@@ -57,7 +57,7 @@ function CardWrapper({ title, linkText, linkHref, accentColor, children }: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: `${tokens.spacing[4]} ${tokens.spacing[5]} ${tokens.spacing[2]}`,
+        padding: `${tokens.spacing[4]} ${tokens.spacing[5]} ${tokens.spacing[3]}`,
       }}>
         <span style={{
           fontSize: tokens.typography.fontSize.base,
@@ -237,12 +237,12 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
     <div className="core-cards-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: tokens.spacing[4], overflowX: 'hidden' }}>
       <CardWrapper title={t('gainersTop5')} accentColor={tokens.gradient.success}>
         {gainers.length === 0 ? (marketLoaded ? (<div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>{t('noGainers')}</div>) : (<div style={{ height: 160 }} className="skeleton" />)) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{gainers.map((row, i) => (<CoinItem key={row.symbol} symbol={row.symbol} price={row.price} changePct={row.changePct} isGainer={true} index={i} />))}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{gainers.map((row, i) => (<CoinItem key={row.symbol} symbol={row.symbol} price={row.price} changePct={row.changePct} isGainer={true} index={i} />))}</div>
         )}
       </CardWrapper>
       <CardWrapper title={t('losersTop5')} accentColor={tokens.gradient.error}>
         {losers.length === 0 ? (marketLoaded ? (<div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>{t('noLosers')}</div>) : (<div style={{ height: 160 }} className="skeleton" />)) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>{losers.map((row, i) => (<CoinItem key={row.symbol} symbol={row.symbol} price={row.price} changePct={row.changePct} isGainer={false} index={i} />))}</div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>{losers.map((row, i) => (<CoinItem key={row.symbol} symbol={row.symbol} price={row.price} changePct={row.changePct} isGainer={false} index={i} />))}</div>
         )}
       </CardWrapper>
       <CardWrapper title={t('fundFlow')} accentColor={tokens.gradient.purple}>
