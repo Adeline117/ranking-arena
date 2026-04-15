@@ -125,7 +125,7 @@ export default function SpotMarket({ spotData, onTokenClick, sectorFilter, initi
   }, [merged, search, showFavOnly, favorites, sectorFilter])
 
   const columns: Column<SpotCoin>[] = [
-    { key: 'rank', label: '#', align: 'center', width: '5%', sortable: true, render: (r) => <span style={{ color: tokens.colors.text.tertiary, fontWeight: 600 }}>{r.rank}</span> },
+    { key: 'rank', label: '#', align: 'center', width: '48px', sortable: true, render: (r) => <span style={{ color: tokens.colors.text.tertiary, fontWeight: 600 }}>{r.rank}</span> },
     { key: 'symbol', label: t('tradingPair'), align: 'left', width: '20%', sortable: true, render: (r) => (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
           {r.image ? (<Image src={r.image} alt={`${r.symbol} icon`} width={22} height={22} style={{ borderRadius: '50%', flexShrink: 0 }} unoptimized={false} />) : (<span style={{ width: 22, height: 22, borderRadius: '50%', background: tokens.colors.bg.tertiary, flexShrink: 0, display: 'inline-block' }} />)}
