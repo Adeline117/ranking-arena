@@ -155,25 +155,35 @@ export async function GET(
     const data = await tieredGetOrSet(
       cacheKey,
       async () => {
-        const resolved = await resolveTrader(supabase, {
-          handle: decodedHandle,
-          platform: sourceParam || undefined,
-        })
+        // 10s timeout for the entire resolve+detail chain.
+        // Non-existent traders were taking 31s as resolveTrader searches multiple sources.
+        const result = await Promise.race([
+          (async () => {
+            const resolved = await resolveTrader(supabase, {
+              handle: decodedHandle,
+              platform: sourceParam || undefined,
+            })
 
-        if (!resolved) {
-          throw ApiError.notFound(`Trader not found: ${decodedHandle}`)
-        }
+            if (!resolved) {
+              throw ApiError.notFound(`Trader not found: ${decodedHandle}`)
+            }
 
-        const detail = await getTraderDetail(supabase, {
-          platform: resolved.platform,
-          traderKey: resolved.traderKey,
-        })
+            const detail = await getTraderDetail(supabase, {
+              platform: resolved.platform,
+              traderKey: resolved.traderKey,
+            })
 
-        if (!detail) {
-          throw ApiError.notFound(`No data for trader: ${decodedHandle}`)
-        }
+            if (!detail) {
+              throw ApiError.notFound(`No data for trader: ${decodedHandle}`)
+            }
 
-        return { pageData: toTraderPageData(detail), resolved: { platform: resolved.platform, traderKey: resolved.traderKey } }
+            return { pageData: toTraderPageData(detail), resolved: { platform: resolved.platform, traderKey: resolved.traderKey } }
+          })(),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(ApiError.notFound(`Trader lookup timed out: ${decodedHandle}`)), 10_000)
+          ),
+        ])
+        return result
       },
       'warm', // warm tier: 2 min memory, 15 min Redis
       ['trader']
