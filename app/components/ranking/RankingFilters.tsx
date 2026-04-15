@@ -436,7 +436,7 @@ export function RankingFilters({
           {/* Score grade filter */}
           <div>
             <Text size="xs" weight="bold" color="tertiary" style={{ marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-              Score
+              {t('scoreLabel')}
             </Text>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               <FilterChip
