@@ -4,7 +4,6 @@ import Providers from "../components/Providers";
 import CapacitorProvider from "../components/Providers/CapacitorProvider";
 import { SkipLink } from "../components/Providers/Accessibility";
 import { PageErrorBoundary } from "../components/utils/ErrorBoundary";
-import BetaBanner from "../components/layout/BetaBanner";
 import { AsyncStylesheets } from "../components/Providers/AsyncStylesheets";
 
 // GlobalProgress / MobileBottomNav stay separate — needed sooner after mount
@@ -46,7 +45,6 @@ export default function AppLayout({
           <Suspense fallback={null}>
             <GlobalProgress />
           </Suspense>
-          <BetaBanner />
           <PageErrorBoundary>
             <main id="main-content" tabIndex={-1}>
               {children}

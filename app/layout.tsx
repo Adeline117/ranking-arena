@@ -4,6 +4,7 @@ import "./globals.css";
 import { JsonLd } from "./components/Providers/JsonLd";
 import { BASE_URL } from "@/lib/constants/urls";
 import { getCriticalCss, getResourceHints } from "@/lib/performance/critical-css";
+import BetaBanner from "./components/layout/BetaBanner";
 
 // Optimized font loading — 2 weights instead of 4 saves ~90KB, 'optional' avoids font-swap LCP delay
 const inter = Inter({
@@ -163,6 +164,7 @@ export default function RootLayout({
         suppressHydrationWarning
       >
         <script dangerouslySetInnerHTML={{ __html: `(function(){var origInsert=Node.prototype.insertBefore;Node.prototype.insertBefore=function(n,r){if(r&&r.parentNode!==this)return n;return origInsert.call(this,n,r)};var origRemove=Node.prototype.removeChild;Node.prototype.removeChild=function(c){if(c.parentNode!==this)return c;return origRemove.call(this,c)}})()` }} />
+        <BetaBanner />
         <main id="main-content" tabIndex={-1}>
           {children}
         </main>
