@@ -4,7 +4,7 @@ import LibraryBrowseClient from './LibraryBrowseClient'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
-  title: 'Library | Arena',
+  title: 'Library',
   description:
     'Browse 60,000+ crypto trading resources. Books, research papers, guides, and educational content for traders.',
   alternates: {
@@ -20,7 +20,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Trading Library | Arena',
+    title: 'Trading Library',
     description: 'Browse 60,000+ crypto trading resources — books, papers, and educational content.',
     images: [`${BASE_URL}/og-image.png`],
   },

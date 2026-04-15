@@ -9,7 +9,7 @@ export const revalidate = 300 // ISR: 5 minutes
 const SSR_TIMEOUT_MS = 4000
 
 export const metadata = {
-  title: 'Bot Rankings — TG Bots, AI Agents & Vaults | Arena',
+  title: 'Bot Rankings — TG Bots, AI Agents & Vaults',
   description:
     'Discover the best Web3 bots, AI agents, and on-chain vaults. Ranked by Arena Score across TVL, APY, and user activity.',
   alternates: { canonical: `${BASE_URL}/rankings/bots` },

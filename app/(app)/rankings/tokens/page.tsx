@@ -11,7 +11,7 @@ export const revalidate = 3600 // ISR: 1 hour (matches API cache)
 const SSR_TIMEOUT_MS = 4000
 
 export const metadata: Metadata = {
-  title: 'Token Rankings — Who Trades BTC Best? | Arena',
+  title: 'Token Rankings — Who Trades BTC Best?',
   description:
     'Discover the best traders for every token. See who profits most trading BTC, ETH, SOL, and 50+ tokens across 27 exchanges.',
   alternates: {

@@ -16,7 +16,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { slug } = await params
   const article = getArticleBySlug(slug)
-  if (!article) return { title: 'Not Found | Arena' }
+  if (!article) return { title: 'Not Found' }
   return {
     title: `${article.title} | Arena Learn`,
     description: article.excerpt,

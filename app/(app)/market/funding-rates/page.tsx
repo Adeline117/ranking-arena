@@ -7,7 +7,7 @@ import { createLogger } from '@/lib/utils/logger'
 const logger = createLogger('funding-rates')
 
 export const metadata: Metadata = {
-  title: 'Funding Rates | Arena',
+  title: 'Funding Rates',
   description:
     'Real-time perpetual futures funding rates across Binance, Bybit, OKX, and Bitget. Track market sentiment through funding rate data.',
   alternates: {
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Funding Rates | Arena',
+    title: 'Funding Rates',
     description: 'Real-time perpetual futures funding rates across major exchanges.',
     images: [`${BASE_URL}/og-image.png`],
   },
