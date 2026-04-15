@@ -1,4 +1,5 @@
 import { round2 } from '@/lib/utils/currency'
+import { isFeatureEnabledForUser } from '@/lib/features'
 
 /**
  * Arena Score V3 计算模块
@@ -384,6 +385,12 @@ export function calculateArenaScore(
   input: TraderScoreInput,
   period: Period
 ): ArenaScoreResult {
+  // Feature flag kill-switch: when arena_score_v2 is enabled, this is the
+  // entry point where the v2 algorithm would diverge. For now, both paths
+  // use the same logic — the flag just provides the infrastructure to swap
+  // algorithms safely in production with percentage-based rollout.
+  const _useV2 = isFeatureEnabledForUser('arena_score_v2')
+
   // Guard against BigInt from Supabase — Number() converts safely
   const roi = Number(input.roi)
   const pnl = Number(input.pnl)

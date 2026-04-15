@@ -80,6 +80,10 @@ interface FeatureFlagConfig {
   enabled: boolean
   /** Rollout percentage (0-100). 100 = fully enabled, 0 = disabled. */
   rolloutPct: number
+  /** Human-readable description of the flag */
+  description?: string
+  /** Alias for rolloutPct — kept for readability in config */
+  rolloutPercentage?: number
 }
 
 /**
@@ -88,6 +92,12 @@ interface FeatureFlagConfig {
  */
 const FEATURE_FLAGS: Record<string, FeatureFlagConfig> = {
   social: { enabled: features.social, rolloutPct: 100 },
+  arena_score_v2: {
+    enabled: false,
+    description: 'Use v2 Arena Score algorithm with updated coefficients',
+    rolloutPercentage: 0, // 0% = disabled, 100% = fully rolled out
+    rolloutPct: 0,
+  },
   // Add new flags here:
   // new_ranking_ui: { enabled: true, rolloutPct: 10 },
   // ai_insights: { enabled: true, rolloutPct: 50 },
