@@ -272,6 +272,15 @@
   "_headers_note": "These headers are defaults. Route handlers that set their own Cache-Control header (e.g. /api/traders, /api/market/overview) will OVERRIDE these values at runtime. Entries here only take effect for routes that do NOT set headers in code.",
   "headers": [
     {
+      "source": "/api/og",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=3600, max-age=3600, stale-while-revalidate=86400"
+        }
+      ]
+    },
+    {
       "source": "/api/avatar",
       "headers": [
         {

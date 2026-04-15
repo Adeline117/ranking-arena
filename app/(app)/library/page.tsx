@@ -26,7 +26,8 @@ export const metadata: Metadata = {
   },
 }
 
-export const dynamic = 'force-dynamic' // Skip static generation, render at request time
+// PERF FIX: removed force-dynamic which defeated ISR — 4 DB queries ran on EVERY visit.
+// Now ISR caches the page for 1 hour at the edge.
 export const revalidate = 3600 // 1 hour
 
 interface LibraryItem {
