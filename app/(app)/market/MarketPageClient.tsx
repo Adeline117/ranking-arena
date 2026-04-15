@@ -247,7 +247,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
           padding: '20px 24px 40px',
         }}>
           {/* L1: Core Cards */}
-          <section style={{ marginBottom: 20 }}>
+          <section style={{ marginBottom: 24 }}>
             <SectionErrorBoundary fallbackMessage="Failed to load core metrics">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <CoreCards spotData={spotData} />
@@ -256,7 +256,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
           </section>
 
           {/* Fear & Greed + Arbitrage + Live Trades — 3-column widget row */}
-          <section style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: tokens.spacing[4], overflowX: 'hidden' }}>
+          <section style={{ marginBottom: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: tokens.spacing[4], overflowX: 'hidden' }}>
             <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <FearGreedGauge />
