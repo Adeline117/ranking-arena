@@ -99,12 +99,13 @@ describe('Encryption Utility', () => {
 
     it('should throw when ENCRYPTION_KEY is missing', () => {
       const originalKey = process.env.ENCRYPTION_KEY
-      delete process.env.ENCRYPTION_KEY
-
-      // The inner error is caught and re-thrown as "Encryption failed"
-      expect(() => encrypt('test')).toThrow('Encryption failed')
-
-      process.env.ENCRYPTION_KEY = originalKey
+      try {
+        delete process.env.ENCRYPTION_KEY
+        // The inner error is caught and re-thrown as "Encryption failed"
+        expect(() => encrypt('test')).toThrow('Encryption failed')
+      } finally {
+        process.env.ENCRYPTION_KEY = originalKey
+      }
     })
   })
 

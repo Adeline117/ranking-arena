@@ -23,12 +23,12 @@ export async function GET(
     const [compResult, entriesResult] = await Promise.all([
       supabase
         .from('competitions')
-        .select('*')
+        .select('id, name, description, season_id, start_date, end_date, status, rules, prizes, created_at, updated_at')
         .eq('id', id)
         .single(),
       supabase
         .from('competition_entries')
-        .select('*')
+        .select('id, competition_id, user_id, trader_id, source, rank, score, roi, pnl, joined_at, updated_at')
         .eq('competition_id', id)
         .order('rank', { ascending: true, nullsFirst: false }),
     ])
