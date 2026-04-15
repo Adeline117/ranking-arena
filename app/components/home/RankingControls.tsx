@@ -208,6 +208,40 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
         </div>
       )}
 
+      {/* Free-tier limit banner — show when user reaches the last page */}
+      {page >= totalPages - 1 && totalCount > 0 && (
+        <a
+          href="/pricing"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+            padding: '10px 14px',
+            borderRadius: 8,
+            fontSize: 13,
+            fontWeight: 500,
+            color: 'var(--color-text-secondary, #aaa)',
+            background: 'linear-gradient(135deg, var(--color-bg-secondary, #1a1a2e) 0%, rgba(167,139,250,0.08) 100%)',
+            border: '1px solid rgba(167, 139, 250, 0.2)',
+            textDecoration: 'none',
+            transition: 'border-color 0.2s, background 0.2s',
+          }}
+        >
+          <span style={{ flex: 1 }}>
+            Showing top {totalCount.toLocaleString()} traders. Unlock all 34,000+ with Pro
+          </span>
+          <span style={{
+            fontSize: 12,
+            fontWeight: 700,
+            color: 'var(--color-brand, #a78bfa)',
+            whiteSpace: 'nowrap',
+          }}>
+            Upgrade →
+          </span>
+        </a>
+      )}
+
       {isPending && (
         <>
           <div className="ssr-loading-bar" />
