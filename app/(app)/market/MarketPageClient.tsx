@@ -274,59 +274,57 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
             </SectionErrorBoundary>
           </section>
 
-          {/* L2: Data Table — ranking table immediately visible after dashboard */}
-          <section style={{ marginBottom: 24 }}>
+          {/* L2: Data Table + Sector Heatmap — side by side */}
+          <section style={{ marginBottom: 24, display: 'grid', gridTemplateColumns: '2fr 1fr', gap: tokens.spacing[4], alignItems: 'start' }}>
             <SectionErrorBoundary fallbackMessage="Market data failed to load">
               <Suspense fallback={<LoadingCard height={400} />}>
                 <SpotMarket spotData={spotData} onTokenClick={handleTokenClick} sectorFilter={sectorFilter} initialData={initialSpotData} />
               </Suspense>
             </SectionErrorBoundary>
-          </section>
-
-          {/* L3: Sector Treemap — below table so it doesn't push ranking down */}
-          <section style={{ marginBottom: 24 }}>
-            <SectionErrorBoundary fallbackMessage="Failed to load sector heatmap">
-              <Suspense fallback={<LoadingCard height={300} />}>
-                <SectorTreemap spotData={spotData} onSectorClick={handleSectorClick} />
-              </Suspense>
-            </SectionErrorBoundary>
-            {sectorFilter && (
-              <div style={{
-                marginTop: 8,
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '4px 12px',
-                background: tokens.colors.bg.tertiary,
-                borderRadius: tokens.radius.md,
-                fontSize: 12,
-                color: tokens.colors.text.secondary,
-              }}>
-                {t('filter')}: {sectorFilter}
-                <button
-                  onClick={() => setSectorFilter(null)}
-                  aria-label="Clear filter"
-                  style={{
-                    background: 'none',
-                    border: 'none',
-                    cursor: 'pointer',
-                    width: 44,
-                    height: 44,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: tokens.colors.text.tertiary,
-                    fontSize: 14,
-                    lineHeight: 1.2,
-                    margin: '-14px -16px -14px 0',
-                  }}
-                >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <path d="M18 6L6 18M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-            )}
+            <div>
+              <SectionErrorBoundary fallbackMessage="Failed to load sector heatmap">
+                <Suspense fallback={<LoadingCard height={300} />}>
+                  <SectorTreemap spotData={spotData} onSectorClick={handleSectorClick} />
+                </Suspense>
+              </SectionErrorBoundary>
+              {sectorFilter && (
+                <div style={{
+                  marginTop: 8,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '4px 12px',
+                  background: tokens.colors.bg.tertiary,
+                  borderRadius: tokens.radius.md,
+                  fontSize: 12,
+                  color: tokens.colors.text.secondary,
+                }}>
+                  {t('filter')}: {sectorFilter}
+                  <button
+                    onClick={() => setSectorFilter(null)}
+                    aria-label="Clear filter"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      width: 44,
+                      height: 44,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: tokens.colors.text.tertiary,
+                      fontSize: 14,
+                      lineHeight: 1.2,
+                      margin: '-14px -16px -14px 0',
+                    }}
+                  >
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                      <path d="M18 6L6 18M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
+            </div>
           </section>
         </div>
       )}
