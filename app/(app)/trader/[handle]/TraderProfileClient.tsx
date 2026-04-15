@@ -257,8 +257,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const traderStats = useMemo(() => traderData?.stats ?? null, [traderData?.stats])
   const traderPortfolio = useMemo(() => traderData?.portfolio ?? [], [traderData?.portfolio])
   const traderPositionHistory = useMemo(() => traderData?.positionHistory ?? [], [traderData?.positionHistory])
-  const traderEquityCurve = traderData?.equityCurve
-  const traderAssetBreakdown = traderData?.assetBreakdown
+  const traderEquityCurve = useMemo(() => traderData?.equityCurve, [traderData?.equityCurve])
+  const traderAssetBreakdown = useMemo(() => traderData?.assetBreakdown, [traderData?.assetBreakdown])
   const traderSimilar = useMemo(() => traderData?.similarTraders ?? [], [traderData?.similarTraders])
 
   // Structured data for SEO — memoized so combineSchemas doesn't re-run on every
