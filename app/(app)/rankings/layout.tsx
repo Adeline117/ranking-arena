@@ -2,6 +2,8 @@ import { Metadata } from 'next'
 import RankingsSubNav from './RankingsSubNav'
 import TopNavWrapper from './TopNavWrapper'
 import { BASE_URL } from '@/lib/constants/urls'
+import { JsonLd } from '@/app/components/Providers/JsonLd'
+import { generateBreadcrumbSchema } from '@/lib/seo/structured-data'
 
 export const metadata: Metadata = {
   title: 'Rankings',
@@ -38,9 +40,15 @@ export const metadata: Metadata = {
   },
 }
 
+const breadcrumbJsonLd = generateBreadcrumbSchema([
+  { name: 'Arena', url: BASE_URL },
+  { name: 'Rankings', url: `${BASE_URL}/rankings` },
+])
+
 export default function RankingsLayout({ children }: { children: React.ReactNode }) {
   return (
     <div style={{ minHeight: '100vh', position: 'relative' }}>
+      <JsonLd data={breadcrumbJsonLd} />
       <div
         className="mesh-gradient-bg"
         style={{
