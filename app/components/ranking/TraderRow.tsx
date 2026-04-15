@@ -461,8 +461,8 @@ export const TraderRow = memo(function TraderRow({
               {isAddress && <CopyButton text={traderHandle} />}
               {/* Mobile Score Badge */}
               {trader.arena_score != null && Number.isFinite(Number(trader.arena_score)) && (
-                <span className="mobile-score-badge" style={MOBILE_BADGE_STYLE}>
-                  <span style={{
+                <span className="mobile-score-badge" style={MOBILE_BADGE_STYLE} aria-label={`Arena Score: ${Number(trader.arena_score).toFixed(0)}`}>
+                  <span aria-hidden="true" style={{
                     width: 6, height: 6, borderRadius: '50%',
                     background: getScoreColor(trader.arena_score),
                   }} />
@@ -471,7 +471,7 @@ export const TraderRow = memo(function TraderRow({
               )}
             </Box>
             <Box style={TAGS_ROW_STYLE}>
-              <Box className="source-tag" style={{ background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
+              <Box className="source-tag" role="img" aria-label={`Platform type: ${sourceInfo.type}`} style={{ background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
                 <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: tokens.typography.fontSize.xs, lineHeight: 1.2 }}>
                   {sourceInfo.type}
                 </Text>
@@ -479,27 +479,32 @@ export const TraderRow = memo(function TraderRow({
               {/* Verified Badge */}
               {trader.is_verified && (
                 <span
+                  role="img"
+                  aria-label={i18nT('verifiedTooltip')}
                   title={i18nT('verifiedTooltip')}
                   style={VERIFIED_BADGE_STYLE}>
-                  <svg width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
+                  <svg aria-hidden="true" width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
                   {i18nT('verifiedBadge')}
                 </span>
               )}
               {/* Bot Badge */}
               {(trader.is_bot || trader.trader_type === 'bot') && (
-                <span style={BOT_BADGE_STYLE}>
-                  <span style={BOT_EMOJI_STYLE}>{'⚡'}</span>
+                <span role="img" aria-label={`Bot: ${i18nT('botLabel')}`} style={BOT_BADGE_STYLE}>
+                  <span aria-hidden="true" style={BOT_EMOJI_STYLE}>{'⚡'}</span>
                   {i18nT('botLabel')}
                 </span>
               )}
               {/* Trading Style Chip */}
               {tradingStyleInfo && (
-                <span style={{
-                  ...TRADING_STYLE_BASE_STYLE,
-                  color: tradingStyleInfo.color,
-                  background: tradingStyleInfo.bgColor,
-                  border: `1px solid ${tradingStyleInfo.borderColor}`,
-                }}>
+                <span
+                  role="img"
+                  aria-label={`Trading style: ${tradingStyleInfo.labelEn}`}
+                  style={{
+                    ...TRADING_STYLE_BASE_STYLE,
+                    color: tradingStyleInfo.color,
+                    background: tradingStyleInfo.bgColor,
+                    border: `1px solid ${tradingStyleInfo.borderColor}`,
+                  }}>
                   {localizedLabel(tradingStyleInfo.label, tradingStyleInfo.labelEn, language)}
                 </span>
               )}
