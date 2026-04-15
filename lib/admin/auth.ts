@@ -5,6 +5,9 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('admin-auth')
 
 // 管理员邮箱白名单（与前端 useAdminAuth 保持一致）
 // 必须通过环境变量 ADMIN_EMAILS 配置，生产环境不能为空
@@ -14,7 +17,7 @@ const ADMIN_EMAILS: string[] = process.env.ADMIN_EMAILS
 
 // SECURITY: Warn if no admin emails configured in production
 if (ADMIN_EMAILS.length === 0 && process.env.NODE_ENV === 'production') {
-  console.warn('[SECURITY] ADMIN_EMAILS not configured — no admin access available')
+  logger.warn('[SECURITY] ADMIN_EMAILS not configured — no admin access available')
 }
 
 export { getSupabaseAdmin }
