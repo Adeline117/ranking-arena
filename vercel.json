@@ -269,68 +269,14 @@
       "schedule": "0 6 * * *"
     }
   ],
-  "_headers_note": "These headers are defaults. Route handlers that set their own Cache-Control header (e.g. /api/traders, /api/market/overview) will OVERRIDE these values at runtime. Entries here only take effect for routes that do NOT set headers in code.",
+  "_headers_note": "IMPORTANT: Route handlers that set their own Cache-Control header in code will OVERRIDE these values at runtime. We removed entries for routes that set headers in code (api/traders, api/market/*, api/search/*, api/flash-news, api/avoid-list, api/og, api/avatar, api/v2/rankings, api/rankings/platform-stats, api/rankings/movers, api/trader/:path*) to avoid confusion. Entries below are ONLY for routes that do NOT set headers in code.",
   "headers": [
-    {
-      "source": "/api/og",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, s-maxage=3600, max-age=3600, stale-while-revalidate=86400"
-        }
-      ]
-    },
-    {
-      "source": "/api/avatar",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, s-maxage=604800, max-age=604800, stale-while-revalidate=86400"
-        }
-      ]
-    },
-    {
-      "source": "/api/traders",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=600, stale-while-revalidate=300"
-        }
-      ]
-    },
     {
       "source": "/api/posts",
       "headers": [
         {
           "key": "Cache-Control",
           "value": "s-maxage=30, stale-while-revalidate=120"
-        }
-      ]
-    },
-    {
-      "source": "/api/market/prices",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "public, s-maxage=30, stale-while-revalidate=120"
-        }
-      ]
-    },
-    {
-      "source": "/api/market/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=30, stale-while-revalidate=60"
-        }
-      ]
-    },
-    {
-      "source": "/api/traders/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=300, stale-while-revalidate=600"
         }
       ]
     },
@@ -344,15 +290,6 @@
       ]
     },
     {
-      "source": "/api/trader/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=300, stale-while-revalidate=600"
-        }
-      ]
-    },
-    {
       "source": "/api/reviews",
       "headers": [
         {
@@ -362,56 +299,11 @@
       ]
     },
     {
-      "source": "/api/avoid-list",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=120, stale-while-revalidate=600"
-        }
-      ]
-    },
-    {
-      "source": "/api/search",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=30, stale-while-revalidate=60"
-        }
-      ]
-    },
-    {
-      "source": "/api/search/:path*",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=30, stale-while-revalidate=60"
-        }
-      ]
-    },
-    {
       "source": "/api/stats",
       "headers": [
         {
           "key": "Cache-Control",
           "value": "s-maxage=300, stale-while-revalidate=600"
-        }
-      ]
-    },
-    {
-      "source": "/api/v2/rankings",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=600, stale-while-revalidate=300"
-        }
-      ]
-    },
-    {
-      "source": "/api/flash-news",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=60, stale-while-revalidate=120"
         }
       ]
     },
