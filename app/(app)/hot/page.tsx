@@ -16,14 +16,14 @@ export const metadata: Metadata = {
   description: 'Trending crypto trading discussions, market insights, and top posts from the Arena community.',
   alternates: { canonical: `${BASE_URL}/hot` },
   openGraph: {
-    title: 'Hot Posts & Trending Discussions | Arena',
+    title: 'Hot Posts & Trending Discussions',
     description: 'Trending crypto trading discussions, market insights, and top posts from the Arena community.',
     url: `${BASE_URL}/hot`,
     images: [{ url: `${BASE_URL}/api/og`, width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Hot Posts & Trending | Arena',
+    title: 'Hot Posts & Trending',
     creator: '@arenafi',
   },
 }

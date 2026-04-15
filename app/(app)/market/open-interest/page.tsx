@@ -7,7 +7,7 @@ import { createLogger } from '@/lib/utils/logger'
 const logger = createLogger('open-interest')
 
 export const metadata: Metadata = {
-  title: 'Open Interest | Arena',
+  title: 'Open Interest',
   description:
     'Real-time open interest data across Binance, Bybit, OKX, and Bitget. Track total outstanding futures positions and market depth.',
   alternates: {
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Open Interest | Arena',
+    title: 'Open Interest',
     description: 'Real-time open interest data across major crypto exchanges.',
     images: [`${BASE_URL}/og-image.png`],
   },

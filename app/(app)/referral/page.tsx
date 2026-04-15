@@ -1,7 +1,7 @@
 import { Metadata } from 'next'
 
 export const metadata: Metadata = {
-  title: 'Referral Program | Arena',
+  title: 'Referral Program',
   description: 'Invite friends to Arena and earn rewards. Share your unique referral link and track your invites.',
   alternates: {
     canonical: `${BASE_URL}/referral`,

@@ -5,7 +5,7 @@ import { ARTICLES } from './articles'
 export const revalidate = 3600
 
 export const metadata: Metadata = {
-  title: 'Learn | Arena',
+  title: 'Learn',
   description:
     'Learn how Arena scores traders, how rankings work, and how to read risk metrics like drawdown, Sharpe ratio, and win rate.',
 }

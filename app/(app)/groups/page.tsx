@@ -15,14 +15,14 @@ export const metadata: Metadata = {
   description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders on Arena.',
   alternates: { canonical: `${BASE_URL}/groups` },
   openGraph: {
-    title: 'Trading Groups & Community | Arena',
+    title: 'Trading Groups & Community',
     description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders.',
     url: `${BASE_URL}/groups`,
     images: [{ url: `${BASE_URL}/api/og`, width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Trading Groups & Community | Arena',
+    title: 'Trading Groups & Community',
     description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders.',
     creator: '@arenafi',
   },

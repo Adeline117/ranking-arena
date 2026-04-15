@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import { tokens } from '@/lib/design-tokens'
 
 export const metadata: Metadata = {
-  title: 'API Documentation | Arena',
+  title: 'API Documentation',
   description: 'Arena public API for crypto trader rankings, trader details, and search. Free tier: 100 requests/day.',
 }
 

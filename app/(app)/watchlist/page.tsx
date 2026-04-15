@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
-  title: 'Watchlist | Arena',
+  title: 'Watchlist',
   description: 'Track your favorite crypto traders. Monitor ROI, Arena Score, and performance changes in real-time.',
   alternates: {
     canonical: `${BASE_URL}/watchlist`,
