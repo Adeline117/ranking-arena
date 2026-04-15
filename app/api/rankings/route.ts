@@ -26,11 +26,14 @@ import type { RankingWindow, TradingCategory, Platform, GranularPlatform, Rankin
 import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
 import { getSupabaseAdmin } from '@/lib/supabase/server';
 import type { TradingPeriod } from '@/lib/types/unified-trader';
-import { tieredGetOrSet } from '@/lib/cache/redis-layer';
+import { tieredGetOrSet, tieredGet } from '@/lib/cache/redis-layer';
 import { ApiError } from '@/lib/api/errors';
 import { success as apiSuccess, withCache } from '@/lib/api/response';
 import { withPublic } from '@/lib/api/middleware'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('rankings-api')
 
 // availableSources cache via Redis (tieredGetOrSet, warm tier).
 //
@@ -122,29 +125,46 @@ export const GET = withPublic(async ({ request }) => {
 
     let result: unknown;
 
-    if (normalizedWindow === 'composite') {
-      // Try precomputed composite first (written by /api/cron/precompute-composite)
-      const precomputedKey = category ? `precomputed:composite:${category}` : 'precomputed:composite:all'
-      const { data: precomputed } = await (await import('@/lib/cache/redis-layer')).tieredGet<{
-        traders: unknown[]
-        totalcount: number
-        total_count: number
-        as_of: string
-        is_stale: boolean
-        availableSources: string[]
-      }>(precomputedKey, 'hot')
+    try {
+      if (normalizedWindow === 'composite') {
+        // Try precomputed composite first (written by /api/cron/precompute-composite)
+        const precomputedKey = category ? `precomputed:composite:${category}` : 'precomputed:composite:all'
+        const { data: precomputed } = await (await import('@/lib/cache/redis-layer')).tieredGet<{
+          traders: unknown[]
+          totalcount: number
+          total_count: number
+          as_of: string
+          is_stale: boolean
+          availableSources: string[]
+        }>(precomputedKey, 'hot')
 
-      if (precomputed && !platform && !minPnl && !minTrades && sortBy === 'arena_score' && sortDir === 'desc') {
-        // Serve from precomputed cache — slice for pagination
-        const traders = precomputed.traders.slice(offset, offset + limit)
-        result = {
-          ...precomputed,
-          traders,
-          window: 'COMPOSITE',
+        if (precomputed && !platform && !minPnl && !minTrades && sortBy === 'arena_score' && sortDir === 'desc') {
+          // Serve from precomputed cache — slice for pagination
+          const traders = precomputed.traders.slice(offset, offset + limit)
+          result = {
+            ...precomputed,
+            traders,
+            window: 'COMPOSITE',
+          }
+        } else {
+          // Fall back to real-time compute for filtered/sorted queries
+          const compositeFetcher = () => getCompositeRankings({
+            category: category || undefined,
+            platform: (platform || undefined) as Platform | undefined,
+            limit,
+            offset,
+            sort_by: sortBy,
+            sort_dir: sortDir,
+            min_pnl: minPnl,
+            min_trades: minTrades,
+          })
+          result = cacheKey
+            ? await tieredGetOrSet(cacheKey, compositeFetcher, 'hot', ['rankings'])
+            : await compositeFetcher()
         }
       } else {
-        // Fall back to real-time compute for filtered/sorted queries
-        const compositeFetcher = () => getCompositeRankings({
+        const query: RankingsQuery = {
+          window: normalizedWindow,
           category: category || undefined,
           platform: (platform || undefined) as Platform | undefined,
           limit,
@@ -153,28 +173,28 @@ export const GET = withPublic(async ({ request }) => {
           sort_dir: sortDir,
           min_pnl: minPnl,
           min_trades: minTrades,
-        })
+          trader_type: traderType || undefined,
+        };
+        const rankingsFetcher = () => getRankingsFallback(query, cursor)
         result = cacheKey
-          ? await tieredGetOrSet(cacheKey, compositeFetcher, 'hot', ['rankings'])
-          : await compositeFetcher()
+          ? await tieredGetOrSet(cacheKey, rankingsFetcher, 'hot', ['rankings'])
+          : await rankingsFetcher()
       }
-    } else {
-      const query: RankingsQuery = {
-        window: normalizedWindow,
-        category: category || undefined,
-        platform: (platform || undefined) as Platform | undefined,
-        limit,
-        offset,
-        sort_by: sortBy,
-        sort_dir: sortDir,
-        min_pnl: minPnl,
-        min_trades: minTrades,
-        trader_type: traderType || undefined,
-      };
-      const rankingsFetcher = () => getRankingsFallback(query, cursor)
-      result = cacheKey
-        ? await tieredGetOrSet(cacheKey, rankingsFetcher, 'hot', ['rankings'])
-        : await rankingsFetcher()
+    } catch (fetchError) {
+      // DB query failed — try to serve last-known-good cached data instead of returning 500.
+      // Only attempt fallback for default (cacheable) queries; filtered queries have no cache.
+      if (cacheKey) {
+        const { data: staleData } = await tieredGet(cacheKey, 'hot')
+        if (staleData) {
+          logger.warn(`Rankings DB query failed, serving stale cache for ${cacheKey}:`, fetchError instanceof Error ? fetchError.message : String(fetchError))
+          result = staleData
+        } else {
+          // No cache either — re-throw to let the error handler respond
+          throw fetchError
+        }
+      } else {
+        throw fetchError
+      }
     }
 
     const response = apiSuccess(result);

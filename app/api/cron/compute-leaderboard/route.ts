@@ -269,6 +269,24 @@ export async function GET(request: NextRequest) {
       logger.warn(`Skipping arena_score v2 sync — only ${Math.round(remainingMs() / 1000)}s remaining`)
     }
 
+    // Save last-known-good snapshot marker for fallback resilience.
+    // Rankings API reads this to verify compute health; if stale, it serves
+    // cached data instead of failing when the DB query errors out.
+    {
+      const successfulSeasons = results.filter(r => !r.error && r.count > 0)
+      if (successfulSeasons.length > 0) {
+        try {
+          await tieredSet('leaderboard:last-success', {
+            timestamp: new Date().toISOString(),
+            seasons: successfulSeasons.map(r => r.season),
+            traderCounts: Object.fromEntries(successfulSeasons.map(r => [r.season, r.count])),
+          }, 'warm', ['leaderboard']) // 900s TTL (warm tier)
+        } catch (e) {
+          logger.warn('Failed to write leaderboard:last-success marker:', e instanceof Error ? e.message : String(e))
+        }
+      }
+    }
+
     // Sync sub-scores + advanced metrics: leaderboard_ranks → trader_snapshots_v2.
     // Extracted to post-processing.ts to shrink this file per Retro 2026-04-09.
     fireAndForget(syncSubscoresToV2(supabase), 'sync-subscores-to-v2')
@@ -343,6 +361,22 @@ async function computeSeason(
   // cleanup-stuck-logs sweeps them 30 min later.
   const timeLeftMs = () => deadlineMs - Date.now()
   const isOutOfTime = (minMs: number = 10_000) => timeLeftMs() < minMs
+  // Checkpoint recovery: skip this season if it was already computed this hour.
+  // Prevents redundant recomputation when compute-leaderboard is retried after
+  // a partial failure (e.g., season 7D succeeded, 30D timed out — retry
+  // shouldn't redo 7D).
+  const hourKey = new Date().toISOString().slice(0, 13) // "2026-04-14T08"
+  const checkpointKey = `leaderboard:computed:${season}:${hourKey}`
+  try {
+    const { data: checkpoint } = await tieredGet<{ count: number }>(checkpointKey, 'warm')
+    if (checkpoint && checkpoint.count > 0 && !forceWrite) {
+      logger.info(`[${season}] Checkpoint hit — already computed this hour (${checkpoint.count} traders). Skipping.`)
+      return checkpoint.count
+    }
+  } catch (e) {
+    logger.warn(`[${season}] Checkpoint read failed (proceeding): ${e instanceof Error ? e.message : String(e)}`)
+  }
+
   // Upsert abort flag (set inside the upsert loop when time runs out, consumed
   // by the zero-out phase below to skip its expensive N+1 cleanup path).
   let upsertAborted = false
@@ -923,6 +957,14 @@ async function computeSeason(
     // CRITICAL: This write prevents the 6-day leaderboard freeze (pipeline_state baseline).
     // If this fails repeatedly, the degradation check uses inflated table counts.
     logger.error(`[${season}] CRITICAL: failed to write scored count to pipeline_state: ${e instanceof Error ? e.message : String(e)}`)
+  }
+
+  // Write per-season checkpoint so retries within the same hour skip this season.
+  // TTL = warm (900s) — survives the cron interval but doesn't linger.
+  try {
+    await tieredSet(checkpointKey, { count: scored.length, at: new Date().toISOString() }, 'warm', ['leaderboard'])
+  } catch (e) {
+    logger.warn(`[${season}] Checkpoint write failed: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   const actualUpserted = scored.length - upsertErrors
