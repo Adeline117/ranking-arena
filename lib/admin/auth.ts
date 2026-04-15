@@ -40,10 +40,10 @@ export async function verifyAdmin(
     return null
   }
 
-  // 方法1: 邮箱白名单
+  // 方法1: 邮箱白名单（生产环境必须通过）
   const isAdminByEmail = user.email && ADMIN_EMAILS.includes(user.email)
 
-  // 方法2: 数据库角色
+  // 方法2: 数据库角色（仅 dev/staging 可作为备用）
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('role')
@@ -52,8 +52,12 @@ export async function verifyAdmin(
 
   const isAdminByRole = profile?.role === 'admin'
 
-  if (!isAdminByEmail && !isAdminByRole) {
-    return null
+  // Production: email whitelist is mandatory
+  if (process.env.NODE_ENV === 'production') {
+    if (!isAdminByEmail) return null
+  } else {
+    // Dev/staging: allow either email or DB role
+    if (!isAdminByEmail && !isAdminByRole) return null
   }
 
   return { id: user.id, email: user.email || '' }
@@ -78,7 +82,7 @@ export async function verifyModeratorOrAdmin(
     return null
   }
 
-  // 方法1: 邮箱白名单 (admin only)
+  // 方法1: 邮箱白名单 (admin only, 生产环境必须通过)
   const isAdminByEmail = user.email && ADMIN_EMAILS.includes(user.email)
 
   // 方法2: 数据库角色
@@ -91,6 +95,18 @@ export async function verifyModeratorOrAdmin(
   const isAdminByRole = profile?.role === 'admin'
   const isModeratorByRole = profile?.role === 'moderator'
 
+  // Production: admin requires email whitelist; moderator uses DB role
+  if (process.env.NODE_ENV === 'production') {
+    if (isAdminByEmail) {
+      return { id: user.id, email: user.email || '', role: 'admin' }
+    }
+    if (isModeratorByRole) {
+      return { id: user.id, email: user.email || '', role: 'moderator' }
+    }
+    return null
+  }
+
+  // Dev/staging: allow either email or DB role for admin
   if (isAdminByEmail || isAdminByRole) {
     return { id: user.id, email: user.email || '', role: 'admin' }
   }
