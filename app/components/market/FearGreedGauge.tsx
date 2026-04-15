@@ -139,8 +139,19 @@ export default function FearGreedGauge() {
       display: 'flex',
       flexDirection: 'column',
       position: 'relative',
-      overflow: 'visible',
+      overflow: 'hidden',
     }}>
+      {/* Top accent line */}
+      <div style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 2,
+        background: tokens.gradient.purple,
+        opacity: 0.6,
+      }} />
+
       {/* Title */}
       <div style={{
         fontSize: tokens.typography.fontSize.base,
