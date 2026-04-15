@@ -5,7 +5,6 @@ import SSRRankingTable from './components/home/SSRRankingTable'
 import HomeHeroSSR from './components/home/HomeHeroSSR'
 import RankingControls from './components/home/RankingControls'
 import TopNav from './components/layout/TopNav'
-import BetaBanner from './components/layout/BetaBanner'
 import WelcomeBanner from './components/home/WelcomeBanner'
 import HomePageLoader from './components/home/HomePageLoader'
 import { JsonLd } from './components/Providers/JsonLd'
@@ -88,7 +87,6 @@ export default async function Page({
         <TopNav />
       </div>
 
-      <BetaBanner />
       <WelcomeBanner />
 
       {/* SSR Hero — visible until Phase 2 replaces it */}
