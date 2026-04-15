@@ -109,17 +109,25 @@ export default function RankingSection({
 
   return (
     <section className="home-ranking-section contain-layout-style" style={{ minWidth: 0 }}>
-      <div className="ranking-time-range-bar">
+      {/* Period + Category tabs in one row */}
+      <div className="ranking-controls-bar" style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        marginBottom: 8,
+        minHeight: 48,
+        flexWrap: 'wrap',
+      }}>
         <TimeRangeSelector activeRange={activeTimeRange} onChange={onTimeRangeChange} />
+        <div style={{ width: 1, height: 24, background: 'var(--color-border-primary)', flexShrink: 0 }} />
+        <CategoryRankingTabs
+          currentCategory={category}
+          onCategoryChange={setCategory}
+          isPro={isPro}
+          onProRequired={handleProRequired}
+          categoryCounts={categoryCounts}
+        />
       </div>
-
-      <CategoryRankingTabs
-        currentCategory={category}
-        onCategoryChange={setCategory}
-        isPro={isPro}
-        onProRequired={handleProRequired}
-        categoryCounts={categoryCounts}
-      />
 
       <AdvancedFilterPanel
         showAdvancedFilter={showAdvancedFilter}
