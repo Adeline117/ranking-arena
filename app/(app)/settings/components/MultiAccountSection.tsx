@@ -41,7 +41,7 @@ export function MultiAccountSection() {
             width: 24, height: 24, borderRadius: '50%',
             background: tokens.colors.accent.primary + '20',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 11, fontWeight: 700, color: tokens.colors.accent.primary,
+            fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: tokens.colors.accent.primary,
           }}>
             {(account.handle?.[0] || account.email[0] || 'U').toUpperCase()}
           </Box>
@@ -59,7 +59,7 @@ export function MultiAccountSection() {
                 disabled={!!switchingId}
                 style={{
                   border: 'none', background: 'transparent', cursor: 'pointer',
-                  fontSize: 11, color: tokens.colors.accent.primary,
+                  fontSize: tokens.typography.fontSize.xs, color: tokens.colors.accent.primary,
                   opacity: switchingId ? 0.5 : 1,
                 }}
               >
@@ -69,7 +69,7 @@ export function MultiAccountSection() {
                 onClick={() => removeAccount(account.userId)}
                 style={{
                   border: 'none', background: 'transparent', cursor: 'pointer',
-                  fontSize: 11, color: tokens.colors.text.tertiary,
+                  fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary,
                 }}
               >
                 {t('removeAccount')}
@@ -102,7 +102,7 @@ export function MultiAccountSection() {
             padding: `1px ${tokens.spacing[1]}`,
             borderRadius: tokens.radius.sm,
             background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-accent))`,
-            color: tokens.colors.white, fontSize: 10, fontWeight: 700,
+            color: tokens.colors.white, fontSize: tokens.typography.fontSize.xs /* TODO: add 10px token */, fontWeight: 700,
           }}>
             Pro
           </Box>

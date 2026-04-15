@@ -157,7 +157,7 @@ export default function MessageInput({
 
       <Box style={{
         maxWidth: 800, margin: '0 auto', display: 'flex', gap: tokens.spacing[2], alignItems: 'flex-end',
-        background: tokens.colors.bg.primary, borderRadius: 28, padding: '8px 8px 8px 14px',
+        background: tokens.colors.bg.primary, borderRadius: tokens.radius['3xl'] /* TODO: add 28px token */, padding: `${tokens.spacing[2]} ${tokens.spacing[2]} ${tokens.spacing[2]} ${tokens.spacing[3]}`,
         border: `1px solid ${tokens.colors.border.primary}`, boxShadow: tokens.shadow.inner,
         transition: `border-color ${tokens.transition.fast}, box-shadow ${tokens.transition.fast}`,
       }}>
@@ -201,7 +201,7 @@ export default function MessageInput({
           placeholder={t('enterMessage')}
           rows={1}
           style={{
-            flex: 1, padding: '8px 0', border: 'none', background: 'transparent',
+            flex: 1, padding: `${tokens.spacing[2]} 0`, border: 'none', background: 'transparent',
             color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.sm,
             fontFamily: tokens.typography.fontFamily.sans.join(', '), outline: 'none',
             resize: 'none', minHeight: 24, maxHeight: 100, lineHeight: 1.5,

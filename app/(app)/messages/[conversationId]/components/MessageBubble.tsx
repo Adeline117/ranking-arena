@@ -162,12 +162,12 @@ export default function MessageBubble({
             <Image
               src={msg.media_url} alt="Shared image" width={400} height={300}
               onClick={() => onPreviewOpen({ type: 'image', url: msg.media_url! })}
-              style={{ maxWidth: '100%', maxHeight: 300, borderRadius: 14, cursor: 'pointer', display: 'block', objectFit: 'contain' }}
+              style={{ maxWidth: '100%', maxHeight: 300, borderRadius: tokens.radius.lg /* TODO: design spec says 14px, closest token is 12px */, cursor: 'pointer', display: 'block', objectFit: 'contain' }}
               unoptimized
             />
           )}
           {msg.media_url && msg.media_type === 'video' && (
-            <Box onClick={() => onPreviewOpen({ type: 'video', url: msg.media_url! })} style={{ position: 'relative', cursor: 'pointer', borderRadius: 14, overflow: 'hidden' }}>
+            <Box onClick={() => onPreviewOpen({ type: 'video', url: msg.media_url! })} style={{ position: 'relative', cursor: 'pointer', borderRadius: tokens.radius.lg /* TODO: design spec says 14px, closest token is 12px */, overflow: 'hidden' }}>
               <video src={msg.media_url} style={{ maxWidth: '100%', maxHeight: 300, display: 'block' }} />
               <Box style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--color-overlay-medium)' }}>
                 <Box style={{ width: 48, height: 48, borderRadius: '50%', background: 'var(--glass-bg-heavy)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
