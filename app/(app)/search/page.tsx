@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useReducer, Suspense, useCallback, useRef } from 'react'
+import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
+import useSWR from 'swr'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
@@ -11,10 +12,10 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import ErrorState from '@/app/components/ui/ErrorState'
 import EmptyState from '@/app/components/ui/EmptyState'
-import { logger } from '@/lib/logger'
 import type { UnifiedSearchResponse } from '@/app/api/search/route'
 import { features } from '@/lib/features'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { useDebounce } from '@/lib/hooks/useDebounce'
 
 interface SearchResult {
   type: 'library' | 'group' | 'post' | 'trader'
@@ -33,12 +34,18 @@ const saveSearchHistory = (query: string) => { addToHistory(query) }
 const clearSearchHistory = () => { clearHistory() }
 
 // ============================================
-// Search state reducer — replaces 14 useState
+// SWR fetcher for search API
 // ============================================
 
-interface SearchState {
-  loading: boolean
-  searchError: boolean
+const searchFetcher = async (url: string): Promise<UnifiedSearchResponse> => {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  const json = await res.json()
+  return json.data || json
+}
+
+// Mapped search results used by the UI
+interface MappedSearchResults {
   traderResults: SearchResult[]
   traderTotal: number
   postResults: SearchResult[]
@@ -49,42 +56,6 @@ interface SearchState {
   groupTotal: number
   availablePlatforms: string[]
   didYouMean: string[]
-}
-
-const initialSearchState: SearchState = {
-  loading: false,
-  searchError: false,
-  traderResults: [],
-  traderTotal: 0,
-  postResults: [],
-  postTotal: 0,
-  libraryResults: [],
-  libTotal: 0,
-  groupResults: [],
-  groupTotal: 0,
-  availablePlatforms: [],
-  didYouMean: [],
-}
-
-type SearchAction =
-  | { type: 'SEARCH_START' }
-  | { type: 'SEARCH_SUCCESS'; payload: Omit<SearchState, 'loading' | 'searchError'> }
-  | { type: 'SEARCH_ERROR' }
-  | { type: 'SEARCH_CLEAR' }
-
-function searchReducer(state: SearchState, action: SearchAction): SearchState {
-  switch (action.type) {
-    case 'SEARCH_START':
-      return { ...state, loading: true, searchError: false }
-    case 'SEARCH_SUCCESS':
-      return { ...state, loading: false, searchError: false, ...action.payload }
-    case 'SEARCH_ERROR':
-      return { ...state, loading: false, searchError: true }
-    case 'SEARCH_CLEAR':
-      return { ...initialSearchState }
-    default:
-      return state
-  }
 }
 
 function SearchContent() {
@@ -99,15 +70,116 @@ function SearchContent() {
   const [trendingSearches, setTrendingSearches] = useState<string[]>(['BTC', 'ETH', 'Binance', 'Bitget', 'SOL'])
   const { showToast } = useToast()
 
-  const [searchState, dispatch] = useReducer(searchReducer, initialSearchState)
+  // Debounce the query for SWR — prevents firing on every keystroke
+  const debouncedQuery = useDebounce(query.trim(), 300)
+  const debouncedPlatform = useDebounce(platformFilter, 300)
+
+  // SWR key: null when no query (disables fetching)
+  const searchKey = debouncedQuery
+    ? `/api/search?q=${encodeURIComponent(debouncedQuery)}&limit=${SECTION_LIMIT}${debouncedPlatform ? `&platform=${encodeURIComponent(debouncedPlatform)}` : ''}`
+    : null
+
+  const { data: rawSearchData, error: searchFetchError, isLoading: swrLoading } = useSWR<UnifiedSearchResponse>(
+    searchKey,
+    searchFetcher,
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 30000, // Cache results for 30s across navigations
+      keepPreviousData: true,
+    }
+  )
+
+  // Map raw API data to UI-friendly shape
+  const mapped = useMemo<MappedSearchResults>(() => {
+    if (!rawSearchData?.results) {
+      return {
+        traderResults: [], traderTotal: 0,
+        postResults: [], postTotal: 0,
+        libraryResults: [], libTotal: 0,
+        groupResults: [], groupTotal: 0,
+        availablePlatforms: [], didYouMean: [],
+      }
+    }
+    const data = rawSearchData
+
+    const mappedLibrary = data.results.library.map(item => ({
+      type: 'library' as const,
+      id: item.id,
+      title: item.title,
+      subtitle: item.subtitle || undefined,
+      meta: item.meta?.category as string || undefined,
+    }))
+
+    const mappedPosts = data.results.posts.map(p => ({
+      type: 'post' as const,
+      id: p.id,
+      title: p.title,
+      subtitle: p.subtitle ? `${t('searchPostBy')}: ${p.subtitle}` : undefined,
+    }))
+
+    const mappedTraders = data.results.traders.map(tr => ({
+      type: 'trader' as const,
+      id: tr.href.replace('/trader/', ''),
+      title: tr.title,
+      subtitle: tr.subtitle || undefined,
+    }))
+
+    const platforms = [...new Set(data.results.traders.map(tr => tr.meta?.platform as string).filter(Boolean))]
+
+    const groupsResults = data.results.groups || []
+    const mappedGroups = groupsResults.map(g => ({
+      type: 'group' as const,
+      id: g.id,
+      title: g.title,
+      subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString('en-US')} ${t('members')}` : undefined,
+      meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
+    }))
+
+    return {
+      libraryResults: mappedLibrary,
+      libTotal: data.results.library.length,
+      postResults: mappedPosts,
+      postTotal: data.results.posts.length,
+      traderResults: mappedTraders,
+      traderTotal: data.results.traders.length,
+      groupResults: mappedGroups,
+      groupTotal: groupsResults.length,
+      availablePlatforms: platforms,
+      didYouMean: data.suggestions || [],
+    }
+  }, [rawSearchData, t])
+
   const {
-    loading, searchError,
     libraryResults, libTotal,
     groupResults, groupTotal,
     postResults, postTotal,
     traderResults, traderTotal,
     availablePlatforms, didYouMean,
-  } = searchState
+  } = mapped
+
+  const loading = swrLoading && !!debouncedQuery
+  const searchError = !!searchFetchError && !!debouncedQuery
+
+  // Show toast on search error
+  useEffect(() => {
+    if (searchFetchError && debouncedQuery) {
+      showToast(t('searchFailedToast'), 'error')
+    }
+  }, [searchFetchError, debouncedQuery, showToast, t])
+
+  // Save search history when results arrive
+  useEffect(() => {
+    if (!rawSearchData?.results || !debouncedQuery) return
+    const totalReceived =
+      rawSearchData.results.library.length +
+      rawSearchData.results.posts.length +
+      rawSearchData.results.traders.length +
+      (rawSearchData.results.groups || []).length
+    if (totalReceived > 0) {
+      saveSearchHistory(debouncedQuery)
+      setSearchHistory(getSearchHistory())
+    }
+  }, [rawSearchData, debouncedQuery])
 
   useEffect(() => {
     setSearchHistory(getSearchHistory())
@@ -139,8 +211,6 @@ function SearchContent() {
     loadTrendingSearches()
   }, [])
 
-  // Search history is saved in the success callback of doSearch below
-
   const highlightText = useCallback((text: string, q: string): React.ReactNode => {
     if (!text || !q.trim()) return text
     const lower = text.toLowerCase()
@@ -164,129 +234,6 @@ function SearchContent() {
     if (last < text.length) parts.push(text.slice(last))
     return parts.length > 0 ? parts : text
   }, [])
-
-  const abortControllerRef = useRef<AbortController | null>(null)
-
-  useEffect(() => {
-    if (!query.trim()) {
-      dispatch({ type: 'SEARCH_CLEAR' })
-      return
-    }
-
-    const doSearch = async () => {
-      dispatch({ type: 'SEARCH_START' })
-
-      // Abort previous request
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-      const controller = new AbortController()
-      abortControllerRef.current = controller
-
-      try {
-        // Use unified search API instead of direct Supabase queries
-        // This leverages server-side caching and consistent search logic
-        const platformParam = platformFilter ? `&platform=${encodeURIComponent(platformFilter)}` : ''
-        const apiRes = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=${SECTION_LIMIT}${platformParam}`, {
-          signal: controller.signal,
-        })
-
-        if (controller.signal.aborted) return
-
-        // Process unified API results (including groups)
-        if (apiRes.ok) {
-          const json = await apiRes.json()
-          const data: UnifiedSearchResponse = json.data || json
-
-          const mappedLibrary = data.results.library.map(item => ({
-            type: 'library' as const,
-            id: item.id,
-            title: item.title,
-            subtitle: item.subtitle || undefined,
-            meta: item.meta?.category as string || undefined,
-          }))
-
-          const mappedPosts = data.results.posts.map(p => ({
-            type: 'post' as const,
-            id: p.id,
-            title: p.title,
-            subtitle: p.subtitle ? `${t('searchPostBy')}: ${p.subtitle}` : undefined,
-          }))
-
-          const mappedTraders = data.results.traders.map(tr => ({
-            type: 'trader' as const,
-            id: tr.href.replace('/trader/', ''),
-            title: tr.title,
-            subtitle: tr.subtitle || undefined,
-          }))
-
-          const platforms = [...new Set(data.results.traders.map(tr => tr.meta?.platform as string).filter(Boolean))]
-
-          const groupsResults = data.results.groups || []
-          const mappedGroups = groupsResults.map(g => ({
-            type: 'group' as const,
-            id: g.id,
-            title: g.title,
-            subtitle: g.meta?.member_count ? `${(g.meta.member_count as number).toLocaleString('en-US')} ${t('members')}` : undefined,
-            meta: g.subtitle ? (g.subtitle.slice(0, 60)) : undefined,
-          }))
-
-          // Single atomic dispatch — sets all result state at once (no re-render storm)
-          dispatch({
-            type: 'SEARCH_SUCCESS',
-            payload: {
-              libraryResults: mappedLibrary,
-              libTotal: data.results.library.length,
-              postResults: mappedPosts,
-              postTotal: data.results.posts.length,
-              traderResults: mappedTraders,
-              traderTotal: data.results.traders.length,
-              groupResults: mappedGroups,
-              groupTotal: groupsResults.length,
-              availablePlatforms: platforms,
-              didYouMean: data.suggestions || [],
-            },
-          })
-
-          // Save to history only after results are received
-          const totalReceived = data.results.library.length + data.results.posts.length + data.results.traders.length + groupsResults.length
-          if (totalReceived > 0) {
-            saveSearchHistory(query.trim())
-            setSearchHistory(getSearchHistory())
-          }
-        } else {
-          dispatch({
-            type: 'SEARCH_SUCCESS',
-            payload: {
-              libraryResults: [],
-              libTotal: 0,
-              postResults: [],
-              postTotal: 0,
-              traderResults: [],
-              traderTotal: 0,
-              groupResults: [],
-              groupTotal: 0,
-              availablePlatforms: [],
-              didYouMean: [],
-            },
-          })
-        }
-      } catch (error) {
-        if (error instanceof Error && error.name === 'AbortError') return
-        logger.error('Search error:', error)
-        dispatch({ type: 'SEARCH_ERROR' })
-        showToast(t('searchFailedToast'), 'error')
-      }
-    }
-
-    const timeout = setTimeout(doSearch, 300)
-    return () => {
-      clearTimeout(timeout)
-      if (abortControllerRef.current) {
-        abortControllerRef.current.abort()
-      }
-    }
-  }, [query, platformFilter, t, showToast])
 
   const getHref = (result: SearchResult) => {
     if (result.type === 'library') return `/library/${result.id}`
