@@ -573,6 +573,9 @@
 .profile-grid {
   grid-template-columns: 1fr !important;
   gap: 20px !important;
+  max-width: 100% !important;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 @media (min-width: 768px) {

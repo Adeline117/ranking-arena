@@ -100,6 +100,9 @@ const OverviewTab = React.memo(function OverviewTab({
         display: 'grid',
         gridTemplateColumns: traderSimilar.length > 0 ? '1fr 300px' : '1fr',
         gap: tokens.spacing[6],
+        maxWidth: '100%',
+        overflow: 'hidden',
+        boxSizing: 'border-box',
       }}
     >
       <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
