@@ -34,16 +34,7 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin() as SupabaseClient
     
     // 验证用户
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { error: 'Please log in first' },
-        { status: 401 }
-      )
-    }
-
-    const token = authHeader.substring(7)
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
+    const { user, error: authError } = await (await import('@/lib/auth/extract-user')).extractUserFromRequest(request)
 
     if (authError || !user) {
       return NextResponse.json(
