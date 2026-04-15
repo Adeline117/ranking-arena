@@ -256,7 +256,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
           </section>
 
           {/* Fear & Greed + Arbitrage + Live Trades — 3-column widget row */}
-          <section style={{ marginBottom: 16, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, minHeight: 200 }}>
+          <section style={{ marginBottom: 20, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: tokens.spacing[4], overflowX: 'hidden' }}>
             <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
               <Suspense fallback={<LoadingCard height={160} />}>
                 <FearGreedGauge />

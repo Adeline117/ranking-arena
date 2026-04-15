@@ -74,6 +74,7 @@ export default function FearGreedGauge() {
     borderRadius: tokens.radius.xl,
     border: tokens.glass.border.light,
     height: '100%',
+    minHeight: 220,
   }
 
   if (!data && !error) {

@@ -93,6 +93,7 @@ export default function ArbitrageOpportunities() {
       borderRadius: tokens.radius.xl,
       border: tokens.glass.border.light,
       height: '100%',
+      minHeight: 220,
       display: 'flex',
       flexDirection: 'column',
       position: 'relative',
