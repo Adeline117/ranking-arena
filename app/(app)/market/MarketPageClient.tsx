@@ -11,6 +11,7 @@ import { tokens } from '@/lib/design-tokens'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import ErrorState from '@/app/components/ui/ErrorState'
 import { supabase } from '@/lib/supabase/client'
+import { useMarketSpotData, type SpotCoin } from '@/lib/hooks/useMarketSpot'
 
 // Core above-fold components: direct import for faster LCP
 import CoreCards from '@/app/components/market/CoreCards'
@@ -83,53 +84,48 @@ function MobileMoversTab({ initialSpotData }: { initialSpotData?: SpotCoinSSR[] 
   return (
     <SectionErrorBoundary fallbackMessage="Market data failed to load">
       <Suspense fallback={<LoadingCard height={300} />}>
-        <SpotMarket initialData={initialSpotData} />
+        <SpotMarket initialData={initialSpotData as SpotCoin[] | undefined} />
       </Suspense>
     </SectionErrorBoundary>
   )
+}
+
+const MOBILE_SECTOR_CATEGORY_MAP: Record<string, string> = {
+  BTC: 'L1', ETH: 'L1', SOL: 'L1', BNB: 'L1', ADA: 'L1', AVAX: 'L1', DOT: 'L1', NEAR: 'L1', ATOM: 'L1', SUI: 'L1', APT: 'L1', TRX: 'L1', TON: 'L1', XRP: 'L1',
+  LINK: 'DeFi', UNI: 'DeFi', AAVE: 'DeFi', MKR: 'DeFi', CRV: 'DeFi', SNX: 'DeFi',
+  ARB: 'L2', OP: 'L2', MATIC: 'L2', STRK: 'L2', IMX: 'L2',
+  DOGE: 'Meme', SHIB: 'Meme', PEPE: 'Meme', WIF: 'Meme', FLOKI: 'Meme', BONK: 'Meme',
+  RNDR: 'AI', FET: 'AI', TAO: 'AI', WLD: 'AI',
+  AXS: 'GameFi', GALA: 'GameFi', SAND: 'GameFi', MANA: 'GameFi',
 }
 
 function MobileSectorsTab() {
   const { t } = useLanguage()
   const [sectors, setSectors] = useState<{ name: string; change: number }[]>([])
   const [loading, setLoading] = useState(true)
-  const [fetchError, setFetchError] = useState(false)
 
   useEffect(() => {
-    const CATEGORY_MAP: Record<string, string> = {
-      BTC: 'L1', ETH: 'L1', SOL: 'L1', BNB: 'L1', ADA: 'L1', AVAX: 'L1', DOT: 'L1', NEAR: 'L1', ATOM: 'L1', SUI: 'L1', APT: 'L1', TRX: 'L1', TON: 'L1', XRP: 'L1',
-      LINK: 'DeFi', UNI: 'DeFi', AAVE: 'DeFi', MKR: 'DeFi', CRV: 'DeFi', SNX: 'DeFi',
-      ARB: 'L2', OP: 'L2', MATIC: 'L2', STRK: 'L2', IMX: 'L2',
-      DOGE: 'Meme', SHIB: 'Meme', PEPE: 'Meme', WIF: 'Meme', FLOKI: 'Meme', BONK: 'Meme',
-      RNDR: 'AI', FET: 'AI', TAO: 'AI', WLD: 'AI',
-      AXS: 'GameFi', GALA: 'GameFi', SAND: 'GameFi', MANA: 'GameFi',
-    }
     fetch('/api/market/spot')
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error('fetch failed'); return r.json() })
       .then((data: { symbol: string; change24h: number | null; marketCap: number }[]) => {
         if (!Array.isArray(data)) return
         const grouped: Record<string, { totalCap: number; weightedChange: number }> = {}
         for (const c of data) {
-          const cat = CATEGORY_MAP[c.symbol]
+          const cat = MOBILE_SECTOR_CATEGORY_MAP[c.symbol]
           if (!cat || c.change24h == null || c.marketCap <= 0) continue
           if (!grouped[cat]) grouped[cat] = { totalCap: 0, weightedChange: 0 }
           grouped[cat].totalCap += c.marketCap
           grouped[cat].weightedChange += c.change24h * c.marketCap
         }
-        const result = Object.entries(grouped)
+        setSectors(Object.entries(grouped)
           .map(([name, v]) => ({ name, change: v.weightedChange / v.totalCap }))
-          .sort((a, b) => b.change - a.change)
-        setSectors(result)
+          .sort((a, b) => b.change - a.change))
       })
-      .catch(err => {
-        console.warn('[MarketPage] fetch failed', err)
-        setFetchError(true)
-      })
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
   if (loading) return <LoadingSkeleton variant="list" count={4} />
-  if (fetchError) return <ErrorState title={t('loadFailed')} variant="compact" />
   if (sectors.length === 0) return (
     <div style={{ height: 160, display: 'flex', alignItems: 'center', justifyContent: 'center', color: tokens.colors.text.tertiary, fontSize: 14 }}>
       {t('noData') || 'No sector data available'}
@@ -195,6 +191,9 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
   const [selectedToken, setSelectedToken] = useState<{ id: string; symbol: string; name: string; image: string; price: number; change24h: number; marketCap: number; volume24h: number; high24h: number; low24h: number; rank: number } | null>(null)
   const [sectorFilter, setSectorFilter] = useState<string | null>(null)
   const isMobile = useIsMobile()
+
+  // Single shared fetch for /api/market/spot — data passed as props to all children
+  const { data: spotData, isLoading: spotLoading } = useMarketSpotData()
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
