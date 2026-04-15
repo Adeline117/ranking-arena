@@ -555,6 +555,12 @@ const nextConfig = {
             key: 'Content-Security-Policy',
             value: cspDirectives,
           },
+          {
+            // All languages served from same URL (client-side locale detection).
+            // Replaces hreflang tags which were incorrect (all pointed to same URL).
+            key: 'Content-Language',
+            value: 'en, zh-CN, ja, ko',
+          },
         ],
       },
       {

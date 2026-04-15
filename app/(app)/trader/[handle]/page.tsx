@@ -175,6 +175,25 @@ const cachedFindUserHandleByTrader = unstable_cache(
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
+/**
+ * Pre-render top 500 trader pages at build time for faster TTFB and better SEO.
+ * Non-pre-rendered handles still work at runtime (dynamicParams = true).
+ */
+export async function generateStaticParams() {
+  const supabase = getSupabaseAdmin()
+  const { data } = await supabase
+    .from('leaderboard_ranks')
+    .select('handle')
+    .not('handle', 'is', null)
+    .order('arena_score', { ascending: false })
+    .limit(500)
+
+  if (!data) return []
+  return data
+    .filter((t: { handle: string | null }) => t.handle)
+    .map((t: { handle: string | null }) => ({ handle: encodeURIComponent(t.handle!) }))
+}
+
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
   const { handle } = await params
   // Reject absurdly long handles early to prevent cache key bloat and DB abuse
