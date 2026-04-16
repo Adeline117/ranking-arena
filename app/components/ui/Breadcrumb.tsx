@@ -26,7 +26,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
     <nav
       aria-label="Breadcrumb"
       style={{
-        padding: '8px 0',
+        padding: `${tokens.spacing[2]} 0`,
         fontSize: tokens.typography.fontSize.xs,
         lineHeight: '1.5',
         whiteSpace: 'nowrap',
@@ -57,7 +57,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
               {idx > 0 && (
                 <span
                   style={{
-                    margin: '0 6px',
+                    margin: `0 ${tokens.spacing[1.5]}`,
                     color: 'var(--color-text-tertiary, #8E8E9E)',
                     opacity: 0.5,
                     userSelect: 'none',
@@ -86,7 +86,7 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
                     display: 'inline-flex',
                     alignItems: 'center',
                     minHeight: 44,
-                    padding: '8px 4px',
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[1]}`,
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.color = 'var(--color-brand, #8b6fa8)'

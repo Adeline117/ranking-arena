@@ -194,7 +194,7 @@ export default function ReportModal({
           style={{
             width: '100%',
             maxWidth: 420,
-            maxHeight: 'calc(100vh - 40px)',
+            maxHeight: `calc(100vh - ${tokens.spacing[10]})`,
             background: tokens.colors.bg.primary,
             borderRadius: tokens.radius.xl,
             boxShadow: 'var(--shadow-elevated)',
@@ -228,8 +228,8 @@ export default function ReportModal({
               onClick={onClose}
               aria-label={t('cancel')}
               style={{
-                width: 32,
-                height: 32,
+                width: tokens.spacing[8],
+                height: tokens.spacing[8],
                 borderRadius: tokens.radius.full,
                 border: 'none',
                 background: tokens.colors.bg.secondary,
@@ -357,7 +357,7 @@ export default function ReportModal({
                   e.target.style.borderColor = tokens.colors.border.primary
                 }}
               />
-              <Text size="xs" style={{ marginTop: 4, textAlign: 'right', color: description.trim().length < MIN_DESC_LENGTH ? 'var(--color-accent-error)' : tokens.colors.text.tertiary }}>
+              <Text size="xs" style={{ marginTop: tokens.spacing[1], textAlign: 'right', color: description.trim().length < MIN_DESC_LENGTH ? 'var(--color-accent-error)' : tokens.colors.text.tertiary }}>
                 {description.trim().length}/{MIN_DESC_LENGTH} {t('reportMinChars')} · {description.length}/1000
               </Text>
             </Box>
@@ -366,7 +366,7 @@ export default function ReportModal({
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
                 {t('reportScreenshot')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
-                <span style={{ fontWeight: 400, color: tokens.colors.text.tertiary, marginLeft: 4, fontSize: 12 }}>
+                <span style={{ fontWeight: 400, color: tokens.colors.text.tertiary, marginLeft: tokens.spacing[1], fontSize: tokens.typography.fontSize.xs }}>
                   ({images.length}/{MAX_IMAGES})
                 </span>
               </Text>
@@ -379,7 +379,7 @@ export default function ReportModal({
                       onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
                       aria-label={`Remove image ${i + 1}`}
                       style={{
-                        position: 'absolute', top: 2, right: 2, width: 20, height: 20,
+                        position: 'absolute', top: tokens.spacing[0.5], right: tokens.spacing[0.5], width: 20, height: 20,
                         borderRadius: '50%', background: 'var(--color-backdrop-medium)', border: 'none',
                         color: tokens.colors.white, fontSize: 12, cursor: 'pointer', display: 'flex',
                         alignItems: 'center', justifyContent: 'center',
@@ -394,7 +394,7 @@ export default function ReportModal({
                     border: `2px dashed ${tokens.colors.border.secondary}`,
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.5 : 1,
-                    flexDirection: 'column', gap: 2,
+                    flexDirection: 'column', gap: tokens.spacing[0.5],
                   }}>
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2">
                       <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
