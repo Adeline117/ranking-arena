@@ -16,7 +16,8 @@ import { logger } from '@/lib/logger'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getReadReplica } from '@/lib/supabase/read-replica'
-import { PipelineLogger } from '@/lib/services/pipeline-logger'
+import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { env } from '@/lib/env'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-async function aggregateForDate(supabase: any, dateStr: string, _plog: any): Promise<{ inserted: number; errors: number }> {
+async function aggregateForDate(supabase: SupabaseClient, dateStr: string, _plog: PipelineLogHandle): Promise<{ inserted: number; errors: number }> {
     const readDb = getReadReplica() // Read replica for heavy SELECT queries
     const today = new Date()
     const _todayStr = today.toISOString().split('T')[0]
