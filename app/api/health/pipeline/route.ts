@@ -17,6 +17,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { getFireAndForgetStats, logger } from '@/lib/utils/logger'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
+import { getCircuitStates } from '@/lib/connectors/circuit-registry'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -176,7 +177,9 @@ export async function GET(req: NextRequest) {
     // Cache key bumped 2026-04-09 v3 to bust the previous degraded entries
     // that got persisted before the OR-based degraded check landed (v2 used
     // AND which let partially-degraded responses through).
-    const CACHE_KEY = 'api:health:pipeline:v3'
+    // v4 (2026-04-16): added `circuits` field and circuit-based status
+    // escalation; bump to avoid serving cached responses without circuit data.
+    const CACHE_KEY = 'api:health:pipeline:v4'
     const cached = await tieredGet(CACHE_KEY, 'warm')
     if (cached.data !== null) {
       // Defensive: even on cache hit, validate the cached entry isn't degraded.
@@ -264,6 +267,31 @@ export async function GET(req: NextRequest) {
           overallStatus = 'degraded'
         }
 
+        // Circuit breaker states — surface OPEN/HALF_OPEN circuits so OpenClaw
+        // can see when exchange connectors are tripping before cron failures
+        // cascade. Previously this was logged only and visible only via grep.
+        // See lib/connectors/circuit-registry.ts for the state source.
+        //
+        // Note: these live in serverless instance memory, so state will reset
+        // on cold start. An OPEN circuit here is a strong signal; its absence
+        // does NOT guarantee healthy (the instance may have just booted).
+        const rawCircuits = getCircuitStates()
+        const circuits = {
+          states: rawCircuits,
+          open: Object.entries(rawCircuits).filter(([, s]) => s === 'open').map(([p]) => p),
+          halfOpen: Object.entries(rawCircuits).filter(([, s]) => s === 'half_open').map(([p]) => p),
+          total: Object.keys(rawCircuits).length,
+        }
+
+        // Any open circuit is at minimum a degraded state. 2+ open circuits
+        // suggests systemic issue (upstream outage, our IP blocked, etc.) →
+        // critical.
+        if (circuits.open.length >= 2) {
+          overallStatus = 'critical'
+        } else if (circuits.open.length >= 1 && overallStatus === 'healthy') {
+          overallStatus = 'degraded'
+        }
+
         return {
           status: overallStatus,
           timestamp: new Date().toISOString(),
@@ -279,12 +307,15 @@ export async function GET(req: NextRequest) {
             platformCritical,
             totalPlatforms: platformHealth.length,
             backgroundFailureCount: backgroundFailures.length,
+            circuitsOpen: circuits.open.length,
+            circuitsHalfOpen: circuits.halfOpen.length,
           },
           platformHealth,
           jobs: jobStatuses,
           stats: jobStats,
           recentFailures,
           backgroundFailures,
+          circuits,
         }
     }
 
