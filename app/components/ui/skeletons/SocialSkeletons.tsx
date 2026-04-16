@@ -213,10 +213,11 @@ export function ConversationPageSkeleton() {
         </div>
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-        {Array.from({ length: 5 }).map((_, i) => (
+        {/* Deterministic widths to avoid hydration mismatch (previously used Math.random) */}
+        {[180, 240, 140, 280, 200].map((w, i) => (
           <div key={i} style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: i % 2 === 0 ? 'flex-start' : 'flex-end' }}>
             {i % 2 === 0 && <SkeletonAvatar size={32} />}
-            <Skeleton width={`${120 + Math.random() * 160}px`} height="40px" variant="rounded" />
+            <Skeleton width={`${w}px`} height="40px" variant="rounded" />
           </div>
         ))}
       </div>
