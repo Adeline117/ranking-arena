@@ -142,7 +142,7 @@ export class BlofinFuturesConnector extends BaseConnector {
         bio: null,
         tags: ['copy-trading', 'futures'],
         profile_url: `https://blofin.com/en/copy-trade/details/${traderKey}`,
-        followers: this.num(info?.followers),
+        followers: safeNumber(info?.followers),
         copiers: null,
         aum: null,
         updated_at: new Date().toISOString(),
@@ -156,7 +156,8 @@ export class BlofinFuturesConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch (_err) {
+    } catch (err) {
+      log.warn(`fetchTraderProfile(${traderKey}) failed: ${err instanceof Error ? err.message : String(err)}`)
       return null
     }
   }
@@ -184,14 +185,14 @@ export class BlofinFuturesConnector extends BaseConnector {
       }
 
       const metrics: SnapshotMetrics = {
-        roi: this.num(info.roi),
-        pnl: this.num(info.pnl),
-        win_rate: this.num(info.winRate),
-        max_drawdown: this.num(info.maxDrawdown),
-        sharpe_ratio: this.num(info.sharpeRatio),
+        roi: safeNumber(info.roi),
+        pnl: safeNumber(info.pnl),
+        win_rate: safeNumber(info.winRate),
+        max_drawdown: safeNumber(info.maxDrawdown),
+        sharpe_ratio: safeNumber(info.sharpeRatio),
         sortino_ratio: null,
         trades_count: null,
-        followers: this.num(info.followers),
+        followers: safeNumber(info.followers),
         copiers: null,
         aum: null,
         platform_rank: null,
@@ -209,7 +210,8 @@ export class BlofinFuturesConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch (_err) {
+    } catch (err) {
+      log.warn(`fetchTraderSnapshot(${traderKey}, ${window}) failed: ${err instanceof Error ? err.message : String(err)}`)
       return null
     }
   }
@@ -251,11 +253,5 @@ export class BlofinFuturesConnector extends BaseConnector {
       sharpe_ratio: safeNumber(raw.sharpeRatio),
       platform_rank: null,
     }
-  }
-
-  protected num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val)
-    return !Number.isFinite(n) ? null : n
   }
 }
