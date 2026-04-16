@@ -78,12 +78,15 @@ export function CommentInput({
               onSubmitComment(postId)
             }
           }}
+          className="comment-input-textarea"
           style={{
             width: '100%',
             padding: 0,
             border: 'none',
             background: 'transparent',
             color: tokens.colors.text.primary,
+            // Desktop: 14px. Mobile override in globals.css bumps to 16px
+            // to prevent iOS Safari auto-zoom on focus.
             fontSize: 14,
             resize: 'none',
             outline: 'none',
