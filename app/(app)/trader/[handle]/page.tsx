@@ -312,6 +312,12 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     notFound()
   }
 
+  // Redirect claimed traders to canonical /u/ URL (avoids SEO duplicate content)
+  if (userHandle) {
+    const redirectUrl = `/u/${encodeURIComponent(userHandle)}${platform ? `?platform=${encodeURIComponent(resolved.platform)}` : ''}`
+    redirect(redirectUrl)
+  }
+
   // Redirect raw address URLs to human-readable handle URLs (better SEO)
   if (resolved.handle && resolved.handle !== decodedHandle) {
     const redirectParams = new URLSearchParams({ platform: resolved.platform })
