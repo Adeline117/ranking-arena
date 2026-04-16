@@ -132,21 +132,58 @@ async function initSentry() {
 
 /**
  * 延迟初始化：idle 时加载，不阻塞渲染
+ *
+ * Fallback chain (in order of preference):
+ *   1. requestIdleCallback — primary path; runs when browser is idle
+ *   2. DOMContentLoaded    — if page hasn't parsed yet, init after DOM ready
+ *   3. setTimeout(2000)    — last-resort fire-and-forget timer
+ *
+ * `initialized` guard ensures initSentry() runs at most once, even if the
+ * user closes the page quickly or multiple fallbacks race.
  */
 if (typeof window !== 'undefined') {
+  let initialized = false
+  const runOnce = () => {
+    if (initialized) return
+    initialized = true
+    initSentry().catch(() => {
+      // eslint-disable-next-line no-restricted-syntax -- non-critical: monitoring failure shouldn't crash the app
+    })
+  }
+
   const deferInit = () => {
-    if ('requestIdleCallback' in window) {
-      (window as Window & { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => void })
-        .requestIdleCallback(() => { initSentry() }, { timeout: 4000 })
-    } else {
-      setTimeout(() => { initSentry() }, 3000)
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => void
     }
+    if (typeof w.requestIdleCallback === 'function') {
+      try {
+        w.requestIdleCallback(runOnce, { timeout: 4000 })
+        // Safety net: requestIdleCallback may never fire on backgrounded tabs.
+        // Force init after 4s if it hasn't happened yet.
+        setTimeout(runOnce, 4000)
+        return
+      } catch {
+        // Fall through to next strategy
+      }
+    }
+    // Fallback 1: DOMContentLoaded — fires even before `load`
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', runOnce, { once: true })
+    }
+    // Fallback 2: plain timeout — always triggers, even if DOM events stall
+    setTimeout(runOnce, 2000)
   }
 
   if (document.readyState === 'complete') {
     deferInit()
   } else {
     window.addEventListener('load', deferInit, { once: true })
+    // If `load` never fires (user navigates away early), still init
+    // via DOMContentLoaded / timeout fallback.
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', deferInit, { once: true })
+    }
+    setTimeout(deferInit, 5000)
   }
 }
 
