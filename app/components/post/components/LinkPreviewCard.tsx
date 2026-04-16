@@ -102,7 +102,7 @@ export const LinkPreviewCard = memo(function LinkPreviewCard({ url }: { url: str
           }}>
             <img
               src={data.image}
-              alt=""
+              alt={data.title || 'Link preview'}
               loading="lazy"
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}

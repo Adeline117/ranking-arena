@@ -157,7 +157,7 @@ export function MentionAutocomplete({
           {user.avatar_url ? (
             <img
               src={user.avatar_url}
-              alt=""
+              alt={`${user.handle || 'User'} avatar`}
               width={24}
               height={24}
               style={{ borderRadius: '50%', objectFit: 'cover' }}
