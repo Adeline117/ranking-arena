@@ -419,7 +419,24 @@ const nextConfig = {
   
   // 服务端专用包（不打包到客户端）
   // 注意：@upstash/redis 使用 REST API，不需要在此配置
-  serverExternalPackages: ['ccxt', 'puppeteer', 'puppeteer-extra', 'puppeteer-extra-plugin-stealth', 'pg', 'redis'],
+  // @aws-sdk/* 虽然只在 scripts 里 import，但保险起见也列出来，防止
+  // 某些 route 意外引入后把 ~3MB 的 AWS SDK 打进 client bundle
+  serverExternalPackages: [
+    'ccxt',
+    'puppeteer',
+    'puppeteer-extra',
+    'puppeteer-extra-plugin-stealth',
+    'pg',
+    'redis',
+    '@aws-sdk/client-s3',
+    '@aws-sdk/s3-request-presigner',
+    '@trigger.dev/sdk',
+    'sharp',
+    'web-push',
+    'resend',
+    'nodemailer',
+    '@sentry/profiling-node',
+  ],
   
   // 实验性功能
   experimental: {
