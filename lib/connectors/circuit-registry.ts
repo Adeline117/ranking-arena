@@ -45,6 +45,9 @@ type AnyPolicy = IPolicy<any, any>
 /** Per-platform policy instances */
 const platformPolicies = new Map<string, AnyPolicy>()
 
+/** Track circuit breaker states explicitly (cockatiel doesn't expose state) */
+const circuitStates = new Map<string, 'closed' | 'open' | 'half_open'>()
+
 /**
  * Get or create a circuit breaker policy for a specific platform.
  * Each platform has its own independent retry + circuit breaker.
@@ -65,7 +68,22 @@ export function getPlatformPolicy(platform: string, config?: Partial<CircuitConf
     breaker: new ConsecutiveBreaker(cfg.breakerThreshold),
   })
 
+  // Track state transitions for API layer visibility
+  breakerPolicy.onBreak(() => {
+    circuitStates.set(platform, 'open')
+    exchangeLogger.warn(`[CircuitRegistry] Circuit OPENED for ${platform}`)
+  })
+  breakerPolicy.onHalfOpen(() => {
+    circuitStates.set(platform, 'half_open')
+    exchangeLogger.info(`[CircuitRegistry] Circuit half-open for ${platform}`)
+  })
+  breakerPolicy.onReset(() => {
+    circuitStates.set(platform, 'closed')
+    exchangeLogger.info(`[CircuitRegistry] Circuit CLOSED for ${platform}`)
+  })
+
   const policy: AnyPolicy = wrap(retryPolicy, breakerPolicy)
+  circuitStates.set(platform, 'closed')
 
   exchangeLogger.info(
     `[CircuitRegistry] Created policy for ${platform}: maxAttempts=${cfg.maxAttempts}, breakerThreshold=${cfg.breakerThreshold}, halfOpenAfter=${cfg.halfOpenAfter}ms`
@@ -81,6 +99,7 @@ export function getPlatformPolicy(platform: string, config?: Partial<CircuitConf
  */
 export function resetCircuit(platform: string): void {
   platformPolicies.delete(platform)
+  circuitStates.delete(platform)
   exchangeLogger.info(`[CircuitRegistry] Reset circuit for ${platform}`)
 }
 
@@ -89,4 +108,25 @@ export function resetCircuit(platform: string): void {
  */
 export function getRegisteredPlatforms(): string[] {
   return Array.from(platformPolicies.keys())
+}
+
+/**
+ * Check if a platform's circuit is currently open (broken).
+ * Returns true if the circuit is open and requests should not be attempted.
+ * API routes should check this before making connector calls to return 503 early.
+ */
+export function isCircuitOpen(platform: string): boolean {
+  return circuitStates.get(platform) === 'open'
+}
+
+/**
+ * Get circuit breaker states for all registered platforms.
+ * Useful for health check endpoints and monitoring dashboards.
+ */
+export function getCircuitStates(): Record<string, 'closed' | 'open' | 'half_open'> {
+  const states: Record<string, 'closed' | 'open' | 'half_open'> = {}
+  for (const [platform, state] of circuitStates.entries()) {
+    states[platform] = state
+  }
+  return states
 }
