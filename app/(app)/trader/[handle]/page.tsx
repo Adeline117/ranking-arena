@@ -3,6 +3,7 @@ import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
 import { redirect, notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getReadReplica } from '@/lib/supabase/read-replica'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
@@ -28,7 +29,7 @@ const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
 
 const cachedResolveTraderISR = unstable_cache(
   async (handle: string, platform: string | undefined) => {
-    const result = await resolveTrader(getSupabaseAdmin(), { handle, platform })
+    const result = await resolveTrader(getReadReplica(), { handle, platform })
     if (!result) {
       // Throw so unstable_cache does NOT cache null results.
       // A transient DB timeout should not cause 5 minutes of 404s.
@@ -78,7 +79,7 @@ const cachedResolveTrader = cache(
 // Null results throw to prevent unstable_cache from persisting "no data" for 5min.
 const cachedGetTraderDetailISR = unstable_cache(
   async (platform: string, traderKey: string) => {
-    const result = await getTraderDetail(getSupabaseAdmin(), { platform, traderKey })
+    const result = await getTraderDetail(getReadReplica(), { platform, traderKey })
     if (!result) throw new Error('TRADER_DETAIL_NULL')
     return result
   },
@@ -123,7 +124,7 @@ const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
 // Avoids a duplicate DB query between generateMetadata and the page render.
 const cachedLeaderboardMeta = unstable_cache(
   async (platform: string, traderKey: string) => {
-    const { data } = await getSupabaseAdmin()
+    const { data } = await getReadReplica()
       .from('leaderboard_ranks')
       .select('rank, arena_score, roi, pnl')
       .eq(LR.source, platform)
@@ -140,7 +141,7 @@ const cachedLeaderboardMeta = unstable_cache(
 const cachedFindUserHandleByTrader = unstable_cache(
   async (traderHandle: string): Promise<string | null> => {
     try {
-      const supabase = getSupabaseAdmin()
+      const supabase = getReadReplica()
       const { data: trader } = await supabase
         .from('traders')
         .select('id, trader_authorizations!inner(user_id, user_profiles:user_id(handle))')
@@ -155,7 +156,7 @@ const cachedFindUserHandleByTrader = unstable_cache(
     } catch {
       // Fallback: query via trader_authorizations table
       try {
-        const supabase = getSupabaseAdmin()
+        const supabase = getReadReplica()
         const { data: auth } = await supabase
           .from('trader_authorizations')
           .select('user_id, traders!inner(handle), user_profiles:user_id(handle)')
@@ -180,7 +181,7 @@ const cachedFindUserHandleByTrader = unstable_cache(
  * Non-pre-rendered handles still work at runtime (dynamicParams = true).
  */
 export async function generateStaticParams() {
-  const supabase = getSupabaseAdmin()
+  const supabase = getReadReplica()
   const { data } = await supabase
     .from('leaderboard_ranks')
     .select('handle')
@@ -331,7 +332,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   // Phase 2: Fetch trader detail + claimed user profile in parallel.
   // cachedGetTraderDetail serves the ~11-query fetch from Next.js data cache.
   const userProfilePromise = userHandle
-    ? getSupabaseAdmin()
+    ? getReadReplica()
         .from('user_profiles')
         .select('id, handle, bio, avatar_url, cover_url')
         .eq('handle', userHandle)
