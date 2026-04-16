@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useCallback } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -110,9 +110,9 @@ export default function SpotMarket({ spotData, onTokenClick, sectorFilter, initi
     try { const saved = localStorage.getItem('market_favorites'); if (saved) setFavorites(new Set(JSON.parse(saved))) } catch { /* ignore */ }
   }, [])
 
-  const toggleFav = (id: string) => {
+  const toggleFav = useCallback((id: string) => {
     setFavorites((prev) => { const next = new Set(prev); if (next.has(id)) { next.delete(id) } else { next.add(id) }; localStorage.setItem('market_favorites', JSON.stringify([...next])); return next })
-  }
+  }, [])
 
   const merged = useMemo(() => data.map((coin) => { const rt = realtimePrices[coin.symbol.toUpperCase()]; if (!rt) return coin; return { ...coin, price: rt.price ?? coin.price, change24h: rt.change24h ?? coin.change24h } }), [data, realtimePrices])
 
@@ -124,7 +124,10 @@ export default function SpotMarket({ spotData, onTokenClick, sectorFilter, initi
     return list
   }, [merged, search, showFavOnly, favorites, sectorFilter])
 
-  const columns: Column<SpotCoin>[] = [
+  // Memoize columns so MarketTable's memo() actually holds when unrelated state
+  // changes. Previously every keystroke / realtime tick created a new columns
+  // array + new render closures, forcing the entire memoized table to re-render.
+  const columns: Column<SpotCoin>[] = useMemo(() => [
     { key: 'rank', label: '#', align: 'center', width: '48px', sortable: true, render: (r) => <span style={{ color: tokens.colors.text.tertiary, fontWeight: 600 }}>{r.rank}</span> },
     { key: 'symbol', label: t('tradingPair'), align: 'left', width: '20%', sortable: true, render: (r) => (
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, overflow: 'hidden' }}>
@@ -141,7 +144,7 @@ export default function SpotMarket({ spotData, onTokenClick, sectorFilter, initi
     { key: 'fav', label: '', width: '6%', align: 'center', render: (r) => { const isFav = favorites.has(r.id); return (
         <button onClick={(e) => { e.stopPropagation(); toggleFav(r.id) }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: isFav ? tokens.colors.accent.warning : tokens.colors.text.tertiary, fontSize: 18, padding: 4, minWidth: 44, minHeight: 44, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: tokens.radius.md, transition: `all ${tokens.transition.fast}` }} title={t('favorite')}>{isFav ? '\u2605' : '\u2606'}</button>
       ) } },
-  ]
+  ], [t, sparklines, flashes, favorites, toggleFav])
 
   return (
     <div>
