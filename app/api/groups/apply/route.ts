@@ -1,55 +1,42 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
 import { logger } from '@/lib/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { notifyNewGroup } from '@/lib/notifications/activity-alerts'
 import { socialFeatureGuard } from '@/lib/features'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 
-export async function POST(request: NextRequest) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
-
-  // Rate limit: write operation
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResponse) return rateLimitResponse
-
-  try {
-    // CSRF 验证
-    const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
-    const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
-    if (!validateCsrfToken(cookieToken, headerToken) && false) { // CSRF disabled: auth token is sufficient
-      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-    }
-
-    // 验证用户身份
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin()
-
-    // 验证 token
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
-    }
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
     // 解析请求体
-    const body = await request.json()
-    const { 
-      name, 
-      name_en, 
-      description, 
-      description_en, 
-      avatar_url, 
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const {
+      name,
+      name_en,
+      description,
+      description_en,
+      avatar_url,
       role_names,
       rules_json,
       rules,
-      is_premium_only
-    } = body
+      is_premium_only,
+    } = body as {
+      name?: string
+      name_en?: string
+      description?: string
+      description_en?: string
+      avatar_url?: string
+      role_names?: { admin?: { zh?: string; en?: string }; member?: { zh?: string; en?: string } }
+      rules_json?: unknown
+      rules?: string
+      is_premium_only?: boolean
+    }
 
     // 验证必填字段
     if (!name || typeof name !== 'string' || name.trim().length === 0) {
@@ -72,8 +59,8 @@ export async function POST(request: NextRequest) {
         .eq('id', user.id)
         .single()
 
-      const isPro = profile?.subscription_tier === 'pro'
-      
+      const isPro = (profile as { subscription_tier?: string } | null)?.subscription_tier === 'pro'
+
       if (!isPro) {
         return NextResponse.json({ error: 'Only Pro members can create exclusive groups' }, { status: 403 })
       }
@@ -105,13 +92,13 @@ export async function POST(request: NextRequest) {
     // 默认角色名称（admin 包含组长和管理员）
     const defaultRoleNames = {
       admin: { zh: '管理员', en: 'Admin' },
-      member: { zh: '成员', en: 'Member' }
+      member: { zh: '成员', en: 'Member' },
     }
 
     // 合并用户提供的角色名称
     const finalRoleNames = role_names ? {
       admin: { ...defaultRoleNames.admin, ...role_names.admin },
-      member: { ...defaultRoleNames.member, ...role_names.member }
+      member: { ...defaultRoleNames.member, ...role_names.member },
     } : defaultRoleNames
 
     // 创建申请 (auto-approved)
@@ -128,7 +115,7 @@ export async function POST(request: NextRequest) {
         rules_json: rules_json || null,
         rules: rules?.trim() || null,
         is_premium_only: is_premium_only || false,
-        status: 'approved'
+        status: 'approved',
       })
       .select()
       .single()
@@ -183,31 +170,15 @@ export async function POST(request: NextRequest) {
       application,
       group: newGroup,
     })
-
-  } catch (error: unknown) {
-    logger.apiError('/api/groups/apply', error, {})
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'groups-apply-post', rateLimit: 'write' }
+)
 
 // 获取当前用户的申请列表
-export async function GET(request: NextRequest) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
-
-  try {
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
-    }
+export const GET = withAuth(
+  async ({ user, supabase }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
     // 获取用户的所有申请
     const { data: applications, error } = await supabase
@@ -222,9 +193,6 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ applications })
-
-  } catch (error: unknown) {
-    logger.apiError('/api/groups/apply', error, {})
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'groups-apply-get', rateLimit: 'read' }
+)

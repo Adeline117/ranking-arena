@@ -1,42 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { SupabaseClient } from '@supabase/supabase-js'
+import { withAuth } from '@/lib/api/middleware'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // 检查是否是管理员
- 
 async function isAdmin(supabase: SupabaseClient, userId: string): Promise<boolean> {
   const { data: profile } = await supabase
     .from('user_profiles')
     .select('role')
     .eq('id', userId)
     .maybeSingle()
-  
+
   return (profile as { role?: string } | null)?.role === 'admin'
 }
 
 // 管理员获取待审核的申请列表
-export async function GET(request: NextRequest) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
-
-  try {
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
-    }
+export const GET = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
     // 检查是否是管理员
-    if (!await isAdmin(supabase, user.id)) {
+    if (!(await isAdmin(supabase, user.id))) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
@@ -65,10 +51,6 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json({ applications })
-
-  } catch (error: unknown) {
-    logger.error('Error fetching applications:', error)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
-
+  },
+  { name: 'groups-applications-get', rateLimit: 'read' }
+)
