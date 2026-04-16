@@ -27,9 +27,17 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
   const [presenceMap, setPresenceMap] = useState<Record<string, PresenceState>>({})
   const channelRef = useRef<RealtimeChannel | null>(null)
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // AbortController for in-flight heartbeat POSTs and last_seen fetches.
+  // Without this, a slow heartbeat request that resolves after unmount
+  // holds the Response body + JSON parser scope in memory until GC.
+  const fetchAbortRef = useRef<AbortController | null>(null)
 
   useEffect(() => {
     if (!currentUserId) return
+
+    // Create a fresh AbortController for this mount cycle.
+    const abortController = new AbortController()
+    fetchAbortRef.current = abortController
 
     const channel = supabase.channel(getPresenceShard(currentUserId), {
       config: { presence: { key: currentUserId } },
@@ -97,11 +105,13 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
 
     // Update last_seen_at in DB periodically (every 60s)
     const dbHeartbeat = setInterval(async () => {
+      if (abortController.signal.aborted) return
       try {
         await fetch('/api/presence', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'heartbeat' }),
+          signal: abortController.signal,
         })
       } catch (_err) {
         // Intentionally swallowed: presence heartbeat is best-effort, missed heartbeats auto-recover
@@ -109,6 +119,11 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
     }, 60000)
 
     return () => {
+      // Abort any in-flight heartbeat fetch before tearing down intervals —
+      // otherwise an in-flight request resolves post-unmount and holds the
+      // response body in memory until GC.
+      abortController.abort()
+      if (fetchAbortRef.current === abortController) fetchAbortRef.current = null
       if (heartbeatRef.current) clearInterval(heartbeatRef.current)
       clearInterval(dbHeartbeat)
       channel.unsubscribe()
@@ -119,14 +134,22 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
   // Fetch initial last_seen_at for watched users
   useEffect(() => {
     if (watchUserIds.length === 0) return
-    
+
+    // Track whether this effect instance has been unmounted so we can
+    // skip the setState after the async supabase call resolves.
+    // The Supabase client doesn't support AbortController directly, so a
+    // mounted flag is the idiomatic guard.
+    let aborted = false
+
     const fetchLastSeen = async () => {
       try {
         const { data } = await supabase
           .from('user_profiles')
           .select('id, last_seen_at, is_online')
           .in('id', watchUserIds)
-        
+
+        if (aborted) return
+
         if (data) {
           setPresenceMap(prev => {
             const updated = { ...prev }
@@ -148,6 +171,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
     }
 
     fetchLastSeen()
+    return () => { aborted = true }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- join produces stable string key
   }, [watchUserIds.join(',')])
 
