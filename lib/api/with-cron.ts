@@ -22,6 +22,7 @@ import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { getSharedRedis } from '@/lib/cache/redis-client'
+import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
 
 interface CronContext {
   plog: PipelineLogHandle
@@ -58,6 +59,18 @@ export function withCron(
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
+    // 1.5. Bind a correlation ID for this cron run. Uses any upstream
+    // X-Correlation-ID / X-Request-ID header so Vercel/OpenClaw can thread
+    // IDs end-to-end; otherwise generates a fresh one. All logs inside
+    // `handler` (including async continuations like fireAndForget) will
+    // automatically include [cid:<id>] so a single cron run can be reassembled
+    // from log aggregator output.
+    const correlationId = getOrCreateCorrelationId(request)
+    return runWithCorrelationId(correlationId, () => runCron(request, correlationId))
+  }
+
+  async function runCron(request: NextRequest, correlationId: string): Promise<NextResponse> {
+
     // 2. Distributed lock — prevent concurrent execution of the same cron job
     const lockKey = `cron:lock:${jobName}`
     const lockTtlSec = Math.ceil(safetyTimeoutMs / 1000)
@@ -73,10 +86,12 @@ export function withCron(
         } else {
           // Another instance already holds the lock
           logger.info(`[${jobName}] Skipped — concurrent execution (lock held)`)
-          return NextResponse.json(
+          const skipRes = NextResponse.json(
             { ok: true, skipped: true, reason: 'concurrent execution' },
             { status: 200 }
           )
+          skipRes.headers.set('X-Correlation-ID', correlationId)
+          return skipRes
         }
       }
       // If redis is null, proceed without lock (fail-open)
@@ -89,8 +104,10 @@ export function withCron(
     const searchParams = Object.fromEntries(request.nextUrl.searchParams.entries())
     const metadata = { ...options.metadata, ...searchParams }
 
-    // 4. Start pipeline logger
-    const plog = await PipelineLogger.start(jobName, metadata)
+    // 4. Start pipeline logger. Correlation ID is stored in metadata so it
+    // becomes queryable via pipeline_logs (→ ClickHouse dual-write), allowing
+    // operators to find every log line for a given cron run with one query.
+    const plog = await PipelineLogger.start(jobName, { ...metadata, correlationId })
     const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 5. Safety timeout
@@ -111,13 +128,17 @@ export function withCron(
 
       if (safetyFired) {
         // Safety already logged timeout — don't overwrite
-        return NextResponse.json({ ok: false, error: 'safety_timeout', partial: result })
+        const timeoutRes = NextResponse.json({ ok: false, error: 'safety_timeout', partial: result })
+        timeoutRes.headers.set('X-Correlation-ID', correlationId)
+        return timeoutRes
       }
 
       const elapsed = Date.now() - startTime
       await plog.success(result.count ?? 0, { ...result, elapsed_ms: elapsed })
 
-      return NextResponse.json({ ok: true, elapsed_ms: elapsed, ...result })
+      const res = NextResponse.json({ ok: true, elapsed_ms: elapsed, ...result })
+      res.headers.set('X-Correlation-ID', correlationId)
+      return res
     } catch (err: unknown) {
       clearTimeout(safetyTimer)
       const errorMessage = err instanceof Error ? err.message : String(err)
@@ -129,10 +150,12 @@ export function withCron(
         })
       }
 
-      return NextResponse.json(
+      const errRes = NextResponse.json(
         { ok: false, error: errorMessage, elapsed_ms: Date.now() - startTime },
         { status: 500 }
       )
+      errRes.headers.set('X-Correlation-ID', correlationId)
+      return errRes
     } finally {
       // Release the distributed lock
       if (lockAcquired && redis) {
