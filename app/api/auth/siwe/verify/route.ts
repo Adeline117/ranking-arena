@@ -126,20 +126,42 @@ export async function POST(request: NextRequest) {
     if (createError || !newUser.user) {
       // User might already exist with this email
       if (createError?.message?.includes('already been registered')) {
-        // Look up the existing user by their wallet-derived email
+        // Look up the existing user by their wallet-derived email.
+        // SECURITY: we must NEVER silently overwrite an existing profile's
+        // wallet_address here. Doing so would let an attacker who has control
+        // over a freshly-signed wallet message rebind a victim's profile
+        // (which shares the deterministic `${walletAddress}@wallet.arena`
+        // email) to a different wallet. Only accept this path when the
+        // existing profile has no wallet bound yet, or it already matches
+        // the signed address.
         const { data: profileByEmail } = await supabase
           .from('user_profiles')
-          .select('id')
+          .select('id, wallet_address')
           .eq('email', walletEmail)
           .maybeSingle()
 
         const userId = profileByEmail?.id
         if (userId) {
-          // Link wallet to existing user
-          await supabase
-            .from('user_profiles')
-            .update({ wallet_address: walletAddress })
-            .eq('id', userId)
+          const existingWallet = (profileByEmail?.wallet_address || '').toLowerCase()
+          if (existingWallet && existingWallet !== walletAddress) {
+            // Profile already bound to a different wallet — refuse to rebind.
+            logger.warn('[SIWE verify] Refusing wallet rebind on existing profile', {
+              userId,
+              walletAddressPrefix: walletAddress.slice(0, 6),
+            })
+            return NextResponse.json(
+              { error: 'This account is already linked to a different wallet' },
+              { status: 409 }
+            )
+          }
+
+          // Safe to set: either unbound, or idempotent re-bind of same wallet.
+          if (!existingWallet) {
+            await supabase
+              .from('user_profiles')
+              .update({ wallet_address: walletAddress })
+              .eq('id', userId)
+          }
 
           const { data: sessionData } = await supabase.auth.admin.generateLink({
             type: 'magiclink',
