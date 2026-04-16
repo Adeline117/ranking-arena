@@ -866,6 +866,33 @@ async function computeSeason(
     if (rejected.length) logRejectedWrites(rejected, supabase)
 
     if (validBatch.length > 0) {
+      // Guarantee trader_sources parent rows exist before inserting into
+      // leaderboard_ranks. Prevents the orphan-row class of bugs where
+      // user-visible leaderboard entries have no profile record (fixed
+      // 10,662 orphan traders in migration 20260416162636). ON CONFLICT
+      // DO NOTHING preserves existing rows — only new (source,trader_id)
+      // combinations are inserted.
+      const parentRows = (validBatch as Array<Record<string, unknown>>).map(r => ({
+        source: r.source as string,
+        source_trader_id: r.source_trader_id as string,
+        source_type: r.source_type as string | null,
+        handle: r.handle as string | null,
+        avatar_url: r.avatar_url as string | null,
+        is_active: true,
+        identity_type: 'public',
+        source_kind: (r.source as string).startsWith('binance_web3') || (r.source as string).startsWith('okx_web3')
+          || ['hyperliquid','gmx','dydx','vertex','drift','aevo','gains','kwenta','jupiter_perps','polymarket'].includes(r.source as string)
+          ? 'dex_leaderboard'
+          : 'cex_leaderboard',
+        last_seen_at: new Date().toISOString(),
+      }))
+      const { error: parentErr } = await supabase
+        .from('trader_sources')
+        .upsert(parentRows, { onConflict: 'source,source_trader_id', ignoreDuplicates: true })
+      if (parentErr) {
+        logger.warn(`[${season}] trader_sources parent-upsert non-fatal: ${parentErr.message}`)
+      }
+
       const { error } = await supabase
         .from('leaderboard_ranks')
         .upsert(validBatch as any, { onConflict: 'season_id,source,source_trader_id' })
