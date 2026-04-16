@@ -343,8 +343,8 @@ export function usePosts(options: UsePostsOptions = {}) {
     fetcher,
     {
       ...defaultConfig,
-      revalidateOnFocus: false,
-      refreshInterval: 60 * 1000, // 优化为 1 分钟刷新，减少请求频率
+      revalidateOnFocus: true,
+      refreshInterval: 5 * 60 * 1000, // 5 min — use Realtime for instant updates, polling as fallback
     }
   )
 }
@@ -499,8 +499,8 @@ export function useNotifications(userId: string | undefined, token?: string) {
     () => (url ? fetcherWithAuth(url, token) : Promise.reject('No URL')),
     {
       ...defaultConfig,
-      refreshInterval: 60 * 1000, // 优化为 1 分钟刷新，减少请求频率
-      revalidateOnFocus: false, // Already refreshing every 60s; focus refetch adds redundant request
+      refreshInterval: 2 * 60 * 1000, // 2 min — Realtime handles instant push, polling as fallback
+      revalidateOnFocus: true, // Refresh on tab focus for freshness
     }
   )
 }
