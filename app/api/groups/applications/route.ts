@@ -1,28 +1,22 @@
 import { NextResponse } from 'next/server'
-import { SupabaseClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
+import { verifyAdmin } from '@/lib/admin/auth'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
-// 检查是否是管理员
-async function isAdmin(supabase: SupabaseClient, userId: string): Promise<boolean> {
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('role')
-    .eq('id', userId)
-    .maybeSingle()
-
-  return (profile as { role?: string } | null)?.role === 'admin'
-}
-
 // 管理员获取待审核的申请列表
 export const GET = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ supabase, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    // 检查是否是管理员
-    if (!(await isAdmin(supabase, user.id))) {
+    // SECURITY: use verifyAdmin so ADMIN_EMAILS env allowlist is enforced in
+    // production — matches /api/admin/* gating. A DB-only role check here
+    // would let anyone with the ability to flip user_profiles.role to 'admin'
+    // (RLS bug, compromised migration, DB insider) gain access without being
+    // on the operational whitelist.
+    const admin = await verifyAdmin(supabase, request.headers.get('authorization'))
+    if (!admin) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
