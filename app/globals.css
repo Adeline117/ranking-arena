@@ -1572,6 +1572,19 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
   }
 }
 
+/* Prevent iOS Safari auto-zoom on input focus.
+   Safari zooms any <input>/<textarea> whose computed font-size is < 16px.
+   We keep the denser design-token font-size on desktop and only bump on mobile.
+   Apply the class to the input/textarea element itself. */
+@media (max-width: 767px) {
+  .no-ios-zoom,
+  .ranking-search-input,
+  .comment-input-textarea,
+  .message-input-textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Show only on mobile */
 .show-mobile { display: none !important; }
 .show-mobile-flex { display: none !important; }
