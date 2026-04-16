@@ -21,6 +21,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
+import { getSharedRedis } from '@/lib/cache/redis-client'
 
 interface CronContext {
   plog: PipelineLogHandle
@@ -57,15 +58,42 @@ export function withCron(
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
-    // 2. Extract metadata from search params
+    // 2. Distributed lock — prevent concurrent execution of the same cron job
+    const lockKey = `cron:lock:${jobName}`
+    const lockTtlSec = Math.ceil(safetyTimeoutMs / 1000)
+    let redis: Awaited<ReturnType<typeof getSharedRedis>> = null
+    let lockAcquired = false
+    try {
+      redis = await getSharedRedis()
+      if (redis) {
+        // SET NX with EX — atomic acquire
+        const result = await redis.set(lockKey, Date.now().toString(), { nx: true, ex: lockTtlSec })
+        if (result === 'OK') {
+          lockAcquired = true
+        } else {
+          // Another instance already holds the lock
+          logger.info(`[${jobName}] Skipped — concurrent execution (lock held)`)
+          return NextResponse.json(
+            { ok: true, skipped: true, reason: 'concurrent execution' },
+            { status: 200 }
+          )
+        }
+      }
+      // If redis is null, proceed without lock (fail-open)
+    } catch (lockErr) {
+      // Redis error — proceed without lock (fail-open for locks is correct)
+      logger.warn(`[${jobName}] Redis lock failed, proceeding without lock:`, lockErr)
+    }
+
+    // 3. Extract metadata from search params
     const searchParams = Object.fromEntries(request.nextUrl.searchParams.entries())
     const metadata = { ...options.metadata, ...searchParams }
 
-    // 3. Start pipeline logger
+    // 4. Start pipeline logger
     const plog = await PipelineLogger.start(jobName, metadata)
     const supabase = getSupabaseAdmin() as SupabaseClient
 
-    // 4. Safety timeout
+    // 5. Safety timeout
     let safetyFired = false
     const safetyTimer = setTimeout(async () => {
       safetyFired = true
@@ -75,7 +103,7 @@ export function withCron(
       } catch (err) { /* best effort - Telegram/Sentry alert */ }
     }, safetyTimeoutMs)
 
-    // 5. Execute handler
+    // 6. Execute handler
     const startTime = Date.now()
     try {
       const result = await handler(request, { plog, supabase })
@@ -105,6 +133,15 @@ export function withCron(
         { ok: false, error: errorMessage, elapsed_ms: Date.now() - startTime },
         { status: 500 }
       )
+    } finally {
+      // Release the distributed lock
+      if (lockAcquired && redis) {
+        try {
+          await redis.del(lockKey)
+        } catch (unlockErr) {
+          logger.warn(`[${jobName}] Failed to release lock:`, unlockErr)
+        }
+      }
     }
   }
 }
