@@ -32,9 +32,15 @@ export const GET = withAdminAuth(
 export async function POST(req: NextRequest) {
   const handler = withAdminAuth(
     async ({ admin, supabase }) => {
-      const { reportId, status, action_taken } = await req.json()
+      let reqBody: { reportId?: string; status?: string; action_taken?: string }
+      try {
+        reqBody = await req.json()
+      } catch {
+        throw ApiError.validation('Invalid JSON in request body')
+      }
+      const { reportId, status, action_taken } = reqBody
 
-      if (!reportId || !['reviewed', 'actioned', 'dismissed'].includes(status)) {
+      if (!reportId || !status || !['reviewed', 'actioned', 'dismissed'].includes(status)) {
         throw ApiError.validation('Invalid parameters')
       }
 

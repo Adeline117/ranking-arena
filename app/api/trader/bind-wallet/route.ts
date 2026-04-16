@@ -40,7 +40,15 @@ export async function POST(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
-    const body = await request.json()
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return handleError(
+        new Error('Invalid JSON in request body'),
+        'bind-wallet'
+      )
+    }
 
     // Validate required fields
     const platform = validateString(body.platform, { required: true, fieldName: 'platform' })

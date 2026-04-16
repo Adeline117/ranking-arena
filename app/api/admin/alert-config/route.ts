@@ -4,20 +4,25 @@
  * POST /api/admin/alert-config - 更新报警配置
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('admin-alert-config')
 
 export const dynamic = 'force-dynamic'
 
-export async function GET(req: Request) {
+export async function GET(req: NextRequest) {
   try {
+    // Admin operation — failClose rate limiting
+    const rateLimitResponse = await checkRateLimit(req, { ...RateLimitPresets.sensitive, prefix: 'admin-alert-config', failClose: true })
+    if (rateLimitResponse) return rateLimitResponse
+
     const supabase = getSupabaseAdmin() as SupabaseClient
     const authHeader = req.headers.get('authorization')
-    
+
     const admin = await verifyAdmin(supabase, authHeader)
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
@@ -53,23 +58,32 @@ export async function GET(req: Request) {
   }
 }
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
   try {
+    // Admin sensitive operation — failClose rate limiting
+    const rateLimitResponse = await checkRateLimit(req, { ...RateLimitPresets.sensitive, prefix: 'admin-alert-config-write', failClose: true })
+    if (rateLimitResponse) return rateLimitResponse
+
     const supabase = getSupabaseAdmin() as SupabaseClient
     const authHeader = req.headers.get('authorization')
-    
+
     const admin = await verifyAdmin(supabase, authHeader)
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    
-    const body = await req.json()
+
+    let body: { key?: string; value?: string; enabled?: boolean }
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
     const { key, value, enabled } = body
-    
+
     if (!key) {
       return NextResponse.json({ error: 'Key is required' }, { status: 400 })
     }
-    
+
     // Validate key
     const validKeys = ['slack_webhook_url', 'feishu_webhook_url', 'alert_email']
     if (!validKeys.includes(key)) {

@@ -10,7 +10,7 @@
 
 export const runtime = 'nodejs'
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
   getSupabaseAdmin,
@@ -319,14 +319,22 @@ export async function POST(request: NextRequest) {
   const guard = socialFeatureGuard()
   if (guard) return guard
 
-  // 写操作限流：每分钟 30 次
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+  // 写操作限流：每分钟 30 次，failClose 防止 Redis 故障时绕过限流
+  const rateLimitResponse = await checkRateLimit(request, { ...RateLimitPresets.write, failClose: true })
   if (rateLimitResponse) return rateLimitResponse
 
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin() as SupabaseClient
-    const body = await request.json()
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { success: false, error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
+        { status: 400 }
+      )
+    }
 
     // Zod 输入验证
     const parsed = CreatePostSchema.safeParse(body)

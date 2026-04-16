@@ -13,6 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { logger } from '@/lib/logger'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 
@@ -31,6 +32,10 @@ interface ManipulationAlert {
 // ============================================
 
 export async function GET(request: NextRequest) {
+  // Admin operation — failClose rate limiting
+  const rateLimitResponse = await checkRateLimit(request, { ...RateLimitPresets.sensitive, prefix: 'admin-manipulation-alerts', failClose: true })
+  if (rateLimitResponse) return rateLimitResponse
+
   const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Auth check
@@ -120,6 +125,10 @@ export async function GET(request: NextRequest) {
 // ============================================
 
 export async function POST(request: NextRequest) {
+  // Admin sensitive write — failClose rate limiting
+  const rateLimitResp = await checkRateLimit(request, { ...RateLimitPresets.sensitive, prefix: 'admin-manipulation-alerts-write', failClose: true })
+  if (rateLimitResp) return rateLimitResp
+
   const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Auth check (allow cron secret or admin JWT)
@@ -129,7 +138,12 @@ export async function POST(request: NextRequest) {
 
   try {
     // Parse request body
-    const alert: ManipulationAlert = await request.json()
+    let alert: ManipulationAlert
+    try {
+      alert = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
 
     // Validate required fields
     if (!alert.alert_type || !alert.severity || !alert.traders || !alert.evidence) {

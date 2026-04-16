@@ -40,7 +40,15 @@ export const POST = withApiHandler('checkout', async (request: NextRequest) => {
   if (rateLimitResp) return rateLimitResp
 
   // 获取请求体
-  const body = await request.json()
+  let body: { plan?: string; billingCycle?: string }
+  try {
+    body = await request.json()
+  } catch {
+    return NextResponse.json(
+      { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
+      { status: 400 }
+    )
+  }
   const { plan, billingCycle: _billingCycle = 'monthly' } = body
 
   if (!plan || !PLANS[plan]) {

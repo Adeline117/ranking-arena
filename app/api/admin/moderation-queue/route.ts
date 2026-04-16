@@ -176,7 +176,12 @@ export const GET = withAdminAuth(
 export async function POST(req: NextRequest) {
   const handler = withAdminAuth(
     async ({ admin, supabase }) => {
-      const body = await req.json()
+      let body: { content_type?: string; content_id?: string; action?: string; author_id?: string }
+      try {
+        body = await req.json()
+      } catch {
+        throw ApiError.validation('Invalid JSON in request body')
+      }
       const { content_type, content_id, action, author_id } = body
 
       if (!content_type || !content_id || !action) {

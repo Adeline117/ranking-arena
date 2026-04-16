@@ -23,7 +23,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { returnUrl: rawReturnUrl } = await request.json()
+    let rawReturnUrl: string | undefined
+    try {
+      const body = await request.json()
+      rawReturnUrl = body.returnUrl
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
+        { status: 400 }
+      )
+    }
 
     // Validate returnUrl to prevent open redirect
     let returnUrl: string | undefined

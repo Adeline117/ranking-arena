@@ -19,7 +19,15 @@ export async function POST(request: NextRequest) {
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
     if (rateLimitResponse) return rateLimitResponse
-    const { message, signature } = await request.json()
+
+    let message: string, signature: string
+    try {
+      const body = await request.json()
+      message = body.message
+      signature = body.signature
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
 
     if (!message || !signature) {
       return NextResponse.json({ error: 'Missing message or signature' }, { status: 400 })

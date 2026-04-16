@@ -21,7 +21,12 @@ export async function PUT(
   const handler = withAdminAuth(
     async ({ admin, supabase }) => {
       const { id: userId } = await params
-      const body = await req.json()
+      let body: { role?: string }
+      try {
+        body = await req.json()
+      } catch {
+        throw ApiError.validation('Invalid JSON in request body')
+      }
       const { role } = body
 
       if (!role || !['user', 'moderator'].includes(role)) {

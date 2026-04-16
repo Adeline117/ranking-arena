@@ -49,7 +49,16 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
     }
 
-    const { sessionId } = await request.json()
+    let sessionId: string
+    try {
+      const body = await request.json()
+      sessionId = body.sessionId
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
+        { status: 400 }
+      )
+    }
 
     if (!sessionId) {
       return NextResponse.json({ error: 'Missing session ID' }, { status: 400 })
