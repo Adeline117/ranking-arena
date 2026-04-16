@@ -100,6 +100,7 @@ export class PipelineLogger {
     'cleanup-stuck-logs',
     'cleanup-data',
     'cleanup-deleted-accounts',
+    'cleanup-violations',
     'meta-monitor',
 
     // Snapshots & ranks
