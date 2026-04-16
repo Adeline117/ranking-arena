@@ -442,9 +442,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
             {(activeTab === 'overview') && (
               <OverviewTab
                 data={data}
-                traderProfile={traderProfile as Record<string, unknown> | null}
-                traderPerformance={traderPerformance as Record<string, unknown> | null}
-                traderEquityCurve={traderEquityCurve as Record<string, Array<{ date: string; roi: number; pnl: number }>> | undefined}
+                traderProfile={traderProfile}
+                traderPerformance={traderPerformance}
+                traderEquityCurve={traderEquityCurve}
                 traderSimilar={traderSimilar}
                 positionSummary={traderData?.positionSummary as { avgLeverage: number | null; longPositions: number | null; shortPositions: number | null } | null | undefined}
                 selectedPeriod={selectedPeriod}
