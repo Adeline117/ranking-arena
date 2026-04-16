@@ -56,24 +56,41 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectAttempts = useRef(0)
+  const mountedRef = useRef(true)
+
+  // Memoize join keys so the connect callback doesn't churn on every render
+  // (without this, inline `symbols`/`exchanges` arrays would create a new
+  // `connect` identity → main effect re-runs → old EventSource leaks while
+  // a new one opens, compounding every render).
+  const symbolsKey = symbols.join(',')
+  const exchangesKey = exchanges.join(',')
 
   const connect = useCallback(() => {
-    if (!enabled) return
+    if (!enabled || !mountedRef.current) return
+
+    // Close any previous connection before opening a new one — prevents
+    // orphaned EventSource instances from accumulating across reconnects.
+    if (eventSourceRef.current) {
+      eventSourceRef.current.close()
+      eventSourceRef.current = null
+    }
 
     const params = new URLSearchParams({
-      symbols: symbols.join(','),
-      exchanges: exchanges.join(','),
+      symbols: symbolsKey,
+      exchanges: exchangesKey,
     })
 
     const es = new EventSource(`/api/ws/market?${params}`)
     eventSourceRef.current = es
 
     es.onopen = () => {
+      if (!mountedRef.current) return
       reconnectAttempts.current = 0
       setState(prev => ({ ...prev, connected: true, error: null }))
     }
 
     es.onmessage = (event) => {
+      if (!mountedRef.current) return
       try {
         const msg = JSON.parse(event.data)
 
@@ -109,16 +126,36 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
 
     es.onerror = () => {
       es.close()
+      if (eventSourceRef.current === es) eventSourceRef.current = null
+      if (!mountedRef.current) return
+
       setState(prev => ({ ...prev, connected: false }))
+
+      // Clear any outstanding reconnect timer before scheduling a new one —
+      // es.onerror can fire multiple times per broken connection on some
+      // browsers, which otherwise queues parallel reconnect timers.
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+
+      // Cap reconnect attempts to prevent unbounded background reconnection
+      // on permanently failed endpoints (e.g. server decommissioned).
+      if (reconnectAttempts.current >= 10) return
 
       // 指数退避重连
       const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000)
       reconnectAttempts.current++
-      reconnectTimerRef.current = setTimeout(connect, delay)
+      reconnectTimerRef.current = setTimeout(() => {
+        reconnectTimerRef.current = null
+        if (mountedRef.current) connect()
+      }, delay)
     }
-  }, [enabled, symbols, exchanges, maxTrades])
+  }, [enabled, symbolsKey, exchangesKey, maxTrades])
 
   useEffect(() => {
+    mountedRef.current = true
+
     // Defer the SSE connection so the page can finish loading and reach
     // networkidle before a persistent connection is opened. This prevents
     // Playwright / browser timeouts caused by the SSE stream blocking idle.
@@ -127,9 +164,16 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
     }, initialDelayMs)
 
     return () => {
+      mountedRef.current = false
       clearTimeout(startTimer)
-      eventSourceRef.current?.close()
-      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current)
+      if (eventSourceRef.current) {
+        eventSourceRef.current.close()
+        eventSourceRef.current = null
+      }
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
     }
   }, [connect, initialDelayMs])
 
