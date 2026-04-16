@@ -252,6 +252,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           description: description.length > 160 ? description.substring(0, 157) + '...' : description,
           images: [ogImageUrl],
           creator: '@arenafi',
+          site: '@arenafi',
         },
         alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
       }
@@ -262,10 +263,10 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
   const fallbackOgImage = `${BASE}/api/og/trader?handle=${encodeURIComponent(decoded)}`
   return {
     title: `${decoded} | Crypto Trader Rankings`,
-    description: `View ${decoded}'s crypto trading performance, PnL, ROI, win rate, and rank on Arena — 34,000+ traders across 28+ exchanges.`,
+    description: `View ${decoded}'s crypto trading performance, PnL, ROI, win rate, and rank on Arena — 34,000+ traders across 30+ exchanges.`,
     openGraph: {
       title: `${decoded} | Crypto Trader`,
-      description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 34,000+ traders across 28+ exchanges.`,
+      description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 34,000+ traders across 30+ exchanges.`,
       url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
       type: 'profile',
@@ -277,6 +278,7 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       description: `View ${decoded}'s trading performance and rank on Arena.`,
       images: [fallbackOgImage],
       creator: '@arenafi',
+      site: '@arenafi',
     },
     alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
   }
