@@ -22,12 +22,13 @@ const VALID_ACTIONS: ModerationAction[] = ['delete_post', 'delete_comment', 'ban
 export async function POST(req: NextRequest) {
   const handler = withAdminAuth(
     async ({ admin, supabase }) => {
-      const body = await req.json()
-      const { action, targetId, reason } = body as {
-        action: ModerationAction
-        targetId: string
-        reason?: string
+      let body: { action: ModerationAction; targetId: string; reason?: string }
+      try {
+        body = await req.json()
+      } catch {
+        throw ApiError.validation('Invalid JSON in request body')
       }
+      const { action, targetId, reason } = body
 
       if (!action || !VALID_ACTIONS.includes(action)) {
         throw ApiError.validation(`Invalid action. Must be one of: ${VALID_ACTIONS.join(', ')}`)

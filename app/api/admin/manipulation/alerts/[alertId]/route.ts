@@ -12,6 +12,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
@@ -29,6 +30,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { alertId: string } }
 ) {
+  // Admin operation — failClose rate limiting
+  const rateLimitResponse = await checkRateLimit(request, { ...RateLimitPresets.sensitive, prefix: 'admin-alert-detail', failClose: true })
+  if (rateLimitResponse) return rateLimitResponse
+
   const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Auth check - require admin role
@@ -104,6 +109,10 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: { alertId: string } }
 ) {
+  // Admin sensitive write — failClose rate limiting
+  const rateLimitResp = await checkRateLimit(request, { ...RateLimitPresets.sensitive, prefix: 'admin-alert-update', failClose: true })
+  if (rateLimitResp) return rateLimitResp
+
   const supabase = getSupabaseAdmin() as SupabaseClient
 
   const { alertId } = params
@@ -146,7 +155,12 @@ export async function PATCH(
     }
 
     // Parse update request
-    const update: AlertUpdateRequest = await request.json()
+    let update: AlertUpdateRequest
+    try {
+      update = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
 
     if (!update.status && !update.resolution_notes) {
       return NextResponse.json(

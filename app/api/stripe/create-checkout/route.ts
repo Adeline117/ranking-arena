@@ -27,7 +27,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { plan, successUrl, cancelUrl, promotionCode } = await request.json()
+    let plan: string, successUrl: string | undefined, cancelUrl: string | undefined, promotionCode: string | undefined
+    try {
+      const body = await request.json()
+      plan = body.plan
+      successUrl = body.successUrl
+      cancelUrl = body.cancelUrl
+      promotionCode = body.promotionCode
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
+        { status: 400 }
+      )
+    }
 
     const { user, error: userError } = await extractUserFromRequest(request)
 

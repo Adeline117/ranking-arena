@@ -22,7 +22,12 @@ export async function POST(
   const handler = withAdminAuth(
     async ({ admin, supabase }) => {
       const { id: userId } = await params
-      const body = await req.json()
+      let body: { reason?: string }
+      try {
+        body = await req.json()
+      } catch {
+        throw ApiError.validation('Invalid JSON in request body')
+      }
       const { reason } = body
 
       // Check if user exists

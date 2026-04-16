@@ -3,8 +3,9 @@
  * POST /api/admin/reports/[id]/resolve
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('admin-resolve-report')
@@ -12,24 +13,33 @@ const logger = createLogger('admin-resolve-report')
 export const dynamic = 'force-dynamic'
 
 export async function POST(
-  req: Request,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    // Admin sensitive operation — failClose rate limiting
+    const rateLimitResponse = await checkRateLimit(req, { ...RateLimitPresets.sensitive, prefix: 'admin-resolve', failClose: true })
+    if (rateLimitResponse) return rateLimitResponse
+
     const supabase = getSupabaseAdmin()
     const authHeader = req.headers.get('authorization')
-    
+
     const admin = await verifyAdmin(supabase, authHeader)
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    
+
     const { id: reportId } = await params
-    const body = await req.json()
+    let body: { action?: string; reason?: string }
+    try {
+      body = await req.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
+    }
     const { action, reason } = body
-    
+
     // action: 'resolve' (delete content), 'dismiss' (ignore report)
-    if (!['resolve', 'dismiss'].includes(action)) {
+    if (!action || !['resolve', 'dismiss'].includes(action)) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
     
