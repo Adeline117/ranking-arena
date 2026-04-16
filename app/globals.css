@@ -147,6 +147,13 @@ html.theme-transition #main-content {
   --color-sentiment-bull: #4DFF9A;
   --color-sentiment-bear: #FF4D4D;
   --color-sentiment-neutral: #898998;
+
+  /* Fear & Greed gauge */
+  --color-gauge-extreme-fear: #ea3943;
+  --color-gauge-fear: #ea8c00;
+  --color-gauge-neutral: #f5c623;
+  --color-gauge-greed: #93d900;
+  --color-gauge-extreme-greed: #16c784;
   
   /* Overlay/backdrop */
   --color-backdrop: rgba(0, 0, 0, 0.6);
@@ -364,6 +371,13 @@ html.theme-transition #main-content {
   --color-sentiment-bull: #15803D; /* 5.1:1 on #FAFAFE (was #00C853 at 2.1:1) */
   --color-sentiment-bear: #DC2626; /* 4.6:1 on #FAFAFE (was #F44336 at 3.5:1) */
   --color-sentiment-neutral: #767676;
+
+  /* Fear & Greed gauge — darkened for light backgrounds */
+  --color-gauge-extreme-fear: #d42f38;
+  --color-gauge-fear: #c47a00;
+  --color-gauge-neutral: #b8930a;
+  --color-gauge-greed: #6fa000;
+  --color-gauge-extreme-greed: #0f9960;
   
   /* Overlay/backdrop */
   --color-backdrop: rgba(0, 0, 0, 0.4);
