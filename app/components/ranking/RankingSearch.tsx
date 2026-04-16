@@ -204,12 +204,15 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
           role="combobox"
           aria-controls="search-results-listbox"
           autoComplete="off"
+          className="ranking-search-input"
           style={{
             flex: 1,
             background: 'transparent',
             border: 'none',
             outline: 'none',
             color: tokens.colors.text.primary,
+            // Desktop keeps compact sm (13px). Mobile override in globals.css
+            // bumps to 16px to prevent iOS Safari auto-zoom on focus.
             fontSize: tokens.typography.fontSize.sm,
             padding: `${tokens.spacing[1]} 0`,
           }}
