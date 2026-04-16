@@ -4,6 +4,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
+import { safeNumber } from '../utils'
 import {
   PhemexFuturesLeaderboardResponseSchema,
   PhemexFuturesDetailResponseSchema,
@@ -62,7 +63,7 @@ export class PhemexFuturesConnector extends BaseConnector {
       display_name: (info.nickname as string) || null, avatar_url: (info.avatar as string) || null,
       bio: null, tags: [],
       profile_url: `https://phemex.com/copy-trading/trader/${traderKey}`,
-      followers: this.num(info.followers), copiers: this.num(info.copiers), aum: null,
+      followers: safeNumber(info.followers), copiers: safeNumber(info.copiers), aum: null,
       updated_at: new Date().toISOString(), last_enriched_at: new Date().toISOString(),
       provenance: { source_platform: 'phemex', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
     }
@@ -79,10 +80,10 @@ export class PhemexFuturesConnector extends BaseConnector {
     if (!info) return null
 
     const metrics: SnapshotMetrics = {
-      roi: this.num(info.roi), pnl: this.num(info.pnl),
-      win_rate: this.num(info.winRate), max_drawdown: this.num(info.maxDrawdown),
+      roi: safeNumber(info.roi), pnl: safeNumber(info.pnl),
+      win_rate: safeNumber(info.winRate), max_drawdown: safeNumber(info.maxDrawdown),
       sharpe_ratio: null, sortino_ratio: null, trades_count: null,
-      followers: this.num(info.followers), copiers: this.num(info.copiers),
+      followers: safeNumber(info.followers), copiers: safeNumber(info.copiers),
       aum: null, platform_rank: null,
       arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
     }
@@ -103,30 +104,26 @@ export class PhemexFuturesConnector extends BaseConnector {
    * maxDrawdown (decimal 0-1), followers, copiers.
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const rawWr = this.num(raw.winRate)
+    const rawWr = safeNumber(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-    const rawMdd = this.num(raw.maxDrawdown)
+    const rawMdd = safeNumber(raw.maxDrawdown)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
 
     return {
       trader_key: raw.uid ?? null,
       display_name: raw.nickname ?? null,
       avatar_url: raw.avatar ?? null,
-      roi: this.num(raw.roi),
-      pnl: this.num(raw.pnl),
+      roi: safeNumber(raw.roi),
+      pnl: safeNumber(raw.pnl),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       trades_count: null,
-      followers: this.num(raw.followers),
-      copiers: this.num(raw.copiers),
+      followers: safeNumber(raw.followers),
+      copiers: safeNumber(raw.copiers),
       aum: null,
       sharpe_ratio: null,
       platform_rank: null,
     }
   }
 
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val); return !Number.isFinite(n) ? null : n
-  }
 }

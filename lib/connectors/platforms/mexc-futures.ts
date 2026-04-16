@@ -8,6 +8,7 @@
 import { BaseConnector } from '../base'
 import { normalizeRoiFormat } from '../normalize-contract'
 import { warnValidate } from '../schemas'
+import { safeNumber } from '../utils'
 import { MexcFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
@@ -126,8 +127,8 @@ export class MexcFuturesConnector extends BaseConnector {
       avatar_url: (info.avatar as string) || null,
       bio: null, tags: [],
       profile_url: `https://futures.mexc.com/copy-trading/trader/${traderKey}`,
-      followers: this.num(info.followerCount), copiers: this.num(info.copyCount),
-      aum: this.num(info.aum),
+      followers: safeNumber(info.followerCount), copiers: safeNumber(info.copyCount),
+      aum: safeNumber(info.aum),
       updated_at: new Date().toISOString(), last_enriched_at: new Date().toISOString(),
       provenance: { source_platform: 'mexc', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
     }
@@ -144,11 +145,11 @@ export class MexcFuturesConnector extends BaseConnector {
     if (!info) return null
 
     const metrics: SnapshotMetrics = {
-      roi: this.num(info.yield), pnl: this.num(info.pnl),
-      win_rate: this.num(info.winRate), max_drawdown: this.num(info.maxRetrace),
-      sharpe_ratio: null, sortino_ratio: null, trades_count: this.num(info.openTimes),
-      followers: this.num(info.followerCount), copiers: this.num(info.copyCount),
-      aum: this.num(info.aum), platform_rank: null,
+      roi: safeNumber(info.yield), pnl: safeNumber(info.pnl),
+      win_rate: safeNumber(info.winRate), max_drawdown: safeNumber(info.maxRetrace),
+      sharpe_ratio: null, sortino_ratio: null, trades_count: safeNumber(info.openTimes),
+      followers: safeNumber(info.followerCount), copiers: safeNumber(info.copyCount),
+      aum: safeNumber(info.aum), platform_rank: null,
       arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
     }
     const quality_flags: QualityFlags = {
@@ -171,12 +172,12 @@ export class MexcFuturesConnector extends BaseConnector {
    * Note: ROI in decimal format (0.5 = 50%), normalized via ×100 if ≤1.
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const rawRoi = this.num(raw.yield ?? raw.roi ?? raw.totalRoi ?? raw.pnlRate)
+    const rawRoi = safeNumber(raw.yield ?? raw.roi ?? raw.totalRoi ?? raw.pnlRate)
     const roi = normalizeRoiFormat(rawRoi)
-    const rawWr = this.num(raw.winRate ?? raw.totalWinRate)
+    const rawWr = safeNumber(raw.winRate ?? raw.totalWinRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
     // Current MEXC API uses maxDrawdown7 (7-day MDD), maxRetrace, or mdd
-    const rawMdd = this.num(raw.maxRetrace ?? raw.maxDrawdown7 ?? raw.mdd ?? raw.maxDrawdown)
+    const rawMdd = safeNumber(raw.maxRetrace ?? raw.maxDrawdown7 ?? raw.mdd ?? raw.maxDrawdown)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
 
     // Compute Sharpe ratio from curveValues (daily ROI equity curve points)
@@ -200,15 +201,15 @@ export class MexcFuturesConnector extends BaseConnector {
       display_name: raw.nickname ?? raw.nickName ?? raw.name ?? raw.displayName ?? raw.traderName ?? null,
       avatar_url: raw.avatar ?? raw.avatarUrl ?? raw.headImg ?? null,
       roi,
-      pnl: this.num(raw.pnl ?? raw.totalPnl ?? raw.profit),
+      pnl: safeNumber(raw.pnl ?? raw.totalPnl ?? raw.profit),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      trades_count: this.num(raw.openTimes),
-      followers: this.num(raw.followers ?? raw.followerCount ?? raw.copierCount),
-      copiers: this.num(raw.historyFollowers),
-      aum: this.num(raw.followCopyFunds ?? raw.equity),
+      trades_count: safeNumber(raw.openTimes),
+      followers: safeNumber(raw.followers ?? raw.followerCount ?? raw.copierCount),
+      copiers: safeNumber(raw.historyFollowers),
+      aum: safeNumber(raw.followCopyFunds ?? raw.equity),
       sharpe_ratio: sharpe,
-      platform_rank: this.num(raw.order),
+      platform_rank: safeNumber(raw.order),
       // Extra: equity curve data from leaderboard API
       _curve_time: raw.curveTime,
       _curve_values: raw.curveValues,
@@ -218,11 +219,5 @@ export class MexcFuturesConnector extends BaseConnector {
       // Extra: trading style tags
       _tags: raw.tags,
     }
-  }
-
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val)
-    return !Number.isFinite(n) ? null : n
   }
 }

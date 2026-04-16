@@ -11,6 +11,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber } from '../utils'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics,
@@ -102,13 +103,13 @@ export class CopinPerpConnector extends BaseConnector {
     const byKey = new Map<string, TraderSource>()
     for (const t of allTraders) {
       const existing = byKey.get(t.trader_key)
-      if (!existing || (this.num(t.raw?.totalPnl) ?? 0) > (this.num(existing.raw?.totalPnl) ?? 0)) {
+      if (!existing || (safeNumber(t.raw?.totalPnl) ?? 0) > (safeNumber(existing.raw?.totalPnl) ?? 0)) {
         byKey.set(t.trader_key, t)
       }
     }
 
     const deduped = Array.from(byKey.values())
-    deduped.sort((a, b) => (this.num(b.raw?.totalPnl) ?? 0) - (this.num(a.raw?.totalPnl) ?? 0))
+    deduped.sort((a, b) => (safeNumber(b.raw?.totalPnl) ?? 0) - (safeNumber(a.raw?.totalPnl) ?? 0))
 
     return {
       traders: deduped.slice(0, limit),
@@ -324,12 +325,12 @@ export class CopinPerpConnector extends BaseConnector {
       trader_key: raw.account ? `${String(raw._protocol || 'hyperliquid').toLowerCase()}:${raw.account}` : null,
       display_name: null,
       avatar_url: null,
-      roi: this.num(raw.avgRoi),
-      pnl: this.num(raw.totalPnl) ?? this.num(raw.pnl),
-      win_rate: this.num(raw.winRate),
+      roi: safeNumber(raw.avgRoi),
+      pnl: safeNumber(raw.totalPnl) ?? safeNumber(raw.pnl),
+      win_rate: safeNumber(raw.winRate),
       max_drawdown: null,
       sharpe_ratio: null,
-      trades_count: this.num(raw.totalTrade),
+      trades_count: safeNumber(raw.totalTrade),
       followers: null,
       copiers: null,
       aum: null,
@@ -337,9 +338,4 @@ export class CopinPerpConnector extends BaseConnector {
     }
   }
 
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val)
-    return !Number.isFinite(n) ? null : n
-  }
 }

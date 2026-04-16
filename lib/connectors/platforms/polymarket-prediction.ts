@@ -8,6 +8,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber } from '../utils'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics,
@@ -105,7 +106,7 @@ export class PolymarketPredictionConnector extends BaseConnector {
           { method: 'GET' }
         )
         if (Array.isArray(valueRaw) && valueRaw.length > 0) {
-          aum = this.num(valueRaw[0].value)
+          aum = safeNumber(valueRaw[0].value)
         }
       } catch (err) { this.logger.debug('Polymarket portfolio value fallback:', err instanceof Error ? err.message : String(err)) }
 
@@ -147,8 +148,8 @@ export class PolymarketPredictionConnector extends BaseConnector {
 
     const entry = Array.isArray(raw) && raw.length > 0 ? raw[0] : null
 
-    const pnl = entry ? this.num(entry.pnl) : null
-    const volume = entry ? this.num(entry.vol) : null
+    const pnl = entry ? safeNumber(entry.pnl) : null
+    const volume = entry ? safeNumber(entry.vol) : null
 
     // Compute rough ROI from PnL / volume (approximate)
     const roi = pnl != null && volume != null && volume > 0 ? (pnl / volume) * 100 : null
@@ -164,7 +165,7 @@ export class PolymarketPredictionConnector extends BaseConnector {
       followers: null,
       copiers: null,
       aum: null,
-      platform_rank: entry ? this.num(entry.rank) : null,
+      platform_rank: entry ? safeNumber(entry.rank) : null,
       arena_score: null,
       return_score: null,
       drawdown_score: null,
@@ -184,8 +185,8 @@ export class PolymarketPredictionConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const pnl = this.num(raw.pnl)
-    const volume = this.num(raw.vol)
+    const pnl = safeNumber(raw.pnl)
+    const volume = safeNumber(raw.vol)
     const roi = pnl != null && volume != null && volume > 0 ? (pnl / volume) * 100 : null
 
     return {
@@ -201,13 +202,8 @@ export class PolymarketPredictionConnector extends BaseConnector {
       followers: null,
       copiers: null,
       aum: null,
-      platform_rank: this.num(raw.rank ?? raw._rank),
+      platform_rank: safeNumber(raw.rank ?? raw._rank),
     }
   }
 
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val)
-    return !Number.isFinite(n) ? null : n
-  }
 }
