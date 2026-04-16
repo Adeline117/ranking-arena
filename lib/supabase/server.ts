@@ -220,7 +220,7 @@ export async function getUserProfile(userId: string) {
     const supabase = getSupabaseAdmin()
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('id, handle, display_name, avatar_url, bio, email, is_pro, exp, level, badge, locale, banned_at, deleted_at, created_at, updated_at')
+      .select('id, handle, display_name, avatar_url, bio, is_pro, exp, level, badge, locale, banned_at, deleted_at, created_at, updated_at')
       .eq('id', userId)
       .maybeSingle()
     
