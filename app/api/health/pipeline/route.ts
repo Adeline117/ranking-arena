@@ -354,8 +354,15 @@ export async function GET(req: NextRequest) {
       result.platformHealth.length === 0
 
     if (!isDegraded) {
-      // Fire-and-forget cache write — don't block the response on Redis.
-      tieredSet(CACHE_KEY, result, 'warm', ['pipeline-health']).catch(() => {})
+      // Fire-and-forget cache write — don't block the response on Redis,
+      // but log failures. If this silently fails, every request recomputes
+      // the full health snapshot (~dozens of Supabase queries), masking the
+      // Redis outage and inflating costs until someone notices.
+      tieredSet(CACHE_KEY, result, 'warm', ['pipeline-health']).catch((cacheErr) => {
+        logger.warn('[health/pipeline] Failed to cache pipeline health result', {
+          error: cacheErr instanceof Error ? cacheErr.message : String(cacheErr),
+        })
+      })
     }
 
     return NextResponse.json(result, {
@@ -365,7 +372,14 @@ export async function GET(req: NextRequest) {
         'X-Degraded': isDegraded ? '1' : '0',
       },
     })
-  } catch (_err) {
+  } catch (err) {
+    // This endpoint feeds OpenClaw / admin dashboard / Sentry alerting.
+    // A silent 500 with no log means we lose the one monitor that would
+    // tell us the monitor itself is broken. Always log.
+    logger.error('[health/pipeline] Unhandled error while computing health snapshot', {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    })
     return NextResponse.json(
       { error: 'Internal server error' },
       { status: 500, headers: { 'Cache-Control': 'no-store' } }
