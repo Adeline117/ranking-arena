@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { apiFetch } from '@/lib/utils/api-fetch'
@@ -22,52 +22,11 @@ interface TriangularOpp {
 
 type ArbOpp = CrossExchangeOpp | TriangularOpp
 
-interface PriceCompare {
-  symbol: string
-  exchanges: { name: string; price: number }[]
-  spreadPct: number
-  bestBuy: string
-  bestSell: string
-}
 
 export default function ArbitrageOpportunities() {
   const { t } = useLanguage()
   const [opps, setOpps] = useState<ArbOpp[]>([])
-  const [priceComparisons, setPriceComparisons] = useState<PriceCompare[]>([])
   const [loading, setLoading] = useState(true)
-
-  const fetchPriceComparisons = useCallback(async () => {
-    try {
-      const data = await apiFetch<Array<{ symbol: string; price: number }>>('/api/market/spot')
-      if (!Array.isArray(data)) return
-
-      // Get BTC and ETH prices from the spot data as baseline
-      const symbols = ['BTC', 'ETH', 'SOL', 'BNB']
-      const comparisons: PriceCompare[] = []
-
-      for (const sym of symbols) {
-        const coin = data.find((c: { symbol: string }) => c.symbol.toUpperCase() === sym)
-        if (!coin) continue
-        // Simulate slight exchange price differences based on real price
-        const basePrice = coin.price
-        const exchanges = [
-          { name: 'Binance', price: basePrice * (1 + (Math.random() - 0.5) * 0.002) },
-          { name: 'OKX', price: basePrice * (1 + (Math.random() - 0.5) * 0.002) },
-          { name: 'Bybit', price: basePrice * (1 + (Math.random() - 0.5) * 0.002) },
-        ]
-        const sorted = [...exchanges].sort((a, b) => a.price - b.price)
-        const spread = ((sorted[sorted.length - 1].price - sorted[0].price) / sorted[0].price) * 100
-        comparisons.push({
-          symbol: sym,
-          exchanges,
-          spreadPct: spread,
-          bestBuy: sorted[0].name,
-          bestSell: sorted[sorted.length - 1].name,
-        })
-      }
-      setPriceComparisons(comparisons.sort((a, b) => b.spreadPct - a.spreadPct))
-    } catch { /* ignore */ }
-  }, [])
 
   useEffect(() => {
     apiFetch<{ ok?: boolean; opportunities?: ArbOpp[] }>('/api/market/arbitrage')
@@ -78,12 +37,9 @@ export default function ArbitrageOpportunities() {
       })
       .catch(err => console.warn('[ArbitrageOpportunities] fetch failed', err))
       .finally(() => setLoading(false))
-
-    fetchPriceComparisons()
-  }, [fetchPriceComparisons])
+  }, [])
 
   const hasOpps = opps.length > 0
-  const showComparisons = !hasOpps && priceComparisons.length > 0
 
   return (
     <div style={{
@@ -133,7 +89,7 @@ export default function ArbitrageOpportunities() {
           borderRadius: tokens.radius.sm,
           background: hasOpps ? 'var(--color-accent-success-10)' : tokens.colors.bg.tertiary,
         }}>
-          {hasOpps ? t('arbitrageOppsCount').replace('{n}', String(opps.length)) : showComparisons ? t('arbitrageCoinsCount').replace('{n}', String(priceComparisons.length)) : t('arbitrageOppsCount').replace('{n}', '0')}
+          {hasOpps ? t('arbitrageOppsCount').replace('{n}', String(opps.length)) : t('arbitrageOppsCount').replace('{n}', '0')}
         </span>
       </div>
 
@@ -207,44 +163,6 @@ export default function ArbitrageOpportunities() {
               </div>
             )
           })}
-        </div>
-      ) : showComparisons ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: `${tokens.spacing[1]}`, flex: 1 }}>
-          {priceComparisons.map((pc, i) => (
-            <div key={pc.symbol} style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
-              minHeight: 36,
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1.5], fontSize: tokens.typography.fontSize.sm }}>
-                <span style={{ color: tokens.colors.text.primary, fontWeight: 700 }}>
-                  {pc.symbol}
-                </span>
-                <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, textTransform: 'lowercase' }}>
-                  {pc.bestBuy}
-                </span>
-                <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-                  <path d="M1 5h12M9 1l4 4-4 4" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, textTransform: 'lowercase' }}>
-                  {pc.bestSell}
-                </span>
-              </div>
-              <span style={{
-                color: pc.spreadPct > 0.05 ? tokens.colors.accent.success : tokens.colors.text.tertiary,
-                fontWeight: 800,
-                fontSize: tokens.typography.fontSize.sm,
-                fontFamily: 'var(--font-mono, monospace)',
-                fontVariantNumeric: 'tabular-nums',
-              } as React.CSSProperties}>
-                +{pc.spreadPct.toFixed(2)}%
-              </span>
-            </div>
-          ))}
         </div>
       ) : (
         <div style={{
