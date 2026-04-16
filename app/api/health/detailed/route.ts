@@ -19,6 +19,7 @@ import { getSupportedPlatforms } from '@/lib/cron/utils'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getFireAndForgetStats } from '@/lib/utils/logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { getAuthFailureStats } from '@/lib/auth/extract-user'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -40,6 +41,10 @@ interface DetailedHealthResponse {
     cron: CronStatus
   }
   metrics: SystemMetrics
+  /** Background task failure counters from getFireAndForgetStats() — present only when populated */
+  backgroundFailures?: Record<string, { count: number; lastError: string; lastAt: string }>
+  /** Auth failure counters from getAuthFailureStats() — present only when populated */
+  authFailures?: Record<string, { count: number; lastMessage: string; lastAt: string }>
 }
 
 interface ServiceStatus {
@@ -494,6 +499,12 @@ export async function GET(request: NextRequest) {
     // and may silently fail without anyone noticing.
     const backgroundFailures = getFireAndForgetStats()
 
+    // Auth failure counters. Elevated `supabase_error` counts indicate the
+    // Supabase Auth service is struggling; elevated `jwt_expired` is expected
+    // and usually fine (tokens naturally expire). `config_missing` == 0
+    // always in production — any value here is a deploy-config bug.
+    const authFailures = getAuthFailureStats()
+
     const response: DetailedHealthResponse = {
       status: calculateStatus(checks),
       timestamp: new Date().toISOString(),
@@ -506,6 +517,7 @@ export async function GET(request: NextRequest) {
         // 这里只提供占位
       },
       ...(Object.keys(backgroundFailures).length > 0 ? { backgroundFailures } : {}),
+      ...(Object.keys(authFailures).length > 0 ? { authFailures } : {}),
     }
 
     const httpStatus = response.status === 'healthy' ? 200 : response.status === 'degraded' ? 200 : 503
