@@ -182,7 +182,12 @@ export default function TraderHeader({
   // Prefer claimed user avatar over exchange avatar
   const effectiveAvatarUrl = claimedAvatarUrl || avatarUrl
   const hasCover = Boolean(coverUrl)
-  const activeDays = getActiveDays(activeSince)
+  // getActiveDays() calls new Date() so its output depends on wall-clock time.
+  // Running it during SSR risks a server/client hydration mismatch whenever the
+  // render crosses a day boundary. Only compute it after mount — before that
+  // the activeSince subtitle item is simply omitted on the server, which is
+  // harmless because the parts array is joined with a separator.
+  const activeDays = mounted ? getActiveDays(activeSince) : null
 
   const containerBackground = hasCover
     ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${coverUrl}) center/cover no-repeat`
