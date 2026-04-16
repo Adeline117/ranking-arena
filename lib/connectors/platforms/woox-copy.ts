@@ -7,6 +7,7 @@
  */
 
 import { BaseConnector } from '../base'
+import { safeNumber } from '../utils'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
   TraderSource, TraderProfile, SnapshotMetrics,
@@ -55,7 +56,7 @@ export class WooxCopyConnector extends BaseConnector {
     return {
       traders,
       total_available: (raw?.data as Record<string, unknown>)?.meta
-        ? this.num(((raw.data as Record<string, unknown>).meta as Record<string, unknown>).totalCount) ?? traders.length
+        ? safeNumber(((raw.data as Record<string, unknown>).meta as Record<string, unknown>).totalCount) ?? traders.length
         : traders.length,
       window,
       fetched_at: new Date().toISOString(),
@@ -82,8 +83,8 @@ export class WooxCopyConnector extends BaseConnector {
       tags: item.strategyTraderType === 'INSTITUTION' ? ['institution'] : [],
       profile_url: `https://woox.io/en/social-trading/strategy/${traderKey}`,
       followers: null,
-      copiers: this.num(item.currentNumberCu),
-      aum: this.num(item.auc),
+      copiers: safeNumber(item.currentNumberCu),
+      aum: safeNumber(item.auc),
       updated_at: new Date().toISOString(),
       last_enriched_at: new Date().toISOString(),
       provenance: this.buildProvenance(`${BASE}/lead-trader-dashboard/sorting-strategy-list`),
@@ -107,28 +108,28 @@ export class WooxCopyConnector extends BaseConnector {
     if (!data) return null
 
     // ROI comes as decimal (e.g., 1.1726 = 117.26%)
-    const rawRoi = this.num(data.roi)
+    const rawRoi = safeNumber(data.roi)
     const roi = rawRoi != null ? rawRoi * 100 : null
 
     // Win rate as decimal
-    const rawWr = this.num(data.winRate)
+    const rawWr = safeNumber(data.winRate)
     const winRate = rawWr != null ? rawWr * 100 : null
 
     // Max drawdown as decimal
-    const rawMdd = this.num(data.maxDrawdown)
+    const rawMdd = safeNumber(data.maxDrawdown)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd * 100) : null
 
     const metrics: SnapshotMetrics = {
       roi,
-      pnl: this.num(data.pnl),
+      pnl: safeNumber(data.pnl),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      sharpe_ratio: this.num(data.sharpeRatio),
+      sharpe_ratio: safeNumber(data.sharpeRatio),
       sortino_ratio: null,
-      trades_count: this.num(data.numberOfTrades),
+      trades_count: safeNumber(data.numberOfTrades),
       followers: null,
-      copiers: this.num(data.copierAssets) != null ? null : null, // copiers count from listing
-      aum: this.num(data.copierAssets),
+      copiers: safeNumber(data.copierAssets) != null ? null : null, // copiers count from listing
+      aum: safeNumber(data.copierAssets),
       platform_rank: null,
       arena_score: null,
       return_score: null,
@@ -181,13 +182,13 @@ export class WooxCopyConnector extends BaseConnector {
   }
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const rawRoi = this.num(raw.roi)
+    const rawRoi = safeNumber(raw.roi)
     const roi = rawRoi != null ? rawRoi * 100 : null // decimal → percentage
 
-    const rawWr = this.num(raw.winRate)
+    const rawWr = safeNumber(raw.winRate)
     const winRate = rawWr != null ? rawWr * 100 : null
 
-    const rawMdd = this.num(raw.mdd ?? raw.maxDrawdown)
+    const rawMdd = safeNumber(raw.mdd ?? raw.maxDrawdown)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd * 100) : null
 
     return {
@@ -195,21 +196,16 @@ export class WooxCopyConnector extends BaseConnector {
       display_name: raw.leadTraderCoolName ?? raw.strategyName ?? null,
       avatar_url: raw.avatarUrl ?? null,
       roi,
-      pnl: this.num(raw.pnl),
+      pnl: safeNumber(raw.pnl),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      sharpe_ratio: this.num(raw.sharpeRatio),
+      sharpe_ratio: safeNumber(raw.sharpeRatio),
       trades_count: null,
       followers: null,
-      copiers: this.num(raw.currentNumberCu),
-      aum: this.num(raw.auc),
+      copiers: safeNumber(raw.currentNumberCu),
+      aum: safeNumber(raw.auc),
       platform_rank: null,
     }
   }
 
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val)
-    return !Number.isFinite(n) ? null : n
-  }
 }

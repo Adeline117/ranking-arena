@@ -7,6 +7,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
+import { safeNumber } from '../utils'
 import { OkxFuturesLeaderboardResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
@@ -125,19 +126,19 @@ export class OkxFuturesConnector extends BaseConnector {
    * MDD computed from pnlRatios in discoverLeaderboard → stored as _computed_mdd.
    */
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
-    const winRatio = this.num(raw.winRatio)
+    const winRatio = safeNumber(raw.winRatio)
     return {
       trader_key: raw.uniqueCode ?? raw.uniqueName ?? null,
       display_name: raw.nickName ?? null,
       avatar_url: raw.portLink ?? null,
       roi: this.decimalToPercent(raw.pnlRatio ?? raw.profitRatio),
-      pnl: this.num(raw.pnl ?? raw.profit),
+      pnl: safeNumber(raw.pnl ?? raw.profit),
       win_rate: winRatio != null ? (winRatio <= 1 ? winRatio * 100 : winRatio) : null,
       max_drawdown: raw._computed_mdd != null ? Number(raw._computed_mdd) : null,
       trades_count: null,
-      followers: this.num(raw.accCopyTraderNum ?? raw.copyTraderNum),
-      copiers: this.num(raw.copyTraderNum),
-      aum: this.num(raw.aum),
+      followers: safeNumber(raw.accCopyTraderNum ?? raw.copyTraderNum),
+      copiers: safeNumber(raw.copyTraderNum),
+      aum: safeNumber(raw.aum),
       sharpe_ratio: raw.sharpeRatio != null ? Number(raw.sharpeRatio) : (() => {
         // Fallback: compute Sharpe from pnlRatios (daily ROI curve from leaderboard API)
         const pnlRatios = raw.pnlRatios as Array<{ beginTs?: unknown; pnlRatio?: unknown }> | undefined
@@ -155,13 +156,8 @@ export class OkxFuturesConnector extends BaseConnector {
     }
   }
 
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val); return !Number.isFinite(n) ? null : n
-  }
-
   private decimalToPercent(val: unknown): number | null {
-    const n = this.num(val)
+    const n = safeNumber(val)
     if (n === null) return null
     // OKX returns decimals (0.25 = 25%), convert to percentage
     return Math.abs(n) < 10 ? n * 100 : n
