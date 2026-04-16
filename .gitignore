@@ -95,6 +95,7 @@ supabase/.temp/
 # Generated reports and artifacts
 playwright-report/
 data/generated/
+scripts/output/
 
 # Local scripts (may contain sensitive data)
 scripts/local-scrape.mjs
