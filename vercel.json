@@ -9,6 +9,10 @@
       "schedule": "0 9 * * 5"
     },
     {
+      "path": "/api/cron/ensure-partitions",
+      "schedule": "0 3 * * 0"
+    },
+    {
       "path": "/api/cron/compute-leaderboard?season=90D",
       "schedule": "1 * * * *"
     },
