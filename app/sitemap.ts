@@ -129,46 +129,37 @@ export async function generateSitemaps() {
 export default async function sitemap({ id }: { id: number }): Promise<MetadataRoute.Sitemap> {
   const now = new Date().toISOString()
 
-  // ── Sitemap 0: static pages + exchange ranking pages ──────────────────────
+  // ── Sitemap 0: static pages ───────────────────────────────────────────────
+  // NOTE: /rankings/{exchange} URLs are deliberately EXCLUDED — they all
+  // 301-redirect to /?exchange=... (see next.config.ts redirects). Including
+  // redirect URLs in a sitemap is treated as low-quality by Google.
+  // Similarly /rankings (→ /), /rankings/traders (→ /), and /library (→ /learn)
+  // are all 301 redirects and must NOT appear here.
   if (id === STATIC_SITEMAP_ID) {
-    const { EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS } = await import('@/lib/constants/exchanges')
-    const deadSet = new Set(DEAD_BLOCKED_PLATFORMS)
-    const exchangePages: MetadataRoute.Sitemap = Object.keys(EXCHANGE_CONFIG)
-      .filter(k => !deadSet.has(k as import('@/lib/constants/exchanges').TraderSource) && !k.startsWith('dune_') && k !== 'okx_wallet')
-      .map(source => ({
-        url: `${BASE_URL}/rankings/${source}`,
-        lastModified: now,
-        changeFrequency: 'daily' as const,
-        priority: 0.85,
-      }))
-
     const staticPages: MetadataRoute.Sitemap = [
       { url: `${BASE_URL}/`, lastModified: now, changeFrequency: 'hourly', priority: 1 },
-      { url: `${BASE_URL}/rankings`, lastModified: now, changeFrequency: 'hourly', priority: 0.95 },
       { url: `${BASE_URL}/hot`, lastModified: now, changeFrequency: 'hourly', priority: 0.9 },
       { url: `${BASE_URL}/groups`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
       { url: `${BASE_URL}/rankings/bots`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
+      { url: `${BASE_URL}/rankings/tokens`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
       { url: `${BASE_URL}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
       { url: `${BASE_URL}/methodology`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
-      { url: `${BASE_URL}/rankings/traders`, lastModified: now, changeFrequency: 'daily', priority: 0.85 },
       { url: `${BASE_URL}/compare`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
       { url: `${BASE_URL}/search`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
       { url: `${BASE_URL}/flash-news`, lastModified: now, changeFrequency: 'hourly', priority: 0.7 },
       { url: `${BASE_URL}/market`, lastModified: now, changeFrequency: 'hourly', priority: 0.8 },
-      { url: `${BASE_URL}/learn`, lastModified: now, changeFrequency: 'weekly', priority: 0.7 },
-      { url: `${BASE_URL}/library`, lastModified: now, changeFrequency: 'weekly', priority: 0.75 },
+      { url: `${BASE_URL}/learn`, lastModified: now, changeFrequency: 'weekly', priority: 0.75 },
       { url: `${BASE_URL}/competitions`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
       { url: `${BASE_URL}/help`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
       { url: `${BASE_URL}/feed`, lastModified: now, changeFrequency: 'hourly', priority: 0.7 },
       { url: `${BASE_URL}/claim`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
-      { url: `${BASE_URL}/login`, lastModified: now, changeFrequency: 'monthly', priority: 0.3 },
       { url: `${BASE_URL}/about`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
       { url: `${BASE_URL}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
       { url: `${BASE_URL}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
       { url: `${BASE_URL}/disclaimer`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
     ]
 
-    return [...staticPages, ...exchangePages]
+    return staticPages
   }
 
   // ── Sitemap EXTRA_SITEMAP_ID: posts, groups, user profiles ─────────────────
