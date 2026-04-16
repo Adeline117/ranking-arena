@@ -147,8 +147,12 @@ export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
         }, 'cleanup-complete', 24 * 60 * 60 * 1000)
       }
     }
-  } catch {
-    // Best-effort check
+  } catch (err) {
+    // Best-effort check — but never silent. If this query breaks, the
+    // cleanup-complete notification would stop firing with zero warning.
+    logger.warn('[meta-monitor] cleanup-complete status check failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
   }
 
   logger.info(`[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck, cleanup=${cleanupComplete ? 'done' : 'running'}`)
