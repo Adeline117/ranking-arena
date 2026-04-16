@@ -171,11 +171,24 @@ export class TokenBucketRateLimiter {
     const config = this.exchangeLimits[exchange] || this.exchangeLimits.default
     const key = `${config.keyPrefix}:global`
 
-    if (this.redis && this.connected) {
-      return this.acquireFromRedis(key, config, tokens)
-    } else {
-      return this.acquireLocal(key, config, tokens)
+    const result = (this.redis && this.connected)
+      ? await this.acquireFromRedis(key, config, tokens)
+      : this.acquireLocal(key, config, tokens)
+
+    // Observability: record every decision so we know when we start hitting
+    // upstream rate limits before cascading failures happen downstream.
+    recordRateLimitDecision(exchange, result.allowed)
+
+    // Warn on denial — surfaces in logs + Sentry fingerprinted by exchange.
+    if (!result.allowed) {
+      logger.warn(`[RateLimit] denied for ${exchange}`, {
+        exchange,
+        remaining: result.remaining,
+        retryAfter: result.retryAfter,
+      })
     }
+
+    return result
   }
 
   private async acquireFromRedis(
@@ -315,6 +328,68 @@ export function getRateLimiter(): TokenBucketRateLimiter {
     rateLimiter = new TokenBucketRateLimiter(process.env.REDIS_URL)
   }
   return rateLimiter
+}
+
+// ---------------------------------------------------------------------------
+// Rate-limit hit tracking (observability)
+// ---------------------------------------------------------------------------
+//
+// Previously, `acquire()` silently returned `{ allowed: false }` when the
+// bucket was empty. There was no counter, log, or alert — meaning if Binance
+// started rate-limiting us, we'd only find out when downstream fetchers
+// failed. This tracker surfaces denials per-exchange so /api/health/pipeline
+// and monitor scripts can see them.
+//
+// In-memory only (resets on cold start) — acceptable because cron jobs run
+// every 5-30min and Binance-type rate limits are on the order of 1200/min,
+// so a single instance sees meaningful data within one request window.
+
+interface RateLimitStats {
+  allowed: number
+  denied: number
+  lastDeniedAt: number | null
+}
+
+const _rateLimitStats = new Map<string, RateLimitStats>()
+
+/** Record an allow/deny decision for observability. */
+export function recordRateLimitDecision(exchange: string, allowed: boolean): void {
+  const existing = _rateLimitStats.get(exchange) ?? { allowed: 0, denied: 0, lastDeniedAt: null }
+  if (allowed) {
+    existing.allowed++
+  } else {
+    existing.denied++
+    existing.lastDeniedAt = Date.now()
+  }
+  _rateLimitStats.set(exchange, existing)
+}
+
+/**
+ * Snapshot of rate-limit stats per exchange since process start.
+ * Denial ratio > 10% indicates we're hitting rate limits and should back off.
+ */
+export function getRateLimitStats(): Record<string, {
+  allowed: number
+  denied: number
+  denialRate: number
+  lastDeniedAt: string | null
+}> {
+  const out: Record<string, {
+    allowed: number
+    denied: number
+    denialRate: number
+    lastDeniedAt: string | null
+  }> = {}
+  for (const [exchange, s] of _rateLimitStats.entries()) {
+    const total = s.allowed + s.denied
+    out[exchange] = {
+      allowed: s.allowed,
+      denied: s.denied,
+      denialRate: total > 0 ? Math.round((s.denied / total) * 1000) / 10 : 0,
+      lastDeniedAt: s.lastDeniedAt ? new Date(s.lastDeniedAt).toISOString() : null,
+    }
+  }
+  return out
 }
 
 export default TokenBucketRateLimiter

@@ -18,6 +18,7 @@ import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { getFireAndForgetStats, logger } from '@/lib/utils/logger'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { getCircuitStates } from '@/lib/connectors/circuit-registry'
+import { getRateLimitStats } from '@/lib/ratelimit/TokenBucket'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -179,7 +180,8 @@ export async function GET(req: NextRequest) {
     // AND which let partially-degraded responses through).
     // v4 (2026-04-16): added `circuits` field and circuit-based status
     // escalation; bump to avoid serving cached responses without circuit data.
-    const CACHE_KEY = 'api:health:pipeline:v4'
+    // v5 (2026-04-16): added `rateLimits` field + hot-exchange escalation.
+    const CACHE_KEY = 'api:health:pipeline:v5'
     const cached = await tieredGet(CACHE_KEY, 'warm')
     if (cached.data !== null) {
       // Defensive: even on cache hit, validate the cached entry isn't degraded.
@@ -292,6 +294,26 @@ export async function GET(req: NextRequest) {
           overallStatus = 'degraded'
         }
 
+        // Rate-limit stats per exchange. Denial rate > 10% means we're hitting
+        // upstream throttles — useful early signal before circuit breakers
+        // trip. In-memory (resets on cold start) so a fresh instance shows
+        // empty. Surfaces `hotExchanges` (> 10% denial + at least 20 calls).
+        const rawRateLimits = getRateLimitStats()
+        const hotExchanges = Object.entries(rawRateLimits)
+          .filter(([, s]) => s.denialRate > 10 && s.allowed + s.denied >= 20)
+          .map(([exchange, s]) => ({ exchange, ...s }))
+          .sort((a, b) => b.denialRate - a.denialRate)
+        const rateLimits = {
+          perExchange: rawRateLimits,
+          hotExchanges,
+        }
+
+        // Escalate if multiple exchanges are hot (our IPs or keys are likely
+        // being throttled across the board).
+        if (hotExchanges.length >= 3 && overallStatus === 'healthy') {
+          overallStatus = 'degraded'
+        }
+
         return {
           status: overallStatus,
           timestamp: new Date().toISOString(),
@@ -309,6 +331,7 @@ export async function GET(req: NextRequest) {
             backgroundFailureCount: backgroundFailures.length,
             circuitsOpen: circuits.open.length,
             circuitsHalfOpen: circuits.halfOpen.length,
+            hotRateLimitedExchanges: hotExchanges.length,
           },
           platformHealth,
           jobs: jobStatuses,
@@ -316,6 +339,7 @@ export async function GET(req: NextRequest) {
           recentFailures,
           backgroundFailures,
           circuits,
+          rateLimits,
         }
     }
 
