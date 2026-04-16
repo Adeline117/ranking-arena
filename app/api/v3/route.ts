@@ -90,12 +90,14 @@ function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200
   const res = apiSuccess(data, meta, status)
   res.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120')
   res.headers.set('Access-Control-Allow-Origin', '*')
+  res.headers.set('Access-Control-Allow-Credentials', 'false')
   return res
 }
 
 function errorResponse(message: string, status: number) {
   const res = apiError('API_ERROR', message, status)
   res.headers.set('Access-Control-Allow-Origin', '*')
+  res.headers.set('Access-Control-Allow-Credentials', 'false')
   return res
 }
 

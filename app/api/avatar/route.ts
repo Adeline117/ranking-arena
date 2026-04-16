@@ -104,7 +104,9 @@ export async function GET(request: NextRequest) {
       'huobi.com',
       'hbfile.net',
       'hbimg.com',
-      'cloudfront.net',
+      // HTX uses specific CloudFront distributions — restrict to avoid open proxy
+      'd2uuskl05wy6ml.cloudfront.net',
+      'd1nhio0ox7pgb.cloudfront.net',
       // BingX
       'bingx.com',
       // CoinEx
