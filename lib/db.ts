@@ -60,17 +60,21 @@ function resetPool(): void {
 export function getPool(): Pool {
   if (!pool) {
     const isProduction = process.env.NODE_ENV === 'production';
-    const connectionString = process.env.DATABASE_URL || 'postgresql://claude:arena_dev@localhost:5432/ranking_arena';
+    // Use Supabase Connection Pooler (PgBouncer, port 6543) in production for proper
+    // connection multiplexing. This removes the per-instance pool sizing problem entirely:
+    // PgBouncer manages a shared pool of ~60 connections across ALL serverless instances.
+    // Env var priority: DATABASE_POOLER_URL → DATABASE_URL → local dev fallback
+    const connectionString = isProduction
+      ? (process.env.DATABASE_POOLER_URL || process.env.DATABASE_URL || '')
+      : (process.env.DATABASE_URL || 'postgresql://claude:arena_dev@localhost:5432/ranking_arena');
 
     const config: PoolConfig = {
       connectionString,
-      // Production: 2 connections per function instance (was 3, reduced for safety margin).
-      // Supabase max_connections = 60 (verified 2026-04-08).
-      // With ~10-20 concurrent serverless functions during cron storms:
-      //   2 × 20 = 40, leaving 20 connections margin for ad-hoc queries/admin.
-      // TODO: Migrate to Supabase Connection Pooler (PgBouncer) for proper connection multiplexing.
-      max: isProduction ? 2 : 10,
-      idleTimeoutMillis: isProduction ? 3000 : 30000,
+      // With PgBouncer in production, each instance can safely open more connections
+      // since PgBouncer multiplexes them. In transaction mode (Supabase default),
+      // connections are released after each transaction.
+      max: isProduction ? 5 : 10,
+      idleTimeoutMillis: isProduction ? 5000 : 30000,
       connectionTimeoutMillis: isProduction ? 15000 : 10000,
       // Keep connections alive through load balancer/pooler
       keepAlive: true,
