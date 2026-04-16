@@ -14,6 +14,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
+import { badRequest } from '@/lib/api/response'
 import { getOrSetWithLock } from '@/lib/cache'
 import type { Period } from '@/lib/utils/arena-score'
 import { safeParseInt } from '@/lib/utils/safe-parse'
@@ -53,10 +54,7 @@ export const GET = withPublic(
     const rawParams = Object.fromEntries(searchParams)
     const parsed = tradersQuerySchema.safeParse(rawParams)
     if (!parsed.success) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid parameters', details: parsed.error.flatten() },
-        { status: 400 }
-      )
+      return badRequest('Invalid parameters')
     }
 
     const { timeRange: timeRangeStr, exchange: exchangeFilter, category: categoryFilter, sortBy, order, limit } = parsed.data
