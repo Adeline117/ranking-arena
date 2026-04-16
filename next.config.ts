@@ -443,8 +443,10 @@ const nextConfig = {
     // Tree-shaking optimization for large packages
     optimizePackageImports: [
       '@supabase/supabase-js',
+      '@supabase/ssr',
       '@upstash/redis',
       '@upstash/ratelimit',
+      '@upstash/qstash',
       'lucide-react',
       '@sentry/nextjs',
       'zod',
@@ -464,6 +466,11 @@ const nextConfig = {
       '@walletconnect/utils',
       '@walletconnect/types',
       '@privy-io/react-auth',
+      // @solana/web3.js is 102MB installed — tree-shaking PublicKey etc.
+      // avoids pulling Connection/Transaction/etc. into the wallet chunk.
+      '@solana/web3.js',
+      // cockatiel advertises sideEffects:false; server-only but cheap hint.
+      'cockatiel',
     ],
 
     // Enable optimized CSS loading
