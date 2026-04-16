@@ -20,16 +20,16 @@ const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'
 
 type EquityCurveData = { '90D': Array<{ date: string; roi: number; pnl: number }>; '30D': Array<{ date: string; roi: number; pnl: number }>; '7D': Array<{ date: string; roi: number; pnl: number }> }
 
-type AssetBreakdownData = { '90D': Array<{ symbol: string; weightPct: number }>; '30D': Array<{ symbol: string; weightPct: number }>; '7D': Array<{ symbol: string; weightPct: number }> }
-type PositionHistoryItem = { symbol: string; direction: string; positionType: string; marginMode: string; openTime: string; closeTime: string; entryPrice: number; exitPrice: number; maxPositionSize: number; closedSize: number; pnlUsd: number; pnlPct: number; status: string }
-
 export interface StatsTabProps {
   visited: boolean
-  stats: TraderStats | null | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SWR data blobs, typed at shell level
+  stats: any
   traderHandle: string
-  assetBreakdown: AssetBreakdownData | null | undefined
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  assetBreakdown: any
   equityCurve: EquityCurveData | undefined
-  positionHistory: PositionHistoryItem[]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  positionHistory: any[]
   isPro: boolean
   onUnlock: () => void
 }
