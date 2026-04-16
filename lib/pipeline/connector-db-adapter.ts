@@ -265,7 +265,14 @@ export async function writeDiscoverResult(
           level: 'critical',
           details: { platform, window, rowCount: traderDataArray.length },
         }, `connector-degrade:${platform}:${window}`, 3600_000)
-      } catch { /* alert non-critical */ }
+      } catch (alertErr) {
+        // Write path already blocked; the alert is the only way ops hears
+        // about this. Never swallow the delivery failure silently.
+        dataLogger.error(
+          `[adapter] Failed to deliver connector-degrade alert for ${platform}/${window}: ${alertErr instanceof Error ? alertErr.message : String(alertErr)}`,
+          { platform, window, reasons: healthCheck.reasons, rowCount: traderDataArray.length },
+        )
+      }
       return {
         source: platform, window, total: traderDataArray.length, saved: 0,
         skipped: traderDataArray.length, error: 'Blocked by health monitor: ' + healthCheck.reasons[0],
