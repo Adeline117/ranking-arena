@@ -78,33 +78,27 @@ export async function extractAndSyncHashtags(
       return
     }
 
-    // Increment post_count for each tag
-    for (const h of hashtagRows) {
-      await supabase.rpc('increment_field', {
-        table_name: 'hashtags',
-        row_id: h.id,
-        field_name: 'post_count',
-        amount: 1,
-      })
+    // Recompute post_count from join table in a single batched pass.
+    // Previous implementation was a double N+1: per-tag RPC increment + per-tag COUNT + per-tag UPDATE.
+    // For a 10-hashtag post: 30 serial round-trips -> 2 parallel batches.
+    const hashtagIds = hashtagRows.map(h => h.id)
+    const { data: counts } = await supabase
+      .from('post_hashtags')
+      .select('hashtag_id')
+      .in('hashtag_id', hashtagIds)
+
+    const countMap = new Map<string, number>()
+    for (const row of counts || []) {
+      const id = row.hashtag_id as string
+      countMap.set(id, (countMap.get(id) || 0) + 1)
     }
 
-    // Simpler approach: just count from join table for accuracy
-    // KEEP 'exact' — this loop recomputes the cached
-    // hashtags.post_count column from the join table source-of-truth.
-    // Scoped per-hashtag via (hashtag_id) index → cheap.
-    for (const h of hashtagRows) {
-      const { count } = await supabase
-        .from('post_hashtags')
-        .select('*', { count: 'exact', head: true })
-        .eq('hashtag_id', h.id)
-
-      if (count !== null) {
-        await supabase
-          .from('hashtags')
-          .update({ post_count: count })
-          .eq('id', h.id)
-      }
-    }
+    // Batch updates in parallel (single IN query read + parallel writes)
+    await Promise.all(
+      hashtagIds.map(id =>
+        supabase.from('hashtags').update({ post_count: countMap.get(id) || 0 }).eq('id', id)
+      )
+    )
   } catch (err) {
     logger.error('[hashtags] sync failed:', err)
   }

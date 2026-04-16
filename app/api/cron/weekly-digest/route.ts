@@ -72,18 +72,36 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   const now = new Date()
   const weekRange = `${weekAgo.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
-  // 6. Send emails to each subscriber
+  // 6. Batch-fetch emails via paginated listUsers (replaces N+1 getUserById)
+  const subscriberIds = new Set(subscribers.map(s => s.id))
+  const emailMap = new Map<string, string>()
+  let page = 1
+  const perPage = 1000
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers({ page, perPage })
+    if (listErr || !users || users.length === 0) break
+    for (const u of users) {
+      if (subscriberIds.has(u.id) && u.email) {
+        emailMap.set(u.id, u.email)
+      }
+    }
+    if (users.length < perPage) break
+    page++
+  }
+
+  // 7. Send emails with bounded concurrency to avoid timeout
   let sentCount = 0
   let failCount = 0
-
-  for (const sub of subscribers) {
+  const CONCURRENCY = 10
+  const sendOne = async (sub: typeof subscribers[number]) => {
     try {
-      // Get user email from Supabase Auth
-      const { data: { user } } = await supabase.auth.admin.getUserById(sub.id)
-      if (!user?.email) {
+      const email = emailMap.get(sub.id)
+      if (!email) {
         logger.warn('Subscriber has no email', { userId: sub.id })
-        continue
+        return
       }
+      const user = { email }
 
       const unsubToken = generateUnsubscribeToken(sub.id, 'digest')
       const unsubLink = `${BASE_URL}/api/email/unsubscribe?token=${unsubToken}`
@@ -120,6 +138,12 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
       })
       failCount++
     }
+  }
+
+  // Execute sends with bounded concurrency
+  for (let i = 0; i < subscribers.length; i += CONCURRENCY) {
+    const batch = subscribers.slice(i, i + CONCURRENCY)
+    await Promise.all(batch.map(sendOne))
   }
 
   logger.info('Weekly digest complete', { sent: sentCount, failed: failCount, subscribers: subscribers.length })
