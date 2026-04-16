@@ -156,15 +156,28 @@ export class PipelineLogger {
       .single()
 
     if (error || !data) {
-      // If logging fails, return a no-op handle so jobs still run
+      // DB write failed — write to Redis as fast-path fallback so monitoring can still see the job
       logger.warn(`[PipelineLogger] Failed to start log for ${jobName}: ${error?.message}`)
-      // Alert so we know pipeline logging is broken (fire-and-forget)
-      fireAndForget(sendAlert({
-        title: `PipelineLogger 启动失败: ${jobName}`,
-        message: `无法插入 pipeline_logs: ${error?.message || 'unknown error'}\n任务仍会运行，但不会被记录。`,
-        level: 'warning',
-        details: { jobName, error: error?.message || 'no data returned' },
-      }), 'pipeline-logger:start-alert')
+      fireAndForget(
+        (async () => {
+          try {
+            const { getSharedRedis } = await import('@/lib/cache/redis-client')
+            const redis = await getSharedRedis()
+            if (redis) {
+              await redis.set(`plog:running:${jobName}`, JSON.stringify({
+                job_name: jobName, status: 'running', started_at: new Date().toISOString(), metadata,
+              }), { ex: 600 }) // 10min TTL
+            }
+          } catch { /* Redis also unavailable, proceed silently */ }
+          await sendAlert({
+            title: `PipelineLogger 启动失败: ${jobName}`,
+            message: `无法插入 pipeline_logs: ${error?.message || 'unknown error'}\n任务仍会运行，但不会被记录。已写入 Redis 备份。`,
+            level: 'warning',
+            details: { jobName, error: error?.message || 'no data returned' },
+          })
+        })(),
+        'pipeline-logger:start-alert',
+      )
       return createNoOpHandle()
     }
 
