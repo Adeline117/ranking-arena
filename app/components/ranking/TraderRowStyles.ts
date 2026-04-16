@@ -102,9 +102,12 @@ export const MDD_TEXT_BASE_STYLE: React.CSSProperties = { color: TRADER_ACCENT_E
 export const ROI_TEXT_BASE_STYLE: React.CSSProperties = { lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }
 
 // Expand button style
+// 36x36 touch target: meets WCAG 2.2 AA (24×24) comfortably while staying
+// small enough to fit between the right-edge of the row and the sort chevron
+// area. Was 28×28 — too small for thumbs in the dense ranking list.
 export const EXPAND_BTN_STYLE: React.CSSProperties = {
-  position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
-  width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
+  position: 'absolute', right: 2, top: '50%', transform: 'translateY(-50%)',
+  width: 36, height: 36, display: 'flex', alignItems: 'center', justifyContent: 'center',
   cursor: 'pointer', opacity: 0.6, transition: 'opacity 0.15s',
   borderRadius: tokens.radius.sm,
 }
