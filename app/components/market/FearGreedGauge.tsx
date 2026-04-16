@@ -8,11 +8,11 @@ import type { FearGreedData } from '@/lib/utils/fear-greed'
 import { apiFetch } from '@/lib/utils/api-fetch'
 
 function getColor(value: number): string {
-  if (value <= 25) return '#ea3943'
-  if (value <= 46) return '#ea8c00'
-  if (value <= 54) return '#f5c623'
-  if (value <= 75) return '#93d900'
-  return '#16c784'
+  if (value <= 25) return tokens.colors.gauge.extremeFear
+  if (value <= 46) return tokens.colors.gauge.fear
+  if (value <= 54) return tokens.colors.gauge.neutral
+  if (value <= 75) return tokens.colors.gauge.greed
+  return tokens.colors.gauge.extremeGreed
 }
 
 export default function FearGreedGauge() {

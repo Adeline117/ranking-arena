@@ -67,6 +67,13 @@ function getCssVarColors() {
       bear: 'var(--color-sentiment-bear)',
       neutral: 'var(--color-sentiment-neutral)',
     },
+    gauge: {
+      extremeFear: 'var(--color-gauge-extreme-fear, #ea3943)',
+      fear: 'var(--color-gauge-fear, #ea8c00)',
+      neutral: 'var(--color-gauge-neutral, #f5c623)',
+      greed: 'var(--color-gauge-greed, #93d900)',
+      extremeGreed: 'var(--color-gauge-extreme-greed, #16c784)',
+    },
     medal: fallback.medal,
     interactive: fallback.interactive,
     rating: fallback.rating,
@@ -90,9 +97,13 @@ export const tokens = {
   // Spacing scale (8px base unit)
   spacing: {
     0: '0',
+    0.5: '2px',  // 0.125rem — borders/accents
     1: '4px',    // 0.25rem
+    1.5: '6px',  // 0.375rem
     2: '8px',    // 0.5rem
+    2.5: '10px', // 0.625rem
     3: '12px',   // 0.75rem
+    3.5: '14px', // 0.875rem
     4: '16px',   // 1rem
     5: '20px',   // 1.25rem
     6: '24px',   // 1.5rem
