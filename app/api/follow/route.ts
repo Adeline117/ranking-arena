@@ -6,7 +6,7 @@
 
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
-import { ApiError } from '@/lib/api/errors'
+import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { success, badRequest, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import { invalidateFollowingCache } from '@/app/api/following/route'
@@ -91,7 +91,7 @@ export const POST = withAuth(
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
-          throw new ApiError('Follow feature not available yet', { code: 'SERVICE_UNAVAILABLE' as 'SERVICE_UNAVAILABLE', statusCode: 503 })
+          throw new ApiError('Follow feature not available yet', { code: ErrorCode.SERVICE_UNAVAILABLE, statusCode: 503 })
         }
         logger.error('Follow failed', { error, traderId, userId: user.id })
         return serverError('Follow failed')
@@ -135,7 +135,7 @@ export const POST = withAuth(
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
-          throw new ApiError('Follow feature not available yet', { code: 'SERVICE_UNAVAILABLE' as 'SERVICE_UNAVAILABLE', statusCode: 503 })
+          throw new ApiError('Follow feature not available yet', { code: ErrorCode.SERVICE_UNAVAILABLE, statusCode: 503 })
         }
         logger.error('Unfollow failed', { error, traderId, userId: user.id })
         return serverError('Unfollow failed')
