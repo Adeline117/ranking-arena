@@ -111,7 +111,7 @@ export default function RecommendedGroups() {
   return (
     <SidebarCard title={t('sidebarRecommendedGroups')}>
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
           {[1, 2, 3].map(i => (
             <div key={i} className="skeleton" style={{ height: 52, borderRadius: tokens.radius.md }} />
           ))}
@@ -121,20 +121,20 @@ export default function RecommendedGroups() {
           <div>{t('sidebarLoadFailedShort')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{ marginTop: tokens.spacing[1.5], padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
         </div>
       ) : groups.length === 0 ? (
         <div style={{ padding: `${tokens.spacing[6]} ${tokens.spacing[3]}`, textAlign: 'center' }}>
-          <Image src="/stickers/confused.webp" alt="No groups found" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
+          <Image src="/stickers/confused.webp" alt="No groups found" width={48} height={48} style={{ margin: `0 auto ${tokens.spacing[2]}`, display: 'block', opacity: 0.7 }} />
           <p style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
             {t('sidebarNoGroups')}
           </p>
         </div>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
           {groups.map(g => {
             const displayName = localizedLabel(g.name, g.name_en, language)
             const desc = localizedLabel(g.description || '', g.description_en, language)
@@ -145,8 +145,8 @@ export default function RecommendedGroups() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 10,
-                  padding: '8px 6px',
+                  gap: tokens.spacing[2.5],
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[1.5]}`,
                   textDecoration: 'none',
                   borderRadius: tokens.radius.md,
                   transition: `background ${tokens.transition.fast}`,
@@ -180,12 +180,12 @@ export default function RecommendedGroups() {
                   >
                     {(g.member_count || 0).toLocaleString('en-US')} {t('members')}
                     {!g.recommendation_reason && desc && (
-                      <span style={{ marginLeft: 6, color: tokens.colors.text.secondary }}>
+                      <span style={{ marginLeft: tokens.spacing[1.5], color: tokens.colors.text.secondary }}>
                         {desc.length > 20 ? desc.slice(0, 20) + '...' : desc}
                       </span>
                     )}
                     {isPersonalized && g.recommendation_reason && (
-                      <span style={{ marginLeft: 6, color: tokens.colors.accent.primary, fontStyle: 'italic' }}>
+                      <span style={{ marginLeft: tokens.spacing[1.5], color: tokens.colors.accent.primary, fontStyle: 'italic' }}>
                         {g.recommendation_reason}
                       </span>
                     )}

@@ -127,9 +127,9 @@ export default function TopTraders() {
   return (
     <SidebarCard title={t('sidebarTopTraders')}>
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
           {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="skeleton" style={{ height: 48, borderRadius: tokens.radius.md }} />
+            <div key={i} className="skeleton" style={{ height: tokens.spacing[12], borderRadius: tokens.radius.md }} />
           ))}
         </div>
       ) : error ? (
@@ -137,7 +137,7 @@ export default function TopTraders() {
           <div>{t('sidebarLoadFailed')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{ marginTop: tokens.spacing[1.5], padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
@@ -168,8 +168,8 @@ export default function TopTraders() {
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 4px',
+                  gap: tokens.spacing[2],
+                  padding: `${tokens.spacing[1.5]} ${tokens.spacing[1]}`,
                   textDecoration: 'none',
                   borderRadius: tokens.radius.sm,
                   transition: `background ${tokens.transition.fast}`,
@@ -214,7 +214,7 @@ export default function TopTraders() {
                 {/* Arena Score only — clean and readable */}
                 {trader.arena_score != null && (
                   <span style={{
-                    fontSize: 13,
+                    fontSize: tokens.typography.fontSize.sm,
                     fontWeight: tokens.typography.fontWeight.bold,
                     color: getScoreColor(trader.arena_score!),
                     lineHeight: tokens.typography.lineHeight.tight,

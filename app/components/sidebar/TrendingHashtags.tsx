@@ -38,7 +38,7 @@ export default memo(function TrendingHashtags() {
 
   return (
     <SidebarCard title={t('trendingHashtags')}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1.5] }}>
         {hashtags.map((h, i) => (
           <Link
             key={h.id}
@@ -57,7 +57,7 @@ export default memo(function TrendingHashtags() {
             onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
-            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <span style={{
                 color: tokens.colors.text.tertiary,
                 fontSize: 11,
