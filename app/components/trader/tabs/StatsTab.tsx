@@ -12,6 +12,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import type { TraderStats } from '@/lib/data/trader'
 
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
@@ -21,12 +22,11 @@ type EquityCurveData = { '90D': Array<{ date: string; roi: number; pnl: number }
 
 export interface StatsTabProps {
   visited: boolean
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- data blobs from SWR, typed generically at the shell level
-  stats: any
+  stats: TraderStats | null | undefined
   traderHandle: string
-  assetBreakdown: any
+  assetBreakdown: Record<string, unknown>[] | null | undefined
   equityCurve: EquityCurveData | undefined
-  positionHistory: any[]
+  positionHistory: Record<string, unknown>[]
   isPro: boolean
   onUnlock: () => void
 }

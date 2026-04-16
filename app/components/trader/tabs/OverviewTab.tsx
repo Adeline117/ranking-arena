@@ -51,9 +51,8 @@ export interface OverviewTabProps {
   data: UnregisteredTraderData
 
   // From SWR trader data (memoized slices)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- data blob from SWR, typed generically at shell level
-  traderProfile: any
-  traderPerformance: any
+  traderProfile: TraderProfile | null | undefined
+  traderPerformance: ExtendedPerformance | null | undefined
   traderEquityCurve: Record<string, Array<{ date: string; roi: number; pnl: number }>> | undefined
   traderSimilar: (TraderProfile & { roi_90d?: number; arena_score?: number })[]
   positionSummary: { avgLeverage: number | null; longPositions: number | null; shortPositions: number | null } | null | undefined
