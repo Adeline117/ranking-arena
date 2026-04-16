@@ -7,6 +7,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
+import { safeNumber } from '../utils'
 import {
   CoinexFuturesLeaderboardResponseSchema,
   CoinexFuturesDetailResponseSchema,
@@ -110,7 +111,7 @@ export class CoinexFuturesConnector extends BaseConnector {
       avatar_url: (info.avatar as string) || null,
       bio: null, tags: [],
       profile_url: `https://www.coinex.com/copy-trading/trader/${traderKey}`,
-      followers: this.num(info.followers), copiers: this.num(info.copiers),
+      followers: safeNumber(info.followers), copiers: safeNumber(info.copiers),
       aum: null,
       updated_at: new Date().toISOString(), last_enriched_at: new Date().toISOString(),
       provenance: { source_platform: 'coinex', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
@@ -151,11 +152,11 @@ export class CoinexFuturesConnector extends BaseConnector {
     if (!info) return null
 
     const metrics: SnapshotMetrics = {
-      roi: this.num(info.roi), pnl: this.num(info.profit),
-      win_rate: this.num(info.win_rate), max_drawdown: this.num(info.max_drawdown),
+      roi: safeNumber(info.roi), pnl: safeNumber(info.profit),
+      win_rate: safeNumber(info.win_rate), max_drawdown: safeNumber(info.max_drawdown),
       sharpe_ratio: null, sortino_ratio: null,
-      trades_count: this.num(info.trade_count ?? info.tradeCount ?? info.trades_count),
-      followers: this.num(info.followers), copiers: this.num(info.copiers),
+      trades_count: safeNumber(info.trade_count ?? info.tradeCount ?? info.trades_count),
+      followers: safeNumber(info.followers), copiers: safeNumber(info.copiers),
       aum: null, platform_rank: null,
       arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
     }
@@ -180,11 +181,11 @@ export class CoinexFuturesConnector extends BaseConnector {
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     // CoinEx returns profit_rate/winning_rate/mdd as decimals (1.0 = 100%)
     // Always multiply by 100 to get percentage values
-    const rawRoi = this.num(raw.roi ?? raw.roi_rate ?? raw.return_rate ?? raw.profit_rate)
+    const rawRoi = safeNumber(raw.roi ?? raw.roi_rate ?? raw.return_rate ?? raw.profit_rate)
     const roi = rawRoi != null ? rawRoi * 100 : null
-    const rawWr = this.num(raw.win_rate ?? raw.winRate ?? raw.winning_rate)
+    const rawWr = safeNumber(raw.win_rate ?? raw.winRate ?? raw.winning_rate)
     const winRate = rawWr != null ? rawWr * 100 : null
-    const rawMdd = this.num(raw.max_drawdown ?? raw.maxDrawdown ?? raw.mdd)
+    const rawMdd = safeNumber(raw.max_drawdown ?? raw.maxDrawdown ?? raw.mdd)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd * 100) : null
 
     return {
@@ -192,13 +193,13 @@ export class CoinexFuturesConnector extends BaseConnector {
       display_name: raw.nick_name ?? raw.nickName ?? raw.nickname ?? raw.account_name ?? raw.name ?? null,
       avatar_url: raw.avatar ?? raw.avatar_url ?? null,
       roi,
-      pnl: this.num(raw.profit_amount ?? raw.pnl ?? raw.profit ?? raw.total_pnl_amount),
+      pnl: safeNumber(raw.profit_amount ?? raw.pnl ?? raw.profit ?? raw.total_pnl_amount),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
-      trades_count: this.num(raw.trade_count ?? raw.tradeCount ?? raw.trades_count),
-      followers: this.num(raw.follower_count ?? raw.followerCount ?? raw.copier_num ?? raw.cur_follower_num),
+      trades_count: safeNumber(raw.trade_count ?? raw.tradeCount ?? raw.trades_count),
+      followers: safeNumber(raw.follower_count ?? raw.followerCount ?? raw.copier_num ?? raw.cur_follower_num),
       copiers: null,
-      aum: this.num(raw.aum),
+      aum: safeNumber(raw.aum),
       sharpe_ratio: (() => {
         const series = raw.profit_rate_series as Array<[number, string]> | undefined
         if (!Array.isArray(series) || series.length < 7) return null
@@ -214,13 +215,8 @@ export class CoinexFuturesConnector extends BaseConnector {
       platform_rank: null,
       // Extra: equity curve from profit_rate_series
       _profit_rate_series: raw.profit_rate_series,
-      _trade_days: this.num(raw.trade_days),
-      _total_profit_amount: this.num(raw.total_profit_amount),
+      _trade_days: safeNumber(raw.trade_days),
+      _total_profit_amount: safeNumber(raw.total_profit_amount),
     }
-  }
-
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val); return !Number.isFinite(n) ? null : n
   }
 }
