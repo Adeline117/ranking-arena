@@ -7,6 +7,26 @@ interface VoiceMessageProps {
   duration: number // seconds
 }
 
+// Deterministic pseudo-random waveform derived from the message URL so
+// server-rendered markup matches client hydration (previous Math.random
+// implementation produced hydration mismatches on every refresh).
+function generateWaveform(seed: string, length = 30): number[] {
+  // Simple 32-bit hash
+  let h = 2166136261 >>> 0
+  for (let i = 0; i < seed.length; i++) {
+    h = Math.imul(h ^ seed.charCodeAt(i), 16777619) >>> 0
+  }
+  const bars: number[] = []
+  for (let i = 0; i < length; i++) {
+    // xorshift step
+    h ^= h << 13; h >>>= 0
+    h ^= h >>> 17; h >>>= 0
+    h ^= h << 5;  h >>>= 0
+    bars.push(0.2 + (h / 0xffffffff) * 0.8)
+  }
+  return bars
+}
+
 export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
   const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
@@ -15,10 +35,8 @@ export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
   const animFrameRef = useRef<number>(0)
   const mountedRef = useRef(true)
 
-  // Generate pseudo-random waveform bars
-  const bars = useRef(
-    Array.from({ length: 30 }, () => 0.2 + Math.random() * 0.8)
-  ).current
+  // Deterministic waveform bars (seeded from URL) — stable across SSR/CSR
+  const bars = useRef(generateWaveform(url)).current
 
   useEffect(() => {
     mountedRef.current = true
