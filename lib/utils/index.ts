@@ -41,7 +41,10 @@ export * from './server-cache'
 // sanitize: import directly from '@/lib/utils/sanitize' — isomorphic-dompurify is heavy (~40KB)
 // export * from './sanitize'
 export * from './csrf'
-export * from './currency'
+// currency: import directly from '@/lib/utils/currency' — currency.js is server-only
+// (used for ROI/PnL/MDD risk math). Re-exporting here would risk pulling it into
+// any client bundle that ever imports from '@/lib/utils'.
+// export * from './currency'
 // 缓存功能请使用 @/lib/cache
 
 /**
