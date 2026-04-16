@@ -11,6 +11,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -88,8 +89,14 @@ export async function GET(request: NextRequest) {
           details: { freshViolations, historicalFixed: totalFixed },
         }, 'cleanup-violations-fresh', 30 * 60 * 1000)
       }
-    } catch {
-      // Monitoring is best-effort
+    } catch (monitorErr) {
+      // Don't fail the cron job on a monitoring glitch, but surface the
+      // failure in Sentry so silent regressions in the count-query or
+      // alert pipeline are caught.
+      logger.error('[cleanup-violations] Fresh-violation monitoring failed', {
+        error: monitorErr instanceof Error ? monitorErr.message : String(monitorErr),
+        totalFixed,
+      })
     }
 
     return NextResponse.json({ fixed: totalFixed, freshViolations })

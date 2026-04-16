@@ -13,6 +13,7 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { withCron } from '@/lib/api/with-cron'
+import { logger } from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -54,8 +55,14 @@ export const GET = withCron('scan-data-quality', async (_request: NextRequest) =
         level: 'critical',
         details: { anomalies },
       }, 'scan-data-quality', 12 * 60 * 60 * 1000) // Max 1 alert per 12h
-    } catch {
-      // Alert delivery is best-effort
+    } catch (alertErr) {
+      // Best-effort for the cron result, but we still want Sentry to see
+      // that the daily anomaly scan could not notify operators.
+      logger.error('[scan-data-quality] Failed to deliver Telegram alert', {
+        error: alertErr instanceof Error ? alertErr.message : String(alertErr),
+        anomalyCount: anomalies.length,
+        criticalCount: critical.length,
+      })
     }
   }
 
