@@ -98,9 +98,14 @@ export function getSupabaseAdmin(): SupabaseClient<Database> {
  * 从 JWT Token 获取用户信息
  * @param token Bearer Token（不含 "Bearer " 前缀）
  */
-// In-memory ban status cache (60s TTL) to avoid querying user_profiles on every request
-const banStatusCache = new Map<string, { banned: boolean; ts: number }>()
-const BAN_CACHE_TTL = 60_000 // 60 seconds
+// In-memory ban status cache — used ONLY for the "not banned" fast path, with a
+// short TTL so bans propagate promptly across already-warm serverless instances.
+// SECURITY: banned users are NEVER cached (banned=true always re-queries). This
+// caps the worst-case delay for a ban to take effect at CLEAN_TTL seconds on
+// any single instance that had previously seen the user, while still avoiding
+// a DB hit on every authed request for the common clean case.
+const banStatusCache = new Map<string, { ts: number }>()
+const CLEAN_STATUS_TTL_MS = 10_000 // 10 seconds — bans take effect within 10s
 
 export async function getUserFromToken(token: string): Promise<User | null> {
   if (!token) return null
@@ -113,14 +118,16 @@ export async function getUserFromToken(token: string): Promise<User | null> {
       return null
     }
 
-    // Check ban/delete status with in-memory cache (avoids 1 DB query per auth check)
+    // Fast path: we've recently confirmed this user is NOT banned. Only the
+    // "clean" result is cached, so a newly-banned user is always re-queried
+    // on next request (capped at CLEAN_STATUS_TTL_MS of stale caching).
     const cached = banStatusCache.get(user.id)
     const now = Date.now()
+    if (cached && now - cached.ts < CLEAN_STATUS_TTL_MS) {
+      return user
+    }
     if (cached) {
-      if (now - cached.ts < BAN_CACHE_TTL) {
-        return cached.banned ? null : user
-      }
-      // Expired — remove stale entry inline
+      // Expired — drop the entry so the Map doesn't grow unboundedly.
       banStatusCache.delete(user.id)
     }
 
@@ -132,12 +139,16 @@ export async function getUserFromToken(token: string): Promise<User | null> {
 
     const isBanned = !!(profile?.banned_at || profile?.deleted_at)
 
-    // Prevent unbounded growth: clear entire map when oversized.
-    // Serverless instances are short-lived, so a full clear is cheap and avoids O(n) scans.
-    if (banStatusCache.size > 5000) {
-      banStatusCache.clear()
+    // Only cache the CLEAN result. Banned/deleted status must always hit the DB
+    // so unbans (or re-bans of the same user) reflect within one request.
+    if (!isBanned) {
+      // Prevent unbounded growth: clear entire map when oversized.
+      // Serverless instances are short-lived, so a full clear is cheap and avoids O(n) scans.
+      if (banStatusCache.size > 5000) {
+        banStatusCache.clear()
+      }
+      banStatusCache.set(user.id, { ts: now })
     }
-    banStatusCache.set(user.id, { banned: isBanned, ts: now })
 
     return isBanned ? null : user
   } catch (error) {
