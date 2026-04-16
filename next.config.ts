@@ -412,7 +412,7 @@ const nextConfig = {
     // 最小缓存时间（秒）- 图片缓存 24 小时（头像/logo 变更不频繁）
     minimumCacheTTL: 86400,
     
-    dangerouslyAllowSVG: true,
+    dangerouslyAllowSVG: false, // Disabled: avatar proxy already filters out SVG via ALLOWED_IMAGE_TYPES
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
