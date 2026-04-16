@@ -118,17 +118,17 @@ export default function Button({
     sm: {
       padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
       fontSize: tokens.typography.fontSize.sm,
-      minHeight: '36px', // 移动端最小触摸目标
+      minHeight: tokens.spacing[10], // 移动端最小触摸目标 (40px, nearest token to 36px)
     },
     md: {
       padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
       fontSize: tokens.typography.fontSize.base,
-      minHeight: '44px', // 移动端最小触摸目标
+      minHeight: `${tokens.touchTarget.min}px`, // 移动端最小触摸目标
     },
     lg: {
       padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
       fontSize: tokens.typography.fontSize.md,
-      minHeight: '48px', // 移动端最小触摸目标
+      minHeight: `${tokens.touchTarget.comfortable}px`, // 移动端最小触摸目标
     },
   }
 

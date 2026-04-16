@@ -48,7 +48,7 @@ export default function RouteError({
       alignItems: 'center',
       justifyContent: 'center',
       minHeight: '60vh',
-      padding: 24,
+      padding: tokens.spacing[6],
       textAlign: 'center',
     }}>
       {/* 错误图标 */}
@@ -60,7 +60,7 @@ export default function RouteError({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: 20,
+        marginBottom: tokens.spacing[5],
       }}>
         <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-error, #ff7c7c)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
@@ -73,7 +73,7 @@ export default function RouteError({
       <h2 style={{
         fontSize: 20,
         fontWeight: 600,
-        marginBottom: 8,
+        marginBottom: tokens.spacing[2],
         color: 'var(--color-text-primary)',
       }}>
         {t('errorTitle') || '出了点问题'}
@@ -82,7 +82,7 @@ export default function RouteError({
       {/* 用户友好消息 */}
       <p style={{
         color: 'var(--color-text-secondary)',
-        marginBottom: 16,
+        marginBottom: tokens.spacing[4],
         maxWidth: 400,
         fontSize: 14,
         lineHeight: 1.6,
@@ -97,9 +97,9 @@ export default function RouteError({
         <p style={{
           color: 'var(--color-text-tertiary)',
           fontSize: 12,
-          marginBottom: 16,
+          marginBottom: tokens.spacing[4],
           fontFamily: '"SF Mono", Consolas, monospace',
-          padding: '4px 10px',
+          padding: `${tokens.spacing[1]} ${tokens.spacing[2.5]}`,
           background: 'var(--color-accent-error-08)',
           borderRadius: tokens.radius.sm,
           border: '1px solid var(--color-accent-error-12)',
@@ -110,7 +110,7 @@ export default function RouteError({
 
       {/* 开发模式错误详情 */}
       {isDev && (
-        <div style={{ marginBottom: 16, maxWidth: 500, width: '100%' }}>
+        <div style={{ marginBottom: tokens.spacing[4], maxWidth: 500, width: '100%' }}>
           <button
             onClick={() => setShowDetails(!showDetails)}
             style={{
@@ -127,8 +127,8 @@ export default function RouteError({
           </button>
           {showDetails && (
             <pre style={{
-              marginTop: 8,
-              padding: 12,
+              marginTop: tokens.spacing[2],
+              padding: tokens.spacing[3],
               background: 'var(--color-bg-tertiary, var(--color-overlay-medium))',
               borderRadius: tokens.radius.md,
               border: '1px solid var(--color-border-primary)',
@@ -147,12 +147,12 @@ export default function RouteError({
       )}
 
       {/* 操作按钮 */}
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+      <div style={{ display: 'flex', gap: tokens.spacing[3], flexWrap: 'wrap', justifyContent: 'center' }}>
         <button
           onClick={handleRetry}
           disabled={isRetrying}
           style={{
-            padding: '10px 24px',
+            padding: `${tokens.spacing[2.5]} ${tokens.spacing[6]}`,
             background: tokens.colors.accent.brand,
             color: tokens.colors.white,
             border: 'none',
@@ -162,7 +162,7 @@ export default function RouteError({
             fontWeight: 500,
             display: 'flex',
             alignItems: 'center',
-            gap: 6,
+            gap: tokens.spacing[1.5],
             opacity: isRetrying ? 0.7 : 1,
             transition: 'opacity 0.2s',
           }}
@@ -176,7 +176,7 @@ export default function RouteError({
         <Link
           href="/"
           style={{
-            padding: '10px 24px',
+            padding: `${tokens.spacing[2.5]} ${tokens.spacing[6]}`,
             background: 'transparent',
             color: 'var(--color-text-tertiary)',
             border: '1px solid var(--color-border-primary)',
@@ -192,7 +192,7 @@ export default function RouteError({
           target="_blank"
           rel="noopener noreferrer"
           style={{
-            padding: '10px 24px',
+            padding: `${tokens.spacing[2.5]} ${tokens.spacing[6]}`,
             background: 'transparent',
             color: 'var(--color-text-tertiary)',
             border: '1px solid var(--color-border-primary)',

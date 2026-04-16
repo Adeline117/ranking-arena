@@ -87,7 +87,7 @@ export default function LanguageToggle() {
           position: 'absolute',
           top: '100%',
           right: 0,
-          marginTop: 4,
+          marginTop: tokens.spacing[1],
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.md,
@@ -103,7 +103,7 @@ export default function LanguageToggle() {
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 8,
+                gap: tokens.spacing[2],
                 width: '100%',
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 background: lang.code === language ? 'var(--color-accent-primary-15, rgba(124,58,237,0.15))' : 'transparent',

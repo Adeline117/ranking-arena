@@ -46,14 +46,14 @@ export default function NetworkStatusBanner() {
         left: 0,
         right: 0,
         zIndex: tokens.zIndex.toast,
-        padding: '10px 16px',
+        padding: `${tokens.spacing[2.5]} ${tokens.spacing[4]}`,
         textAlign: 'center',
         fontSize: 13,
         fontWeight: 500,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 8,
+        gap: tokens.spacing[2],
         background: isOffline
           ? tokens.colors.accent.error
           : tokens.colors.accent.success,
@@ -80,10 +80,10 @@ export default function NetworkStatusBanner() {
               border: '1px solid rgba(255,255,255,0.4)',
               color: tokens.colors.white,
               borderRadius: tokens.radius.sm,
-              padding: '3px 10px',
+              padding: `${tokens.spacing[0.5]} ${tokens.spacing[2.5]}`,
               fontSize: 12,
               cursor: 'pointer',
-              marginLeft: 4,
+              marginLeft: tokens.spacing[1],
             }}
           >
             {t('retry')}

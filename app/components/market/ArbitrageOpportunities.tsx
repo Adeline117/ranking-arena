@@ -129,7 +129,7 @@ export default function ArbitrageOpportunities() {
           fontSize: tokens.typography.fontSize.xs,
           color: hasOpps ? tokens.colors.accent.success : tokens.colors.text.tertiary,
           fontWeight: 600,
-          padding: `2px ${tokens.spacing[2]}`,
+          padding: `${tokens.spacing[0.5]} ${tokens.spacing[2]}`,
           borderRadius: tokens.radius.sm,
           background: hasOpps ? 'var(--color-accent-success-10)' : tokens.colors.bg.tertiary,
         }}>
@@ -140,7 +140,7 @@ export default function ArbitrageOpportunities() {
       {loading ? (
         <div className="skeleton" style={{ height: 120, borderRadius: tokens.radius.md }} />
       ) : hasOpps ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: `${tokens.spacing[1]}`, flex: 1 }}>
           {opps.map((opp, i) => {
             if (opp.type === 'cross-exchange') {
               return (
@@ -151,9 +151,9 @@ export default function ArbitrageOpportunities() {
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                   borderRadius: tokens.radius.md,
                   background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
-                  minHeight: 36,
+                  minHeight: tokens.spacing[10],
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: tokens.typography.fontSize.sm }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1.5], fontSize: tokens.typography.fontSize.sm }}>
                     <span style={{ color: tokens.colors.text.primary, fontWeight: 700 }}>
                       {opp.symbol.replace('/USDT', '')}
                     </span>
@@ -209,7 +209,7 @@ export default function ArbitrageOpportunities() {
           })}
         </div>
       ) : showComparisons ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: `${tokens.spacing[1]}`, flex: 1 }}>
           {priceComparisons.map((pc, i) => (
             <div key={pc.symbol} style={{
               display: 'flex',
@@ -220,7 +220,7 @@ export default function ArbitrageOpportunities() {
               background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
               minHeight: 36,
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: tokens.typography.fontSize.sm }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1.5], fontSize: tokens.typography.fontSize.sm }}>
                 <span style={{ color: tokens.colors.text.primary, fontWeight: 700 }}>
                   {pc.symbol}
                 </span>

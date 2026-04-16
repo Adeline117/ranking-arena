@@ -5,9 +5,11 @@ import { tokens } from '@/lib/design-tokens'
 
 interface PasswordInputProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 'type'> {
   wrapperStyle?: React.CSSProperties
+  error?: boolean
+  errorId?: string
 }
 
-export default function PasswordInput({ wrapperStyle, style, ...props }: PasswordInputProps) {
+export default function PasswordInput({ wrapperStyle, style, error, errorId, ...props }: PasswordInputProps) {
   const [show, setShow] = useState(false)
 
   return (
@@ -15,7 +17,9 @@ export default function PasswordInput({ wrapperStyle, style, ...props }: Passwor
       <input
         {...props}
         type={show ? 'text' : 'password'}
-        style={{ paddingRight: 44, ...style }}
+        aria-invalid={error || undefined}
+        aria-describedby={errorId || undefined}
+        style={{ paddingRight: tokens.touchTarget.min, ...style }}
       />
       <button
         type="button"
@@ -25,19 +29,19 @@ export default function PasswordInput({ wrapperStyle, style, ...props }: Passwor
         className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-current"
         style={{
           position: 'absolute',
-          right: 8,
+          right: tokens.spacing[2],
           top: '50%',
           transform: 'translateY(-50%)',
           background: 'none',
           border: 'none',
           cursor: 'pointer',
-          padding: 6,
+          padding: tokens.spacing[1.5],
           color: 'var(--color-text-tertiary)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          minWidth: 32,
-          minHeight: 32,
+          minWidth: tokens.spacing[8],
+          minHeight: tokens.spacing[8],
           borderRadius: tokens.radius.sm,
         }}
       >
