@@ -101,14 +101,11 @@ export interface CronBudgetSuccess {
 
 function authorize(request: NextRequest | undefined): NextResponse | null {
   if (!request) return null
-  const authHeader = request.headers.get('authorization')
   if (!env.CRON_SECRET) {
-    if (process.env.NODE_ENV !== 'development') {
-      return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
-    }
-    return null
+    return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
   }
-  if (authHeader !== `Bearer ${env.CRON_SECRET}`) {
+  const { verifyCronSecret } = require('@/lib/auth/verify-service-auth')
+  if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
   return null

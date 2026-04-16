@@ -4,6 +4,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { sanitizeText } from '@/lib/utils/sanitize'
 
 /**
  * Simple language detection heuristic.
@@ -568,8 +569,8 @@ export async function createPost(
   const { data, error } = await supabase
     .from('posts')
     .insert({
-      title: input.title,
-      content: input.content,
+      title: input.title ? sanitizeText(input.title) : input.title,
+      content: sanitizeText(input.content),
       author_id: userId,
       author_handle: userHandle,
       group_id: input.group_id || null,
@@ -597,9 +598,12 @@ export async function updatePost(
   userId: string,
   updates: { title?: string; content?: string; poll_enabled?: boolean; visibility?: PostVisibility; is_sensitive?: boolean; content_warning?: string | null }
 ): Promise<Post> {
+  const sanitizedUpdates = { ...updates, updated_at: new Date().toISOString() }
+  if (sanitizedUpdates.title) sanitizedUpdates.title = sanitizeText(sanitizedUpdates.title)
+  if (sanitizedUpdates.content) sanitizedUpdates.content = sanitizeText(sanitizedUpdates.content)
   const { data, error } = await supabase
     .from('posts')
-    .update({ ...updates, updated_at: new Date().toISOString() })
+    .update(sanitizedUpdates)
     .eq('id', postId)
     .eq('author_id', userId)
     .select()
