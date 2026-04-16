@@ -62,6 +62,17 @@ export const metadata: Metadata = {
   formatDetection: { telephone: false },
   alternates: {
     canonical: BASE_URL,
+    // Language preference is client-side (localStorage), so URLs are the same
+    // across languages. Declare each locale variant so Google can discover them
+    // and x-default so the English version is the fallback for unlisted locales.
+    // See: https://developers.google.com/search/docs/specialty/international/localized-versions
+    languages: {
+      'en': BASE_URL,
+      'zh-CN': BASE_URL,
+      'ja': BASE_URL,
+      'ko': BASE_URL,
+      'x-default': BASE_URL,
+    },
   },
   openGraph: {
     type: "website",
