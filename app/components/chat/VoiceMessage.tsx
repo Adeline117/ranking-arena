@@ -13,6 +13,7 @@ export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
   const [audioDuration, setAudioDuration] = useState(duration)
   const audioRef = useRef<HTMLAudioElement | null>(null)
   const animFrameRef = useRef<number>(0)
+  const mountedRef = useRef(true)
 
   // Generate pseudo-random waveform bars
   const bars = useRef(
@@ -20,15 +21,18 @@ export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
   ).current
 
   useEffect(() => {
+    mountedRef.current = true
     const audio = new Audio(url)
     audioRef.current = audio
 
     const handleLoadedMetadata = () => {
+      if (!mountedRef.current) return
       if (audio.duration && isFinite(audio.duration)) {
         setAudioDuration(audio.duration)
       }
     }
     const handleEnded = () => {
+      if (!mountedRef.current) return
       setPlaying(false)
       setCurrentTime(0)
     }
@@ -37,11 +41,20 @@ export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
     audio.addEventListener('ended', handleEnded)
 
     return () => {
+      mountedRef.current = false
       audio.removeEventListener('loadedmetadata', handleLoadedMetadata)
       audio.removeEventListener('ended', handleEnded)
-      audio.pause()
+      try {
+        audio.pause()
+      } catch {
+        // Pausing a never-played audio element is a no-op in some browsers
+      }
+      // Clear src + call load() so the browser releases the audio buffer.
+      // Just setting src='' leaves the decoded PCM in memory on Safari/iOS.
       audio.src = ''
+      try { audio.load() } catch { /* safari edge cases */ }
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
+      audioRef.current = null
     }
   }, [url])
 
@@ -67,7 +80,15 @@ export default function VoiceMessage({ url, duration }: VoiceMessageProps) {
       audioRef.current.pause()
       setPlaying(false)
     } else {
-      audioRef.current.play()
+      // play() returns a Promise; if the component unmounts before it resolves
+      // (typical on mobile when navigating away), the uncaught rejection holds
+      // the audio element reference via the microtask queue. Catch + no-op.
+      const playPromise = audioRef.current.play()
+      if (playPromise && typeof playPromise.catch === 'function') {
+        playPromise.catch(() => {
+          if (mountedRef.current) setPlaying(false)
+        })
+      }
       setPlaying(true)
     }
   }
