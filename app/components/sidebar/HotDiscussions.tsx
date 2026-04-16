@@ -185,7 +185,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   return (
     <SidebarCard title={t('sidebarHotDiscussions')}>
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1.5] }}>
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="skeleton" style={{ height: 56, borderRadius: tokens.radius.md }} />
           ))}
@@ -200,7 +200,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           <div>{t('loadFailed')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: '1px solid var(--glass-border-light)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{ marginTop: tokens.spacing[1.5], padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: '1px solid var(--glass-border-light)', background: 'transparent', color: 'var(--color-text-secondary)', fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
@@ -215,7 +215,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
           {t('sidebarNoDiscussions')}
         </p>
       ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2.5] }}>
           {posts.map((post) => {
             const contentPreview = getContentPreview(post)
             return (
@@ -226,8 +226,8 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
-                  gap: 8,
-                  padding: '12px 14px',
+                  gap: tokens.spacing[2],
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[3.5]}`,
                   borderRadius: tokens.radius.lg,
                   textDecoration: 'none',
                   color: 'inherit',
@@ -251,7 +251,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                 <div style={{
                   display: 'flex',
                   alignItems: 'flex-start',
-                  gap: 8,
+                  gap: tokens.spacing[2],
                 }}>
                   <span style={{
                     fontSize: tokens.typography.fontSize.sm,
@@ -304,7 +304,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 6,
+                  gap: tokens.spacing[1.5],
                   fontSize: tokens.typography.fontSize.xs,
                   color: 'var(--color-text-tertiary)',
                   whiteSpace: 'nowrap',
@@ -342,11 +342,11 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                       {post.author_handle}
                     </span>
                   )}
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[0.5], flexShrink: 0 }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M7 10v12"/><path d="M15 5.88L14 10h5.83a2 2 0 0 1 1.92 2.56l-2.33 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.76a2 2 0 0 0 1.79-1.11L12 2h0a3.13 3.13 0 0 1 3 3.88z"/></svg>
                     {post.like_count || 0}
                   </span>
-                  <span style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                  <span style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[0.5], flexShrink: 0 }}>
                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
                     {post.comment_count || 0}
                   </span>

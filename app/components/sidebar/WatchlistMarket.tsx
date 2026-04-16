@@ -178,7 +178,7 @@ export default function WatchlistMarket() {
   return (
     <SidebarCard title={t('sidebarWatchlist')}>
       {loading ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
           {[1, 2, 3, 4].map(i => (
             <div key={i} className="skeleton" style={{ height: 40, borderRadius: tokens.radius.md }} />
           ))}
@@ -188,7 +188,7 @@ export default function WatchlistMarket() {
           <div>{t('sidebarLoadFailedShort')}</div>
           <button
             onClick={() => mutateMarket()}
-            style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{ marginTop: tokens.spacing[1.5], padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
@@ -198,7 +198,7 @@ export default function WatchlistMarket() {
           {t('marketDataLoading') || 'Loading market data...'}
           <button
             onClick={() => mutateMarket()}
-            style={{ display: 'block', margin: '8px auto 0', padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{ display: 'block', margin: `${tokens.spacing[2]} auto 0`, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
           >
             {t('retry') || 'Retry'}
           </button>
@@ -211,7 +211,7 @@ export default function WatchlistMarket() {
                 key={coin.id}
                 style={{
                   display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '9px 6px',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[1.5]}`,
                   borderBottom: idx < coins.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                   borderRadius: tokens.radius.sm,
                   transition: `background ${tokens.transition.fast}`,
@@ -219,7 +219,7 @@ export default function WatchlistMarket() {
                 onMouseEnter={handleRowEnter}
                 onMouseLeave={handleRowLeave}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.semibold, color: tokens.colors.text.primary }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1.5], fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.semibold, color: tokens.colors.text.primary }}>
                   <CryptoIcon symbol={coin.symbol} size={18} />
                   {coin.symbol}
                 </span>
@@ -242,7 +242,7 @@ export default function WatchlistMarket() {
           <button
             onClick={() => setShowPicker(!showPicker)}
             style={{
-              width: '100%', marginTop: 8, padding: `${tokens.spacing[2]} 0`,
+              width: '100%', marginTop: tokens.spacing[2], padding: `${tokens.spacing[2]} 0`,
               background: 'transparent',
               border: `1px dashed ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.md,
@@ -268,7 +268,7 @@ export default function WatchlistMarket() {
 
           {/* Coin picker */}
           {showPicker && (
-            <div style={{ marginTop: 8 }}>
+            <div style={{ marginTop: tokens.spacing[2] }}>
               <input
                 type="text"
                 value={search}
@@ -276,7 +276,7 @@ export default function WatchlistMarket() {
                 placeholder={t('sidebarSearchCoins')}
                 aria-label={t('searchCoin')}
                 style={{
-                  width: '100%', padding: '6px 10px', marginBottom: 8,
+                  width: '100%', padding: `${tokens.spacing[1.5]} ${tokens.spacing[2.5]}`, marginBottom: tokens.spacing[2],
                   borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.primary,
@@ -286,7 +286,7 @@ export default function WatchlistMarket() {
                   boxSizing: 'border-box',
                 }}
               />
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[1.5] }}>
                 {filteredOptions.map(opt => {
                   const selected = watchIds.includes(opt.id)
                   return (
@@ -294,7 +294,7 @@ export default function WatchlistMarket() {
                       key={opt.id}
                       onClick={() => toggleCoin(opt.id)}
                       style={{
-                        padding: '4px 10px',
+                        padding: `${tokens.spacing[1]} ${tokens.spacing[2.5]}`,
                         borderRadius: tokens.radius.full,
                         border: selected ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                         background: selected ? tokens.colors.accent.brand : 'transparent',

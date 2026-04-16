@@ -90,14 +90,14 @@ export default function NewsFlash() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
         {loading ? (
           [1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="skeleton" style={{ height: 52, marginBottom: 4, borderRadius: tokens.radius.md }} />
+            <div key={i} className="skeleton" style={{ height: 52, marginBottom: tokens.spacing[1], borderRadius: tokens.radius.md }} />
           ))
         ) : error ? (
           <div style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary, textAlign: 'center', padding: `${tokens.spacing[3]} 0` }}>
             <div>{t('sidebarLoadFailed')}</div>
             <button
               onClick={() => mutate()}
-              style={{ marginTop: 6, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: '1px solid var(--glass-border-light)', background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+              style={{ marginTop: tokens.spacing[1.5], padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: '1px solid var(--glass-border-light)', background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
             >
               {t('retry') || 'Retry'}
             </button>
@@ -115,11 +115,11 @@ export default function NewsFlash() {
               <div
                 key={item.id}
                 style={{
-                  padding: '10px 6px',
+                  padding: `${tokens.spacing[2.5]} ${tokens.spacing[1.5]}`,
                   borderBottom: idx < news.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                 }}
               >
-                <div style={{ display: 'flex', gap: 6, marginBottom: 4, flexWrap: 'wrap', alignItems: 'center' }}>
+                <div style={{ display: 'flex', gap: tokens.spacing[1.5], marginBottom: tokens.spacing[1], flexWrap: 'wrap', alignItems: 'center' }}>
                   {impConfig && (
                     <span style={{
                       fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.white,
@@ -139,7 +139,7 @@ export default function NewsFlash() {
                     </span>
                   )}
                 </div>
-                <p style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.primary, lineHeight: tokens.typography.lineHeight.snug, marginBottom: 4, userSelect: 'text' }}>
+                <p style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.primary, lineHeight: tokens.typography.lineHeight.snug, marginBottom: tokens.spacing[1], userSelect: 'text' }}>
                   {getTitle(item)}
                   {(() => {
                     const badge = getLangBadge(item)
@@ -156,7 +156,7 @@ export default function NewsFlash() {
                     )
                   })()}
                 </p>
-                <div style={{ display: 'flex', gap: 8, fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary }}>
+                <div style={{ display: 'flex', gap: tokens.spacing[2], fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary }}>
                   <span>{item.source}</span>
                   <span>{formatTimeAgo(item.published_at, language)}</span>
                 </div>
