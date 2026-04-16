@@ -5,20 +5,18 @@
  * Runs hourly.
  */
 
-import { NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
-import { env } from '@/lib/env'
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { withCron } from '@/lib/api/with-cron'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
 // Expected max interval (minutes) for each job group
-// If a job hasn't succeeded in 2x this interval, it's considered stuck
 const EXPECTED_INTERVALS: Record<string, number> = {
   // Core pipeline (every 30min-3h)
   'compute-leaderboard': 60,
@@ -70,111 +68,96 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'subscription-expiry': 1440,
 }
 
-export async function GET(request: Request) {
-  if (!verifyCronSecret(request)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
+  const statuses = await PipelineLogger.getJobStatuses()
+  const now = Date.now()
+  const stuckJobs: Array<{ job: string; lastSuccess: string; expectedMinutes: number; actualMinutes: number }> = []
+
+  // Build a map of job_name -> last success time
+  const lastSuccessMap = new Map<string, string>()
+  for (const s of statuses) {
+    if (s.status === 'success' || s.status === 'partial_success') {
+      const existing = lastSuccessMap.get(s.job_name)
+      if (!existing || s.started_at > existing) {
+        lastSuccessMap.set(s.job_name, s.started_at)
+      }
+    }
   }
 
-  const plog = await PipelineLogger.start('meta-monitor')
+  // Check each monitored job against expected interval
+  for (const [jobPrefix, expectedMinutes] of Object.entries(EXPECTED_INTERVALS)) {
+    let latestSuccess: string | null = null
+    for (const [jobName, lastTime] of lastSuccessMap.entries()) {
+      if (jobName === jobPrefix || jobName.startsWith(`${jobPrefix}-`)) {
+        if (!latestSuccess || lastTime > latestSuccess) {
+          latestSuccess = lastTime
+        }
+      }
+    }
 
+    if (!latestSuccess) {
+      stuckJobs.push({ job: jobPrefix, lastSuccess: 'never', expectedMinutes, actualMinutes: -1 })
+      continue
+    }
+
+    const minutesSince = (now - new Date(latestSuccess).getTime()) / 60_000
+    const threshold = expectedMinutes * 2
+
+    if (minutesSince > threshold) {
+      stuckJobs.push({
+        job: jobPrefix,
+        lastSuccess: latestSuccess,
+        expectedMinutes,
+        actualMinutes: Math.round(minutesSince),
+      })
+    }
+  }
+
+  if (stuckJobs.length > 0) {
+    const jobList = stuckJobs
+      .map(j => `\u2022 ${j.job}: last success ${j.actualMinutes === -1 ? 'NEVER' : `${j.actualMinutes}m ago`} (expected: every ${j.expectedMinutes}m)`)
+      .join('\n')
+
+    const jobKey = stuckJobs.map(j => j.job).sort().join(',')
+    await sendRateLimitedAlert({
+      title: `Meta-Monitor: ${stuckJobs.length} cron jobs 异常`,
+      message: `以下 cron job 超过预期间隔未成功运行:\n\n${jobList}`,
+      level: stuckJobs.length >= 3 ? 'critical' : 'warning',
+      details: {
+        stuck_count: stuckJobs.length,
+        total_monitored: Object.keys(EXPECTED_INTERVALS).length,
+      },
+    }, `meta-monitor:${jobKey}`, 3 * 60 * 60 * 1000)
+  }
+
+  // Check if historical data cleanup is complete
+  let cleanupComplete = false
   try {
-    const statuses = await PipelineLogger.getJobStatuses()
-    const now = Date.now()
-    const stuckJobs: Array<{ job: string; lastSuccess: string; expectedMinutes: number; actualMinutes: number }> = []
-
-    // Build a map of job_name -> last success time
-    const lastSuccessMap = new Map<string, string>()
-    for (const s of statuses) {
-      if (s.status === 'success' || s.status === 'partial_success') {
-        const existing = lastSuccessMap.get(s.job_name)
-        if (!existing || s.started_at > existing) {
-          lastSuccessMap.set(s.job_name, s.started_at)
-        }
+    const supabase = getSupabaseAdmin()
+    const { data: cleanupStatus } = await supabase.from('pipeline_logs').select('metadata').eq('job_name', 'cleanup-violations').order('started_at', { ascending: false }).limit(1).single()
+    if (cleanupStatus?.metadata && typeof cleanupStatus.metadata === 'object') {
+      const meta = cleanupStatus.metadata as Record<string, unknown>
+      if (meta.done === true || meta.fixed === 0) {
+        cleanupComplete = true
+        await sendRateLimitedAlert({
+          title: '历史数据清理完成!',
+          message: '所有历史违规数据已清理完毕。请运行:\nbash scripts/post-cleanup-orchestrate.sh\n\n此脚本将: VALIDATE 约束 → 重算指标 → 重算 composite',
+          level: 'info',
+          details: { action: 'run post-cleanup-orchestrate.sh' },
+        }, 'cleanup-complete', 24 * 60 * 60 * 1000)
       }
     }
-
-    // Check each monitored job against expected interval
-    for (const [jobPrefix, expectedMinutes] of Object.entries(EXPECTED_INTERVALS)) {
-      // Find the most recent success for any job matching this prefix
-      let latestSuccess: string | null = null
-      for (const [jobName, lastTime] of lastSuccessMap.entries()) {
-        if (jobName === jobPrefix || jobName.startsWith(`${jobPrefix}-`)) {
-          if (!latestSuccess || lastTime > latestSuccess) {
-            latestSuccess = lastTime
-          }
-        }
-      }
-
-      if (!latestSuccess) {
-        // Job has never succeeded in pipeline_logs -- could be new or very broken
-        stuckJobs.push({ job: jobPrefix, lastSuccess: 'never', expectedMinutes, actualMinutes: -1 })
-        continue
-      }
-
-      const minutesSince = (now - new Date(latestSuccess).getTime()) / 60_000
-      const threshold = expectedMinutes * 2
-
-      if (minutesSince > threshold) {
-        stuckJobs.push({
-          job: jobPrefix,
-          lastSuccess: latestSuccess,
-          expectedMinutes,
-          actualMinutes: Math.round(minutesSince),
-        })
-      }
-    }
-
-    if (stuckJobs.length > 0) {
-      const jobList = stuckJobs
-        .map(j => `\u2022 ${j.job}: last success ${j.actualMinutes === -1 ? 'NEVER' : `${j.actualMinutes}m ago`} (expected: every ${j.expectedMinutes}m)`)
-        .join('\n')
-
-      const jobKey = stuckJobs.map(j => j.job).sort().join(',')
-      await sendRateLimitedAlert({
-        title: `Meta-Monitor: ${stuckJobs.length} cron jobs 异常`,
-        message: `以下 cron job 超过预期间隔未成功运行:\n\n${jobList}`,
-        level: stuckJobs.length >= 3 ? 'critical' : 'warning',
-        details: {
-          stuck_count: stuckJobs.length,
-          total_monitored: Object.keys(EXPECTED_INTERVALS).length,
-        },
-      }, `meta-monitor:${jobKey}`, 3 * 60 * 60 * 1000)
-    }
-
-    // Check if historical data cleanup is complete
-    let cleanupComplete = false
-    try {
-      const supabase = getSupabaseAdmin()
-      const { data: cleanupStatus } = await supabase.from('pipeline_logs').select('metadata').eq('job_name', 'cleanup-violations').order('started_at', { ascending: false }).limit(1).single()
-      if (cleanupStatus?.metadata && typeof cleanupStatus.metadata === 'object') {
-        const meta = cleanupStatus.metadata as Record<string, unknown>
-        if (meta.done === true || meta.fixed === 0) {
-          cleanupComplete = true
-          await sendRateLimitedAlert({
-            title: '历史数据清理完成!',
-            message: '所有历史违规数据已清理完毕。请运行:\nbash scripts/post-cleanup-orchestrate.sh\n\n此脚本将: VALIDATE 约束 → 重算指标 → 重算 composite',
-            level: 'info',
-            details: { action: 'run post-cleanup-orchestrate.sh' },
-          }, 'cleanup-complete', 24 * 60 * 60 * 1000) // Once per day max
-        }
-      }
-    } catch {
-      // Best-effort check
-    }
-
-    await plog.success(stuckJobs.length, { stuck_jobs: stuckJobs.map(j => j.job), cleanupComplete })
-
-    logger.info(`[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck, cleanup=${cleanupComplete ? 'done' : 'running'}`)
-
-    return NextResponse.json({
-      ok: true,
-      monitored: Object.keys(EXPECTED_INTERVALS).length,
-      stuck: stuckJobs.length,
-      stuckJobs,
-      cleanupComplete,
-    })
-  } catch (error) {
-    await plog.error(error)
-    return NextResponse.json({ error: String(error) }, { status: 500 })
+  } catch {
+    // Best-effort check
   }
-}
+
+  logger.info(`[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck, cleanup=${cleanupComplete ? 'done' : 'running'}`)
+
+  return {
+    count: stuckJobs.length,
+    monitored: Object.keys(EXPECTED_INTERVALS).length,
+    stuck: stuckJobs.length,
+    stuckJobs,
+    cleanupComplete,
+  }
+})
