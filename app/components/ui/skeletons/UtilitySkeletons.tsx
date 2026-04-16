@@ -97,8 +97,9 @@ export function SearchPageSkeleton() {
     <PageShell>
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
         <div style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
-          {Array.from({ length: 5 }).map((_, i) => (
-            <Skeleton key={i} width={`${48 + Math.random() * 24}px`} height="36px" variant="rounded" />
+          {/* Deterministic widths to avoid hydration mismatch (previously used Math.random) */}
+          {[56, 64, 52, 68, 60].map((w, i) => (
+            <Skeleton key={i} width={`${w}px`} height="36px" variant="rounded" />
           ))}
         </div>
         <Box className="glass-card" radius="xl" style={{ overflow: 'hidden' }}>
