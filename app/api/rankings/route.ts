@@ -368,27 +368,26 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     return true;
   });
 
-  // Get available sources (cached via Redis, shared across instances)
+  // Fetch available sources + freshness check in PARALLEL (was serial, ~100-200ms saved)
   const seasonIdUpper = seasonId;
-  const availableSources = await getAvailableSources(supabase, seasonIdUpper);
+  const [availableSources, lastRun] = await Promise.all([
+    getAvailableSources(supabase, seasonIdUpper),
+    supabase
+      .from('pipeline_logs')
+      .select('ended_at')
+      .like('job_name', 'compute-leaderboard%')
+      .eq('status', 'success')
+      .order('ended_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+      .then(r => r.data),
+  ]);
 
   // Freshness check: use most recent pipeline run, not displayed rows' computed_at.
-  // computed_at only updates when a trader's score changes, so stable top traders
-  // can have old computed_at even when the pipeline ran minutes ago — causing
-  // false is_stale=true warnings for users.
   let latestCapturedAt: number;
-  const { data: lastRun } = await supabase
-    .from('pipeline_logs')
-    .select('ended_at')
-    .like('job_name', 'compute-leaderboard%')
-    .eq('status', 'success')
-    .order('ended_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
   if (lastRun?.ended_at) {
     latestCapturedAt = new Date(lastRun.ended_at).getTime();
   } else if (paginatedRows.length > 0) {
-    // Fallback: use row computed_at if no pipeline_logs available
     latestCapturedAt = Math.max(
       ...paginatedRows.map((r: Record<string, unknown>) => new Date(r.computed_at as string).getTime()).filter(t => t > 0)
     );

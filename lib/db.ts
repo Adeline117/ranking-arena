@@ -64,14 +64,13 @@ export function getPool(): Pool {
 
     const config: PoolConfig = {
       connectionString,
-      // Production: 3 connections per function instance.
-      // Supabase max_connections = 60 (verified 2026-04-08 via SHOW max_connections).
-      // With ~10-20 concurrent serverless function instances during cron storms,
-      // 10 per instance × 20 instances = 200 connections → MaxClientsInSessionMode error.
-      // Reduced to 3 per instance: 3 × 20 = 60, fits within limit.
-      // Idle timeout shortened so connections release faster between cron runs.
-      max: isProduction ? 3 : 10,
-      idleTimeoutMillis: isProduction ? 5000 : 30000,
+      // Production: 2 connections per function instance (was 3, reduced for safety margin).
+      // Supabase max_connections = 60 (verified 2026-04-08).
+      // With ~10-20 concurrent serverless functions during cron storms:
+      //   2 × 20 = 40, leaving 20 connections margin for ad-hoc queries/admin.
+      // TODO: Migrate to Supabase Connection Pooler (PgBouncer) for proper connection multiplexing.
+      max: isProduction ? 2 : 10,
+      idleTimeoutMillis: isProduction ? 3000 : 30000,
       connectionTimeoutMillis: isProduction ? 15000 : 10000,
       // Keep connections alive through load balancer/pooler
       keepAlive: true,
