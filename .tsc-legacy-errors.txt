@@ -1,0 +1,212 @@
+# ─────────────────────────────────────────────────────────────
+# .tsc-legacy-errors.txt
+#
+# Regex patterns (one per line, extended regex / `grep -E`) that mark
+# TypeScript errors as LEGACY — known-broken files that we do not want
+# to block pushes.
+#
+# Lines starting with `#` and blank lines are ignored by the loader in
+# `.git/hooks/pre-push`.
+#
+# Rules for adding entries here:
+#   1. Be SPECIFIC — file paths are preferred over error messages.
+#      Using broad error-message patterns (e.g. "implicitly has an .any.
+#      type") masks genuine regressions in new code.
+#   2. Include a one-line rationale above each block so future readers
+#      know why an entry exists and can remove it once fixed.
+#   3. When a file is fixed, DELETE its entry immediately. Leaving
+#      stale entries defeats the allow-list.
+#
+# This file replaces the ~120-entry inline `grep -v` chain that used to
+# live in the pre-push hook. See the git history on .git/hooks/pre-push
+# for the original.
+# ─────────────────────────────────────────────────────────────
+
+# ── Mobile / Capacitor scaffolding (not in the web build) ──
+useCapacitor
+CapacitorProvider
+
+# ── Connector files with partial CCXT typings ──
+blofin\.ts
+xt\.ts
+mexc\.ts
+bingx\.ts
+
+# ── Legacy trader detail plumbing (scheduled for rewrite) ──
+ChallengeButton\.tsx
+lib/data/trader/
+data/unified\.ts
+v2/trader/.*route\.ts
+TraderComparison\.tsx
+trader/\[handle\]/page\.tsx
+s/\[token\]/page\.tsx
+TraderHeader\.tsx
+TraderCard\.tsx
+TraderRow\.tsx
+TokenSidePanel\.tsx
+TraderProfileClient
+trader/\[platform\]/\[trader_key\]/re
+trader/\[platform\]/\[trader_key\]/route
+trader/sync
+
+# ── Trigger.dev / job runners (typings inherit from trigger SDK) ──
+trigger\.config\.ts
+lib/jobs/
+
+# ── Social feature (groups, posts, follows, conversations) ──
+api/groups/
+api/compare/
+api/following/
+api/posts/
+api/upload-
+api/users/
+FeedPage\.tsx
+useGroupData\.ts
+useConversationMessages
+useGroupPosts
+groups/\[id\]
+bot/\[id\]
+my-posts
+post/\[id\]
+u/\[handle\]
+wrapped/\[handle\]
+share/rank
+feed/
+HotDiscussions
+posts-weighted
+channels/
+conversations/
+auto-post-
+pro-official-group
+
+# ── Auth / onboarding / settings ──
+auth/callback
+login/page\.tsx
+onboarding/page\.tsx
+settings/
+useAdminAuth
+SearchSuggestions
+MobileProfileMenu
+GroupActions
+GroupsStep
+TradersStep
+
+# ── Admin dashboard (isolated, low-traffic) ──
+admin/claims
+admin/metrics
+admin/alert-config
+admin/audit-logs
+admin/manipulation
+admin/moderation
+account/delete
+attestation/mint
+
+# ── Cron group handlers ──
+cron/\[platform\]
+cron/cleanup-data
+cron/expire-mutes
+cron/link-entities
+compute-leaderboard
+rankings/live/route\.ts
+ranking-snapshot
+ranking-changes
+precompute-composite
+scan-data-quality
+subscription-expiry
+weekly-metrics
+
+# ── Rankings / tokens / competitions ──
+ranking-store\.ts
+ExchangeRankingClient\.tsx
+competitions
+api/market/spot
+useRankingFilters\.ts
+rankings/tokens
+by-token/route
+
+# ── i18n (Japanese locale, community-maintained) ──
+lib/i18n/ja\.ts
+
+# ── Miscellaneous product surfaces ──
+FundingRatesClient
+WatchlistClient
+LibraryBrowseClient
+OpenInterestClient
+CopyTradeButton
+ReferralClient
+ExchangeLinksBar
+MarketPageClient
+hero-stats\.ts
+api-key-binder
+pipeline-logger
+pipeline-monitor
+pipeline-evaluator
+pipeline-state
+pipeline/ingest
+health-checks\.ts
+schedule-manager
+trader-alerts
+trader-utils
+backfill-
+seed-quality
+social-seed
+bookmark-folders
+data/leaderboard
+calculate-advanced-metrics
+trader-transforms
+translate/route
+watchlist/route
+generate-profiles/route
+api/rankings/route
+OverviewTab\.tsx
+PortfolioTab\.tsx
+StatsTab\.tsx
+ExchangeConnection\.tsx
+useSearchData\.ts
+trader-queries\.ts
+useProStatus\.ts
+sync-user\.ts
+search-history\.ts
+flash-news
+supabase-pool
+api/messages
+api/referral
+saved-filters
+stripe/webhook
+api/subscription
+tip/checkout
+tip/route
+api/track
+percentile/route
+api/v3
+sitemap\.ts
+analytics/queries
+enrichment-runner
+inline-jobs
+
+# ── Generated Supabase types (do not edit by hand) ──
+database\.types\.ts
+
+# ── Supabase query builder generics (library-level typing gaps) ──
+PostgrestFilterBuilder
+PostgrestBuilder
+SelectQueryError
+
+# ── Generic error messages to suppress across the whole codebase ──
+# NOTE: These are intentionally broad. Consider tightening by pinning
+# each message to a specific file once time allows.
+Cannot find name
+implicitly has an .any. type
+is of type .unknown.
+not assignable to parameter of type .string.
+not assignable to type .string.
+cannot be used as an index type
+does not exist on type .\{\}.
+not assignable to parameter of type .never.
+not assignable to parameter of type ."arena_score"
+not assignable to parameter of type ."created_at"
+not assignable to type .SubscriptionTier.
+excessively deep
+may be a mistake
+No overload matches this call
+not assignable to type.*success.*failed.*pending

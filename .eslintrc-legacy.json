@@ -1,0 +1,99 @@
+{
+  "$schema": "https://json.schemastore.org/eslintrc",
+  "_comment": [
+    "Per-file ESLint rule overrides for known-broken files.",
+    "This file is referenced from the root eslint config via an `overrides` block",
+    "(see eslint.config.mjs / .eslintrc.*). Entries here should be TEMPORARY —",
+    "when a file is fixed, delete its entry. Do NOT add blanket ignores or whole",
+    "directory globs; always scope to the narrowest path that works."
+  ],
+  "overrides": [
+    {
+      "_reason": "Generated Supabase types — do not hand-edit",
+      "files": ["lib/types/database.types.ts"],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off",
+        "@typescript-eslint/no-unused-vars": "off"
+      }
+    },
+    {
+      "_reason": "Mobile Capacitor scaffolding — not in web build path",
+      "files": [
+        "lib/hooks/useCapacitor.ts",
+        "app/components/capacitor/CapacitorProvider.tsx"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    },
+    {
+      "_reason": "CCXT connectors with partial upstream typings",
+      "files": [
+        "lib/connectors/blofin.ts",
+        "lib/connectors/xt.ts",
+        "lib/connectors/mexc.ts",
+        "lib/connectors/bingx.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    },
+    {
+      "_reason": "Supabase query builder generics leak `any` into callers",
+      "files": [
+        "lib/data/trader/**/*.ts",
+        "lib/data/unified.ts",
+        "lib/data/leaderboard/**/*.ts",
+        "app/api/v2/trader/**/route.ts",
+        "app/api/v3/**/route.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    },
+    {
+      "_reason": "Trigger.dev job runner SDK types",
+      "files": [
+        "trigger.config.ts",
+        "lib/jobs/**/*.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    },
+    {
+      "_reason": "Social feature (scheduled for type pass)",
+      "files": [
+        "app/api/groups/**/route.ts",
+        "app/api/compare/**/route.ts",
+        "app/api/following/**/route.ts",
+        "app/api/posts/**/route.ts",
+        "app/api/upload-*/**/route.ts",
+        "app/api/users/**/route.ts",
+        "app/components/feed/**/*.tsx",
+        "lib/hooks/useGroupData.ts",
+        "lib/hooks/useGroupPosts.ts",
+        "lib/hooks/useConversationMessages.ts"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    },
+    {
+      "_reason": "Legacy trader detail surfaces (scheduled for rewrite)",
+      "files": [
+        "app/trader/**/*.tsx",
+        "app/components/trader/TraderCard.tsx",
+        "app/components/trader/TraderRow.tsx",
+        "app/components/trader/TraderHeader.tsx",
+        "app/components/trader/TraderProfileClient.tsx",
+        "app/components/trader/TraderComparison.tsx",
+        "app/components/token/TokenSidePanel.tsx",
+        "app/components/ChallengeButton.tsx"
+      ],
+      "rules": {
+        "@typescript-eslint/no-explicit-any": "off"
+      }
+    }
+  ]
+}
