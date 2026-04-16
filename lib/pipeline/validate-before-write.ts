@@ -288,7 +288,13 @@ export async function logRejectedWrites(
       level: 'warning',
       details: { count: rejections.length, tables: [...new Set(rejections.map(r => r.target_table))] },
     }, 'validate-gatekeeper', 10 * 60 * 1000)
-  } catch {
-    // Non-critical
+  } catch (alertErr) {
+    // Non-critical for the write-path itself, but NEVER swallow silently —
+    // a swallowed alert means dirty-data detection has gone dark.
+    logger.error('[validate-gatekeeper] Failed to deliver Telegram alert for rejections', {
+      error: alertErr instanceof Error ? alertErr.message : String(alertErr),
+      rejectionCount: rejections.length,
+      tables: [...new Set(rejections.map(r => r.target_table))],
+    })
   }
 }
