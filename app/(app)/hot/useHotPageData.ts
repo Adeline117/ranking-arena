@@ -118,15 +118,28 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     load()
   }, [])
 
+  // AbortController for loadPosts — prevents stale setState after unmount
+  // and allows the auto-refresh interval to cancel in-flight requests on cleanup.
+  const loadPostsAbortRef = useRef<AbortController | null>(null)
+
   // Load hot posts from cache API
   const loadPosts = useCallback(async () => {
+    // Cancel any in-flight loadPosts before starting a new one
+    loadPostsAbortRef.current?.abort()
+    const controller = new AbortController()
+    loadPostsAbortRef.current = controller
+
     setLoadingPosts(true)
     try {
       const headers: Record<string, string> = {}
       if (accessToken) {
         headers['Authorization'] = `Bearer ${accessToken}`
       }
-      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=30`, { headers })
+      const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=30`, {
+        headers,
+        signal: controller.signal,
+      })
+      if (controller.signal.aborted) return
       const json = await res.json()
       const data = json.posts || json.data?.posts || []
 
@@ -173,11 +186,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         setPosts([])
       }
     } catch (e) {
+      // Swallow aborts (unmount/navigation) — not real errors
+      if (e instanceof Error && (e.name === 'AbortError' || controller.signal.aborted)) return
       logger.error('Failed to load posts:', e)
       setPosts([])
       showToast(t('loadHotPostsFailed'), 'error')
     } finally {
-      setLoadingPosts(false)
+      if (!controller.signal.aborted) setLoadingPosts(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [showToast, language, accessToken])
@@ -185,7 +200,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   useEffect(() => {
     loadPosts()
     const interval = setInterval(loadPosts, 180000)
-    return () => clearInterval(interval)
+    return () => {
+      clearInterval(interval)
+      // Abort in-flight fetch on unmount so setState can't leak onto unmounted tree
+      // and response bodies aren't held in memory waiting for GC.
+      loadPostsAbortRef.current?.abort()
+      loadPostsAbortRef.current = null
+    }
   }, [loadPosts])
 
   // Load groups when groups tab is active
