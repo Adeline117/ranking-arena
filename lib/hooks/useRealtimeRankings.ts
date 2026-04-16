@@ -116,6 +116,10 @@ export function useRealtimeRankings({
 
   const bufferRef = useRef<Map<string, RankingUpdate>>(new Map())
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Separate timer for the realtime-event debounce. Previously this
+  // shared flushTimerRef, which caused realtime bursts to clobber the
+  // in-flight 2s batch flush and silently discard buffered updates.
+  const realtimeDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const pulseTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const previousDataRef = useRef<string>('') // JSON fingerprint for change detection
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -205,8 +209,11 @@ export function useRealtimeRankings({
         () => {
           // Debounce: compute-leaderboard writes many rows at once.
           // Wait 3s after the first notification, then fetch once.
-          if (flushTimerRef.current) clearTimeout(flushTimerRef.current)
-          flushTimerRef.current = setTimeout(() => {
+          // Use a DEDICATED timer ref so this debounce does not clobber the
+          // in-flight 2s flushTimer (which drains bufferRef → onUpdate).
+          if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current)
+          realtimeDebounceRef.current = setTimeout(() => {
+            realtimeDebounceRef.current = null
             if (!aborted) fetchLiveRankings()
           }, 3000)
         }
@@ -219,6 +226,7 @@ export function useRealtimeRankings({
       clearInterval(intervalId)
       supabase.removeChannel(channel)
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current)
+      if (realtimeDebounceRef.current) clearTimeout(realtimeDebounceRef.current)
       if (pulseTimerRef.current) clearTimeout(pulseTimerRef.current)
       // Don't flush during cleanup — calling onUpdateRef after unmount can
       // trigger setState on an unmounted component. Buffered updates are discarded.
