@@ -13,6 +13,7 @@
 import { BaseConnector } from '../base'
 import { normalizeRoiFormat } from '../normalize-contract'
 import { warnValidate } from '../schemas'
+import { safeNumber } from '../utils'
 import {
   BingxFuturesDetailResponseSchema,
 } from './schemas'
@@ -140,9 +141,9 @@ export class BingxFuturesConnector extends BaseConnector {
         bio: null,
         tags: ['copy-trading', 'futures'],
         profile_url: `https://bingx.com/en/CopyTrading/tradeDetail/${traderKey}`,
-        followers: this.num(info.followerNum),
-        copiers: this.num(info.copyNum),
-        aum: this.num(info.aum),
+        followers: safeNumber(info.followerNum),
+        copiers: safeNumber(info.copyNum),
+        aum: safeNumber(info.aum),
         updated_at: new Date().toISOString(),
         last_enriched_at: new Date().toISOString(),
         provenance: {
@@ -154,7 +155,8 @@ export class BingxFuturesConnector extends BaseConnector {
         },
       }
       return { profile, fetched_at: new Date().toISOString() }
-    } catch (_err) {
+    } catch (err) {
+      log.warn(`fetchTraderProfile(${traderKey}) failed: ${err instanceof Error ? err.message : String(err)}`)
       return null
     }
   }
@@ -180,16 +182,16 @@ export class BingxFuturesConnector extends BaseConnector {
       }
 
       const metrics: SnapshotMetrics = {
-        roi: this.num(info.roi),
-        pnl: this.num(info.pnl),
-        win_rate: this.num(info.winRate),
-        max_drawdown: this.num(info.maxDrawdown),
-        sharpe_ratio: this.num(info.sharpe30d ?? info.sharpeRatio ?? info.sharpe),
+        roi: safeNumber(info.roi),
+        pnl: safeNumber(info.pnl),
+        win_rate: safeNumber(info.winRate),
+        max_drawdown: safeNumber(info.maxDrawdown),
+        sharpe_ratio: safeNumber(info.sharpe30d ?? info.sharpeRatio ?? info.sharpe),
         sortino_ratio: null,
-        trades_count: this.num(info.tradeCount ?? info.totalOrders),
-        followers: this.num(info.followerNum),
-        copiers: this.num(info.copyNum),
-        aum: this.num(info.aum),
+        trades_count: safeNumber(info.tradeCount ?? info.totalOrders),
+        followers: safeNumber(info.followerNum),
+        copiers: safeNumber(info.copyNum),
+        aum: safeNumber(info.aum),
         platform_rank: null,
         arena_score: null,
         return_score: null,
@@ -205,7 +207,8 @@ export class BingxFuturesConnector extends BaseConnector {
       }
 
       return { metrics, quality_flags, fetched_at: new Date().toISOString() }
-    } catch (_err) {
+    } catch (err) {
+      log.warn(`fetchTraderSnapshot(${traderKey}, ${window}) failed: ${err instanceof Error ? err.message : String(err)}`)
       return null
     }
   }
@@ -226,11 +229,11 @@ export class BingxFuturesConnector extends BaseConnector {
     // Handle nested scraper format: { traderInfoVo: { trader, traderName }, cumulativePnlRate7Days, ... }
     const info = raw.traderInfoVo as Record<string, unknown> | undefined
 
-    const rawRoi = this.num(raw.roi ?? raw.roiRate ?? raw.returnRate ?? raw.pnlRatio ?? raw.cumulativePnlRate7Days)
+    const rawRoi = safeNumber(raw.roi ?? raw.roiRate ?? raw.returnRate ?? raw.pnlRatio ?? raw.cumulativePnlRate7Days)
     const roi = normalizeRoiFormat(rawRoi)
-    const rawWr = this.num(raw.winRate)
+    const rawWr = safeNumber(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-    const rawMdd = this.num(raw.maxDrawdown)
+    const rawMdd = safeNumber(raw.maxDrawdown)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
 
     return {
@@ -238,22 +241,16 @@ export class BingxFuturesConnector extends BaseConnector {
       display_name: info?.traderName ?? raw.traderName ?? raw.nickname ?? raw.nickName ?? raw.displayName ?? null,
       avatar_url: info?.avatar ?? raw.headUrl ?? raw.avatarUrl ?? raw.avatar ?? null,
       roi,
-      pnl: this.num(raw.pnl ?? raw.totalPnl ?? raw.totalEarnings ?? raw.followerEarning ?? raw.profit),
+      pnl: safeNumber(raw.pnl ?? raw.totalPnl ?? raw.totalEarnings ?? raw.followerEarning ?? raw.profit),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       trades_count: null,
-      followers: this.num(raw.followerNum ?? raw.followers ?? raw.followerCount),
+      followers: safeNumber(raw.followerNum ?? raw.followers ?? raw.followerCount),
       copiers: null,
       aum: null,
       // BingX page shows "Sharpe Ratio" and API returns sharpe30d field
-      sharpe_ratio: this.num(raw.sharpe30d ?? raw.sharpeRatio ?? raw.sharpe ?? raw.sharpRatio),
-      platform_rank: this.num(raw.rank),
+      sharpe_ratio: safeNumber(raw.sharpe30d ?? raw.sharpeRatio ?? raw.sharpe ?? raw.sharpRatio),
+      platform_rank: safeNumber(raw.rank),
     }
-  }
-
-  protected num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val)
-    return !Number.isFinite(n) ? null : n
   }
 }
