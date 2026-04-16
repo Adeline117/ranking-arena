@@ -200,7 +200,10 @@ export default function MessageInput({
           onPaste={handlePaste}
           placeholder={t('enterMessage')}
           rows={1}
+          className="message-input-textarea"
           style={{
+            // Desktop: sm (13px). Mobile override in globals.css bumps to 16px
+            // to prevent iOS Safari auto-zoom on focus when tapping the composer.
             flex: 1, padding: `${tokens.spacing[2]} 0`, border: 'none', background: 'transparent',
             color: tokens.colors.text.primary, fontSize: tokens.typography.fontSize.sm,
             fontFamily: tokens.typography.fontFamily.sans.join(', '), outline: 'none',
