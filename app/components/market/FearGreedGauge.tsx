@@ -51,8 +51,16 @@ export default function FearGreedGauge() {
 
   useEffect(() => {
     if (!data) return
+    const prefersReduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
     const from = prevValueRef.current
     const to = data.value
+
+    if (prefersReduced) {
+      setAnimatedValue(to)
+      prevValueRef.current = to
+      return
+    }
+
     const duration = 1200
     const startTime = performance.now()
 
