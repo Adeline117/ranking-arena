@@ -35,13 +35,14 @@ async function withDbTimeout<T>(thenable: PromiseLike<T>, label: string): Promis
     const msg = err instanceof Error ? err.message : String(err)
     logger.warn(`[PipelineLogger] ${label}: ${msg}`)
     // Fallback: send alert on DB write timeout so we don't lose visibility
-    fireAndForget(sendRateLimitedAlert(
-      `PipelineLogger DB timeout: ${label}`,
-      `DB write timed out after 15s. Job: ${label}. Error: ${msg}`,
-      'warning',
-      'plog-db-timeout',
-      5 * 60 * 1000, // Rate limit: 1 alert per 5 minutes
-    ))
+    fireAndForget(
+      sendRateLimitedAlert(
+        { title: `PipelineLogger DB timeout: ${label}`, message: `DB write timed out after 15s. Error: ${msg}`, level: 'warning' },
+        'plog-db-timeout',
+        5 * 60 * 1000,
+      ),
+      'plog-timeout-alert',
+    )
     return null
   }
 }

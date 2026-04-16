@@ -51,8 +51,8 @@ export interface OverviewTabProps {
   data: UnregisteredTraderData
 
   // From SWR trader data (memoized slices)
-  traderProfile: TraderProfile | null | undefined
-  traderPerformance: ExtendedPerformance | null | undefined
+  traderProfile: Record<string, unknown> | null | undefined
+  traderPerformance: Record<string, unknown> | null | undefined
   traderEquityCurve: Record<string, Array<{ date: string; roi: number; pnl: number }>> | undefined
   traderSimilar: (TraderProfile & { roi_90d?: number; arena_score?: number })[]
   positionSummary: { avgLeverage: number | null; longPositions: number | null; shortPositions: number | null } | null | undefined
