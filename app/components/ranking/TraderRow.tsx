@@ -1,157 +1,43 @@
 'use client'
 
-import { localizedLabel } from '@/lib/utils/format'
 import React, { memo, useCallback, useRef, useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text } from '../base'
-import { useCountUp } from '@/lib/hooks/useCountUp'
-import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
-import { getPlatformNote } from '@/lib/constants/platform-metrics'
-import { t as i18nT } from '@/lib/i18n'
+import { Box } from '../base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
-import { formatPnL, formatROI, formatDisplayName } from './utils'
-import { HighlightedName } from './RankingSearch'
+import { formatDisplayName } from './utils'
 import {
-  TRADER_TEXT_TERTIARY,
-  TRADER_ACCENT_ERROR,
   RankDisplay,
-  TraderAvatar,
   ArenaScoreCircle,
   areTraderPropsEqual,
 } from './shared/TraderDisplay'
-import { getScoreColor } from '@/lib/utils/score-colors'
-import { CopyButton } from './HeroSection'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { classifyStyle, getStyleInfo, type TradingStyle } from '@/lib/utils/trading-style'
-import { t as i18nTFn } from '@/lib/i18n'
 
-const SWIPE_THRESHOLD = 50
-const ACTION_WIDTH = 140
+// Sub-components
+import { TraderInfoCell } from './TraderInfoCell'
+import { TraderMetricCells } from './TraderMetricCells'
+import { TraderRowSwipeActions } from './TraderRowSwipeActions'
 
-// ────────────────────────────────────────────────────────────────────────────
-// Module-level style constants — avoid allocating new objects on every render
-// (defeats React.memo; ~750-1000 throwaway objects per 50-row render pass → ~0)
-// ────────────────────────────────────────────────────────────────────────────
+// Styles
+import {
+  HERO_STYLE_RANK_1,
+  HERO_STYLE_RANK_2,
+  HERO_STYLE_RANK_3,
+  LAZY_LOADING_STYLE,
+  LAZY_ICON_STYLE,
+  ROW_BASE_STYLE,
+  SCORE_CELL_STYLE,
+  EXPAND_BTN_STYLE,
+  CHEVRON_EXPANDED_STYLE,
+  CHEVRON_COLLAPSED_STYLE,
+  LINK_BASE_STYLE,
+} from './TraderRowStyles'
 
-// Hero row gradient styles (top 3)
-const HERO_STYLE_RANK_1: React.CSSProperties = {
-  background: 'linear-gradient(135deg, rgba(255,215,0,0.13) 0%, rgba(255,215,0,0.04) 40%, transparent 80%)',
-  boxShadow: 'inset 3px 0 0 var(--color-rank-gold), 0 2px 20px rgba(255,215,0,0.08)',
-  borderRadius: 12,
-  margin: '4px',
-}
-const HERO_STYLE_RANK_2: React.CSSProperties = {
-  background: 'linear-gradient(135deg, rgba(192,192,192,0.10) 0%, rgba(192,192,192,0.03) 40%, transparent 80%)',
-  boxShadow: 'inset 3px 0 0 var(--color-rank-silver), 0 2px 16px rgba(192,192,192,0.06)',
-  borderRadius: 12,
-  margin: '4px',
-}
-const HERO_STYLE_RANK_3: React.CSSProperties = {
-  background: 'linear-gradient(135deg, rgba(205,127,50,0.10) 0%, rgba(205,127,50,0.03) 40%, transparent 80%)',
-  boxShadow: 'inset 3px 0 0 var(--color-rank-bronze), 0 2px 16px rgba(205,127,50,0.06)',
-  borderRadius: 12,
-  margin: '4px',
-}
-
-// Lazy-loading placeholder styles (must be before dynamic() calls)
-const LAZY_LOADING_STYLE: React.CSSProperties = { padding: 16, textAlign: 'center', opacity: 0.5 }
-const LAZY_ICON_STYLE: React.CSSProperties = { width: 14, height: 14, display: 'inline-block' }
-
-// Core layout styles
-const NA_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4, letterSpacing: 1, cursor: 'help' }
-const NA_DASH_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, opacity: 0.4 }
-const ROW_BASE_STYLE: React.CSSProperties = { display: 'grid', alignItems: 'center', gap: tokens.spacing[3], padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, cursor: 'pointer', position: 'relative' as const }
-const TRADER_INFO_STYLE: React.CSSProperties = { display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'nowrap', minWidth: 0 }
-const SCORE_CELL_STYLE: React.CSSProperties = { textAlign: 'center', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }
-const ROI_CELL_STYLE: React.CSSProperties = { textAlign: 'right', display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }
-const PNL_CELL_STYLE: React.CSSProperties = { textAlign: 'right', display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }
-const RIGHT_CELL_STYLE: React.CSSProperties = { textAlign: 'right', alignItems: 'center', justifyContent: 'flex-end' }
-
-// Trader info sub-layout styles
-const NAME_COLUMN_STYLE: React.CSSProperties = { display: 'flex', flexDirection: 'column', gap: 4, minWidth: 0, flex: 1 }
-const NAME_ROW_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6 }
-const TAGS_ROW_STYLE: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }
-
-// Mobile score badge styles
-const MOBILE_BADGE_STYLE: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }
-const MOBILE_BADGE_TEXT_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: TRADER_TEXT_TERTIARY }
-
-// Verified badge style
-const VERIFIED_BADGE_STYLE: React.CSSProperties = {
-  padding: '1px 6px',
-  borderRadius: tokens.radius.md,
-  fontSize: 12,
-  fontWeight: 600,
-  color: '#22d3ee',
-  background: 'rgba(34, 211, 238, 0.12)',
-  border: '1px solid rgba(34, 211, 238, 0.25)',
-  lineHeight: 1.4,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 3,
-}
-
-// Bot badge style
-const BOT_BADGE_STYLE: React.CSSProperties = {
-  padding: '1px 6px',
-  borderRadius: tokens.radius.md,
-  fontSize: 12,
-  fontWeight: 600,
-  color: tokens.colors.accent.primary,
-  background: 'var(--color-accent-primary-12)',
-  border: '1px solid var(--color-accent-primary-30)',
-  lineHeight: 1.4,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: 3,
-}
-const BOT_EMOJI_STYLE: React.CSSProperties = { fontSize: 10 }
-
-// Trading style chip base (colors merged at render time)
-const TRADING_STYLE_BASE_STYLE: React.CSSProperties = {
-  padding: '1px 6px',
-  borderRadius: tokens.radius.md,
-  fontSize: 12,
-  fontWeight: 600,
-  lineHeight: 1.4,
-}
-
-// "also on" text style
-const ALSO_ON_STYLE: React.CSSProperties = { fontSize: tokens.typography.fontSize.xs, color: TRADER_TEXT_TERTIARY, lineHeight: 1.2 }
-
-// Tabular-nums text style for stat columns (followers, trades count)
-const STAT_TEXT_TERTIARY_STYLE: React.CSSProperties = { color: TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }
-
-// MDD text base style (opacity merged at render time)
-const MDD_TEXT_BASE_STYLE: React.CSSProperties = { color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }
-
-// AnimatedROI base style (color merged at render time)
-const ROI_TEXT_BASE_STYLE: React.CSSProperties = { lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }
-
-// Expand button style
-const EXPAND_BTN_STYLE: React.CSSProperties = {
-  position: 'absolute', right: 4, top: '50%', transform: 'translateY(-50%)',
-  width: 28, height: 28, display: 'flex', alignItems: 'center', justifyContent: 'center',
-  cursor: 'pointer', opacity: 0.6, transition: 'opacity 0.15s',
-  borderRadius: tokens.radius.sm,
-}
-
-// Expand chevron styles
-const CHEVRON_EXPANDED_STYLE: React.CSSProperties = { transform: 'rotate(180deg)', transition: 'transform 0.2s' }
-const CHEVRON_COLLAPSED_STYLE: React.CSSProperties = { transform: 'rotate(0deg)', transition: 'transform 0.2s' }
-
-// Swipe action button styles
-const SWIPE_COMPARE_BTN_STYLE: React.CSSProperties = { background: tokens.colors.accent.primary }
-const SWIPE_SHARE_BTN_STYLE: React.CSSProperties = { background: tokens.colors.accent.brand }
-
-// Link base style
-const LINK_BASE_STYLE: React.CSSProperties = { textDecoration: 'none', display: 'block' }
-
-// ────────────────────────────────────────────────────────────────────────────
+// ── Lazy-loaded panels ─────────────────────────────────────────────────────
 
 const ScoreBreakdownLazy = dynamic(
   () => import('./ScoreBreakdown'),
@@ -166,37 +52,7 @@ const ScoreBreakdownTooltip = dynamic(
   }
 )
 
-// Reusable N/A indicator for missing data with platform-specific tooltip
-function NaIndicator({ source, metricType }: { source?: string; metricType: 'winRate' | 'drawdown' }) {
-  // Get platform-specific note or use default
-  const platformNote = source ? getPlatformNote(source) : undefined
-  const defaultNote = metricType === 'winRate'
-    ? i18nT('winRateNotAvailable')
-    : i18nT('drawdownNotAvailable')
-
-  return (
-    <span title={platformNote || defaultNote} style={NA_STYLE}>
-      &mdash;
-    </span>
-  )
-}
-
-// ROI display — animated count-up only for top 3 hero rows to avoid 100x concurrent rAF loops
-function AnimatedROI({ roi, roiColor, animate }: { roi: number; roiColor: string; animate?: boolean }) {
-  const animatedValue = useCountUp(animate ? roi : roi, animate ? 500 : 0)
-  const displayValue = animate ? animatedValue : roi
-  return (
-    <Text
-      size="md"
-      weight="black"
-      className="roi-value"
-      style={{ ...ROI_TEXT_BASE_STYLE, color: roiColor }}
-      title={`${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%`}
-    >
-      {formatROI(displayValue)}
-    </Text>
-  )
-}
+// ── Props ──────────────────────────────────────────────────────────────────
 
 export interface TraderRowProps {
   trader: Trader
@@ -210,6 +66,8 @@ export interface TraderRowProps {
   isExpanded?: boolean
   onToggleExpand?: (id: string) => void
 }
+
+// ── Component ──────────────────────────────────────────────────────────────
 
 export const TraderRow = memo(function TraderRow({
   trader,
@@ -226,18 +84,14 @@ export const TraderRow = memo(function TraderRow({
   const { t } = useLanguage()
   const traderHandle = trader.handle || trader.id
   const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ""}`
-  // Show original platform ID as primary display name
-  // Prefer handle (original exchange nickname) over id
   const displayName = trader.display_name || formatDisplayName(trader.handle || trader.id, trader.source || source)
   const isAddress = traderHandle.startsWith('0x') && traderHandle.length > 20
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
-  // Compare checkbox state — use individual selectors to avoid new object on every getSnapshot call
-  // (returning an object from a Zustand selector causes useSyncExternalStore infinite loop)
+  // Compare checkbox state
   const isSelected = useComparisonStore(useCallback(s => s.isSelected(trader.id), [trader.id]))
-  const _canAddMore = useComparisonStore(useCallback(s => s.selectedTraders.length < 5, []))
 
-  // Memoize trading style classification to avoid recomputing on every render
+  // Memoize trading style classification
   const tradingStyleInfo = useMemo(() => {
     if (trader.trading_style && trader.trading_style !== 'unknown') {
       return getStyleInfo(trader.trading_style as TradingStyle)
@@ -250,8 +104,7 @@ export const TraderRow = memo(function TraderRow({
     return computed !== 'unknown' ? getStyleInfo(computed) : null
   }, [trader.trading_style, trader.avg_holding_hours, trader.trades_count, trader.win_rate])
 
-  // Prefetch trader detail on hover with 300ms debounce to prevent
-  // firing 20-50 requests during rapid scroll over rows
+  // Prefetch trader detail on hover with debounce
   const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => () => { if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current) }, [])
   const handleMouseEnter = useCallback(() => {
@@ -295,13 +148,11 @@ export const TraderRow = memo(function TraderRow({
     const prevRank = prevRankRef.current
     prevRoiRef.current = trader.roi
     prevRankRef.current = rank
-    // Compare ROI changes
     if (prevRoi != null && trader.roi != null && prevRoi !== trader.roi) {
       setFlashClass(trader.roi > prevRoi ? 'flash-green' : 'flash-red')
       const timer = setTimeout(() => setFlashClass(''), 1000)
       return () => clearTimeout(timer)
     }
-    // Compare rank changes
     if (prevRank !== rank && prevRank !== 0) {
       setFlashClass(rank < prevRank ? 'flash-green' : 'flash-red')
       const timer = setTimeout(() => setFlashClass(''), 1000)
@@ -309,113 +160,21 @@ export const TraderRow = memo(function TraderRow({
     }
   }, [trader.roi, rank])
 
-  // Rank class for CSS art direction (top 3 heroes)
   const rankClass = rank <= 3 ? ` rank-${rank}` : ''
-
-  // Top 3 inline styles — use module-level constants to avoid object allocation per render
   const heroStyle = rank === 1 ? HERO_STYLE_RANK_1
     : rank === 2 ? HERO_STYLE_RANK_2
     : rank === 3 ? HERO_STYLE_RANK_3
     : undefined
 
-  // Swipe state (mobile only)
-  const swipeRef = useRef<{ startX: number; startY: number; swiping: boolean }>({ startX: 0, startY: 0, swiping: false })
-  const contentRef = useRef<HTMLDivElement>(null)
-  const [swipeOpen, setSwipeOpen] = useState(false)
-
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    swipeRef.current = { startX: touch.clientX, startY: touch.clientY, swiping: false }
-  }, [])
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0]
-    const dx = touch.clientX - swipeRef.current.startX
-    const dy = touch.clientY - swipeRef.current.startY
-    if (!swipeRef.current.swiping && Math.abs(dy) > Math.abs(dx)) return
-    if (Math.abs(dx) > 10) swipeRef.current.swiping = true
-    if (!swipeRef.current.swiping) return
-    e.preventDefault()
-    const el = contentRef.current
-    if (!el) return
-    const offset = swipeOpen ? -ACTION_WIDTH + dx : dx
-    const clamped = Math.max(-ACTION_WIDTH, Math.min(0, offset))
-    el.style.transform = `translateX(${clamped}px)`
-    el.style.transition = 'none'
-  }, [swipeOpen])
-
-  const handleTouchEnd = useCallback(() => {
-    if (!swipeRef.current.swiping) return
-    const el = contentRef.current
-    if (!el) return
-    el.style.transition = ''
-    const matrix = getComputedStyle(el).transform
-    const tx = matrix !== 'none' ? parseFloat(matrix.split(',')[4]) : 0
-    if (tx < -SWIPE_THRESHOLD) {
-      el.style.transform = `translateX(-${ACTION_WIDTH}px)`
-      setSwipeOpen(true)
-    } else {
-      el.style.transform = 'translateX(0)'
-      setSwipeOpen(false)
-    }
-  }, [])
-
-  const closeSwipe = useCallback(() => {
-    const el = contentRef.current
-    if (el) {
-      el.style.transition = ''
-      el.style.transform = 'translateX(0)'
-    }
-    setSwipeOpen(false)
-  }, [])
-
-  const handleShare = useCallback((e: React.MouseEvent) => {
-    e.preventDefault()
-    e.stopPropagation()
-    closeSwipe()
-    const shareUrl = `${window.location.origin}${href}`
-    if (typeof navigator !== 'undefined' && navigator.share) {
-      void navigator.share({ title: displayName, url: shareUrl }).catch(() => {
-        // Share cancelled or failed — fall back to clipboard
-        navigator.clipboard?.writeText(shareUrl).catch(() => {
-          console.warn('[TraderRow] share and clipboard both failed')
-        })
-      })
-    } else if (typeof navigator !== 'undefined') {
-      navigator.clipboard.writeText(shareUrl).catch(() => {
-        console.warn('[TraderRow] clipboard.writeText failed')
-      })
-    }
-  }, [displayName, href, closeSwipe])
+  const shareUrl = typeof window !== 'undefined' ? `${window.location.origin}${href}` : href
 
   return (
     <>
-    <div
-      className="swipe-row-wrapper"
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
+    <TraderRowSwipeActions
+      onCompareToggle={handleCompareToggle}
+      shareUrl={shareUrl}
+      displayName={displayName}
     >
-      <div className="swipe-row-actions">
-        <button
-          onClick={(e) => { e.preventDefault(); e.stopPropagation(); closeSwipe(); handleCompareToggle(e) }}
-          style={SWIPE_COMPARE_BTN_STYLE}
-          title={i18nTFn('compare')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M18 20V10M12 20V4M6 20v-6"/></svg>
-          <span>{i18nTFn('compare')}</span>
-        </button>
-        <button
-          onClick={handleShare}
-          style={SWIPE_SHARE_BTN_STYLE}
-          title={i18nTFn('share')}
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg>
-          <span>{i18nTFn('share')}</span>
-        </button>
-      </div>
-
-      <div ref={contentRef} className="swipe-row-content">
     <Link
       href={href}
       prefetch={false}
@@ -445,79 +204,19 @@ export const TraderRow = memo(function TraderRow({
         />
 
         {/* Trader Info */}
-        <Box style={TRADER_INFO_STYLE}>
-          <TraderAvatar
-            traderId={trader.id}
-            displayName={displayName}
-            avatarUrl={trader.avatar_url}
-            rank={rank}
-            size={rank <= 3 ? 42 : 36}
-          />
-          <Box style={NAME_COLUMN_STYLE}>
-            <Box style={NAME_ROW_STYLE}>
-              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: rank <= 3 ? '15px' : '14px', letterSpacing: rank <= 3 ? '-0.01em' : undefined }}>
-                <HighlightedName text={displayName} query={searchQuery} />
-              </Text>
-              {isAddress && <CopyButton text={traderHandle} />}
-              {/* Mobile Score Badge */}
-              {trader.arena_score != null && Number.isFinite(Number(trader.arena_score)) && (
-                <span className="mobile-score-badge" style={MOBILE_BADGE_STYLE} aria-label={`Arena Score: ${Number(trader.arena_score).toFixed(0)}`}>
-                  <span aria-hidden="true" style={{
-                    width: 6, height: 6, borderRadius: '50%',
-                    background: getScoreColor(trader.arena_score),
-                  }} />
-                  <span style={MOBILE_BADGE_TEXT_STYLE}>{Number(trader.arena_score).toFixed(0)}</span>
-                </span>
-              )}
-            </Box>
-            <Box style={TAGS_ROW_STYLE}>
-              <Box className="source-tag" role="img" aria-label={`Platform type: ${sourceInfo.type}`} style={{ background: `${sourceInfo.typeColor}15`, border: `1px solid ${sourceInfo.typeColor}30` }}>
-                <Text size="xs" weight="bold" style={{ color: sourceInfo.typeColor, fontSize: tokens.typography.fontSize.xs, lineHeight: 1.2 }}>
-                  {sourceInfo.type}
-                </Text>
-              </Box>
-              {/* Verified Badge */}
-              {trader.is_verified && (
-                <span
-                  role="img"
-                  aria-label={i18nT('verifiedTooltip')}
-                  title={i18nT('verifiedTooltip')}
-                  style={VERIFIED_BADGE_STYLE}>
-                  <svg aria-hidden="true" width="10" height="10" viewBox="0 0 20 20" fill="currentColor"><path d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"/></svg>
-                  {i18nT('verifiedBadge')}
-                </span>
-              )}
-              {/* Bot Badge */}
-              {(trader.is_bot || trader.trader_type === 'bot') && (
-                <span role="img" aria-label={`Bot: ${i18nT('botLabel')}`} style={BOT_BADGE_STYLE}>
-                  <span aria-hidden="true" style={BOT_EMOJI_STYLE}>{'⚡'}</span>
-                  {i18nT('botLabel')}
-                </span>
-              )}
-              {/* Trading Style Chip */}
-              {tradingStyleInfo && (
-                <span
-                  role="img"
-                  aria-label={`Trading style: ${tradingStyleInfo.labelEn}`}
-                  style={{
-                    ...TRADING_STYLE_BASE_STYLE,
-                    color: tradingStyleInfo.color,
-                    background: tradingStyleInfo.bgColor,
-                    border: `1px solid ${tradingStyleInfo.borderColor}`,
-                  }}>
-                  {localizedLabel(tradingStyleInfo.label, tradingStyleInfo.labelEn, language)}
-                </span>
-              )}
-              {trader.also_on && trader.also_on.length > 0 && (
-                <Text size="xs" style={ALSO_ON_STYLE}>
-                  also on: {[...new Set(trader.also_on.map(s => EXCHANGE_NAMES[s] || s.split('_')[0]))].join(', ')}
-                </Text>
-              )}
-            </Box>
-          </Box>
-        </Box>
+        <TraderInfoCell
+          trader={trader}
+          rank={rank}
+          displayName={displayName}
+          isAddress={isAddress}
+          traderHandle={traderHandle}
+          sourceInfo={sourceInfo}
+          searchQuery={searchQuery}
+          language={language}
+          tradingStyleInfo={tradingStyleInfo}
+        />
 
-        {/* Arena Score — circular hero badge with hover breakdown tooltip */}
+        {/* Arena Score */}
         <Box className="col-score" style={SCORE_CELL_STYLE}>
           <ArenaScoreCircle
             score={trader.arena_score}
@@ -529,94 +228,15 @@ export const TraderRow = memo(function TraderRow({
           <ScoreBreakdownTooltip trader={trader} language={language} />
         </Box>
 
-        {/* ROI */}
-        {(() => {
-          const roi = trader.roi ?? 0
-          const roiColor = roi > 0 ? tokens.colors.accent.success : roi < 0 ? tokens.colors.accent.error : tokens.colors.text.tertiary
-          return (
-            <Box className="roi-cell" style={ROI_CELL_STYLE}>
-              <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
-            </Box>
-          )
-        })()}
-
-        {/* PnL */}
-        {(() => {
-          const pnl = trader.pnl
-          const hasPnl = pnl != null
-          const pnlColor = hasPnl
-            ? (pnl >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR)
-            : TRADER_TEXT_TERTIARY
-          const pnlText = hasPnl ? formatPnL(pnl) : '\u2014'
-          return (
-            <Box className="col-pnl" style={PNL_CELL_STYLE}>
-              <Text
-                size="sm"
-                weight="semibold"
-                className="pnl-value"
-                style={{ color: pnlColor, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, opacity: hasPnl ? 0.85 : 0.5, cursor: hasPnl ? 'help' : 'default', fontVariantNumeric: 'tabular-nums' }}
-                title={hasPnl ? getPnLTooltipFn(trader.source || source || '', language) : undefined}
-              >
-                {pnlText}
-              </Text>
-            </Box>
-          )
-        })()}
-
-        {/* Win% */}
-        <Box className="col-winrate" style={RIGHT_CELL_STYLE}>
-          {trader.win_rate != null && Number.isFinite(Number(trader.win_rate)) ? (
-            <Text size="sm" weight="semibold" style={{ color: Number(trader.win_rate) > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
-              {trader.metrics_estimated ? '~' : ''}{Number(trader.win_rate).toFixed(1)}%
-            </Text>
-          ) : (
-            <NaIndicator source={trader.source || source} metricType="winRate" />
-          )}
-        </Box>
-
-        {/* MDD */}
-        <Box className="col-mdd" style={RIGHT_CELL_STYLE}>
-          {trader.max_drawdown != null && Number.isFinite(Number(trader.max_drawdown)) ? (
-            <Text size="sm" weight="semibold" style={{ ...MDD_TEXT_BASE_STYLE, opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
-              {trader.metrics_estimated ? '~' : ''}{Math.abs(Number(trader.max_drawdown)) < 0.05 ? '< 0.1' : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}`}%
-            </Text>
-          ) : (
-            <NaIndicator source={trader.source || source} metricType="drawdown" />
-          )}
-        </Box>
-
-        {/* Sharpe Ratio (P1-3) */}
-        <Box className="col-sharpe" style={RIGHT_CELL_STYLE}>
-          {trader.sharpe_ratio != null && Number.isFinite(Number(trader.sharpe_ratio)) ? (
-            <Text size="sm" weight="semibold" style={{ color: Number(trader.sharpe_ratio) >= 1 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
-              {Number(trader.sharpe_ratio).toFixed(2)}
-            </Text>
-          ) : (
-            <span style={NA_DASH_STYLE}>&mdash;</span>
-          )}
-        </Box>
-
-        {/* Followers (P1-2) */}
-        <Box className="col-followers" style={RIGHT_CELL_STYLE}>
-          {trader.followers != null ? (
-            <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
-              {Number(trader.followers) >= 1000 ? `${(Number(trader.followers) / 1000).toFixed(1)}K` : trader.followers}
-            </Text>
-          ) : (
-            <span style={NA_DASH_STYLE}>&mdash;</span>
-          )}
-        </Box>
-
-        {/* Trades Count (P1-4) */}
-        <Box className="col-trades" style={RIGHT_CELL_STYLE}>
-          {trader.trades_count != null ? (
-            <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
-              {Number(trader.trades_count) >= 1000 ? `${(Number(trader.trades_count) / 1000).toFixed(1)}K` : trader.trades_count}
-            </Text>
-          ) : (
-            <span style={NA_DASH_STYLE}>&mdash;</span>
-          )}
-        </Box>
+        {/* All metric columns */}
+        <TraderMetricCells
+          trader={trader}
+          rank={rank}
+          source={source}
+          language={language}
+          getPnLTooltipFn={getPnLTooltipFn}
+          t={t}
+        />
       </Box>
 
       {/* Expand button overlay */}
@@ -652,8 +272,7 @@ export const TraderRow = memo(function TraderRow({
         arena_score={trader.arena_score}
       />
     )}
-      </div>{/* end swipe-row-content */}
-    </div>{/* end swipe-row-wrapper */}
+    </TraderRowSwipeActions>
     </>
   )
 }, (prev, next) => areTraderPropsEqual(prev, next) && prev.source === next.source && prev.isExpanded === next.isExpanded)
