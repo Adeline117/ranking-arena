@@ -7,7 +7,11 @@
 
 import { BASE_URL } from '@/lib/constants/urls'
 const SITE_NAME = 'Arena'
-const SITE_DESCRIPTION = '加密万物排行榜'
+// English-first description — site is primarily indexed in English. Using the
+// Chinese-only "加密万物排行榜" caused Google Rich Results to show Chinese text
+// on English search results, hurting CTR. Localized variants are handled via
+// hreflang alternates in app/layout.tsx.
+const SITE_DESCRIPTION = 'Crypto trader rankings across 30+ exchanges — ROI, Arena Score, and PnL leaderboards.'
 
 // ============================================
 // 类型定义
@@ -174,13 +178,12 @@ export function generateOrganizationSchema(): OrganizationSchema {
     logo: `${BASE_URL}/logo.png`,
     description: SITE_DESCRIPTION,
     sameAs: [
-      // 添加社交媒体链接
-      // 'https://twitter.com/arenafi',
+      'https://twitter.com/arenafi',
     ],
     contactPoint: {
       '@type': 'ContactPoint',
       contactType: 'customer service',
-      url: `${BASE_URL}/contact`,
+      url: `${BASE_URL}/help`,
     },
   }
 }
