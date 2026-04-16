@@ -36,26 +36,30 @@ const redis = {
   },
   async lpush(key: string, value: string): Promise<void> {
     const current = await this.get(key)
-    const list: string[] = current ? JSON.parse(current) : []
+    let list: string[] = []
+    if (current) { try { list = JSON.parse(current) } catch { /* corrupted data, reset */ } }
     list.unshift(value)
     await this.set(key, JSON.stringify(list))
   },
   async ltrim(key: string, start: number, stop: number): Promise<void> {
     const current = await this.get(key)
     if (!current) return
-    const list: string[] = JSON.parse(current)
+    let list: string[] = []
+    try { list = JSON.parse(current) } catch { /* corrupted */ }
     const trimmed = list.slice(start, stop + 1)
     await this.set(key, JSON.stringify(trimmed))
   },
   async lrange(key: string, start: number, stop: number): Promise<string[]> {
     const current = await this.get(key)
     if (!current) return []
-    const list: string[] = JSON.parse(current)
+    let list: string[] = []
+    try { list = JSON.parse(current) } catch { /* corrupted */ }
     return list.slice(start, stop === -1 ? undefined : stop + 1)
   },
   async hset(key: string, updates: Record<string, string | number>): Promise<void> {
     const current = await this.get(key)
-    const hash: Record<string, string | number> = current ? JSON.parse(current) : {}
+    let hash: Record<string, string | number> = {}
+    if (current) { try { hash = JSON.parse(current) } catch { /* corrupted data, reset */ } }
     for (const [field, value] of Object.entries(updates)) {
       if (typeof hash[field] === 'number' && typeof value === 'number' && value === 1) {
         hash[field] = (hash[field] as number) + 1
@@ -67,7 +71,8 @@ const redis = {
   },
   async hgetall(key: string): Promise<Record<string, string | number> | null> {
     const current = await this.get(key)
-    return current ? JSON.parse(current) : null
+    if (!current) return null
+    try { return JSON.parse(current) } catch { return null }
   },
   async xadd(_streamKey: string, _id: string, _data: Record<string, string>, _options?: { maxLen?: number }): Promise<void> {
     // Simplified: store in regular key as JSON array
@@ -429,7 +434,7 @@ async function createAlert(alert: HealthAlert): Promise<void> {
 export async function getRecentAlerts(limit: number = 20): Promise<HealthAlert[]> {
   try {
     const alerts = await redis.lrange(KEYS.alerts, 0, limit - 1)
-    return alerts.map(a => JSON.parse(a as string))
+    return alerts.map(a => { try { return JSON.parse(a as string) } catch { return null } }).filter(Boolean)
   } catch (error) {
     logger.error('获取告警失败:', error)
     return []

@@ -48,15 +48,7 @@ import {
 // Re-export for backward compatibility (many components import { Trader } from './RankingTable')
 export type { Trader, ColumnKey, ViewMode }
 
-// Debounce hook
-function useDebounce<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value)
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay)
-    return () => clearTimeout(timer)
-  }, [value, delay])
-  return debounced
-}
+import { useDebounce } from '@/lib/hooks/useDebounce'
 
 // ExportRankingButton moved to RankingFilters.tsx
 

@@ -14,7 +14,7 @@ const withBundleAnalyzer = process.env.ANALYZE === 'true'
 const nextConfig = {
   /* config options here */
   
-  // ESLint — 紧急修复: 跳过 build 时 lint 检查 (2026-04-01)
+  // ESLint — CI runs lint separately; skip in build to avoid double-linting
   eslint: {
     ignoreDuringBuilds: true,
   },
@@ -139,9 +139,9 @@ const nextConfig = {
     return config
   },
   
-  // TypeScript — 暂时跳过 build 时类型检查（CI 单独跑 tsc）
+  // TypeScript — CI runs tsc separately; enable build-time checks as safety net
   typescript: {
-    ignoreBuildErrors: true,
+    ignoreBuildErrors: false,
   },
 
   // 性能优化
