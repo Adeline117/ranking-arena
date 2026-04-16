@@ -15,6 +15,7 @@
  *   // only upsert `valid` rows
  */
 
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { VALIDATION_BOUNDS } from './types'
 
@@ -251,10 +252,9 @@ export function sanitizeRow<T extends Record<string, unknown>>(
 /**
  * Log rejected writes to pipeline_rejected_writes table and send Telegram alert.
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function logRejectedWrites(
   rejections: ValidationFailure[],
-  supabase?: any,
+  supabase?: SupabaseClient,
 ): Promise<void> {
   if (rejections.length === 0) return
 
