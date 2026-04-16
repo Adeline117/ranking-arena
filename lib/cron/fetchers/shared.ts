@@ -387,6 +387,9 @@ export async function upsertTraders(
       dataLogger.error(msg)
       // >50% rejected = likely API format change or broken connector
       // Alert immediately so the connector bug is fixed at the source
+      // Alert delivery MUST NOT be swallowed silently — if Telegram is down
+      // and we also fail to log the reason, the entire "connector broken"
+      // safety net goes dark. Log the failure so Sentry still captures it.
       import('@/lib/alerts/send-alert').then(({ sendRateLimitedAlert }) =>
         sendRateLimitedAlert({
           title: `Connector 异常: ${traders[0]?.source} ${Math.round(rejectionRate * 100)}% 数据被拒`,
@@ -394,7 +397,12 @@ export async function upsertTraders(
           level: 'critical',
           details: { source: traders[0]?.source, rejected, total: traders.length },
         }, `connector-reject-${traders[0]?.source}`, 60 * 60 * 1000)
-      ).catch(() => {})
+      ).catch((alertErr) => {
+        dataLogger.error(
+          `[alerting] Failed to deliver connector-reject alert for ${traders[0]?.source}: ${alertErr instanceof Error ? alertErr.message : String(alertErr)}`,
+          { source: traders[0]?.source, rejected, total: traders.length, originalAlert: msg },
+        )
+      })
     } else {
       dataLogger.warn(msg)
     }
@@ -464,6 +472,8 @@ export async function upsertTraders(
         // Median |ROI| < 0.5% across 20+ traders is suspicious (likely decimal ratio bug)
         const source = snapshotValidated[0]?.source
         dataLogger.warn(`[sanity] ${source}: median |ROI| = ${medianAbsRoi.toFixed(3)}% across ${rois.length} traders — possible decimal bug`)
+        // Same reasoning as above — decimal-bug sanity alerts are high-signal;
+        // log the delivery failure so it is not lost.
         import('@/lib/alerts/send-alert').then(({ sendRateLimitedAlert }) =>
           sendRateLimitedAlert({
             title: `数据异常: ${source} ROI 中位数仅 ${medianAbsRoi.toFixed(3)}%`,
@@ -471,7 +481,12 @@ export async function upsertTraders(
             level: 'warning',
             details: { source, medianAbsRoi, traderCount: rois.length },
           }, `sanity-roi-${source}`, 6 * 60 * 60 * 1000)
-        ).catch(() => {})
+        ).catch((alertErr) => {
+          dataLogger.error(
+            `[alerting] Failed to deliver ROI sanity alert for ${source}: ${alertErr instanceof Error ? alertErr.message : String(alertErr)}`,
+            { source, medianAbsRoi, traderCount: rois.length },
+          )
+        })
       }
     }
   }
