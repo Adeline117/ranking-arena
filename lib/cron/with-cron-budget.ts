@@ -99,12 +99,12 @@ export interface CronBudgetSuccess {
   body?: Record<string, unknown>
 }
 
-function authorize(request: NextRequest | undefined): NextResponse | null {
+async function authorize(request: NextRequest | undefined): Promise<NextResponse | null> {
   if (!request) return null
   if (!env.CRON_SECRET) {
     return NextResponse.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
   }
-  const { verifyCronSecret } = require('@/lib/auth/verify-service-auth')
+  const { verifyCronSecret } = await import('@/lib/auth/verify-service-auth')
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
@@ -149,7 +149,7 @@ export async function withCronBudget(
 ): Promise<NextResponse> {
   // 1. Auth
   if (!opts.skipAuth) {
-    const authErr = authorize(opts.request)
+    const authErr = await authorize(opts.request)
     if (authErr) return authErr
   }
 
