@@ -4,10 +4,10 @@
  * POST /api/follow - 关注/取消关注
  */
 
-import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { withApiMiddleware, createErrorResponse } from '@/lib/api/middleware'
+import { withAuth } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
+import { success, badRequest, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
@@ -25,17 +25,12 @@ export const dynamic = 'force-dynamic'
  * GET /api/follow?traderId=xxx
  * 检查当前用户是否关注指定交易员
  */
-export const GET = withApiMiddleware(
+export const GET = withAuth(
   async ({ user, supabase, request }) => {
-    // 需要认证
-    if (!user) {
-      return createErrorResponse('Unauthorized', 401)
-    }
-
     const traderId = request.nextUrl.searchParams.get('traderId')
 
     if (!traderId) {
-      return createErrorResponse('Missing traderId parameter', 400)
+      return badRequest('Missing traderId parameter')
     }
 
     const { data, error } = await supabase
@@ -49,18 +44,17 @@ export const GET = withApiMiddleware(
       // 如果表不存在，返回未关注状态
       if (error.message?.includes('Could not find the table')) {
         logger.warn('trader_follows 表不存在')
-        return NextResponse.json({ following: false, tableNotFound: true })
+        return success({ following: false, tableNotFound: true })
       }
       logger.error('查询关注状态失败', { error, traderId, userId: user.id })
-      return createErrorResponse('Query failed', 500)
+      return serverError('Query failed')
     }
 
     return { following: !!data }
   },
   {
     name: 'follow-check',
-    requireAuth: true,
-    rateLimit: 'read', // 500次/分钟，读取操作
+    rateLimit: 'read',
   }
 )
 
@@ -69,14 +63,14 @@ export const GET = withApiMiddleware(
  * 关注或取消关注交易员
  * Body: { traderId: string, action: 'follow' | 'unfollow' }
  */
-export const POST = withApiMiddleware(
+export const POST = withAuth(
   async ({ user, supabase, request }) => {
-    // 需要认证
-    if (!user) {
-      return createErrorResponse('Unauthorized', 401)
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
     }
-
-    const body = await request.json()
     const parsed = FollowActionSchema.safeParse(body)
     if (!parsed.success) {
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
@@ -92,15 +86,15 @@ export const POST = withApiMiddleware(
       if (error) {
         // 如果是重复关注，忽略错误
         if (error.code === '23505') {
-          return { success: true, following: true }
+          return { following: true }
         }
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
-          return createErrorResponse('Follow feature not available yet', 503)
+          throw new ApiError('Follow feature not available yet', { code: 'SERVICE_UNAVAILABLE' as 'SERVICE_UNAVAILABLE', statusCode: 503 })
         }
         logger.error('Follow failed', { error, traderId, userId: user.id })
-        return createErrorResponse('Follow failed', 500)
+        return serverError('Follow failed')
       }
 
       logger.info('用户关注交易员', { userId: user.id, traderId })
@@ -128,7 +122,7 @@ export const POST = withApiMiddleware(
         } catch { /* non-critical */ }
       })()
 
-      return { success: true, following: true }
+      return { following: true }
     } else {
       // 取消关注
       const { error } = await supabase
@@ -141,20 +135,19 @@ export const POST = withApiMiddleware(
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
-          return createErrorResponse('Follow feature not available yet', 503)
+          throw new ApiError('Follow feature not available yet', { code: 'SERVICE_UNAVAILABLE' as 'SERVICE_UNAVAILABLE', statusCode: 503 })
         }
         logger.error('Unfollow failed', { error, traderId, userId: user.id })
-        return createErrorResponse('Unfollow failed', 500)
+        return serverError('Unfollow failed')
       }
 
       logger.info('用户取消关注交易员', { userId: user.id, traderId })
       await invalidateFollowingCache(user.id).catch(() => {})
-      return { success: true, following: false }
+      return { following: false }
     }
   },
   {
     name: 'follow-action',
-    requireAuth: true,
-    rateLimit: 'write', // 50次/分钟
+    rateLimit: 'write',
   }
 )
