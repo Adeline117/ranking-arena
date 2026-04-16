@@ -6,29 +6,15 @@
  * DELETE — remove trader from watchlist (via body: { source, source_trader_id })
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { withAuth } from '@/lib/api/middleware'
+import { success, badRequest, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getAuthUser } from '@/lib/supabase/server'
 
 const log = createLogger('api:watchlist')
 
-export async function GET(request: NextRequest) {
-  try {
-    const rl = await checkRateLimit(request, RateLimitPresets.read)
-    if (rl) return rl
-
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    const admin = createClient(adminUrl, serviceKey)
-
-    const { data, error } = await admin
+export const GET = withAuth(
+  async ({ user, supabase }) => {
+    const { data, error } = await supabase
       .from('trader_watchlist')
       .select('source, source_trader_id, handle, created_at')
       .eq('user_id', user.id)
@@ -36,16 +22,15 @@ export async function GET(request: NextRequest) {
       .limit(200)
 
     if (error) {
-      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+      log.error('GET query failed', { error: error.message })
+      return serverError('Internal server error')
     }
 
     const watchlist = data || []
 
     // Enrich watchlist items with leaderboard snapshot data (ROI, PnL, rank, arena_score)
-    if (watchlist.length > 0 && serviceKey) {
-      // Build filter for all watchlist items
-      const _keys = watchlist.map(w => `${w.source}:${w.source_trader_id}`)
-      const { data: ranks } = await admin
+    if (watchlist.length > 0) {
+      const { data: ranks } = await supabase
         .from('leaderboard_ranks')
         .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')
         .eq('season_id', '90D')
@@ -72,54 +57,40 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    return NextResponse.json({ watchlist })
-  } catch (error) {
-    log.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+    return success({ watchlist })
+  },
+  { name: 'watchlist-list', rateLimit: 'read' }
+)
 
-export async function POST(request: NextRequest) {
-  try {
-    const rl = await checkRateLimit(request, RateLimitPresets.write)
-    if (rl) return rl
-
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    const admin = createClient(adminUrl, serviceKey)
-
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
     let body: Record<string, unknown>
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+      return badRequest('Invalid JSON body')
     }
     const { source, source_trader_id, handle } = body as { source?: string; source_trader_id?: string; handle?: string }
 
     if (!source || !source_trader_id || typeof source !== 'string' || typeof source_trader_id !== 'string') {
-      return NextResponse.json({ error: 'source and source_trader_id required (strings)' }, { status: 400 })
+      return badRequest('source and source_trader_id required (strings)')
     }
     if (source.length > 50 || source_trader_id.length > 200) {
-      return NextResponse.json({ error: 'Invalid input length' }, { status: 400 })
+      return badRequest('Invalid input length')
     }
 
     // Enforce max watchlist size (200)
     // KEEP 'exact' — limit enforcement, scoped per-user via (user_id)
     // index. Must be accurate to block the 201st add.
-    const { count } = await admin
+    const { count } = await supabase
       .from('trader_watchlist')
       .select('id', { count: 'exact', head: true })
       .eq('user_id', user.id)
     if ((count ?? 0) >= 200) {
-      return NextResponse.json({ error: 'Watchlist full (max 200)' }, { status: 400 })
+      return badRequest('Watchlist full (max 200)')
     }
 
-    const { error } = await admin
+    const { error } = await supabase
       .from('trader_watchlist')
       .upsert({
         user_id: user.id,
@@ -131,50 +102,37 @@ export async function POST(request: NextRequest) {
       })
 
     if (error) {
-      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+      log.error('POST upsert failed', { error: error.message })
+      return serverError('Internal server error')
     }
 
     // Return updated watchlist so client can mutate SWR cache immediately
-    const { data: updated } = await admin
+    const { data: updated } = await supabase
       .from('trader_watchlist')
       .select('source, source_trader_id, handle, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    return NextResponse.json({ watchlist: updated ?? [] })
-  } catch (error) {
-    log.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+    return success({ watchlist: updated ?? [] })
+  },
+  { name: 'watchlist-add', rateLimit: 'write' }
+)
 
-export async function DELETE(request: NextRequest) {
-  try {
-    const rl = await checkRateLimit(request, RateLimitPresets.write)
-    if (rl) return rl
-
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const adminUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
-    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
-    const admin = createClient(adminUrl, serviceKey)
-
+export const DELETE = withAuth(
+  async ({ user, supabase, request }) => {
     let body: Record<string, unknown>
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+      return badRequest('Invalid JSON body')
     }
     const { source, source_trader_id } = body as { source?: string; source_trader_id?: string }
 
     if (!source || !source_trader_id) {
-      return NextResponse.json({ error: 'source and source_trader_id required' }, { status: 400 })
+      return badRequest('source and source_trader_id required')
     }
 
-    const { error } = await admin
+    const { error } = await supabase
       .from('trader_watchlist')
       .delete()
       .eq('user_id', user.id)
@@ -182,19 +140,18 @@ export async function DELETE(request: NextRequest) {
       .eq('source_trader_id', source_trader_id)
 
     if (error) {
-      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+      log.error('DELETE failed', { error: error.message })
+      return serverError('Internal server error')
     }
 
     // Return updated watchlist so client can mutate SWR cache immediately
-    const { data: updated } = await admin
+    const { data: updated } = await supabase
       .from('trader_watchlist')
       .select('source, source_trader_id, handle, created_at')
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    return NextResponse.json({ watchlist: updated ?? [] })
-  } catch (error) {
-    log.error('DELETE failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+    return success({ watchlist: updated ?? [] })
+  },
+  { name: 'watchlist-remove', rateLimit: 'write' }
+)
