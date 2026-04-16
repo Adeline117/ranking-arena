@@ -5,6 +5,7 @@
 import { BaseConnector } from '../base'
 import { normalizeRoiFormat } from '../normalize-contract'
 import { warnValidate } from '../schemas'
+import { safeNumber } from '../utils'
 import { KucoinFuturesDetailResponseSchema } from './schemas'
 import type {
   DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
@@ -52,8 +53,10 @@ export class KucoinFuturesConnector extends BaseConnector {
     // Strategy 2: Direct POST API fallback (works from residential IPs)
     if (rawList.length === 0) {
       try {
+        // Use tier-based timeout from ConnectorConfig (kucoin = medium → 30000ms)
+        // instead of a hardcoded 15s that could truncate legitimate slow responses.
         const controller = new AbortController()
-        const timeout = setTimeout(() => controller.abort(), 15000)
+        const timeout = setTimeout(() => controller.abort(), this.config.timeout)
         const res = await fetch(
           'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading/rn/leaderboard/query',
           {
@@ -102,7 +105,7 @@ export class KucoinFuturesConnector extends BaseConnector {
       avatar_url: (info.avatar as string) || null,
       bio: null, tags: [],
       profile_url: `https://www.kucoin.com/copy-trading/leader/${traderKey}`,
-      followers: this.num(info.followerCount), copiers: this.num(info.currentCopyCount), aum: null,
+      followers: safeNumber(info.followerCount), copiers: safeNumber(info.currentCopyCount), aum: null,
       updated_at: new Date().toISOString(), last_enriched_at: new Date().toISOString(),
       provenance: { source_platform: 'kucoin', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
     }
@@ -119,10 +122,10 @@ export class KucoinFuturesConnector extends BaseConnector {
     if (!info) return null
 
     const metrics: SnapshotMetrics = {
-      roi: this.num(info.roi), pnl: this.num(info.totalPnl),
-      win_rate: this.num(info.winRate), max_drawdown: this.num(info.maxDrawdown),
+      roi: safeNumber(info.roi), pnl: safeNumber(info.totalPnl),
+      win_rate: safeNumber(info.winRate), max_drawdown: safeNumber(info.maxDrawdown),
       sharpe_ratio: null, sortino_ratio: null, trades_count: null,
-      followers: this.num(info.followerCount), copiers: this.num(info.currentCopyCount),
+      followers: safeNumber(info.followerCount), copiers: safeNumber(info.currentCopyCount),
       aum: null, platform_rank: null,
       arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
     }
@@ -139,25 +142,20 @@ export class KucoinFuturesConnector extends BaseConnector {
 
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     // New POST API returns thirtyDayPnlRatio as decimal (2.80 = 280%)
-    const rawRoi = this.num(raw.thirtyDayPnlRatio ?? raw.totalPnlRatio ?? raw.roi ?? raw.returnRate)
+    const rawRoi = safeNumber(raw.thirtyDayPnlRatio ?? raw.totalPnlRatio ?? raw.roi ?? raw.returnRate)
     const roi = normalizeRoiFormat(rawRoi)
     return {
       trader_key: raw.leadConfigId || raw.uid,
       display_name: raw.nickName || raw.name,
       avatar_url: raw.avatarUrl || raw.avatar || null,
       roi,
-      pnl: this.num(raw.thirtyDayPnl ?? raw.totalPnl ?? raw.pnl),
+      pnl: safeNumber(raw.thirtyDayPnl ?? raw.totalPnl ?? raw.pnl),
       win_rate: null, // Not in leaderboard response
       max_drawdown: null, // Not in leaderboard response
-      followers: this.num(raw.currentCopyUserCount ?? raw.followerCount),
-      copiers: this.num(raw.currentCopyUserCount ?? raw.currentCopyCount),
-      trades_count: this.num(raw.tradeCount),
-      aum: this.num(raw.leadPrincipal),
+      followers: safeNumber(raw.currentCopyUserCount ?? raw.followerCount),
+      copiers: safeNumber(raw.currentCopyUserCount ?? raw.currentCopyCount),
+      trades_count: safeNumber(raw.tradeCount),
+      aum: safeNumber(raw.leadPrincipal),
     }
-  }
-
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val); return !Number.isFinite(n) ? null : n
   }
 }
