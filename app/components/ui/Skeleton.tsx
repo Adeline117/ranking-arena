@@ -64,6 +64,8 @@ export function Skeleton({
   return (
     <div
       className={`skeleton ${className}`}
+      aria-busy="true"
+      aria-label="Loading"
       style={{
         width: toPx(width),
         height: toPx(height),

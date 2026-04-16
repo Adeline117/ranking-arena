@@ -191,7 +191,7 @@ export function Dropdown<T = string>({
         aria-haspopup="listbox"
         aria-controls={listId}
         aria-invalid={hasError}
-        aria-describedby={errorMessage ? errorId : undefined}
+        aria-describedby={hasError ? errorId : undefined}
         disabled={disabled}
         onClick={() => {
           if (disabled) return

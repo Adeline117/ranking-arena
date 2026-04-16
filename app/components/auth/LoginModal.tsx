@@ -297,6 +297,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               onChange={(e) => setEmail(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSendOTP()}
               placeholder="you@email.com"
+              aria-required="true"
+              aria-label={t('authEnterEmail')}
               style={{
                 width: '100%', padding: '12px 14px', borderRadius: tokens.radius.lg,
                 background: 'var(--glass-bg-light)',
@@ -369,6 +371,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               onKeyDown={(e) => e.key === 'Enter' && handleVerifyOTP()}
               placeholder="000000"
               maxLength={6}
+              aria-required="true"
+              aria-label={t('authEnterCode')}
               style={{
                 width: '100%', padding: '12px 14px', borderRadius: tokens.radius.lg,
                 background: 'var(--glass-bg-light)',
