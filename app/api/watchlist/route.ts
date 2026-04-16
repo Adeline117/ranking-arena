@@ -6,8 +6,9 @@
  * DELETE — remove trader from watchlist (via body: { source, source_trader_id })
  */
 
+import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import { success, badRequest, serverError } from '@/lib/api/response'
+import { badRequest, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('api:watchlist')
@@ -57,7 +58,9 @@ export const GET = withAuth(
       }
     }
 
-    return success({ watchlist })
+    // Return raw NextResponse to maintain backward-compatible shape { watchlist: [...] }
+    // (frontend useWatchlist reads data.watchlist directly)
+    return NextResponse.json({ watchlist })
   },
   { name: 'watchlist-list', rateLimit: 'read' }
 )
@@ -113,7 +116,8 @@ export const POST = withAuth(
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    return success({ watchlist: updated ?? [] })
+    // Return raw NextResponse to maintain backward-compatible shape { watchlist: [...] }
+    return NextResponse.json({ watchlist: updated ?? [] })
   },
   { name: 'watchlist-add', rateLimit: 'write' }
 )
@@ -151,7 +155,8 @@ export const DELETE = withAuth(
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    return success({ watchlist: updated ?? [] })
+    // Return raw NextResponse to maintain backward-compatible shape { watchlist: [...] }
+    return NextResponse.json({ watchlist: updated ?? [] })
   },
   { name: 'watchlist-remove', rateLimit: 'write' }
 )
