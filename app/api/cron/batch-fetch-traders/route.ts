@@ -43,9 +43,9 @@ const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 // Was threshold=20, max_age=30min — but since cron intervals are 1-8h,
 // the 30min auto-reset meant the counter ALWAYS reset between runs and
 // could never reach 20. The circuit breaker was effectively a no-op.
-// Fix: threshold=3 (reasonable for 1-8h intervals), max_age=12h (retry daily).
-const DEAD_THRESHOLD = 3
-const DEAD_COUNTER_MAX_AGE_MS = 12 * 60 * 60 * 1000 // 12h — retry after half a day
+// Fix: threshold=6 (tolerate transient failures at 1-8h intervals), max_age=6h (retry sooner).
+const DEAD_THRESHOLD = 6
+const DEAD_COUNTER_MAX_AGE_MS = 6 * 60 * 60 * 1000 // 6h — retry after quarter day
 
 export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
 export const dynamic = 'force-dynamic'

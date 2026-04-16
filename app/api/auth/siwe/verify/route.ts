@@ -99,7 +99,6 @@ export async function POST(request: NextRequest) {
         walletAddress,
         // The client will use the hashed_token to complete sign-in
         verificationToken: sessionData.properties?.hashed_token,
-        email: existingProfile.email || `${walletAddress}@wallet.arena`,
       })
     }
 
@@ -146,7 +145,6 @@ export async function POST(request: NextRequest) {
             userId,
             walletAddress,
             verificationToken: sessionData?.properties?.hashed_token,
-            email: walletEmail,
           })
         }
       }
@@ -189,7 +187,6 @@ export async function POST(request: NextRequest) {
       handle,
       walletAddress,
       verificationToken: sessionData?.properties?.hashed_token,
-      email: walletEmail,
     })
   } catch (err) {
     logger.error('[SIWE verify] Error:', err)
