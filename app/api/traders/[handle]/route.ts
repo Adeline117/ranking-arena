@@ -16,13 +16,12 @@
  */
 
 import { NextRequest } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { z } from 'zod'
-import { checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { withPublic } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { ApiError } from '@/lib/api/errors'
-import { success as apiSuccess, handleError, withCache } from '@/lib/api/response'
+import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
@@ -121,13 +120,10 @@ export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResponse) return rateLimitResponse
+  const { handle: rawHandle } = await params
 
-  const startTime = Date.now()
-
-  try {
-    const { handle: rawHandle } = await params
+  const handler = withPublic(async ({ supabase, request: req }) => {
+    const startTime = Date.now()
 
     const parsed = handleSchema.safeParse(rawHandle)
     if (!parsed.success) {
@@ -140,16 +136,14 @@ export async function GET(
     // E2E test fixture short-circuit (only when explicitly requested via
     // query param). Returns deterministic mock data so Playwright tests
     // don't depend on prod data shape.
-    const fixtureName = request.nextUrl.searchParams.get('e2e_fixture')
+    const fixtureName = req.nextUrl.searchParams.get('e2e_fixture')
     if (fixtureName && E2E_FIXTURES[fixtureName]) {
       return apiSuccess(E2E_FIXTURES[fixtureName]())
     }
 
     // Accept optional ?source= param to disambiguate traders with same handle across exchanges
-    const sourceParam = request.nextUrl.searchParams.get('source') || ''
+    const sourceParam = req.nextUrl.searchParams.get('source') || ''
     const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
-
-    const supabase = getSupabaseAdmin()
 
     // ── Unified data layer: resolveTrader → getTraderDetail (cached in Redis, 5 min) ──
     const data = await tieredGetOrSet(
@@ -192,7 +186,7 @@ export async function GET(
     const { pageData, resolved } = data
 
     // ── include: bundle additional data into the response ──
-    const includeParam = request.nextUrl.searchParams.get('include') || ''
+    const includeParam = req.nextUrl.searchParams.get('include') || ''
     const includes = includeParam ? includeParam.split(',').map(s => s.trim().toLowerCase()) : []
     const extras: Record<string, unknown> = {}
 
@@ -288,8 +282,8 @@ export async function GET(
         promises.push(
           (async () => {
             try {
-              const period = request.nextUrl.searchParams.get('rh_period') || '90D'
-              const days = Math.min(Number(request.nextUrl.searchParams.get('rh_days') || '7'), 30)
+              const period = req.nextUrl.searchParams.get('rh_period') || '90D'
+              const days = Math.min(Number(req.nextUrl.searchParams.get('rh_days') || '7'), 30)
               const cutoffDate = new Date()
               cutoffDate.setDate(cutoffDate.getDate() - days)
               const cutoffISO = cutoffDate.toISOString().split('T')[0]
@@ -335,10 +329,7 @@ export async function GET(
     const duration = Date.now() - startTime
     const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })
     return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
+  }, { name: 'trader-detail', rateLimit: 'public' })
 
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error'
-    logger.error('Trader API error', { error: errorMessage })
-    return handleError(error, 'trader-detail')
-  }
+  return handler(request)
 }
