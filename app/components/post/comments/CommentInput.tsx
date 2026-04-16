@@ -51,7 +51,8 @@ export function CommentInput({
           borderRadius: tokens.radius.xl,
           background: tokens.colors.bg.tertiary,
           padding: '10px 14px',
-          paddingBottom: 38,
+          // Reserve room for the toolbar row (36px buttons + 6px breathing space)
+          paddingBottom: 48,
           transition: 'border-color 0.2s',
         }}
         onFocus={(e) => { e.currentTarget.style.borderColor = ARENA_PURPLE }}
@@ -115,17 +116,22 @@ export function CommentInput({
               <button
                 type="button"
                 onClick={() => { setShowEmojiPicker(prev => !prev) }}
+                aria-label={t('postEmoji')}
                 style={{
                   background: 'transparent',
                   border: 'none',
                   cursor: 'pointer',
-                  padding: 4,
+                  // 36×36 touch target (was ~26×26). WCAG 2.2 minimum 24×24, AAA 44×44.
+                  width: 36,
+                  height: 36,
+                  padding: 0,
                   borderRadius: tokens.radius.sm,
                   color: showEmojiPicker ? ARENA_PURPLE : tokens.colors.text.tertiary,
                   fontSize: 16,
                   lineHeight: 1.2,
                   display: 'flex',
                   alignItems: 'center',
+                  justifyContent: 'center',
                 }}
                 title={t('postEmoji')}
               >
@@ -195,16 +201,23 @@ export function CommentInput({
                 setNewComment(newComment + '@')
                 commentInputRef.current?.focus()
               }}
+              aria-label={t('postMention')}
               style={{
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
-                padding: 4,
+                // 36×36 touch target (was ~22×22). See sticker button above.
+                width: 36,
+                height: 36,
+                padding: 0,
                 borderRadius: tokens.radius.sm,
                 color: tokens.colors.text.tertiary,
                 fontSize: 14,
                 fontWeight: 700,
                 lineHeight: 1.2,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
               }}
               title={t('postMention')}
             >
@@ -226,17 +239,22 @@ export function CommentInput({
                   input.click()
                 }
               }}
+              aria-label={t('postImage')}
               style={{
                 background: 'transparent',
                 border: 'none',
                 cursor: 'pointer',
-                padding: 4,
+                // 36×36 touch target (was ~24×24). See sticker button above.
+                width: 36,
+                height: 36,
+                padding: 0,
                 borderRadius: tokens.radius.sm,
                 color: tokens.colors.text.tertiary,
                 fontSize: 16,
                 lineHeight: 1.2,
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
               }}
               title={t('postImage')}
             >
@@ -253,7 +271,9 @@ export function CommentInput({
             onClick={() => onSubmitComment(postId)}
             disabled={submittingComment || !newComment.trim()}
             style={{
-              padding: '4px 12px',
+              // Match toolbar button height (36px) for consistent touch targets
+              minHeight: 36,
+              padding: '6px 14px',
               borderRadius: tokens.radius.md,
               border: 'none',
               background: newComment.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
