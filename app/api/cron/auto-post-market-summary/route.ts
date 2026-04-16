@@ -10,14 +10,12 @@
  * Posts as "Arena Bot" system user.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { type SupabaseClient } from '@supabase/supabase-js'
-import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
-import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { withCron } from '@/lib/api/with-cron'
 
 const log = createLogger('cron:auto-post-market-summary')
 
@@ -47,71 +45,60 @@ interface TopTrader {
   roi_pct: number | null
 }
 
-export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+const handler = withCron('auto-post-market-summary', async (_request: NextRequest) => {
+  const supabase = getSupabaseAdmin()
+
+  // Ensure system user exists
+  await ensureSystemUser(supabase)
+
+  // Check if we already posted today (prevent duplicates)
+  const today = new Date().toISOString().split('T')[0]
+  const { data: existingPost } = await supabase
+    .from('posts')
+    .select('id')
+    .eq('author_id', SYSTEM_USER_ID)
+    .gte('created_at', `${today}T00:00:00Z`)
+    .lt('created_at', `${today}T23:59:59Z`)
+    .limit(1)
+    .maybeSingle()
+
+  if (existingPost) {
+    return { count: 0, skipped: true, reason: 'already posted today' }
   }
 
-  const plog = await PipelineLogger.start('auto-post-market-summary')
+  // Fetch market data
+  const [prices, topPerformers, trendingTraders] = await Promise.all([
+    fetchMarketPrices(supabase),
+    fetchTopPerformers(supabase),
+    fetchTrendingTraders(supabase),
+  ])
 
-  try {
-    const supabase = getSupabaseAdmin()
+  // Generate post content
+  const { title, content } = generateMarketPost(prices, topPerformers, trendingTraders)
 
-    // Ensure system user exists
-    await ensureSystemUser(supabase)
+  // Insert post
+  const { data: post, error: insertError } = await supabase
+    .from('posts')
+    .insert({
+      title,
+      content,
+      author_id: SYSTEM_USER_ID,
+      author_handle: SYSTEM_HANDLE,
+      author_avatar_url: `${BASE_URL}/logo-symbol.png`,
+      poll_enabled: false,
+      hot_score: 50, // Give system posts a baseline hot score
+    })
+    .select('id')
+    .single()
 
-    // Check if we already posted today (prevent duplicates)
-    const today = new Date().toISOString().split('T')[0]
-    const { data: existingPost } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('author_id', SYSTEM_USER_ID)
-      .gte('created_at', `${today}T00:00:00Z`)
-      .lt('created_at', `${today}T23:59:59Z`)
-      .limit(1)
-      .maybeSingle()
-
-    if (existingPost) {
-      await plog.success(0, { skipped: true, reason: 'already posted today' })
-      return NextResponse.json({ ok: true, skipped: true, reason: 'already posted today' })
-    }
-
-    // Fetch market data
-    const [prices, topPerformers, trendingTraders] = await Promise.all([
-      fetchMarketPrices(supabase),
-      fetchTopPerformers(supabase),
-      fetchTrendingTraders(supabase),
-    ])
-
-    // Generate post content
-    const { title, content } = generateMarketPost(prices, topPerformers, trendingTraders)
-
-    // Insert post
-    const { data: post, error: insertError } = await supabase
-      .from('posts')
-      .insert({
-        title,
-        content,
-        author_id: SYSTEM_USER_ID,
-        author_handle: SYSTEM_HANDLE,
-        author_avatar_url: `${BASE_URL}/logo-symbol.png`,
-        poll_enabled: false,
-        hot_score: 50, // Give system posts a baseline hot score
-      })
-      .select('id')
-      .single()
-
-    if (insertError) {
-      throw new Error(`Failed to insert post: ${insertError.message}`)
-    }
-
-    await plog.success(1, { postId: post.id })
-    return NextResponse.json({ ok: true, postId: post.id })
-  } catch (err) {
-    await plog.error(err instanceof Error ? err : new Error(String(err)))
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+  if (insertError) {
+    throw new Error(`Failed to insert post: ${insertError.message}`)
   }
-}
+
+  return { count: 1, postId: post.id }
+})
+
+export const GET = handler
 
 async function ensureSystemUser(supabase: AnySupabase) {
   // Must exist in auth.users first (user_activities trigger has FK to auth.users)
@@ -290,5 +277,5 @@ function generateMarketPost(
 
 // Also support POST for Vercel cron
 export async function POST(request: NextRequest) {
-  return GET(request)
+  return handler(request)
 }

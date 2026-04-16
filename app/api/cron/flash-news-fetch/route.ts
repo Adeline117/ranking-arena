@@ -3,11 +3,10 @@
  * Fetches crypto news from RSS feeds and inserts into flash_news table.
  * Runs every 30 minutes via Vercel cron.
  */
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import logger from '@/lib/logger'
-import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { withCron } from '@/lib/api/with-cron'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -79,73 +78,54 @@ async function fetchRSSFeed(feed: FeedConfig): Promise<{
   }
 }
 
-// Vercel Cron sends GET requests
-export async function GET(req: NextRequest) {
-  return handleFetch(req)
-}
-
-export async function POST(req: NextRequest) {
-  return handleFetch(req)
-}
-
-async function handleFetch(req: NextRequest) {
-  // Auth check (timing-safe)
-  if (!verifyCronSecret(req)) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
+const handler = withCron('flash-news-fetch', async (_req: NextRequest) => {
   const supabase = getSupabaseAdmin()
-  const plog = await PipelineLogger.start('flash-news-fetch')
 
-  try {
-    // Fetch all feeds in parallel
-    const feedResults = await Promise.allSettled(RSS_FEEDS.map(fetchRSSFeed))
-    const rejectedFeeds = feedResults.filter(r => r.status === 'rejected')
-    if (rejectedFeeds.length > 0) {
-      logger.warn(`[flash-news-fetch] ${rejectedFeeds.length}/${feedResults.length} feeds failed: ${rejectedFeeds.map(r => (r as PromiseRejectedResult).reason?.message || String((r as PromiseRejectedResult).reason)).join('; ')}`)
-    }
-    const allItems = feedResults
-      .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchRSSFeed>>> => r.status === 'fulfilled')
-      .flatMap(r => r.value)
-
-    if (allItems.length === 0) {
-      await plog.success(0, { message: 'No items fetched' })
-      return NextResponse.json({ inserted: 0, message: 'No items fetched' })
-    }
-
-    // Deduplicate by checking existing titles from last 24h
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
-    const { data: existing } = await supabase
-      .from('flash_news')
-      .select('title')
-      .gte('published_at', since)
-
-    const existingTitles = new Set((existing || []).map(e => e.title.toLowerCase().trim()))
-    const newItems = allItems.filter(item => !existingTitles.has(item.title.toLowerCase().trim()))
-
-    if (newItems.length === 0) {
-      await plog.success(0, { message: 'All items already exist' })
-      return NextResponse.json({ inserted: 0, message: 'All items already exist' })
-    }
-
-    // Upsert new items — handle race conditions where duplicate titles slip through
-    const { data: inserted, error: insertError } = await supabase
-      .from('flash_news')
-      .upsert(newItems, { onConflict: 'title', ignoreDuplicates: true })
-      .select('id')
-
-    if (insertError) {
-      logger.error('[flash-news-fetch] Insert error:', insertError)
-      await plog.error(new Error(insertError.message))
-      return NextResponse.json({ error: insertError.message }, { status: 500 })
-    }
-
-    logger.info(`[flash-news-fetch] Inserted ${inserted?.length || 0} new flash news items`)
-    await plog.success(inserted?.length || 0, { total_fetched: allItems.length })
-    return NextResponse.json({ inserted: inserted?.length || 0, total_fetched: allItems.length })
-  } catch (err) {
-    logger.error('[flash-news-fetch] Error:', err)
-    await plog.error(err)
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 })
+  // Fetch all feeds in parallel
+  const feedResults = await Promise.allSettled(RSS_FEEDS.map(fetchRSSFeed))
+  const rejectedFeeds = feedResults.filter(r => r.status === 'rejected')
+  if (rejectedFeeds.length > 0) {
+    logger.warn(`[flash-news-fetch] ${rejectedFeeds.length}/${feedResults.length} feeds failed: ${rejectedFeeds.map(r => (r as PromiseRejectedResult).reason?.message || String((r as PromiseRejectedResult).reason)).join('; ')}`)
   }
+  const allItems = feedResults
+    .filter((r): r is PromiseFulfilledResult<Awaited<ReturnType<typeof fetchRSSFeed>>> => r.status === 'fulfilled')
+    .flatMap(r => r.value)
+
+  if (allItems.length === 0) {
+    return { count: 0, message: 'No items fetched' }
+  }
+
+  // Deduplicate by checking existing titles from last 24h
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+  const { data: existing } = await supabase
+    .from('flash_news')
+    .select('title')
+    .gte('published_at', since)
+
+  const existingTitles = new Set((existing || []).map(e => e.title.toLowerCase().trim()))
+  const newItems = allItems.filter(item => !existingTitles.has(item.title.toLowerCase().trim()))
+
+  if (newItems.length === 0) {
+    return { count: 0, message: 'All items already exist' }
+  }
+
+  // Upsert new items
+  const { data: inserted, error: insertError } = await supabase
+    .from('flash_news')
+    .upsert(newItems, { onConflict: 'title', ignoreDuplicates: true })
+    .select('id')
+
+  if (insertError) {
+    logger.error('[flash-news-fetch] Insert error:', insertError)
+    throw new Error(insertError.message)
+  }
+
+  logger.info(`[flash-news-fetch] Inserted ${inserted?.length || 0} new flash news items`)
+  return { count: inserted?.length || 0, total_fetched: allItems.length }
+})
+
+// Vercel Cron sends GET requests
+export const GET = handler
+export async function POST(req: NextRequest) {
+  return handler(req)
 }
