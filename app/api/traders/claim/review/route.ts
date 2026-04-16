@@ -5,65 +5,53 @@
  */
 
 import { NextRequest } from 'next/server'
-import {
-  getSupabaseAdmin,
-  requireAuth,
-  success,
-  handleError,
-  validateString,
-  checkRateLimit,
-  RateLimitPresets,
-} from '@/lib/api'
+import { withAdminAuth } from '@/lib/api/with-admin-auth'
+import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
+import { validateString } from '@/lib/api'
 import { reviewClaim } from '@/lib/data/trader-claims'
 
-export async function POST(request: NextRequest) {
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
-  if (rateLimitResponse) return rateLimitResponse
+export const dynamic = 'force-dynamic'
 
-  try {
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+export async function POST(req: NextRequest) {
+  const handler = withAdminAuth(
+    async ({ admin, supabase }) => {
+      let body: { claimId?: string; approved?: boolean; rejectReason?: string }
+      try {
+        body = await req.json()
+      } catch {
+        throw ApiError.validation('Invalid JSON in request body')
+      }
 
-    // Check admin role
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
+      const claimId = validateString(body.claimId, { required: true, fieldName: 'claimId' })
+      const approved = body.approved === true
+      const rejectReason = body.rejectReason || undefined
 
-    if (!profile || profile.role !== 'admin') {
-      throw ApiError.forbidden('Admin access required')
-    }
+      if (!claimId) {
+        throw ApiError.validation('claimId is required')
+      }
 
-    const body = await request.json()
-    const claimId = validateString(body.claimId, { required: true, fieldName: 'claimId' })
-    const approved = body.approved === true
-    const rejectReason = body.rejectReason || undefined
+      const claim = await reviewClaim(supabase, claimId, admin.id, approved, rejectReason)
 
-    if (!claimId) {
-      throw ApiError.validation('claimId is required')
-    }
+      // If approved, update user_profiles with verified trader info
+      if (approved && claim) {
+        await supabase
+          .from('user_profiles')
+          .update({
+            is_verified_trader: true,
+            verified_trader_id: claim.trader_id,
+            verified_trader_source: claim.source,
+          })
+          .eq('id', claim.user_id)
+      }
 
-    const claim = await reviewClaim(supabase, claimId, user.id, approved, rejectReason)
+      return apiSuccess({
+        claim,
+        message: approved ? 'Claim approved' : 'Claim rejected',
+      })
+    },
+    { name: 'trader-claim-review' }
+  )
 
-    // If approved, update user_profiles with verified trader info
-    if (approved && claim) {
-      await supabase
-        .from('user_profiles')
-        .update({
-          is_verified_trader: true,
-          verified_trader_id: claim.trader_id,
-          verified_trader_source: claim.source,
-        })
-        .eq('id', claim.user_id)
-    }
-
-    return success({
-      claim,
-      message: approved ? 'Claim approved' : 'Claim rejected',
-    })
-  } catch (error: unknown) {
-    return handleError(error, 'claim review')
-  }
+  return handler(req)
 }
