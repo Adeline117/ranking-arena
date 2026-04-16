@@ -105,7 +105,7 @@ export class HtxFuturesConnector extends BaseConnector {
       display_name: (info.nickName as string) || null, avatar_url: (info.avatar as string) || null,
       bio: null, tags: [],
       profile_url: `https://www.htx.com/copy-trading/trader/${traderKey}`,
-      followers: this.num(info.followerCount), copiers: this.num(info.copyCount), aum: null,
+      followers: safeNumber(info.followerCount), copiers: safeNumber(info.copyCount), aum: null,
       updated_at: new Date().toISOString(), last_enriched_at: new Date().toISOString(),
       provenance: { source_platform: 'htx', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
     }
@@ -122,10 +122,10 @@ export class HtxFuturesConnector extends BaseConnector {
     if (!info) return null
 
     const metrics: SnapshotMetrics = {
-      roi: this.num(info.roi), pnl: this.num(info.pnl),
-      win_rate: this.num(info.winRate), max_drawdown: this.num(info.maxDrawdown),
+      roi: safeNumber(info.roi), pnl: safeNumber(info.pnl),
+      win_rate: safeNumber(info.winRate), max_drawdown: safeNumber(info.maxDrawdown),
       sharpe_ratio: null, sortino_ratio: null, trades_count: null,
-      followers: this.num(info.followerCount), copiers: this.num(info.copyCount),
+      followers: safeNumber(info.followerCount), copiers: safeNumber(info.copyCount),
       aum: null, platform_rank: null,
       arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
     }
@@ -183,8 +183,4 @@ export class HtxFuturesConnector extends BaseConnector {
     }
   }
 
-  private num(val: unknown): number | null {
-    if (val === null || val === undefined) return null
-    const n = Number(val); return !Number.isFinite(n) ? null : n
-  }
 }
