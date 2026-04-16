@@ -368,11 +368,11 @@ export const POST = withAuth(async ({ user, supabase, request }) => {
             .update({ mentions: mentionedUsers.map((u: { id: string; handle: string }) => u.handle) })
             .eq('id', post.id)
 
-          // Send mention notifications
-          for (const mentioned of mentionedUsers) {
-            if (mentioned.id === user.id) continue
-            await supabase.from('notifications').insert({
-              user_id: mentioned.id,
+          // Send mention notifications — batch insert (was N+1)
+          const notificationRows = mentionedUsers
+            .filter((m: { id: string }) => m.id !== user.id)
+            .map((m: { id: string }) => ({
+              user_id: m.id,
               type: 'mention',
               title: `${userHandle} mentioned you in a post`,
               message: (title || content).slice(0, 100),
@@ -380,7 +380,9 @@ export const POST = withAuth(async ({ user, supabase, request }) => {
               link: `/post/${post.id}`,
               reference_id: post.id,
               read: false,
-            })
+            }))
+          if (notificationRows.length > 0) {
+            await supabase.from('notifications').insert(notificationRows)
           }
         }
       })(),
