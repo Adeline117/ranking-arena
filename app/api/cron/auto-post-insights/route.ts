@@ -7,13 +7,11 @@
  * Posts as Arena Bot system user.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest } from 'next/server'
 import { type SupabaseClient } from '@supabase/supabase-js'
-import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
-import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { withCron } from '@/lib/api/with-cron'
 
 type AnySupabase = SupabaseClient
 
@@ -23,79 +21,65 @@ export const maxDuration = 60
 const SYSTEM_USER_ID = '00000000-0000-0000-0000-000000000001'
 const SYSTEM_HANDLE = 'arena_bot'
 
-export async function GET(request: NextRequest) {
-  if (!verifyCronSecret(request)) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+export const GET = withCron('auto-post-insights', async (_request: NextRequest) => {
+  const supabase = getSupabaseAdmin()
+
+  // Ensure system user exists in auth.users (user_activities trigger has FK constraint)
+  await ensureSystemUser(supabase)
+
+  // Check if already posted today
+  const today = new Date().toISOString().split('T')[0]
+  const { data: existing } = await supabase
+    .from('posts')
+    .select('id')
+    .eq('author_id', SYSTEM_USER_ID)
+    .eq('author_handle', SYSTEM_HANDLE)
+    .gte('created_at', `${today}T00:00:00Z`)
+    .lt('created_at', `${today}T23:59:59Z`)
+    .limit(2)
+
+  // Allow max 2 auto-posts per day (insights + market summary)
+  if ((existing?.length || 0) >= 2) {
+    return { count: 0, skipped: true, reason: 'already posted twice today' }
   }
 
-  const plog = await PipelineLogger.start('auto-post-insights')
+  // Rotate post types based on day of week
+  const dayOfWeek = new Date().getUTCDay() // 0=Sun, 1=Mon... (UTC for server consistency)
+  const generators = [
+    generateWeeklyRecap,     // 0: Sun
+    generateRankChanges,     // 1: Mon
+    generateExchangeCompare, // 2: Tue
+    generateRankChanges,     // 3: Wed
+    generateDataFact,        // 4: Thu
+    generateRankChanges,     // 5: Fri
+    generateDataFact,        // 6: Sat
+  ]
 
-  try {
-    const supabase = getSupabaseAdmin()
+  const generator = generators[dayOfWeek]
+  const { title, content } = await generator(supabase)
 
-    // Ensure system user exists in auth.users (user_activities trigger has FK constraint)
-    await ensureSystemUser(supabase)
-
-    // Check if already posted today
-    const today = new Date().toISOString().split('T')[0]
-    const { data: existing } = await supabase
-      .from('posts')
-      .select('id')
-      .eq('author_id', SYSTEM_USER_ID)
-      .eq('author_handle', SYSTEM_HANDLE)
-      .gte('created_at', `${today}T00:00:00Z`)
-      .lt('created_at', `${today}T23:59:59Z`)
-      .limit(2)
-
-    // Allow max 2 auto-posts per day (insights + market summary)
-    if ((existing?.length || 0) >= 2) {
-      await plog.success(0, { skipped: true, reason: 'already posted twice today' })
-      return NextResponse.json({ ok: true, skipped: true })
-    }
-
-    // Rotate post types based on day of week
-    const dayOfWeek = new Date().getUTCDay() // 0=Sun, 1=Mon... (UTC for server consistency)
-    const generators = [
-      generateWeeklyRecap,     // 0: Sun
-      generateRankChanges,     // 1: Mon
-      generateExchangeCompare, // 2: Tue
-      generateRankChanges,     // 3: Wed
-      generateDataFact,        // 4: Thu
-      generateRankChanges,     // 5: Fri
-      generateDataFact,        // 6: Sat
-    ]
-
-    const generator = generators[dayOfWeek]
-    const { title, content } = await generator(supabase)
-
-    if (!content) {
-      await plog.success(0, { skipped: true, reason: 'no data for post' })
-      return NextResponse.json({ ok: true, skipped: true, reason: 'no data' })
-    }
-
-    const { data: post, error: insertError } = await supabase
-      .from('posts')
-      .insert({
-        title,
-        content,
-        author_id: SYSTEM_USER_ID,
-        author_handle: SYSTEM_HANDLE,
-        author_avatar_url: `${BASE_URL}/logo-symbol.png`,
-        poll_enabled: false,
-        hot_score: 40,
-      })
-      .select('id')
-      .single()
-
-    if (insertError) throw new Error(`Insert failed: ${insertError.message}`)
-
-    await plog.success(1, { postId: post.id, type: generator.name })
-    return NextResponse.json({ ok: true, postId: post.id, type: generator.name })
-  } catch (err) {
-    await plog.error(err instanceof Error ? err : new Error(String(err)))
-    return NextResponse.json({ error: String(err) }, { status: 500 })
+  if (!content) {
+    return { count: 0, skipped: true, reason: 'no data for post' }
   }
-}
+
+  const { data: post, error: insertError } = await supabase
+    .from('posts')
+    .insert({
+      title,
+      content,
+      author_id: SYSTEM_USER_ID,
+      author_handle: SYSTEM_HANDLE,
+      author_avatar_url: `${BASE_URL}/logo-symbol.png`,
+      poll_enabled: false,
+      hot_score: 40,
+    })
+    .select('id')
+    .single()
+
+  if (insertError) throw new Error(`Insert failed: ${insertError.message}`)
+
+  return { count: 1, postId: post.id, type: generator.name }
+})
 
 // ─── Helpers ───
 
@@ -189,9 +173,6 @@ async function generateExchangeCompare(supabase: AnySupabase): Promise<{ title: 
 
 async function generateDataFact(supabase: AnySupabase): Promise<{ title: string; content: string }> {
   // Count traders by various criteria.
-  // Marketing copy only (AI-generated social post) — approximate counts are
-  // fine. 'estimated' uses pg_class.reltuples which is O(1) and avoids
-  // scanning leaderboard_ranks (~300k rows) three times per post.
   const { count: totalTraders } = await supabase
     .from('leaderboard_ranks')
     .select('*', { count: 'estimated', head: true })
@@ -232,7 +213,6 @@ async function generateWeeklyRecap(supabase: AnySupabase): Promise<{ title: stri
     .order('arena_score', { ascending: false })
     .limit(1)
 
-  // Weekly-recap marketing copy — approximate count is fine (pg_class.reltuples)
   const { count: total } = await supabase
     .from('leaderboard_ranks')
     .select('*', { count: 'estimated', head: true })

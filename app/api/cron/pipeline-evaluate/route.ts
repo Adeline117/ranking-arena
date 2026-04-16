@@ -6,13 +6,16 @@
  *
  * Triggered by: trigger-chain (after compute-leaderboard)
  * Also runs on schedule: every 6h as fallback
+ *
+ * NOTE: Kept as manual pattern (not withCron) because it conditionally
+ * calls plog.partialSuccess() based on evaluation results, which
+ * conflicts with withCron's automatic plog.success() finalization.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { PipelineEvaluator } from '@/lib/harness/pipeline-evaluator'
 import { PipelineState } from '@/lib/services/pipeline-state'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
