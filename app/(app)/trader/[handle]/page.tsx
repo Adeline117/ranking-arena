@@ -343,7 +343,13 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     : Promise.resolve(null as null)
 
   const [detailResult, claimedUserProfile] = await Promise.all([
-    cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch(() => null),
+    cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch((err) => {
+      // Log real fetch failures so they aren't silently masked as "no data".
+      // cachedGetTraderDetail already handles TRADER_DETAIL_NULL internally;
+      // errors reaching here are unexpected (e.g. network/timeout).
+      logger.error('[trader/page] cachedGetTraderDetail unexpected error:', err instanceof Error ? err.message : err)
+      return null
+    }),
     userProfilePromise,
   ])
 
