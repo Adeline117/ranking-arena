@@ -88,8 +88,9 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
   // ============================================
   const { data: expiredSubscriptions } = await supabase
     .from('subscriptions')
-    .select('user_id, stripe_subscription_id')
+    .select('user_id, stripe_subscription_id, plan')
     .eq('status', 'active')
+    .neq('plan', 'lifetime') // Never expire lifetime plans
     .lt('current_period_end', now.toISOString())
 
   if (expiredSubscriptions && expiredSubscriptions.length > 0) {

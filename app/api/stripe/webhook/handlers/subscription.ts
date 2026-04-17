@@ -52,16 +52,26 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
     logger.error('Failed to update subscription status to canceled', { userId: profile.id, error: subError.message })
   }
 
-  const { error: profileError } = await getSupabase()
+  // Only downgrade if the cancelled subscription actually matched the user's active one
+  // AND the user is not a lifetime plan holder
+  const { data: currentProfile } = await getSupabase()
     .from('user_profiles')
-    .update({
-      subscription_tier: 'free',
-      updated_at: new Date().toISOString(),
-    })
+    .select('pro_plan')
     .eq('id', profile.id)
-
-  if (profileError) {
-    logger.error('Failed to downgrade user tier to free', { userId: profile.id, error: profileError.message })
+    .single()
+  if (currentProfile?.pro_plan === 'lifetime') {
+    logger.info('Skipping downgrade for lifetime user on subscription cancel', { userId: profile.id })
+  } else {
+    const { error: profileError } = await getSupabase()
+      .from('user_profiles')
+      .update({
+        subscription_tier: 'free',
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', profile.id)
+    if (profileError) {
+      logger.error('Failed to downgrade user tier to free', { userId: profile.id, error: profileError.message })
+    }
   }
 
   try {
