@@ -3,16 +3,10 @@
  * POST /api/exchange/connect
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import {
-  getSupabaseAdmin,
-  requireAuth,
-  success,
-  handleError,
-  checkRateLimit,
-  RateLimitPresets,
-} from '@/lib/api'
+import { withAuth } from '@/lib/api/middleware'
+import { badRequest, handleError } from '@/lib/api/response'
 import { validateExchangeCredentials, SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
 import { encrypt } from '@/lib/exchange/encryption'
 import { createLogger } from '@/lib/utils/logger'
@@ -30,15 +24,14 @@ const ConnectExchangeSchema = z.object({
   passphrase: z.string().optional().nullable(),
 })
 
-export async function POST(req: NextRequest) {
-  // Rate limit: sensitive operation
-  const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.sensitive)
-  if (rateLimitResponse) return rateLimitResponse
-
-  try {
-    const user = await requireAuth(req)
-    const adminSupabase = getSupabaseAdmin()
-    const body = await req.json()
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
+    }
 
     // Zod 输入验证
     const parsed = ConnectExchangeSchema.safeParse(body)
@@ -53,9 +46,7 @@ export async function POST(req: NextRequest) {
 
     // Bitget 需要 passphrase
     if (exchange === 'bitget' && !passphrase) {
-      const error = new Error('Bitget requires a passphrase') as Error & { statusCode?: number }
-      error.statusCode = 400
-      throw error
+      return badRequest('Bitget requires a passphrase')
     }
 
     // 验证 API 凭证
@@ -65,18 +56,14 @@ export async function POST(req: NextRequest) {
         apiSecret,
         passphrase: passphrase ?? undefined,
       })
-      
+
       if (!isValid) {
-        const error = new Error('Invalid API Key or Secret. Please check your credentials.') as Error & { statusCode?: number }
-        error.statusCode = 400
-        throw error
+        return badRequest('Invalid API Key or Secret. Please check your credentials.')
       }
     } catch (err: unknown) {
-      if (err instanceof Error && 'statusCode' in err && err.statusCode) throw err
       logger.error('验证凭证失败', { error: err, exchange, userId: user.id })
-      const error = new Error(err instanceof Error ? err.message : 'API credential verification failed')
-      ;(error as Error & { statusCode?: number }).statusCode = 400
-      throw error
+      const message = err instanceof Error ? err.message : 'API credential verification failed'
+      return badRequest(message)
     }
 
     // 加密存储凭证
@@ -85,7 +72,7 @@ export async function POST(req: NextRequest) {
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
 
     // 保存或更新连接
-    const { data: existing } = await adminSupabase
+    const { data: existing } = await supabase
       .from('user_exchange_connections')
       .select('id')
       .eq('user_id', user.id)
@@ -102,7 +89,7 @@ export async function POST(req: NextRequest) {
     }
 
     if (existing) {
-      const { error: updateError } = await adminSupabase
+      const { error: updateError } = await supabase
         .from('user_exchange_connections')
         .update(connectionData)
         .eq('id', existing.id)
@@ -111,7 +98,7 @@ export async function POST(req: NextRequest) {
         throw new Error('Failed to update connection')
       }
     } else {
-      const { error: insertError } = await adminSupabase
+      const { error: insertError } = await supabase
         .from('user_exchange_connections')
         .insert({
           user_id: user.id,
@@ -124,10 +111,15 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return success({
-      message: `Successfully connected to ${exchange}. Syncing data...`,
+    return NextResponse.json({
+      success: true,
+      data: {
+        message: `Successfully connected to ${exchange}. Syncing data...`,
+      },
     })
-  } catch (error: unknown) {
-    return handleError(error, 'exchange/connect')
+  },
+  {
+    name: 'exchange-connect',
+    rateLimit: 'sensitive',
   }
-}
+)
