@@ -1,9 +1,8 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { SupabaseClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import logger from '@/lib/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 // 检查用户是否是小组组长（兼容旧数据：admin + 创建者也视为组长）
 async function isGroupOwner(
@@ -34,40 +33,29 @@ async function isGroupOwner(
   return false
 }
 
+/** Extract group id from URL path */
+function extractGroupId(url: string): string {
+  const pathParts = new URL(url).pathname.split('/')
+  const idx = pathParts.indexOf('groups')
+  return pathParts[idx + 1]
+}
+
 // 提交小组信息修改申请
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
-
-  try {
-    const { id: groupId } = await params
-    
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
-    }
+    const groupId = extractGroupId(request.url)
+    const sb = supabase as SupabaseClient
 
     // 只有组长可以提交修改申请
-    if (!await isGroupOwner(supabase, groupId, user.id)) {
+    if (!await isGroupOwner(sb, groupId, user.id)) {
       return NextResponse.json({ error: 'Only the group owner can modify group info' }, { status: 403 })
     }
 
     // 检查是否已有待审核的修改申请
-    const { data: existingApp } = await supabase
+    const { data: existingApp } = await sb
       .from('group_edit_applications')
       .select('id')
       .eq('group_id', groupId)
@@ -116,7 +104,7 @@ export async function POST(
     }
 
     // 创建修改申请
-    const { data: application, error: insertError } = await supabase
+    const { data: application, error: insertError } = await sb
       .from('group_edit_applications')
       .insert({
         group_id: groupId,
@@ -145,43 +133,25 @@ export async function POST(
       message: 'Edit application submitted, pending admin review',
       application
     })
-
-  } catch (error: unknown) {
-    logger.error('Edit apply error:', error)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'groups/edit-apply-post', rateLimit: 'write' }
+)
 
 // 获取小组的修改申请列表（组长可查看）
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const GET = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  try {
-    const { id: groupId } = await params
-    
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
-    }
+    const groupId = extractGroupId(request.url)
+    const sb = supabase as SupabaseClient
 
     // 检查是否是组长
-    if (!await isGroupOwner(supabase, groupId, user.id)) {
+    if (!await isGroupOwner(sb, groupId, user.id)) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
-    const { data: applications, error } = await supabase
+    const { data: applications, error } = await sb
       .from('group_edit_applications')
       .select('id, group_id, applicant_id, name, name_en, description, description_en, avatar_url, rules_json, rules, role_names, is_premium_only, status, reject_reason, reviewed_at, reviewed_by, created_at')
       .eq('group_id', groupId)
@@ -193,9 +163,6 @@ export async function GET(
     }
 
     return NextResponse.json({ applications })
-
-  } catch (error: unknown) {
-    logger.error('Get edit applications error:', error)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'groups/edit-apply-get', rateLimit: 'read' }
+)

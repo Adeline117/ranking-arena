@@ -1,36 +1,23 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createNotification } from '@/lib/data/notifications'
 import logger from '@/lib/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+
+/** Extract group id from URL path */
+function extractGroupId(url: string): string {
+  const pathParts = new URL(url).pathname.split('/')
+  const idx = pathParts.indexOf('groups')
+  return pathParts[idx + 1]
+}
 
 // 管理员/组长向成员发送通知
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
-
-  try {
-    const { id: groupId } = await params
-
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin()
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
-    }
+    const groupId = extractGroupId(request.url)
 
     // 检查操作者权限
     const { data: operatorMember } = await supabase
@@ -45,7 +32,13 @@ export async function POST(
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
-    const body = await request.json()
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+
     const { title, message, target_user_ids } = body as {
       title?: string
       message: string
@@ -83,7 +76,7 @@ export async function POST(
         .eq('group_id', groupId)
         .neq('user_id', user.id)
 
-      memberIds = (allMembers || []).map(m => m.user_id)
+      memberIds = (allMembers || []).map((m: { user_id: string }) => m.user_id)
     }
 
     if (memberIds.length === 0) {
@@ -164,9 +157,6 @@ export async function POST(
       failed: errors.length,
       total: memberIds.length,
     })
-
-  } catch (error: unknown) {
-    logger.error('Group notify error:', error)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'groups/notify', rateLimit: 'write' }
+)

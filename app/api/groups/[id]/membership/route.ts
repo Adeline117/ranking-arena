@@ -1,38 +1,38 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+/** Extract group id from URL path */
+function extractGroupId(url: string): string {
+  const pathParts = new URL(url).pathname.split('/')
+  const idx = pathParts.indexOf('groups')
+  return pathParts[idx + 1]
+}
 
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  try {
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const groupId = extractGroupId(request.url)
+    const sb = supabase as SupabaseClient
+
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-
-    const { id: groupId } = await params
-    const body = await request.json()
     const { action } = body as { action: 'join' | 'leave' }
 
     if (!action || !['join', 'leave'].includes(action)) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
     // Verify group exists
-    const { data: group, error: groupErr } = await supabase
+    const { data: group, error: groupErr } = await sb
       .from('groups')
       .select('id, created_by, is_premium_only, min_arena_score, is_verified_only, dissolved_at')
       .eq('id', groupId)
@@ -50,7 +50,7 @@ export async function POST(
     if (action === 'join') {
       // Check score gate and verified-only restrictions
       if (group.min_arena_score > 0 || group.is_verified_only) {
-        const { data: profile } = await supabase
+        const { data: profile } = await sb
           .from('user_profiles')
           .select('reputation_score, is_verified_trader')
           .eq('id', user.id)
@@ -73,7 +73,7 @@ export async function POST(
       }
 
       // Check if already a member
-      const { data: existing } = await supabase
+      const { data: existing } = await sb
         .from('group_members')
         .select('user_id')
         .eq('group_id', groupId)
@@ -84,7 +84,7 @@ export async function POST(
         return NextResponse.json({ error: 'Already a member' }, { status: 409 })
       }
 
-      const { error: insertErr } = await supabase
+      const { error: insertErr } = await sb
         .from('group_members')
         .insert({ group_id: groupId, user_id: user.id, role: 'member' })
 
@@ -94,13 +94,13 @@ export async function POST(
       }
 
       // Increment count + notify owner (fire-and-forget, don't block response)
-      supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
+      sb.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
         .then(({ error: rpcErr }) => {
           if (rpcErr) logger.error('increment_member_count failed:', rpcErr)
         })
 
       if (group.created_by && group.created_by !== user.id) {
-        supabase.from('notifications').insert({
+        sb.from('notifications').insert({
           user_id: group.created_by,
           type: 'system',
           title: 'New member joined',
@@ -122,7 +122,7 @@ export async function POST(
         return NextResponse.json({ error: 'Owner cannot leave the group' }, { status: 403 })
       }
 
-      const { error: deleteErr } = await supabase
+      const { error: deleteErr } = await sb
         .from('group_members')
         .delete()
         .eq('group_id', groupId)
@@ -134,15 +134,15 @@ export async function POST(
       }
 
       // Decrement count (fire-and-forget)
-      supabase.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 })
+      sb.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 })
         .then(({ error: rpcErr }) => {
           if (rpcErr) logger.error('decrement_member_count failed:', rpcErr)
         })
 
       return NextResponse.json({ success: true, action: 'left' })
     }
-  } catch (err) {
-    logger.error('Membership API error:', err)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+  },
+  { name: 'groups/membership', rateLimit: 'write' }
+)
