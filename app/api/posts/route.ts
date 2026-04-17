@@ -390,9 +390,9 @@ export const POST = withAuth(async ({ user, supabase, request }) => {
     )
   }
 
-  // 创建帖子后清除相关缓存（await Redis to avoid race with next GET）
+  // 创建帖子后清除相关缓存
   deleteServerCacheByPrefix(POSTS_CACHE_PREFIX)
-  await cacheDel('hot_posts:top50').catch(() => {})
+  fireAndForget(cacheDel('hot_posts:top50'), 'delete-hot-posts-cache')
 
   return success({ post }, 201)
 }, { name: 'posts-create', rateLimit: 'write' })
