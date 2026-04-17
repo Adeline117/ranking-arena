@@ -3,52 +3,35 @@
  * POST: Disable 2FA with password confirmation
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
-import logger from '@/lib/logger'
+import { withAuth } from '@/lib/api/middleware'
+import { badRequest, serverError } from '@/lib/api/response'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('2fa-disable')
 
 export const dynamic = 'force-dynamic'
 
-interface DisableRequestBody {
-  password: string
-}
-
-export async function POST(request: NextRequest) {
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
-    if (rateLimitResponse) return rateLimitResponse
-
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    let body: { password?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
     }
 
-    // CSRF validation
-    const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
-    const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
-    if (!validateCsrfToken(cookieToken, headerToken)) {
-      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-    }
-
-    const supabase = getSupabaseAdmin()
-
-    const body = (await request.json()) as DisableRequestBody
     const { password } = body
 
     if (!password || typeof password !== 'string') {
-      return NextResponse.json({ error: 'Password is required' }, { status: 400 })
+      return badRequest('Password is required')
     }
 
     // Verify the user's password by attempting sign-in
     const userEmail = user.email
     if (!userEmail) {
-      return NextResponse.json(
-        { error: 'No email associated with this account' },
-        { status: 400 }
-      )
+      return badRequest('No email associated with this account')
     }
 
     const verifyClient = createClient(
@@ -75,11 +58,11 @@ export async function POST(request: NextRequest) {
 
     if (profileError || !profile) {
       logger.error('[2FA Disable] Profile fetch error:', profileError)
-      return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
+      return serverError('Failed to fetch user profile')
     }
 
     if (!profile.totp_enabled) {
-      return NextResponse.json({ error: '2FA is not enabled' }, { status: 400 })
+      return badRequest('2FA is not enabled')
     }
 
     // Disable 2FA: set enabled to false and delete secret from secure table
@@ -90,7 +73,7 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       logger.error('[2FA Disable] Update error:', updateError)
-      return NextResponse.json({ error: 'Failed to disable 2FA' }, { status: 500 })
+      return serverError('Failed to disable 2FA')
     }
 
     // Delete all backup codes for this user
@@ -105,8 +88,9 @@ export async function POST(request: NextRequest) {
     }
 
     return NextResponse.json({ success: true })
-  } catch (error: unknown) {
-    logger.error('[2FA Disable] Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  },
+  {
+    name: '2fa-disable',
+    rateLimit: 'sensitive',
   }
-}
+)

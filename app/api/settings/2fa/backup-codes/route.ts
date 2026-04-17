@@ -4,26 +4,18 @@
  * (Changed from GET to POST — regenerating security credentials is a mutation)
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import logger from '@/lib/logger'
+import { withAuth } from '@/lib/api/middleware'
+import { serverError } from '@/lib/api/response'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('2fa-backup-codes')
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
-    if (rateLimitResponse) return rateLimitResponse
-
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
-    const supabase = getSupabaseAdmin()
-
+export const POST = withAuth(
+  async ({ user, supabase }) => {
     // Check that 2FA is enabled
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
@@ -33,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     if (profileError || !profile) {
       logger.error('[2FA Backup Codes] Profile fetch error:', profileError)
-      return NextResponse.json({ error: 'Failed to fetch user profile' }, { status: 500 })
+      return serverError('Failed to fetch user profile')
     }
 
     if (!profile.totp_enabled) {
@@ -59,7 +51,7 @@ export async function POST(request: NextRequest) {
 
     if (deleteError) {
       logger.error('[2FA Backup Codes] Delete old codes error:', deleteError)
-      return NextResponse.json({ error: 'Failed to regenerate backup codes' }, { status: 500 })
+      return serverError('Failed to regenerate backup codes')
     }
 
     // Insert new hashed codes
@@ -69,15 +61,16 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       logger.error('[2FA Backup Codes] Insert error:', insertError)
-      return NextResponse.json({ error: 'Failed to store new backup codes' }, { status: 500 })
+      return serverError('Failed to store new backup codes')
     }
 
     return NextResponse.json({
       success: true,
       backupCodes,
     })
-  } catch (error: unknown) {
-    logger.error('[2FA Backup Codes] Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  },
+  {
+    name: '2fa-backup-codes',
+    rateLimit: 'sensitive',
   }
-}
+)
