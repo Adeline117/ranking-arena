@@ -940,6 +940,23 @@
     backdrop-filter: none !important;
     -webkit-backdrop-filter: none !important;
   }
+
+  /* Mobile: reduced-transparency fallback for always-on elements.
+     backdrop-filter is expensive on mid-range Android GPUs.
+     The bottom nav and scrolled top-nav blur every frame. */
+  @media (prefers-reduced-transparency: reduce) {
+    .mobile-bottom-nav {
+      background: var(--color-bg-primary) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+
+    .glass-card {
+      background: var(--color-bg-secondary) !important;
+      backdrop-filter: none !important;
+      -webkit-backdrop-filter: none !important;
+    }
+  }
 }
 
 /* ============================================
