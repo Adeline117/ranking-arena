@@ -41,11 +41,16 @@ export default function MessageButton({
   const { mutate, isLoading } = useApiMutation<StartMessageResponse, void>(
     async () => {
       // Get fresh access token for auth
-       
       const { data: sessionData } = await supabase.auth.getSession()
       const token = sessionData.session?.access_token
-      const headers: Record<string, string> = {}
-      if (token) headers['Authorization'] = `Bearer ${token}`
+      if (!token) {
+        // Session expired — return structured error so onError can handle it
+        return {
+          success: false,
+          error: { code: 'UNAUTHORIZED', message: t('loginExpiredPleaseRelogin') || '登录已过期，请重新登录' },
+        }
+      }
+      const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` }
 
       return apiRequest<StartMessageResponse>('/api/messages/start', {
         method: 'POST',
@@ -65,14 +70,19 @@ export default function MessageButton({
         }
       },
       onError: (error) => {
-        if (error.message === '该用户已关闭私信功能' || error.message === 'User has disabled direct messages') {
+        if (error.code === 'UNAUTHORIZED') {
+          showToast(t('loginExpiredPleaseRelogin') || '登录已过期，请重新登录', 'error')
+          openLoginModal(t('pleaseLogin'))
+        } else if (error.message?.includes('disabled direct messages') || error.message?.includes('关闭私信')) {
           showToast(t('userDmDisabled'), 'warning')
-        } else if (error.limitReached) {
+        } else if (error.limitReached || error.code === 'PERMISSION_DENIED') {
           showToast(t('msgLimitReached'), 'warning')
+        } else {
+          showToast(error.message || t('unexpectedError'), 'error')
         }
       },
       showToast: false,
-      retryCount: 1,
+      retryCount: 0, // Don't retry auth errors — show login prompt instead
     }
   )
 

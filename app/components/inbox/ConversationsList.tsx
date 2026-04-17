@@ -12,6 +12,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import CreateGroupModal from '@/app/components/features/CreateGroupModal'
 import { logger } from '@/lib/logger'
+import { getCsrfHeaders } from '@/lib/api/client'
 import { Skeleton, SkeletonAvatar } from '@/app/components/ui/Skeleton'
 
 type GroupChannel = {
@@ -232,7 +233,7 @@ export default function ConversationsList(): React.ReactElement {
       const headers = await getAuthHeadersAsync()
       const res = await fetch(`/api/chat/${conversationId}/settings`, {
         method: 'PATCH',
-        headers: { ...headers, 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ cleared_before: new Date().toISOString() }),
       })
       if (res.ok) {
