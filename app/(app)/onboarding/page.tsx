@@ -70,7 +70,7 @@ export default function OnboardingPage() {
       const res = await fetch('/api/sidebar/top-traders')
       const data = await res.json()
       setTraders(data.traders || [])
-    } catch { logger.error('Failed to fetch traders') }
+    } catch (err) { logger.error('Failed to fetch traders', err) }
     finally { setLoadingTraders(false) }
   }, [])
 
@@ -81,7 +81,7 @@ export default function OnboardingPage() {
       const data = await res.json()
       const raw = data.data?.groups || data.data || data.groups || []
       setGroups(Array.isArray(raw) ? raw : [])
-    } catch { logger.error('Failed to fetch groups') }
+    } catch (err) { logger.error('Failed to fetch groups', err) }
     finally { setLoadingGroups(false) }
   }, [])
 
