@@ -3,48 +3,37 @@
  * POST /api/tip - 给帖子打赏
  */
 
-import { NextRequest } from 'next/server'
-import {
-  getSupabaseAdmin,
-  requireAuth,
-  success,
-  error,
-  handleError,
-  validateString,
-  checkRateLimit,
-  RateLimitPresets,
-} from '@/lib/api'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
+import { badRequest, serverError } from '@/lib/api/response'
+import { validateString } from '@/lib/api/validation'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('tip-api')
 
 export const runtime = 'nodejs'
 
-export async function POST(request: NextRequest) {
-  // 敏感操作限流：每分钟 10 次
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
-  if (rateLimitResponse) return rateLimitResponse
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
+    }
 
-  try {
-    // 验证用户身份
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin() as SupabaseClient
-    
-    const body = await request.json()
-
-    const post_id = validateString(body.post_id, { 
-      required: true, 
-      fieldName: 'post_id' 
+    const post_id = validateString(body.post_id, {
+      required: true,
+      fieldName: 'post_id'
     })
     const amount_cents = Number(body.amount_cents ?? 100)
 
     if (!post_id) {
-      return error('Missing post_id parameter', 400)
+      return badRequest('Missing post_id parameter')
     }
 
     if (amount_cents <= 0 || amount_cents > 100000) {
-      return error('Invalid tip amount', 400)
+      return badRequest('Invalid tip amount')
     }
 
     // 检查帖子是否存在
@@ -55,12 +44,15 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (!post) {
-      return error('Post not found', 404)
+      return NextResponse.json(
+        { success: false, error: { code: 'NOT_FOUND', message: 'Post not found' } },
+        { status: 404 }
+      )
     }
 
     // 不能给自己的帖子打赏
     if (post.author_id === user.id) {
-      return error('Cannot tip your own post', 400)
+      return badRequest('Cannot tip your own post')
     }
 
     // 写入 gifts 表
@@ -73,11 +65,16 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       logger.error('Insert error', { error: insertError, postId: post_id, userId: user.id, amountCents: amount_cents })
-      return error('Tip failed: ' + insertError.message, 500)
+      return serverError('Tip failed: ' + insertError.message)
     }
 
-    return success({ message: 'Tip successful' })
-  } catch (e: unknown) {
-    return handleError(e, 'tip POST')
+    return NextResponse.json({
+      success: true,
+      data: { message: 'Tip successful' },
+    })
+  },
+  {
+    name: 'tip',
+    rateLimit: 'sensitive',
   }
-}
+)
