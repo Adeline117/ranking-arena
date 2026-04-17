@@ -6,37 +6,36 @@
  * Requires password confirmation.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
+import { success, badRequest, forbidden } from '@/lib/api/response'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@supabase/supabase-js'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { env } from '@/lib/env'
-import logger from '@/lib/logger'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('account-delete')
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
+export const POST = withAuth(async ({ user, supabase: sb, request }) => {
+  const supabase = sb as SupabaseClient
+
+  let body: { password?: string; reason?: string }
   try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
-    if (rateLimitResponse) return rateLimitResponse
+    body = await request.json()
+  } catch {
+    return badRequest('Invalid JSON body')
+  }
 
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const { password, reason } = body
 
-    const body = await request.json()
-    const { password, reason } = body as { password?: string; reason?: string }
+  if (!password) {
+    return badRequest('Password required')
+  }
 
-    if (!password) {
-      return NextResponse.json({ error: 'Password required' }, { status: 400 })
-    }
-
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    // Verify password by attempting sign-in
+  // Verify password by attempting sign-in
     const anonClient = createClient(
       env.NEXT_PUBLIC_SUPABASE_URL,
       env.NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -47,7 +46,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (signInError) {
-      return NextResponse.json({ error: 'Invalid password', code: 'INVALID_PASSWORD' }, { status: 403 })
+      return forbidden('Invalid password')
     }
 
     // Get current profile info for recovery
@@ -139,13 +138,12 @@ export async function POST(request: NextRequest) {
       ban_duration: '876000h',
     })
 
+    logger.info('Account deletion scheduled', { userId: user.id })
+
+    // Backward-compatible response shape
     return NextResponse.json({
       success: true,
       deletion_scheduled_at: scheduledDeletion.toISOString(),
       message: 'Account marked for deletion, recoverable within 30 days',
     })
-  } catch (error: unknown) {
-    logger.error('[account/delete] Error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+}, { name: 'account-delete', rateLimit: 'sensitive', skipCsrf: true })

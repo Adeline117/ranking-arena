@@ -10,10 +10,13 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import { withPublic } from '@/lib/api/middleware'
+import { badRequest, notFound, serverError } from '@/lib/api/response'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import logger from '@/lib/logger'
+import { createLogger } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
+
+const logger = createLogger('users-follow')
 
 export const dynamic = 'force-dynamic'
 
@@ -28,7 +31,7 @@ type FollowingRow = {
 }
 
 async function fetchFollowStatus(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseClient,
   requesterId: string,
   userIds: string[]
 ): Promise<Record<string, boolean>> {
@@ -48,7 +51,7 @@ async function fetchFollowStatus(
 }
 
 async function getFollowersList(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseClient,
   targetUser: { id: string; show_followers?: boolean },
   requesterId: string | null
 ) {
@@ -80,8 +83,8 @@ async function getFollowersList(
     if (followersError.message?.includes('Could not find')) {
       return NextResponse.json({ followers: [], count: 0 })
     }
-    logger.dbError('Fetch followers', followersError, { targetUserId: targetUser.id })
-    return NextResponse.json({ error: 'Failed to fetch followers' }, { status: 500 })
+    logger.error('Fetch followers failed', { error: followersError, targetUserId: targetUser.id })
+    return serverError('Failed to fetch followers')
   }
 
   let followStatus: Record<string, boolean> = {}
@@ -110,7 +113,7 @@ async function getFollowersList(
 }
 
 async function getFollowingList(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseClient,
   targetUser: { id: string; show_following?: boolean },
   requesterId: string | null
 ) {
@@ -142,8 +145,8 @@ async function getFollowingList(
     if (followingError.message?.includes('Could not find')) {
       return NextResponse.json({ following: [], count: 0 })
     }
-    logger.dbError('Fetch following', followingError, { targetUserId: targetUser.id })
-    return NextResponse.json({ error: 'Failed to fetch following list' }, { status: 500 })
+    logger.error('Fetch following failed', { error: followingError, targetUserId: targetUser.id })
+    return serverError('Failed to fetch following list')
   }
 
   let followStatus: Record<string, boolean> = {}
@@ -178,25 +181,22 @@ export async function GET(
   const guard = socialFeatureGuard()
   if (guard) return guard
 
-  try {
-    const resolvedParams = await Promise.resolve(params)
-    const handle = resolvedParams.handle
+  const resolvedParams = await Promise.resolve(params)
+  const handle = resolvedParams.handle
 
-    if (!handle) {
-      return NextResponse.json({ error: 'Missing handle' }, { status: 400 })
-    }
+  if (!handle) {
+    return badRequest('Missing handle')
+  }
 
-    const supabase = getSupabaseAdmin() as SupabaseClient
+  // Delegate to withPublic-wrapped handler with captured handle
+  const handler = withPublic(async ({ user, supabase: sb }) => {
+    const supabase = sb as SupabaseClient
     const searchParams = request.nextUrl.searchParams
     const list = searchParams.get('list') // 'followers' | 'following'
-    // Derive requesterId from auth token, not query params (prevents IDOR)
-    const authUser = await getAuthUser(request)
-    const requesterId = authUser?.id ?? null
+    // Derive requesterId from auth token (middleware provides user if auth header present)
+    const requesterId = user?.id ?? null
 
     // Fetch cached follower/following counts directly from user_profiles.
-    // These columns are kept in sync by updateFollowCounts() in
-    // app/api/users/follow/route.ts after every follow/unfollow write,
-    // so we don't need to re-count user_follows on every read.
     const { data: targetUser, error: userError } = await supabase
       .from('user_profiles')
       .select('id, handle, show_followers, show_following, follower_count, following_count')
@@ -204,7 +204,7 @@ export async function GET(
       .maybeSingle()
 
     if (userError || !targetUser) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+      return notFound('User not found')
     }
 
     if (list === 'followers') {
@@ -214,13 +214,12 @@ export async function GET(
       return getFollowingList(supabase, targetUser, requesterId)
     }
 
-    // Default: return both counts — served from the cached columns
+    // Default: return both counts -- served from the cached columns
     return NextResponse.json({
       followers_count: targetUser.follower_count ?? 0,
       following_count: targetUser.following_count ?? 0,
     })
-  } catch (error: unknown) {
-    logger.apiError('/api/users/[handle]/follow', error, { handle: (await params).handle })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+  }, { name: 'users-follow', rateLimit: 'public', readsAuth: true })
+
+  return handler(request)
 }
