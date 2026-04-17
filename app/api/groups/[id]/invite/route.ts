@@ -1,10 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 import { logger } from '@/lib/logger'
 import { createLogger } from '@/lib/utils/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'
-import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 const log = createLogger('api:group-invite')
@@ -59,8 +58,6 @@ function getInviteSecret(): string {
   return _cachedInviteSecret
 }
 
-type RouteContext = { params: Promise<{ id: string }> }
-
 function generateInviteToken(groupId: string, expiresAt: number): string {
   const payload = `${groupId}:${expiresAt}`
   // Full 64-char hex HMAC-SHA256 (was truncated to 16 hex / 64 bits)
@@ -103,28 +100,20 @@ export function verifyInviteToken(token: string): { groupId: string; valid: bool
   }
 }
 
+/** Extract group id from URL path */
+function extractGroupId(url: string): string {
+  const pathParts = new URL(url).pathname.split('/')
+  const idx = pathParts.indexOf('groups')
+  return pathParts[idx + 1]
+}
+
 // GET: Verify invite token (auth required — see security note below)
-export async function GET(request: NextRequest, context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const GET = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  // Rate-limit verify hits per IP — defense in depth alongside auth check.
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.read)
-  if (rateLimitResp) return rateLimitResp
-
-  // SECURITY (2026-04-09, audit P0-SEC-3):
-  // Require authenticated user to verify an invite. Previously this endpoint
-  // was unauthenticated AND incremented used_count, so anyone holding a
-  // valid token could burn the 50-use limit in a second via curl. The
-  // frontend (app/(app)/groups/[id]/page.tsx:395) only calls verify when
-  // userId is set (logged in), so adding auth here doesn't change the UX.
-  const user = await getAuthUser(request)
-  if (!user) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
-
-  try {
-    const { id: groupId } = await context.params
+    const groupId = extractGroupId(request.url)
     const { searchParams } = new URL(request.url)
     const token = searchParams.get('verify')
 
@@ -138,10 +127,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     // Check usage limits in group_invites table
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const sb = supabase as SupabaseClient
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
 
-    const { data: invite } = await supabase
+    const { data: invite } = await sb
       .from('group_invites')
       .select('id, used_count, max_uses')
       .eq('token_hash', tokenHash)
@@ -154,45 +143,28 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
       // Increment used_count — now safe because endpoint requires auth +
       // is rate-limited per IP. Burnout-attack vector closed.
-      await supabase
+      await sb
         .from('group_invites')
         .update({ used_count: invite.used_count + 1 })
         .eq('id', invite.id)
     }
 
     return NextResponse.json({ success: true, valid: true })
-  } catch (error) {
-    log.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'group-invite-verify', rateLimit: 'read' }
+)
 
 // POST: Generate invite link
-export async function POST(request: NextRequest, context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
-
-  try {
-    const { id: groupId } = await context.params
-
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader?.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Not logged in' }, { status: 401 })
-    }
-
-    const token = authHeader.slice(7)
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
-    }
+    const groupId = extractGroupId(request.url)
+    const sb = supabase as SupabaseClient
 
     // Check requester is owner/admin
-    const { data: membership } = await supabase
+    const { data: membership } = await sb
       .from('group_members')
       .select('role')
       .eq('group_id', groupId)
@@ -207,7 +179,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // KEEP 'exact' — rate-limit enforcement, scoped per-user + 1h
     // window. Must be accurate to block the 11th invite.
     const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    const { count: recentInviteCount } = await supabase
+    const { count: recentInviteCount } = await sb
       .from('group_invites')
       .select('id', { count: 'exact', head: true })
       .eq('created_by', user.id)
@@ -222,7 +194,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const inviteToken = generateInviteToken(groupId, expiresAt)
 
     // Track invite in group_invites table
-    await supabase.from('group_invites').insert({
+    await sb.from('group_invites').insert({
       group_id: groupId,
       created_by: user.id,
       token_hash: crypto.createHash('sha256').update(inviteToken).digest('hex'),
@@ -238,8 +210,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       invite_url: inviteUrl,
       expires_at: new Date(expiresAt).toISOString(),
     })
-  } catch (error: unknown) {
-    logger.apiError('/api/groups/[id]/invite', error, {})
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'group-invite-create', rateLimit: 'write' }
+)
