@@ -56,12 +56,28 @@ jest.mock('@/lib/supabase/server', () => ({
   })),
 }))
 
+// Mock middleware to pass through — the search route now uses withAuth
+jest.mock('@/lib/api/middleware', () => ({
+  withAuth: (handler: Function) => async (req: unknown, ctx: unknown) => {
+    const { getAuthUser: gau, getSupabaseAdmin: gsa } = require('@/lib/supabase/server')
+    const user = await gau(req)
+    if (!user) {
+      const { NextResponse: NR } = require('next/server')
+      return NR.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    return handler({ user, supabase: gsa(), request: req, version: { current: 'v1' } }, ctx)
+  },
+  withPublic: (handler: Function) => handler,
+}))
+
 import { getAuthUser } from '@/lib/supabase/server'
 
 const mockGetAuthUser = getAuthUser as jest.MockedFunction<typeof getAuthUser>
 
 function createRequest(url: string, options: RequestInit = {}): NextRequest {
-  return new NextRequest(new URL(url, 'http://localhost:3000'), options)
+  const headers = new Headers(options.headers)
+  if (!headers.has('User-Agent')) headers.set('User-Agent', 'Jest Test Runner')
+  return new NextRequest(new URL(url, 'http://localhost:3000'), { ...options, headers })
 }
 
 describe('Chat Settings API', () => {

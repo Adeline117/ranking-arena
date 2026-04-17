@@ -109,6 +109,12 @@ jest.mock('@/lib/supabase/server', () => ({
   })),
 }))
 
+// Mock extractUserFromRequest — the route uses this instead of direct supabase.auth.getUser
+const mockExtractUser = jest.fn()
+jest.mock('@/lib/auth/extract-user', () => ({
+  extractUserFromRequest: (...args: unknown[]) => mockExtractUser(...args),
+}))
+
 // Also mock createClient for the cookie-auth fallback path in the route
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
@@ -132,6 +138,7 @@ describe('POST /api/stripe/create-checkout', () => {
     jest.clearAllMocks()
     mockCheckRateLimit.mockResolvedValue(null)
     mockGetUser.mockResolvedValue({ data: { user: validUser }, error: null })
+    mockExtractUser.mockResolvedValue({ user: validUser, error: null })
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_test123')
     mockCreateCheckoutSession.mockResolvedValue({ url: 'https://checkout.stripe.com/session', id: 'cs_test123' })
     // Reset env mock
@@ -182,6 +189,7 @@ describe('POST /api/stripe/create-checkout', () => {
 
   it('returns 401 when auth token is invalid', async () => {
     mockGetUser.mockResolvedValue({ data: { user: null }, error: { message: 'Invalid token' } })
+    mockExtractUser.mockResolvedValue({ user: null, error: 'Invalid token' })
 
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
@@ -197,6 +205,7 @@ describe('POST /api/stripe/create-checkout', () => {
 
   it('returns 401 when no auth header and cookie auth fails', async () => {
     mockGetUser.mockResolvedValue({ data: { user: null }, error: { message: 'No session' } })
+    mockExtractUser.mockResolvedValue({ user: null, error: 'No session' })
 
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
