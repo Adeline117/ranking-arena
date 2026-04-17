@@ -501,8 +501,8 @@ export async function fetchHyperliquidStatsDetail(
           body: { type: 'clearinghouseState', user: address },
           timeoutMs: 10000,
         }
-      ).catch(() => null),
-      fetchHyperliquidFills(address).catch(() => [] as HyperliquidFill[]),
+      ).catch((err) => { logger.warn(`[enrichment-dex] Hyperliquid clearinghouseState failed for ${address}:`, err instanceof Error ? err.message : String(err)); return null }),
+      fetchHyperliquidFills(address).catch((err) => { logger.warn(`[enrichment-dex] Hyperliquid fills failed for ${address}:`, err instanceof Error ? err.message : String(err)); return [] as HyperliquidFill[] }),
     ])
     
     const state = results[0].status === 'fulfilled' ? results[0].value : null

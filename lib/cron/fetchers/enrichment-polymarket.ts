@@ -110,19 +110,19 @@ export async function fetchPolymarketStatsDetail(
       fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/v1/leaderboard?timePeriod=ALL&user=${traderId}&limit=1`,
         { timeoutMs: 10000 }
-      ).catch(() => null),
+      ).catch((err) => { logger.warn(`[polymarket] leaderboard ALL fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null }),
       fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/v1/leaderboard?timePeriod=MONTH&user=${traderId}&limit=1`,
         { timeoutMs: 10000 }
-      ).catch(() => null),
+      ).catch((err) => { logger.warn(`[polymarket] leaderboard MONTH fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null }),
       fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/positions?user=${traderId}&limit=500`,
         { timeoutMs: 10000 }
-      ).catch(() => null),
+      ).catch((err) => { logger.warn(`[polymarket] positions fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null }),
       fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/closed-positions?user=${traderId}&limit=500`,
         { timeoutMs: 10000 }
-      ).catch(() => null),
+      ).catch((err) => { logger.warn(`[polymarket] closed-positions fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null }),
     ])
 
     const entry = Array.isArray(lbAll) && lbAll.length > 0 ? lbAll[0] : null
@@ -174,7 +174,7 @@ export async function fetchPolymarketStatsDetail(
         const actData = await fetchJson<Array<Record<string, unknown>>>(
           `${DATA_API}/activity?user=${traderId}&limit=500&offset=${actOffset}&start=${startTs90d}`,
           { timeoutMs: 15000 }
-        ).catch(() => null)
+        ).catch((err) => { logger.warn(`[polymarket] activity fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null })
         if (!Array.isArray(actData) || actData.length === 0) break
         allActivity.push(...actData)
         if (actData.length < 500) break
