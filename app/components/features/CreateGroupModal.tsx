@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type UserResult = {
   id: string
@@ -120,7 +121,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
     try {
       const res = await globalThis.fetch('/api/channels', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}`, ...getCsrfHeaders() },
         body: JSON.stringify({
           name: groupName.trim(),
           description: description.trim() || undefined,

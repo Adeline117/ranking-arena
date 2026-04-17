@@ -360,7 +360,7 @@ export default function ChatSearchOverlay({
               cursor: 'pointer',
               textAlign: 'left',
               transition: 'background 0.15s',
-              borderLeft: index === currentIndex ? '3px solid ${tokens.colors.accent.brandHover}' : '3px solid transparent',
+              borderLeft: index === currentIndex ? `3px solid ${tokens.colors.accent.brandHover}` : '3px solid transparent',
             }}
             onMouseEnter={(e) => {
               if (index !== currentIndex) e.currentTarget.style.background = tokens.colors.bg.secondary
