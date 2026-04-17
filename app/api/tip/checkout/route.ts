@@ -3,13 +3,14 @@
  * POST /api/tip/checkout - 创建打赏支付会话
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import logger from '@/lib/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { withAuth } from '@/lib/api/middleware'
+import { badRequest, serverError } from '@/lib/api/response'
+import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
+
+const logger = createLogger('tip-checkout')
 
 export const dynamic = 'force-dynamic'
 
@@ -26,40 +27,29 @@ function getStripe(): Stripe {
 // 打赏金额选项（美分）
 const _TIP_AMOUNTS = [100, 300, 500, 1000, 2000, 5000] // $1, $3, $5, $10, $20, $50
 
-export async function POST(request: NextRequest) {
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.sensitive)
-  if (rateLimitResp) return rateLimitResp
-
-  try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
-    
-    // 验证用户
-    const { user, error: authError } = await (await import('@/lib/auth/extract-user')).extractUserFromRequest(request)
-
-    if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Session expired, please log in again' },
-        { status: 401 }
-      )
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
     }
 
-    const body = await request.json()
-    const { post_id, amount_cents, message } = body
+    const { post_id, amount_cents, message } = body as {
+      post_id?: string
+      amount_cents?: number
+      message?: string
+    }
 
     // 验证参数
     if (!post_id) {
-      return NextResponse.json(
-        { error: 'Missing post_id parameter' },
-        { status: 400 }
-      )
+      return badRequest('Missing post_id parameter')
     }
 
     const amount = Number(amount_cents)
     if (!amount || amount < 100 || amount > 50000) {
-      return NextResponse.json(
-        { error: 'Invalid tip amount ($1 - $500)' },
-        { status: 400 }
-      )
+      return badRequest('Invalid tip amount ($1 - $500)')
     }
 
     // Idempotency check: prevent duplicate tips within 60 seconds
@@ -96,10 +86,7 @@ export async function POST(request: NextRequest) {
 
     // 不能给自己打赏
     if (post.author_id === user.id) {
-      return NextResponse.json(
-        { error: 'Cannot tip your own post' },
-        { status: 400 }
-      )
+      return badRequest('Cannot tip your own post')
     }
 
     const stripe = getStripe()
@@ -134,7 +121,7 @@ export async function POST(request: NextRequest) {
         from_user_id: user.id,
         to_user_id: post.author_id,
         amount_cents: amount,
-        message: message?.slice(0, 200) || null,
+        message: typeof message === 'string' ? message.slice(0, 200) : null,
         status: 'pending',
       })
       .select('id')
@@ -142,10 +129,7 @@ export async function POST(request: NextRequest) {
 
     if (tipError) {
       logger.error('[Tip Checkout] Insert error:', tipError)
-      return NextResponse.json(
-        { error: 'Failed to create tip record' },
-        { status: 500 }
-      )
+      return serverError('Failed to create tip record')
     }
 
     // 创建 Stripe Checkout Session（一次性支付）
@@ -189,21 +173,9 @@ export async function POST(request: NextRequest) {
       sessionId: session.id,
       url: session.url,
     })
-  } catch (error: unknown) {
-    logger.error('[Tip Checkout] Error:', error)
-    
-    const message = error instanceof Error ? error.message : 'Internal server error'
-    
-    if (message.includes('STRIPE_SECRET_KEY')) {
-      return NextResponse.json(
-        { error: 'Payment system not configured, please contact admin' },
-        { status: 503 }
-      )
-    }
-    
-    return NextResponse.json(
-      { error: message },
-      { status: 500 }
-    )
+  },
+  {
+    name: 'tip-checkout',
+    rateLimit: 'sensitive',
   }
-}
+)
