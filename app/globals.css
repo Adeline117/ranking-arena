@@ -1308,6 +1308,38 @@ select:focus-visible {
   }
 }
 
+/* Disable backdrop-filter for users who prefer reduced transparency.
+   On mid-range Android devices, backdrop-filter causes GPU jank (compositing
+   every frame for blur). Fall back to solid opaque backgrounds. */
+@media (prefers-reduced-transparency: reduce) {
+  .glass-card,
+  .onboarding-card,
+  .mobile-bottom-nav,
+  .top-nav.scrolled,
+  [style*="backdrop-filter"],
+  [style*="backdropFilter"] {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+  }
+
+  /* Solid fallbacks so UI stays readable without blur */
+  .glass-card {
+    background: var(--color-bg-secondary) !important;
+  }
+
+  .mobile-bottom-nav {
+    background: var(--color-bg-primary) !important;
+  }
+
+  .top-nav.scrolled {
+    background: var(--color-bg-primary) !important;
+  }
+
+  .onboarding-card {
+    background: var(--color-bg-secondary) !important;
+  }
+}
+
 /* Sidebar sections - independent layout contexts */
 .home-left-section,
 .home-right-section {
