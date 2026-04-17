@@ -12,6 +12,73 @@ import React, { useState, useRef, useEffect, useCallback, useId } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useKeyboardNavigation } from '@/lib/hooks/useKeyboardNavigation'
 
+/* ── Module-level style constants ──
+   Avoids recreating size/style objects on every Dropdown render. */
+
+const DDN_SIZE_STYLES: Record<string, React.CSSProperties> = {
+  sm: {
+    padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+    fontSize: tokens.typography.fontSize.sm,
+    minHeight: 44,
+  },
+  md: {
+    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+    fontSize: tokens.typography.fontSize.base,
+    minHeight: 44,
+  },
+  lg: {
+    padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+    fontSize: tokens.typography.fontSize.md,
+    minHeight: 48,
+  },
+}
+
+const DDN_LIST_ITEM_SIZE_STYLES: Record<string, React.CSSProperties> = {
+  sm: { padding: `${tokens.spacing[2]} ${tokens.spacing[3]}` },
+  md: { padding: `${tokens.spacing[2]} ${tokens.spacing[4]}` },
+  lg: { padding: `${tokens.spacing[3]} ${tokens.spacing[5]}` },
+}
+
+const DDN_TRIGGER_BASE_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-between',
+  gap: tokens.spacing[2],
+  width: '100%',
+  background: tokens.glass.bg.light,
+  backdropFilter: tokens.glass.blur.sm,
+  WebkitBackdropFilter: tokens.glass.blur.sm,
+  borderRadius: tokens.radius.lg,
+  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+  fontWeight: tokens.typography.fontWeight.medium,
+  transition: tokens.transition.fast,
+  outline: 'none',
+}
+
+const DDN_PANEL_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  top: '100%',
+  left: 0,
+  right: 0,
+  marginTop: tokens.spacing[1],
+  background: tokens.glass.bg.secondary,
+  backdropFilter: tokens.glass.blur.xl,
+  WebkitBackdropFilter: tokens.glass.blur.xl,
+  border: tokens.glass.border.light,
+  borderRadius: tokens.radius.lg,
+  boxShadow: tokens.shadow.xl,
+  zIndex: tokens.zIndex.dropdown,
+  overflow: 'hidden',
+}
+
+const DDN_LABEL_STYLE: React.CSSProperties = {
+  display: 'block',
+  marginBottom: tokens.spacing[1],
+  fontSize: tokens.typography.fontSize.sm,
+  fontWeight: tokens.typography.fontWeight.medium,
+  color: tokens.colors.text.secondary,
+}
+
 export interface DropdownOption<T = string> {
   value: T
   label: string
@@ -135,29 +202,8 @@ export function Dropdown<T = string>({
     }
   }, [isOpen, activeIndex])
 
-  const sizeStyles = {
-    sm: {
-      padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-      fontSize: tokens.typography.fontSize.sm,
-      minHeight: 44,
-    },
-    md: {
-      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-      fontSize: tokens.typography.fontSize.base,
-      minHeight: 44,
-    },
-    lg: {
-      padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
-      fontSize: tokens.typography.fontSize.md,
-      minHeight: 48,
-    },
-  }
-
-  const listItemSizeStyles = {
-    sm: { padding: `${tokens.spacing[2]} ${tokens.spacing[3]}` },
-    md: { padding: `${tokens.spacing[2]} ${tokens.spacing[4]}` },
-    lg: { padding: `${tokens.spacing[3]} ${tokens.spacing[5]}` },
-  }
+  const sizeStyles = DDN_SIZE_STYLES
+  const listItemSizeStyles = DDN_LIST_ITEM_SIZE_STYLES
 
   return (
     <div
@@ -170,15 +216,7 @@ export function Dropdown<T = string>({
       }}
     >
       {label && (
-        <label
-          style={{
-            display: 'block',
-            marginBottom: tokens.spacing[1],
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: tokens.typography.fontWeight.medium,
-            color: tokens.colors.text.secondary,
-          }}
-        >
+        <label style={DDN_LABEL_STYLE}>
           {label}
         </label>
       )}
@@ -218,26 +256,14 @@ export function Dropdown<T = string>({
           }
         }}
         style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: tokens.spacing[2],
-          width: '100%',
+          ...DDN_TRIGGER_BASE_STYLE,
           ...sizeStyles[size],
-          background: tokens.glass.bg.light,
-          backdropFilter: tokens.glass.blur.sm,
-          WebkitBackdropFilter: tokens.glass.blur.sm,
           border: hasError
             ? `2px solid ${tokens.colors.accent.error}`
             : `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.lg,
           color: selectedOption ? tokens.colors.text.primary : tokens.colors.text.tertiary,
           cursor: disabled ? 'not-allowed' : 'pointer',
-          fontFamily: tokens.typography.fontFamily.sans.join(', '),
-          fontWeight: tokens.typography.fontWeight.medium,
           opacity: disabled ? 0.5 : 1,
-          transition: tokens.transition.fast,
-          outline: 'none',
         }}
         className="focus-visible:ring-2 focus-visible:ring-offset-2"
       >
@@ -277,21 +303,7 @@ export function Dropdown<T = string>({
       {isOpen && (
         <div
           className="dropdown-enter"
-          style={{
-            position: 'absolute',
-            top: '100%',
-            left: 0,
-            right: 0,
-            marginTop: tokens.spacing[1],
-            background: tokens.glass.bg.secondary,
-            backdropFilter: tokens.glass.blur.xl,
-            WebkitBackdropFilter: tokens.glass.blur.xl,
-            border: tokens.glass.border.light,
-            borderRadius: tokens.radius.lg,
-            boxShadow: tokens.shadow.xl,
-            zIndex: tokens.zIndex.dropdown,
-            overflow: 'hidden',
-          }}
+          style={DDN_PANEL_STYLE}
         >
           {/* Search input for long lists */}
           {showSearch && (
