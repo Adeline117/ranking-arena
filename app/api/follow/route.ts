@@ -109,7 +109,7 @@ export const POST = withAuth(
             .eq('trader_id', traderId)
             .maybeSingle()
           if (claim?.user_id && claim.user_id !== user.id) {
-            await supabase.from('notifications').insert({
+            const { error: notifError } = await supabase.from('notifications').insert({
               user_id: claim.user_id,
               type: 'new_follower',
               title: 'New Follower',
@@ -118,8 +118,13 @@ export const POST = withAuth(
               actor_id: user.id,
               reference_id: traderId,
             })
+            if (notifError) {
+              logger.error('Failed to insert follow notification', { error: notifError, traderId, claimUserId: claim.user_id })
+            }
           }
-        } catch { /* non-critical */ }
+        } catch (err) {
+          logger.error('Follow notification fire-and-forget failed', { error: err, traderId, userId: user.id })
+        }
       })()
 
       return { following: true }
