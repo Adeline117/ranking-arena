@@ -35,6 +35,9 @@ const nextConfig = {
       'porto/internal': './lib/stubs/empty.js',
       // ClickHouse client is optional — only used when env vars are set
       '@clickhouse/client': './lib/stubs/empty.js',
+      // Farcaster SDK — optional Privy peer dep, removed from package.json to save 45MB
+      '@farcaster/mini-app-solana': './lib/stubs/empty.js',
+      '@farcaster/miniapp-sdk': './lib/stubs/empty.js',
     },
   },
 
@@ -133,7 +136,7 @@ const nextConfig = {
     config.plugins.push(
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       new (require('webpack').IgnorePlugin)({
-        resourceRegExp: /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client)$/,
+        resourceRegExp: /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
     )
     return config
