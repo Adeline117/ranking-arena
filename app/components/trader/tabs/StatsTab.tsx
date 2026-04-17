@@ -13,6 +13,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import type { TraderStats } from '@/lib/data/trader'
+import type { AssetBreakdownData, PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
   loading: () => <RankingSkeleton />,
@@ -22,14 +23,11 @@ type EquityCurveData = { '90D': Array<{ date: string; roi: number; pnl: number }
 
 export interface StatsTabProps {
   visited: boolean
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SWR data blobs, typed at shell level
-  stats: any
+  stats: TraderStats | null | undefined
   traderHandle: string
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  assetBreakdown: any
+  assetBreakdown: AssetBreakdownData | undefined
   equityCurve: EquityCurveData | undefined
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  positionHistory: any[]
+  positionHistory: PositionHistoryEntry[]
   isPro: boolean
   onUnlock: () => void
 }

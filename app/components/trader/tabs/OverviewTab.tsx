@@ -16,8 +16,12 @@ import { Box, Text } from '@/app/components/base'
 import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 import { ChartSkeleton } from '@/app/components/ui/Skeleton'
 import { features } from '@/lib/features'
-import type { TraderProfile } from '@/lib/data/trader'
+import type { TraderProfile, TraderPerformance } from '@/lib/data/trader'
+import type { EquityCurveData } from '@/app/(app)/u/[handle]/components/types'
 import type { UnregisteredTraderData } from '@/app/(app)/trader/[handle]/TraderProfileClient'
+
+/** Valid equity curve period keys. */
+type EquityCurvePeriod = keyof EquityCurveData
 
 const AdvancedMetricsCard = dynamic(() => import('@/app/components/trader/AdvancedMetricsCard'), { ssr: false })
 const DailyReturnsChart = dynamic(() => import('@/app/components/trader/charts/DailyReturnsChart').then(m => ({ default: m.DailyReturnsChart })), {
@@ -51,12 +55,9 @@ export interface OverviewTabProps {
   data: UnregisteredTraderData
 
   // From SWR trader data (memoized slices)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- SWR blob, typed at shell level
-  traderProfile: any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  traderPerformance: any
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  traderEquityCurve: any
+  traderProfile: TraderProfile | null
+  traderPerformance: TraderPerformance | null
+  traderEquityCurve: EquityCurveData | undefined
   traderSimilar: (TraderProfile & { roi_90d?: number; arena_score?: number })[]
   positionSummary: { avgLeverage: number | null; longPositions: number | null; shortPositions: number | null } | null | undefined
 
@@ -134,7 +135,7 @@ const OverviewTab = React.memo(function OverviewTab({
           <OverviewPerformanceCard
             performance={traderPerformance as ExtendedPerformance}
             equityCurve={traderEquityCurve?.['90D']}
-            allEquityCurves={traderEquityCurve as Record<string, Array<{ date: string; roi: number; pnl: number }>> | undefined}
+            allEquityCurves={traderEquityCurve}
             source={(traderProfile?.source as string) || data.source}
             positionSummary={positionSummary}
           />
@@ -164,7 +165,7 @@ const OverviewTab = React.memo(function OverviewTab({
         {traderEquityCurve && (
           <SectionErrorBoundary>
             <EquityCurveSection
-              equityCurve={traderEquityCurve as { '90D': Array<{ date: string; roi: number; pnl: number }>; '30D': Array<{ date: string; roi: number; pnl: number }>; '7D': Array<{ date: string; roi: number; pnl: number }> } | undefined}
+              equityCurve={traderEquityCurve}
               traderHandle={(traderProfile?.handle as string) || data.handle}
               delay={0}
             />
@@ -173,7 +174,7 @@ const OverviewTab = React.memo(function OverviewTab({
 
         {/* Drawdown Chart */}
         {(() => {
-          const curve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
+          const curve = traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ?? traderEquityCurve?.['90D']
           if (!curve || curve.length <= 2) return null
           return (
             <Box
@@ -195,14 +196,14 @@ const OverviewTab = React.memo(function OverviewTab({
 
         {/* Copy-Trade Simulator */}
         {(() => {
-          const simCurve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
+          const simCurve = traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ?? traderEquityCurve?.['90D']
           if (!simCurve || simCurve.length <= 2) return null
           return <SectionErrorBoundary><CopyTradeSimulator equityCurve={simCurve} /></SectionErrorBoundary>
         })()}
 
         {/* Daily Returns Distribution */}
         {(() => {
-          const curve = traderEquityCurve?.[selectedPeriod] ?? traderEquityCurve?.['90D']
+          const curve = traderEquityCurve?.[selectedPeriod as EquityCurvePeriod] ?? traderEquityCurve?.['90D']
           if (!curve || curve.length <= 5) return null
           const dailyReturns = curve.slice(1).map((point: { date: string; roi: number }, i: number) => ({
             date: point.date,

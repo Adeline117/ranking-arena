@@ -444,7 +444,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
                 data={data}
                 traderProfile={traderProfile}
                 traderPerformance={traderPerformance}
-                traderEquityCurve={traderEquityCurve}
+                traderEquityCurve={traderEquityCurve as import('@/app/(app)/u/[handle]/components/types').EquityCurveData | undefined}
                 traderSimilar={traderSimilar}
                 positionSummary={traderData?.positionSummary as { avgLeverage: number | null; longPositions: number | null; shortPositions: number | null } | null | undefined}
                 selectedPeriod={selectedPeriod}
