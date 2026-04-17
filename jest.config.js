@@ -47,7 +47,7 @@ const baseConfig = createJestConfig(customJestConfig)
 module.exports = async () => {
   const config = await baseConfig()
   // Add ESM-only packages that Jest must transform
-  const esmPackages = ['uncrypto']
+  const esmPackages = ['uncrypto', '@exodus/bytes']
   config.transformIgnorePatterns = config.transformIgnorePatterns?.map(pattern => {
     // Inject ESM packages into the negative lookahead of node_modules patterns
     if (pattern.includes('node_modules') && pattern.includes('(?!')) {

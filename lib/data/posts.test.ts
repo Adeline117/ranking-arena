@@ -1,3 +1,9 @@
+// Mock sanitize to avoid isomorphic-dompurify → jsdom → undici ESM issue
+jest.mock('@/lib/utils/sanitize', () => ({
+  sanitizeText: jest.fn((text: string) => text),
+  sanitizeHtml: jest.fn((html: string) => html),
+}))
+
 import type { SupabaseClient } from "@supabase/supabase-js"
 /**
  * Posts Data Layer Tests
