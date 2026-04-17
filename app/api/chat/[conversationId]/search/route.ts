@@ -7,27 +7,29 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import logger from '@/lib/logger'
+import { withAuth } from '@/lib/api/middleware'
+import { badRequest, notFound, forbidden, serverError } from '@/lib/api/response'
+import { createLogger } from '@/lib/utils/logger'
 import { parseLimit } from '@/lib/utils/safe-parse'
+
+const logger = createLogger('chat-search')
 
 export const dynamic = 'force-dynamic'
 
+// Next.js dynamic route params must be extracted from the raw handler signature.
+// withAuth wraps the handler so we extract params from the URL path instead.
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ conversationId: string }> }
 ) {
-  try {
-    // Authenticate user
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+  const resolvedParams = params instanceof Promise ? await params : params
+  const conversationId = resolvedParams.conversationId
 
-    const resolvedParams = params instanceof Promise ? await params : params
-    const conversationId = resolvedParams.conversationId
-
-    const searchParams = request.nextUrl.searchParams
+  // Delegate to the withAuth-wrapped handler, passing conversationId via URL
+  // Since withAuth expects (request: NextRequest) => Promise<NextResponse>,
+  // we create the handler inline with the captured conversationId.
+  const handler = withAuth(async ({ user, supabase, request: req }) => {
+    const searchParams = req.nextUrl.searchParams
     const query = searchParams.get('q')
     const limit = parseLimit(searchParams.get('limit'), 20, 50)
     const cursor = searchParams.get('cursor') // message created_at for pagination
@@ -35,10 +37,8 @@ export async function GET(
     const toDate = searchParams.get('to') // optional: filter end date
 
     if (!query || query.trim().length === 0) {
-      return NextResponse.json({ error: 'Search query cannot be empty' }, { status: 400 })
+      return badRequest('Search query cannot be empty')
     }
-
-    const supabase = getSupabaseAdmin()
 
     // Verify user is a member of this conversation
     const { data: conversation, error: convError } = await supabase
@@ -48,11 +48,11 @@ export async function GET(
       .maybeSingle()
 
     if (convError || !conversation) {
-      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+      return notFound('Conversation not found')
     }
 
     if (conversation.user1_id !== user.id && conversation.user2_id !== user.id) {
-      return NextResponse.json({ error: 'No permission to access this conversation' }, { status: 403 })
+      return forbidden('No permission to access this conversation')
     }
 
     // Check if user has cleared history - only show messages after cleared_before
@@ -94,8 +94,8 @@ export async function GET(
     const { data: messages, error: searchError } = await searchQuery.limit(limit + 1)
 
     if (searchError) {
-      logger.error('[Chat Search] Query error:', searchError)
-      return NextResponse.json({ error: 'Search failed' }, { status: 500 })
+      logger.error('Query error', { error: searchError })
+      return serverError('Search failed')
     }
 
     // Determine if there's a next page
@@ -128,13 +128,13 @@ export async function GET(
       ? results[results.length - 1].created_at
       : null
 
+    // Backward-compatible response shape
     return NextResponse.json({
       matches,
       next_cursor: nextCursor,
       total_in_page: matches.length,
     })
-  } catch (error: unknown) {
-    logger.error('[Chat Search] Error:', error)
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
+  }, { name: 'chat-search', rateLimit: 'authenticated' })
+
+  return handler(request)
 }
