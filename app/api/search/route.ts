@@ -57,6 +57,8 @@ export interface UnifiedSearchResponse {
   matchedExchange?: string
   /** Facet distribution from Meilisearch (platform counts, trader_type counts, etc.) */
   facetDistribution?: Record<string, Record<string, number>>
+  /** true when Meilisearch is unavailable and results fell back to Supabase (slower, less fuzzy) */
+  degraded?: boolean
 }
 
 // ---------- Exchange name matcher ----------
@@ -419,6 +421,7 @@ export const GET = withPublic(
 
     // Try Meilisearch first (1-6ms), fall back to Supabase (100-300ms)
     let meliFacetDistribution: Record<string, Record<string, number>> | undefined
+    let meiliDegraded = false
     const meiliTraderSearch = isMeilisearchAvailable() && sanitizedQuery.length >= 2
       ? searchTradersMeili(sanitizedQuery, { limit: effectiveLimit, platform: effectivePlatform || undefined, season: '90D' })
           .then(result => {
@@ -439,6 +442,7 @@ export const GET = withPublic(
           })
           .catch((err) => {
             logger.warn('Meilisearch trader search failed, falling back to Supabase', { error: err instanceof Error ? err.message : String(err), query: sanitizedQuery })
+            meiliDegraded = true
             return null
           })
       : Promise.resolve(null)
@@ -639,6 +643,7 @@ export const GET = withPublic(
       ...(suggestions ? { suggestions } : {}),
       ...(matchedExchange && !platformFilter ? { matchedExchange } : {}),
       ...(meliFacetDistribution ? { facetDistribution: meliFacetDistribution } : {}),
+      ...(meiliDegraded ? { degraded: true } : {}),
     }
 
     const cacheTtl = totalResults > 5 ? 600 : 300
