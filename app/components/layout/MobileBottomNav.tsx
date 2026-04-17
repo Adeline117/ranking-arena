@@ -125,26 +125,7 @@ function NotificationBadge({ count, ariaLabel }: NotificationBadgeProps): React.
   if (count <= 0) return null
 
   return (
-    <span
-      style={{
-        position: 'absolute',
-        top: -4,
-        right: -4,
-        minWidth: 16,
-        height: 16,
-        padding: '0 4px',
-        borderRadius: tokens.radius.md,
-        background: 'var(--color-accent-error)',
-        color: tokens.colors.white,
-        fontSize: 12,
-        fontWeight: 700,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        boxShadow: '0 2px 4px var(--color-overlay-medium)',
-      }}
-      aria-label={ariaLabel}
-    >
+    <span style={BADGE_STYLE} aria-label={ariaLabel}>
       {count > 99 ? '99+' : count}
     </span>
   )
@@ -274,6 +255,92 @@ function isActivePath(href: string, pathname: string): boolean {
 /** Pages where the bottom nav should be completely hidden */
 const HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callback']
 
+/* ── Module-level style constants ──
+   Extracted from render to avoid creating new objects every frame.
+   Dynamic properties (color, transform, opacity) are applied inline. */
+
+const SPACER_STYLE: React.CSSProperties = {
+  height: 'var(--mobile-nav-height, 60px)',
+}
+
+const NAV_BASE_STYLE: React.CSSProperties = {
+  position: 'fixed',
+  bottom: 0,
+  left: 0,
+  right: 0,
+  height: 60,
+  background: tokens.glass.bg.primary,
+  backdropFilter: tokens.glass.blur.lg,
+  WebkitBackdropFilter: tokens.glass.blur.lg,
+  borderTop: `1px solid var(--color-border-primary)`,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'space-around',
+  zIndex: tokens.zIndex.sticky,
+  paddingBottom: 'env(safe-area-inset-bottom, 0)',
+  transition: 'transform 0.3s ease',
+}
+
+const INDICATOR_PILL_STYLE: React.CSSProperties = {
+  width: 28,
+  height: 3,
+  borderRadius: '0 0 4px 4px',
+  background: tokens.gradient.primary,
+  boxShadow: `0 2px 8px var(--color-accent-primary-60)`,
+}
+
+const BADGE_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  top: -4,
+  right: -4,
+  minWidth: 16,
+  height: 16,
+  padding: '0 4px',
+  borderRadius: tokens.radius.md,
+  background: 'var(--color-accent-error)',
+  color: tokens.colors.white,
+  fontSize: 12,
+  fontWeight: 700,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  boxShadow: '0 2px 4px var(--color-overlay-medium)',
+}
+
+const NAV_LINK_BASE_STYLE: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flex: 1,
+  gap: 4,
+  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+  textDecoration: 'none',
+  transition: `color ${tokens.transition.base}, background-color ${tokens.transition.base}`,
+  borderRadius: tokens.radius.lg,
+  position: 'relative',
+  minWidth: 60,
+  minHeight: tokens.touchTarget.comfortable,
+}
+
+const ICON_WRAPPER_BASE_STYLE: React.CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  transition: `opacity ${tokens.transition.fast}, transform ${tokens.transition.fast}`,
+}
+
+const HIGHLIGHT_DOT_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  top: -2,
+  right: -2,
+  width: 6,
+  height: 6,
+  borderRadius: 3,
+  background: 'var(--color-accent-error)',
+}
+
 export default function MobileBottomNav(): React.ReactElement {
   const pathname = usePathname()
   const { t } = useLanguage()
@@ -313,28 +380,14 @@ export default function MobileBottomNav(): React.ReactElement {
 
   return (
     <>
-      <div className="mobile-bottom-nav-spacer" style={{ height: 'var(--mobile-nav-height, 60px)' }} aria-hidden="true" />
+      <div className="mobile-bottom-nav-spacer" style={SPACER_STYLE} aria-hidden="true" />
 
       <nav
         aria-label={t('mainNavigation')}
         className="mobile-bottom-nav safe-area-inset-bottom"
         style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 60,
-          background: tokens.glass.bg.primary,
-          backdropFilter: tokens.glass.blur.lg,
-          WebkitBackdropFilter: tokens.glass.blur.lg,
-          borderTop: `1px solid var(--color-border-primary)`,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-around',
-          zIndex: tokens.zIndex.sticky,
-          paddingBottom: 'env(safe-area-inset-bottom, 0)',
+          ...NAV_BASE_STYLE,
           transform: isVisible ? 'translateY(0)' : 'translateY(100%)',
-          transition: 'transform 0.3s ease',
         }}
       >
         {/* Sliding active indicator pill */}
@@ -352,15 +405,7 @@ export default function MobileBottomNav(): React.ReactElement {
               pointerEvents: 'none',
             }}
           >
-            <span
-              style={{
-                width: 28,
-                height: 3,
-                borderRadius: '0 0 4px 4px',
-                background: tokens.gradient.primary,
-                boxShadow: `0 2px 8px var(--color-accent-primary-60)`,
-              }}
-            />
+            <span style={INDICATOR_PILL_STYLE} />
           </span>
         )}
         {navItems.map((item) => (
@@ -396,31 +441,15 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
       aria-current={active ? 'page' : undefined}
       onClick={onClick}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        flex: 1,
-        gap: 4,
-        padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-        textDecoration: 'none',
+        ...NAV_LINK_BASE_STYLE,
         color: active ? 'var(--color-brand)' : 'var(--color-text-secondary)',
-        transition: `color ${tokens.transition.base}, background-color ${tokens.transition.base}`,
-        borderRadius: tokens.radius.lg,
-        position: 'relative',
-        minWidth: 60,
-        minHeight: tokens.touchTarget.comfortable,
         background: active ? 'var(--color-accent-primary-12)' : 'transparent',
       }}
       // focus-visible handled by global CSS rule in globals.css
     >
       <span
         style={{
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: `opacity ${tokens.transition.fast}, transform ${tokens.transition.fast}`,
+          ...ICON_WRAPPER_BASE_STYLE,
           opacity: active ? 1 : 0.85,
           transform: active ? 'scale(1.1)' : 'scale(1)',
         }}
@@ -453,15 +482,11 @@ function _ActiveIndicator(): React.ReactElement {
   return (
     <span
       style={{
+        ...INDICATOR_PILL_STYLE,
         position: 'absolute',
         top: 0,
         left: '50%',
         transform: 'translateX(-50%)',
-        width: 28,
-        height: 3,
-        borderRadius: '0 0 4px 4px',
-        background: tokens.gradient.primary,
-        boxShadow: `0 2px 8px var(--color-accent-primary-60)`,
       }}
       aria-hidden="true"
     />
@@ -470,17 +495,6 @@ function _ActiveIndicator(): React.ReactElement {
 
 function HighlightDot(): React.ReactElement {
   return (
-    <span
-      style={{
-        position: 'absolute',
-        top: -2,
-        right: -2,
-        width: 6,
-        height: 6,
-        borderRadius: 3,
-        background: 'var(--color-accent-error)',
-      }}
-      aria-hidden="true"
-    />
+    <span style={HIGHLIGHT_DOT_STYLE} aria-hidden="true" />
   )
 }
