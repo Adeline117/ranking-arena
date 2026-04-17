@@ -367,12 +367,24 @@ export async function authedFetch<T>(
         headers,
         body: body ? JSON.stringify(body) : undefined,
       })
-      const retryData = await retryResponse.json().catch(() => null)
+      const retryData = await retryResponse.json().catch(() => {
+        const ct = retryResponse.headers.get('content-type') || ''
+        if (!ct.includes('application/json')) {
+          logger.warn(`[api-client] Retry response is not JSON (status=${retryResponse.status}, content-type=${ct}), likely HTML error page`)
+        }
+        return null
+      })
       return { ok: retryResponse.ok, status: retryResponse.status, data: retryData }
     }
   }
 
-  const data = await response.json().catch(() => null)
+  const data = await response.json().catch(() => {
+    const ct = response.headers.get('content-type') || ''
+    if (!ct.includes('application/json')) {
+      logger.warn(`[api-client] Response is not JSON (status=${response.status}, content-type=${ct}), likely HTML error page`)
+    }
+    return null
+  })
   return { ok: response.ok, status: response.status, data }
 }
 
