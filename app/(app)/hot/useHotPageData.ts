@@ -643,6 +643,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
             user_reaction: result.reaction,
           } : null)
         }
+      } else {
+        logger.error('[HotPage] Reaction API error:', json.error || response.status)
+        showToast(t('actionFailedRetry'), 'error')
       }
     } catch (err) {
       logger.error('[HotPage] Reaction failed:', err)
