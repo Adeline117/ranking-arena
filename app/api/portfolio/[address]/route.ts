@@ -1,10 +1,11 @@
 /**
  * GET /api/portfolio/[address]
  * Returns cross-chain EVM portfolio for the given address.
- * Cached in Redis for 30 seconds.
+ * Cached in Redis for 5 minutes.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
+import { withPublic } from '@/lib/api/middleware'
 import { getPortfolio } from '@/lib/chains/evm-adapter'
 import * as cache from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
@@ -17,12 +18,16 @@ function isValidEvmAddress(address: string): boolean {
   return /^0x[a-fA-F0-9]{40}$/.test(address)
 }
 
-export async function GET(
-  _request: NextRequest,
-  { params }: { params: Promise<{ address: string }> }
-) {
-  try {
-    const { address } = await params
+/** Extract address from URL path */
+function extractAddress(url: string): string {
+  const pathParts = new URL(url).pathname.split('/')
+  const idx = pathParts.indexOf('portfolio')
+  return pathParts[idx + 1]
+}
+
+export const GET = withPublic(
+  async ({ request }) => {
+    const address = extractAddress(request.url)
 
     if (!isValidEvmAddress(address)) {
       return NextResponse.json(
@@ -50,9 +55,6 @@ export async function GET(
     return NextResponse.json(portfolio, {
       headers: { 'X-Cache': 'MISS' },
     })
-  } catch (error) {
-    log.error('Error', { error: error instanceof Error ? error.message : String(error) })
-    // SECURITY: Do not leak internal error details to client
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'portfolio/address', rateLimit: 'public' }
+)
