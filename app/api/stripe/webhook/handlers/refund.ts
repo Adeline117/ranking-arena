@@ -52,14 +52,24 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
       logger.info(`Subscription ${subscription.id} canceled due to full refund`)
     }
 
-    // Downgrade user to free tier
-    await getSupabase()
+    // Downgrade user to free tier — but NEVER downgrade lifetime plan holders
+    // unless the refund is specifically for their lifetime purchase
+    const { data: currentProfile } = await getSupabase()
       .from('user_profiles')
-      .update({
-        subscription_tier: 'free',
-        updated_at: new Date().toISOString(),
-      })
+      .select('pro_plan')
       .eq('id', profile.id)
+      .single()
+    if (currentProfile?.pro_plan === 'lifetime') {
+      logger.warn('Skipping downgrade for lifetime user on refund', { userId: profile.id, chargeId: charge.id })
+    } else {
+      await getSupabase()
+        .from('user_profiles')
+        .update({
+          subscription_tier: 'free',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id)
+    }
 
     try {
       await leaveProOfficialGroup(profile.id)
