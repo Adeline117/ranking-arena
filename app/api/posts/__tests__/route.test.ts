@@ -29,12 +29,14 @@ jest.mock('next/server', () => {
     headers: Map<string, string>
     method: string
     _body: unknown
+    cookies: { get: () => undefined }
     constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries(opts?.headers || {}))
+      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...(opts?.headers || {}) }))
       this.method = opts?.method || 'GET'
       this._body = opts?.body
+      this.cookies = { get: () => undefined }
     }
     async json() { return this._body }
   }
@@ -44,6 +46,8 @@ jest.mock('next/server', () => {
 
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue(null),
+  checkRateLimitFull: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  addRateLimitHeaders: jest.fn(),
   RateLimitPresets: { read: {}, write: {}, public: {} },
 }))
 
@@ -117,6 +121,25 @@ jest.mock('@/lib/data/hashtags', () => ({
   extractAndSyncHashtags: jest.fn().mockResolvedValue(undefined),
 }))
 
+jest.mock('@/lib/utils/csrf', () => ({
+  validateCsrfToken: jest.fn().mockReturnValue(true),
+  generateCsrfToken: jest.fn().mockReturnValue('test-csrf'),
+  CSRF_COOKIE_NAME: 'csrf-token',
+  CSRF_HEADER_NAME: 'x-csrf-token',
+}))
+
+jest.mock('@/lib/api/correlation', () => ({
+  getOrCreateCorrelationId: jest.fn().mockReturnValue('test-cid'),
+  runWithCorrelationId: jest.fn((_id: string, fn: () => unknown) => fn()),
+  getCorrelationId: jest.fn().mockReturnValue('test-cid'),
+}))
+
+jest.mock('@/lib/api/versioning', () => ({
+  parseApiVersion: jest.fn().mockReturnValue({ version: 'v1', isDeprecated: false }),
+  addVersionHeaders: jest.fn(),
+  addDeprecationHeaders: jest.fn(),
+}))
+
 jest.mock('@/lib/utils/logger', () => ({
   fireAndForget: jest.fn(),
   createLogger: jest.fn(() => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() })),
@@ -183,7 +206,7 @@ describe('/api/posts', () => {
       mockGetUserPostReactions.mockResolvedValue(new Map([['post-1', 'up']]))
       mockGetUserPostVotes.mockResolvedValue(new Map([['post-1', 'bull']]))
 
-      const req = new NextRequest('http://localhost/api/posts')
+      const req = new NextRequest('http://localhost/api/posts', { headers: { authorization: 'Bearer test-token' } })
       const res = await GET(req)
       const body = await res.json()
 
@@ -239,7 +262,7 @@ describe('/api/posts', () => {
     })
 
     it('returns 400 when title is missing', async () => {
-      mockRequireAuth.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
       mockGetUserHandle.mockResolvedValue('testuser')
 
       const req = new NextRequest('http://localhost/api/posts', {
@@ -255,7 +278,7 @@ describe('/api/posts', () => {
     })
 
     it('returns 400 when content is missing', async () => {
-      mockRequireAuth.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
       mockGetUserHandle.mockResolvedValue('testuser')
 
       const req = new NextRequest('http://localhost/api/posts', {
@@ -271,7 +294,7 @@ describe('/api/posts', () => {
 
     it('creates post successfully with valid input', async () => {
       const mockPost = { id: 'post-new', title: 'My Post', content: 'Great content' }
-      mockRequireAuth.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
+      mockGetAuthUser.mockResolvedValue({ id: 'user-1', email: 'test@test.com' })
       mockGetUserHandle.mockResolvedValue('testuser')
       mockCreatePost.mockResolvedValue(mockPost)
 

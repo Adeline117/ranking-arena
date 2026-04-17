@@ -29,12 +29,14 @@ jest.mock('next/server', () => {
     headers: Map<string, string>
     method: string
     _body: unknown
+    cookies: { get: () => undefined }
     constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries(opts?.headers || {}))
+      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...(opts?.headers || {}) }))
       this.method = opts?.method || 'GET'
       this._body = opts?.body
+      this.cookies = { get: () => undefined }
     }
     async json() { return this._body }
   }
@@ -44,10 +46,13 @@ jest.mock('next/server', () => {
 
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue(null),
+  checkRateLimitFull: jest.fn().mockResolvedValue({ response: null, meta: null }),
+  addRateLimitHeaders: jest.fn(),
   RateLimitPresets: { read: {}, write: {} },
 }))
 
 const mockRequireAuth = jest.fn()
+const mockGetAuthUser = jest.fn()
 let mockSupabaseRpcResult: { data: unknown; error: unknown } = { data: null, error: null }
 let mockSupabaseSelectResult: { data: unknown; error: unknown } = { data: [], error: null }
 let mockSupabaseInsertResult: { data: unknown; error: unknown } = { data: null, error: null }
@@ -68,9 +73,28 @@ jest.mock('@/lib/supabase/server', () => ({
     }),
   })),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
-  getAuthUser: jest.fn(),
+  getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getUserHandle: jest.fn(),
   getUserProfile: jest.fn(),
+}))
+
+jest.mock('@/lib/utils/csrf', () => ({
+  validateCsrfToken: jest.fn().mockReturnValue(true),
+  generateCsrfToken: jest.fn().mockReturnValue('test-csrf'),
+  CSRF_COOKIE_NAME: 'csrf-token',
+  CSRF_HEADER_NAME: 'x-csrf-token',
+}))
+
+jest.mock('@/lib/api/correlation', () => ({
+  getOrCreateCorrelationId: jest.fn().mockReturnValue('test-cid'),
+  runWithCorrelationId: jest.fn((_id: string, fn: () => unknown) => fn()),
+  getCorrelationId: jest.fn().mockReturnValue('test-cid'),
+}))
+
+jest.mock('@/lib/api/versioning', () => ({
+  parseApiVersion: jest.fn().mockReturnValue({ version: 'v1', isDeprecated: false }),
+  addVersionHeaders: jest.fn(),
+  addDeprecationHeaders: jest.fn(),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -90,6 +114,7 @@ describe('/api/bookmark-folders', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockRequireAuth.mockResolvedValue(mockUser)
+    mockGetAuthUser.mockResolvedValue(mockUser)
     mockSupabaseRpcResult = { data: null, error: null }
     mockSupabaseSelectResult = { data: [], error: null }
     mockSupabaseInsertResult = { data: null, error: null }
@@ -99,9 +124,7 @@ describe('/api/bookmark-folders', () => {
 
   describe('GET /api/bookmark-folders', () => {
     it('returns 401 when not authenticated', async () => {
-      mockRequireAuth.mockRejectedValue(
-        Object.assign(new Error('Unauthorized'), { statusCode: 401 })
-      )
+      mockGetAuthUser.mockResolvedValue(null)
 
       const req = new NextRequest('http://localhost/api/bookmark-folders')
       const res = await GET(req)
@@ -159,9 +182,7 @@ describe('/api/bookmark-folders', () => {
 
   describe('POST /api/bookmark-folders', () => {
     it('returns 401 when not authenticated', async () => {
-      mockRequireAuth.mockRejectedValue(
-        Object.assign(new Error('Unauthorized'), { statusCode: 401 })
-      )
+      mockGetAuthUser.mockResolvedValue(null)
 
       const req = new NextRequest('http://localhost/api/bookmark-folders', {
         method: 'POST',
