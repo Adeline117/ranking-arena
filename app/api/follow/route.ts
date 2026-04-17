@@ -8,7 +8,7 @@ import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { success, badRequest, serverError } from '@/lib/api/response'
-import { createLogger } from '@/lib/utils/logger'
+import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
 const logger = createLogger('follow-api')
@@ -98,7 +98,7 @@ export const POST = withAuth(
       }
 
       logger.info('用户关注交易员', { userId: user.id, traderId })
-      await invalidateFollowingCache(user.id).catch(() => {})
+      fireAndForget(invalidateFollowingCache(user.id), 'invalidate-following-cache')
 
       // Fire-and-forget: notify the followed trader's claimed user (if any)
       ;(async () => {
@@ -147,7 +147,7 @@ export const POST = withAuth(
       }
 
       logger.info('用户取消关注交易员', { userId: user.id, traderId })
-      await invalidateFollowingCache(user.id).catch(() => {})
+      fireAndForget(invalidateFollowingCache(user.id), 'invalidate-following-cache')
       return { following: false }
     }
   },
