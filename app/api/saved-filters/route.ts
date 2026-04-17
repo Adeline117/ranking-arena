@@ -169,34 +169,22 @@ export const PUT = withAuth(async ({ user, supabase, request }) => {
     return NextResponse.json({ success: false, error: 'Filter ID is required' }, { status: 400 })
   }
 
-  // 更新使用统计
-  const { error: updateError } = await supabase
+  // 更新使用统计 — read current count then increment (atomic read-then-write per user)
+  const { data: current } = await supabase
+    .from('saved_filters')
+    .select('use_count')
+    .eq('id', filterId)
+    .eq('user_id', user.id)
+    .single()
+
+  await supabase
     .from('saved_filters')
     .update({
-      use_count: supabase.rpc('increment', { x: 1 }),
+      use_count: (current?.use_count || 0) + 1,
       last_used_at: new Date().toISOString(),
     })
     .eq('id', filterId)
     .eq('user_id', user.id)
-
-  // 如果 rpc 不存在，使用原生更新
-  if (updateError) {
-    const { data: current } = await supabase
-      .from('saved_filters')
-      .select('use_count')
-      .eq('id', filterId)
-      .eq('user_id', user.id)
-      .single()
-
-    await supabase
-      .from('saved_filters')
-      .update({
-        use_count: (current?.use_count || 0) + 1,
-        last_used_at: new Date().toISOString(),
-      })
-      .eq('id', filterId)
-      .eq('user_id', user.id)
-  }
 
   return { updated: true }
 }, { name: 'put-saved-filters', rateLimit: 'authenticated' })
