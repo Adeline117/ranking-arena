@@ -690,11 +690,7 @@ select:focus-visible {
   100% { transform: translateX(100%); }
 }
 
-/* Skeleton shape variants */
-.skeleton-text { height: 14px; border-radius: 4px; }
-.skeleton-title { height: 20px; width: 60%; border-radius: 4px; }
-.skeleton-avatar { border-radius: 50%; }
-.skeleton-card { min-height: 120px; border-radius: 12px; }
+/* Skeleton shape variants removed — unused (Skeleton.tsx uses inline props) */
 
 /* ============================================
    Three-Column Layout
@@ -1025,13 +1021,13 @@ select:focus-visible {
 }
 
 /* Prevent overscroll chaining on sidebar containers only */
-.three-col-left,
-/* Reduce paint for fixed elements */
-.fixed-header, .fixed-nav {
+/* Reduce paint for fixed/sticky elements */
+.three-col-left {
   will-change: transform;
   backface-visibility: hidden;
   transform: translateZ(0);
 }
+/* .fixed-header, .fixed-nav removed — unused selectors */
 
 /* Optimize image containers */
 .trader-avatar, .post-image {
