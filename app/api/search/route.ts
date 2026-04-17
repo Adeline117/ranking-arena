@@ -20,7 +20,9 @@ import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { success } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet, getOrSetWithLock } from '@/lib/cache'
-import { fireAndForget } from '@/lib/utils/logger'
+import { fireAndForget, createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('search-api')
 import { features } from '@/lib/features'
 import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
@@ -435,7 +437,10 @@ export const GET = withPublic(
               traderType: h.trader_type,
             }))
           })
-          .catch(() => null)
+          .catch((err) => {
+            logger.warn('Meilisearch trader search failed, falling back to Supabase', { error: err instanceof Error ? err.message : String(err), query: sanitizedQuery })
+            return null
+          })
       : Promise.resolve(null)
 
     const [meiliResults, supabaseTraders, postsData, libraryData, usersData, groupsData] = await Promise.all([
@@ -445,7 +450,10 @@ export const GET = withPublic(
         query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
         limit: effectiveLimit,
         platform: effectivePlatform,
-      }).catch(() => []),
+      }).catch((err) => {
+        logger.warn('Supabase trader search failed', { error: err instanceof Error ? err.message : String(err), query: sanitizedQuery })
+        return []
+      }),
 
       // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
       features.social
