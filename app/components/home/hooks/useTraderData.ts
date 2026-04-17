@@ -42,6 +42,8 @@ interface TraderDataState {
   totalCount: number
   categoryCounts: CategoryCounts
   lastRefreshFailed: boolean
+  /** True when consecutive auto-refresh failures exceed threshold (3+) */
+  staleDataWarning: boolean
 }
 
 type TraderDataAction =
@@ -56,6 +58,7 @@ type TraderDataAction =
   | { type: 'LOAD_ERROR'; error: string }
   | { type: 'LOAD_ABORT' }
   | { type: 'SET_COUNTS'; totalCount: number; categoryCounts: CategoryCounts }
+  | { type: 'SET_STALE_DATA_WARNING'; warning: boolean }
 
 function traderDataReducer(state: TraderDataState, action: TraderDataAction): TraderDataState {
   switch (action.type) {
@@ -90,6 +93,7 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
         totalCount: action.totalCount ?? state.totalCount,
         categoryCounts: action.categoryCounts ?? state.categoryCounts,
         lastRefreshFailed: false,
+        staleDataWarning: false,
       }
     case 'LOAD_ERROR':
       // If we already have traders (from SSR or previous fetch), silently keep them
@@ -106,6 +110,8 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
       return { ...state, loading: false, isChangingTimeRange: false }
     case 'SET_COUNTS':
       return { ...state, totalCount: action.totalCount, categoryCounts: action.categoryCounts }
+    case 'SET_STALE_DATA_WARNING':
+      return { ...state, staleDataWarning: action.warning }
     default:
       return state
   }
@@ -145,7 +151,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     totalCount: initialTotalCount,
     categoryCounts: initialCategoryCounts,
     lastRefreshFailed: false,
+    staleDataWarning: false,
   })
+
+  // Track consecutive auto-refresh failures for stale data warning
+  const refreshFailCountRef = useRef(0)
 
   const { broadcast, on } = useTraderDataSync()
 
@@ -335,7 +345,16 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
     const silentRefresh = () => {
       lastFetchTime = Date.now()
-      fetchPage(0).catch(() => {})
+      fetchPage(0)
+        .then(() => {
+          refreshFailCountRef.current = 0
+        })
+        .catch(() => {
+          refreshFailCountRef.current += 1
+          if (refreshFailCountRef.current > 3) {
+            dispatch({ type: 'SET_STALE_DATA_WARNING', warning: true })
+          }
+        })
     }
 
     const startInterval = () => {
@@ -418,11 +437,12 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     categoryCounts: state.categoryCounts,
     fetchPage,
     lastRefreshFailed: state.lastRefreshFailed,
+    staleDataWarning: state.staleDataWarning,
   }), [
     state.currentTraders, state.loading, state.error, state.activeTimeRange,
     state.lastUpdated, state.availableSources, state.deferredFetchFailed,
     state.isChangingTimeRange, state.totalCount, state.categoryCounts,
-    state.lastRefreshFailed,
+    state.lastRefreshFailed, state.staleDataWarning,
     changeTimeRange, refresh, retryDeferredFetch, fetchPage,
   ])
 
