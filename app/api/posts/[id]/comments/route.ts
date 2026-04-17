@@ -6,21 +6,18 @@
  * DELETE /api/posts/[id]/comments - 删除评论
  */
 
-import { NextRequest } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import {
-  getSupabaseAdmin,
-  requireAuth,
   success,
   successWithPagination,
-  handleError,
   validateNumber,
   ApiError,
   ErrorCode,
 } from '@/lib/api'
+import { withPublic, withAuth } from '@/lib/api/middleware'
 import { getPostComments, createComment, deleteComment, type CommentSortMode } from '@/lib/data/comments'
 import { createNotificationDeduped } from '@/lib/data/notifications'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
@@ -42,17 +39,19 @@ const DeleteCommentSchema = z.object({
   comment_id: z.string().uuid('Invalid comment ID'),
 })
 
-type RouteContext = { params: Promise<{ id: string }> }
+/** Extract post id from URL path */
+function extractPostId(url: string): string {
+  const pathParts = new URL(url).pathname.split('/')
+  const postsIdx = pathParts.indexOf('posts')
+  return pathParts[postsIdx + 1]
+}
 
-export async function GET(request: NextRequest, context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const GET = withPublic(
+  async ({ supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
-    if (rateLimitResponse) return rateLimitResponse
-
-    const { id } = await context.params
+    const id = extractPostId(request.url)
 
     // Validate UUID format to prevent PostgreSQL cast errors
     const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -61,14 +60,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const { searchParams } = new URL(request.url)
-    
+
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 100 }) ?? 50
     const offset = validateNumber(searchParams.get('offset'), { min: 0 }) ?? 0
     const sortParam = searchParams.get('sort')
     const sort: CommentSortMode = sortParam === 'time' ? 'time' : 'best'
 
-    const supabase = getSupabaseAdmin()
-    
     // 尝试获取当前用户ID（用于获取点赞状态）
     let userId: string | undefined
     const authHeader = request.headers.get('Authorization')
@@ -77,33 +74,37 @@ export async function GET(request: NextRequest, context: RouteContext) {
       const { data: { user } } = await supabase.auth.getUser(token)
       userId = user?.id
     }
-    
+
     const comments = await getPostComments(supabase, id, { limit, offset, userId, sort })
 
     return successWithPagination(
       { comments },
       { limit, offset, has_more: comments.length === limit }
     )
-  } catch (error: unknown) {
-    return handleError(error, 'posts/[id]/comments GET')
-  }
-}
+  },
+  { name: 'posts/comments-get', rateLimit: 'read' }
+)
 
-export async function POST(request: NextRequest, context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
-
-  try {
-    const { id } = await context.params
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    const id = extractPostId(request.url)
 
     // Parse body and check mute status in parallel
-    const [body, { data: post }] = await Promise.all([
-      request.json(),
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      )
+    }
+
+    const [, { data: post }] = await Promise.all([
+      Promise.resolve(body),
       supabase.from('posts').select('group_id').eq('id', id).single(),
     ])
 
@@ -184,23 +185,25 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     return success({ comment }, 201)
-  } catch (error: unknown) {
-    return handleError(error, 'posts/[id]/comments POST')
-  }
-}
+  },
+  { name: 'posts/comments-post', rateLimit: 'write' }
+)
 
-export async function PUT(request: NextRequest, _context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const PUT = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      )
+    }
 
-  try {
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
-
-    const body = await request.json()
     const parsed = EditCommentSchema.safeParse(body)
     if (!parsed.success) {
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
@@ -238,23 +241,25 @@ export async function PUT(request: NextRequest, _context: RouteContext) {
     }
 
     return success({ comment: updated })
-  } catch (error: unknown) {
-    return handleError(error, 'posts/[id]/comments PUT')
-  }
-}
+  },
+  { name: 'posts/comments-put', rateLimit: 'write' }
+)
 
-export async function DELETE(request: NextRequest, _context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const DELETE = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      )
+    }
 
-  try {
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
-
-    const body = await request.json()
     const parsed = DeleteCommentSchema.safeParse(body)
     if (!parsed.success) {
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
@@ -264,7 +269,6 @@ export async function DELETE(request: NextRequest, _context: RouteContext) {
     await deleteComment(supabase, commentId, user.id)
 
     return success({ message: 'Comment deleted' })
-  } catch (error: unknown) {
-    return handleError(error, 'posts/[id]/comments DELETE')
-  }
-}
+  },
+  { name: 'posts/comments-delete', rateLimit: 'write' }
+)
