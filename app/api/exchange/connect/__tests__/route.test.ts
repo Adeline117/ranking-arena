@@ -32,7 +32,7 @@ jest.mock('next/server', () => {
     constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries(opts?.headers || {}))
+      this.headers = new Map(Object.entries({ 'user-agent': 'Jest Test Runner', ...opts?.headers }))
       this.method = opts?.method || 'POST'
       this._body = opts?.body
     }
@@ -49,6 +49,25 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 
 const mockRequireAuth = jest.fn()
 const mockSupabaseFrom = jest.fn()
+
+// Mock middleware to pass through to existing mockRequireAuth
+jest.mock('@/lib/api/middleware', () => ({
+  withAuth: (handler: Function, _opts?: unknown) => async (req: unknown) => {
+    try {
+      const user = await mockRequireAuth(req)
+      if (!user) {
+        const { NextResponse: NR } = require('next/server')
+        return NR.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+      }
+      const { getSupabaseAdmin } = require('@/lib/supabase/server')
+      return handler({ user, supabase: getSupabaseAdmin(), request: req, version: { current: 'v1' } })
+    } catch {
+      const { NextResponse: NR } = require('next/server')
+      return NR.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+    }
+  },
+  withPublic: (handler: Function) => handler,
+}))
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
