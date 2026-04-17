@@ -100,7 +100,7 @@ export default function ArbitrageOpportunities() {
           {opps.map((opp, i) => {
             if (opp.type === 'cross-exchange') {
               return (
-                <div key={i} style={{
+                <div key={`${opp.symbol}-${opp.buyExchange}-${opp.sellExchange}`} style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
@@ -136,7 +136,7 @@ export default function ArbitrageOpportunities() {
               )
             }
             return (
-              <div key={i} style={{
+              <div key={`${opp.exchange}-${opp.path.join('-')}`} style={{
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
