@@ -464,10 +464,10 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           <Box style={{ minHeight: 200 }} className="tab-pane-enter">
             <StatsTab
               visited={visitedTabs.has('stats')}
-              stats={traderStats as Record<string, unknown> | null}
-              traderHandle={(traderProfile as Record<string, unknown> | null)?.handle as string || data.handle}
+              stats={traderStats}
+              traderHandle={traderProfile?.handle || data.handle}
               assetBreakdown={traderAssetBreakdown}
-              equityCurve={traderEquityCurve as { '90D': Array<{ date: string; roi: number; pnl: number }>; '30D': Array<{ date: string; roi: number; pnl: number }>; '7D': Array<{ date: string; roi: number; pnl: number }> } | undefined}
+              equityCurve={traderEquityCurve}
               positionHistory={traderPositionHistory}
               isPro={isPro}
               onUnlock={handlePricingRedirect}

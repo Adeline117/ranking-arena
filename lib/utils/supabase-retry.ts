@@ -138,6 +138,7 @@ export async function retryInsert<T>(
   options: RetryOptions = {}
 ): Promise<PostgrestResponse<T>> {
   return retrySupabaseQuery<T>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PostgREST generic: table name is dynamic, insert payload type cannot be inferred
     async () => await client.from(table).insert(data as any) as PostgrestResponse<T>,
     options
   )
@@ -154,6 +155,7 @@ export async function retryUpsert<T>(
   retryOptions: RetryOptions = {}
 ): Promise<PostgrestResponse<T>> {
   return retrySupabaseQuery<T>(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PostgREST generic: table name is dynamic, upsert payload type cannot be inferred
     async () => await client.from(table).upsert(data as any, upsertOptions) as PostgrestResponse<T>,
     retryOptions
   )

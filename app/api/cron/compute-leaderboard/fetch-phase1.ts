@@ -74,7 +74,7 @@ export async function fetchPhase1FromV2(
           ])
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase .select() returns untyped rows; fields are accessed dynamically via col() helper below
         let data: any[] | null = null
         let error: { message: string; code?: string } | null = null
         try {
