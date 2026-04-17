@@ -6,12 +6,11 @@
  * session, preventing users from starting conversations as other users.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { withAuth } from '@/lib/api/middleware'
 import { traceMessage } from '@/lib/utils/logger'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
@@ -22,24 +21,21 @@ const StartConversationSchema = z.object({
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
-
-    // SECURITY: Require authentication
-    const user = await getAuthUser(request)
-    if (!user) {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
       return NextResponse.json(
-        { error: 'Please log in first', error_code: 'NOT_AUTHENTICATED' },
-        { status: 401 }
+        { error: 'Invalid JSON body', error_code: 'VALIDATION_ERROR' },
+        { status: 400 }
       )
     }
 
-    const body = await request.json()
     const parsed = StartConversationSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(
@@ -59,10 +55,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
     // Permission check via single RPC call (replaces multiple queries)
-    const { data: permCheck, error: permError } = await supabase
+    const { data: permCheck, error: permError } = await (supabase as SupabaseClient)
       .rpc('check_dm_permission', { p_sender_id: senderId, p_receiver_id: receiverId })
 
     if (permError) {
@@ -157,8 +151,6 @@ export async function POST(request: NextRequest) {
       message_limit: messageLimit,
       receiver_handle: receiverProfile?.handle || null
     })
-  } catch (error: unknown) {
-    logger.error('[Start Message API] 错误:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'messages-start', rateLimit: 'write' }
+)
