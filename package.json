@@ -58,7 +58,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1010.0",
     "@aws-sdk/s3-request-presigner": "^3.1006.0",
-    "@privy-io/react-auth": "^3.18.0",
+    "@privy-io/react-auth": "^3.22.1",
     "@rainbow-me/rainbowkit": "^2.2.10",
     "@sentry/nextjs": "^10.48.0",
     "@solana/wallet-adapter-react": "^0.15.39",
