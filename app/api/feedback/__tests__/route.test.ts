@@ -142,7 +142,7 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(400)
-    expect(body.error).toBe('Message is required')
+    expect(body.error?.message ?? body.error).toBe('Message is required')
   })
 
   it('returns 400 when message is empty string', async () => {
@@ -151,7 +151,7 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(400)
-    expect(body.error).toBe('Message is required')
+    expect(body.error?.message ?? body.error).toBe('Message is required')
   })
 
   it('returns 400 when message is whitespace only', async () => {
@@ -160,7 +160,7 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(400)
-    expect(body.error).toBe('Message is required')
+    expect(body.error?.message ?? body.error).toBe('Message is required')
   })
 
   it('returns 400 when message is not a string', async () => {
@@ -169,7 +169,7 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(400)
-    expect(body.error).toBe('Message is required')
+    expect(body.error?.message ?? body.error).toBe('Message is required')
   })
 
   it('returns 400 when message exceeds 5000 characters', async () => {
@@ -178,7 +178,7 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(400)
-    expect(body.error).toBe('Message too long')
+    expect(body.error?.message ?? body.error).toBe('Message too long')
   })
 
   // --- Success Case ---
@@ -193,7 +193,7 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.ok).toBe(true)
+    expect(body.data?.ok ?? body.ok).toBe(true)
     expect(mockInsert).toHaveBeenCalledWith({
       user_id: null,
       message: 'Great platform!',
@@ -226,7 +226,7 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.ok).toBe(true)
+    expect(body.data?.ok ?? body.ok).toBe(true)
     expect(mockInsert).toHaveBeenCalledWith(
       expect.objectContaining({ user_id: 'user-123' })
     )
@@ -257,7 +257,7 @@ describe('POST /api/feedback', () => {
     const body = await res.json()
 
     expect(res.status).toBe(500)
-    expect(body.error).toBe('Failed to save feedback')
+    expect(body.error?.message ?? body.error).toBe('Failed to save feedback')
   })
 
   // --- Unexpected Error ---
@@ -271,7 +271,7 @@ describe('POST /api/feedback', () => {
 
     expect(res.status).toBe(500)
     // Middleware sanitizes internal errors to prevent leaking implementation details
-    expect(body.error).toBeTruthy()
+    expect(body.error?.message ?? body.error).toBeTruthy()
   })
 
   // --- Rate Limiting ---
