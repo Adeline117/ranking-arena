@@ -3,13 +3,14 @@
  * POST: Verify TOTP code and enable 2FA, generate backup codes
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { verifyTotpCode, generateBackupCodes, hashBackupCode } from '@/lib/services/totp'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
-import logger from '@/lib/logger'
+import { withAuth } from '@/lib/api/middleware'
+import { badRequest } from '@/lib/api/response'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('2fa-verify')
 
 // Zod schema for POST /api/settings/2fa/verify
 const Verify2FASchema = z.object({
@@ -18,26 +19,15 @@ const Verify2FASchema = z.object({
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
-    if (rateLimitResponse) return rateLimitResponse
-
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
     }
 
-    // CSRF validation
-    const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
-    const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
-    if (!validateCsrfToken(cookieToken, headerToken)) {
-      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
-    }
-
-    const supabase = getSupabaseAdmin()
-
-    const body = await request.json()
     const parsed = Verify2FASchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(
@@ -55,7 +45,7 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (profile?.totp_enabled) {
-      return NextResponse.json({ error: '2FA is already enabled' }, { status: 400 })
+      return badRequest('2FA is already enabled')
     }
 
     // Get the stored TOTP secret from secure table
@@ -66,16 +56,13 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (secretError || !secretRow?.totp_secret) {
-      return NextResponse.json(
-        { error: 'No TOTP secret found. Please run setup first.' },
-        { status: 400 }
-      )
+      return badRequest('No TOTP secret found. Please run setup first.')
     }
 
     // Verify the code
     const isValid = verifyTotpCode(secretRow.totp_secret, code)
     if (!isValid) {
-      return NextResponse.json({ error: 'Invalid verification code' }, { status: 400 })
+      return badRequest('Invalid verification code')
     }
 
     // Enable 2FA
@@ -122,8 +109,9 @@ export async function POST(request: NextRequest) {
       success: true,
       backupCodes,
     })
-  } catch (error: unknown) {
-    logger.error('[2FA Verify] Unexpected error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  },
+  {
+    name: '2fa-verify',
+    rateLimit: 'sensitive',
   }
-}
+)
