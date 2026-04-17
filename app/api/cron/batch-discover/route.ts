@@ -105,7 +105,8 @@ async function discoverRankingsInline(): Promise<BatchResult> {
 
     return { name, status: 'success', durationMs: Date.now() - start, detail: { jobs_created: jobs.length, blocked: Array.from(blockedPlatforms) } }
   } catch (_err) {
-    return { name, status: 'error', durationMs: Date.now() - start, error: 'Discovery task failed' }
+    const errMsg = _err instanceof Error ? _err.message : String(_err)
+    return { name, status: 'error', durationMs: Date.now() - start, error: `Discovery task failed: ${errMsg}` }
   }
 }
 
