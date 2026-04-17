@@ -18,29 +18,36 @@ export interface PaginationProps {
 export default memo(function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
   const { t, language: _language } = useLanguage()
 
-  if (totalPages <= 1) return null
+  // Guard: non-positive or non-finite totalPages means no pagination needed
+  if (!Number.isFinite(totalPages) || totalPages <= 1) return null
+
+  // Clamp currentPage to valid range to prevent out-of-bounds rendering
+  const safePage = Math.max(1, Math.min(currentPage, totalPages))
 
   // Build page numbers array with ellipsis
   const pages: (number | string)[] = []
   if (totalPages <= 7) {
     for (let i = 1; i <= totalPages; i++) pages.push(i)
   } else {
-    if (currentPage <= 3) {
+    if (safePage <= 3) {
       for (let i = 1; i <= 5; i++) pages.push(i)
       pages.push('...')
       pages.push(totalPages)
-    } else if (currentPage >= totalPages - 2) {
+    } else if (safePage >= totalPages - 2) {
       pages.push(1)
       pages.push('...')
       for (let i = totalPages - 4; i <= totalPages; i++) pages.push(i)
     } else {
       pages.push(1)
       pages.push('...')
-      for (let i = currentPage - 1; i <= currentPage + 1; i++) pages.push(i)
+      for (let i = safePage - 1; i <= safePage + 1; i++) pages.push(i)
       pages.push('...')
       pages.push(totalPages)
     }
   }
+
+  // Clamp page changes to valid range
+  const safePageChange = (page: number) => onPageChange(Math.max(1, Math.min(page, totalPages)))
 
   return (
     <nav
@@ -59,17 +66,17 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
     >
       <button
         aria-label={t('prevPage')}
-        className={`pagination-btn pagination-nav ${currentPage === 1 ? 'pagination-disabled' : ''}`}
-        onClick={() => onPageChange(Math.max(1, currentPage - 1))}
-        disabled={currentPage === 1}
+        className={`pagination-btn pagination-nav ${safePage === 1 ? 'pagination-disabled' : ''}`}
+        onClick={() => safePageChange(safePage - 1)}
+        disabled={safePage === 1}
         style={{
           padding: `6px ${tokens.spacing[3]}`,
           minHeight: 44,
-          background: currentPage === 1 ? 'transparent' : `${tokens.colors.accent.primary}10`,
-          border: `1px solid ${currentPage === 1 ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
+          background: safePage === 1 ? 'transparent' : `${tokens.colors.accent.primary}10`,
+          border: `1px solid ${safePage === 1 ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
           borderRadius: tokens.radius.md,
-          color: currentPage === 1 ? tokens.colors.text.disabled : tokens.colors.accent.primary,
-          cursor: currentPage === 1 ? 'not-allowed' : 'pointer',
+          color: safePage === 1 ? tokens.colors.text.disabled : tokens.colors.accent.primary,
+          cursor: safePage === 1 ? 'not-allowed' : 'pointer',
           fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.semibold,
           transition: `all ${tokens.transition.fast}`,
@@ -90,7 +97,7 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
           }
 
           const pageNum = page as number
-          const isActive = pageNum === currentPage
+          const isActive = pageNum === safePage
 
           return (
             <button
@@ -98,7 +105,7 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
               aria-label={t('goToPage').replace('{page}', String(pageNum))}
               aria-current={isActive ? 'page' : undefined}
               className={`pagination-btn pagination-page ${isActive ? 'pagination-active' : ''}`}
-              onClick={() => onPageChange(pageNum)}
+              onClick={() => safePageChange(pageNum)}
               style={{
                 minWidth: 44,
                 height: 44,
@@ -121,17 +128,17 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
 
       <button
         aria-label={t('nextPage')}
-        className={`pagination-btn pagination-nav ${currentPage === totalPages ? 'pagination-disabled' : ''}`}
-        onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
-        disabled={currentPage === totalPages}
+        className={`pagination-btn pagination-nav ${safePage === totalPages ? 'pagination-disabled' : ''}`}
+        onClick={() => safePageChange(safePage + 1)}
+        disabled={safePage === totalPages}
         style={{
           padding: `6px ${tokens.spacing[3]}`,
           minHeight: 44,
-          background: currentPage === totalPages ? 'transparent' : `${tokens.colors.accent.primary}10`,
-          border: `1px solid ${currentPage === totalPages ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
+          background: safePage === totalPages ? 'transparent' : `${tokens.colors.accent.primary}10`,
+          border: `1px solid ${safePage === totalPages ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
           borderRadius: tokens.radius.md,
-          color: currentPage === totalPages ? tokens.colors.text.disabled : tokens.colors.accent.primary,
-          cursor: currentPage === totalPages ? 'not-allowed' : 'pointer',
+          color: safePage === totalPages ? tokens.colors.text.disabled : tokens.colors.accent.primary,
+          cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
           fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.semibold,
           transition: `all ${tokens.transition.fast}`,

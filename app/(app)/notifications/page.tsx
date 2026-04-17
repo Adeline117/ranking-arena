@@ -99,7 +99,11 @@ function groupNotifications(notifications: Notification[]): GroupedNotification[
 function timeAgo(dateStr: string, t: (key: string) => string): string {
   const now = Date.now()
   const then = new Date(dateStr).getTime()
+
+  // Guard: invalid date or future timestamp (clock skew / bad data)
+  if (isNaN(then) || !Number.isFinite(then)) return t('timeSecondsAgo').replace('{n}', '0')
   const diff = Math.floor((now - then) / 1000)
+  if (diff < 0) return t('timeSecondsAgo').replace('{n}', '0')
 
   if (diff < 60) return t('timeSecondsAgo').replace('{n}', String(diff))
   if (diff < 3600) return t('timeMinutesAgo').replace('{n}', String(Math.floor(diff / 60)))

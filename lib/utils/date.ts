@@ -62,7 +62,12 @@ export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'):
   
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
-  
+
+  // Guard: negative diff means future date (clock skew, bad data) — treat as "just now"
+  if (diffMs < 0 || !Number.isFinite(diffMs)) {
+    return translations[effectiveLocale].justNow
+  }
+
   const diffSeconds = Math.floor(diffMs / 1000)
   const diffMinutes = Math.floor(diffSeconds / 60)
   const diffHours = Math.floor(diffMinutes / 60)
@@ -70,9 +75,9 @@ export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'):
   const diffWeeks = Math.floor(diffDays / 7)
   const diffMonths = Math.floor(diffDays / 30)
   const diffYears = Math.floor(diffDays / 365)
-  
+
   const t = translations[effectiveLocale]
-  
+
   if (diffMinutes < 1) return t.justNow
   if (diffMinutes < 60) return t.minutesAgo(diffMinutes)
   if (diffHours < 24) return t.hoursAgo(diffHours)
