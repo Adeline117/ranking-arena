@@ -48,7 +48,7 @@ export async function POST(request: NextRequest) {
   // Auth: accept either VPS proxy key or CRON_SECRET
   const proxyKey = request.headers.get('x-proxy-key') || request.headers.get('authorization')?.replace('Bearer ', '')
   const validKeys = [
-    (env as unknown as Record<string, string | undefined>).VPS_PROXY_KEY,
+    process.env.VPS_PROXY_KEY,
     env.CRON_SECRET,
   ].filter(Boolean)
   if (validKeys.length === 0 || !validKeys.includes(proxyKey || '')) {
