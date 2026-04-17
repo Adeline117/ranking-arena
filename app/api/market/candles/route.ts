@@ -47,7 +47,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json({ symbol, timeframe, exchange: exchangeId, candles })
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120')
     return response
-  } catch (_err) {
+  } catch (error) { console.error('[market] Failed:', error instanceof Error ? error.message : error);
     return NextResponse.json({ error: 'Failed to fetch candle data' }, { status: 500 })
   }
 }

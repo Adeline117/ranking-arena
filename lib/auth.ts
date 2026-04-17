@@ -63,7 +63,8 @@ export async function getAuthSession(): Promise<AuthResult> {
       userId: session.user.id,
       accessToken: token,
     }
-  } catch (_err) {
+  } catch (err) {
+    console.warn('[auth] getAuthSession failed:', err instanceof Error ? err.message : err)
     return null
   }
 }
@@ -85,7 +86,8 @@ export async function refreshAuthToken(): Promise<AuthResult> {
       userId: session.user.id,
       accessToken: token,
     }
-  } catch (_err) {
+  } catch (err) {
+    console.warn('[auth] refreshAuthToken failed:', err instanceof Error ? err.message : err)
     return null
   }
 }

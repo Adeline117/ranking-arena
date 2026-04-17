@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800',
       },
     })
-  } catch (_error) {
+  } catch (error) { console.error('[market] Failed:', error instanceof Error ? error.message : error);
     return NextResponse.json(
       { error: 'Failed to fetch Fear & Greed Index' },
       { status: 500 }
