@@ -17,61 +17,48 @@
  * }
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
-import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
+import { badRequest, notFound, serverError } from '@/lib/api/response'
 import { resolveExchangeUid, isCexVerifiable } from '@/lib/validators/exchange-uid-resolver'
 import { encrypt } from '@/lib/crypto/encryption'
-import { logger } from '@/lib/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader } from '@/lib/data/unified'
 
-export async function POST(req: NextRequest) {
-  const rateLimitResp = await checkRateLimit(req, RateLimitPresets.sensitive)
-  if (rateLimitResp) return rateLimitResp
+const logger = createLogger('verify-ownership')
 
-  try {
-    // 1. Auth check
-    const user = await getAuthUser(req)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
     }
 
-    // CSRF validation
-    const cookieToken = req.cookies.get(CSRF_COOKIE_NAME)?.value
-    const headerToken = req.headers.get(CSRF_HEADER_NAME) ?? undefined
-    if (!validateCsrfToken(cookieToken, headerToken)) {
-      return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
+    const { exchange, traderId, source, apiKey, apiSecret, passphrase } = body as {
+      exchange?: string
+      traderId?: string
+      source?: string
+      apiKey?: string
+      apiSecret?: string
+      passphrase?: string
     }
-
-    const body = await req.json()
-    const { exchange, traderId, source, apiKey, apiSecret, passphrase } = body
 
     if (!exchange || !traderId || !source) {
-      return NextResponse.json(
-        { error: 'Missing required parameters: exchange, traderId, source' },
-        { status: 400 }
-      )
+      return badRequest('Missing required parameters: exchange, traderId, source')
     }
 
     if (!apiKey || !apiSecret) {
-      return NextResponse.json(
-        { error: 'Missing required parameters: apiKey, apiSecret' },
-        { status: 400 }
-      )
+      return badRequest('Missing required parameters: apiKey, apiSecret')
     }
 
     // Validate this is a CEX platform that supports API key verification
     if (!isCexVerifiable(source)) {
-      return NextResponse.json(
-        { error: `Platform ${source} does not support API key verification. Use wallet signature for DEX platforms.` },
-        { status: 400 }
-      )
+      return badRequest(`Platform ${source} does not support API key verification. Use wallet signature for DEX platforms.`)
     }
 
     // 2. Look up trader's source_trader_id from Arena DB (unified data layer)
-    const supabase = getSupabaseAdmin()
-
     const resolved = await resolveTrader(supabase, {
       handle: traderId,
       platform: source,
@@ -80,10 +67,7 @@ export async function POST(req: NextRequest) {
     const traderKey = resolved?.traderKey || traderId
 
     if (!resolved) {
-      return NextResponse.json(
-        { error: 'Trader not found in Arena database', verified: false },
-        { status: 404 }
-      )
+      return notFound('Trader not found in Arena database')
     }
 
     // 3. Resolve the UID from the user's API credentials
@@ -147,10 +131,7 @@ export async function POST(req: NextRequest) {
 
     if (upsertError) {
       logger.error('[verify-ownership] Failed to store exchange connection', upsertError)
-      return NextResponse.json(
-        { error: 'Verification succeeded but failed to store credentials. Please try again.', verified: false },
-        { status: 500 }
-      )
+      return serverError('Verification succeeded but failed to store credentials. Please try again.')
     }
 
     logger.info('[verify-ownership] Verification passed', {
@@ -165,12 +146,9 @@ export async function POST(req: NextRequest) {
       uid: resolvedUid,
       message: 'Account ownership verified successfully',
     })
-  } catch (error: unknown) {
-    logger.error('[verify-ownership] Error:', error)
-    // SECURITY: Do not leak internal error details to client
-    return NextResponse.json(
-      { error: 'Verification failed', verified: false },
-      { status: 500 }
-    )
+  },
+  {
+    name: 'verify-ownership',
+    rateLimit: 'sensitive',
   }
-}
+)

@@ -3,17 +3,10 @@
  * POST /api/exchange/sync
  */
 
-import { NextRequest } from 'next/server'
-import {
-  getSupabaseAdmin,
-  requireAuth,
-  success,
-  notFound,
-  handleError,
-  validateEnum,
-} from '@/lib/api'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
+import { badRequest, notFound } from '@/lib/api/response'
+import { validateEnum } from '@/lib/api/validation'
 import { decrypt } from '@/lib/exchange/encryption'
 import { type Exchange, SUPPORTED_EXCHANGES } from '@/lib/exchange'
 import { createLogger } from '@/lib/utils/logger'
@@ -47,15 +40,15 @@ import {
 
 const logger = createLogger('exchange-sync')
 
-export async function POST(request: NextRequest) {
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
+    }
 
-  try {
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    const body = await request.json()
     const exchange = validateEnum(body.exchange, SUPPORTED_EXCHANGES, {
       required: true,
       fieldName: 'exchange',
@@ -87,9 +80,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (err: unknown) {
       logger.error('Decryption failed', { error: String(err) })
-      const error = new Error('Failed to decrypt credentials') as Error & { statusCode?: number }
-      error.statusCode = 500
-      throw error
+      throw new Error('Failed to decrypt credentials')
     }
 
     // 根据交易所类型获取数据
@@ -144,7 +135,7 @@ export async function POST(request: NextRequest) {
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Sync failed'
       logger.error(`${exchange} sync failed`, { error: errorMessage })
-      
+
       // 更新连接状态为失败
       await supabase
         .from('user_exchange_connections')
@@ -193,12 +184,17 @@ export async function POST(request: NextRequest) {
       })
       .eq('id', connection.id)
 
-    return success({
-      message: 'Sync successful',
-      tradesCount: stats?.totalTrades ?? 0,
-      stats,
+    return NextResponse.json({
+      success: true,
+      data: {
+        message: 'Sync successful',
+        tradesCount: stats?.totalTrades ?? 0,
+        stats,
+      },
     })
-  } catch (error: unknown) {
-    return handleError(error, 'exchange/sync')
+  },
+  {
+    name: 'exchange-sync',
+    rateLimit: 'sensitive',
   }
-}
+)
