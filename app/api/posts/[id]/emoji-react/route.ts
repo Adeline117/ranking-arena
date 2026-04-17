@@ -4,35 +4,42 @@
  * GET /api/posts/[id]/emoji-react - Get aggregated emoji counts
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import {
-  getSupabaseAdmin,
-  requireAuth,
   success,
   handleError,
 } from '@/lib/api'
+import { withPublic, withAuth } from '@/lib/api/middleware'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
-
-type RouteContext = { params: Promise<{ id: string }> }
 
 // Allowed emoji set (crypto-relevant, keep it focused)
 const ALLOWED_EMOJIS = new Set(['👍', '🔥', '💎', '🚀', '❤️', '👀', '🎯', '💰', '📈', '📉', '🤔', '😂'])
 
-export async function POST(request: NextRequest, context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+/** Extract post id from URL path */
+function extractPostId(url: string): string {
+  const pathParts = new URL(url).pathname.split('/')
+  const postsIdx = pathParts.indexOf('posts')
+  return pathParts[postsIdx + 1]
+}
 
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-    const { id: postId } = await context.params
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const postId = extractPostId(request.url)
+    const sb = supabase as SupabaseClient
 
-    const body = await request.json()
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      )
+    }
     const emoji = body.emoji as string
 
     if (!emoji || !ALLOWED_EMOJIS.has(emoji)) {
@@ -40,7 +47,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Check if reaction exists
-    const { data: existing } = await supabase
+    const { data: existing } = await sb
       .from('post_emoji_reactions')
       .select('id')
       .eq('post_id', postId)
@@ -50,10 +57,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     if (existing) {
       // Remove (toggle off)
-      await supabase.from('post_emoji_reactions').delete().eq('id', existing.id)
+      await sb.from('post_emoji_reactions').delete().eq('id', existing.id)
     } else {
       // Add
-      await supabase.from('post_emoji_reactions').insert({
+      await sb.from('post_emoji_reactions').insert({
         post_id: postId,
         user_id: user.id,
         emoji,
@@ -61,7 +68,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Get updated aggregated counts
-    const { data: reactions } = await supabase
+    const { data: reactions } = await sb
       .from('post_emoji_reactions')
       .select('emoji')
       .eq('post_id', postId)
@@ -72,7 +79,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // Get user's own reactions
-    const { data: userReactions } = await supabase
+    const { data: userReactions } = await sb
       .from('post_emoji_reactions')
       .select('emoji')
       .eq('post_id', postId)
@@ -82,22 +89,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
       action: existing ? 'removed' : 'added',
       emoji,
       counts,
-      userEmojis: (userReactions || []).map(r => r.emoji),
+      userEmojis: (userReactions || []).map((r: { emoji: string }) => r.emoji),
     })
-  } catch (err) {
-    return handleError(err)
-  }
-}
+  },
+  { name: 'posts/emoji-react-post', rateLimit: 'write' }
+)
 
-export async function GET(request: NextRequest, context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const GET = withPublic(
+  async ({ supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  try {
-    const { id: postId } = await context.params
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const postId = extractPostId(request.url)
+    const sb = supabase as SupabaseClient
 
-    const { data: reactions } = await supabase
+    const { data: reactions } = await sb
       .from('post_emoji_reactions')
       .select('emoji')
       .eq('post_id', postId)
@@ -109,20 +115,21 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     // Check if user is authenticated to get their own reactions
     let userEmojis: string[] = []
-    try {
-      const user = await requireAuth(request)
-      const { data: userReactions } = await supabase
-        .from('post_emoji_reactions')
-        .select('emoji')
-        .eq('post_id', postId)
-        .eq('user_id', user.id)
-      userEmojis = (userReactions || []).map(r => r.emoji)
-    } catch {
-      // Not authenticated — just return counts without user state
+    const authHeader = request.headers.get('Authorization')
+    if (authHeader?.startsWith('Bearer ')) {
+      const token = authHeader.slice(7)
+      const { data: { user } } = await sb.auth.getUser(token)
+      if (user) {
+        const { data: userReactions } = await sb
+          .from('post_emoji_reactions')
+          .select('emoji')
+          .eq('post_id', postId)
+          .eq('user_id', user.id)
+        userEmojis = (userReactions || []).map((r: { emoji: string }) => r.emoji)
+      }
     }
 
     return success({ counts, userEmojis })
-  } catch (err) {
-    return handleError(err)
-  }
-}
+  },
+  { name: 'posts/emoji-react-get', rateLimit: 'read' }
+)

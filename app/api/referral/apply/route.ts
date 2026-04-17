@@ -1,8 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 const logger = createLogger('referral-apply')
 
@@ -16,24 +15,20 @@ const PRO_EXTENSION_DAYS = 30
  * - Increments the referrer's referral count (via query)
  * - If referrer reaches 3 referrals, extend their Pro subscription by 1 month
  */
-export async function POST(req: NextRequest) {
-  try {
-    const rateLimitResult = await checkRateLimit(req, RateLimitPresets.authenticated)
-    if (rateLimitResult) return rateLimitResult
-
-    const user = await getAuthUser(req)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    let body: Record<string, unknown> | null
+    try {
+      body = await request.json()
+    } catch {
+      body = null
     }
 
-    const body = await req.json().catch(() => null)
-    const code = body?.code?.trim()
+    const code = (body?.code as string)?.trim()
 
     if (!code || typeof code !== 'string' || code.length < 2) {
       return NextResponse.json({ error: 'Invalid referral code' }, { status: 400 })
     }
-
-    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Check if user already has a referrer
     const { data: currentProfile } = await supabase
@@ -97,11 +92,9 @@ export async function POST(req: NextRequest) {
       referral_count: totalReferrals,
       reward_earned: totalReferrals >= REFERRAL_REWARD_THRESHOLD,
     })
-  } catch (error) {
-    logger.error('Referral apply error:', error)
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'referral/apply', rateLimit: 'write' }
+)
 
 /**
  * Grant or extend Pro subscription by PRO_EXTENSION_DAYS for the referrer.

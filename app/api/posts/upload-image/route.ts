@@ -1,23 +1,14 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
 
-export async function POST(request: NextRequest) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
-
-    // Authenticate from JWT, not from client-submitted formData
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
     const userId = user.id
 
     const formData = await request.formData()
@@ -49,9 +40,6 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 创建 Supabase 客户端（使用 service key 以绕过 RLS）
-    const supabase = getSupabaseAdmin()
-
     // 检查 posts bucket 是否存在
     const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
     if (bucketsError) {
@@ -61,7 +49,7 @@ export async function POST(request: NextRequest) {
       }, { status: 503 })
     }
 
-    const postsBucketExists = buckets?.some(b => b.id === 'posts')
+    const postsBucketExists = buckets?.some((b: { id: string }) => b.id === 'posts')
     if (!postsBucketExists) {
       logger.error('Posts bucket does not exist. Please run scripts/setup_posts_storage.sql')
       return NextResponse.json({
@@ -132,9 +120,6 @@ export async function POST(request: NextRequest) {
       fileName: data.path,
       verified: true, // 标记已验证
     })
-  } catch (error: unknown) {
-    logger.error('Error uploading image:', error)
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 })
-  }
-}
-
+  },
+  { name: 'posts/upload-image', rateLimit: 'write' }
+)

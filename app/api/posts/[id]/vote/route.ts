@@ -3,16 +3,10 @@
  * POST /api/posts/[id]/vote - 投票（看涨/看跌/观望）
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import {
-  getSupabaseAdmin,
-  requireAuth,
-  success,
-  handleError,
-} from '@/lib/api'
+import { withAuth } from '@/lib/api/middleware'
 import { togglePostVote, getPostById } from '@/lib/data/posts'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 
 // Zod schema for POST /api/posts/[id]/vote
@@ -20,21 +14,34 @@ const PostVoteSchema = z.object({
   choice: z.enum(['bull', 'bear', 'wait'], { message: 'choice must be bull, bear, or wait' }),
 })
 
-type RouteContext = { params: Promise<{ id: string }> }
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-export async function POST(request: NextRequest, context: RouteContext) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+    // Extract post id from URL path
+    const url = new URL(request.url)
+    const pathParts = url.pathname.split('/')
+    const postsIdx = pathParts.indexOf('posts')
+    const id = pathParts[postsIdx + 1]
 
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Missing post ID' },
+        { status: 400 }
+      )
+    }
 
-    const { id } = await context.params
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: 'Invalid JSON body' },
+        { status: 400 }
+      )
+    }
 
-    const body = await request.json()
     const parsed = PostVoteSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(
@@ -50,16 +57,18 @@ export async function POST(request: NextRequest, context: RouteContext) {
     // 获取更新后的帖子信息
     const post = await getPostById(supabase, id)
 
-    return success({
-      action: result.action,
-      vote: result.vote,
-      poll: {
-        bull: post?.poll_bull || 0,
-        bear: post?.poll_bear || 0,
-        wait: post?.poll_wait || 0,
+    return NextResponse.json({
+      success: true,
+      data: {
+        action: result.action,
+        vote: result.vote,
+        poll: {
+          bull: post?.poll_bull || 0,
+          bear: post?.poll_bear || 0,
+          wait: post?.poll_wait || 0,
+        },
       },
     })
-  } catch (error: unknown) {
-    return handleError(error, 'posts/[id]/vote')
-  }
-}
+  },
+  { name: 'posts/vote', rateLimit: 'write' }
+)
