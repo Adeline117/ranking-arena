@@ -238,7 +238,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     try {
       const res = await globalThis.fetch(`/api/channels/${channelId}/members`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}`, ...getCsrfHeaders() },
         body: JSON.stringify({ userId: targetId }),
       })
       if (res.ok) {
@@ -255,7 +255,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     try {
       const res = await globalThis.fetch(`/api/channels/${channelId}/members`, {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}`, ...getCsrfHeaders() },
         body: JSON.stringify({ userId }),
       })
       if (res.ok) {
@@ -272,7 +272,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     try {
       await globalThis.fetch(`/api/channels/${channelId}/members`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}` },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${accessToken}`, ...getCsrfHeaders() },
         body: JSON.stringify({ userId: targetId, role: newRole }),
       })
       setMembers(prev => prev.map(m => m.user_id === targetId ? { ...m, role: newRole } : m))
@@ -281,7 +281,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     }
   }
 
-  const formatTime = (d: string) => new Date(d).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const formatTime = (d: string) => new Date(d).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 
   if (!authChecked || loading) {
     return (
