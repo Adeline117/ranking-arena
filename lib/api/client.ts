@@ -178,16 +178,27 @@ export async function apiRequest<T = unknown>(
         const isRateLimited = response.status === 429 || isProviderRateLimitResponse(data)
         const isRetryable = isRateLimited || [500, 502, 503, 504].includes(response.status)
 
-        if (!retryAfter && data?.error?.details?.retryAfter) {
-          retryAfter = data.error.details.retryAfter
+        // Normalize error: server returns either { error: "string" } or { error: { code, message } }
+        const rawError = data?.error
+        const errorIsObject = rawError && typeof rawError === 'object'
+        const errorCode = isRateLimited
+          ? 'RATE_LIMITED'
+          : (errorIsObject ? rawError.code : null) || httpStatusToErrorCode(response.status)
+        const errorMessage = (errorIsObject ? rawError.message : null)
+          || (typeof rawError === 'string' ? rawError : null)
+          || data?.message
+          || (isRateLimited ? '请求频率超限' : '请求失败')
+
+        if (!retryAfter && errorIsObject && rawError.details?.retryAfter) {
+          retryAfter = rawError.details.retryAfter
         }
 
         lastResult = {
           success: false,
           error: {
-            code: isRateLimited ? 'RATE_LIMITED' : (data.error?.code || 'REQUEST_FAILED'),
-            message: data.error?.message || data.message || (isRateLimited ? '请求频率超限' : '请求失败'),
-            details: data.error?.details,
+            code: errorCode,
+            message: errorMessage,
+            details: errorIsObject ? rawError.details : undefined,
             retryable: isRetryable,
             retryAfter,
           },
@@ -386,6 +397,20 @@ export async function authedFetch<T>(
     return null
   })
   return { ok: response.ok, status: response.status, data }
+}
+
+/**
+ * Map HTTP status codes to error code strings for consistent client-side handling.
+ * Handles both proxy-level errors (which return { code, message } objects)
+ * and route-handler errors (which return plain string messages).
+ */
+function httpStatusToErrorCode(status: number): string {
+  if (status === 401) return 'UNAUTHORIZED'
+  if (status === 403) return 'FORBIDDEN'
+  if (status === 404) return 'NOT_FOUND'
+  if (status === 429) return 'RATE_LIMITED'
+  if (status >= 500) return 'SERVER_ERROR'
+  return 'REQUEST_FAILED'
 }
 
 /**

@@ -35,6 +35,9 @@ const CSRF_EXEMPT_ROUTES = [
   '/api/users/follow',     // 关注 API 需要认证
   '/api/follow',           // 交易员关注 API 需要认证
   '/api/messages',         // 消息 API 需要认证
+  '/api/chat',             // 聊天设置 API 需要认证 (settings, search, upload)
+  '/api/conversations',    // 会话列表 API 需要认证
+  '/api/channels',         // 群聊频道 API 需要认证
   '/api/notifications',    // 通知 API 需要认证
   '/api/upload-profile-image', // 头像/背景图上传 API，通过 userId 验证
   '/api/pipeline',             // VPS pipeline ingest — authenticated via X-Proxy-Key
@@ -46,6 +49,9 @@ const PROTECTED_ROUTES = [
   '/api/comments',
   '/api/bookmark',
   '/api/messages',
+  '/api/chat',
+  '/api/conversations',
+  '/api/channels',
   '/api/notifications',
   '/api/users/follow',
   '/api/exchange',
