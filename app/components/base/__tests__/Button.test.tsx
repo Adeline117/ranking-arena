@@ -5,7 +5,8 @@ import Button from '../Button'
 // Mock design tokens
 jest.mock('@/lib/design-tokens', () => ({
   tokens: {
-    spacing: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 5: '20px' },
+    spacing: { 1: '4px', 2: '8px', 3: '12px', 4: '16px', 5: '20px', 6: '24px', 8: '32px', 10: '40px', 12: '48px' },
+    touchTarget: { min: 44, comfortable: 48, large: 56 },
     radius: { lg: '8px' },
     typography: {
       fontWeight: { bold: 700 },
