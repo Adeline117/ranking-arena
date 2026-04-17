@@ -6,34 +6,30 @@
  * Redis-cached for 30 seconds.
  */
 
-import { NextResponse } from 'next/server';
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js';
-import { getOrSetWithLock } from '@/lib/cache';
+import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import { withPublic } from '@/lib/api/middleware'
+import { getOrSetWithLock } from '@/lib/cache'
 import logger from '@/lib/logger'
 
-export const dynamic = 'force-dynamic';
+export const dynamic = 'force-dynamic'
 
-export async function GET() {
-  try {
+export const GET = withPublic(
+  async ({ supabase }) => {
     const result = await getOrSetWithLock(
       'api:platforms:health',
-      async () => computePlatformHealth(),
+      async () => computePlatformHealth(supabase as SupabaseClient),
       { ttl: 30, lockTtl: 10 }
-    );
+    )
 
     return NextResponse.json(result, {
       headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
-    });
-  } catch (error: unknown) {
-    logger.error('[platforms/health] Error:', error);
-    return NextResponse.json({ error: 'Internal error' }, { status: 500 });
-  }
-}
+    })
+  },
+  { name: 'platforms/health', rateLimit: 'public' }
+)
 
-async function computePlatformHealth() {
-  const supabase = getSupabaseAdmin() as SupabaseClient;
-
+async function computePlatformHealth(supabase: SupabaseClient) {
   // Run both queries in parallel instead of sequentially
   const [healthResult, pipelineLogsResult] = await Promise.all([
     supabase
@@ -46,20 +42,20 @@ async function computePlatformHealth() {
       .eq('status', 'success')
       .order('ended_at', { ascending: false })
       .limit(200),
-  ]);
+  ])
 
-  const health = healthResult.data;
-  const pipelineLogs = pipelineLogsResult.data;
+  const health = healthResult.data
+  const pipelineLogs = pipelineLogsResult.data
 
   // Get latest data timestamps per platform from pipeline_logs
-  const latestByPlatform = new Map<string, string>();
+  const latestByPlatform = new Map<string, string>()
 
   for (const row of pipelineLogs || []) {
-    const match = row.job_name?.match(/(?:fetch|enrich)-(.+)/);
+    const match = row.job_name?.match(/(?:fetch|enrich)-(.+)/)
     if (match) {
-      const platform = match[1];
+      const platform = match[1]
       if (!latestByPlatform.has(platform)) {
-        latestByPlatform.set(platform, row.ended_at);
+        latestByPlatform.set(platform, row.ended_at)
       }
     }
   }
@@ -71,12 +67,12 @@ async function computePlatformHealth() {
       .select('platform, updated_at')
       .eq('season_id', '90D')
       .order('updated_at', { ascending: false })
-      .limit(100);
+      .limit(100)
 
     for (const row of lbFreshness || []) {
-      const key = row.platform;
+      const key = row.platform
       if (key && !latestByPlatform.has(key)) {
-        latestByPlatform.set(key, row.updated_at);
+        latestByPlatform.set(key, row.updated_at)
       }
     }
   }
@@ -84,5 +80,5 @@ async function computePlatformHealth() {
   return {
     platforms: health || [],
     freshness: Object.fromEntries(latestByPlatform),
-  };
+  }
 }
