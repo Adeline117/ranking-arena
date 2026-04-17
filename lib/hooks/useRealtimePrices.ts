@@ -42,6 +42,7 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
   const visibleRef = useRef(true)
   const mountedRef = useRef(true)
   const flashTimersRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set())
+  const parseWarnedRef = useRef(false)
 
   const handleData = useCallback((data: Record<string, PriceData>) => {
     if (!mountedRef.current) return
@@ -132,7 +133,12 @@ export function useRealtimePrices(options: UseRealtimePricesOptions = {}) {
       try {
         handleData(JSON.parse(event.data))
         setMode('sse')
-      } catch (_err) { /* ignore parse errors */ }
+      } catch (err) {
+        if (!parseWarnedRef.current) {
+          parseWarnedRef.current = true
+          console.warn('[useRealtimePrices] SSE parse error (further suppressed):', err instanceof Error ? err.message : String(err))
+        }
+      }
     }
 
     es.onerror = () => {
