@@ -93,8 +93,7 @@ export async function syncRedisSortedSet(
 ): Promise<void> {
   const { syncSortedSetFromLeaderboard } = await import('@/lib/realtime/ranking-store')
   for (const season of seasons) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- season type is a string literal union defined in the caller
-    await syncSortedSetFromLeaderboard(supabase, season as any)
+    await syncSortedSetFromLeaderboard(supabase, season)
   }
 }
 

@@ -61,6 +61,7 @@ export async function getSharedRedis(): Promise<UpstashRedisType | null> {
       }
       return fetch(input, init)
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Upstash SDK types omit `fetch` but runtime accepts it for ISR-safe override
     redisClient = new Redis({ url, token, enableAutoPipelining: true, fetch: isrSafeFetch } as any)
     dataLogger.info('[Redis] connected')
     return redisClient

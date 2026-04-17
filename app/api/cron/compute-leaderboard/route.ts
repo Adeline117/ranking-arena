@@ -893,6 +893,7 @@ async function computeSeason(
         logger.warn(`[${season}] trader_sources parent-upsert non-fatal: ${parentErr.message}`)
       }
 
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PostgREST: validBatch comes from validateBeforeWrite (Record<string,unknown>[]) which is not assignable to the generated row type
       const { error } = await supabase
         .from('leaderboard_ranks')
         .upsert(validBatch as any, { onConflict: 'season_id,source,source_trader_id' })

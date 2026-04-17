@@ -42,6 +42,7 @@ function getUpstashRedis(): Redis | null {
       }
       return fetch(input, init)
     }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Upstash SDK types omit `fetch` but runtime accepts it for ISR-safe override
     redis = new Redis({ url, token, fetch: isrSafeFetch } as any)
     rateLimitLogger.info('Upstash Redis 连接成功')
     return redis
