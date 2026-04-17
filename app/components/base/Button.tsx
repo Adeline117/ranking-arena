@@ -3,6 +3,89 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
+/* ── Module-level style constants ──
+   Avoids recreating these static objects on every Button render. */
+
+const BTN_BASE_STYLE: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: tokens.spacing[2],
+  border: 'none',
+  borderRadius: tokens.radius.lg,
+  fontWeight: tokens.typography.fontWeight.bold,
+  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+  position: 'relative',
+  overflow: 'hidden',
+}
+
+const BTN_VARIANT_STYLES: Record<string, React.CSSProperties> = {
+  primary: {
+    background: tokens.gradient.primary,
+    color: tokens.colors.white,
+    border: 'none',
+    boxShadow: `0 4px 12px ${tokens.colors.accent.brand}40`,
+  },
+  secondary: {
+    background: tokens.glass.bg.light,
+    backdropFilter: tokens.glass.blur.sm,
+    WebkitBackdropFilter: tokens.glass.blur.sm,
+    color: tokens.colors.text.primary,
+    border: tokens.glass.border.light,
+    boxShadow: tokens.shadow.sm,
+  },
+  ghost: {
+    background: 'transparent',
+    color: tokens.colors.text.primary,
+    border: `1px solid ${tokens.colors.border.primary}`,
+  },
+  text: {
+    background: 'transparent',
+    color: tokens.colors.accent.primary,
+    border: 'none',
+  },
+  success: {
+    background: tokens.gradient.success,
+    color: tokens.colors.white,
+    border: 'none',
+    boxShadow: `0 4px 12px ${tokens.colors.accent.success}40`,
+  },
+  danger: {
+    background: tokens.gradient.error,
+    color: tokens.colors.white,
+    border: 'none',
+    boxShadow: `0 4px 12px ${tokens.colors.accent.error}40`,
+  },
+}
+
+const BTN_SIZE_STYLES: Record<string, React.CSSProperties> = {
+  sm: {
+    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+    fontSize: tokens.typography.fontSize.sm,
+    minHeight: tokens.spacing[10],
+  },
+  md: {
+    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+    fontSize: tokens.typography.fontSize.base,
+    minHeight: `${tokens.touchTarget.min}px`,
+  },
+  lg: {
+    padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+    fontSize: tokens.typography.fontSize.md,
+    minHeight: `${tokens.touchTarget.comfortable}px`,
+  },
+}
+
+const BTN_LOADING_OVERLAY_STYLE: React.CSSProperties = {
+  position: 'absolute',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  inset: 0,
+  background: 'inherit',
+  borderRadius: 'inherit',
+}
+
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'text' | 'success' | 'danger'
   size?: 'sm' | 'md' | 'lg'
@@ -61,75 +144,9 @@ export default function Button({
   const errorMessage = typeof error === 'string' ? error : undefined
 
   const baseStyle: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: tokens.spacing[2],
-    border: 'none',
-    borderRadius: tokens.radius.lg,
-    fontWeight: tokens.typography.fontWeight.bold,
+    ...BTN_BASE_STYLE,
     cursor: isDisabled ? 'not-allowed' : 'pointer',
-    fontFamily: tokens.typography.fontFamily.sans.join(', '),
-    position: 'relative',
-    overflow: 'hidden',
     ...(fullWidth && { width: '100%' }),
-  }
-
-  const variantStyles: Record<string, React.CSSProperties> = {
-    primary: {
-      background: tokens.gradient.primary,
-      color: tokens.colors.white,
-      border: 'none',
-      boxShadow: `0 4px 12px ${tokens.colors.accent.brand}40`,
-    },
-    secondary: {
-      background: tokens.glass.bg.light,
-      backdropFilter: tokens.glass.blur.sm,
-      WebkitBackdropFilter: tokens.glass.blur.sm,
-      color: tokens.colors.text.primary,
-      border: tokens.glass.border.light,
-      boxShadow: tokens.shadow.sm,
-    },
-    ghost: {
-      background: 'transparent',
-      color: tokens.colors.text.primary,
-      border: `1px solid ${tokens.colors.border.primary}`,
-    },
-    text: {
-      background: 'transparent',
-      color: tokens.colors.accent.primary,
-      border: 'none',
-    },
-    success: {
-      background: tokens.gradient.success,
-      color: tokens.colors.white,
-      border: 'none',
-      boxShadow: `0 4px 12px ${tokens.colors.accent.success}40`,
-    },
-    danger: {
-      background: tokens.gradient.error,
-      color: tokens.colors.white,
-      border: 'none',
-      boxShadow: `0 4px 12px ${tokens.colors.accent.error}40`,
-    },
-  }
-
-  const sizeStyles: Record<typeof size, React.CSSProperties> = {
-    sm: {
-      padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-      fontSize: tokens.typography.fontSize.sm,
-      minHeight: tokens.spacing[10], // 移动端最小触摸目标 (40px, nearest token to 36px)
-    },
-    md: {
-      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-      fontSize: tokens.typography.fontSize.base,
-      minHeight: `${tokens.touchTarget.min}px`, // 移动端最小触摸目标
-    },
-    lg: {
-      padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
-      fontSize: tokens.typography.fontSize.md,
-      minHeight: `${tokens.touchTarget.comfortable}px`, // 移动端最小触摸目标
-    },
   }
 
   // 自动生成aria-label（如果未提供）
@@ -155,8 +172,8 @@ export default function Button({
       className={btnClassName}
       style={{
         ...baseStyle,
-        ...variantStyles[variant],
-        ...sizeStyles[size],
+        ...BTN_VARIANT_STYLES[variant],
+        ...BTN_SIZE_STYLES[size],
         ...errorStyles,
         ...style,
       }}
@@ -204,17 +221,7 @@ export default function Button({
       
       {/* 加载状态 */}
       {loading && (
-        <span
-          style={{
-            position: 'absolute',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            inset: 0,
-            background: 'inherit',
-            borderRadius: 'inherit',
-          }}
-        >
+        <span style={BTN_LOADING_OVERLAY_STYLE}>
           <span
             className="spinner-sm"
             style={{
