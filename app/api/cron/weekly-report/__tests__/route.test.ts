@@ -148,7 +148,7 @@ describe('GET /api/cron/weekly-report', () => {
 
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
-    expect(body.totalRuns).toBe(90)
+    expect(body.count).toBe(90)
     expect(body.totalErrors).toBe(2)
     expect(mockSendAlert).toHaveBeenCalledTimes(1)
     expect(mockSendAlert).toHaveBeenCalledWith(

@@ -157,7 +157,7 @@ describe('GET /api/cron/subscription-expiry', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
+    expect(body.ok).toBe(true)
     expect(body.expiringReminders).toBe(0)
     expect(body.downgraded).toBe(0)
   })
@@ -235,7 +235,7 @@ describe('GET /api/cron/subscription-expiry', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
+    expect(body.ok).toBe(true)
     expect(body.downgraded).toBe(1)
   })
 
@@ -296,7 +296,7 @@ describe('GET /api/cron/subscription-expiry', () => {
     const body = await res.json()
 
     expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
+    expect(body.ok).toBe(true)
     expect(body.errors.length).toBeGreaterThan(0)
     expect(body.errors[0]).toContain('Downgrade error')
   })
