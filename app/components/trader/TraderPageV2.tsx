@@ -257,16 +257,16 @@ function StatItem({ label, value, format }: {
   value: number | null | undefined
   format: 'number' | 'currency' | 'percent'
 }) {
-  const isNull = value == null
+  const isNull = value == null || !Number.isFinite(value)
   const formatValue = (): string => {
     if (isNull) return '—'
     switch (format) {
       case 'currency':
-        return `$${value.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
+        return `$${value!.toLocaleString('en-US', { maximumFractionDigits: 0 })}`
       case 'percent':
-        return `${value.toFixed(2)}%`
+        return `${value!.toFixed(2)}%`
       default:
-        return value.toLocaleString('en-US')
+        return value!.toLocaleString('en-US')
     }
   }
 

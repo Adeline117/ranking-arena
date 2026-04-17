@@ -213,6 +213,7 @@ export function CommentThread({
             <div style={{ marginTop: 8, position: 'relative' }}>
               <textarea
                 value={editContent || ''}
+                maxLength={2000}
                 onChange={(e) => {
                   setEditContent(e.target.value)
                   const ta = e.target
@@ -280,6 +281,7 @@ export function CommentThread({
             <div style={{ marginTop: 8, position: 'relative' }}>
               <textarea
                 value={replyContent}
+                maxLength={2000}
                 onChange={(e) => {
                   setReplyContent(e.target.value)
                   const ta = e.target
