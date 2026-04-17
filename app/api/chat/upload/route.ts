@@ -1,6 +1,5 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
 import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
 import logger from '@/lib/logger'
 
@@ -22,20 +21,10 @@ const MAX_IMAGE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_VIDEO_SIZE = 50 * 1024 * 1024 // 50MB
 const MAX_FILE_SIZE = 20 * 1024 * 1024 // 20MB
 
-export async function POST(request: NextRequest) {
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
-
-    // Security: Verify authentication
-    const authUser = await getAuthUser(request)
-    if (!authUser) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const _userId = authUser.id // Use authenticated user ID, ignore client-provided userId
     const conversationId = formData.get('conversationId') as string
 
     if (!file) {
@@ -47,13 +36,12 @@ export async function POST(request: NextRequest) {
     }
 
     // SECURITY: Verify user is a member of this conversation
-    const supabaseCheck = getSupabaseAdmin()
-    const { data: conv } = await supabaseCheck
+    const { data: conv } = await supabase
       .from('conversations')
       .select('user1_id, user2_id')
       .eq('id', conversationId)
       .maybeSingle()
-    if (!conv || (conv.user1_id !== authUser.id && conv.user2_id !== authUser.id)) {
+    if (!conv || (conv.user1_id !== user.id && conv.user2_id !== user.id)) {
       return NextResponse.json({ error: 'Not a member of this conversation' }, { status: 403 })
     }
 
@@ -108,9 +96,6 @@ export async function POST(request: NextRequest) {
       sniffedExt = sniffed.extension
     }
 
-    // Create Supabase client with service key
-    const supabase = getSupabaseAdmin()
-
     // Check if chat bucket exists, create if not
     const { data: buckets, error: bucketsError } = await supabase.storage.listBuckets()
     if (bucketsError) {
@@ -121,7 +106,7 @@ export async function POST(request: NextRequest) {
       }, { status: 503 })
     }
 
-    const chatBucketExists = buckets?.some(b => b.id === 'chat')
+    const chatBucketExists = buckets?.some((b: { id: string }) => b.id === 'chat')
     if (!chatBucketExists) {
       // Create chat bucket
       const { error: createBucketError } = await supabase.storage.createBucket('chat', {
@@ -173,9 +158,6 @@ export async function POST(request: NextRequest) {
       fileSize: file.size,
       category: fileCategory,
     })
-  } catch (error: unknown) {
-    logger.error('Error uploading chat file:', error)
-    const _errorMessage = error instanceof Error ? error.message : 'Upload failed'
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'chat-upload', rateLimit: 'sensitive' }
+)

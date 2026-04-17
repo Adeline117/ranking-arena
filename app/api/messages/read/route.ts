@@ -3,9 +3,8 @@
  * POST: Mark all messages in a conversation as read for the current user
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
@@ -13,25 +12,22 @@ const logger = createLogger('api:messages-read')
 
 export const dynamic = 'force-dynamic'
 
-export async function POST(request: NextRequest) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
-  if (rateLimitResp) return rateLimitResp
-
-  try {
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
-    const { conversationId } = await request.json()
+    const { conversationId } = body as { conversationId?: string }
     if (!conversationId) {
       return NextResponse.json({ error: 'Missing conversationId' }, { status: 400 })
     }
-
-    const supabase = getSupabaseAdmin()
 
     // Verify user is in this conversation
     const { data: conv } = await supabase
@@ -58,6 +54,7 @@ export async function POST(request: NextRequest) {
       .select('id')
 
     if (error) {
+      logger.error('Mark read failed', { error: error.message })
       return NextResponse.json({ error: 'Failed to mark as read' }, { status: 500 })
     }
 
@@ -66,8 +63,6 @@ export async function POST(request: NextRequest) {
       marked_count: updated?.length || 0,
       read_at: now,
     })
-  } catch (error) {
-    logger.error('POST failed', { error: error instanceof Error ? error.message : String(error) })
-    return NextResponse.json({ error: 'Server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'messages-read', rateLimit: 'write' }
+)

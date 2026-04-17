@@ -3,17 +3,13 @@
  * Handles avatar and cover image uploads using service role to bypass RLS
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
 import { sniffImageFile } from '@/lib/utils/image-magic-bytes'
 import logger from '@/lib/logger'
 
-export async function POST(request: NextRequest) {
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
-
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
     const formData = await request.formData()
     const file = formData.get('file') as File
     const userId = formData.get('userId') as string
@@ -27,12 +23,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No userId provided' }, { status: 401 })
     }
 
-    // Authenticate the request and verify the userId matches the session user
-    const authUser = await getAuthUser(request)
-    if (!authUser) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
-    }
-    if (authUser.id !== userId) {
+    // Verify the userId matches the session user
+    if (user.id !== userId) {
       return NextResponse.json({ error: 'Cannot upload images for another user' }, { status: 403 })
     }
 
@@ -58,9 +50,6 @@ export async function POST(request: NextRequest) {
         code: 'INVALID_FILE_TYPE'
       }, { status: 400 })
     }
-
-    // Create Supabase client with service role (bypasses RLS)
-    const supabase = getSupabaseAdmin()
 
     // Generate unique filename — use SERVER-derived extension from sniffed magic bytes
     const fileName = `${userId}-${Date.now()}.${sniffed.extension}`
@@ -95,10 +84,6 @@ export async function POST(request: NextRequest) {
       url: urlData.publicUrl,
       fileName
     })
-
-  } catch (error: unknown) {
-    logger.error('[upload-profile-image] Error:', error)
-    const _errorMessage = error instanceof Error ? error.message : 'Upload failed'
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'upload-profile-image', rateLimit: 'sensitive' }
+)

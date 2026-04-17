@@ -7,12 +7,11 @@
  * the authenticated user's session, preventing impersonation attacks.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
+import { withAuth } from '@/lib/api/middleware'
 import { createLogger, traceMessage } from '@/lib/utils/logger'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { parseLimit } from '@/lib/utils/safe-parse'
 
@@ -35,22 +34,10 @@ const DEFAULT_PAGE_SIZE = 50
 const MAX_PAGE_SIZE = 100
 
 // 获取会话消息（支持 cursor 分页）
-export async function GET(request: NextRequest) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
-
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.authenticated)
-    if (rateLimitResponse) return rateLimitResponse
-
-    // SECURITY: Require authentication
-    const user = await getAuthUser(request)
-    if (!user) {
-      return NextResponse.json(
-        { error: 'Please log in first', error_code: 'NOT_AUTHENTICATED' },
-        { status: 401 }
-      )
-    }
+export const GET = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
     const conversationId = request.nextUrl.searchParams.get('conversationId')
     // SECURITY: Use authenticated user's ID, never from query params
@@ -64,8 +51,6 @@ export async function GET(request: NextRequest) {
     const before = request.nextUrl.searchParams.get('before') // cursor: created_at of oldest loaded message
     const limitParam = request.nextUrl.searchParams.get('limit')
     const limit = parseLimit(limitParam, DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE)
-
-    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 验证用户是否有权限访问此会话
     const { data: conversation, error: convError } = await supabase
@@ -83,7 +68,7 @@ export async function GET(request: NextRequest) {
     }
 
     // 构建查询（支持 cursor 分页）
-    let query = supabase
+    let query = (supabase as SupabaseClient)
       .from('direct_messages')
       .select(`
         id,
@@ -154,31 +139,26 @@ export async function GET(request: NextRequest) {
       otherUser: otherUserData,
       has_more,
     })
-  } catch (error: unknown) {
-    logger.error('GET error', { error: String(error) })
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
+  },
+  { name: 'messages-get', rateLimit: 'authenticated' }
+)
 
 // 发送私信
-export async function POST(request: NextRequest) {
-  const guard = socialFeatureGuard()
-  if (guard) return guard
+export const POST = withAuth(
+  async ({ user, supabase, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
 
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
-
-    // SECURITY: Require authentication
-    const user = await getAuthUser(request)
-    if (!user) {
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
       return NextResponse.json(
-        { error: 'Please log in first', error_code: 'NOT_AUTHENTICATED' },
-        { status: 401 }
+        { error: 'Invalid JSON body', error_code: 'VALIDATION_ERROR' },
+        { status: 400 }
       )
     }
 
-    const body = await request.json()
     const parsed = SendMessageSchema.safeParse(body)
     if (!parsed.success) {
       return NextResponse.json(
@@ -204,10 +184,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
     // Permission check via single RPC call (replaces 5-7 separate queries)
-    const { data: permCheck, error: permError } = await supabase
+    const { data: permCheck, error: permError } = await (supabase as SupabaseClient)
       .rpc('check_dm_permission', { p_sender_id: senderId, p_receiver_id: receiverId })
 
     if (permError) {
@@ -347,11 +325,6 @@ export async function POST(request: NextRequest) {
       message,
       conversation_id: conversation.id
     })
-  } catch (error: unknown) {
-    logger.error('POST error', { error: String(error) })
-    return NextResponse.json(
-      { error: 'Service error, please try again later', error_code: 'SERVER_ERROR' },
-      { status: 500 }
-    )
-  }
-}
+  },
+  { name: 'messages-send', rateLimit: 'write' }
+)
