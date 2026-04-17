@@ -3,19 +3,12 @@
  * POST /api/posts/[id]/like - 点赞/取消点赞
  */
 
-import { NextRequest } from 'next/server'
-import {
-  getSupabaseAdmin,
-  requireAuth,
-  success,
-  handleError,
-  validateEnum,
-} from '@/lib/api'
+import { NextRequest, NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
+import { validateEnum, success, handleError } from '@/lib/api'
 import { togglePostReaction, getPostById } from '@/lib/data/posts'
 import { createNotificationDeduped } from '@/lib/data/notifications'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
-import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
@@ -26,79 +19,75 @@ export async function POST(request: NextRequest, context: RouteContext) {
   const guard = socialFeatureGuard()
   if (guard) return guard
 
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
+  const { id } = await context.params
 
-    const { id } = await context.params
+  const handler = withAuth(
+    async ({ user, supabase, request: req }) => {
+      let body: Record<string, unknown>
+      try {
+        body = await req.json()
+      } catch {
+        return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
+      }
 
-    // CSRF 验证 (currently disabled: auth token is sufficient)
-    const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
-    const headerToken = request.headers.get(CSRF_HEADER_NAME) ?? undefined
-    if (!validateCsrfToken(cookieToken, headerToken) && false) {
-      throw (await import('@/lib/api/errors')).ApiError.forbidden('CSRF validation failed')
-    }
+      const reactionType = validateEnum(
+        body.reaction_type || 'up',
+        ['up', 'down'] as const,
+        { fieldName: 'reaction_type' }
+      ) ?? 'up'
 
-    const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin()
+      // 执行点赞/踩操作
+      const result = await togglePostReaction(supabase, id, user.id, reactionType)
 
-    const body = await request.json()
-    const reactionType = validateEnum(
-      body.reaction_type || 'up',
-      ['up', 'down'] as const,
-      { fieldName: 'reaction_type' }
-    ) ?? 'up'
+      // 清除帖子列表缓存
+      deleteServerCacheByPrefix('posts:')
 
-    // 执行点赞/踩操作
-    const result = await togglePostReaction(supabase, id, user.id, reactionType)
+      // 获取更新后的帖子信息（一次查询，同时用于计数和通知）
+      let likeCount: number | null = 0
+      let dislikeCount: number | null = 0
+      let post: Awaited<ReturnType<typeof getPostById>> = null
 
-    // 清除帖子列表缓存
-    deleteServerCacheByPrefix('posts:')
+      try {
+        post = await getPostById(supabase, id)
+        likeCount = post?.like_count || 0
+        dislikeCount = post?.dislike_count || 0
+      } catch (fetchError) {
+        // Reaction saved but couldn't fetch actual counts.
+        // Return null so client keeps its optimistic count instead of wrong "1".
+        logger.warn('[posts/[id]/like] Failed to fetch updated counts:', fetchError)
+        likeCount = null
+        dislikeCount = null
+      }
 
-    // 获取更新后的帖子信息（一次查询，同时用于计数和通知）
-    let likeCount: number | null = 0
-    let dislikeCount: number | null = 0
-    let post: Awaited<ReturnType<typeof getPostById>> = null
-
-    try {
-      post = await getPostById(supabase, id)
-      likeCount = post?.like_count || 0
-      dislikeCount = post?.dislike_count || 0
-    } catch (fetchError) {
-      // Reaction saved but couldn't fetch actual counts.
-      // Return null so client keeps its optimistic count instead of wrong "1".
-      logger.warn('[posts/[id]/like] Failed to fetch updated counts:', fetchError)
-      likeCount = null
-      dislikeCount = null
-    }
-
-    // Send like notification (fire-and-forget, deduped — same actor+post within 1h won't send again)
-    if (result.action === 'added' && reactionType === 'up' && post?.author_id && post.author_id !== user.id) {
-      getUserHandle(user.id, user.email ?? undefined)
-        .then(userHandle => {
-          createNotificationDeduped(supabase, {
-            user_id: post!.author_id,
-            type: 'like',
-            title: `${userHandle} liked your post`,
-            message: (post!.title || '').slice(0, 100) || 'your post',
-            actor_id: user.id,
-            link: `/post/${id}`,
-            reference_id: id,
-            read: false,
+      // Send like notification (fire-and-forget, deduped — same actor+post within 1h won't send again)
+      if (result.action === 'added' && reactionType === 'up' && post?.author_id && post.author_id !== user.id) {
+        getUserHandle(user.id, user.email ?? undefined)
+          .then(userHandle => {
+            createNotificationDeduped(supabase, {
+              user_id: post!.author_id,
+              type: 'like',
+              title: `${userHandle} liked your post`,
+              message: (post!.title || '').slice(0, 100) || 'your post',
+              actor_id: user.id,
+              link: `/post/${id}`,
+              reference_id: id,
+              read: false,
+            })
           })
-        })
-        .catch(notifErr => {
-          logger.warn('[posts/[id]/like] Notification error:', notifErr)
-        })
-    }
+          .catch(notifErr => {
+            logger.warn('[posts/[id]/like] Notification error:', notifErr)
+          })
+      }
 
-    return success({
-      action: result.action,
-      reaction: result.reaction,
-      like_count: likeCount,
-      dislike_count: dislikeCount,
-    })
-  } catch (error: unknown) {
-    return handleError(error, 'posts/[id]/like')
-  }
+      return success({
+        action: result.action,
+        reaction: result.reaction,
+        like_count: likeCount,
+        dislike_count: dislikeCount,
+      })
+    },
+    { name: 'posts-like', rateLimit: 'write' }
+  )
+
+  return handler(request)
 }

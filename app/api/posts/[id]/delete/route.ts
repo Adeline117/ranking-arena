@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { withAuth } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 const logger = createLogger('posts-delete')
 
@@ -14,91 +13,73 @@ export async function DELETE(
   const guard = socialFeatureGuard()
   if (guard) return guard
 
-  try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
-    if (rateLimitResponse) return rateLimitResponse
+  const { id: postId } = await params
 
-    const { id: postId } = await params
+  const handler = withAuth(
+    async ({ user, supabase }) => {
+      // 获取帖子信息，验证所有权
+      const { data: post, error: fetchError } = await supabase
+        .from('posts')
+        .select('author_id')
+        .eq('id', postId)
+        .single()
 
-    // 验证用户身份
-    const authHeader = request.headers.get('Authorization')
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+      if (fetchError || !post) {
+        return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+      }
 
-    const token = authHeader.split(' ')[1]
-    const supabase = getSupabaseAdmin()
+      if (post.author_id !== user.id) {
+        return NextResponse.json({ error: 'No permission to delete this post' }, { status: 403 })
+      }
 
-    // 验证 token 并获取用户
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token)
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Authentication failed' }, { status: 401 })
-    }
+      // 删除帖子相关的评论（记录错误但继续删除帖子）
+      const { error: commentsError } = await supabase
+        .from('comments')
+        .delete()
+        .eq('post_id', postId)
 
-    // 获取帖子信息，验证所有权
-    const { data: post, error: fetchError } = await supabase
-      .from('posts')
-      .select('author_id')
-      .eq('id', postId)
-      .single()
+      if (commentsError) {
+        logger.warn('Failed to delete comments', { error: commentsError.message, postId })
+      }
 
-    if (fetchError || !post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
-    }
+      // 删除帖子相关的点赞（记录错误但继续删除帖子）
+      const { error: likesError } = await supabase
+        .from('post_likes')
+        .delete()
+        .eq('post_id', postId)
 
-    if (post.author_id !== user.id) {
-      return NextResponse.json({ error: 'No permission to delete this post' }, { status: 403 })
-    }
+      if (likesError) {
+        logger.warn('Failed to delete likes', { error: likesError.message, postId })
+      }
 
-    // 删除帖子相关的评论（记录错误但继续删除帖子）
-    const { error: commentsError } = await supabase
-      .from('comments')
-      .delete()
-      .eq('post_id', postId)
+      // 删除帖子收藏（记录错误但继续删除帖子）
+      const { error: bookmarksError } = await supabase
+        .from('post_bookmarks')
+        .delete()
+        .eq('post_id', postId)
 
-    if (commentsError) {
-      logger.warn('Failed to delete comments', { error: commentsError.message, postId })
-    }
+      if (bookmarksError) {
+        logger.warn('Failed to delete bookmarks', { error: bookmarksError.message, postId })
+      }
 
-    // 删除帖子相关的点赞（记录错误但继续删除帖子）
-    const { error: likesError } = await supabase
-      .from('post_likes')
-      .delete()
-      .eq('post_id', postId)
+      // 删除帖子
+      const { error: deleteError } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId)
 
-    if (likesError) {
-      logger.warn('Failed to delete likes', { error: likesError.message, postId })
-    }
+      if (deleteError) {
+        logger.error('Delete error', { error: deleteError, postId, userId: user.id })
+        return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
+      }
 
-    // 删除帖子收藏（记录错误但继续删除帖子）
-    const { error: bookmarksError } = await supabase
-      .from('post_bookmarks')
-      .delete()
-      .eq('post_id', postId)
+      // 清除帖子列表缓存
+      deleteServerCacheByPrefix('posts:')
 
-    if (bookmarksError) {
-      logger.warn('Failed to delete bookmarks', { error: bookmarksError.message, postId })
-    }
+      return NextResponse.json({ success: true })
+    },
+    { name: 'posts-delete', rateLimit: 'write' }
+  )
 
-    // 删除帖子
-    const { error: deleteError } = await supabase
-      .from('posts')
-      .delete()
-      .eq('id', postId)
-
-    if (deleteError) {
-      logger.error('Delete error', { error: deleteError, postId, userId: user.id })
-      return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
-    }
-
-    // 清除帖子列表缓存
-    deleteServerCacheByPrefix('posts:')
-
-    return NextResponse.json({ success: true })
-  } catch (error: unknown) {
-    logger.error('Error deleting post', { error })
-    const _errorMessage = error instanceof Error ? error.message : 'Server error'
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
+  return handler(request)
 }
-
