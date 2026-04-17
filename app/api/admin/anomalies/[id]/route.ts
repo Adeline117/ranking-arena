@@ -6,60 +6,20 @@
  * @module app/api/admin/anomalies/[id]
  */
 
-import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { NextRequest } from 'next/server'
+import { withAdminAuth } from '@/lib/api/with-admin-auth'
+import { success, notFound, badRequest } from '@/lib/api/response'
+import { ApiError } from '@/lib/api/errors'
 import { updateAnomalyStatus } from '@/lib/services/anomaly-manager'
-import logger from '@/lib/logger'
-
-// Verify admin access and get user ID
-async function verifyAdminAndGetUserId(request: NextRequest): Promise<string | null> {
-  const authHeader = request.headers.get('authorization')
-  if (!authHeader?.startsWith('Bearer ')) {
-    return null
-  }
-
-  const token = authHeader.substring(7)
-  const supabase = getSupabaseAdmin() as SupabaseClient
-
-  const { data: { user }, error } = await supabase.auth.getUser(token)
-
-  if (error || !user) {
-    return null
-  }
-
-  // Check if user is admin
-  const { data: profile } = await supabase
-    .from('user_profiles')
-    .select('is_admin')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.is_admin !== true) {
-    return null
-  }
-
-  return user.id
-}
 
 // GET: Fetch anomaly details
 export async function GET(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const userId = await verifyAdminAndGetUserId(request)
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
-    }
+  const { id: anomalyId } = await Promise.resolve(params)
 
-    const anomalyId = params.id
-
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
+  const handler = withAdminAuth(async ({ supabase }) => {
     const { data, error } = await supabase
       .from('trader_anomalies')
       .select('id, platform, market_type, trader_key, anomaly_type, severity, status, details, detected_at, resolved_at, resolved_by, notes, created_at')
@@ -68,76 +28,46 @@ export async function GET(
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return NextResponse.json(
-          { success: false, error: 'Anomaly not found' },
-          { status: 404 }
-        )
+        return notFound('Anomaly not found')
       }
-      throw error
+      throw ApiError.database('Failed to fetch anomaly')
     }
 
-    return NextResponse.json({
-      success: true,
-      data,
-    })
-  } catch (error: unknown) {
-    logger.error('[Admin Anomalies] Error fetching anomaly:', error)
+    return success(data)
+  }, { name: 'admin-anomaly-detail' })
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to fetch anomaly',
-        code: 'INTERNAL_ERROR',
-      },
-      { status: 500 }
-    )
-  }
+  return handler(request)
 }
 
 // PATCH: Update anomaly status
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const userId = await verifyAdminAndGetUserId(request)
-    if (!userId) {
-      return NextResponse.json(
-        { success: false, error: 'Unauthorized' },
-        { status: 401 }
-      )
+  const { id: anomalyId } = await Promise.resolve(params)
+
+  const handler = withAdminAuth(async ({ admin }) => {
+    let body: { status?: string; notes?: string }
+    try {
+      body = await request.json()
+    } catch {
+      throw ApiError.validation('Invalid JSON in request body')
     }
 
-    const anomalyId = params.id
-    const body = await request.json()
+    const { status: newStatus, notes } = body
 
-    // Validate request body
-    const { status, notes } = body
+    const validStatuses = ['confirmed', 'false_positive', 'resolved'] as const
+    type AnomalyStatus = typeof validStatuses[number]
 
-    if (!status || !['confirmed', 'false_positive', 'resolved'].includes(status)) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid status. Must be: confirmed, false_positive, or resolved' },
-        { status: 400 }
-      )
+    if (!newStatus || !validStatuses.includes(newStatus as AnomalyStatus)) {
+      return badRequest('Invalid status. Must be: confirmed, false_positive, or resolved')
     }
 
     // Update anomaly
-    await updateAnomalyStatus(anomalyId, status, notes, userId)
+    await updateAnomalyStatus(anomalyId, newStatus as AnomalyStatus, notes, admin.id)
 
-    return NextResponse.json({
-      success: true,
-      message: 'Anomaly updated successfully',
-    })
-  } catch (error: unknown) {
-    logger.error('[Admin Anomalies] Error updating anomaly:', error)
+    return success({ message: 'Anomaly updated successfully' })
+  }, { name: 'admin-anomaly-update' })
 
-    return NextResponse.json(
-      {
-        success: false,
-        error: 'Failed to update anomaly',
-        code: 'INTERNAL_ERROR',
-      },
-      { status: 500 }
-    )
-  }
+  return handler(request)
 }
