@@ -21,8 +21,10 @@ import {
 // Request-scoped cache for findTraderAcrossSources to eliminate N+1 lookups.
 // On a trader detail page, 8+ functions call findTraderAcrossSources(handle) independently.
 // This Map caches results so only the first call hits the DB; subsequent calls return instantly.
-// The cache lives for the lifetime of the serverless function invocation (~seconds), so no TTL needed.
-const sourceCache = new Map<string, Promise<TraderSourceRecord | null>>()
+// TTL of 60s and max size of 1000 entries prevent unbounded growth in long-lived processes.
+const SOURCE_CACHE_TTL_MS = 60_000
+const SOURCE_CACHE_MAX_SIZE = 1000
+const sourceCache = new Map<string, { promise: Promise<TraderSourceRecord | null>; ts: number }>()
 
 /**
  * Clear the request-scoped source cache.
@@ -30,6 +32,25 @@ const sourceCache = new Map<string, Promise<TraderSourceRecord | null>>()
  */
 export function clearSourceCache() {
   sourceCache.clear()
+}
+
+/** Evict expired entries and enforce max size (oldest-first LRU-style). */
+function pruneSourceCache() {
+  const now = Date.now()
+  // Evict expired entries
+  for (const [key, entry] of sourceCache) {
+    if (now - entry.ts > SOURCE_CACHE_TTL_MS) {
+      sourceCache.delete(key)
+    }
+  }
+  // If still over max size, evict oldest entries
+  if (sourceCache.size > SOURCE_CACHE_MAX_SIZE) {
+    const entries = Array.from(sourceCache.entries()).sort((a, b) => a[1].ts - b[1].ts)
+    const toEvict = entries.slice(0, sourceCache.size - SOURCE_CACHE_MAX_SIZE)
+    for (const [key] of toEvict) {
+      sourceCache.delete(key)
+    }
+  }
 }
 
 /**
@@ -49,11 +70,14 @@ export async function findTraderAcrossSources(
   // Check request-scoped cache first (eliminates N+1 on trader detail pages)
   const cacheKey = `${handle}:${includeWeb3}`
   const cached = sourceCache.get(cacheKey)
-  if (cached) return cached
+  if (cached && Date.now() - cached.ts < SOURCE_CACHE_TTL_MS) return cached.promise
+
+  // Prune stale/oversized entries before inserting
+  pruneSourceCache()
 
   // Store the promise itself (not the result) to deduplicate concurrent calls
   const promise = findTraderAcrossSourcesInner(handle, includeWeb3, client)
-  sourceCache.set(cacheKey, promise)
+  sourceCache.set(cacheKey, { promise, ts: Date.now() })
   return promise
 }
 
