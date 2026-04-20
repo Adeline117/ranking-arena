@@ -74,7 +74,7 @@
     "@vercel/analytics": "^2.0.0",
     "@vercel/speed-insights": "^2.0.0",
     "candlestick-convert": "^7.0.0",
-    "ccxt": "^4.5.43",
+    "ccxt": "^4.5.50",
     "cockatiel": "^3.2.1",
     "currency.js": "^2.0.4",
     "ethers": "^6.16.0",
