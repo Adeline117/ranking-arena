@@ -87,17 +87,15 @@ export class HyperliquidPerpConnector extends BaseConnector {
       }
       const rawRoi = perf?.roi != null ? Number(perf.roi) : null
       const rawPnl = perf?.pnl != null ? Number(perf.pnl) : null
-      // Hyperliquid API returns ROI as decimal (0.35 = 35%) but occasionally as percentage (35 = 35%)
-      // Smart detection: if |roi| <= 10, treat as decimal and multiply; otherwise already percentage
-      const roi = rawRoi != null ? (Math.abs(rawRoi) <= 10 ? rawRoi * 100 : rawRoi) : null
-      // Anomaly fix: if roi ≈ pnl (wrong scale), recalculate
-      const accountValue = item.accountValue != null ? Number(item.accountValue) : null
-      let correctedRoi = (roi != null && rawPnl != null && accountValue != null
-        && Math.abs(roi - rawPnl) < 1 && accountValue > 0)
-        ? (rawPnl / accountValue) * 100
-        : roi
+      // Hyperliquid stats-data API ALWAYS returns ROI as a decimal fraction
+      // (verified 2026-04-20: 0.4495 = 44.95%, 21.007 = 2100.7%).
+      // Previous heuristic (|roi| <= 10 → multiply) was incorrect for >1000% traders
+      // (2056 traders affected). Always multiply by 100 to convert to percentage.
+      const roi = rawRoi != null ? rawRoi * 100 : null
       // Cap extreme ROI values (Arena Score caps at 10000% internally anyway)
+      let correctedRoi = roi
       if (correctedRoi != null && correctedRoi > 10000) correctedRoi = 10000
+      if (correctedRoi != null && correctedRoi < -10000) correctedRoi = -10000
 
       return {
         platform: 'hyperliquid' as const, market_type: 'perp' as const,
@@ -186,8 +184,9 @@ export class HyperliquidPerpConnector extends BaseConnector {
       }
       if (perf?.roi != null) {
         const rawRoi = Number(perf.roi)
-        roi = Math.abs(rawRoi) <= 10 ? rawRoi * 100 : rawRoi
-        // Cap extreme ROI (same as discoverLeaderboard line 100)
+        // API always returns decimal (verified 2026-04-20). Always multiply by 100.
+        roi = rawRoi * 100
+        // Cap extreme ROI (same as discoverLeaderboard)
         if (roi > 10000) roi = 10000
         if (roi < -10000) roi = -10000
       }
