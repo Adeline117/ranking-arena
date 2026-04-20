@@ -11,8 +11,16 @@ import { NextResponse } from 'next/server'
 import { buildFreshnessReport } from '@/app/api/cron/check-data-freshness/route'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
+import { timingSafeEqual } from 'crypto'
 
 const log = createLogger('api:data-freshness')
+
+function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  if (bufA.length !== bufB.length) return false
+  return timingSafeEqual(bufA, bufB)
+}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -24,7 +32,7 @@ export async function GET(req: Request) {
   const validSecret =
     env.ADMIN_SECRET || env.CRON_SECRET
 
-  if (!validSecret || token !== validSecret) {
+  if (!validSecret || !token || !safeCompare(token, validSecret)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
