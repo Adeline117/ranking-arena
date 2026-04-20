@@ -11,6 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { randomBytes } from 'crypto'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { extractUserFromRequest } from '@/lib/auth/extract-user'
 
 const logger = createLogger('ranking-snapshot')
 
@@ -25,6 +26,12 @@ export async function POST(request: NextRequest) {
   // Redis-based rate limiting (shared across serverless instances)
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResponse) return rateLimitResponse
+
+  // Require authentication to prevent abuse
+  const { user, error: authError } = await extractUserFromRequest(request)
+  if (authError || !user) {
+    return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
+  }
 
   try {
     const body = await request.json()
