@@ -547,12 +547,23 @@ export async function upsertTraders(
 
     // --- 4. trader_snapshots_v2 (PRIMARY) ---
     try {
+      // Detect which enrichment-sourced fields have ANY non-null value in this batch.
+      // Fields that are ALL null should be EXCLUDED from the upsert payload so that
+      // PostgreSQL's ON CONFLICT UPDATE doesn't overwrite values previously written by
+      // the enrichment pipeline. This fixes the P0 issue where Hyperliquid's hourly
+      // discover job (which doesn't have win_rate) was overwriting enrichment-computed
+      // win_rate with null on every run.
+      const hasWinRate = batch.some(t => t.win_rate != null)
+      const hasMaxDrawdown = batch.some(t => t.max_drawdown != null)
+      const hasSharpeRatio = batch.some(t => t.sharpe_ratio != null)
+      const hasTradesCount = batch.some(t => t.trades_count != null)
+
       const snapshots = batch.map((t) => {
         const w = t.season_id?.toUpperCase() || '30D'
 
         // Real data only — null is better than estimated values.
         // Enrichment pipeline fills in WR/MDD/Sharpe from real API data + equity curve.
-        return {
+        const row: Record<string, unknown> = {
         platform: t.source,
         market_type: getMarketType(t.source),
         trader_key: t.source_trader_id,
@@ -560,16 +571,10 @@ export async function upsertTraders(
         as_of_ts: truncateToHour(t.captured_at),
         // Flat columns — read by leaderboard, scoring, and frontend
         // Cap extreme ROI values (>100,000% is likely a normalization bug)
-        // Also null out roi if roi ≈ pnl (data mapping error, e.g. Hyperliquid)
         roi_pct: t.roi != null && Math.abs(t.roi) > 100000 ? null
-          : (t.roi != null && t.pnl != null && Math.abs(t.roi) > 1000 && Math.abs(t.roi - t.pnl) < 1) ? null
           : (t.roi ?? null),
         pnl_usd: t.pnl ?? null,
-        win_rate: t.win_rate ?? null,
-        max_drawdown: t.max_drawdown ?? null,
         arena_score: t.arena_score ?? null,  // computed by compute-leaderboard, don't overwrite with placeholder
-        sharpe_ratio: t.sharpe_ratio ?? null,
-        trades_count: t.trades_count ?? null,
         followers: t.followers ?? null,  // Exchange followers (v2 fallback needs this when trader isn't in leaderboard_ranks yet)
         copiers: t.copiers ?? null,  // Exchange copy-trade count (from connector API)
         // JSONB metrics — full data for detail views and future use
@@ -591,7 +596,20 @@ export async function upsertTraders(
           data_completeness: t.win_rate != null && t.max_drawdown != null ? 1.0 : 0.7,
         },
         updated_at: new Date().toISOString(),
-      }})
+        }
+
+        // Only include enrichment-sourced fields when batch has real data for them.
+        // When ALL values in the batch are null (e.g. Hyperliquid win_rate), excluding
+        // the field from the upsert payload prevents ON CONFLICT UPDATE from overwriting
+        // enrichment-written values with null. PostgREST requires all rows in a batch
+        // to have the same keys, so the decision is per-batch, not per-row.
+        if (hasWinRate) row.win_rate = t.win_rate ?? null
+        if (hasMaxDrawdown) row.max_drawdown = t.max_drawdown ?? null
+        if (hasSharpeRatio) row.sharpe_ratio = t.sharpe_ratio ?? null
+        if (hasTradesCount) row.trades_count = t.trades_count ?? null
+
+        return row
+      })
 
       // Upsert snapshots — update metrics on conflict so re-runs refresh data
       // Emergency fix 2026-04-01: Add retry logic for Supabase 502 errors
