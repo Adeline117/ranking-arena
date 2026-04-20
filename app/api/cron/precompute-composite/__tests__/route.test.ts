@@ -19,11 +19,44 @@ jest.mock('@/lib/env', () => ({
   }),
 }))
 
+// Mock pg pool (getPool) — the route now uses raw SQL for heavy snapshot queries.
+// Each test configures mockPgQueryResults to control what the pool client returns.
+let mockPgQueryResults: Record<string, unknown[]> = {}
+const mockPgClient = {
+  query: jest.fn().mockImplementation((text: string, _params?: unknown[]) => {
+    if (text === 'BEGIN' || text === 'COMMIT' || text === 'ROLLBACK') {
+      return Promise.resolve({ rows: [], rowCount: 0 })
+    }
+    if (text.startsWith('SET LOCAL')) {
+      return Promise.resolve({ rows: [], rowCount: 0 })
+    }
+    // Main SELECT query — determine window from params
+    // The route passes [seasonId, freshnessThreshold] as params
+    const windowMatch = _params?.[0] as string | undefined
+    const rows = windowMatch && mockPgQueryResults[windowMatch]
+      ? mockPgQueryResults[windowMatch]
+      : (mockPgQueryResults['default'] || [])
+    return Promise.resolve({ rows, rowCount: rows.length })
+  }),
+  release: jest.fn(),
+}
+
+jest.mock('@/lib/db', () => ({
+  getPool: jest.fn(() => ({
+    connect: jest.fn().mockResolvedValue(mockPgClient),
+  })),
+}))
 
 const mockSupabaseFrom = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
+    from: mockSupabaseFrom,
+  })),
+}))
+
+jest.mock('@/lib/supabase/read-replica', () => ({
+  getReadReplica: jest.fn(() => ({
     from: mockSupabaseFrom,
   })),
 }))
@@ -141,6 +174,9 @@ describe('GET /api/cron/precompute-composite', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockPgQueryResults = {}
+    mockPgClient.query.mockClear()
+    mockPgClient.release.mockClear()
   })
 
   // ---- Auth ----------------------------------------------------------------
@@ -160,35 +196,23 @@ describe('GET /api/cron/precompute-composite', () => {
   // ---- Normal execution ----------------------------------------------------
 
   it('computes composite rankings and stores in Redis', async () => {
-    const rows7d = [
-      makeSnapshotRow({ trader_key: 'trader1', arena_score: 90, roi_pct: 60 }),
-      makeSnapshotRow({ trader_key: 'trader2', arena_score: 70, roi_pct: 30 }),
-    ]
-    const rows30d = [
-      makeSnapshotRow({ trader_key: 'trader1', arena_score: 85, roi_pct: 50 }),
-      makeSnapshotRow({ trader_key: 'trader3', arena_score: 75, roi_pct: 40, platform: 'hyperliquid' }),
-    ]
-    const rows90d = [
-      makeSnapshotRow({ trader_key: 'trader1', arena_score: 80, roi_pct: 45 }),
-    ]
-
-    const snapshotQueryFor = (rows: unknown[]) => chainProxy({ data: rows, error: null })
-
-    const traderSourcesQuery = chainProxy({
-      data: [
-        { source: 'binance-futures', source_trader_id: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
-        { source: 'binance-futures', source_trader_id: 'trader2', handle: 'TraderJoe', avatar_url: null },
-        { source: 'hyperliquid', source_trader_id: 'trader3', handle: 'DeFiWhale', avatar_url: null },
+    // Configure pg pool to return rows per window
+    mockPgQueryResults = {
+      '7D': [
+        makeSnapshotRow({ trader_key: 'trader1', arena_score: 90, roi_pct: 60 }),
+        makeSnapshotRow({ trader_key: 'trader2', arena_score: 70, roi_pct: 30 }),
       ],
-      error: null,
-    })
+      '30D': [
+        makeSnapshotRow({ trader_key: 'trader1', arena_score: 85, roi_pct: 50 }),
+        makeSnapshotRow({ trader_key: 'trader3', arena_score: 75, roi_pct: 40, platform: 'hyperliquid' }),
+      ],
+      '90D': [
+        makeSnapshotRow({ trader_key: 'trader1', arena_score: 80, roi_pct: 45 }),
+      ],
+    }
 
-    // The route calls fetchWindow 3 times (7D, 30D, 90D) in parallel
-    // Create a fresh proxy per call to avoid shared state between concurrent awaits
-    const allRows = [...rows7d, ...rows30d, ...rows90d]
-
+    // Supabase client only used for trader_sources display names now
     mockSupabaseFrom.mockImplementation((table: string) => {
-      if (table === 'trader_snapshots_v2') return snapshotQueryFor(allRows)
       if (table === 'trader_sources') return chainProxy({ data: [
         { source: 'binance-futures', source_trader_id: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
         { source: 'binance-futures', source_trader_id: 'trader2', handle: 'TraderJoe', avatar_url: null },
@@ -238,9 +262,10 @@ describe('GET /api/cron/precompute-composite', () => {
   // ---- Error during computation -------------------------------------------
 
   it('returns 500 when a database query throws', async () => {
-    mockSupabaseFrom.mockImplementation(() => {
-      throw new Error('DB connection lost')
-    })
+    // Make pg client.query throw to simulate DB failure
+    mockPgClient.query.mockImplementationOnce(() => Promise.resolve({ rows: [], rowCount: 0 })) // BEGIN
+      .mockImplementationOnce(() => Promise.resolve({ rows: [], rowCount: 0 })) // SET LOCAL
+      .mockImplementationOnce(() => Promise.reject(new Error('DB connection lost'))) // SELECT
 
     const res = await GET(createCronRequest(CRON_SECRET))
     expect(res.status).toBe(500)
@@ -263,11 +288,16 @@ describe('GET /api/cron/precompute-composite', () => {
   })
 
   it('returns 500 when Redis tieredSet fails', async () => {
-    const rows = [makeSnapshotRow({ arena_score: 90 })]
+    // pg pool returns valid data so the route gets past the fetch phase
+    mockPgQueryResults = {
+      '7D': [makeSnapshotRow({ arena_score: 90 })],
+      '30D': [makeSnapshotRow({ arena_score: 85 })],
+      '90D': [makeSnapshotRow({ arena_score: 80 })],
+    }
 
     mockSupabaseFrom.mockImplementation((table: string) => {
       if (table === 'trader_sources') return chainProxy({ data: [], error: null })
-      return chainProxy({ data: rows, error: null })
+      return chainProxy({ data: [], error: null })
     })
 
     mockTieredSet.mockRejectedValueOnce(new Error('Redis connection refused'))
