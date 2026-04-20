@@ -42,12 +42,16 @@ export class BybitSpotConnector extends BaseConnector {
     const page = Math.floor(offset / limit) + 1
     const totalDeadline = Date.now() + 4 * 60 * 1000
 
+    // 2026-04-20: reduced from 90s to 30s per strategy. Same rationale as
+    // bybit-futures: worst case = 2 × (30s + 30s) + 3s = 123s per VPS call.
+    // Previously 90s meant 363s worst case (2 × 2 × 90s), far exceeding
+    // 180s platform budget. If VPS can't respond in 30s, it's down.
     const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
       dataDuration: SCRAPER_DURATION_MAP[window],
       pageNo: String(page),
       pageSize: String(limit),
       leaderTag: 'LEADER_TAG_SPOT',
-    }, 90000) // 90s — Playwright scraper can be slow
+    }, 30000)
 
     if (Date.now() > totalDeadline) {
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }

@@ -62,11 +62,18 @@ export class BybitFuturesConnector extends BaseConnector {
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages; page++) {
       // Bybit API is geo-blocked from datacenter IPs — use VPS Playwright scraper.
+      // 2026-04-20: reduced timeout from 70s to 30s per strategy.
+      // With cockatiel retry (2 attempts) and 2 strategies (direct + proxy), worst case:
+      //   2 attempts × (30s direct + 30s proxy) + 3s backoff = 123s per VPS call
+      // Previously 70s meant 283s worst case, exceeding 240s platform budget before
+      // the DB seed fallback could trigger. 30s is still generous for Playwright
+      // (normal response is 5-15s for cached/warm pages, 15-30s for cold).
+      // If VPS can't respond in 30s, it's likely down or overloaded.
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
         dataDuration: SCRAPER_DURATION_MAP[window],
         pageNo: String(page),
         pageSize: String(pageSize),
-      }, 70000) // 70s per VPS call — 3 calls (1 page/window × 3 windows) must fit in 240s budget
+      }, 30000)
 
       let _rawLb: Record<string, unknown>
       if (vpsData) {
