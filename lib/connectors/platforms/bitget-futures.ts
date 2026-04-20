@@ -73,16 +73,59 @@ export class BitgetFuturesConnector extends BaseConnector {
       // Try VPS Playwright scraper first, fall back to direct API.
       let _rawLb: Record<string, unknown>
       const pageSize = 100 // Bitget API max per page — was passing limit (2000) causing huge VPS scraper load
+      // 2026-04-20: reduced from 60s to 35s. Same rationale as bybit: with cockatiel
+      // retry (2 attempts × 2 strategies × timeout), 60s meant 243s worst case before
+      // falling back to direct API. 35s gives ~143s worst case, leaving room for the
+      // direct API fallback within the 200s platform budget.
       const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
         period: VPS_PERIOD_MAP[window], pageNo: String(currentPage), pageSize: String(pageSize),
-      }, 60000) // 60s per page (reduced from 120s)
+      }, 35000)
       if (vpsData) {
         _rawLb = vpsData
       } else {
-        _rawLb = await this.request<Record<string, unknown>>(
-          `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${pageSize}&sortType=2&timeRange=${timeRange}`,
-          { method: 'GET' }
-        )
+        try {
+          _rawLb = await this.request<Record<string, unknown>>(
+            `https://www.bitget.com/v1/trigger/trace/public/currentTrader/list?pageNo=${currentPage}&pageSize=${pageSize}&sortType=2&timeRange=${timeRange}`,
+            { method: 'GET' }
+          )
+        } catch (directErr) {
+          // 2026-04-20: if both VPS and direct API fail on page 1, use DB seed fallback
+          if (currentPage === Math.floor(offset / 100) + 1 && allTraders.length === 0) {
+            const msg = directErr instanceof Error ? directErr.message : String(directErr)
+            this.logger.warn(`[bitget_futures] VPS + direct API both failed: ${msg} — trying DB seed`)
+            try {
+              const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+              const supabase = getSupabaseAdmin()
+              const { data: existingTraders } = await supabase
+                .from('trader_snapshots_v2')
+                .select('trader_key')
+                .eq('platform', 'bitget_futures')
+                .eq('window', window.toUpperCase())
+                .order('updated_at', { ascending: false })
+                .limit(limit)
+
+              if (existingTraders && existingTraders.length > 0) {
+                this.logger.info(`[bitget_futures] DB seed fallback: ${existingTraders.length} traders for ${window}`)
+                const seedTraders: TraderSource[] = existingTraders.map((t) => ({
+                  platform: 'bitget_futures' as const,
+                  market_type: 'futures' as const,
+                  trader_key: String(t.trader_key),
+                  display_name: null,
+                  profile_url: `https://www.bitget.com/copy-trading/trader/${t.trader_key}`,
+                  discovered_at: new Date().toISOString(),
+                  last_seen_at: new Date().toISOString(),
+                  is_active: true,
+                  raw: { _source: 'db_seed' } as Record<string, unknown>,
+                }))
+                return { traders: seedTraders, total_available: seedTraders.length, window, fetched_at: new Date().toISOString() }
+              }
+            } catch (seedErr) {
+              this.logger.warn('[bitget_futures] DB seed fallback failed:', seedErr instanceof Error ? seedErr.message : String(seedErr))
+            }
+            throw directErr
+          }
+          break
+        }
       }
       // Parse directly — Zod defaults data.list=[] hiding scraper's data.traderList/data.rows
       const dataObj = (_rawLb?.data ?? {}) as Record<string, unknown>
