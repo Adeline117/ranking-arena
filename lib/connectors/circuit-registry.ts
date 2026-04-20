@@ -130,3 +130,18 @@ export function getCircuitStates(): Record<string, 'closed' | 'open' | 'half_ope
   }
   return states
 }
+
+/**
+ * Reset ALL platform circuit breakers.
+ * Useful for admin recovery after widespread outages.
+ * Returns list of platforms that were reset.
+ */
+export function resetAllCircuits(): string[] {
+  const platforms = Array.from(platformPolicies.keys())
+  for (const platform of platforms) {
+    platformPolicies.delete(platform)
+    circuitStates.delete(platform)
+  }
+  exchangeLogger.info(`[CircuitRegistry] Reset ALL circuits (${platforms.length} platforms): ${platforms.join(', ')}`)
+  return platforms
+}
