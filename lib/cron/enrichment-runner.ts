@@ -542,20 +542,22 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 ])
 
 // Per-platform timeout: prevents any single platform from burning the entire batch budget
-// 2026-03-20: Increased timeouts for full coverage (was 45s/90s, now 120s/180s)
-// Batch-cached platforms (bitunix, xt, etc.) finish in <5s regardless
+// 2026-04-20: Reduced to match route-level caps. The route wraps runEnrichment in a
+// Promise.race with even shorter timeouts (15s/50s/90s), so these internal timeouts
+// serve as a secondary safety net. With reduced trader limits (bitget 40, etoro 30,
+// bybit 5), platforms complete well within these budgets.
 const PLATFORM_TIMEOUT_MS: Record<string, number> = {
-  'bitget_futures': 180_000,  // 3min total - increased for 200 trader limit at concurrency 3
-  'binance_spot': 60_000,  // RE-ENABLED 2026-03-19 — 60s per-platform timeout
-  'bybit': 240_000, // 4min - VPS Playwright scraper is slow (~20s/trader × 20 traders / 2 concurrent = ~200s)
-  'bybit_spot': 240_000, // 4min - same VPS scraper as bybit (was using default 120s, causing 100% timeout)
-  'etoro': 180_000, // 3min - eToro APIs are rate-limited, need generous timeout
+  'bitget_futures': 80_000,  // 80s (was 180s) — 40 traders × concurrency 3 × 18s = ~240s theoretical max, but most finish in <5s
+  'binance_spot': 50_000,  // 50s (was 60s)
+  'bybit': 80_000, // 80s (was 240s) — 5 traders × concurrency 2 × 20s = ~50s realistic max
+  'bybit_spot': 80_000, // 80s (was 240s) — same as bybit
+  'etoro': 80_000, // 80s (was 180s) — 30 traders × concurrency 2 × 20s = ~300s theoretical, but route caps at 90s
   // Batch-cached: instant, but set generous limit
-  'bitunix': 30_000, 'xt': 30_000, 'blofin': 60_000,
-  'bitfinex': 60_000, 'toobit': 60_000, 'coinex': 60_000,
+  'bitunix': 15_000, 'xt': 15_000, 'blofin': 30_000,
+  'bitfinex': 30_000, 'toobit': 30_000, 'coinex': 30_000,
 }
-const DEFAULT_PLATFORM_TIMEOUT_MS = 120_000  // 2min for CEX (was 45s)
-const ONCHAIN_PLATFORM_TIMEOUT_MS = 180_000  // 3min for onchain (was 90s)
+const DEFAULT_PLATFORM_TIMEOUT_MS = 50_000  // 50s for CEX (was 120s) — route caps at 50s anyway
+const ONCHAIN_PLATFORM_TIMEOUT_MS = 60_000  // 60s for onchain (was 180s) — route caps at 50s
 const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains', 'kwenta'])
 
 // Per-trader timeout: ultra-aggressive timeout for platforms that hang

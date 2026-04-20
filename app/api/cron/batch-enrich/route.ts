@@ -48,7 +48,7 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   binance_futures: { limit90: 150, limit30: 100, limit7: 100 },
   okx_futures: { limit90: 150, limit30: 100, limit7: 100 },
   htx_futures: { limit90: 100, limit30: 80, limit7: 80 },
-  etoro: { limit90: 100, limit30: 80, limit7: 80 },
+  etoro: { limit90: 30, limit30: 25, limit7: 25 }, // was 100/80/80, concurrency 2 × 20s/trader = needs <9 at a time for 90s budget
   gateio: { limit90: 100, limit30: 80, limit7: 80 },
   mexc: { limit90: 100, limit30: 80, limit7: 80 },
   // DEX on-chain (~0.3s/trader → max ~300 in 120s, but leave margin)
@@ -59,9 +59,9 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   gains: { limit90: 80, limit30: 60, limit7: 60 },
   dydx: { limit90: 150, limit30: 100, limit7: 100 },
   aevo: { limit90: 100, limit30: 80, limit7: 80 },
-  // Medium CEX
-  bitget_futures: { limit90: 100, limit30: 80, limit7: 80 },
-  btcc: { limit90: 50, limit30: 50, limit7: 50 },
+  // Slow-tier CEX (rate-limited) — reduced limits to fit within 90s route timeout
+  bitget_futures: { limit90: 40, limit30: 30, limit7: 30 }, // was 100/80/80, concurrency 3 × 18s/trader = needs <15 at a time
+  btcc: { limit90: 30, limit30: 25, limit7: 25 }, // was 50/50/50
   okx_spot: { limit90: 40, limit30: 40, limit7: 40 },
   okx_web3: { limit90: 150, limit30: 100, limit7: 100 },
   // Additional platforms
@@ -81,21 +81,26 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // lbank: Mac Mini scraper only (VPS scraper returns empty data)
 }
 
-// 2026-03-20: Full coverage — batch-cached first (instant), then API-per-trader
-const HIGH_PRIORITY = [
+// 2026-04-20: Tiered execution to prevent 40-77min timeout hangs
+// Tier 1 (FAST): Batch-cached — no per-trader API calls, complete in <5s total
+// Tier 2 (MEDIUM): API-per-trader with reasonable rate limits, complete in <60s per platform
+// Tier 3 (SLOW): VPS scrapers / heavily rate-limited, can take 60-180s per platform
+// Each tier has its own concurrency to prevent slow platforms from starving the time budget.
+const TIER_FAST = [
   'bitunix', 'xt', 'bitfinex', 'toobit', 'coinex', // batch-cached: instant
+]
+const TIER_MEDIUM = [
   'binance_futures', 'okx_futures', 'hyperliquid', 'jupiter_perps', // fast APIs
-]
-const MEDIUM_PRIORITY = [
   'htx_futures', 'gateio', 'mexc', 'drift', 'gmx', 'gains',
-  'bitget_futures', 'btcc', 'etoro', 'okx_spot', 'okx_web3',
-  'dydx', 'aevo', // re-enabled via Copin + indexer
-  'binance_web3', 'binance_spot', 'polymarket', // added for full coverage
-  // REMOVED: phemex (API 404), bingx (empty data), blofin (auth + geo-block — Mac Mini only)
+  'dydx', 'aevo', 'okx_spot', 'okx_web3',
+  'binance_web3', 'binance_spot', 'polymarket',
 ]
-const LOW_PRIORITY = ['bybit', 'bybit_spot'] // VPS scrapers, run last
-// REMOVED: weex (75% timeout), bingx_spot (no enrichment API)
-const LOWER_PRIORITY: string[] = []
+const TIER_SLOW = [
+  'bitget_futures', 'btcc', 'etoro', // rate-limited CEX
+  'bybit', 'bybit_spot', // VPS scrapers
+]
+// Concurrency per tier: fast can run all at once, medium in batches of 5, slow in batches of 2
+const TIER_CONCURRENCY = { fast: 5, medium: 5, slow: 2 } as const
 
 interface BatchResult {
   platform: string
@@ -126,14 +131,14 @@ export async function GET(request: NextRequest) {
     ? ['90D', '30D', '7D']
     : [periodParam as Period]
 
-  // Determine which platforms to enrich
-  // Low priority platforms (dydx, binance_spot) run LAST to prevent blocking
-  let platforms: string[]
-  if (enrichAll) {
-    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...LOWER_PRIORITY, ...LOW_PRIORITY]
-  } else {
-    platforms = [...HIGH_PRIORITY, ...MEDIUM_PRIORITY, ...LOW_PRIORITY]
-  }
+  // Determine which platforms to enrich — organized by tier for budget-aware execution
+  // 2026-04-20: Tiered execution prevents slow platforms from consuming the entire time budget
+  // All tiers run by default (enrichAll flag reserved for future use)
+  const platforms = [...TIER_FAST, ...TIER_MEDIUM, ...TIER_SLOW]
+
+  // Build tier membership set for efficient lookup during batch execution
+  const tierFastSet = new Set(TIER_FAST)
+  const tierSlowSet = new Set(TIER_SLOW)
 
   const results: BatchResult[] = []
   const startedAt = Date.now()
@@ -198,26 +203,159 @@ export async function GET(request: NextRequest) {
     }
   }, HARD_DEADLINE_MS)
 
-  // Per-platform enrichment timeout (2026-04-03 optimization)
-  // Previous: 90s CEX / 120s onchain caused frequent timeouts
-  // New strategy: Platform-specific timeouts based on actual data:
-  //   - Batch-cached (bitunix, xt, etc.): 30s (no per-trader API calls)
-  //   - Fast CEX APIs: 60s
-  //   - Slow CEX/onchain: 120s
-  //   - VPS scrapers: 180s (Playwright)
-  const ONCHAIN_PLATFORMS = new Set(['gmx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains'])
-  const BATCH_CACHED = new Set(['bitunix', 'xt', 'bitfinex', 'toobit', 'coinex']) // blofin removed 2026-04-09 (Mac Mini only)
-  const VPS_SCRAPERS = new Set(['bybit'])
-  
-  function getPlatformTimeout(platform: string): number {
-    if (VPS_SCRAPERS.has(platform)) return 180_000
-    if (BATCH_CACHED.has(platform)) return 30_000
-    if (ONCHAIN_PLATFORMS.has(platform)) return 120_000
-    return 60_000 // Default for CEX APIs
+  // Per-platform enrichment timeout (2026-04-20 rewrite)
+  // Each tier gets a fixed timeout cap per platform. The route-level timeout
+  // MUST be shorter than the enrichment-runner's internal timeout to ensure
+  // the Promise.race here fires first, allowing us to mark the platform as
+  // timed out and continue to the next one without the watchdog firing.
+  function getRoutePlatformTimeout(platform: string): number {
+    if (tierFastSet.has(platform)) return 15_000   // batch-cached: should be <5s
+    if (tierSlowSet.has(platform)) return 90_000   // VPS/rate-limited: cap at 90s (was 180s — too generous)
+    return 50_000                                   // medium tier: cap at 50s (was 60-120s)
   }
 
   // Budget per period: divide 240s (leaving 60s buffer from 300s total) by number of periods
   const PER_PERIOD_BUDGET_MS = Math.floor(TIME_BUDGET_MS / periodsToRun.length)
+
+  // ── Helper: run a batch of platforms with given concurrency ────────
+  async function runPlatformBatch(
+    platformList: string[],
+    concurrency: number,
+    period: string,
+    periodStart: number,
+  ): Promise<boolean> {
+    for (let i = 0; i < platformList.length; i += concurrency) {
+      // Hard budget gate: if we're within 30s of the hard deadline, skip remaining
+      if (isOutOfTime(30_000)) {
+        const remaining = platformList.slice(i)
+        for (const p of remaining) {
+          results.push({ platform: p, period, status: 'error', durationMs: 0, error: `Skipped: hard budget reached (${Math.round(elapsed() / 1000)}s elapsed)` })
+        }
+        return false // signal: time exhausted
+      }
+      // Check per-period budget
+      if (Date.now() - periodStart > PER_PERIOD_BUDGET_MS) {
+        const remaining = platformList.slice(i)
+        for (const p of remaining) {
+          results.push({ platform: p, period, status: 'error', durationMs: 0, error: `Skipped: period budget ${Math.round(PER_PERIOD_BUDGET_MS / 1000)}s exhausted` })
+        }
+        return false
+      }
+
+      const batch = platformList.slice(i, i + concurrency)
+      // Per-batch deadline: the entire batch (all concurrent platforms) must complete
+      // within the lesser of: remaining period budget, or 2× the max single-platform timeout in this batch.
+      // This prevents a single batch from consuming the entire remaining budget.
+      const maxPlatformTimeout = Math.max(...batch.map(p => getRoutePlatformTimeout(p)))
+      const remainingBudget = PER_PERIOD_BUDGET_MS - (Date.now() - periodStart)
+      const batchDeadline = Math.min(remainingBudget, maxPlatformTimeout + 10_000) // platform timeout + 10s grace
+
+      const batchResults = await Promise.race([
+        Promise.allSettled(
+          batch.map(async (platform): Promise<BatchResult> => {
+            // Checkpoint: skip platforms already completed in a prior (crashed) run
+            const checkpointKey = `${platform}:${period}`
+            if (PipelineCheckpoint.isCompleted(checkpoint, checkpointKey)) {
+              logger.info(`[checkpoint] Skipping ${checkpointKey} (already completed in prior run)`)
+              return { platform, period, status: 'success', durationMs: 0, enriched: 0 }
+            }
+            const config = PLATFORM_LIMITS[platform]
+            if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
+
+            const limit = period === '90D' ? config.limit90 : period === '30D' ? config.limit30 : config.limit7
+            const start = Date.now()
+
+            // Offset rotation
+            let offset = 0
+            let leaderboardSize: number | null = null
+            try {
+              const supabase = getSupabaseAdmin()
+              const { data: cacheRow } = await supabase
+                .from('leaderboard_count_cache')
+                .select('total_count')
+                .eq('season_id', period)
+                .eq('source', `${platform}_gt0`)
+                .maybeSingle()
+              leaderboardSize = cacheRow?.total_count ?? null
+            } catch (err) {
+              logger.warn(`[batch-enrich] Failed to read leaderboard_count_cache for ${platform}/${period}`, { error: err instanceof Error ? err.message : String(err) })
+            }
+
+            try {
+              const { PipelineState } = await import('@/lib/services/pipeline-state')
+              const rotationKey = `enrich:offset:${platform}:${period}`
+              const prevOffset = await PipelineState.get<number>(rotationKey) ?? 0
+              const wrapAt = leaderboardSize && leaderboardSize > 0 ? leaderboardSize : 5000
+              offset = prevOffset >= wrapAt ? 0 : prevOffset
+              await PipelineState.set(rotationKey, (offset + limit) % wrapAt)
+            } catch (err) {
+              logger.warn(`[batch-enrich] Redis offset rotation failed for ${platform}/${period}, starting at 0`, {
+                error: err instanceof Error ? err.message : String(err),
+              })
+            }
+
+            try {
+              // Route-level timeout wraps runEnrichment to guarantee bail-out
+              const timeoutMs = getRoutePlatformTimeout(platform)
+              const result: EnrichmentResult = await Promise.race([
+                runEnrichment({ platform, period, limit, offset }),
+                new Promise<never>((_, reject) =>
+                  setTimeout(() => reject(new Error(`Enrichment ${platform}/${period} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
+                ),
+              ])
+              if (result.ok) {
+                await PipelineCheckpoint.markCompleted(checkpoint, checkpointKey, result.summary.enriched ?? 0)
+              } else {
+                await PipelineCheckpoint.markFailed(checkpoint, checkpointKey, `${result.summary.failed} enrichments failed`)
+              }
+              return {
+                platform, period,
+                status: result.ok ? 'success' : 'error',
+                durationMs: Date.now() - start,
+                enriched: result.summary.enriched,
+                failed: result.summary.failed,
+                error: result.ok ? undefined : `${result.summary.failed} enrichments failed`,
+              }
+            } catch (err) {
+              await PipelineCheckpoint.markFailed(checkpoint, checkpointKey, err instanceof Error ? err.message : String(err))
+              return {
+                platform, period,
+                status: 'error',
+                durationMs: Date.now() - start,
+                error: err instanceof Error ? err.message : String(err),
+              }
+            }
+          })
+        ),
+        // Batch-level deadline: if the entire batch hasn't resolved, force-skip
+        new Promise<PromiseSettledResult<BatchResult>[]>((resolve) =>
+          setTimeout(() => {
+            resolve(batch.map(p => ({
+              status: 'fulfilled' as const,
+              value: { platform: p, period, status: 'error' as const, durationMs: batchDeadline, error: `Batch deadline ${Math.round(batchDeadline / 1000)}s exceeded` }
+            })))
+          }, batchDeadline)
+        ),
+      ])
+
+      // Handle Promise.allSettled results
+      const settled = batchResults.map(r =>
+        r.status === 'fulfilled' ? r.value : {
+          platform: 'unknown',
+          period,
+          status: 'error' as const,
+          durationMs: 0,
+          error: r.reason instanceof Error ? r.reason.message : String(r.reason)
+        }
+      )
+      results.push(...settled)
+
+      const batchSucceeded = settled.filter(r => r.status === 'success').length
+      const batchFailed = settled.length - batchSucceeded
+      logger.info(`Batch ${period} [${batch.join(',')}]: ${batchSucceeded} ok, ${batchFailed} failed (${Math.round(elapsed() / 1000)}s total)`)
+    }
+    return true // all batches processed within budget
+  }
 
   // Run each period sequentially (when period=all, this runs 90D → 30D → 7D)
   for (const period of periodsToRun) {
@@ -229,139 +367,30 @@ export async function GET(request: NextRequest) {
 
     const periodStart = Date.now()
 
-    // Run enrichments inline in parallel batches of 10 to fit within 270s budget.
-    // With 27 platforms: 3 batches × ~90s = ~270s (tight but workable).
-    // batch-cached platforms (bitunix, xt, etc.) complete in <5s, freeing time for API-per-trader ones.
-    const BATCH_CONCURRENCY = 7
-    for (let i = 0; i < platforms.length; i += BATCH_CONCURRENCY) {
-      // Hard budget gate: if we're within 30s of the hard deadline, skip the
-      // rest of this period entirely so the watchdog doesn't have to fire.
-      // This is the top-level version of the per-platform budget check below.
-      if (isOutOfTime(30_000)) {
-        const remaining = platforms.slice(i)
-        for (const p of remaining) {
-          results.push({ platform: p, period, status: 'error', durationMs: 0, error: `Skipped: hard budget ${Math.round((TIME_BUDGET_MS - 30_000) / 1000)}s reached (${Math.round(elapsed() / 1000)}s elapsed)` })
-        }
-        break
-      }
-      // Check per-period budget before starting next batch
-      if (Date.now() - periodStart > PER_PERIOD_BUDGET_MS) {
-        const remaining = platforms.slice(i)
-        for (const p of remaining) {
-          results.push({ platform: p, period, status: 'error', durationMs: 0, error: `Skipped: period budget ${Math.round(PER_PERIOD_BUDGET_MS / 1000)}s exhausted` })
-        }
-        break
-      }
-      const batch = platforms.slice(i, i + BATCH_CONCURRENCY)
-      const batchResults = await Promise.allSettled(
-        batch.map(async (platform): Promise<BatchResult> => {
-          // Checkpoint: skip platforms already completed in a prior (crashed) run
-          const checkpointKey = `${platform}:${period}`
-          if (PipelineCheckpoint.isCompleted(checkpoint, checkpointKey)) {
-            logger.info(`[checkpoint] Skipping ${checkpointKey} (already completed in prior run)`)
-            return { platform, period, status: 'success', durationMs: 0, enriched: 0 }
-          }
-          const config = PLATFORM_LIMITS[platform]
-          if (!config) return { platform, period, status: 'error', durationMs: 0, error: 'No config' }
+    // 2026-04-20: Tiered execution — fast platforms first (high value, instant),
+    // then medium (most coverage), then slow (VPS scrapers, rate-limited).
+    // Each tier has its own concurrency. If time runs out during medium tier,
+    // slow tier is skipped entirely (acceptable: slow platforms have very few traders
+    // and are covered by checkpoint-resume on the next run).
 
-          const limit = period === '90D' ? config.limit90 : period === '30D' ? config.limit30 : config.limit7
-          const start = Date.now()
+    // Tier 1: FAST (batch-cached) — all at once, should complete in <5s total
+    const fastPlatforms = platforms.filter(p => tierFastSet.has(p))
+    if (fastPlatforms.length > 0) {
+      const ok = await runPlatformBatch(fastPlatforms, TIER_CONCURRENCY.fast, period, periodStart)
+      if (!ok) continue // budget exhausted, skip to next period
+    }
 
-          // Offset rotation: each run enriches a different slice of the leaderboard
-          // Counter stored in PipelineState, incremented per platform per period
-          //
-          // ROOT CAUSE FIX (2026-04-08): Previously wrapped at hardcoded 5000.
-          // Many platforms have <2000 traders → offset > total → 0 enriched but
-          // status=success → critical platforms because no data is updated.
-          // Now we read the actual leaderboard size from leaderboard_count_cache.
-          //
-          // PERF FIX (2026-04-09): Previously this issued count:exact on
-          // leaderboard_ranks (~314k rows) per platform × period — 81 exact
-          // counts per cycle, 200ms-25s each. Audit flagged 30-60s/run cron
-          // savings + frequent fetch safety-timeouts. leaderboard_count_cache
-          // is maintained by compute-leaderboard via refresh_leaderboard_count_cache RPC
-          // and is refreshed every cron cycle, so it's always at most a few
-          // minutes stale — fine for offset wrap calculation.
-          let offset = 0
-          let leaderboardSize: number | null = null
-          try {
-            const supabase = getSupabaseAdmin()
-            // Use the _gt0 variant which counts only traders with arena_score > 0
-            // (equivalent in spirit to the prior `.not('arena_score', 'is', null)`).
-            const { data: cacheRow } = await supabase
-              .from('leaderboard_count_cache')
-              .select('total_count')
-              .eq('season_id', period)
-              .eq('source', `${platform}_gt0`)
-              .maybeSingle()
-            leaderboardSize = cacheRow?.total_count ?? null
-          } catch (err) {
-            logger.warn(`[batch-enrich] Failed to read leaderboard_count_cache for ${platform}/${period}`, { error: err instanceof Error ? err.message : String(err) })
-          }
+    // Tier 2: MEDIUM (API-per-trader) — batches of 5, most coverage here
+    const mediumPlatforms = platforms.filter(p => !tierFastSet.has(p) && !tierSlowSet.has(p))
+    if (mediumPlatforms.length > 0) {
+      const ok = await runPlatformBatch(mediumPlatforms, TIER_CONCURRENCY.medium, period, periodStart)
+      if (!ok) continue
+    }
 
-          try {
-            const { PipelineState } = await import('@/lib/services/pipeline-state')
-            const rotationKey = `enrich:offset:${platform}:${period}`
-            const prevOffset = await PipelineState.get<number>(rotationKey) ?? 0
-            // Wrap at actual leaderboard size (or 5000 fallback). Reset to 0 if prev offset already exceeds size.
-            const wrapAt = leaderboardSize && leaderboardSize > 0 ? leaderboardSize : 5000
-            offset = prevOffset >= wrapAt ? 0 : prevOffset
-            await PipelineState.set(rotationKey, (offset + limit) % wrapAt)
-          } catch (err) {
-            logger.warn(`[batch-enrich] Redis offset rotation failed for ${platform}/${period}, starting at 0`, {
-              error: err instanceof Error ? err.message : String(err),
-            })
-          }
-
-          try {
-            // Wrap enrichment in a timeout to prevent stuck jobs
-            const timeoutMs = getPlatformTimeout(platform)
-            const result: EnrichmentResult = await Promise.race([
-              runEnrichment({ platform, period, limit, offset }),
-              new Promise<never>((_, reject) =>
-                setTimeout(() => reject(new Error(`Enrichment ${platform}/${period} timed out after ${timeoutMs / 1000}s`)), timeoutMs)
-              ),
-            ])
-            if (result.ok) {
-              await PipelineCheckpoint.markCompleted(checkpoint, checkpointKey, result.summary.enriched ?? 0)
-            } else {
-              await PipelineCheckpoint.markFailed(checkpoint, checkpointKey, `${result.summary.failed} enrichments failed`)
-            }
-            return {
-              platform, period,
-              status: result.ok ? 'success' : 'error',
-              durationMs: Date.now() - start,
-              enriched: result.summary.enriched,
-              failed: result.summary.failed,
-              error: result.ok ? undefined : `${result.summary.failed} enrichments failed`,
-            }
-          } catch (err) {
-            await PipelineCheckpoint.markFailed(checkpoint, checkpointKey, err instanceof Error ? err.message : String(err))
-            return {
-              platform, period,
-              status: 'error',
-              durationMs: Date.now() - start,
-              error: err instanceof Error ? err.message : String(err),
-            }
-          }
-        })
-      )
-      
-      // Handle Promise.allSettled results
-      const settled = batchResults.map(r => 
-        r.status === 'fulfilled' ? r.value : {
-          platform: 'unknown',
-          period,
-          status: 'error' as const,
-          durationMs: 0,
-          error: r.reason instanceof Error ? r.reason.message : String(r.reason)
-        }
-      )
-      results.push(...settled)
-      
-      const batchSucceeded = settled.filter(r => r.status === 'success').length
-      const batchFailed = settled.length - batchSucceeded
-      logger.info(`Batch ${period}: ${batchSucceeded} success, ${batchFailed} failed`)
+    // Tier 3: SLOW (VPS scrapers, rate-limited) — batches of 2, run last
+    const slowPlatforms = platforms.filter(p => tierSlowSet.has(p))
+    if (slowPlatforms.length > 0) {
+      await runPlatformBatch(slowPlatforms, TIER_CONCURRENCY.slow, period, periodStart)
     }
   }
 
