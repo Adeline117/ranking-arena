@@ -35,7 +35,11 @@ export class HtxFuturesConnector extends BaseConnector {
 
     // Overall timeout guard: abort pagination if we're taking too long
     const startedAt = Date.now()
-    const PAGE_TIMEOUT_MS = 25000 // 25s per page budget (leaves room for 3 windows in 300s limit)
+    // 2026-04-20: increased from 25s to 40s — with 4 routes (direct, vps_sg, vps_jp,
+    // residential), 25s was only ~6s per route. Direct timeouts at 15s left no time
+    // for fallback routes, causing 145h+ stale data. 40s gives each route ~10s.
+    // Platform budget is 120s, and we typically only need 1-3 pages, so 40s/page is safe.
+    const PAGE_TIMEOUT_MS = 40000
 
     for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
       // Bail out early if we're running close to budget
@@ -49,20 +53,55 @@ export class HtxFuturesConnector extends BaseConnector {
         // for ~7 days (167h stale), and this.request() has no fallback. The
         // smart router tries direct first, falls through to VPS proxy on
         // failure. The endpoint itself is alive (200ms from local Mac).
+        //
+        // 2026-04-20: per-route timeout is PAGE_TIMEOUT / 3 so that multiple
+        // routes get a chance within the page budget. With 4 routes configured
+        // and ~13s per route, even if 2 routes timeout we still have budget
+        // for the remaining routes to respond.
+        const perRouteTimeout = Math.floor(PAGE_TIMEOUT_MS / 3)
         _rawLb = await this.fetchWithSmartRoute<Record<string, unknown>>(
           `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=${pageSize}`,
           { method: 'GET' },
-          PAGE_TIMEOUT_MS
+          perRouteTimeout
         )
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         this.logger.warn(`HTX leaderboard page ${page} failed: ${msg}`)
         // ROOT CAUSE FIX (2026-04-09): if this is the FIRST page and we have
-        // no traders yet, propagate the error instead of silently returning
-        // an empty result. A silent empty result was being flipped to
-        // `status: 'error', error: ""` by the batch wrapper, hiding the
-        // actual failure for days (167h stale).
+        // no traders yet, try DB seed fallback before propagating.
         if (allTraders.length === 0) {
+          // 2026-04-20: DB seed fallback (same pattern as bybit connector).
+          // When all routes fail (geo-block + VPS outage), fall back to refreshing
+          // existing traders from DB. This prevents indefinite staleness.
+          try {
+            const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+            const supabase = getSupabaseAdmin()
+            const { data: existingTraders } = await supabase
+              .from('trader_snapshots_v2')
+              .select('trader_key')
+              .eq('platform', 'htx')
+              .eq('window', window.toUpperCase())
+              .order('updated_at', { ascending: false })
+              .limit(limit)
+
+            if (existingTraders && existingTraders.length > 0) {
+              this.logger.info(`[htx_futures] All routes failed — falling back to DB seed list (${existingTraders.length} traders)`)
+              const seedTraders: TraderSource[] = existingTraders.map((t) => ({
+                platform: 'htx' as const,
+                market_type: 'futures' as const,
+                trader_key: String(t.trader_key),
+                display_name: null,
+                profile_url: `https://www.htx.com/copy-trading/trader/${t.trader_key}`,
+                discovered_at: new Date().toISOString(),
+                last_seen_at: new Date().toISOString(),
+                is_active: true,
+                raw: { _source: 'db_seed' } as Record<string, unknown>,
+              }))
+              return { traders: seedTraders, total_available: seedTraders.length, window, fetched_at: new Date().toISOString() }
+            }
+          } catch (seedErr) {
+            this.logger.warn('[htx_futures] DB seed fallback failed:', seedErr instanceof Error ? seedErr.message : String(seedErr))
+          }
           throw new Error(`HTX leaderboard fetch failed on page ${page}: ${msg}`)
         }
         break // Later page failure: return what we have (partial success)
