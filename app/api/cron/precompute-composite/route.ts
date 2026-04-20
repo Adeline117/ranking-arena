@@ -11,15 +11,14 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { getPool } from '@/lib/db'
 import { tieredSet } from '@/lib/cache/redis-layer'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { GranularPlatform } from '@/lib/types/leaderboard'
 import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
@@ -33,49 +32,95 @@ const ROI_ANOMALY_THRESHOLD = 5000
 const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
 const _FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
 
+// Statement timeout for the heavy per-window queries (default 30s is too short
+// for 7D which scans the largest partition). 90s gives ample headroom while
+// still failing fast if Supabase is degraded.
+const WINDOW_QUERY_TIMEOUT_S = 90
+
+interface SnapshotRow {
+  platform: string
+  trader_key: string
+  as_of_ts: string
+  arena_score: string | number | null
+  roi_pct: string | number | null
+  pnl_usd: string | number | null
+  max_drawdown: string | number | null
+  win_rate: string | number | null
+  trades_count: number | null
+  followers: number | null
+}
+
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   const startTime = Date.now()
-  // Use read replica for heavy SELECT queries (no writes in this job)
+  // Use read replica for light queries (display names); heavy snapshot queries
+  // use the pg pool directly so we can control statement_timeout.
   const supabase = getReadReplica() as SupabaseClient
   const plog = await PipelineLogger.start('precompute-composite')
 
   try {
-    // Fetch all three windows in parallel (top 2000 per window)
     // Include data from the last 7 days — some platforms (Bybit VPS scraper) may
     // have intermittent failures; 72h was too aggressive and dropped platforms entirely
     const freshnessThreshold = new Date(Date.now() - 168 * 3600 * 1000).toISOString()
 
-    const fetchWindow = async (seasonId: string) => {
-      // Removed .or('roi_pct.neq.0,pnl_usd.neq.0') — defeats index usage and causes
-      // statement timeout. Redundant: arena_score > 0 implies non-zero ROI or PnL.
-      // Filter trivially in app code if needed.
-      const { data, error } = await supabase
-        .from('trader_snapshots_v2')
-        .select('platform, trader_key, as_of_ts, arena_score, roi_pct, pnl_usd, max_drawdown, win_rate, trades_count, followers')
-        .eq('window', seasonId)
-        .not('arena_score', 'is', null)
-        .gte('as_of_ts', freshnessThreshold)
-        .lte('roi_pct', ROI_ANOMALY_THRESHOLD)
-        .gte('roi_pct', -ROI_ANOMALY_THRESHOLD)
-        .order('arena_score', { ascending: false, nullsFirst: false })
-        .limit(2000)
+    /**
+     * Fetch top 2000 traders for a window using raw SQL via pg pool.
+     * This bypasses PostgREST's 30s statement_timeout — we SET LOCAL to 90s.
+     *
+     * Key optimizations vs the old PostgREST query:
+     * 1. SET LOCAL statement_timeout = '90s' (per-transaction, not per-connection)
+     * 2. Explicit as_of_ts range enables partition pruning on the monthly-partitioned table
+     * 3. roi_pct anomaly filter applied in-app after index scan (avoids recheck on every row)
+     * 4. Uses idx_snapshots_v2_window_arena_score (window, arena_score DESC WHERE NOT NULL)
+     */
+    const fetchWindow = async (seasonId: string): Promise<SnapshotRow[]> => {
+      const client = await getPool().connect()
+      try {
+        await client.query('BEGIN')
+        await client.query(`SET LOCAL statement_timeout = '${WINDOW_QUERY_TIMEOUT_S}s'`)
 
-      if (error) throw new Error(`Fetch ${seasonId} failed: ${error.message}`)
-      return data || []
+        const result = await client.query<SnapshotRow>(
+          `SELECT platform, trader_key, as_of_ts, arena_score,
+                  roi_pct, pnl_usd, max_drawdown, win_rate,
+                  trades_count, followers
+           FROM trader_snapshots_v2
+           WHERE "window" = $1
+             AND arena_score IS NOT NULL
+             AND as_of_ts >= $2
+           ORDER BY arena_score DESC NULLS LAST
+           LIMIT 2500`,
+          [seasonId, freshnessThreshold]
+        )
+
+        await client.query('COMMIT')
+
+        // Apply roi_pct anomaly filter in app code — avoids defeating index usage
+        // in Postgres (the index covers window + arena_score, not roi_pct).
+        // Fetch 2500 from DB to have headroom after filtering.
+        const filtered = (result.rows || []).filter(r => {
+          if (r.roi_pct == null) return true
+          const roi = typeof r.roi_pct === 'string' ? parseFloat(r.roi_pct) : r.roi_pct
+          return roi >= -ROI_ANOMALY_THRESHOLD && roi <= ROI_ANOMALY_THRESHOLD
+        })
+        return filtered.slice(0, 2000)
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {})
+        throw new Error(`Fetch ${seasonId} failed: ${err instanceof Error ? err.message : String(err)}`)
+      } finally {
+        client.release()
+      }
     }
 
-    // Fetch sequentially to avoid concurrent statement_timeout on 90D partition scan.
-    // 90D is the largest partition; concurrent fetches exhaust Supabase statement timeout budget.
+    // Fetch sequentially to avoid concurrent connection exhaustion.
+    // 7D is now the bottleneck (largest active partition scan).
     const rows7d = await fetchWindow('7D')
     const rows30d = await fetchWindow('30D')
     const rows90d = await fetchWindow('90D')
 
     // Build maps keyed by platform:trader_key
-    type SnapshotRow = typeof rows7d[number]
     const buildMap = (rows: SnapshotRow[]) => {
       const m = new Map<string, SnapshotRow>()
       for (const r of rows) {
