@@ -94,44 +94,67 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     .lt('current_period_end', now.toISOString())
 
   if (expiredSubscriptions && expiredSubscriptions.length > 0) {
-    for (const sub of expiredSubscriptions) {
-      try {
-        await supabase
-          .from('subscriptions')
-          .update({
-            status: 'expired',
-            updated_at: now.toISOString(),
-          })
-          .eq('user_id', sub.user_id)
-          .eq('stripe_subscription_id', sub.stripe_subscription_id)
+    const expiredUserIds = expiredSubscriptions.map(s => s.user_id)
 
-        await supabase
-          .from('user_profiles')
-          .update({
-            subscription_tier: 'free',
-            updated_at: now.toISOString(),
-          })
-          .eq('id', sub.user_id)
-
-        await supabase.from('notifications').insert({
-          user_id: sub.user_id,
-          type: 'subscription_expired',
-          title: 'Pro 会员已到期',
-          body: '您的 Pro 会员已到期，账号已降级为免费用户。如需恢复 Pro 功能，请前往会员中心重新订阅。',
-          data: {},
+    try {
+      // Batch UPDATE subscriptions → expired
+      const { error: subErr } = await supabase
+        .from('subscriptions')
+        .update({
+          status: 'expired',
+          updated_at: now.toISOString(),
         })
+        .in('user_id', expiredUserIds)
+        .eq('status', 'active')
 
-        await supabase
+      if (subErr) {
+        results.errors.push(`Batch subscription update error: ${subErr.message}`)
+      }
+
+      // Batch UPDATE user_profiles → free tier
+      const { error: profileErr } = await supabase
+        .from('user_profiles')
+        .update({
+          subscription_tier: 'free',
+          updated_at: now.toISOString(),
+        })
+        .in('id', expiredUserIds)
+
+      if (profileErr) {
+        results.errors.push(`Batch profile downgrade error: ${profileErr.message}`)
+      }
+
+      // Batch INSERT notifications
+      const notifications = expiredSubscriptions.map(sub => ({
+        user_id: sub.user_id,
+        type: 'subscription_expired',
+        title: 'Pro 会员已到期',
+        body: '您的 Pro 会员已到期，账号已降级为免费用户。如需恢复 Pro 功能，请前往会员中心重新订阅。',
+        data: {},
+      }))
+      const { error: notifErr } = await supabase.from('notifications').insert(notifications)
+      if (notifErr) {
+        results.errors.push(`Batch notification insert error: ${notifErr.message}`)
+      }
+
+      // Batch DELETE group_members for pro group
+      const proGroupId = process.env.PRO_OFFICIAL_GROUP_ID || ''
+      if (proGroupId) {
+        const { error: groupErr } = await supabase
           .from('group_members')
           .delete()
-          .eq('user_id', sub.user_id)
-          .eq('group_id', process.env.PRO_OFFICIAL_GROUP_ID || '')
+          .in('user_id', expiredUserIds)
+          .eq('group_id', proGroupId)
 
-        results.downgraded++
-        logger.info(`User ${sub.user_id} downgraded due to subscription expiry`)
-      } catch (err) {
-        results.errors.push(`Downgrade error for ${sub.user_id}: ${err}`)
+        if (groupErr) {
+          results.errors.push(`Batch group member removal error: ${groupErr.message}`)
+        }
       }
+
+      results.downgraded = expiredSubscriptions.length
+      logger.info(`Batch downgraded ${expiredSubscriptions.length} users due to subscription expiry`)
+    } catch (err) {
+      results.errors.push(`Batch downgrade error: ${err}`)
     }
   }
 
@@ -145,42 +168,78 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     .eq('subscription_tier', 'pro')
 
   if (nftUsers && nftUsers.length > 0) {
-    for (const user of nftUsers) {
-      if (!user.wallet_address) continue
+    const validNftUsers = nftUsers.filter(u => u.wallet_address)
 
-      try {
-        const hasValidNFT = await checkNFTMembership(user.wallet_address)
-        results.nftChecked++
+    // Check NFT membership with concurrency limit of 5
+    const NFT_CONCURRENCY = 5
+    const nftResults: { user: typeof validNftUsers[number]; hasValidNFT: boolean }[] = []
 
-        const { data: activeSub } = await supabase
-          .from('subscriptions')
-          .select('id')
-          .eq('user_id', user.id)
-          .eq('status', 'active')
-          .single()
+    for (let i = 0; i < validNftUsers.length; i += NFT_CONCURRENCY) {
+      const batch = validNftUsers.slice(i, i + NFT_CONCURRENCY)
+      const batchResults = await Promise.all(
+        batch.map(async (user) => {
+          try {
+            const hasValidNFT = await checkNFTMembership(user.wallet_address!)
+            results.nftChecked++
+            return { user, hasValidNFT }
+          } catch (err) {
+            results.errors.push(`NFT check error for ${user.id}: ${err}`)
+            return null
+          }
+        })
+      )
+      for (const r of batchResults) {
+        if (r) nftResults.push(r)
+      }
+    }
 
-        if (!hasValidNFT && !activeSub) {
-          await supabase
-            .from('user_profiles')
-            .update({
-              subscription_tier: 'free',
-              updated_at: now.toISOString(),
-            })
-            .eq('id', user.id)
+    // Batch query: find which of these users have active subscriptions
+    const nftUserIds = nftResults.filter(r => !r.hasValidNFT).map(r => r.user.id)
 
-          await supabase.from('notifications').insert({
-            user_id: user.id,
-            type: 'nft_expired',
-            title: 'NFT 会员已过期',
-            body: '您的 NFT 会员证已过期，账号已降级为免费用户。如需继续使用 Pro 功能，请续费或重新购买 NFT。',
-            data: { walletAddress: user.wallet_address },
+    if (nftUserIds.length > 0) {
+      const { data: activeSubUsers } = await supabase
+        .from('subscriptions')
+        .select('user_id')
+        .in('user_id', nftUserIds)
+        .eq('status', 'active')
+
+      const usersWithActiveSub = new Set(activeSubUsers?.map(s => s.user_id) || [])
+
+      // Users to downgrade: no valid NFT AND no active subscription
+      const toDowngrade = nftResults
+        .filter(r => !r.hasValidNFT && !usersWithActiveSub.has(r.user.id))
+
+      if (toDowngrade.length > 0) {
+        const downgradeIds = toDowngrade.map(r => r.user.id)
+
+        // Batch UPDATE user_profiles → free tier
+        const { error: profileErr } = await supabase
+          .from('user_profiles')
+          .update({
+            subscription_tier: 'free',
+            updated_at: now.toISOString(),
           })
+          .in('id', downgradeIds)
 
-          results.downgraded++
-          logger.info(`User ${user.id} downgraded due to NFT expiry`)
+        if (profileErr) {
+          results.errors.push(`Batch NFT profile downgrade error: ${profileErr.message}`)
         }
-      } catch (err) {
-        results.errors.push(`NFT check error for ${user.id}: ${err}`)
+
+        // Batch INSERT notifications
+        const nftNotifications = toDowngrade.map(r => ({
+          user_id: r.user.id,
+          type: 'nft_expired',
+          title: 'NFT 会员已过期',
+          body: '您的 NFT 会员证已过期，账号已降级为免费用户。如需继续使用 Pro 功能，请续费或重新购买 NFT。',
+          data: { walletAddress: r.user.wallet_address },
+        }))
+        const { error: notifErr } = await supabase.from('notifications').insert(nftNotifications)
+        if (notifErr) {
+          results.errors.push(`Batch NFT notification insert error: ${notifErr.message}`)
+        }
+
+        results.downgraded += toDowngrade.length
+        logger.info(`Batch downgraded ${toDowngrade.length} users due to NFT expiry`)
       }
     }
   }
