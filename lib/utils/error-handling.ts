@@ -232,33 +232,31 @@ export function reportError(error: unknown, context?: Record<string, unknown>) {
     return
   }
   
-  // 延迟加载 Sentry
-  if (typeof window !== 'undefined') {
-    import('@sentry/nextjs').then((Sentry) => {
-      Sentry.captureException(errorInfo.originalError || error, {
-        level: errorInfo.type === 'server' ? 'error' : 'warning',
-        tags: {
-          errorType: errorInfo.type,
-          errorCode: String(errorInfo.code || 'unknown'),
-          source: context?.source as string || 'client',
+  // 延迟加载 Sentry (works on both client and server)
+  import('@sentry/nextjs').then((Sentry) => {
+    Sentry.captureException(errorInfo.originalError || error, {
+      level: errorInfo.type === 'server' ? 'error' : 'warning',
+      tags: {
+        errorType: errorInfo.type,
+        errorCode: String(errorInfo.code || 'unknown'),
+        source: context?.source as string || (typeof window !== 'undefined' ? 'client' : 'server'),
+      },
+      contexts: {
+        errorInfo: {
+          type: errorInfo.type,
+          message: errorInfo.message,
+          code: errorInfo.code,
         },
-        contexts: {
-          errorInfo: {
-            type: errorInfo.type,
-            message: errorInfo.message,
-            code: errorInfo.code,
-          },
-          additional: context
-        },
-        fingerprint: errorInfo.code
-          ? ['{{ default }}', String(errorInfo.code)]
-          : ['{{ default }}'],
-      })
-    // eslint-disable-next-line no-restricted-syntax -- Intentional: dynamic import, failure is non-critical
-    }).catch(() => {
-      // Sentry 加载失败时静默处理
+        additional: context
+      },
+      fingerprint: errorInfo.code
+        ? ['{{ default }}', String(errorInfo.code)]
+        : ['{{ default }}'],
     })
-  }
+  // eslint-disable-next-line no-restricted-syntax -- Intentional: dynamic import, failure is non-critical
+  }).catch(() => {
+    // Sentry 加载失败时静默处理
+  })
 }
 
 /**

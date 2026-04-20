@@ -34,6 +34,12 @@ export default function RouteError({
 
   useEffect(() => {
     logger.error(`[${contextLabel || 'RouteError'}]`, error)
+    // Report route errors to Sentry for observability
+    import('@sentry/nextjs').then(Sentry => {
+      Sentry.captureException(error, {
+        tags: { source: 'route-error', context: contextLabel || 'unknown' },
+      })
+    }).catch(() => {})
   }, [error, contextLabel])
 
   const handleRetry = () => {

@@ -24,9 +24,9 @@ async function initSentry() {
     // 性能监控 — 生产环境低采样率
     tracesSampleRate: process.env.NODE_ENV === 'production' ? 0.1 : 1.0,
 
-    // Session Replay — 初始为 0，后续延迟加载
+    // Session Replay — capture replay on every error session for debugging
     replaysSessionSampleRate: 0,
-    replaysOnErrorSampleRate: 0,
+    replaysOnErrorSampleRate: 1.0,
 
     // Profiling — 关闭以减少开销
     profilesSampleRate: 0,

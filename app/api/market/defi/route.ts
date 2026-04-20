@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { fetchDefiOverview } from '@/lib/utils/defillama'
 import { getOrSetWithLock } from '@/lib/cache'
+import { logger } from '@/lib/utils/logger'
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
       },
     })
   } catch (error) {
-    console.error('[market/defi] Failed:', error instanceof Error ? error.message : error)
+    logger.error('[market/defi] Failed:', error instanceof Error ? error : new Error(String(error)))
     return NextResponse.json(
       { error: 'Failed to fetch DeFi overview' },
       { status: 500 }

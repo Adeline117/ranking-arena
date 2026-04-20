@@ -116,8 +116,8 @@ export class BingxFuturesConnector extends BaseConnector {
       return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
     } catch (err) {
       log.error(`discoverLeaderboard error: ${err instanceof Error ? err.message : String(err)}`)
-      // Return empty result if API fails (may need Puppeteer scraping)
-      return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
+      // Re-throw so batch-fetch detects the failure instead of treating it as 0 traders
+      throw err
     }
   }
 

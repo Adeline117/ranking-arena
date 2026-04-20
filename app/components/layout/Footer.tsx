@@ -16,7 +16,7 @@ export default function Footer() {
     {
       title: t('footerProduct'),
       links: [
-        { href: '/rankings', label: t('footerRankings') },
+        { href: '/', label: t('footerRankings') },
         { href: '/market', label: t('footerMarket') },
         { href: '/claim', label: t('claimTrader') || 'Claim Profile' },
         { href: '/pricing', label: t('footerPricing') },
