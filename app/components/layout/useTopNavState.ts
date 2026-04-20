@@ -212,23 +212,8 @@ export function useTopNavState() {
     }
   }, [showUserMenu, showSearchDropdown])
 
-  // Cmd+K / Ctrl+K keyboard shortcut to focus search
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        const input = searchRef.current?.querySelector('input')
-        if (input) {
-          input.focus()
-          setShowSearchDropdown(true)
-        } else {
-          setShowMobileSearch(true)
-        }
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [])
+  // Cmd+K / Ctrl+K handled by TopNavClient (more robust version with editable field check)
+  // Removed duplicate listener that was registered here
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
