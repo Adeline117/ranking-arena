@@ -5,6 +5,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server'
 import { getOrSetWithLock } from '@/lib/cache'
+import { logger } from '@/lib/utils/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -19,7 +20,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json(result)
     response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
     return response
-  } catch (error) { console.error('[market] Failed:', error instanceof Error ? error.message : error);
+  } catch (error) { logger.error('[market/alpha] Failed:', error instanceof Error ? error : new Error(String(error)));
     return NextResponse.json({ error: 'Failed to fetch market alpha data' }, { status: 500 })
   }
 }

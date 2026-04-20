@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { convertTimeframe, TIMEFRAME_SECONDS, type Timeframe } from '@/lib/utils/candlestick'
+import { logger } from '@/lib/utils/logger'
 
 const VALID_TIMEFRAMES = Object.keys(TIMEFRAME_SECONDS) as Timeframe[]
 
@@ -47,7 +48,7 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json({ symbol, timeframe, exchange: exchangeId, candles })
     response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=120')
     return response
-  } catch (error) { console.error('[market] Failed:', error instanceof Error ? error.message : error);
+  } catch (error) { logger.error('[market/candles] Failed:', error instanceof Error ? error : new Error(String(error)));
     return NextResponse.json({ error: 'Failed to fetch candle data' }, { status: 500 })
   }
 }

@@ -30,9 +30,8 @@ Sentry.init({
   // integrations here if a debugging session needs them.
   defaultIntegrations: false,
   integrations: [
-    // Empty list keeps the bare error-capture path. Add named integrations
-    // (e.g., Sentry.consoleIntegration(), Sentry.linkedErrorsIntegration())
-    // here if needed for a specific incident.
+    // Re-enable linkedErrors to capture Error.cause chains in Sentry
+    Sentry.linkedErrorsIntegration({ key: 'cause', limit: 5 }),
   ],
 
   // 环境标识

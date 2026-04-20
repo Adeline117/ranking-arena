@@ -229,9 +229,15 @@ class Logger {
 
   /**
    * Error 级别日志（生产环境可见）
+   * 自动上报 Error 实例到 Sentry
    */
   error(message: string, ...data: unknown[]): void {
     this.output('error', message, ...data)
+    // Auto-report Error objects to Sentry for observability
+    const errorObj = data.find(d => d instanceof Error) as Error | undefined
+    if (errorObj) {
+      void captureError(errorObj, { message, logger: this.name })
+    }
   }
 
   /**

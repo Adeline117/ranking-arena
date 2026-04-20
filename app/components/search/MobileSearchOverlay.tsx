@@ -28,7 +28,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
   // Load search history
   useEffect(() => {
     try {
-      const stored = localStorage.getItem('arena-search-history')
+      const stored = localStorage.getItem('arena_search_history')
       if (stored) setSearchHistory(JSON.parse(stored))
     } catch { /* ignore */ }
   }, [])
@@ -38,14 +38,14 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
     if (!trimmed) return
     setSearchHistory(prev => {
       const updated = [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 10)
-      try { localStorage.setItem('arena-search-history', JSON.stringify(updated)) } catch { /* ignore */ }
+      try { localStorage.setItem('arena_search_history', JSON.stringify(updated)) } catch { /* ignore */ }
       return updated
     })
   }, [])
 
   const clearHistory = useCallback(() => {
     setSearchHistory([])
-    try { localStorage.removeItem('arena-search-history') } catch { /* ignore */ }
+    try { localStorage.removeItem('arena_search_history') } catch { /* ignore */ }
   }, [])
 
   useEffect(() => {

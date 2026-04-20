@@ -13,7 +13,7 @@ export default function NavLinks() {
   const pathname = usePathname()
 
   const items = [
-    { href: '/rankings', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
+    { href: '/', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
     ...(features.social ? [
       { href: '/groups', labelKey: 'groups' as const, tooltip: t('navTooltipGroups') },
     ] : []),
@@ -27,7 +27,7 @@ export default function NavLinks() {
     <Box as="nav" aria-label={t('mainNavigation')} className="hide-mobile" style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
       {items.map((item) => {
         const label = t(item.labelKey)
-        const isActive = item.href === '/rankings' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname.startsWith(item.href)
+        const isActive = item.href === '/' ? (pathname === '/' || pathname.startsWith('/rankings')) : pathname.startsWith(item.href)
         return (
           <Link
             key={item.href}

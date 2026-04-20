@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { fetchSectorPerformance } from '@/lib/utils/coingecko'
 import { getOrSetWithLock } from '@/lib/cache'
+import { logger } from '@/lib/utils/logger'
 
 export async function GET(request: NextRequest) {
   try {
@@ -18,7 +19,7 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=900',
       },
     })
-  } catch (error) { console.error('[market] Failed:', error instanceof Error ? error.message : error);
+  } catch (error) { logger.error('[market/sectors] Failed:', error instanceof Error ? error : new Error(String(error)));
     return NextResponse.json(
       { error: 'Failed to fetch sector performance' },
       { status: 500 }
