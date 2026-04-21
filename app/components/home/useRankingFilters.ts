@@ -172,7 +172,7 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     const urlPreset = searchParams.get('preset') as PresetId | null
     const urlEx = searchParams.get('ex')
 
-    if (urlSort && ['score', 'roi', 'pnl', 'winrate', 'mdd'].includes(urlSort)) {
+    if (urlSort && ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino', 'alpha'].includes(urlSort)) {
       setSortColumn(urlSort)
     }
     if (urlOrder && ['asc', 'desc'].includes(urlOrder)) {
@@ -286,7 +286,7 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     setCurrentPage(1)
     syncStateToUrl({ sort: col, order: dir, page: 1 })
     if (fetchPage) {
-      const sortByMap: Record<string, string> = { score: 'arena_score', roi: 'roi', pnl: 'pnl', winrate: 'win_rate', mdd: 'max_drawdown' }
+      const sortByMap: Record<string, string> = { score: 'arena_score', roi: 'roi', pnl: 'pnl', winrate: 'win_rate', mdd: 'max_drawdown', sortino: 'sortino_ratio', alpha: 'alpha' }
       const apiCategory = category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
       fetchPage(0, { category: apiCategory, sortBy: sortByMap[col] || 'arena_score', sortDir: dir })
     }
@@ -296,7 +296,7 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     setCurrentPage(page)
     syncStateToUrl({ page })
     if (fetchPage) {
-      const sortByMap: Record<string, string> = { score: 'arena_score', roi: 'roi', pnl: 'pnl', winrate: 'win_rate', mdd: 'max_drawdown' }
+      const sortByMap: Record<string, string> = { score: 'arena_score', roi: 'roi', pnl: 'pnl', winrate: 'win_rate', mdd: 'max_drawdown', sortino: 'sortino_ratio', alpha: 'alpha' }
       const apiCategory = category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
       fetchPage(page - 1, { category: apiCategory, sortBy: sortByMap[sortColumn] || 'arena_score', sortDir: sortDir })
     }

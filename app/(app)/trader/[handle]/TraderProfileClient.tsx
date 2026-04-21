@@ -438,7 +438,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           onIndexChange={(i) => handleTabChange(tabKeys[i])}
         >
           {/* Overview Tab */}
-          <Box style={{ minHeight: 200 }} key={activeTab} className="tab-pane-enter">
+          <Box style={{ minHeight: 200 }} className="tab-pane-enter">
             {(activeTab === 'overview') && (
               <OverviewTab
                 data={data}
