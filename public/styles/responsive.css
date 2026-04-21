@@ -162,7 +162,6 @@
 
 .swipe-container {
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
   -ms-overflow-style: none;
 }
@@ -538,7 +537,6 @@
 /* 移动端表格横向滚动 */
 .table-scroll-mobile {
   overflow-x: auto;
-  -webkit-overflow-scrolling: touch;
 }
 
 .table-scroll-mobile::-webkit-scrollbar {
@@ -1298,14 +1296,12 @@
   .compare-grid-scroll {
     overflow-x: auto !important;
     overflow-y: hidden !important;
-    -webkit-overflow-scrolling: touch !important;
     max-width: 100% !important;
   }
 
   /* Market table: contained scroll */
   .market-table-wrapper {
     overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch !important;
     max-width: 100% !important;
   }
 
@@ -1454,7 +1450,6 @@
   /* Smoother scroll momentum */
   .mobile-search-results,
   .ranking-table-container {
-    -webkit-overflow-scrolling: touch;
     scroll-behavior: smooth;
   }
 }
@@ -1513,7 +1508,6 @@
   .comments-section {
     max-height: 60vh;
     overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
   }
 }
 

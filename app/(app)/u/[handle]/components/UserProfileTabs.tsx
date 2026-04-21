@@ -32,7 +32,6 @@ export default function UserProfileTabs({ activeTab, onTabChange }: UserProfileT
         padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
         paddingBottom: tokens.spacing[3],
         overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
         scrollbarWidth: 'none',
         background: `linear-gradient(to bottom, ${tokens.colors.bg.secondary}40 0%, transparent 100%)`,
         borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,

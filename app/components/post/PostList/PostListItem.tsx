@@ -205,7 +205,6 @@ export const PostListItem = memo(function PostListItem({
               gap: 8,
               overflowX: 'auto',
               scrollSnapType: 'x mandatory',
-              WebkitOverflowScrolling: 'touch',
               paddingBottom: 4,
             }}
             onClick={(e) => e.stopPropagation()}

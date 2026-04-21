@@ -158,7 +158,7 @@ function SettingsContent() {
             style={{
               display: 'none', gap: tokens.spacing[2], marginBottom: tokens.spacing[5],
               overflowX: 'auto', paddingBottom: tokens.spacing[2],
-              WebkitOverflowScrolling: 'touch', msOverflowStyle: 'none', scrollbarWidth: 'none',
+              msOverflowStyle: 'none', scrollbarWidth: 'none',
             }}
           >
             {SECTION_IDS.map(sectionId => (

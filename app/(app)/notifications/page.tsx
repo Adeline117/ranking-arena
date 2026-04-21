@@ -454,7 +454,6 @@ export default function NotificationsPage() {
           marginBottom: tokens.spacing[4],
           overflowX: 'auto',
           paddingBottom: tokens.spacing[1],
-          WebkitOverflowScrolling: 'touch',
           msOverflowStyle: 'none',
           scrollbarWidth: 'none',
         }}>

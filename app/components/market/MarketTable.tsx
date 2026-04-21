@@ -102,7 +102,7 @@ function MarketTableInner<T>({
         maxWidth: '100%',
       }}
     >
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch', maxWidth: '100%' }}>
+      <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
       <table
         style={{
           width: '100%',

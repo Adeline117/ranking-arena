@@ -21,7 +21,6 @@ export default function HomeSubNav() {
         gap: tokens.spacing[1],
         marginTop: 4,
         overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
       }}
