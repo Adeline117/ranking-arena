@@ -167,8 +167,17 @@ export default function LoginPage() {
     submittingRef.current = true
     setError(null)
     setSendingCode(true)
+
+    // 15-second timeout — Supabase OTP delivery can hang on slow networks
+    const timeoutId = setTimeout(() => {
+      setError(t('loginTimeout'))
+      setSendingCode(false)
+      submittingRef.current = false
+    }, 15_000)
+
     try {
       const { data, error: otpError } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } })
+      clearTimeout(timeoutId)
       if (otpError) {
         setError(otpError.message.includes('redirect') || otpError.message.includes('link') ? t('loginConfigError') : t('loginSendFailed'))
         setSendingCode(false)
@@ -176,8 +185,8 @@ export default function LoginPage() {
       }
       if (data) { setCodeSent(true); setCountdown(60); showToast(t('loginCodeSent'), 'success') }
       else { setError(t('loginSendFailed')) }
-    } catch (err: unknown) { logger.error('Login OTP error:', err); setError(t('loginSendFailedNetwork')) }
-    finally { setSendingCode(false); submittingRef.current = false }
+    } catch (err: unknown) { clearTimeout(timeoutId); logger.error('Login OTP error:', err); setError(t('loginSendFailedNetwork')) }
+    finally { clearTimeout(timeoutId); setSendingCode(false); submittingRef.current = false }
   }
 
   const handleSendLoginCode = async () => {
@@ -186,8 +195,17 @@ export default function LoginPage() {
     submittingRef.current = true
     setError(null)
     setSendingCode(true)
+
+    // 15-second timeout — matches handleSendCode pattern
+    const timeoutId = setTimeout(() => {
+      setError(t('loginTimeout'))
+      setSendingCode(false)
+      submittingRef.current = false
+    }, 15_000)
+
     try {
       const { data, error: otpError } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
+      clearTimeout(timeoutId)
       if (otpError) {
         const msg = otpError.message.toLowerCase()
         if (msg.includes('signup') || msg.includes('not allowed') || msg.includes('not found')) {
@@ -200,8 +218,8 @@ export default function LoginPage() {
       }
       if (data) { setCodeSent(true); setCountdown(60); showToast(t('loginCodeSent'), 'success') }
       else { setError(t('loginSendFailedShort')) }
-    } catch (err: unknown) { logger.error('Login OTP error:', err); setError(t('loginSendFailedSimple')) }
-    finally { setSendingCode(false); submittingRef.current = false }
+    } catch (err: unknown) { clearTimeout(timeoutId); logger.error('Login OTP error:', err); setError(t('loginSendFailedSimple')) }
+    finally { clearTimeout(timeoutId); setSendingCode(false); submittingRef.current = false }
   }
 
   const handleVerifyCode = async () => {
@@ -211,8 +229,18 @@ export default function LoginPage() {
     verifyingOtpRef.current = true
     setError(null)
     setLoading(true)
+
+    // 15-second timeout — OTP verification can hang on poor connections
+    const timeoutId = setTimeout(() => {
+      setError(t('loginTimeout'))
+      setLoading(false)
+      submittingRef.current = false
+      verifyingOtpRef.current = false
+    }, 15_000)
+
     try {
       const { data, error: verifyError } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' })
+      clearTimeout(timeoutId)
       if (verifyError) {
         if (verifyError.message.includes('expired') || verifyError.message.includes('过期')) setError(t('loginCodeExpired'))
         else setError(t('loginVerificationFailed'))
@@ -232,9 +260,10 @@ export default function LoginPage() {
         }
       }
     } catch (err: unknown) {
+      clearTimeout(timeoutId)
       const errMsg = err instanceof Error ? err.message : undefined
       setError(errMsg?.includes('expired') || errMsg?.includes('过期') ? t('loginCodeExpired') : errMsg || t('loginVerificationFailed'))
-    } finally { setLoading(false); submittingRef.current = false; verifyingOtpRef.current = false }
+    } finally { clearTimeout(timeoutId); setLoading(false); submittingRef.current = false; verifyingOtpRef.current = false }
   }
 
   const createUserProfile = async (userId: string, userEmail: string, userHandle?: string) => {
