@@ -9,6 +9,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { useDeferredKey } from '@/lib/hooks/useDeferredSWR'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type HotPost = {
   id: string
@@ -134,7 +135,7 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
         if (!data.session) return // Skip translate for unauthenticated users (avoids 401)
         fetch('/api/translate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
           body: JSON.stringify({ items: needsTranslation.slice(0, 20), targetLang }),
         }).catch(() => {}) // Silently fail — translation is non-critical
       })

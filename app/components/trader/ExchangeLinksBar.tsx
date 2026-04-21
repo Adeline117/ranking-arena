@@ -6,6 +6,7 @@ import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 /** Referral config per exchange */
 const REFERRAL_LINKS: Record<string, { url: string; code: string; color: string }> = {
@@ -112,7 +113,7 @@ export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccoun
                 // #33: Fire-and-forget click tracking for exchange link analytics
                 fetch('/api/interactions', {
                   method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
+                  headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
                   body: JSON.stringify({ type: 'exchange_link_click', platform: acc.platform, traderKey: acc.traderKey }),
                 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget: analytics is non-critical
               }}
