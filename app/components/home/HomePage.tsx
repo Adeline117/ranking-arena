@@ -4,8 +4,8 @@
 import { Suspense, lazy } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '../layout/TopNav'
-// MobileBottomNav is rendered in root layout.tsx -- do not duplicate here
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
+const MobileBottomNav = lazy(() => import('../layout/MobileBottomNav'))
 const Footer = lazy(() => import('../layout/Footer'))
 const FoundingMemberBanner = lazy(() => import('./FoundingMemberBanner'))
 const ExchangePartners = lazy(() => import('./ExchangePartners'))
@@ -147,7 +147,7 @@ export default function HomePage({ initialTraders, initialLastUpdated, heroStats
       <div className="contain-content">
         <Suspense fallback={<div style={{ minHeight: 200 }} />}><Footer /></Suspense>
       </div>
-      {/* MobileBottomNav rendered in root layout.tsx */}
+      <Suspense fallback={null}><MobileBottomNav /></Suspense>
       <Suspense fallback={null}><GuestSignupPrompt /></Suspense>
       {/* WelcomeModal removed — homepage content IS the onboarding */}
     </div>
