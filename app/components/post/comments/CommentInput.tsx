@@ -69,6 +69,7 @@ export function CommentInput({
             ta.style.height = 'auto'
             ta.style.height = Math.min(ta.scrollHeight, 160) + 'px'
           }}
+          enterKeyHint="send"
           placeholder={t('writeComment')}
           aria-label={t('writeComment')}
           rows={1}

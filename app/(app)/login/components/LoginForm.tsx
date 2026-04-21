@@ -79,6 +79,7 @@ export default function LoginForm({
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onBlur={() => markTouched('password')}
+              enterKeyHint="go"
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !loading && email && password) {
                   onLogin()
