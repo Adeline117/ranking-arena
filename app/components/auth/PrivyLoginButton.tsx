@@ -48,6 +48,7 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
       } catch (err) {
         logger.error('Privy sync error:', err);
         hasRedirected.current = false;
+        onError?.(lang === 'zh' ? '账户同步失败，请重试' : 'Account sync failed, please try again');
       }
     };
 
