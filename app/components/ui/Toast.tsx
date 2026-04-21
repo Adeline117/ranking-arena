@@ -438,7 +438,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           className="toast-container"
           style={{
             position: 'fixed',
-            top: 'calc(var(--top-nav-height, 56px) + 24px)',
+            top: 'calc(var(--top-nav-height, 56px) + env(safe-area-inset-top, 0px) + 24px)',
             right: 16,
             zIndex: tokens.zIndex.toast,
             maxWidth: 'calc(100vw - 32px)',
