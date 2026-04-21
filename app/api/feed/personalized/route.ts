@@ -5,7 +5,7 @@
  * Falls back to hot_score for unauthenticated users.
  */
 
-export const runtime = 'edge'
+export const runtime = 'nodejs'
 
 import { NextRequest } from 'next/server'
 import {
