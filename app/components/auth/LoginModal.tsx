@@ -117,11 +117,16 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
 
     setLoading(false)
     if (otpError) {
-      setError(otpError.message)
+      const msg = otpError.message.toLowerCase()
+      if (msg.includes('rate') || msg.includes('limit') || msg.includes('too many')) {
+        setError(t('loginTimeout'))
+      } else {
+        setError(t('loginSendFailed'))
+      }
     } else {
       setStep('email-sent')
     }
-  }, [email, loading])
+  }, [email, loading, t])
 
   const handleVerifyOTP = useCallback(async () => {
     if (!otp.trim() || loading) return
