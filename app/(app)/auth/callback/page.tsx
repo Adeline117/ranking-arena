@@ -99,8 +99,15 @@ function AuthCallbackContent() {
         const now = Date.now()
         const isNewUser = now - createdAt < 30_000
 
-        // New users → homepage with welcome banner (skip complex onboarding)
-        router.replace(isAddAccount ? '/' : (isNewUser ? '/?welcome=1' : defaultRedirect))
+        // New users → preserve returnUrl with welcome banner (skip complex onboarding)
+        if (isAddAccount) {
+          router.replace('/')
+        } else if (isNewUser) {
+          const target = isSafeReturn ? returnUrl! : '/'
+          router.replace(target + (target.includes('?') ? '&' : '?') + 'welcome=1')
+        } else {
+          router.replace(defaultRedirect)
+        }
       } else {
         // Wait a moment for supabase to process the hash fragment
         setTimeout(async () => {
@@ -111,8 +118,15 @@ function AuthCallbackContent() {
             const createdAt = new Date(retrySession.user.created_at).getTime()
             const now = Date.now()
             const isNewUser = now - createdAt < 30_000
-            // New users → homepage with welcome banner (consistent with immediate-session path)
-            router.replace(isAddAccount ? '/' : (isNewUser ? '/?welcome=1' : defaultRedirect))
+            // New users → preserve returnUrl with welcome banner (consistent with immediate-session path)
+            if (isAddAccount) {
+              router.replace('/')
+            } else if (isNewUser) {
+              const target = isSafeReturn ? returnUrl! : '/'
+              router.replace(target + (target.includes('?') ? '&' : '?') + 'welcome=1')
+            } else {
+              router.replace(defaultRedirect)
+            }
           } else {
             router.replace('/login?error=no_session')
           }
