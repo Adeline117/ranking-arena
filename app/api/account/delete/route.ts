@@ -13,6 +13,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@supabase/supabase-js'
 import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
+import { getStripe } from '@/lib/stripe'
 
 const logger = createLogger('account-delete')
 
@@ -130,12 +131,45 @@ export const POST = withAuth(async ({ user, supabase: sb, request }) => {
     // Execute all cleanup in parallel, don't fail the deletion if some cleanup fails
     await Promise.allSettled(cleanupPromises.map(p => Promise.resolve(p)))
 
+    // Cancel Stripe subscription if active (before banning/session invalidation)
+    try {
+      const { data: subscription } = await supabase
+        .from('subscriptions')
+        .select('stripe_subscription_id, status')
+        .eq('user_id', user.id)
+        .in('status', ['active', 'trialing', 'past_due'])
+        .maybeSingle()
+
+      if (subscription?.stripe_subscription_id) {
+        const stripe = getStripe()
+        const cancelled = await stripe.subscriptions.cancel(subscription.stripe_subscription_id)
+        logger.info('Stripe subscription cancelled on account deletion', {
+          userId: user.id,
+          subscriptionId: subscription.stripe_subscription_id,
+          status: cancelled.status,
+        })
+
+        // Update local subscription record
+        await supabase
+          .from('subscriptions')
+          .update({ status: 'canceled', canceled_at: new Date().toISOString() })
+          .eq('user_id', user.id)
+      }
+    } catch (stripeError) {
+      // Don't block account deletion if Stripe cancellation fails
+      logger.error('Failed to cancel Stripe subscription during account deletion', {
+        userId: user.id,
+        error: stripeError instanceof Error ? stripeError.message : String(stripeError),
+      })
+    }
+
     // SECURITY: Invalidate all active sessions before banning
     await supabase.auth.admin.signOut(user.id, 'global')
 
-    // Ban the user (876000h ~ 100 years)
+    // Ban the user for 30 days (matching the grace period)
+    // After 30 days the cleanup cron hard-deletes the account
     await supabase.auth.admin.updateUserById(user.id, {
-      ban_duration: '876000h',
+      ban_duration: '720h',
     })
 
     logger.info('Account deletion scheduled', { userId: user.id })
