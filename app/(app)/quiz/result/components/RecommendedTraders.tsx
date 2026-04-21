@@ -53,6 +53,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
           <Link
             key={trader.handle}
             href={`/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.platform)}`}
+            aria-label={`View ${trader.name} on ${trader.platform.replace(/_/g, ' ')}`}
             style={{
               padding: '10px 14px',
               borderRadius: 8,
@@ -188,6 +189,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               strokeLinecap="round"
               strokeLinejoin="round"
               style={{ flexShrink: 0 }}
+              aria-hidden="true"
             >
               <polyline points="9 18 15 12 9 6" />
             </svg>
