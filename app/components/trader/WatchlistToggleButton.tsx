@@ -1,5 +1,6 @@
 'use client'
 
+import { useRef, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useWatchlist } from '@/lib/hooks/useWatchlist'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -18,15 +19,20 @@ export default function WatchlistToggleButton({ source, sourceTraderID, handle }
   const { isWatched, addToWatchlist, removeFromWatchlist } = useWatchlist()
   const { showToast } = useToast()
   const { t } = useLanguage()
+  const pendingRef = useRef(false)
+  const [isLoading, setIsLoading] = useState(false)
 
   const watched = isWatched(source, sourceTraderID)
 
   const handleClick = async () => {
+    if (pendingRef.current) return
     if (!isLoggedIn) {
       useLoginModal.getState().openLoginModal()
       return
     }
 
+    pendingRef.current = true
+    setIsLoading(true)
     try {
       if (watched) {
         await removeFromWatchlist(source, sourceTraderID)
@@ -37,6 +43,9 @@ export default function WatchlistToggleButton({ source, sourceTraderID, handle }
       }
     } catch {
       showToast(t('watchlistError') || 'Failed to update watchlist', 'error')
+    } finally {
+      pendingRef.current = false
+      setIsLoading(false)
     }
   }
 
@@ -60,7 +69,8 @@ export default function WatchlistToggleButton({ source, sourceTraderID, handle }
         color: watched
           ? 'var(--color-accent-warning, #f59e0b)'
           : tokens.colors.text.secondary,
-        cursor: 'pointer',
+        cursor: isLoading ? 'not-allowed' : 'pointer',
+        opacity: isLoading ? 0.6 : 1,
         display: 'flex',
         alignItems: 'center',
         gap: 6,
