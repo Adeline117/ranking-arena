@@ -123,7 +123,7 @@ export default function LoginPage() {
   useEffect(() => {
     let redirected = false
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified && !redirected && !verifyingOtpRef.current) {
+      if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified && !redirected && !verifyingOtpRef.current && !submittingRef.current) {
         redirected = true
         saveNewAccountToStore().then(() => {
           supabase.auth.getUser().then(({ data: { user } }) => {
