@@ -4,17 +4,21 @@
  */
 
 // Allowed origins for CORS
-const ALLOWED_ORIGINS = [
+const ALLOWED_ORIGINS: (string | RegExp)[] = [
   // Production domains
   'https://www.arenafi.org',
   'https://arenafi.org',
   'https://ranking-arena.vercel.app',
   // Preview deployments (Vercel)
   /^https:\/\/ranking-arena-.*\.vercel\.app$/,
-  // Development
-  'http://localhost:3000',
-  'http://localhost:3001',
-  'http://127.0.0.1:3000',
+  // Development — only in non-production environments
+  ...(process.env.NODE_ENV !== 'production'
+    ? [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://127.0.0.1:3000',
+      ]
+    : []),
 ]
 
 /**
