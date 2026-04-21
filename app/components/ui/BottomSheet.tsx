@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState, type ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 
 type SnapPoint = 'closed' | 'half' | 'full'
 
@@ -45,6 +46,9 @@ export default function BottomSheet({
   const startYRef = useRef(0)
   const currentYRef = useRef(0)
 
+  // iOS-safe scroll lock when bottom sheet is open
+  useScrollLock(open)
+
   // Sync open state
   useEffect(() => {
     if (open) {
@@ -54,12 +58,9 @@ export default function BottomSheet({
         closeTimerRef.current = null
       }
       setSnap(initialSnap)
-      document.body.style.overflow = 'hidden'
     } else {
       setSnap('closed')
-      document.body.style.overflow = ''
     }
-    return () => { document.body.style.overflow = '' }
   }, [open, initialSnap])
 
   const closeTimerRef = useRef<NodeJS.Timeout | null>(null)

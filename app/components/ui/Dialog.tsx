@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 
 interface DialogOptions {
   title: string
@@ -69,15 +70,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   // Forward declaration ref for handleCancel (used in useEffect before declaration)
   const handleCancelRef = useRef<() => void>(() => {})
 
-  // Scroll lock when dialog is open
-  useEffect(() => {
-    if (state.isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => { document.body.style.overflow = '' }
-  }, [state.isOpen])
+  // iOS-safe scroll lock when dialog is open
+  useScrollLock(state.isOpen)
 
   // Focus trap + escape key
   useEffect(() => {

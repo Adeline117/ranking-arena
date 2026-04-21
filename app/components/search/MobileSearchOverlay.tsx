@@ -8,6 +8,7 @@ import { CloseIcon } from '../ui/icons'
 import SearchDropdown from './SearchDropdown'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { addToHistory } from '@/lib/services/search-history'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 
 interface MobileSearchOverlayProps {
   open: boolean
@@ -51,17 +52,8 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
     return () => window.removeEventListener('keydown', handler)
   }, [open, onClose])
 
-  // Prevent body scrolling when overlay is open
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => {
-      document.body.style.overflow = ''
-    }
-  }, [open])
+  // iOS-safe scroll lock when overlay is open
+  useScrollLock(open)
 
   if (!open) return null
 
