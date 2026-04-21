@@ -97,13 +97,22 @@ jest.mock('@/lib/stripe', () => ({
 const mockGetUser = jest.fn()
 
 // The route uses getSupabaseAdmin() from '@/lib/supabase/server', not createClient directly
+const mockSubscriptionQuery = {
+  eq: jest.fn().mockReturnThis(),
+  in: jest.fn().mockReturnThis(),
+  maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
+}
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
     auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
     from: jest.fn(() => ({
       upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
       select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockResolvedValue({ count: 0, error: null }),
+        eq: jest.fn().mockReturnValue({
+          ...mockSubscriptionQuery,
+          mockResolvedValue: undefined,
+        }),
+        ...mockSubscriptionQuery,
       }),
     })),
   })),
