@@ -30,7 +30,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           boxShadow: '0 4px 16px color-mix(in srgb, var(--color-brand) 25%, transparent)',
         }}
       >
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <circle cx="12" cy="12" r="10" />
           <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
           <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -85,6 +85,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
 
       {/* Start button */}
       <button
+        type="button"
         onClick={onStart}
         style={{
           padding: '12px 32px',

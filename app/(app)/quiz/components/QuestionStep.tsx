@@ -45,13 +45,15 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
       </h2>
 
       {/* Options */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div role="group" aria-label={tr(question.titleKey)} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {question.options.map((option, idx) => {
           const isSelected = selectedOption === option.id
           return (
             <button
               key={option.id}
+              type="button"
               onClick={() => handleSelect(option.id)}
+              aria-pressed={isSelected}
               style={{
                 width: '100%',
                 padding: '12px 14px',
@@ -120,6 +122,8 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
 
       {/* Back button */}
       <button
+        type="button"
+        aria-label={tr('quizBack')}
         onClick={onBack}
         style={{
           alignSelf: 'flex-start',
@@ -139,7 +143,7 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
         onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text-primary)' }}
         onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-tertiary)' }}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
           <polyline points="15 18 9 12 15 6" />
         </svg>
         {tr('quizBack')}

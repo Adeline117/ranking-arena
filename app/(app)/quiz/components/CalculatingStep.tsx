@@ -71,6 +71,8 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
     >
       {/* Spinner */}
       <div
+        role="status"
+        aria-label="Calculating results"
         style={{
           width: 48,
           height: 48,
@@ -83,6 +85,7 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
 
       {/* Text — rotating messages */}
       <p
+        aria-live="polite"
         style={{
           fontSize: 15,
           fontWeight: 600,
