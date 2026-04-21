@@ -10,6 +10,7 @@ import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { logger } from '@/lib/logger'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface LinkedTraderStats {
   arena_score: number | null
@@ -173,7 +174,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
       const res = await fetch('/api/traders/linked', {
         method: 'PATCH',
-        headers,
+        headers: { ...headers, ...getCsrfHeaders() },
         body: JSON.stringify({ id, label: editLabelValue.trim() || null }),
       })
       if (res.ok) {
@@ -196,7 +197,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
       const res = await fetch('/api/traders/linked', {
         method: 'PATCH',
-        headers,
+        headers: { ...headers, ...getCsrfHeaders() },
         body: JSON.stringify({ id, is_primary: true }),
       })
       if (res.ok) {
@@ -232,7 +233,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
       const res = await fetch('/api/traders/linked', {
         method: 'DELETE',
-        headers,
+        headers: { ...headers, ...getCsrfHeaders() },
         body: JSON.stringify({ id: trader.id }),
       })
       if (res.ok) {
