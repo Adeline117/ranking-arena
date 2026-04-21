@@ -401,13 +401,19 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         </div>
       )}
       <div style={props.layout === 'masonry' ? { columnGap: 12 } : undefined} className={`stagger-children${props.layout === 'masonry' ? ' post-feed-masonry' : ''} ${props.layout === 'masonry' ? `mobile-view-${mobileViewMode}` : ''}`}>
-        {sortedPosts.map((p) => (
+        {sortedPosts.map((p, idx) => (
           <SectionErrorBoundary key={p.id}>
-            <PostListItem post={p} isMasonry={props.layout === 'masonry'} language={language}
-              currentUserId={currentUserId} translatedListPosts={translatedListPosts}
-              onOpenPost={handleOpenPost} onToggleReaction={actions.toggleReaction} onTogglePin={actions.handleTogglePin}
-              onStartEdit={actions.handleStartEdit} onDeletePost={actions.handleDeletePost}
-              removeImagesFromContent={removeImagesFromContent} t={t} />
+            {/* content-visibility: auto on off-screen posts (20+) lets the browser
+                skip layout/paint for posts far below the fold, reducing DOM cost
+                without full virtualization. contain-intrinsic-size gives the browser
+                an estimated height so scrollbar doesn't jump. */}
+            <div style={idx >= 20 ? { contentVisibility: 'auto', containIntrinsicSize: 'auto 200px' } : undefined}>
+              <PostListItem post={p} isMasonry={props.layout === 'masonry'} language={language}
+                currentUserId={currentUserId} translatedListPosts={translatedListPosts}
+                onOpenPost={handleOpenPost} onToggleReaction={actions.toggleReaction} onTogglePin={actions.handleTogglePin}
+                onStartEdit={actions.handleStartEdit} onDeletePost={actions.handleDeletePost}
+                removeImagesFromContent={removeImagesFromContent} t={t} />
+            </div>
           </SectionErrorBoundary>
         ))}
       </div>
