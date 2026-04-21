@@ -120,7 +120,7 @@ function RankingTableInner(props: {
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [_sortAnimationKey, setSortAnimationKey] = useState(0)
-  const sortTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
+  const sortTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined)
   const itemsPerPage = 50
 
   // Mobile card view: load more instead of pagination
