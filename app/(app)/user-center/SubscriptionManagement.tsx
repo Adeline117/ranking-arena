@@ -2,6 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 import type { MembershipInfo } from './membership-config'
 
 interface SubscriptionManagementProps {
@@ -24,12 +25,21 @@ export default function SubscriptionManagement({
       const headers = await getAuthHeadersAsync()
       const res = await fetch('/api/stripe/portal', {
         method: 'POST',
-        headers: { ...headers, 'Content-Type': 'application/json' },
+        headers: { ...headers, 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ returnUrl: `${window.location.origin}/user-center?tab=membership` }),
       })
       if (res.ok) {
-        const { url } = await res.json()
-        window.location.href = url
+        const data = await res.json()
+        // Handle redirect response (e.g., no stripe_customer_id)
+        if (data.redirect) {
+          window.location.href = data.redirect
+          return
+        }
+        if (data.url) {
+          window.location.href = data.url
+        } else {
+          showToast(t('paymentSystemComingSoon'), 'error')
+        }
       } else {
         showToast(t('paymentSystemComingSoon'), 'error')
       }
@@ -81,12 +91,16 @@ export default function SubscriptionManagement({
               const headers = await getAuthHeadersAsync()
               const res = await fetch('/api/stripe/portal', {
                 method: 'POST',
-                headers: { ...headers, 'Content-Type': 'application/json' },
+                headers: { ...headers, 'Content-Type': 'application/json', ...getCsrfHeaders() },
                 body: JSON.stringify({ returnUrl: `${window.location.origin}/user-center?tab=membership` }),
               })
               if (res.ok) {
-                const { url } = await res.json()
-                window.location.href = url
+                const data = await res.json()
+                if (data.redirect) {
+                  window.location.href = data.redirect
+                } else if (data.url) {
+                  window.location.href = data.url
+                }
               }
             }}
             style={{
