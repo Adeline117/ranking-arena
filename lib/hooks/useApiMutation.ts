@@ -75,6 +75,10 @@ export function setGlobalToast(fn: ToastFn) {
   globalShowToast = fn
 }
 
+export function getGlobalToast(): ToastFn | null {
+  return globalShowToast
+}
+
 /**
  * 格式化错误消息
  */
