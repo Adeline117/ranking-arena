@@ -4,14 +4,13 @@
  */
 
 import {
-  requireAuth,
   success,
   error,
 } from '@/lib/api'
 import { hasFeatureAccess, getFeatureLimits } from '@/lib/types/premium'
 import logger from '@/lib/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
-import { withPublic } from '@/lib/api/middleware'
+import { withAuth } from '@/lib/api/middleware'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 export const runtime = 'nodejs'
@@ -43,8 +42,7 @@ interface TraderCompareData {
  * GET - 获取多traders allowed for comparison的对比数据
  * Query params: ids=trader1,trader2,trader3 (最多10个)
  */
-export const GET = withPublic(async ({ supabase, request }) => {
-    const user = await requireAuth(request)
+export const GET = withAuth(async ({ supabase, user }) => {
 
     // 获取用户订阅等级
     const { data: subscription } = await supabase
