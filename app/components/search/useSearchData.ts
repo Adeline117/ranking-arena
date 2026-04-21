@@ -46,6 +46,7 @@ export function useSearchData(open: boolean, query: string) {
   const [loading, setLoading] = useState(false)
   const [searchData, setSearchData] = useState<UnifiedSearchResponse | null>(null)
   const [searching, setSearching] = useState(false)
+  const [isOffline, setIsOffline] = useState(false)
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const [translatedTitles, setTranslatedTitles] = useState<Record<string, string>>({})
   const [translating, setTranslating] = useState(false)
@@ -241,8 +242,10 @@ export function useSearchData(open: boolean, query: string) {
       if (typeof navigator !== 'undefined' && !navigator.onLine) {
         setSearchData(null)
         setSearching(false)
+        setIsOffline(true)
         return
       }
+      setIsOffline(false)
 
       if (abortControllerRef.current) abortControllerRef.current.abort()
 
@@ -306,6 +309,7 @@ export function useSearchData(open: boolean, query: string) {
     loading,
     searchData,
     searching,
+    isOffline,
     selectedIndex,
     setSelectedIndex,
     translatedTitles,
