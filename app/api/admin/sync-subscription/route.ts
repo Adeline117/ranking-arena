@@ -59,7 +59,9 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!profile.stripe_customer_id) {
+    const stripeCustomerId = (profile as unknown as Record<string, unknown>).stripe_customer_id as string | null
+
+    if (!stripeCustomerId) {
       logger.warn('sync-subscription: user has no stripe_customer_id', { userId })
       return NextResponse.json(
         { error: 'User has no Stripe customer ID. Nothing to sync.' },
@@ -67,7 +69,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const customerId = profile.stripe_customer_id
+    const customerId = stripeCustomerId
 
     // 2. List subscriptions from Stripe
     const stripe = getStripe()
