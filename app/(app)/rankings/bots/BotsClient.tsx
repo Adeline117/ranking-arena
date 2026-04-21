@@ -5,7 +5,7 @@
  * Receives SSR initial data as props for instant render, then hydrates with SWR.
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Suspense } from 'react'
@@ -269,7 +269,19 @@ function BotsContent({ initialBots }: BotsClientProps) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQueryRaw] = useState(() => searchParams.get('q') || '')
+  const searchSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const setSearchQuery = useCallback((q: string) => {
+    setSearchQueryRaw(q)
+    // Sync search to URL (debounced 300ms)
+    if (searchSyncRef.current) clearTimeout(searchSyncRef.current)
+    searchSyncRef.current = setTimeout(() => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (q.trim()) params.set('q', q.trim())
+      else params.delete('q')
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+    }, 300)
+  }, [searchParams, router, pathname])
   const filteredBots = useMemo(() => {
     if (!data?.bots) return []
     if (!searchQuery.trim()) return data.bots
