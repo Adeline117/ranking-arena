@@ -84,13 +84,13 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
           >
             {tr('quizRiskLevel')}
           </span>
-          <div style={{ display: 'flex', gap: 3 }}>
+          <div style={{ display: 'flex', gap: 4 }}>
             {[1, 2, 3, 4, 5].map((level) => (
               <div
                 key={level}
                 style={{
-                  width: 8,
-                  height: 8,
+                  width: 10,
+                  height: 10,
                   borderRadius: '50%',
                   background: level <= type.riskLevel ? type.color : 'var(--color-bg-tertiary)',
                   transition: 'background 0.3s',

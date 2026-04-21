@@ -146,7 +146,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   </div>
                   <div
                     style={{
-                      fontSize: 11,
+                      fontSize: 12,
                       color: 'var(--color-text-tertiary)',
                     }}
                   >
@@ -167,8 +167,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   </div>
                   <div
                     style={{
-                      fontSize: 11,
-                      color: 'var(--color-text-tertiary)',
+                      fontSize: 12,
+                      color: '#D4AF37',
                     }}
                   >
                     Score

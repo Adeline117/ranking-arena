@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import type { PersonalityType } from '../../components/types'
 import { QuizIcon } from './QuizIcon'
 
@@ -11,6 +12,15 @@ interface PersonalityCardProps {
 }
 
 export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel, tr }: PersonalityCardProps) {
+  const [animatedWidth, setAnimatedWidth] = useState(0)
+
+  useEffect(() => {
+    // Delay to ensure the transition runs after initial render at 0
+    const raf = requestAnimationFrame(() => {
+      setAnimatedWidth(matchPercent)
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [matchPercent])
   return (
     <div
       style={{
@@ -80,7 +90,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
         >
           <div
             style={{
-              width: `${matchPercent}%`,
+              width: `${animatedWidth}%`,
               height: '100%',
               borderRadius: 3,
               background: type.gradient,
