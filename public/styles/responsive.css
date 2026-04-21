@@ -1447,11 +1447,7 @@
     background: inherit !important;
   }
 
-  /* Smoother scroll momentum */
-  .mobile-search-results,
-  .ranking-table-container {
-    scroll-behavior: smooth;
-  }
+  /* scroll-behavior: smooth removed — blocks compositor on mobile */
 }
 
 /* ============================================
