@@ -17,10 +17,16 @@ export default function ProgressBar({ current, total }: ProgressBarProps) {
           color: 'var(--color-text-tertiary)',
           opacity: 0.7,
         }}
+        aria-hidden="true"
       >
         {current} / {total}
       </span>
       <div
+        role="progressbar"
+        aria-valuenow={current}
+        aria-valuemin={1}
+        aria-valuemax={total}
+        aria-label={`Question ${current} of ${total}`}
         style={{
           width: '100%',
           height: 3,
