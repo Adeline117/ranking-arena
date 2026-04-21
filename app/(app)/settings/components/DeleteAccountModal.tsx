@@ -119,7 +119,7 @@ export function DeleteAccountModal({
             border: `1px solid ${tokens.colors.accent.primary}20`,
           }}>
             <Text size="xs" style={{ color: tokens.colors.accent.primary, lineHeight: 1.6 }}>
-              {t('deleteAccountRecoveryNote') || 'Your account will be deactivated for 30 days before permanent deletion. You can log back in during this period to cancel.'}
+              {t('deleteAccountRecoveryNote')}
             </Text>
           </Box>
         </Box>
