@@ -44,6 +44,7 @@ export default function NavSearchBar({
         <input
           type="search"
           className="top-nav-search-input"
+          maxLength={200}
           placeholder={`${t('searchPlaceholder')} ⌘K`}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
