@@ -135,6 +135,7 @@ export async function apiRequest<T = unknown>(
   }
 
   let lastResult: ApiResponse<T> | undefined
+  let hasAttempted401Refresh = false
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     // Wait before retry (exponential backoff)
@@ -162,6 +163,44 @@ export async function apiRequest<T = unknown>(
       const data = await response.json()
 
       if (!response.ok) {
+        // 401 token refresh: attempt once, then retry the request
+        if (
+          response.status === 401 &&
+          !hasAttempted401Refresh &&
+          typeof window !== 'undefined'
+        ) {
+          hasAttempted401Refresh = true
+          try {
+            const newToken = await tokenRefreshCoordinator.forceRefresh()
+            if (newToken) {
+              // Retry the request with fresh credentials (cookies will be updated)
+              const retryController = new AbortController()
+              const retryTimeoutId = setTimeout(() => retryController.abort(), timeoutMs)
+              try {
+                const retryResponse = await fetch(url, {
+                  ...restOptions,
+                  headers,
+                  body: body ? JSON.stringify(body) : undefined,
+                  credentials: 'include',
+                  signal: retryController.signal,
+                })
+                clearTimeout(retryTimeoutId)
+                const retryData = await retryResponse.json()
+                if (retryResponse.ok) {
+                  return { success: true, data: retryData as T }
+                }
+                // If retry also failed, fall through to normal error handling
+                // with the retry response instead
+              } catch {
+                clearTimeout(retryTimeoutId)
+                // Fall through to return the original 401 error
+              }
+            }
+          } catch {
+            // Token refresh failed — fall through to return original 401
+          }
+        }
+
         // Extract retry-after header if present
         const retryAfterHeader = response.headers.get('Retry-After')
         let retryAfter: number | undefined
