@@ -149,6 +149,8 @@ export default function QuizClient() {
         }}
       >
         <div
+          role="status"
+          aria-label="Loading quiz"
           style={{
             width: 40,
             height: 40,
