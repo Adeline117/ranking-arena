@@ -33,7 +33,7 @@ function CompareFloatingBar() {
       className="compare-floating-bar"
       style={{
         position: 'fixed',
-        bottom: 80, // Above mobile nav
+        bottom: 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 16px)',
         right: 16,
         zIndex: tokens.zIndex.overlay,
         background: tokens.glass.bg.heavy,
