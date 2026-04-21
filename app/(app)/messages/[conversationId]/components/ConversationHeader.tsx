@@ -69,8 +69,8 @@ export default function ConversationHeader({
         }}
       >
         {/* Back button */}
-        <Link 
-          href="/messages" 
+        <Link
+          href="/inbox"
           style={{ 
             color: tokens.colors.text.primary, textDecoration: 'none',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
