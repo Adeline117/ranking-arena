@@ -59,6 +59,8 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         }}
       >
         <div
+          role="status"
+          aria-label="Loading results"
           style={{
             width: 40,
             height: 40,
