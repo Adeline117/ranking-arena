@@ -3400,6 +3400,7 @@ const ko = {
     nameRequiredError: '그룹 이름을 하나 이상 입력해 주세요 (한국어 또는 영어)',
     imageSizeExceed5MB: '이미지 크기는 5MB를 초과할 수 없습니다',
     networkErrorCheckConnection: '네트워크 오류, 연결을 확인해 주세요',
+    offlineError: '오프라인 상태입니다. 연결을 확인해 주세요.',
     cannotConnectToServer: '서버에 연결할 수 없습니다. 연결을 확인해 주세요',
     addLanguageBtn: '언어 추가',
     groupNameRequired: '그룹 이름 *',

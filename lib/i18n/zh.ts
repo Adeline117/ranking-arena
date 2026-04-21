@@ -3448,6 +3448,7 @@ const zh = {
     nameRequiredError: '请至少填写一个小组名称（中文或英文）',
     imageSizeExceed5MB: '图片大小不能超过 5MB',
     networkErrorCheckConnection: '网络错误，请检查网络连接',
+    offlineError: '您已断网，请检查网络连接。',
     cannotConnectToServer: '无法连接到服务器，请检查网络连接',
     addLanguageBtn: '添加多语言',
     groupNameRequired: '小组名称 *',
