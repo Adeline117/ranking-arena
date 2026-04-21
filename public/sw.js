@@ -297,8 +297,8 @@ self.addEventListener('push', (event) => {
       ...data.data,
     },
     actions: [
-      { action: 'open', title: '查看' },
-      { action: 'close', title: '关闭' },
+      { action: 'open', title: 'View / 查看' },
+      { action: 'close', title: 'Close / 关闭' },
     ],
   };
 
