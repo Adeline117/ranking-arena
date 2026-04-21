@@ -48,7 +48,7 @@ export const TraderCard = memo(function TraderCard({
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
   const isSelected = useComparisonStore(useCallback(s => s.isSelected(trader.id), [trader.id]))
-  const canAddMore = useComparisonStore(useCallback(s => s.selectedTraders.length < 5, []))
+  const canAddMore = useComparisonStore(useCallback(s => s.canAddMore(), []))
 
   const handleCompareToggle = (e: React.MouseEvent) => {
     e.preventDefault()
