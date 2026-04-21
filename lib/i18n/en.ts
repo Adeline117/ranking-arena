@@ -1911,6 +1911,8 @@ const en = {
     loginSetupFailed: 'Setup failed',
     loginFailed: 'Login failed',
     loginTimeout: 'Login is taking too long. Please check your connection and try again.',
+    loginAuthFailed: 'Sign-in failed. Please try again.',
+    loginNoSession: 'Session could not be created. Please try signing in again.',
     loginWithPassword: 'Login with password',
     loginUsernamePlaceholder: 'Username',
     loginSetPasswordPlaceholder: 'Set password (min 6 chars)',

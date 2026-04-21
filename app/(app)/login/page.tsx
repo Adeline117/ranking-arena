@@ -42,6 +42,7 @@ export default function LoginPage() {
   
   const errorRef = useRef<HTMLDivElement>(null)
   const submittingRef = useRef(false)
+  const verifyingOtpRef = useRef(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const { showToast } = useToast()
@@ -102,7 +103,14 @@ export default function LoginPage() {
   useEffect(() => {
     injectStyles()
     setMounted(true)
-  }, [router])
+    // Show error from auth callback redirect (e.g. ?error=auth_failed or ?error=no_session)
+    const errorParam = searchParams.get('error')
+    if (errorParam === 'auth_failed') {
+      setError(t('loginAuthFailed'))
+    } else if (errorParam === 'no_session') {
+      setError(t('loginNoSession'))
+    }
+  }, [router, searchParams, t])
 
   useEffect(() => {
     if (error && errorRef.current) {
@@ -115,7 +123,7 @@ export default function LoginPage() {
   useEffect(() => {
     let redirected = false
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified && !redirected) {
+      if (event === 'SIGNED_IN' && session && !isRegister && !codeVerified && !redirected && !verifyingOtpRef.current) {
         redirected = true
         saveNewAccountToStore().then(() => {
           supabase.auth.getUser().then(({ data: { user } }) => {
@@ -185,6 +193,7 @@ export default function LoginPage() {
     if (submittingRef.current || loading) return
     if (!code) { setError(t('loginPleaseEnterCode')); return }
     submittingRef.current = true
+    verifyingOtpRef.current = true
     setError(null)
     setLoading(true)
     try {
@@ -210,7 +219,7 @@ export default function LoginPage() {
     } catch (err: unknown) {
       const errMsg = err instanceof Error ? err.message : undefined
       setError(errMsg?.includes('expired') || errMsg?.includes('过期') ? t('loginCodeExpired') : errMsg || t('loginVerificationFailed'))
-    } finally { setLoading(false); submittingRef.current = false }
+    } finally { setLoading(false); submittingRef.current = false; verifyingOtpRef.current = false }
   }
 
   const createUserProfile = async (userId: string, userEmail: string, userHandle?: string) => {
