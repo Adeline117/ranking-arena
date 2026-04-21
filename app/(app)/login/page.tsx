@@ -273,7 +273,7 @@ export default function LoginPage() {
         const { data: referrer } = await supabase
           .from('user_profiles')
           .select('id')
-          .or(`referral_code.eq.${refCode},handle.eq.${refCode}`)
+          .or(`referral_code.eq.${refCode.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${refCode.replace(/[,.()\[\]\\%_]/g, '')}`)
           .maybeSingle()
         if (referrer && referrer.id !== userId) {
           updateData.referred_by = referrer.id

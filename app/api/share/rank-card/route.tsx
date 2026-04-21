@@ -17,7 +17,8 @@ export async function GET(request: NextRequest) {
   const sb = getSupabaseAdmin()
   const sMap: Record<string, string> = { '7d': '7D', '30d': '30D', '90d': '90D', '7D': '7D', '30D': '30D', '90D': '90D' }
   const sId = sMap[windowParam] ?? '7D'
-  let q = sb.from('trader_sources').select('handle, source, source_trader_id').or(`handle.eq.${handle},source_trader_id.eq.${handle}`).limit(1)
+  const safeHandle = handle.replace(/[,.()\[\]\\%_]/g, '')
+  let q = sb.from('trader_sources').select('handle, source, source_trader_id').or(`handle.eq.${safeHandle},source_trader_id.eq.${safeHandle}`).limit(1)
   if (platform) q = q.eq('source', platform)
   const { data: tr } = await q.maybeSingle()
   if (!tr) return NextResponse.json({ error: 'Not found' }, { status: 404 })

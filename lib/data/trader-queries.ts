@@ -58,7 +58,7 @@ export async function getTraderByHandle(handle: string): Promise<DataResult<Trad
             const { data } = await supabase
               .from('user_profiles')
               .select('id, bio, avatar_url, cover_url')
-              .or(`handle.eq.${profileHandle},handle.eq.${decodedHandle},handle.eq.${handle}`)
+              .or(`handle.eq.${profileHandle.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${handle.replace(/[,.()\[\]\\%_]/g, '')}`)
               .limit(1)
               .maybeSingle()
 
@@ -504,14 +504,14 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
     const postsPromise = supabase
       .from('posts')
       .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
-      .or(`author_handle.eq.${handle},author_handle.eq.${decodedHandle}`)
+      .or(`author_handle.eq.${handle.replace(/[,.()\[\]\\%_]/g, '')},author_handle.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`)
       .order('created_at', { ascending: false })
       .limit(20)
 
     const repostsPromise = supabase
       .from('user_profiles')
       .select('id')
-      .or(`handle.eq.${handle},handle.eq.${decodedHandle}`)
+      .or(`handle.eq.${handle.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`)
       .limit(1)
       .maybeSingle()
       .then(async (userProfileResult) => {

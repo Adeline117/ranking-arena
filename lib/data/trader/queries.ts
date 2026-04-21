@@ -609,7 +609,7 @@ async function searchTradersInner(supabase: SupabaseClient, params: {
     let sourcesQuery = supabase
       .from('traders')
       .select('trader_key, handle, platform, avatar_url')
-      .or(`handle.ilike.%${sanitizedQuery}%,trader_key.ilike.%${sanitizedQuery}%`)
+      .or(`handle.ilike.%${sanitizedQuery.replace(/[,.()\[\]]/g, '')}%,trader_key.ilike.%${sanitizedQuery.replace(/[,.()\[\]]/g, '')}%`)
 
     if (platform) {
       sourcesQuery = sourcesQuery.eq('platform', platform)
@@ -782,7 +782,7 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
     let query = supabase
       .from('traders')
       .select('platform, trader_key, handle, avatar_url')
-      .or(`handle.eq.${decodedHandle},trader_key.eq.${decodedHandle}`)
+      .or(`handle.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')},trader_key.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`)
 
     if (platformFilter) {
       query = query.eq('platform', platformFilter)
@@ -825,13 +825,13 @@ export async function resolveTrader(supabase: SupabaseClient, params: {
     let lbQuery = supabase
       .from('leaderboard_ranks')
       .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}`)
-      .or(`${LR.source_trader_id}.eq.${decodedHandle},${LR.handle}.eq.${decodedHandle}`)
+      .or(`${LR.source_trader_id}.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')},${LR.handle}.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`)
       .eq(LR.season_id, '90D')
 
     let profileQuery = supabase
       .from('trader_profiles_v2')
       .select('platform, trader_key, display_name, avatar_url')
-      .or(`trader_key.eq.${decodedHandle},display_name.eq.${decodedHandle}`)
+      .or(`trader_key.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')},display_name.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`)
 
     if (platformFilter) {
       lbQuery = lbQuery.eq(LR.source, platformFilter)
