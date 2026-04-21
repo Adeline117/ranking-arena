@@ -11,7 +11,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
 import { supabase } from '@/lib/supabase/client'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { getCsrfHeaders, apiRequest } from '@/lib/api/client'
 import { type MembershipInfo, type PlanType } from './membership-config'
 import CurrentPlanCard from './CurrentPlanCard'
 import UpgradeSection from './UpgradeSection'
@@ -36,23 +36,30 @@ export default function MembershipContent() {
   const submittingRef = useRef(false)
 
   useEffect(() => {
-    fetchMembershipInfo()
+    const controller = new AbortController()
+    fetchMembershipInfo(controller.signal)
+    return () => { controller.abort() }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; fetchMembershipInfo is defined after hook
   }, [])
 
-  async function fetchMembershipInfo() {
+  async function fetchMembershipInfo(signal?: AbortSignal) {
     try {
       const headers = await getAuthHeadersAsync()
 
       const [subRes, nftRes, usageRes] = await Promise.all([
-        fetch('/api/subscription', { headers }),
-        fetch('/api/membership/nft', { headers }),
-        fetch('/api/user/usage', { headers }),
+        fetch('/api/subscription', { headers, signal }),
+        fetch('/api/membership/nft', { headers, signal }),
+        fetch('/api/user/usage', { headers, signal }),
       ])
+
+      // If the component unmounted while awaiting, bail out
+      if (signal?.aborted) return
 
       const subData = subRes.ok ? await subRes.json() : null
       const nftData = nftRes.ok ? await nftRes.json() : null
       const usageData = usageRes.ok ? await usageRes.json() : { followedTraders: 0, apiCallsToday: 0 }
+
+      if (signal?.aborted) return
 
       // Map API response to MembershipInfo shape.
       // The API returns both UserSubscription fields (endDate, autoRenew) and
@@ -72,9 +79,11 @@ export default function MembershipContent() {
         usage: usageData,
       })
     } catch (err) {
+      // Silently ignore abort errors (component unmounted)
+      if (err instanceof DOMException && err.name === 'AbortError') return
       logger.error('Failed to fetch membership info:', err)
     } finally {
-      setLoading(false)
+      if (!signal?.aborted) setLoading(false)
     }
   }
 
@@ -100,39 +109,31 @@ export default function MembershipContent() {
         return
       }
 
-      const response = await fetch('/api/stripe/create-checkout', {
+      const result = await apiRequest<{ url?: string; error?: string }>('/api/stripe/create-checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({
+        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        body: {
           plan: selectedPlan,
           successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
           cancelUrl: `${window.location.origin}/user-center?tab=membership`,
-        }),
+        },
+        timeoutMs: 20_000,
       })
 
-      if (!response.ok) {
-        let errorMsg = t('createCheckoutFailed')
-        try {
-          const errorData = await response.json()
-          errorMsg = errorData.error || errorMsg
-        } catch {
-          errorMsg = `${errorMsg} (${response.status})`
-        }
+      if (!result.success) {
+        const errorMsg = result.error?.code === 'TIMEOUT'
+          ? t('requestTimeout')
+          : result.error?.message || t('createCheckoutFailed')
         showToast(errorMsg, 'error')
         return
       }
 
-      const data = await response.json()
-      if (data.url) {
+      if (result.data?.url) {
         // Don't re-enable the button — we're navigating away to Stripe
-        window.location.href = data.url
+        window.location.href = result.data.url
         return
-      } else if (data.error) {
-        showToast(data.error, 'error')
+      } else if (result.data?.error) {
+        showToast(result.data.error, 'error')
       } else {
         showToast(t('getPaymentLinkFailed'), 'error')
       }
