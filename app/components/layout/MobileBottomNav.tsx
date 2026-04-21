@@ -260,7 +260,7 @@ const HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callbac
    Dynamic properties (color, transform, opacity) are applied inline. */
 
 const SPACER_STYLE: React.CSSProperties = {
-  height: 'var(--mobile-nav-height, 60px)',
+  height: 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px))',
 }
 
 const NAV_BASE_STYLE: React.CSSProperties = {

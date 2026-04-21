@@ -80,6 +80,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
         zIndex: tokens.zIndex.modal,
         display: 'flex',
         flexDirection: 'column',
+        paddingTop: 'env(safe-area-inset-top, 0px)',
       }}
     >
       {/* Header with search input */}
@@ -103,7 +104,10 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
                 // If the dropdown has a highlighted item, let the dropdown handle Enter
                 const dropdownEl = document.getElementById('search-dropdown-listbox')
                 const hasSelection = dropdownEl?.querySelector('[aria-selected="true"]')
-                if (hasSelection) return
+                if (hasSelection) {
+                  e.preventDefault()
+                  return
+                }
                 e.preventDefault()
                 saveToHistory(query.trim())
                 router.push(`/search?q=${encodeURIComponent(query.trim())}`)
