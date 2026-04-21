@@ -1,24 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
 import type { QuizQuestion } from './types'
-
-/** Forced dark-theme palette */
-const Q = {
-  TEXT_PRIMARY: '#FFFFFF',
-  TEXT_SECONDARY: 'rgba(255,255,255,0.5)',
-  BG_OPTION: 'rgba(255,255,255,0.04)',
-  BORDER: 'rgba(255,255,255,0.08)',
-  BORDER_HOVER: 'rgba(255,255,255,0.15)',
-  HOVER_BG: 'rgba(255,255,255,0.06)',
-  SELECTED_BG: 'rgba(139, 92, 246, 0.15)',
-  SELECTED_BORDER: 'rgba(139, 92, 246, 0.6)',
-  BRAND: '#8B5CF6',
-  BRAND_DEEP: '#6D28D9',
-  LETTER_BG: 'rgba(255,255,255,0.06)',
-  LETTER_COLOR: 'rgba(255,255,255,0.5)',
-} as const
 
 interface QuestionStepProps {
   question: QuizQuestion
@@ -44,16 +27,16 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 24,
+        gap: 20,
         animation: 'fadeIn 0.35s ease-out',
       }}
     >
       {/* Question text */}
       <h2
         style={{
-          fontSize: 'clamp(18px, 4vw, 22px)',
-          fontWeight: tokens.typography.fontWeight.bold,
-          color: Q.TEXT_PRIMARY,
+          fontSize: 'clamp(16px, 3.5vw, 18px)',
+          fontWeight: 600,
+          color: 'var(--color-text-primary)',
           lineHeight: 1.4,
           margin: 0,
         }}
@@ -62,7 +45,7 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
       </h2>
 
       {/* Options */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {question.options.map((option, idx) => {
           const isSelected = selectedOption === option.id
           return (
@@ -71,59 +54,57 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
               onClick={() => handleSelect(option.id)}
               style={{
                 width: '100%',
-                padding: '14px 18px',
-                borderRadius: 12,
+                padding: '12px 14px',
+                borderRadius: 8,
                 border: isSelected
-                  ? `2px solid ${Q.SELECTED_BORDER}`
-                  : `2px solid ${Q.BORDER}`,
+                  ? '1px solid var(--color-brand)'
+                  : '1px solid var(--glass-border-light)',
                 background: isSelected
-                  ? Q.SELECTED_BG
-                  : Q.BG_OPTION,
-                color: Q.TEXT_PRIMARY,
-                fontSize: tokens.typography.fontSize.base,
-                fontWeight: isSelected ? tokens.typography.fontWeight.semibold : tokens.typography.fontWeight.medium,
+                  ? 'var(--color-accent-primary-08)'
+                  : 'var(--color-bg-tertiary)',
+                color: 'var(--color-text-primary)',
+                fontSize: 14,
+                fontWeight: isSelected ? 600 : 500,
                 textAlign: 'left',
                 cursor: 'pointer',
                 transition: 'all 0.2s ease',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 12,
+                gap: 10,
                 animation: `fadeIn 0.3s ease-out ${idx * 0.05}s both`,
               }}
               onMouseDown={(e) => {
-                e.currentTarget.style.transform = 'scale(0.97)'
+                e.currentTarget.style.transform = 'scale(0.98)'
               }}
               onMouseUp={(e) => {
                 e.currentTarget.style.transform = 'scale(1)'
               }}
               onMouseEnter={(e) => {
                 if (!isSelected) {
-                  e.currentTarget.style.borderColor = Q.BORDER_HOVER
-                  e.currentTarget.style.background = Q.HOVER_BG
+                  e.currentTarget.style.borderColor = 'var(--color-text-tertiary)'
                 }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'scale(1)'
                 if (!isSelected) {
-                  e.currentTarget.style.borderColor = Q.BORDER
-                  e.currentTarget.style.background = Q.BG_OPTION
+                  e.currentTarget.style.borderColor = 'var(--glass-border-light)'
                 }
               }}
             >
               <span
                 style={{
-                  width: 28,
-                  height: 28,
-                  borderRadius: 8,
+                  width: 24,
+                  height: 24,
+                  borderRadius: 6,
                   background: isSelected
-                    ? `linear-gradient(135deg, ${Q.BRAND} 0%, ${Q.BRAND_DEEP} 100%)`
-                    : Q.LETTER_BG,
+                    ? 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))'
+                    : 'var(--color-bg-secondary)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  color: isSelected ? '#fff' : Q.LETTER_COLOR,
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: isSelected ? '#fff' : 'var(--color-text-tertiary)',
                   flexShrink: 0,
                 }}
               >
@@ -140,23 +121,23 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
         onClick={onBack}
         style={{
           alignSelf: 'flex-start',
-          padding: '12px 16px',
-          minHeight: 44,
-          borderRadius: 8,
+          padding: '8px 0',
+          minHeight: 36,
+          borderRadius: 0,
           border: 'none',
           background: 'transparent',
-          color: Q.TEXT_SECONDARY,
-          fontSize: tokens.typography.fontSize.sm,
+          color: 'var(--color-text-tertiary)',
+          fontSize: 13,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
-          gap: 6,
+          gap: 4,
           transition: 'color 0.2s',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = Q.TEXT_PRIMARY }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = Q.TEXT_SECONDARY }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text-primary)' }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-tertiary)' }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />
         </svg>
         {tr('quizBack')}

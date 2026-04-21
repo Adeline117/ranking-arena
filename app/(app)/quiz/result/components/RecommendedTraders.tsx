@@ -4,20 +4,6 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import type { PersonalityType, RecommendedTrader } from '../../components/types'
 
-/** Forced dark-theme palette */
-const Q = {
-  BG_CARD: '#161625',
-  BG_TRADER: 'rgba(255,255,255,0.04)',
-  BORDER: 'rgba(255,255,255,0.08)',
-  HOVER_BG: 'rgba(255,255,255,0.06)',
-  TEXT_PRIMARY: '#FFFFFF',
-  TEXT_SECONDARY: 'rgba(255,255,255,0.5)',
-  BULL: '#2FE57D',
-  BEAR: '#FF5555',
-  GOLD: '#D4AF37',
-  ARROW: 'rgba(255,255,255,0.4)',
-} as const
-
 interface RecommendedTradersProps {
   type: PersonalityType
   traders: RecommendedTrader[]
@@ -30,21 +16,21 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
   return (
     <div
       style={{
-        borderRadius: 16,
-        background: Q.BG_CARD,
-        border: `1px solid ${Q.BORDER}`,
-        padding: 'clamp(20px, 4vw, 28px)',
+        borderRadius: 12,
+        background: 'var(--color-bg-secondary)',
+        border: '1px solid var(--glass-border-light)',
+        padding: 'clamp(16px, 3vw, 24px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 14,
       }}
     >
       {/* Section header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div
           style={{
-            width: 4,
-            height: 24,
+            width: 3,
+            height: 20,
             borderRadius: 2,
             background: type.gradient,
           }}
@@ -53,7 +39,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
           style={{
             fontSize: tokens.typography.fontSize.lg,
             fontWeight: tokens.typography.fontWeight.bold,
-            color: Q.TEXT_PRIMARY,
+            color: 'var(--color-text-primary)',
             margin: 0,
           }}
         >
@@ -62,39 +48,37 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
       </div>
 
       {/* Trader cards */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {traders.map((trader) => (
           <Link
             key={trader.handle}
             href={`/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.platform)}`}
             style={{
-              padding: '12px 16px',
-              borderRadius: 12,
-              background: Q.BG_TRADER,
-              border: `1px solid ${Q.BORDER}`,
+              padding: '10px 14px',
+              borderRadius: 8,
+              background: 'var(--color-bg-tertiary)',
+              border: '1px solid var(--glass-border-light)',
               display: 'flex',
               alignItems: 'center',
-              gap: 12,
+              gap: 10,
               textDecoration: 'none',
-              transition: 'border-color 0.2s, background 0.2s',
+              transition: 'border-color 0.2s',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = `${type.color}40`
-              e.currentTarget.style.background = Q.HOVER_BG
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = Q.BORDER
-              e.currentTarget.style.background = Q.BG_TRADER
+              e.currentTarget.style.borderColor = 'var(--glass-border-light)'
             }}
           >
             {/* Avatar */}
             <div
               style={{
-                width: 40,
-                height: 40,
-                borderRadius: 10,
-                background: `${type.color}20`,
-                border: `1px solid ${type.color}30`,
+                width: 36,
+                height: 36,
+                borderRadius: 8,
+                background: `${type.color}15`,
+                border: `1px solid ${type.color}25`,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -106,13 +90,13 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                 <img
                   src={trader.avatar_url}
                   alt={trader.name}
-                  style={{ width: 40, height: 40, objectFit: 'cover' }}
+                  style={{ width: 36, height: 36, objectFit: 'cover' }}
                 />
               ) : (
                 <span
                   style={{
-                    fontSize: tokens.typography.fontSize.base,
-                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: 14,
+                    fontWeight: 700,
                     color: type.color,
                   }}
                 >
@@ -125,9 +109,9 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
             <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
-                  fontSize: tokens.typography.fontSize.base,
-                  fontWeight: tokens.typography.fontWeight.semibold,
-                  color: Q.TEXT_PRIMARY,
+                  fontSize: 14,
+                  fontWeight: 600,
+                  color: 'var(--color-text-primary)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -137,8 +121,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               </div>
               <div
                 style={{
-                  fontSize: tokens.typography.fontSize.xs,
-                  color: Q.TEXT_SECONDARY,
+                  fontSize: 12,
+                  color: 'var(--color-text-tertiary)',
                   textTransform: 'capitalize',
                 }}
               >
@@ -152,9 +136,9 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                 <div style={{ textAlign: 'right' }}>
                   <div
                     style={{
-                      fontSize: tokens.typography.fontSize.sm,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      color: trader.roi_90d >= 0 ? Q.BULL : Q.BEAR,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: trader.roi_90d >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
                     }}
                   >
                     {trader.roi_90d >= 0 ? '+' : ''}
@@ -162,8 +146,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   </div>
                   <div
                     style={{
-                      fontSize: tokens.typography.fontSize.xs,
-                      color: Q.TEXT_SECONDARY,
+                      fontSize: 11,
+                      color: 'var(--color-text-tertiary)',
                     }}
                   >
                     ROI
@@ -174,17 +158,17 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                 <div style={{ textAlign: 'right' }}>
                   <div
                     style={{
-                      fontSize: tokens.typography.fontSize.sm,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      color: Q.GOLD,
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: '#D4AF37',
                     }}
                   >
                     {Math.round(trader.arena_score)}
                   </div>
                   <div
                     style={{
-                      fontSize: tokens.typography.fontSize.xs,
-                      color: Q.TEXT_SECONDARY,
+                      fontSize: 11,
+                      color: 'var(--color-text-tertiary)',
                     }}
                   >
                     Score
@@ -195,11 +179,11 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
 
             {/* Arrow */}
             <svg
-              width="16"
-              height="16"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
-              stroke={Q.ARROW}
+              stroke="var(--color-text-tertiary)"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

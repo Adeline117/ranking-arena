@@ -1,18 +1,7 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
 import type { PersonalityType } from '../../components/types'
 import { QuizIcon } from './QuizIcon'
-
-/** Forced dark-theme palette */
-const Q = {
-  BG_CARD: '#161625',
-  TEXT_PRIMARY: '#FFFFFF',
-  TEXT_SECONDARY: 'rgba(255,255,255,0.7)',
-  TRACK: 'rgba(255,255,255,0.08)',
-  BADGE_BG: 'rgba(139, 92, 246, 0.12)',
-  BADGE_BORDER: 'rgba(139, 92, 246, 0.25)',
-} as const
 
 interface PersonalityCardProps {
   type: PersonalityType
@@ -25,14 +14,14 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
   return (
     <div
       style={{
-        borderRadius: 20,
-        background: Q.BG_CARD,
-        border: `2px solid ${type.color}40`,
-        padding: 'clamp(24px, 5vw, 32px)',
+        borderRadius: 12,
+        background: 'var(--color-bg-secondary)',
+        border: '1px solid var(--glass-border-light)',
+        padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        gap: 20,
+        gap: 16,
         position: 'relative',
         overflow: 'hidden',
       }}
@@ -52,24 +41,24 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
       {/* Icon */}
       <div
         style={{
-          width: 72,
-          height: 72,
-          borderRadius: 18,
-          background: `${type.color}20`,
-          border: `2px solid ${type.color}40`,
+          width: 56,
+          height: 56,
+          borderRadius: 12,
+          background: `${type.color}15`,
+          border: `1px solid ${type.color}30`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <QuizIcon name={type.icon} color={type.color} size={36} />
+        <QuizIcon name={type.icon} color={type.color} size={28} />
       </div>
 
       {/* Type name */}
       <h2
         style={{
-          fontSize: 'clamp(24px, 5vw, 32px)',
-          fontWeight: tokens.typography.fontWeight.bold,
+          fontSize: 'clamp(22px, 5vw, 28px)',
+          fontWeight: 700,
           color: type.color,
           margin: 0,
           textAlign: 'center',
@@ -79,13 +68,13 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
       </h2>
 
       {/* Match percentage */}
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: '100%', maxWidth: 280 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: '100%', maxWidth: 240 }}>
         <div
           style={{
             width: '100%',
-            height: 8,
-            borderRadius: 4,
-            background: Q.TRACK,
+            height: 6,
+            borderRadius: 3,
+            background: 'var(--color-bg-tertiary)',
             overflow: 'hidden',
           }}
         >
@@ -93,7 +82,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
             style={{
               width: `${matchPercent}%`,
               height: '100%',
-              borderRadius: 4,
+              borderRadius: 3,
               background: type.gradient,
               transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)',
             }}
@@ -101,8 +90,8 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
         </div>
         <span
           style={{
-            fontSize: tokens.typography.fontSize.lg,
-            fontWeight: tokens.typography.fontWeight.bold,
+            fontSize: 15,
+            fontWeight: 700,
             color: type.color,
           }}
         >
@@ -113,8 +102,8 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
       {/* Description */}
       <p
         style={{
-          fontSize: tokens.typography.fontSize.base,
-          color: Q.TEXT_SECONDARY,
+          fontSize: 14,
+          color: 'var(--color-text-secondary)',
           lineHeight: 1.6,
           textAlign: 'center',
           margin: 0,
@@ -126,13 +115,13 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
       {/* Secondary type badge */}
       <span
         style={{
-          padding: '6px 14px',
-          borderRadius: 8,
-          background: Q.BADGE_BG,
-          border: `1px solid ${Q.BADGE_BORDER}`,
-          fontSize: tokens.typography.fontSize.sm,
-          fontWeight: tokens.typography.fontWeight.medium,
-          color: Q.TEXT_PRIMARY,
+          padding: '4px 12px',
+          borderRadius: 6,
+          background: 'var(--color-bg-tertiary)',
+          border: '1px solid var(--glass-border-light)',
+          fontSize: 13,
+          fontWeight: 500,
+          color: 'var(--color-text-secondary)',
         }}
       >
         {tr('quizShadowType')}: {secondaryTypeLabel}

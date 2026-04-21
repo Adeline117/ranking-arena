@@ -3,14 +3,6 @@
 import { tokens } from '@/lib/design-tokens'
 import type { PersonalityType } from '../../components/types'
 
-/** Forced dark-theme palette */
-const Q = {
-  BG_CARD: '#161625',
-  TEXT_PRIMARY: '#FFFFFF',
-  TEXT_SECONDARY: 'rgba(255,255,255,0.7)',
-  TEXT_TERTIARY: 'rgba(255,255,255,0.45)',
-} as const
-
 interface MasterSectionProps {
   type: PersonalityType
   tr: (key: string) => string
@@ -22,21 +14,21 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
   return (
     <div
       style={{
-        borderRadius: 16,
-        background: Q.BG_CARD,
-        border: `1px solid ${type.color}25`,
-        padding: 'clamp(20px, 4vw, 28px)',
+        borderRadius: 12,
+        background: 'var(--color-bg-secondary)',
+        border: '1px solid var(--glass-border-light)',
+        padding: 'clamp(16px, 3vw, 24px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 14,
       }}
     >
       {/* Section header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div
           style={{
-            width: 4,
-            height: 24,
+            width: 3,
+            height: 20,
             borderRadius: 2,
             background: type.gradient,
           }}
@@ -45,7 +37,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
           style={{
             fontSize: tokens.typography.fontSize.lg,
             fontWeight: tokens.typography.fontWeight.bold,
-            color: Q.TEXT_PRIMARY,
+            color: 'var(--color-text-primary)',
             margin: 0,
           }}
         >
@@ -57,7 +49,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <h4
           style={{
-            fontSize: 'clamp(18px, 4vw, 22px)',
+            fontSize: 'clamp(16px, 3.5vw, 20px)',
             fontWeight: tokens.typography.fontWeight.bold,
             color: type.color,
             margin: 0,
@@ -68,7 +60,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         <span
           style={{
             fontSize: tokens.typography.fontSize.sm,
-            color: Q.TEXT_TERTIARY,
+            color: 'var(--color-text-tertiary)',
           }}
         >
           {tr(master.yearsKey)}
@@ -77,7 +69,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
           style={{
             fontSize: tokens.typography.fontSize.base,
             fontWeight: tokens.typography.fontWeight.semibold,
-            color: Q.TEXT_SECONDARY,
+            color: 'var(--color-text-secondary)',
             fontStyle: 'italic',
             marginTop: 4,
           }}
@@ -87,13 +79,13 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
       </div>
 
       {/* Bio paragraphs */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {master.bioKeys.map((key) => (
           <p
             key={key}
             style={{
               fontSize: tokens.typography.fontSize.base,
-              color: Q.TEXT_SECONDARY,
+              color: 'var(--color-text-secondary)',
               lineHeight: 1.7,
               margin: 0,
             }}
@@ -106,10 +98,10 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
       {/* Famous trade */}
       <div
         style={{
-          padding: '14px 18px',
-          borderRadius: 12,
-          background: `${type.color}10`,
-          border: `1px solid ${type.color}20`,
+          padding: '12px 16px',
+          borderRadius: 8,
+          background: `${type.color}08`,
+          border: `1px solid ${type.color}15`,
         }}
       >
         <p
@@ -117,7 +109,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.semibold,
             color: type.color,
-            margin: '0 0 6px 0',
+            margin: '0 0 4px 0',
           }}
         >
           {tr('quizFamousTrade')}
@@ -125,7 +117,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         <p
           style={{
             fontSize: tokens.typography.fontSize.base,
-            color: Q.TEXT_SECONDARY,
+            color: 'var(--color-text-secondary)',
             lineHeight: 1.6,
             margin: 0,
           }}
@@ -138,10 +130,10 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
       <blockquote
         style={{
           margin: 0,
-          padding: '12px 18px',
+          padding: '10px 16px',
           borderLeft: `3px solid ${type.color}`,
           fontStyle: 'italic',
-          color: Q.TEXT_SECONDARY,
+          color: 'var(--color-text-secondary)',
           fontSize: tokens.typography.fontSize.base,
           lineHeight: 1.6,
         }}
