@@ -191,8 +191,8 @@ export async function generateStaticParams() {
 
   if (!data) return []
   return data
-    .filter((t: { handle: string | null }) => t.handle)
-    .map((t: { handle: string | null }) => ({ handle: encodeURIComponent(t.handle!) }))
+    .filter((t: { handle: string | null }) => t.handle && t.handle.trim().length > 0 && t.handle.length <= 100)
+    .map((t: { handle: string | null }) => ({ handle: encodeURIComponent(t.handle!.trim()) }))
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
