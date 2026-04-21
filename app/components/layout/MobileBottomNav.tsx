@@ -341,12 +341,33 @@ const HIGHLIGHT_DOT_STYLE: React.CSSProperties = {
   background: 'var(--color-accent-error)',
 }
 
+function useKeyboardOpen(): boolean {
+  const [keyboardOpen, setKeyboardOpen] = useState(false)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.visualViewport) return
+
+    const vv = window.visualViewport
+    const threshold = window.innerHeight * 0.75 // keyboard takes >25% of screen
+
+    const handleResize = () => {
+      setKeyboardOpen(vv.height < threshold)
+    }
+
+    vv.addEventListener('resize', handleResize)
+    return () => vv.removeEventListener('resize', handleResize)
+  }, [])
+
+  return keyboardOpen
+}
+
 export default function MobileBottomNav(): React.ReactElement {
   const pathname = usePathname()
   const { t } = useLanguage()
   const { impact } = useCapacitorHaptics()
   const userHandle = useUserHandle()
   const isVisible = useScrollVisibility()
+  const keyboardOpen = useKeyboardOpen()
   const unreadCount = useInboxStore(s => s.unreadNotifications + s.unreadMessages)
 
   const handleNavClick = useCallback(() => {
@@ -380,14 +401,16 @@ export default function MobileBottomNav(): React.ReactElement {
 
   return (
     <>
-      <div className="mobile-bottom-nav-spacer" style={SPACER_STYLE} aria-hidden="true" />
+      {!keyboardOpen && (
+        <div className="mobile-bottom-nav-spacer" style={SPACER_STYLE} aria-hidden="true" />
+      )}
 
       <nav
         aria-label={t('mainNavigation')}
         className="mobile-bottom-nav safe-area-inset-bottom"
         style={{
           ...NAV_BASE_STYLE,
-          transform: isVisible ? 'translateY(0)' : 'translateY(100%)',
+          transform: (isVisible && !keyboardOpen) ? 'translateY(0)' : 'translateY(100%)',
         }}
       >
         {/* Sliding active indicator pill */}
