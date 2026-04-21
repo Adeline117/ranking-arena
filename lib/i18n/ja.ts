@@ -1761,6 +1761,8 @@ const ja = {
     loginSetupFailed: 'セットアップに失敗しました',
     loginFailed: 'ログインに失敗しました',
     loginTimeout: 'ログインに時間がかかっています。接続を確認して再度お試しください。',
+    loginAuthFailed: 'ログインに失敗しました。もう一度お試しください。',
+    loginNoSession: 'セッションを作成できませんでした。再度ログインしてください。',
     loginWithPassword: 'パスワードでログイン',
     loginUsernamePlaceholder: 'ユーザー名',
     loginSetPasswordPlaceholder: 'パスワードを設定（6文字以上）',

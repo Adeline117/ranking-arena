@@ -111,8 +111,8 @@ function AuthCallbackContent() {
             const createdAt = new Date(retrySession.user.created_at).getTime()
             const now = Date.now()
             const isNewUser = now - createdAt < 30_000
-            const onboardingDest2 = isSafeReturn ? `/onboarding?returnUrl=${encodeURIComponent(returnUrl!)}` : '/onboarding'
-            router.replace(isAddAccount ? '/' : (isNewUser ? onboardingDest2 : defaultRedirect))
+            // New users → homepage with welcome banner (consistent with immediate-session path)
+            router.replace(isAddAccount ? '/' : (isNewUser ? '/?welcome=1' : defaultRedirect))
           } else {
             router.replace('/login?error=no_session')
           }

@@ -1912,6 +1912,8 @@ const zh = {
     loginSetupFailed: '设置失败',
     loginFailed: '登录失败',
     loginTimeout: '登录超时，请检查网络连接后重试。',
+    loginAuthFailed: '登录失败，请重试。',
+    loginNoSession: '无法创建会话，请重新登录。',
     loginWithPassword: '使用密码登录',
     loginUsernamePlaceholder: '用户名',
     loginSetPasswordPlaceholder: '设置密码（至少6位）',
