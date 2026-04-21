@@ -121,6 +121,10 @@ export default function RootLayout({
           <link rel="stylesheet" href="/styles/responsive.css" />
           {/* eslint-disable-next-line @next/next/no-css-tags */}
           <link rel="stylesheet" href="/styles/animations.css" />
+          <div style={{ position: 'fixed', top: 0, left: 0, right: 0, padding: '12px 16px', background: '#1a1a2e', color: '#e5e5e5', textAlign: 'center', fontFamily: 'system-ui, sans-serif', zIndex: 9999, borderBottom: '1px solid #333' }}>
+            JavaScript is required for full functionality. / 需要启用 JavaScript 才能使用完整功能。{' '}
+            <a href="/" style={{ color: '#8b5cf6', textDecoration: 'underline' }}>View rankings / 查看排名</a>
+          </div>
         </noscript>
         <JsonLd data={{
           '@context': 'https://schema.org',
