@@ -376,6 +376,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               ref={otpRef}
               type="text"
               inputMode="numeric"
+              autoComplete="one-time-code"
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
               onKeyDown={(e) => e.key === 'Enter' && handleVerifyOTP()}
