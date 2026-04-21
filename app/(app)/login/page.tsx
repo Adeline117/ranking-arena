@@ -188,7 +188,16 @@ export default function LoginPage() {
     setSendingCode(true)
     try {
       const { data, error: otpError } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
-      if (otpError) { setError(t('loginSendFailedShort')); setSendingCode(false); return }
+      if (otpError) {
+        const msg = otpError.message.toLowerCase()
+        if (msg.includes('signup') || msg.includes('not allowed') || msg.includes('not found')) {
+          setError(t('loginEmailNotRegistered'))
+        } else {
+          setError(t('loginSendFailedShort'))
+        }
+        setSendingCode(false)
+        return
+      }
       if (data) { setCodeSent(true); setCountdown(60); showToast(t('loginCodeSent'), 'success') }
       else { setError(t('loginSendFailedShort')) }
     } catch (err: unknown) { logger.error('Login OTP error:', err); setError(t('loginSendFailedSimple')) }
