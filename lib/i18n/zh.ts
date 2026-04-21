@@ -4369,6 +4369,18 @@ userActivityReviewed: '评论了 ',
 userActivityFollowedTrader: '关注了交易员 ',
 userActivityFollowedUser: '关注了 ',
 userActivityJoinedGroup: '加入了小组 ',
+
+// Activity Feed (global feed page)
+activityFeedTitle: '动态流',
+activityFeedDesc: '来自实时交易数据的自动生成里程碑 — 排名攀升、ROI 突破、连胜记录和大额盈利。',
+activityFilterAll: '全部',
+
+// Market section error boundaries
+marketSectionError: '加载此部分失败',
+marketCoreMetricsError: '加载核心指标失败',
+marketDataError: '市场数据加载失败',
+marketTickerError: '加载价格行情失败',
+marketFearGreedError: '加载恐惧贪婪指数失败',
 userActivityPublishedPost: '发布了帖子 ',
 userActivityView: '查看',
 

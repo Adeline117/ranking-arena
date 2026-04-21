@@ -3992,6 +3992,16 @@ const ja = {
     userActivityFollowedTrader: 'トレーダーをフォロー',
     userActivityFollowedUser: 'をフォロー',
     userActivityJoinedGroup: 'グループに参加',
+
+    // Activity Feed
+    activityFeedTitle: 'アクティビティフィード',
+    activityFeedDesc: 'ライブトレーダーデータからのマイルストーン — ランク上昇、ROIブレイクアウト、連勝、大幅利益。',
+    activityFilterAll: 'すべて',
+    marketSectionError: 'このセクションの読み込みに失敗しました',
+    marketCoreMetricsError: 'コア指標の読み込みに失敗しました',
+    marketDataError: 'マーケットデータの読み込みに失敗しました',
+    marketTickerError: '価格ティッカーの読み込みに失敗しました',
+    marketFearGreedError: 'Fear & Greedインデックスの読み込みに失敗しました',
     userActivityPublishedPost: '投稿を公開',
     userActivityView: '表示',
 

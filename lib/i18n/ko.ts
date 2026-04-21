@@ -4302,6 +4302,16 @@ const ko = {
     userActivityFollowedTrader: '트레이더 팔로우: ',
     userActivityFollowedUser: '팔로우: ',
     userActivityJoinedGroup: '그룹 가입: ',
+
+    // Activity Feed
+    activityFeedTitle: '활동 피드',
+    activityFeedDesc: '라이브 트레이더 데이터의 마일스톤 — 순위 상승, ROI 돌파, 연승, 대규모 수익.',
+    activityFilterAll: '전체',
+    marketSectionError: '이 섹션을 로드하지 못했습니다',
+    marketCoreMetricsError: '핵심 지표를 로드하지 못했습니다',
+    marketDataError: '시장 데이터 로드 실패',
+    marketTickerError: '가격 티커 로드 실패',
+    marketFearGreedError: 'Fear & Greed 지수 로드 실패',
     userActivityPublishedPost: '게시물 작성: ',
     userActivityView: '보기',
 
