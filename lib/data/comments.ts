@@ -255,12 +255,16 @@ export async function createComment(
   userId: string,
   input: CreateCommentInput
 ): Promise<Comment> {
+  // Sanitize comment content to prevent XSS (matches post sanitization pattern)
+  const { sanitizeText } = await import('@/lib/utils/sanitize')
+  const safeContent = sanitizeText(input.content, { preserveNewlines: true, maxLength: 2000 })
+
   const { data, error } = await supabase
     .from('comments')
     .insert({
       post_id: input.post_id,
       user_id: userId,
-      content: input.content,
+      content: safeContent,
       parent_id: input.parent_id || null,
     })
     .select()
@@ -287,9 +291,12 @@ export async function updateComment(
   userId: string,
   content: string
 ): Promise<Comment> {
+  const { sanitizeText } = await import('@/lib/utils/sanitize')
+  const safeContent = sanitizeText(content, { preserveNewlines: true, maxLength: 2000 })
+
   const { data, error } = await supabase
     .from('comments')
-    .update({ content, updated_at: new Date().toISOString() })
+    .update({ content: safeContent, updated_at: new Date().toISOString() })
     .eq('id', commentId)
     .eq('user_id', userId)
     .select()
