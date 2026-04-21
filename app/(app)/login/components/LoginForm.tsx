@@ -179,32 +179,51 @@ export default function LoginForm({
   // Code login mode
   if (!codeSent) {
     return (
-      <button
-        onClick={onSendLoginCode}
-        disabled={sendingCode || !email || countdown > 0}
-        className="login-button"
-        style={{ 
-          width: '100%',
-          padding: '14px 16px', 
-          borderRadius: tokens.radius.lg,
-          border: 'none',
-          background: sendingCode || !email || countdown > 0 
-            ? 'var(--color-accent-primary-20)' 
-            : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
-          color: tokens.colors.white,
-          fontWeight: 700,
-          fontSize: 16,
-          cursor: sendingCode || !email || countdown > 0 ? 'not-allowed' : 'pointer',
-          marginBottom: 16,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 8,
-        }}
-      >
-        {sendingCode && <Spinner />}
-        {sendingCode ? t('loginSendingCode') : t('loginSendCode')}
-      </button>
+      <>
+        <button
+          onClick={onSendLoginCode}
+          disabled={sendingCode || !email || countdown > 0}
+          className="login-button"
+          style={{
+            width: '100%',
+            padding: '14px 16px',
+            borderRadius: tokens.radius.lg,
+            border: 'none',
+            background: sendingCode || !email || countdown > 0
+              ? 'var(--color-accent-primary-20)'
+              : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+            color: tokens.colors.white,
+            fontWeight: 700,
+            fontSize: 16,
+            cursor: sendingCode || !email || countdown > 0 ? 'not-allowed' : 'pointer',
+            marginBottom: 12,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}
+        >
+          {sendingCode && <Spinner />}
+          {sendingCode ? t('loginSendingCode') : t('loginSendCode')}
+        </button>
+        <button
+          onClick={onSwitchToPassword}
+          className="link-hover"
+          style={{
+            width: '100%',
+            padding: '8px',
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--color-brand)',
+            fontWeight: 600,
+            fontSize: 13,
+            cursor: 'pointer',
+            marginBottom: 12,
+          }}
+        >
+          {t('loginWithPassword')}
+        </button>
+      </>
     )
   }
 
