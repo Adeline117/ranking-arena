@@ -4890,6 +4890,7 @@ compShareTitle: 'Check out this competition on Arena',
     tokenRankingPrev: 'Previous',
     tokenRankingNext: 'Next',
     rankingsSubNavTokens: 'Tokens',
+    rankingsSubNavBots: 'Bots',
 
     // Achievements
     achievementUnlocked: 'Achievement Unlocked',

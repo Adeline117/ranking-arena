@@ -4898,6 +4898,7 @@ compFieldMaxParticipants: '最大参与人数',
     tokenRankingPrev: '上一页',
     tokenRankingNext: '下一页',
     rankingsSubNavTokens: '币种',
+    rankingsSubNavBots: '机器人',
 
     // Achievements
     achievementUnlocked: '成就解锁',

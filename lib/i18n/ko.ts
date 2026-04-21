@@ -4855,6 +4855,7 @@ compFieldMaxParticipants: '최대 참가자 수',
     tokenRankingPrev: '이전',
     tokenRankingNext: '다음',
     rankingsSubNavTokens: '토큰',
+    rankingsSubNavBots: '봇',
 
     // Achievements
     achievementUnlocked: '업적 달성',
