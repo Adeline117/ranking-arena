@@ -51,6 +51,7 @@ export interface QuizOption {
 export interface QuizQuestion {
   id: number
   titleKey: string
+  format?: 'yesno'  // if set, renders as Yes/No/Unsure buttons instead of A/B/C/D
   options: QuizOption[]
 }
 
