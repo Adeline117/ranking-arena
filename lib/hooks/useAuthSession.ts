@@ -110,6 +110,27 @@ function initializeAuth() {
       setGlobalAuthState({ loading: false, authChecked: true })
     })
 
+    // Listen for cross-tab logout broadcasts via BroadcastChannel.
+    // Supabase's storage-event listener can miss logout when tabs are inactive.
+    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const authChannel = new BroadcastChannel('ranking-arena:auth-state')
+        authChannel.onmessage = (event: MessageEvent) => {
+          if (event.data?.type === 'USER_LOGGED_OUT') {
+            setGlobalAuthState({
+              user: null,
+              userId: null,
+              email: null,
+              accessToken: null,
+              isLoggedIn: false,
+              authChecked: true,
+              loading: false,
+            })
+          }
+        }
+      } catch { /* BroadcastChannel not supported — storage events are fallback */ }
+    }
+
     // Subscribe to auth state changes
     sb.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT') {
@@ -256,6 +277,18 @@ export function useAuthSession(): AuthSessionReturn {
       loading: false,
       authChecked: true,
     })
+    // Explicitly broadcast logout to all other tabs via BroadcastChannel.
+    // Supabase's storage-event listener can miss this when tabs are inactive.
+    try {
+      const channel = new BroadcastChannel('ranking-arena:auth-state')
+      channel.postMessage({
+        type: 'USER_LOGGED_OUT',
+        payload: { userId: null, handle: null },
+        timestamp: Date.now(),
+        sourceTabId: `signout-${Date.now()}`,
+      })
+      channel.close()
+    } catch { /* BroadcastChannel not supported — storage events are fallback */ }
   }, [])
 
   return useMemo(() => ({
