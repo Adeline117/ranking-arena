@@ -180,4 +180,4 @@ export const POST = withAuth(async ({ user, supabase: sb, request }) => {
       deletion_scheduled_at: scheduledDeletion.toISOString(),
       message: 'Account marked for deletion, recoverable within 30 days',
     })
-}, { name: 'account-delete', rateLimit: 'sensitive', skipCsrf: true })
+}, { name: 'account-delete', rateLimit: 'sensitive' })
