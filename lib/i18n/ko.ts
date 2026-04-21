@@ -4698,6 +4698,8 @@ authCodeSentTo: '코드를 {email}로 전송했습니다',
 authVerify: '인증',
 authVerifying: '인증 중...',
 authInAppBrowserError: '시스템 브라우저(Safari/Chrome)에서 열어주세요. 링크가 복사되었습니다.',
+authCodeExpired: '코드가 만료되었습니다. 새 코드를 요청해 주세요.',
+authCodeInvalid: '잘못된 코드입니다. 확인 후 다시 시도해 주세요.',
 
 tradingStyleScalper: '스캘퍼',
 tradingStyleScalperDesc: '초단기 고빈도 트레이딩',
