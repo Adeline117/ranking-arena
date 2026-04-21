@@ -9,7 +9,7 @@ const PrivyLoginButton = dynamic(() => import('@/app/components/auth/PrivyLoginB
 
 interface SocialLoginProps {
   lang: string
-  searchParams: ReadonlyURLSearchParams
+  searchParams: ReturnType<typeof import('next/navigation').useSearchParams>
   isAddAccount: boolean
   onError: (msg: string) => void
   onWalletSuccess: (result: { handle?: string | null }) => void
