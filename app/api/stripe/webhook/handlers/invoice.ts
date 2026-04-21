@@ -78,6 +78,14 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice) {
             updated_at: new Date().toISOString(),
           })
           .eq('stripe_subscription_id', subscriptionId)
+
+        // Downgrade user profile to prevent Pro access during payment failure
+        await getSupabase()
+          .from('user_profiles')
+          .update({ subscription_tier: 'free', updated_at: new Date().toISOString() })
+          .eq('stripe_customer_id', customerId)
+
+        logger.info(`Downgraded user to free tier due to past_due status`, { customerId, subscriptionId })
       }
     } catch (err: unknown) {
       logger.error('Failed to update subscription status on payment failure', { error: err })
