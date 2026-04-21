@@ -100,8 +100,8 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         style={{
           padding: '12px 16px',
           borderRadius: 8,
-          background: `${type.color}08`,
-          border: `1px solid ${type.color}15`,
+          background: `${type.color}12`,
+          border: `1px solid ${type.color}20`,
         }}
       >
         <p

@@ -188,21 +188,24 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
             gap: 14,
           }}
         >
-          <h3
-            style={{
-              fontSize: tokens.typography.fontSize.lg,
-              fontWeight: tokens.typography.fontWeight.bold,
-              color: 'var(--color-text-primary)',
-              margin: 0,
-            }}
-          >
-            {t('quizShareTitle')}
-          </h3>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 3, height: 20, borderRadius: 2, background: pType.gradient }} />
+            <h3
+              style={{
+                fontSize: tokens.typography.fontSize.lg,
+                fontWeight: tokens.typography.fontWeight.bold,
+                color: 'var(--color-text-primary)',
+                margin: 0,
+              }}
+            >
+              {t('quizShareTitle')}
+            </h3>
+          </div>
           <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
         </div>
 
         {/* CTAs */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
           <Link
             href="/quiz"
             style={{
