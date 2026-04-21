@@ -26,6 +26,14 @@ DOMPurify.setConfig({
   FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover', 'onfocus', 'onblur'],
 })
 
+// 确保链接在新窗口打开且有 noopener — registered once at module level
+DOMPurify.addHook('afterSanitizeAttributes', (node) => {
+  if (node.tagName === 'A') {
+    node.setAttribute('target', '_blank')
+    node.setAttribute('rel', 'noopener noreferrer')
+  }
+})
+
 /**
  * 消毒配置选项
  */
@@ -69,14 +77,6 @@ export function sanitizeHtml(dirty: string, options: SanitizeOptions = {}): stri
     config.ALLOWED_TAGS = allowedTags.filter(tag => tag !== 'a')
     config.ALLOWED_ATTR = allowedAttr.filter(attr => attr !== 'href' && attr !== 'target')
   }
-  
-  // 确保链接在新窗口打开且有 noopener
-  DOMPurify.addHook('afterSanitizeAttributes', (node) => {
-    if (node.tagName === 'A') {
-      node.setAttribute('target', '_blank')
-      node.setAttribute('rel', 'noopener noreferrer')
-    }
-  })
   
   let clean = DOMPurify.sanitize(dirty, config)
   
