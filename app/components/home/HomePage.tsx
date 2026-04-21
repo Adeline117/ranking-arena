@@ -1,7 +1,7 @@
 
 'use client'
 
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import TopNav from '../layout/TopNav'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
@@ -50,6 +50,15 @@ interface HomePageProps {
 export default function HomePage({ initialTraders, initialLastUpdated, heroStats, initialTotalCount, initialCategoryCounts }: HomePageProps) {
   // SSR TopNav stays visible permanently (no portal, no removal).
   // globals.css no longer hides #ssr-topnav when Phase 2 loads.
+
+  // :has() fallback — older browsers (Firefox <121, Safari <15.4) don't support :has().
+  // Add class to <html> so the CSS rule .homepage-interactive-mounted can hide SSR shells.
+  useEffect(() => {
+    document.documentElement.classList.add('homepage-interactive-mounted')
+    return () => {
+      document.documentElement.classList.remove('homepage-interactive-mounted')
+    }
+  }, [])
 
   return (
     <>
