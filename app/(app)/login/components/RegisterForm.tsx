@@ -161,6 +161,7 @@ export default function RegisterForm({
               outline: 'none',
             }}
             placeholder={t('loginSetPasswordPlaceholder')}
+            maxLength={128}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onBlur={() => markTouched('password')}

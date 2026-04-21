@@ -76,6 +76,7 @@ export default function LoginForm({
                 outline: 'none',
               }}
               placeholder={t('loginPasswordPlaceholder')}
+              maxLength={128}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               onBlur={() => markTouched('password')}
