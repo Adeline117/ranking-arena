@@ -51,7 +51,6 @@ export default function Footer() {
 
   return (
     <footer
-      className="hide-mobile-nav"
       style={{
         marginTop: tokens.spacing[8],
         borderTop: `1px solid var(--color-border-primary)`,
