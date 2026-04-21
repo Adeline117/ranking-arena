@@ -293,6 +293,7 @@ export const revalidate = 300
 
 export default async function TraderPage({ params, searchParams }: { params: Promise<{ handle: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
   const { handle } = await params
+  if (handle.length > 300) notFound()
   const allSearchParams = await searchParams
   const platform = allSearchParams.platform
 

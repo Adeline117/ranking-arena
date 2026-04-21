@@ -27,11 +27,17 @@ function getStripe(): Stripe {
   })
 }
 
-// 订阅计划配置 - 只有 Pro 会员
-const PLANS: Record<string, { priceId: string; name: string }> = {
+// 订阅计划配置 - 按 billingCycle 区分价格
+const PLANS: Record<string, Record<string, { priceId: string; name: string }>> = {
   pro: {
-    priceId: process.env.STRIPE_PRO_PRICE_ID || env.STRIPE_PRO_MONTHLY_PRICE_ID || '',
-    name: 'Pro',
+    monthly: {
+      priceId: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID || '',
+      name: 'Pro Monthly',
+    },
+    yearly: {
+      priceId: process.env.STRIPE_PRO_YEARLY_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID || '',
+      name: 'Pro Yearly',
+    },
   },
 }
 
@@ -49,7 +55,7 @@ export const POST = withApiHandler('checkout', async (request: NextRequest) => {
       { status: 400 }
     )
   }
-  const { plan, billingCycle: _billingCycle = 'monthly' } = body
+  const { plan, billingCycle = 'monthly' } = body
 
   if (!plan || !PLANS[plan]) {
     return NextResponse.json(
@@ -57,6 +63,8 @@ export const POST = withApiHandler('checkout', async (request: NextRequest) => {
       { status: 400 }
     )
   }
+
+  const cycle = billingCycle === 'yearly' ? 'yearly' : 'monthly'
 
   // 获取当前用户
   const { user, error: authError } = await extractUserFromRequest(request)
@@ -71,7 +79,13 @@ export const POST = withApiHandler('checkout', async (request: NextRequest) => {
 
   try {
     const stripe = getStripe()
-    const planConfig = PLANS[plan]
+    const planConfig = PLANS[plan][cycle]
+    if (!planConfig.priceId) {
+      return NextResponse.json(
+        { error: 'Plan pricing not configured for this billing cycle', code: 'PRICE_NOT_CONFIGURED' },
+        { status: 503 }
+      )
+    }
 
     // 检查是否已有 Stripe 客户
     const { data: existingSubscription } = await supabase

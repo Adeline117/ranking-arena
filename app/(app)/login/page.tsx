@@ -348,7 +348,7 @@ export default function LoginPage() {
       clearTimeout(timeoutId)
       setError((err instanceof Error ? err.message : undefined) || t('loginFailed'))
     }
-    finally { setLoading(false); submittingRef.current = false }
+    finally { clearTimeout(timeoutId); setLoading(false); submittingRef.current = false }
   }
 
   const resetForm = () => {
