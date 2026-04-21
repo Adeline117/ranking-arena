@@ -127,9 +127,11 @@ by-token/route
 # ── i18n (Japanese locale, community-maintained) ──
 lib/i18n/ja\.ts
 
-# ── Quiz feature (useLanguage hook not yet created) ──
+# ── Quiz feature (useLanguage hook not yet created; PersonalityTypeId expanded) ──
 quiz/QuizClient\.tsx
 quiz/result/ResultPageClient\.tsx
+quiz/components/scoring\.ts
+quiz/result/page\.tsx
 
 # ── Miscellaneous product surfaces ──
 FundingRatesClient
