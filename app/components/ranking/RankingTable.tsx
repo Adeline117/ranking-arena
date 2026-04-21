@@ -120,6 +120,7 @@ function RankingTableInner(props: {
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc')
   const [justSortedColumn, setJustSortedColumn] = useState<string | null>(null)
   const [_sortAnimationKey, setSortAnimationKey] = useState(0)
+  const sortTimeoutRef = useRef<ReturnType<typeof setTimeout>>()
   const itemsPerPage = 50
 
   // Mobile card view: load more instead of pagination
@@ -170,6 +171,11 @@ function RankingTableInner(props: {
     return () => mql.removeEventListener('change', handleResize)
   }, [])
 
+  // Cleanup sort highlight timeout on unmount
+  useEffect(() => {
+    return () => { clearTimeout(sortTimeoutRef.current) }
+  }, [])
+
   const toggleColumn = (col: ColumnKey) => {
     setVisibleColumns(prev => {
       const next = prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]
@@ -217,7 +223,8 @@ function RankingTableInner(props: {
     const newDir = sortColumn === col ? (sortDir === 'desc' ? 'asc' : 'desc') : 'desc'
     setJustSortedColumn(col)
     setSortAnimationKey(prev => prev + 1)
-    setTimeout(() => setJustSortedColumn(null), 400)
+    clearTimeout(sortTimeoutRef.current)
+    sortTimeoutRef.current = setTimeout(() => setJustSortedColumn(null), 400)
     if (onSortChange) { onSortChange(col, newDir) }
     else { setInternalSortColumn(col); setInternalSortDir(newDir) }
     setCurrentPage(1)
