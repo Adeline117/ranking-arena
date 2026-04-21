@@ -582,6 +582,11 @@ html {
   }
 }
 
+/* Eliminate 300ms tap delay on mobile without disabling pinch-to-zoom */
+a, button, input, select, textarea, [role="button"], [tabindex] {
+  touch-action: manipulation;
+}
+
 /* Theme-aware body styles */
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
