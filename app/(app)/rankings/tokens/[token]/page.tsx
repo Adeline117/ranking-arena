@@ -1,7 +1,11 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import TokenRankingClient from './TokenRankingClient'
 import { BASE_URL } from '@/lib/constants/urls'
 const CURRENT_YEAR = new Date().getFullYear()
+
+// Only allow 1-20 uppercase alphanumeric characters (valid crypto token symbols)
+const VALID_TOKEN_RE = /^[A-Z0-9]{1,20}$/
 
 export async function generateMetadata({
   params,
@@ -54,6 +58,11 @@ export default async function TokenDetailPage({
 }) {
   const { token: rawToken } = await params
   const token = rawToken.toUpperCase()
+
+  // Reject malformed token symbols (SQL injection, XSS, garbage URLs)
+  if (!VALID_TOKEN_RE.test(token)) {
+    notFound()
+  }
 
   return <TokenRankingClient token={token} />
 }
