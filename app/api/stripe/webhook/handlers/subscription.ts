@@ -14,7 +14,7 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
     .single()
 
   if (!profile) {
-    logger.error('No user found for customer', { customerId })
+    logger.warn('Subscription update: no user found for stripe_customer_id', { customerId })
     return
   }
 
@@ -36,7 +36,10 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
     .eq('stripe_customer_id', customerId)
     .single()
 
-  if (!profile) return
+  if (!profile) {
+    logger.warn('Subscription canceled: no user found for stripe_customer_id', { customerId })
+    return
+  }
 
   const { error: subError } = await getSupabase()
     .from('subscriptions')
