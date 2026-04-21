@@ -270,8 +270,7 @@ const NAV_BASE_STYLE: React.CSSProperties = {
   right: 0,
   height: 60,
   background: tokens.glass.bg.primary,
-  backdropFilter: tokens.glass.blur.lg,
-  WebkitBackdropFilter: tokens.glass.blur.lg,
+  // backdrop-filter moved to CSS class .glass so responsive.css mobile override works
   borderTop: `1px solid var(--color-border-primary)`,
   display: 'flex',
   alignItems: 'center',
@@ -407,7 +406,7 @@ export default function MobileBottomNav(): React.ReactElement {
 
       <nav
         aria-label={t('mainNavigation')}
-        className="mobile-bottom-nav safe-area-inset-bottom"
+        className="mobile-bottom-nav safe-area-inset-bottom glass"
         style={{
           ...NAV_BASE_STYLE,
           transform: (isVisible && !keyboardOpen) ? 'translateY(0)' : 'translateY(100%)',
