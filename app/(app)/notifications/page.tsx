@@ -289,7 +289,8 @@ export default function NotificationsPage() {
 
   // 加载通知 — 初始加载 30 条，滚动加载更多
   const NOTIFICATION_PAGE_SIZE = 30
-  const [_hasMoreNotifs, setHasMoreNotifs] = useState(true)
+  const [hasMoreNotifs, setHasMoreNotifs] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const loadNotifications = useCallback(async (offset = 0, append = false) => {
     if (!accessToken) return
     if (!append) setLoading(true)
@@ -655,6 +656,37 @@ export default function NotificationsPage() {
                 </Box>
               )
             })}
+
+            {/* Load More button */}
+            {hasMoreNotifs && (
+              <button
+                onClick={async () => {
+                  setLoadingMore(true)
+                  await loadNotifications(notifications.length, true)
+                  setLoadingMore(false)
+                }}
+                disabled={loadingMore}
+                style={{
+                  width: '100%',
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                  marginTop: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.secondary,
+                  color: tokens.colors.text.secondary,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: 600,
+                  cursor: loadingMore ? 'not-allowed' : 'pointer',
+                  opacity: loadingMore ? 0.6 : 1,
+                  transition: `all ${tokens.transition.base}`,
+                  minHeight: 44,
+                }}
+              >
+                {loadingMore
+                  ? (language === 'zh' ? '加载中...' : 'Loading...')
+                  : (language === 'zh' ? '加载更多' : 'Load More')}
+              </button>
+            )}
           </Box>
         )}
       </Box>
