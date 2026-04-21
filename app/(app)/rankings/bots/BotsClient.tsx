@@ -18,6 +18,7 @@ import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { Box } from '@/app/components/base'
 import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 
 type BotCategory = 'all' | 'tg_bot' | 'ai_agent' | 'vault'
 type WindowOption = '7D' | '30D' | '90D'
@@ -38,7 +39,7 @@ const CHAIN_COLORS: Record<string, string> = {
 }
 
 function formatLargeNumber(n: number | null): string {
-  if (n == null) return 'N/A'
+  if (n == null) return NULL_DISPLAY
   if (n >= 1e9) return `$${(n / 1e9).toFixed(1)}B`
   if (n >= 1e6) return `$${(n / 1e6).toFixed(1)}M`
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`
@@ -46,14 +47,14 @@ function formatLargeNumber(n: number | null): string {
 }
 
 function formatUsers(n: number | null): string {
-  if (n == null) return 'N/A'
+  if (n == null) return NULL_DISPLAY
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
   if (n >= 1e3) return `${(n / 1e3).toFixed(0)}K`
   return n.toString()
 }
 
 function formatPercent(n: number | null): string {
-  if (n == null) return '--'
+  if (n == null) return NULL_DISPLAY
   return `${n.toFixed(1)}%`
 }
 

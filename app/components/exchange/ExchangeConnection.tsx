@@ -80,10 +80,9 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       setConnections(data || [])
       setError(null)
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('loadConnectionsFailed')
-      setError(errorMsg)
+      setError(t('loadConnectionsFailed'))
       setConnections([])
-      showToast(errorMsg, 'error')
+      showToast(t('loadConnectionsFailed'), 'error')
     } finally {
       setLoading(false)
     }
