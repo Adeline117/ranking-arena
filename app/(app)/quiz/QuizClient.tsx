@@ -8,6 +8,7 @@ import { useQuizStore } from '@/lib/stores/quizStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { QUIZ_QUESTIONS } from './components/quiz-data'
 import { calculateResult } from './components/scoring'
+import { getCsrfHeaders } from '@/lib/api/client'
 import StartStep from './components/StartStep'
 import QuestionStep from './components/QuestionStep'
 import ProgressBar from './components/ProgressBar'
@@ -76,7 +77,7 @@ export default function QuizClient() {
           : Math.random().toString(36).slice(2)
       fetch('/api/quiz/save', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({
           sessionId,
           primaryType: result.primaryType,
@@ -85,7 +86,7 @@ export default function QuizClient() {
           scores: result.scores,
           answers,
         }),
-      }).catch(() => {}) // swallow errors — this is optional analytics
+      }).catch(() => { /* non-critical analytics */ }) // eslint-disable-line no-restricted-syntax
     } catch {
       // ignore
     }
