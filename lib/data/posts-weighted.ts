@@ -339,7 +339,7 @@ export async function getWeightedSearchResults(
         repost_count, view_count, hot_score, is_pinned, images,
         created_at, updated_at, original_post_id, groups(name, name_en)
       `)
-      .or(`title.ilike.%${searchQuery}%, content.ilike.%${searchQuery}%`)
+      .or(`title.ilike.%${searchQuery.replace(/[,.()\[\]\\%_]/g, '')}%, content.ilike.%${searchQuery.replace(/[,.()\[\]\\%_]/g, '')}%`)
       .order('hot_score', { ascending: false })
       .range(offset, offset + limit - 1)
 
@@ -369,7 +369,7 @@ export async function getWeightedSearchResults(
         repost_count, view_count, hot_score, is_pinned, images,
         created_at, updated_at, original_post_id, groups(name, name_en)
       `)
-      .or(`title.ilike.%${searchQuery}%, content.ilike.%${searchQuery}%`)
+      .or(`title.ilike.%${searchQuery.replace(/[,.()\[\]\\%_]/g, '')}%, content.ilike.%${searchQuery.replace(/[,.()\[\]\\%_]/g, '')}%`)
       .order('hot_score', { ascending: false })
       .range(offset, offset + limit - 1)
 

@@ -286,6 +286,19 @@ export function sanitizeObject<T extends Record<string, unknown>>(
 }
 
 /**
+ * 清洗 PostgREST 过滤器值
+ * 防止通过 .or() 等方法进行过滤器注入攻击
+ * PostgREST 使用逗号分隔过滤条件，点号作为运算符分隔符
+ */
+export function sanitizePostgrestValue(value: string): string {
+  if (!value) return ''
+  return value
+    .replace(/[,.()\[\]]/g, '') // 移除 PostgREST 元字符
+    .replace(/[\\%_]/g, (c) => `\\${c}`) // 转义 LIKE 通配符
+    .slice(0, 200) // 限制长度
+}
+
+/**
  * 检查字符串是否包含潜在危险内容
  */
 export function containsDangerousContent(text: string): boolean {

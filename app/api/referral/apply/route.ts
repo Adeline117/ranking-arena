@@ -45,7 +45,7 @@ export const POST = withAuth(
     const { data: referrer } = await supabase
       .from('user_profiles')
       .select('id, referral_code, handle')
-      .or(`referral_code.eq.${code},handle.eq.${code}`)
+      .or(`referral_code.eq.${code.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${code.replace(/[,.()\[\]\\%_]/g, '')}`)
       .limit(1)
       .maybeSingle()
 
