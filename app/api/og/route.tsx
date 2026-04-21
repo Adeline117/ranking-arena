@@ -1,10 +1,14 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { BASE_URL } from '@/lib/constants/urls'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
 export const runtime = 'edge'
 
 export async function GET(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResp) return rateLimitResp
+
   const { searchParams } = request.nextUrl
   const type = searchParams.get('type') || 'default'
   const title = searchParams.get('title') || 'Arena'

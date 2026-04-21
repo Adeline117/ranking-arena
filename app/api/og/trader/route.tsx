@@ -12,6 +12,7 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
 export const runtime = 'nodejs' // requires Node.js for getSupabaseAdmin()
 
@@ -124,6 +125,9 @@ async function fetchTrader(handle: string) {
 }
 
 export async function GET(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResp) return rateLimitResp
+
   try {
     const { searchParams } = new URL(request.url)
     const handle = searchParams.get('handle')
