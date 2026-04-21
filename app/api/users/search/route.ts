@@ -27,10 +27,13 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
+    // Escape LIKE special characters to prevent wildcard injection
+    const escapedQ = q.replace(/%/g, '\\%').replace(/_/g, '\\_')
+
     const { data: users } = await supabase
       .from('user_profiles')
       .select('id, handle, avatar_url')
-      .ilike('handle', `%${q}%`)
+      .ilike('handle', `%${escapedQ}%`)
       .neq('id', user.id)
       .is('deleted_at', null)
       .limit(limit)
