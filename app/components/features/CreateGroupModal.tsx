@@ -70,6 +70,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const [description, setDescription] = useState('')
   const [searching, setSearching] = useState(false)
   const [creating, setCreating] = useState(false)
+  const submittingRef = useRef(false)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
 
   const debouncedSearch = useCallback((query: string) => {
@@ -108,12 +109,19 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   }
 
   const handleCreate = async () => {
+    // Ref-based guard: synchronous, prevents duplicate submissions even when
+    // React batches the setState(creating) update across rapid clicks.
+    if (submittingRef.current) return
+    submittingRef.current = true
+
     if (!groupName.trim()) {
       showToast(t('groupNamePlaceholder'), 'warning')
+      submittingRef.current = false
       return
     }
     if (selectedMembers.length < 1) {
       showToast(t('minGroupMembers'), 'warning')
+      submittingRef.current = false
       return
     }
 
@@ -140,6 +148,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
       showToast(t('createGroupFailed'), 'error')
     } finally {
       setCreating(false)
+      submittingRef.current = false
     }
   }
 
