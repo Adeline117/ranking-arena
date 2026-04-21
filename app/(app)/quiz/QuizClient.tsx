@@ -184,13 +184,13 @@ export default function QuizClient() {
         style={{
           maxWidth: 560,
           width: '100%',
-          background: 'var(--glass-bg-secondary)',
-          border: '1px solid var(--color-accent-primary-15)',
+          background: 'var(--color-bg-secondary)',
+          border: '1px solid var(--color-accent-primary-20)',
           borderRadius: 24,
           padding: 'clamp(24px, 5vw, 40px) clamp(20px, 4vw, 32px)',
           position: 'relative',
           zIndex: 1,
-          boxShadow: '0 25px 50px -12px var(--color-overlay-dark), 0 0 80px var(--color-notification-unread)',
+          boxShadow: '0 25px 50px -12px var(--color-overlay-dark), 0 0 80px var(--color-notification-unread), inset 0 1px 0 var(--color-accent-primary-08)',
         }}
       >
         {/* Progress bar (visible during questions) */}

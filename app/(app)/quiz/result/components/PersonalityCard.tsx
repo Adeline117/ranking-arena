@@ -16,7 +16,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
     <div
       style={{
         borderRadius: 20,
-        background: 'var(--glass-bg-secondary)',
+        background: 'var(--color-bg-secondary)',
         border: `2px solid ${type.color}40`,
         padding: 'clamp(24px, 5vw, 32px)',
         display: 'flex',
@@ -104,7 +104,8 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
       <p
         style={{
           fontSize: tokens.typography.fontSize.base,
-          color: 'var(--color-text-secondary)',
+          color: 'var(--color-text-primary)',
+          opacity: 0.8,
           lineHeight: 1.6,
           textAlign: 'center',
           margin: 0,
@@ -118,10 +119,11 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
         style={{
           padding: '6px 14px',
           borderRadius: 8,
-          background: 'var(--color-overlay-subtle)',
-          border: '1px solid var(--glass-border-light)',
+          background: 'var(--color-accent-primary-08)',
+          border: '1px solid var(--color-accent-primary-20)',
           fontSize: tokens.typography.fontSize.sm,
-          color: 'var(--color-text-secondary)',
+          fontWeight: tokens.typography.fontWeight.medium,
+          color: 'var(--color-text-primary)',
         }}
       >
         {tr('quizShadowType')}: {secondaryTypeLabel}

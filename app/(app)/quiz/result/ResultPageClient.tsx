@@ -64,7 +64,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         <StyleAnalysis type={pType} tr={t} />
 
         {/* Type Compatibility */}
-        <div style={{ borderRadius: 16, background: 'var(--glass-bg-secondary)', border: '1px solid var(--glass-border-light)', padding: 'clamp(20px, 4vw, 28px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ borderRadius: 16, background: 'var(--color-bg-secondary)', border: '1px solid var(--color-accent-primary-15)', padding: 'clamp(20px, 4vw, 28px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 4, height: 24, borderRadius: 2, background: pType.gradient }} />
             <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>
@@ -106,8 +106,8 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         <div
           style={{
             borderRadius: 16,
-            background: 'var(--glass-bg-secondary)',
-            border: '1px solid var(--glass-border-light)',
+            background: 'var(--color-bg-secondary)',
+            border: '1px solid var(--color-accent-primary-15)',
             padding: 'clamp(20px, 4vw, 28px)',
             display: 'flex',
             flexDirection: 'column',
@@ -136,9 +136,9 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               minWidth: 140,
               padding: '12px 20px',
               borderRadius: 12,
-              border: '1px solid var(--glass-border-light)',
+              border: '1px solid var(--color-accent-primary-15)',
               background: 'transparent',
-              color: 'var(--color-text-secondary)',
+              color: 'var(--color-text-primary)',
               fontSize: tokens.typography.fontSize.base,
               fontWeight: tokens.typography.fontWeight.medium,
               textAlign: 'center',
