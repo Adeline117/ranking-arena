@@ -333,7 +333,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       const response = await fetch('/api/upload-profile-image', {
         method: 'POST',
         body: formData,
-        headers: session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {},
+        headers: { ...(session?.access_token ? { 'Authorization': `Bearer ${session.access_token}` } : {}), ...getCsrfHeaders() },
       })
       const result = await response.json()
       if (!response.ok) { uiLogger.error(`${bucket} upload error:`, result.error); showToast(result.error || t('uploadFailed'), 'error'); return null }
@@ -415,7 +415,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       try {
         const { data: { session } } = await supabase.auth.getSession()
         if (session?.access_token) {
-          await fetch('/api/revalidate/profile', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}` } })
+          await fetch('/api/revalidate/profile', { method: 'POST', headers: { Authorization: `Bearer ${session.access_token}`, ...getCsrfHeaders() } })
         }
       } catch (revalidateError) {
         logger.warn('[Settings] Failed to revalidate profile cache:', revalidateError)
@@ -519,7 +519,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     try {
       const token = await getFreshToken()
       if (!token) { showToast(t('pleaseLoginFirst'), 'error'); return }
-      const res = await fetch('/api/settings/2fa/setup', { method: 'POST', headers: { Authorization: `Bearer ${token}` } })
+      const res = await fetch('/api/settings/2fa/setup', { method: 'POST', headers: { Authorization: `Bearer ${token}`, ...getCsrfHeaders() } })
       const data = await res.json()
       if (!res.ok) { showToast(data.error || t('operationFailed'), 'error'); return }
       setTwoFASetupData({ qrCodeDataUrl: data.qrCode, secret: data.secret })
@@ -535,7 +535,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       const token = await getFreshToken()
       if (!token) { showToast(t('pleaseLoginFirst'), 'error'); return }
       const res = await fetch('/api/settings/2fa/verify', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...getCsrfHeaders() },
         body: JSON.stringify({ code: twoFACode }),
       })
       const data = await res.json()
@@ -554,7 +554,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       const token = await getFreshToken()
       if (!token) { showToast(t('pleaseLoginFirst'), 'error'); return }
       const res = await fetch('/api/settings/2fa/disable', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...getCsrfHeaders() },
         body: JSON.stringify({ password: disablePassword }),
       })
       const data = await res.json()
@@ -635,7 +635,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
-      const res = await fetch(`/api/users/${blockedId}/block`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}` } })
+      const res = await fetch(`/api/users/${blockedId}/block`, { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}`, ...getCsrfHeaders() } })
       if (res.ok) { setBlockedUsers(prev => prev.filter(u => u.blockedId !== blockedId)); showToast(t('unblocked'), 'success') }
       else showToast(t('operationFailed'), 'error')
     } catch { showToast(t('networkError'), 'error') }
