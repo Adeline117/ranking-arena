@@ -3,6 +3,18 @@
 import { tokens } from '@/lib/design-tokens'
 import type { PersonalityType } from '../../components/types'
 
+/** Forced dark-theme palette */
+const Q = {
+  BG_CARD: '#161625',
+  BORDER: 'rgba(255,255,255,0.08)',
+  TEXT_PRIMARY: '#FFFFFF',
+  TEXT_SECONDARY: 'rgba(255,255,255,0.7)',
+  TEXT_TERTIARY: 'rgba(255,255,255,0.45)',
+  INACTIVE_DOT: 'rgba(255,255,255,0.12)',
+  SUCCESS: '#2FE57D',
+  ERROR: '#FF5555',
+} as const
+
 interface StyleAnalysisProps {
   type: PersonalityType
   tr: (key: string) => string
@@ -19,8 +31,8 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--color-bg-secondary)',
-        border: '1px solid var(--color-accent-primary-15)',
+        background: Q.BG_CARD,
+        border: `1px solid ${Q.BORDER}`,
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
         flexDirection: 'column',
@@ -41,7 +53,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
           style={{
             fontSize: tokens.typography.fontSize.lg,
             fontWeight: tokens.typography.fontWeight.bold,
-            color: 'var(--color-text-primary)',
+            color: Q.TEXT_PRIMARY,
             margin: 0,
           }}
         >
@@ -77,8 +89,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.xs,
               fontWeight: tokens.typography.fontWeight.semibold,
-              color: 'var(--color-text-primary)',
-              opacity: 0.55,
+              color: Q.TEXT_TERTIARY,
               letterSpacing: '1px',
               textTransform: 'uppercase',
             }}
@@ -93,7 +104,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
                   width: 10,
                   height: 10,
                   borderRadius: '50%',
-                  background: level <= type.riskLevel ? type.color : 'var(--color-overlay-medium)',
+                  background: level <= type.riskLevel ? type.color : Q.INACTIVE_DOT,
                   transition: 'background 0.3s',
                 }}
               />
@@ -105,8 +116,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.xs,
               fontWeight: tokens.typography.fontWeight.semibold,
-              color: 'var(--color-text-primary)',
-              opacity: 0.55,
+              color: Q.TEXT_TERTIARY,
               letterSpacing: '1px',
               textTransform: 'uppercase',
             }}
@@ -117,7 +127,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.medium,
-              color: 'var(--color-text-primary)',
+              color: Q.TEXT_PRIMARY,
             }}
           >
             {tr(timeLabels[type.timeHorizon])}
@@ -133,19 +143,18 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.bold,
-              color: 'var(--color-accent-success)',
+              color: Q.SUCCESS,
             }}
           >
             {tr('quizStrengths')}
           </span>
           {type.strengthKeys.map((key) => (
             <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <span style={{ color: 'var(--color-accent-success)', flexShrink: 0, marginTop: 2 }}>+</span>
+              <span style={{ color: Q.SUCCESS, flexShrink: 0, marginTop: 2 }}>+</span>
               <span
                 style={{
                   fontSize: tokens.typography.fontSize.sm,
-                  color: 'var(--color-text-primary)',
-                  opacity: 0.75,
+                  color: Q.TEXT_SECONDARY,
                   lineHeight: 1.5,
                 }}
               >
@@ -161,19 +170,18 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.bold,
-              color: 'var(--color-accent-error)',
+              color: Q.ERROR,
             }}
           >
             {tr('quizWeaknesses')}
           </span>
           {type.weaknessKeys.map((key) => (
             <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <span style={{ color: 'var(--color-accent-error)', flexShrink: 0, marginTop: 2 }}>-</span>
+              <span style={{ color: Q.ERROR, flexShrink: 0, marginTop: 2 }}>-</span>
               <span
                 style={{
                   fontSize: tokens.typography.fontSize.sm,
-                  color: 'var(--color-text-primary)',
-                  opacity: 0.75,
+                  color: Q.TEXT_SECONDARY,
                   lineHeight: 1.5,
                 }}
               >

@@ -2,6 +2,14 @@
 
 import { tokens } from '@/lib/design-tokens'
 
+/** Forced dark-theme palette */
+const Q = {
+  TRACK: 'rgba(255,255,255,0.08)',
+  TEXT: 'rgba(255,255,255,0.5)',
+  BRAND: '#8B5CF6',
+  BRAND_DEEP: '#6D28D9',
+} as const
+
 interface ProgressBarProps {
   current: number // 1-15
   total: number // 15
@@ -23,7 +31,7 @@ export default function ProgressBar({ current, total }: ProgressBarProps) {
           style={{
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.semibold,
-            color: 'var(--color-text-secondary)',
+            color: Q.TEXT,
             letterSpacing: '0.5px',
           }}
         >
@@ -35,7 +43,7 @@ export default function ProgressBar({ current, total }: ProgressBarProps) {
           width: '100%',
           height: 4,
           borderRadius: 2,
-          background: 'var(--color-overlay-subtle)',
+          background: Q.TRACK,
           overflow: 'hidden',
         }}
       >
@@ -44,7 +52,7 @@ export default function ProgressBar({ current, total }: ProgressBarProps) {
             width: `${percent}%`,
             height: '100%',
             borderRadius: 2,
-            background: 'linear-gradient(90deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+            background: `linear-gradient(90deg, ${Q.BRAND} 0%, ${Q.BRAND_DEEP} 100%)`,
             transition: 'width 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
           }}
         />

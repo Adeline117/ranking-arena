@@ -4,6 +4,22 @@ import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import type { QuizQuestion } from './types'
 
+/** Forced dark-theme palette */
+const Q = {
+  TEXT_PRIMARY: '#FFFFFF',
+  TEXT_SECONDARY: 'rgba(255,255,255,0.5)',
+  BG_OPTION: 'rgba(255,255,255,0.04)',
+  BORDER: 'rgba(255,255,255,0.08)',
+  BORDER_HOVER: 'rgba(255,255,255,0.15)',
+  HOVER_BG: 'rgba(255,255,255,0.06)',
+  SELECTED_BG: 'rgba(139, 92, 246, 0.15)',
+  SELECTED_BORDER: 'rgba(139, 92, 246, 0.6)',
+  BRAND: '#8B5CF6',
+  BRAND_DEEP: '#6D28D9',
+  LETTER_BG: 'rgba(255,255,255,0.06)',
+  LETTER_COLOR: 'rgba(255,255,255,0.5)',
+} as const
+
 interface QuestionStepProps {
   question: QuizQuestion
   selectedOption: string | undefined
@@ -37,7 +53,7 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
         style={{
           fontSize: 'clamp(18px, 4vw, 22px)',
           fontWeight: tokens.typography.fontWeight.bold,
-          color: 'var(--color-text-primary)',
+          color: Q.TEXT_PRIMARY,
           lineHeight: 1.4,
           margin: 0,
         }}
@@ -58,12 +74,12 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
                 padding: '14px 18px',
                 borderRadius: 12,
                 border: isSelected
-                  ? '2px solid var(--color-brand)'
-                  : '2px solid var(--color-accent-primary-15)',
+                  ? `2px solid ${Q.SELECTED_BORDER}`
+                  : `2px solid ${Q.BORDER}`,
                 background: isSelected
-                  ? 'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)'
-                  : 'var(--color-bg-tertiary)',
-                color: 'var(--color-text-primary)',
+                  ? Q.SELECTED_BG
+                  : Q.BG_OPTION,
+                color: Q.TEXT_PRIMARY,
                 fontSize: tokens.typography.fontSize.base,
                 fontWeight: isSelected ? tokens.typography.fontWeight.semibold : tokens.typography.fontWeight.medium,
                 textAlign: 'left',
@@ -82,15 +98,15 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
               }}
               onMouseEnter={(e) => {
                 if (!isSelected) {
-                  e.currentTarget.style.borderColor = 'var(--color-accent-primary-40)'
-                  e.currentTarget.style.background = 'var(--color-overlay-medium)'
+                  e.currentTarget.style.borderColor = Q.BORDER_HOVER
+                  e.currentTarget.style.background = Q.HOVER_BG
                 }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'scale(1)'
                 if (!isSelected) {
-                  e.currentTarget.style.borderColor = 'var(--color-accent-primary-15)'
-                  e.currentTarget.style.background = 'var(--color-bg-tertiary)'
+                  e.currentTarget.style.borderColor = Q.BORDER
+                  e.currentTarget.style.background = Q.BG_OPTION
                 }
               }}
             >
@@ -100,14 +116,14 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
                   height: 28,
                   borderRadius: 8,
                   background: isSelected
-                    ? 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)'
-                    : 'var(--color-accent-primary-10)',
+                    ? `linear-gradient(135deg, ${Q.BRAND} 0%, ${Q.BRAND_DEEP} 100%)`
+                    : Q.LETTER_BG,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontSize: tokens.typography.fontSize.sm,
                   fontWeight: tokens.typography.fontWeight.bold,
-                  color: isSelected ? '#fff' : 'var(--color-text-secondary)',
+                  color: isSelected ? '#fff' : Q.LETTER_COLOR,
                   flexShrink: 0,
                 }}
               >
@@ -129,7 +145,7 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
           borderRadius: 8,
           border: 'none',
           background: 'transparent',
-          color: 'var(--color-text-secondary)',
+          color: Q.TEXT_SECONDARY,
           fontSize: tokens.typography.fontSize.sm,
           cursor: 'pointer',
           display: 'flex',
@@ -137,8 +153,8 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
           gap: 6,
           transition: 'color 0.2s',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text-primary)' }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-secondary)' }}
+        onMouseEnter={(e) => { e.currentTarget.style.color = Q.TEXT_PRIMARY }}
+        onMouseLeave={(e) => { e.currentTarget.style.color = Q.TEXT_SECONDARY }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <polyline points="15 18 9 12 15 6" />

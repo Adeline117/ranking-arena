@@ -4,6 +4,20 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import type { PersonalityType, RecommendedTrader } from '../../components/types'
 
+/** Forced dark-theme palette */
+const Q = {
+  BG_CARD: '#161625',
+  BG_TRADER: 'rgba(255,255,255,0.04)',
+  BORDER: 'rgba(255,255,255,0.08)',
+  HOVER_BG: 'rgba(255,255,255,0.06)',
+  TEXT_PRIMARY: '#FFFFFF',
+  TEXT_SECONDARY: 'rgba(255,255,255,0.5)',
+  BULL: '#2FE57D',
+  BEAR: '#FF5555',
+  GOLD: '#D4AF37',
+  ARROW: 'rgba(255,255,255,0.4)',
+} as const
+
 interface RecommendedTradersProps {
   type: PersonalityType
   traders: RecommendedTrader[]
@@ -17,8 +31,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--color-bg-secondary)',
-        border: '1px solid var(--color-accent-primary-15)',
+        background: Q.BG_CARD,
+        border: `1px solid ${Q.BORDER}`,
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
         flexDirection: 'column',
@@ -39,7 +53,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
           style={{
             fontSize: tokens.typography.fontSize.lg,
             fontWeight: tokens.typography.fontWeight.bold,
-            color: 'var(--color-text-primary)',
+            color: Q.TEXT_PRIMARY,
             margin: 0,
           }}
         >
@@ -56,8 +70,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
             style={{
               padding: '12px 16px',
               borderRadius: 12,
-              background: 'var(--color-bg-tertiary)',
-              border: '1px solid var(--color-accent-primary-10)',
+              background: Q.BG_TRADER,
+              border: `1px solid ${Q.BORDER}`,
               display: 'flex',
               alignItems: 'center',
               gap: 12,
@@ -66,11 +80,11 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = `${type.color}40`
-              e.currentTarget.style.background = 'var(--color-overlay-medium)'
+              e.currentTarget.style.background = Q.HOVER_BG
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-accent-primary-10)'
-              e.currentTarget.style.background = 'var(--color-bg-tertiary)'
+              e.currentTarget.style.borderColor = Q.BORDER
+              e.currentTarget.style.background = Q.BG_TRADER
             }}
           >
             {/* Avatar */}
@@ -113,7 +127,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                 style={{
                   fontSize: tokens.typography.fontSize.base,
                   fontWeight: tokens.typography.fontWeight.semibold,
-                  color: 'var(--color-text-primary)',
+                  color: Q.TEXT_PRIMARY,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -124,8 +138,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               <div
                 style={{
                   fontSize: tokens.typography.fontSize.xs,
-                  color: 'var(--color-text-primary)',
-                  opacity: 0.5,
+                  color: Q.TEXT_SECONDARY,
                   textTransform: 'capitalize',
                 }}
               >
@@ -141,7 +154,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                     style={{
                       fontSize: tokens.typography.fontSize.sm,
                       fontWeight: tokens.typography.fontWeight.bold,
-                      color: trader.roi_90d >= 0 ? 'var(--color-sentiment-bull)' : 'var(--color-sentiment-bear)',
+                      color: trader.roi_90d >= 0 ? Q.BULL : Q.BEAR,
                     }}
                   >
                     {trader.roi_90d >= 0 ? '+' : ''}
@@ -150,8 +163,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   <div
                     style={{
                       fontSize: tokens.typography.fontSize.xs,
-                      color: 'var(--color-text-primary)',
-                  opacity: 0.5,
+                      color: Q.TEXT_SECONDARY,
                     }}
                   >
                     ROI
@@ -164,7 +176,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                     style={{
                       fontSize: tokens.typography.fontSize.sm,
                       fontWeight: tokens.typography.fontWeight.bold,
-                      color: 'var(--color-accent-warning)',
+                      color: Q.GOLD,
                     }}
                   >
                     {Math.round(trader.arena_score)}
@@ -172,8 +184,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   <div
                     style={{
                       fontSize: tokens.typography.fontSize.xs,
-                      color: 'var(--color-text-primary)',
-                  opacity: 0.5,
+                      color: Q.TEXT_SECONDARY,
                     }}
                   >
                     Score
@@ -188,7 +199,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               height="16"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="var(--color-text-secondary)"
+              stroke={Q.ARROW}
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

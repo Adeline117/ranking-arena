@@ -4,6 +4,16 @@ import { tokens } from '@/lib/design-tokens'
 import type { PersonalityType } from '../../components/types'
 import { QuizIcon } from './QuizIcon'
 
+/** Forced dark-theme palette */
+const Q = {
+  BG_CARD: '#161625',
+  TEXT_PRIMARY: '#FFFFFF',
+  TEXT_SECONDARY: 'rgba(255,255,255,0.7)',
+  TRACK: 'rgba(255,255,255,0.08)',
+  BADGE_BG: 'rgba(139, 92, 246, 0.12)',
+  BADGE_BORDER: 'rgba(139, 92, 246, 0.25)',
+} as const
+
 interface PersonalityCardProps {
   type: PersonalityType
   matchPercent: number
@@ -16,7 +26,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
     <div
       style={{
         borderRadius: 20,
-        background: 'var(--color-bg-secondary)',
+        background: Q.BG_CARD,
         border: `2px solid ${type.color}40`,
         padding: 'clamp(24px, 5vw, 32px)',
         display: 'flex',
@@ -75,7 +85,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
             width: '100%',
             height: 8,
             borderRadius: 4,
-            background: 'var(--color-overlay-subtle)',
+            background: Q.TRACK,
             overflow: 'hidden',
           }}
         >
@@ -104,8 +114,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
       <p
         style={{
           fontSize: tokens.typography.fontSize.base,
-          color: 'var(--color-text-primary)',
-          opacity: 0.8,
+          color: Q.TEXT_SECONDARY,
           lineHeight: 1.6,
           textAlign: 'center',
           margin: 0,
@@ -119,11 +128,11 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
         style={{
           padding: '6px 14px',
           borderRadius: 8,
-          background: 'var(--color-accent-primary-08)',
-          border: '1px solid var(--color-accent-primary-20)',
+          background: Q.BADGE_BG,
+          border: `1px solid ${Q.BADGE_BORDER}`,
           fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.medium,
-          color: 'var(--color-text-primary)',
+          color: Q.TEXT_PRIMARY,
         }}
       >
         {tr('quizShadowType')}: {secondaryTypeLabel}
