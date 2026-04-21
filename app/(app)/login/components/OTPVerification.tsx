@@ -52,9 +52,10 @@ export default function OTPVerification({
           }}
           placeholder="000000"
           inputMode="numeric"
+          pattern="[0-9]*"
           autoComplete="one-time-code"
           value={code}
-          onChange={(e) => setCode(e.target.value)}
+          onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !loading && code) {
               onVerify()
