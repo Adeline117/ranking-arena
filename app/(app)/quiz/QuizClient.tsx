@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { setLanguage } from '@/lib/i18n'
+import { onTranslationsReady } from '@/lib/i18n'
 import { QUIZ_QUESTIONS } from './components/quiz-data'
 import { calculateResult } from './components/scoring'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -13,29 +15,26 @@ import QuestionStep from './components/QuestionStep'
 import ProgressBar from './components/ProgressBar'
 import CalculatingStep from './components/CalculatingStep'
 
-/** Forced dark-theme palette — explicit colors, never CSS vars */
-const Q = {
-  BG_PAGE: '#0C0C14',
-  BG_CARD: '#161625',
-  BORDER: 'rgba(139, 92, 246, 0.15)',
-  BRAND: '#8B5CF6',
-  BRAND_DEEP: '#6D28D9',
-} as const
-
 const TOTAL_QUESTIONS = QUIZ_QUESTIONS.length // 15
 
 export default function QuizClient() {
   const router = useRouter()
-  const { t } = useLanguage()
+  const { language, t } = useLanguage()
   const { currentQuestion, answers, setAnswer, goToQuestion, setResult, reset } = useQuizStore()
   const [mounted, setMounted] = useState(false)
+  const [txnReady, setTxnReady] = useState(false)
   const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     setMounted(true)
     // Reset quiz state when mounting fresh
     reset()
+    // Wait for translations to be loaded
+    const unsub = onTranslationsReady(() => setTxnReady(true))
+    // Check if already loaded
+    if (t('quizTitle') !== 'quizTitle') setTxnReady(true)
     return () => {
+      unsub()
       if (autoAdvanceTimer.current) {
         clearTimeout(autoAdvanceTimer.current)
       }
@@ -137,26 +136,24 @@ export default function QuizClient() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [currentQuestion, handleStart, handleBack, handleSelectOption])
 
-  if (!mounted) {
+  // Show loading until both mounted AND translations ready
+  if (!mounted || !txnReady) {
     return (
       <Box
-        data-theme="dark"
         style={{
-          position: 'fixed',
-          inset: 0,
-          zIndex: 50,
-          background: Q.BG_PAGE,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          minHeight: '80vh',
+          padding: 20,
         }}
       >
         <div
           style={{
             width: 40,
             height: 40,
-            border: `3px solid ${Q.BRAND}33`,
-            borderTopColor: Q.BRAND,
+            border: '3px solid var(--color-accent-primary-08)',
+            borderTopColor: 'var(--color-brand)',
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',
           }}
@@ -165,55 +162,66 @@ export default function QuizClient() {
     )
   }
 
+  const handleToggleLanguage = () => {
+    const newLang = language === 'en' ? 'zh' : 'en'
+    setLanguage(newLang)
+  }
+
   const isQuestion = currentQuestion >= 1 && currentQuestion <= TOTAL_QUESTIONS
   const isCalculating = currentQuestion === TOTAL_QUESTIONS + 1
+
   const currentQ = isQuestion ? QUIZ_QUESTIONS[currentQuestion - 1] : null
 
   return (
     <Box
-      data-theme="dark"
       style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 50,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
+        minHeight: '80vh',
         padding: 20,
-        overflow: 'auto',
-        background: Q.BG_PAGE,
-        color: '#FFFFFF',
       }}
     >
-      <div
-        style={{
-          position: 'fixed',
-          top: '30%',
-          left: '50%',
-          transform: 'translate(-50%, -50%)',
-          width: 600,
-          height: 600,
-          borderRadius: '50%',
-          background: `radial-gradient(circle, ${Q.BRAND}12 0%, transparent 70%)`,
-          zIndex: -1,
-          pointerEvents: 'none',
-        }}
-      />
-
       {/* Card */}
       <Box
         style={{
-          maxWidth: 560,
+          maxWidth: 520,
           width: '100%',
-          background: Q.BG_CARD,
-          border: `1px solid ${Q.BORDER}`,
-          borderRadius: 24,
-          padding: 'clamp(24px, 5vw, 40px) clamp(20px, 4vw, 32px)',
+          background: 'var(--color-bg-secondary)',
+          border: '1px solid var(--glass-border-light)',
+          borderRadius: 12,
+          padding: 'clamp(20px, 4vw, 32px)',
           position: 'relative',
-          zIndex: 1,
-          boxShadow: `0 25px 50px -12px rgba(0,0,0,0.5), 0 0 80px ${Q.BRAND}08, inset 0 1px 0 rgba(255,255,255,0.04)`,
         }}
       >
+        {/* Language toggle — top-right of card */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            zIndex: 1,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleToggleLanguage}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 6,
+              border: '1px solid var(--glass-border-light)',
+              background: 'transparent',
+              color: 'var(--color-text-tertiary)',
+              fontSize: 12,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+            aria-label="Toggle language"
+          >
+            {language === 'en' ? '\u4E2D\u6587' : 'EN'}
+          </button>
+        </div>
+
         {/* Progress bar (visible during questions) */}
         {isQuestion && (
           <div style={{ marginBottom: 24 }}>
