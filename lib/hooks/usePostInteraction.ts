@@ -67,7 +67,7 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
 
       const response = await fetch(
         `/api/posts/${pid}/comments?limit=${pageSize}&offset=0`,
-        { headers }
+        { headers, signal: AbortSignal.timeout(15000) }
       )
       const data = await response.json()
 
@@ -104,7 +104,7 @@ export function usePostComments({ postId, pageSize = 10 }: UsePostCommentsOption
 
       const response = await fetch(
         `/api/posts/${postId}/comments?limit=${pageSize}&offset=${offsetRef.current}`,
-        { headers }
+        { headers, signal: AbortSignal.timeout(15000) }
       )
       const data = await response.json()
 
