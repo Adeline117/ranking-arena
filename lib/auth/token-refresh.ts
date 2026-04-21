@@ -65,6 +65,11 @@ function clearAuthState() {
       authChecked: true,
     })
   }
+  // Notify UI layer that auth was lost due to token refresh failure.
+  // React hooks (useAuthSession) listen for this event and show a toast.
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('arena:auth-lost', { detail: { reason: 'token_refresh_failed' } }))
+  }
 }
 
 function updateAuthState(session: import('@supabase/supabase-js').Session) {

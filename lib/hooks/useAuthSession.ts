@@ -99,6 +99,25 @@ function initializeAuth() {
   // so it can update auth state when tokens are refreshed or sessions expire.
   registerAuthStateSetter((state) => setGlobalAuthState(state))
 
+  // Listen for auth-lost events (fired by token-refresh.ts on unrecoverable refresh failure)
+  // and show a toast notification so the user knows they need to log in again.
+  if (typeof window !== 'undefined') {
+    window.addEventListener('arena:auth-lost', () => {
+      // Lazy-import to avoid circular dependency
+      Promise.all([
+        import('@/lib/hooks/useApiMutation'),
+        import('@/lib/i18n'),
+      ]).then(([{ getGlobalToast }, { t }]) => {
+        const toast = getGlobalToast()
+        if (toast) {
+          toast(t('sessionExpired'), 'warning')
+        }
+      }).catch(() => {
+        logger.warn('[useAuthSession] Could not show auth-lost toast')
+      })
+    })
+  }
+
   // Lazy-load Supabase then initialize auth
   getSupabase().then((sb) => {
     // Get initial session
