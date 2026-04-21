@@ -39,7 +39,7 @@ interface PricingPageClientProps {
 
 export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClientProps) {
   const { email } = useAuthSession()
-  const { t, language: locale } = useLanguage()
+  const { t } = useLanguage()
   const [billing, setBillingRaw] = useState<'monthly' | 'yearly'>(() => {
     // Persist billing selection across React re-mounts caused by Suspense/streaming
     if (typeof window !== 'undefined') {
@@ -111,9 +111,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             color: 'var(--color-accent-success, #16c784)',
             letterSpacing: '-0.01em',
           }}>
-            {locale === 'zh'
-              ? '限时优惠：所有 Pro 功能目前免费开放！'
-              : 'Limited Time: All Pro features are currently free!'}
+            {resolved(t('pricingLimitedTimeBanner'), 'pricingLimitedTimeBanner', 'Limited Time: All Pro features are currently free!')}
           </span>
         </div>
 
@@ -126,9 +124,9 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           marginBottom: tokens.spacing[10],
         }}>
           {[
-            { value: '34,000+', label: locale === 'zh' ? '\u4EA4\u6613\u5458\u5DF2\u6392\u540D' : 'Traders Ranked' },
-            { value: '27+', label: locale === 'zh' ? '\u4EA4\u6613\u6240\u8986\u76D6' : 'Exchanges Tracked' },
-            { value: '30min', label: locale === 'zh' ? '\u6570\u636E\u66F4\u65B0\u9891\u7387' : 'Update Frequency' },
+            { value: '34,000+', label: resolved(t('pricingStatTradersRanked'), 'pricingStatTradersRanked', 'Traders Ranked') },
+            { value: '27+', label: resolved(t('pricingStatExchangesTracked'), 'pricingStatExchangesTracked', 'Exchanges Tracked') },
+            { value: '30min', label: resolved(t('pricingStatUpdateFrequency'), 'pricingStatUpdateFrequency', 'Update Frequency') },
           ].map((stat) => (
             <div key={stat.label} style={{ textAlign: 'center', minWidth: 120 }}>
               <div style={{
@@ -324,9 +322,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               textAlign: 'center' as const,
               fontWeight: 600,
             }}>
-              {locale === 'zh'
-                ? '所有功能限时免费'
-                : 'All features are free for a limited time'}
+              {resolved(t('pricingAllFeaturesFree'), 'pricingAllFeaturesFree', 'All features are free for a limited time')}
             </div>
           </div>
         </div>
@@ -357,18 +353,16 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               textTransform: 'uppercase',
               whiteSpace: 'nowrap',
             }}>
-              {locale === 'zh' ? '创始会员 · 仅限前200名' : 'FOUNDING MEMBER · FIRST 200 ONLY'}
+              {resolved(t('pricingFoundingMemberBadge'), 'pricingFoundingMemberBadge', 'FOUNDING MEMBER \u00b7 FIRST 200 ONLY')}
             </div>
 
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 24 }}>
               <div style={{ flex: 1 }}>
                 <h3 style={{ fontSize: 20, fontWeight: 700, marginBottom: 6, color: 'var(--color-founding-accent)' }}>
-                  {locale === 'zh' ? '终身会员' : 'Lifetime Pro'}
+                  {resolved(t('pricingLifetimePro'), 'pricingLifetimePro', 'Lifetime Pro')}
                 </h3>
                 <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginBottom: 0, lineHeight: 1.6 }}>
-                  {locale === 'zh'
-                    ? '一次付款，永久享有所有 Pro 功能。价格以后不会再有，早期用户专属。'
-                    : 'One-time payment. All Pro features, forever. This price will never be available again.'}
+                  {resolved(t('pricingLifetimeDesc'), 'pricingLifetimeDesc', 'One-time payment. All Pro features, forever. This price will never be available again.')}
                 </p>
               </div>
               <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -376,7 +370,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                   ${PRICING.lifetime.price}
                 </p>
                 <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginTop: 2 }}>
-                  {locale === 'zh' ? '一次性 · 永久有效' : 'one-time · forever'}
+                  {resolved(t('pricingLifetimeOneTime'), 'pricingLifetimeOneTime', 'one-time \u00b7 forever')}
                 </p>
               </div>
             </div>
@@ -433,14 +427,14 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 boxShadow: '0 4px 14px var(--color-founding-accent-shadow)',
               }}
             >
-              {locale === 'zh' ? '立即成为创始会员' : 'Get Founding Member Access'}
+              {resolved(t('pricingGetFoundingAccess'), 'pricingGetFoundingAccess', 'Get Founding Member Access')}
             </Link>
           </div>
         </div>
         {/* Feature Comparison Table */}
         <div style={{ maxWidth: 720, margin: `${tokens.spacing[10]} auto 0`, textAlign: 'left' }}>
           <h2 style={{ fontSize: 24, fontWeight: 800, marginBottom: tokens.spacing[6], textAlign: 'center' }}>
-            {locale === 'zh' ? '功能对比' : 'Feature Comparison'}
+            {resolved(t('pricingFeatureComparison'), 'pricingFeatureComparison', 'Feature Comparison')}
           </h2>
           <div style={{
             borderRadius: tokens.radius.lg,
@@ -459,24 +453,24 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               fontSize: 13,
               color: tokens.colors.text.secondary,
             }}>
-              <span>{locale === 'zh' ? '功能' : 'Feature'}</span>
+              <span>{resolved(t('pricingFeatureHeader'), 'pricingFeatureHeader', 'Feature')}</span>
               <span style={{ textAlign: 'center' }}>Free</span>
               <span style={{ textAlign: 'center', color: tokens.colors.accent.brand }}>Pro</span>
             </div>
             {/* Rows */}
             {[
-              { feature: locale === 'zh' ? '交易员排行榜' : 'Trader Rankings', free: 'Top 100', pro: true },
-              { feature: locale === 'zh' ? '高级筛选' : 'Advanced Filters', free: false, pro: true },
-              { feature: locale === 'zh' ? 'Arena Score 详情' : 'Score Breakdown', free: false, pro: true },
-              { feature: locale === 'zh' ? '交易员对比' : 'Trader Comparison', free: false, pro: true },
-              { feature: locale === 'zh' ? '分类排行' : 'Category Rankings', free: false, pro: true },
-              { feature: locale === 'zh' ? 'CSV 导出' : 'CSV Export', free: false, pro: true },
-              { feature: locale === 'zh' ? '交易提醒' : 'Trader Alerts', free: false, pro: true },
-              { feature: locale === 'zh' ? 'API 访问' : 'API Access', free: false, pro: true },
-              { feature: locale === 'zh' ? '社区帖子' : 'Community Posts', free: true, pro: true },
-              { feature: locale === 'zh' ? '资源库' : 'Library Access', free: true, pro: true },
-              { feature: locale === 'zh' ? '公共群组' : 'Public Groups', free: true, pro: true },
-              { feature: locale === 'zh' ? '市场概览' : 'Market Overview', free: true, pro: true },
+              { feature: resolved(t('pricingCompareTraderRankings'), 'pricingCompareTraderRankings', 'Trader Rankings'), free: 'Top 100', pro: true },
+              { feature: resolved(t('pricingCompareAdvancedFilters'), 'pricingCompareAdvancedFilters', 'Advanced Filters'), free: false, pro: true },
+              { feature: resolved(t('pricingCompareScoreBreakdown'), 'pricingCompareScoreBreakdown', 'Score Breakdown'), free: false, pro: true },
+              { feature: resolved(t('pricingCompareTraderComparison'), 'pricingCompareTraderComparison', 'Trader Comparison'), free: false, pro: true },
+              { feature: resolved(t('pricingCompareCategoryRankings'), 'pricingCompareCategoryRankings', 'Category Rankings'), free: false, pro: true },
+              { feature: resolved(t('pricingCompareCsvExport'), 'pricingCompareCsvExport', 'CSV Export'), free: false, pro: true },
+              { feature: resolved(t('pricingCompareTraderAlerts'), 'pricingCompareTraderAlerts', 'Trader Alerts'), free: false, pro: true },
+              { feature: resolved(t('pricingCompareApiAccess'), 'pricingCompareApiAccess', 'API Access'), free: false, pro: true },
+              { feature: resolved(t('pricingCompareCommunityPosts'), 'pricingCompareCommunityPosts', 'Community Posts'), free: true, pro: true },
+              { feature: resolved(t('pricingCompareLibrary'), 'pricingCompareLibrary', 'Library Access'), free: true, pro: true },
+              { feature: resolved(t('pricingComparePublicGroups'), 'pricingComparePublicGroups', 'Public Groups'), free: true, pro: true },
+              { feature: resolved(t('pricingCompareMarketOverview'), 'pricingCompareMarketOverview', 'Market Overview'), free: true, pro: true },
             ].map((row, i) => (
               <div key={i} style={{
                 display: 'grid',
@@ -546,16 +540,16 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           </h2>
           {[
             {
-              q: locale === 'zh' ? '可以随时取消吗？' : 'Can I cancel anytime?',
-              a: locale === 'zh' ? '当然！月付用户可以随时取消，当期剩余时间仍然有效。' : 'Yes! Monthly subscribers can cancel anytime. You keep access until the end of your billing period.',
+              q: resolved(t('pricingFaqCancelQ'), 'pricingFaqCancelQ', 'Can I cancel anytime?'),
+              a: resolved(t('pricingFaqCancelA'), 'pricingFaqCancelA', 'Yes! Monthly subscribers can cancel anytime. You keep access until the end of your billing period.'),
             },
             {
-              q: locale === 'zh' ? '年付如何退款？' : 'What about refunds for yearly plans?',
-              a: locale === 'zh' ? '年付用户在首7天内可以全额退款。' : 'Yearly subscribers can get a full refund within the first 7 days.',
+              q: resolved(t('pricingFaqRefundQ'), 'pricingFaqRefundQ', 'What about refunds for yearly plans?'),
+              a: resolved(t('pricingFaqRefundA'), 'pricingFaqRefundA', 'Yearly subscribers can get a full refund within the first 7 days.'),
             },
             {
-              q: locale === 'zh' ? '终身会员是什么意思？' : 'What does Lifetime mean?',
-              a: locale === 'zh' ? '一次付款，永久享有所有 Pro 功能。即使未来涨价或增加新功能，都自动包含。' : 'Pay once, access all Pro features forever. Includes all future features and price increases.',
+              q: resolved(t('pricingFaqLifetimeQ'), 'pricingFaqLifetimeQ', 'What does Lifetime mean?'),
+              a: resolved(t('pricingFaqLifetimeA'), 'pricingFaqLifetimeA', 'Pay once, access all Pro features forever. Includes all future features and price increases.'),
             },
             {
               q: resolved(t('pricingFaqPaymentQ'), 'pricingFaqPaymentQ', 'What payment methods do you accept?'),
