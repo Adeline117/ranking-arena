@@ -235,7 +235,7 @@ export default function OnboardingPage() {
     isDark,
     cardBg: isDark ? 'var(--color-backdrop-heavy)' : 'var(--glass-bg-heavy)',
     cardBorder: isDark ? 'var(--color-accent-primary-15)' : 'var(--color-accent-primary-20)',
-    textPrimary: isDark ? 'var(--color-bg-tertiary)' : 'var(--color-text-primary)',
+    textPrimary: 'var(--color-text-primary)',
     textSecondary: 'var(--color-text-secondary)',
     optionBg: isDark ? 'var(--color-overlay-medium)' : 'var(--color-overlay-subtle)',
     optionBorder: isDark ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)',
