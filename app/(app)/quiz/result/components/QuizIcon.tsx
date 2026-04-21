@@ -20,6 +20,7 @@ export function QuizIcon({ name, color, size = 24 }: QuizIconProps) {
     strokeWidth: 2,
     strokeLinecap: 'round' as const,
     strokeLinejoin: 'round' as const,
+    'aria-hidden': true as const,
   }
 
   switch (name) {
