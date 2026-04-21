@@ -127,6 +127,9 @@ by-token/route
 # ── i18n (Japanese locale, community-maintained) ──
 lib/i18n/ja\.ts
 
+# ── Quiz feature (useLanguage hook not yet created) ──
+QuizClient\.tsx
+
 # ── Miscellaneous product surfaces ──
 FundingRatesClient
 WatchlistClient
