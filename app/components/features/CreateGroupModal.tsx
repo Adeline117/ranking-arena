@@ -269,6 +269,9 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                     fontSize: 14, outline: 'none',
                   }}
                 />
+                <Text size="xs" color="tertiary" style={{ marginTop: 4, textAlign: 'right' }}>
+                  {groupName.length}/50
+                </Text>
               </Box>
               <Box style={{ marginBottom: 16 }}>
                 <Text size="sm" weight="bold" style={{ marginBottom: 6 }}>{t('groupDescription')}</Text>
