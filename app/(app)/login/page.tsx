@@ -444,6 +444,7 @@ export default function LoginPage() {
               background: 'var(--color-bg-tertiary)', color: tokens.colors.text.primary, fontSize: 16, outline: 'none',
             }}
             placeholder="you@email.com"
+            maxLength={254}
             value={email}
             onChange={(e) => { setEmail(e.target.value); if (isRegister) resetForm() }}
             onBlur={() => markTouched('email')}
