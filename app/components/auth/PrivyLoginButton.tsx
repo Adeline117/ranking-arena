@@ -41,9 +41,9 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
         });
 
         if (result.isNew) {
-          router.push('/onboarding');
+          router.push('/?welcome=1');
         } else {
-          router.push(redirectUrl || (result.handle ? `/u/${result.handle}` : '/'));
+          router.push(redirectUrl || '/');
         }
       } catch (err) {
         logger.error('Privy sync error:', err);
