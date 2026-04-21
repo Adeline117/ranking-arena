@@ -51,8 +51,24 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const [openPost, setOpenPost] = useState<Post | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
-  const [newComment, setNewComment] = useState('')
+  const [newComment, setNewCommentRaw] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
+
+  // Comment draft persistence — keyed by opened post
+  const hotDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const openPostIdRef = useRef<string | null>(null)
+  const setNewComment = useCallback((value: string) => {
+    setNewCommentRaw(value)
+    if (hotDraftTimerRef.current) clearTimeout(hotDraftTimerRef.current)
+    const pid = openPostIdRef.current
+    if (!pid) return
+    hotDraftTimerRef.current = setTimeout(() => {
+      try {
+        if (value.trim()) localStorage.setItem(`comment-draft-${pid}`, value)
+        else localStorage.removeItem(`comment-draft-${pid}`)
+      } catch { /* quota exceeded */ }
+    }, 500)
+  }, [])
 
   // Comment pagination
   const COMMENTS_PER_PAGE = 10
@@ -457,6 +473,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Open post detail
   const handleOpenPost = useCallback((post: Post, fromUrlRestore = false) => {
     setOpenPost(post)
+    openPostIdRef.current = post.id
+    // Restore draft comment for this post
+    try {
+      const draft = localStorage.getItem(`comment-draft-${post.id}`)
+      if (draft) setNewCommentRaw(draft)
+      else setNewCommentRaw('')
+    } catch { setNewCommentRaw('') }
     setComments([])
     setCommentsOffset(0)
     setHasMoreComments(true)
@@ -581,7 +604,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
       const json = await response.json()
       if (json.success && json.data?.comment) {
-        setNewComment('')
+        setNewCommentRaw('')
+        try { localStorage.removeItem(`comment-draft-${postId}`) } catch { /* ignore */ }
         setComments(prev => [...prev, json.data.comment])
         setPosts(prev => prev.map(p => {
           if (p.id === postId) {
