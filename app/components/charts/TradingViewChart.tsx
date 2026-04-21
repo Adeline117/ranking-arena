@@ -268,10 +268,11 @@ export default function TradingViewChart({
 
       chart.timeScale().fitContent()
 
-      // Resize observer
+      // Resize observer — update both width and height so the chart
+      // responds correctly to viewport changes (e.g. orientation flip).
       const ro = new ResizeObserver(() => {
         if (containerEl) {
-          chart.applyOptions({ width: containerEl.clientWidth })
+          chart.resize(containerEl.clientWidth, containerEl.clientHeight)
         }
       })
       ro.observe(containerEl!)

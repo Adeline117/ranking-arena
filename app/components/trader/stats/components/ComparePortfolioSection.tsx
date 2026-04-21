@@ -249,10 +249,11 @@ function CompareChart({
 
       chart.timeScale().fitContent()
 
-      // 响应式调整
+      // 响应式调整 — update both width and height so the chart
+      // responds correctly to viewport changes (e.g. orientation flip).
       resizeHandler = () => {
         if (container) {
-          chart.applyOptions({ width: container.clientWidth })
+          chart.resize(container.clientWidth, container.clientHeight)
         }
       }
 
