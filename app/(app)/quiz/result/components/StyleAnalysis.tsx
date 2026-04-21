@@ -19,7 +19,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--color-backdrop-heavy)',
+        background: 'var(--glass-bg-secondary)',
         border: '1px solid var(--glass-border-light)',
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
@@ -131,14 +131,14 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.bold,
-              color: '#2FE57D',
+              color: 'var(--color-accent-success)',
             }}
           >
             {tr('quizStrengths')}
           </span>
           {type.strengthKeys.map((key) => (
             <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <span style={{ color: '#2FE57D', flexShrink: 0, marginTop: 2 }}>+</span>
+              <span style={{ color: 'var(--color-accent-success)', flexShrink: 0, marginTop: 2 }}>+</span>
               <span
                 style={{
                   fontSize: tokens.typography.fontSize.sm,
@@ -158,14 +158,14 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: tokens.typography.fontWeight.bold,
-              color: '#FF5555',
+              color: 'var(--color-accent-error)',
             }}
           >
             {tr('quizWeaknesses')}
           </span>
           {type.weaknessKeys.map((key) => (
             <div key={key} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <span style={{ color: '#FF5555', flexShrink: 0, marginTop: 2 }}>-</span>
+              <span style={{ color: 'var(--color-accent-error)', flexShrink: 0, marginTop: 2 }}>-</span>
               <span
                 style={{
                   fontSize: tokens.typography.fontSize.sm,

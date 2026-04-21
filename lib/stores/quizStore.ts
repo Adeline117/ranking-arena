@@ -6,7 +6,7 @@
  */
 
 import { create } from 'zustand'
-import type { QuizResult, QuizState } from '@/app/(app)/quiz/components/types'
+import type { QuizState } from '@/app/(app)/quiz/components/types'
 
 export const useQuizStore = create<QuizState>((set) => ({
   currentQuestion: 0,
@@ -20,12 +20,7 @@ export const useQuizStore = create<QuizState>((set) => ({
 
   goToQuestion: (n: number) => set({ currentQuestion: n }),
 
-  goBack: () =>
-    set((state) => ({
-      currentQuestion: Math.max(0, state.currentQuestion - 1),
-    })),
-
-  setResult: (result: QuizResult) => set({ result }),
+  setResult: (result) => set({ result }),
 
   reset: () => set({ currentQuestion: 0, answers: {}, result: null }),
 }))

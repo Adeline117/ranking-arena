@@ -15,7 +15,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--color-backdrop-heavy)',
+        background: 'var(--glass-bg-secondary)',
         border: `1px solid ${type.color}25`,
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',

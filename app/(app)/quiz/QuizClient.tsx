@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
@@ -18,13 +18,19 @@ const TOTAL_QUESTIONS = QUIZ_QUESTIONS.length // 15
 export default function QuizClient() {
   const router = useRouter()
   const { t } = useLanguage()
-  const { currentQuestion, answers, setAnswer, goToQuestion, goBack, setResult, reset } = useQuizStore()
+  const { currentQuestion, answers, setAnswer, goToQuestion, setResult, reset } = useQuizStore()
   const [mounted, setMounted] = useState(false)
+  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     setMounted(true)
     // Reset quiz state when mounting fresh
     reset()
+    return () => {
+      if (autoAdvanceTimer.current) {
+        clearTimeout(autoAdvanceTimer.current)
+      }
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleStart = useCallback(() => {
@@ -36,7 +42,10 @@ export default function QuizClient() {
       const qId = currentQuestion
       setAnswer(qId, optionId)
       // Auto-advance after 300ms
-      setTimeout(() => {
+      if (autoAdvanceTimer.current) {
+        clearTimeout(autoAdvanceTimer.current)
+      }
+      autoAdvanceTimer.current = setTimeout(() => {
         if (qId < TOTAL_QUESTIONS) {
           goToQuestion(qId + 1)
         } else {
@@ -91,14 +100,33 @@ export default function QuizClient() {
       if (currentQuestion === 0 && e.key === 'Enter') {
         e.preventDefault()
         handleStart()
-      } else if (currentQuestion >= 1 && currentQuestion <= TOTAL_QUESTIONS && e.key === 'Escape') {
-        e.preventDefault()
-        handleBack()
+      } else if (currentQuestion >= 1 && currentQuestion <= TOTAL_QUESTIONS) {
+        if (e.key === 'Escape') {
+          e.preventDefault()
+          handleBack()
+        } else {
+          // A/B/C/D or 1/2/3/4 to select options
+          const currentQ = QUIZ_QUESTIONS[currentQuestion - 1]
+          if (currentQ) {
+            const keyLower = e.key.toLowerCase()
+            const letterIndex = keyLower.charCodeAt(0) - 97 // a=0, b=1, c=2, d=3
+            const digitIndex = parseInt(e.key, 10) - 1 // 1=0, 2=1, 3=2, 4=3
+            const idx = letterIndex >= 0 && letterIndex < currentQ.options.length
+              ? letterIndex
+              : digitIndex >= 0 && digitIndex < currentQ.options.length
+                ? digitIndex
+                : -1
+            if (idx >= 0) {
+              e.preventDefault()
+              handleSelectOption(currentQ.options[idx].id)
+            }
+          }
+        }
       }
     }
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentQuestion, handleStart, handleBack])
+  }, [currentQuestion, handleStart, handleBack, handleSelectOption])
 
   if (!mounted) {
     return (
@@ -154,9 +182,9 @@ export default function QuizClient() {
       {/* Card */}
       <Box
         style={{
-          maxWidth: 520,
+          maxWidth: 560,
           width: '100%',
-          background: 'var(--color-backdrop-heavy)',
+          background: 'var(--glass-bg-secondary)',
           border: '1px solid var(--color-accent-primary-15)',
           borderRadius: 24,
           padding: 'clamp(24px, 5vw, 40px) clamp(20px, 4vw, 32px)',

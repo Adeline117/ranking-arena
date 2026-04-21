@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 
 interface CalculatingStepProps {
@@ -10,6 +10,8 @@ interface CalculatingStepProps {
 
 export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
   const [progress, setProgress] = useState(0)
+  const onDoneRef = useRef(onDone)
+  onDoneRef.current = onDone
 
   useEffect(() => {
     // Animate progress from 0 to 100 over 1.5s
@@ -22,11 +24,11 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
       if (elapsed < duration) {
         requestAnimationFrame(tick)
       } else {
-        onDone()
+        onDoneRef.current()
       }
     }
     requestAnimationFrame(tick)
-  }, [onDone])
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div

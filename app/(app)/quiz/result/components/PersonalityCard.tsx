@@ -16,7 +16,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
     <div
       style={{
         borderRadius: 20,
-        background: 'var(--color-backdrop-heavy)',
+        background: 'var(--glass-bg-secondary)',
         border: `2px solid ${type.color}40`,
         padding: 'clamp(24px, 5vw, 32px)',
         display: 'flex',

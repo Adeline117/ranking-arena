@@ -64,7 +64,6 @@ export interface QuizState {
 
   setAnswer: (questionId: number, optionId: string) => void
   goToQuestion: (n: number) => void
-  goBack: () => void
   setResult: (result: QuizResult) => void
   reset: () => void
 }
