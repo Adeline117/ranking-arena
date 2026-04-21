@@ -93,6 +93,47 @@ export function QuizIcon({ name, color, size = 24 }: QuizIconProps) {
           <path d="M7 20H17V22H7V20Z" fill={`${color}30`} />
         </svg>
       )
+    case 'users':
+      return (
+        <svg {...props}>
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+          <circle cx="9" cy="7" r="4" />
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+          <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+        </svg>
+      )
+    case 'scales':
+      return (
+        <svg {...props}>
+          <line x1="12" y1="3" x2="12" y2="21" />
+          <path d="M5 8L2 14h6L5 8z" fill={`${color}30`} />
+          <path d="M19 8l-3 6h6l-3-6z" fill={`${color}30`} />
+          <line x1="5" y1="8" x2="19" y2="8" />
+          <line x1="10" y1="21" x2="14" y2="21" />
+        </svg>
+      )
+    case 'grid':
+      return (
+        <svg {...props}>
+          <rect x="3" y="3" width="5" height="5" rx="1" />
+          <rect x="10" y="3" width="5" height="5" rx="1" />
+          <rect x="17" y="3" width="5" height="5" rx="1" />
+          <rect x="3" y="10" width="5" height="5" rx="1" />
+          <rect x="10" y="10" width="5" height="5" rx="1" />
+          <rect x="17" y="10" width="5" height="5" rx="1" />
+          <rect x="3" y="17" width="5" height="5" rx="1" />
+          <rect x="10" y="17" width="5" height="5" rx="1" />
+          <rect x="17" y="17" width="5" height="5" rx="1" />
+        </svg>
+      )
+    case 'megaphone':
+      return (
+        <svg {...props}>
+          <path d="M3 11l18-5v12L3 13v-2z" fill={`${color}30`} />
+          <path d="M11.6 16.8a3 3 0 0 1-5.8-1.6" />
+          <line x1="21" y1="6" x2="21" y2="18" />
+        </svg>
+      )
     default:
       return (
         <svg {...props}>

@@ -8,7 +8,9 @@ import { setLanguage, onTranslationsReady } from '@/lib/i18n'
 import { BASE_URL } from '@/lib/constants/urls'
 import { PERSONALITY_TYPE_MAP, PERSONALITY_TYPES } from '../components/quiz-data'
 import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
+import { useQuizStore } from '@/lib/stores/quizStore'
 import PersonalityCard from './components/PersonalityCard'
+import TypeBreakdown from './components/TypeBreakdown'
 import MasterSection from './components/MasterSection'
 import StyleAnalysis from './components/StyleAnalysis'
 import RecommendedTraders from './components/RecommendedTraders'
@@ -22,6 +24,7 @@ interface ResultPageClientProps {
 
 export default function ResultPageClient({ typeId, matchPercent, recommendedTraders }: ResultPageClientProps) {
   const { language, t } = useLanguage()
+  const quizResult = useQuizStore((s) => s.result)
   const [mounted, setMounted] = useState(false)
   const [txnReady, setTxnReady] = useState(false)
 
@@ -122,6 +125,15 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           secondaryTypeLabel={secondaryLabel}
           tr={t}
         />
+
+        {/* Type Breakdown */}
+        {quizResult?.allTypePercents && (
+          <TypeBreakdown
+            allTypePercents={quizResult.allTypePercents}
+            primaryTypeId={typeId}
+            tr={t}
+          />
+        )}
 
         {/* Master Biography */}
         <MasterSection type={pType} tr={t} />
