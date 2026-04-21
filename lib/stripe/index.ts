@@ -1,5 +1,6 @@
 import 'server-only'
 import Stripe from 'stripe'
+import { PRICING } from '@/app/(app)/user-center/membership-config'
 
 /**
  * Validates that a required Stripe environment variable is set.
@@ -47,13 +48,13 @@ export const STRIPE_PRICE_IDS = {
   lifetime: process.env.STRIPE_PRO_LIFETIME_PRICE_ID || '',
 }
 
-// 订阅计划配置 - 与 Stripe 价格保持一致
+// 订阅计划配置 - prices sourced from PRICING (single source of truth)
 export const SUBSCRIPTION_PLANS = {
   monthly: {
     name: 'Pro Monthly',
     nameCn: 'Pro 月付会员',
-    price: 4.99,
-    originalPrice: null,
+    price: PRICING.monthly.price,
+    originalPrice: PRICING.monthly.original,
     interval: 'month' as const,
     features: [
       'Category ranking',
@@ -69,8 +70,8 @@ export const SUBSCRIPTION_PLANS = {
   yearly: {
     name: 'Pro Yearly',
     nameCn: 'Pro 年付会员',
-    price: 29.99,
-    originalPrice: 59.88,
+    price: PRICING.yearly.price,
+    originalPrice: PRICING.yearly.original,
     interval: 'year' as const,
     features: [
       'All monthly features',
@@ -81,10 +82,10 @@ export const SUBSCRIPTION_PLANS = {
   lifetime: {
     name: 'Founding Member Lifetime',
     nameCn: '创始会员终身',
-    price: 49.99,
+    price: PRICING.lifetime.price,
     originalPrice: null,
     interval: 'once' as const,
-    spotsTotal: 200,
+    spotsTotal: PRICING.lifetime.spots,
     features: [
       'All Pro features forever',
       'Founding member badge',

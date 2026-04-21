@@ -8,6 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { trackEvent } from '@/lib/analytics/track'
+import { PRICING } from '@/app/(app)/user-center/membership-config'
 
 const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color || 'currentColor'} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
@@ -21,12 +22,6 @@ const LockIcon = ({ size = 14 }: { size?: number }) => (
     <path d="M7 11V7a5 5 0 0 1 10 0v4" />
   </svg>
 )
-
-const PRICING = {
-  monthly: { price: 4.99, original: null },
-  yearly: { price: 29.99, original: 59.88 },
-  lifetime: { price: 49.99, spots: 200 },
-}
 
 /* Helper: t() returns the key itself when missing — treat that as a miss */
 function resolved(value: string, key: string, fallback: string): string {

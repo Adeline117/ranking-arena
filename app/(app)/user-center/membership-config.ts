@@ -1,4 +1,7 @@
-// Pricing config
+/**
+ * Canonical pricing source — imported by PricingPageClient, lib/stripe, etc.
+ * Change prices here and they propagate everywhere.
+ */
 export const PRICING = {
   monthly: { price: 4.99, original: null as number | null },
   yearly: { price: 29.99, original: 59.88 },
