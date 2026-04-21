@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
-import { tokens } from '@/lib/design-tokens'
 import { useQuizStore } from '@/lib/stores/quizStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { QUIZ_QUESTIONS } from './components/quiz-data'
@@ -13,6 +12,15 @@ import StartStep from './components/StartStep'
 import QuestionStep from './components/QuestionStep'
 import ProgressBar from './components/ProgressBar'
 import CalculatingStep from './components/CalculatingStep'
+
+/** Forced dark-theme palette — explicit colors, never CSS vars */
+const Q = {
+  BG_PAGE: '#0C0C14',
+  BG_CARD: '#161625',
+  BORDER: 'rgba(139, 92, 246, 0.15)',
+  BRAND: '#8B5CF6',
+  BRAND_DEEP: '#6D28D9',
+} as const
 
 const TOTAL_QUESTIONS = QUIZ_QUESTIONS.length // 15
 
@@ -132,9 +140,10 @@ export default function QuizClient() {
   if (!mounted) {
     return (
       <Box
+        data-theme="dark"
         style={{
           minHeight: '100vh',
-          background: tokens.colors.bg.primary,
+          background: Q.BG_PAGE,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -144,8 +153,8 @@ export default function QuizClient() {
           style={{
             width: 40,
             height: 40,
-            border: '3px solid var(--color-accent-primary-20)',
-            borderTopColor: 'var(--color-brand)',
+            border: `3px solid ${Q.BRAND}33`,
+            borderTopColor: Q.BRAND,
             borderRadius: '50%',
             animation: 'spin 1s linear infinite',
           }}
@@ -160,6 +169,7 @@ export default function QuizClient() {
 
   return (
     <Box
+      data-theme="dark"
       style={{
         minHeight: '100vh',
         display: 'flex',
@@ -168,15 +178,31 @@ export default function QuizClient() {
         padding: 20,
         position: 'relative',
         overflow: 'hidden',
+        background: Q.BG_PAGE,
+        color: '#FFFFFF',
       }}
     >
-      {/* Background */}
+      {/* Background with subtle radial glow */}
       <div
         style={{
           position: 'fixed',
           inset: 0,
-          background: tokens.colors.bg.primary,
+          background: Q.BG_PAGE,
           zIndex: -1,
+        }}
+      />
+      <div
+        style={{
+          position: 'fixed',
+          top: '30%',
+          left: '50%',
+          transform: 'translate(-50%, -50%)',
+          width: 600,
+          height: 600,
+          borderRadius: '50%',
+          background: `radial-gradient(circle, ${Q.BRAND}12 0%, transparent 70%)`,
+          zIndex: -1,
+          pointerEvents: 'none',
         }}
       />
 
@@ -185,13 +211,13 @@ export default function QuizClient() {
         style={{
           maxWidth: 560,
           width: '100%',
-          background: 'var(--color-bg-secondary)',
-          border: '1px solid var(--color-accent-primary-20)',
+          background: Q.BG_CARD,
+          border: `1px solid ${Q.BORDER}`,
           borderRadius: 24,
           padding: 'clamp(24px, 5vw, 40px) clamp(20px, 4vw, 32px)',
           position: 'relative',
           zIndex: 1,
-          boxShadow: '0 25px 50px -12px var(--color-overlay-dark), 0 0 80px var(--color-notification-unread), inset 0 1px 0 var(--color-accent-primary-08)',
+          boxShadow: `0 25px 50px -12px rgba(0,0,0,0.5), 0 0 80px ${Q.BRAND}08, inset 0 1px 0 rgba(255,255,255,0.04)`,
         }}
       >
         {/* Progress bar (visible during questions) */}

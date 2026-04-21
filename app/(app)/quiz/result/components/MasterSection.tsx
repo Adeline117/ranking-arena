@@ -3,6 +3,14 @@
 import { tokens } from '@/lib/design-tokens'
 import type { PersonalityType } from '../../components/types'
 
+/** Forced dark-theme palette */
+const Q = {
+  BG_CARD: '#161625',
+  TEXT_PRIMARY: '#FFFFFF',
+  TEXT_SECONDARY: 'rgba(255,255,255,0.7)',
+  TEXT_TERTIARY: 'rgba(255,255,255,0.45)',
+} as const
+
 interface MasterSectionProps {
   type: PersonalityType
   tr: (key: string) => string
@@ -15,7 +23,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--color-bg-secondary)',
+        background: Q.BG_CARD,
         border: `1px solid ${type.color}25`,
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
@@ -37,7 +45,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
           style={{
             fontSize: tokens.typography.fontSize.lg,
             fontWeight: tokens.typography.fontWeight.bold,
-            color: 'var(--color-text-primary)',
+            color: Q.TEXT_PRIMARY,
             margin: 0,
           }}
         >
@@ -60,8 +68,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         <span
           style={{
             fontSize: tokens.typography.fontSize.sm,
-            color: 'var(--color-text-primary)',
-            opacity: 0.6,
+            color: Q.TEXT_TERTIARY,
           }}
         >
           {tr(master.yearsKey)}
@@ -70,8 +77,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
           style={{
             fontSize: tokens.typography.fontSize.base,
             fontWeight: tokens.typography.fontWeight.semibold,
-            color: 'var(--color-text-primary)',
-            opacity: 0.75,
+            color: Q.TEXT_SECONDARY,
             fontStyle: 'italic',
             marginTop: 4,
           }}
@@ -87,8 +93,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
             key={key}
             style={{
               fontSize: tokens.typography.fontSize.base,
-              color: 'var(--color-text-primary)',
-              opacity: 0.75,
+              color: Q.TEXT_SECONDARY,
               lineHeight: 1.7,
               margin: 0,
             }}
@@ -120,8 +125,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         <p
           style={{
             fontSize: tokens.typography.fontSize.base,
-            color: 'var(--color-text-primary)',
-            opacity: 0.75,
+            color: Q.TEXT_SECONDARY,
             lineHeight: 1.6,
             margin: 0,
           }}
@@ -137,8 +141,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
           padding: '12px 18px',
           borderLeft: `3px solid ${type.color}`,
           fontStyle: 'italic',
-          color: 'var(--color-text-primary)',
-          opacity: 0.8,
+          color: Q.TEXT_SECONDARY,
           fontSize: tokens.typography.fontSize.base,
           lineHeight: 1.6,
         }}

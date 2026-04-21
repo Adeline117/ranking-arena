@@ -12,6 +12,22 @@ import StyleAnalysis from './components/StyleAnalysis'
 import RecommendedTraders from './components/RecommendedTraders'
 import ShareActions from './components/ShareActions'
 
+/** Forced dark-theme palette — explicit colors, never CSS vars */
+const Q = {
+  BG_PAGE: '#0C0C14',
+  BG_CARD: '#161625',
+  BORDER: 'rgba(255,255,255,0.08)',
+  TEXT_PRIMARY: '#FFFFFF',
+  TEXT_SECONDARY: 'rgba(255,255,255,0.7)',
+  TEXT_TERTIARY: 'rgba(255,255,255,0.45)',
+  BRAND: '#8B5CF6',
+  BRAND_DEEP: '#6D28D9',
+  ERROR_BG: 'rgba(255,85,85,0.1)',
+  ERROR_BORDER: 'rgba(255,85,85,0.2)',
+  ERROR_COLOR: '#FF5555',
+  CTA_BORDER: 'rgba(255,255,255,0.12)',
+} as const
+
 interface ResultPageClientProps {
   typeId: PersonalityTypeId
   matchPercent: number
@@ -31,11 +47,14 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
 
   return (
     <div
+      data-theme="dark"
       style={{
         minHeight: '100vh',
         padding: 'clamp(16px, 4vw, 32px)',
         display: 'flex',
         justifyContent: 'center',
+        background: Q.BG_PAGE,
+        color: Q.TEXT_PRIMARY,
       }}
     >
       <div
@@ -64,14 +83,14 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         <StyleAnalysis type={pType} tr={t} />
 
         {/* Type Compatibility */}
-        <div style={{ borderRadius: 16, background: 'var(--color-bg-secondary)', border: '1px solid var(--color-accent-primary-15)', padding: 'clamp(20px, 4vw, 28px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <div style={{ borderRadius: 16, background: Q.BG_CARD, border: `1px solid ${Q.BORDER}`, padding: 'clamp(20px, 4vw, 28px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 4, height: 24, borderRadius: 2, background: pType.gradient }} />
-            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: Q.TEXT_PRIMARY, margin: 0 }}>
               {t('quizCompatTitle')}
             </h3>
           </div>
-          <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+          <div style={{ fontSize: '13px', color: Q.TEXT_SECONDARY, fontWeight: 500 }}>
             {t('quizCompatWith')}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -84,14 +103,14 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               ) : null
             })}
           </div>
-          <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+          <div style={{ fontSize: '13px', color: Q.TEXT_SECONDARY, fontWeight: 500 }}>
             {t('quizIncompatWith')}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {pType.incompatibleTypes.map(id => {
               const ct = PERSONALITY_TYPE_MAP[id]
               return ct ? (
-                <span key={id} style={{ padding: '6px 12px', borderRadius: 8, background: 'var(--color-accent-error-10, rgba(239,68,68,0.1))', border: '1px solid var(--color-accent-error-20, rgba(239,68,68,0.2))', fontSize: '14px', color: 'var(--color-accent-error)', fontWeight: 600 }}>
+                <span key={id} style={{ padding: '6px 12px', borderRadius: 8, background: Q.ERROR_BG, border: `1px solid ${Q.ERROR_BORDER}`, fontSize: '14px', color: Q.ERROR_COLOR, fontWeight: 600 }}>
                   {t(ct.nameKey)}
                 </span>
               ) : null
@@ -106,8 +125,8 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         <div
           style={{
             borderRadius: 16,
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--color-accent-primary-15)',
+            background: Q.BG_CARD,
+            border: `1px solid ${Q.BORDER}`,
             padding: 'clamp(20px, 4vw, 28px)',
             display: 'flex',
             flexDirection: 'column',
@@ -118,7 +137,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
             style={{
               fontSize: tokens.typography.fontSize.lg,
               fontWeight: tokens.typography.fontWeight.bold,
-              color: 'var(--color-text-primary)',
+              color: Q.TEXT_PRIMARY,
               margin: 0,
             }}
           >
@@ -136,9 +155,9 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               minWidth: 140,
               padding: '12px 20px',
               borderRadius: 12,
-              border: '1px solid var(--color-accent-primary-15)',
+              border: `1px solid ${Q.CTA_BORDER}`,
               background: 'transparent',
-              color: 'var(--color-text-primary)',
+              color: Q.TEXT_PRIMARY,
               fontSize: tokens.typography.fontSize.base,
               fontWeight: tokens.typography.fontWeight.medium,
               textAlign: 'center',
@@ -156,7 +175,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               padding: '12px 20px',
               borderRadius: 12,
               border: 'none',
-              background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+              background: `linear-gradient(135deg, ${Q.BRAND} 0%, ${Q.BRAND_DEEP} 100%)`,
               color: '#fff',
               fontSize: tokens.typography.fontSize.base,
               fontWeight: tokens.typography.fontWeight.bold,

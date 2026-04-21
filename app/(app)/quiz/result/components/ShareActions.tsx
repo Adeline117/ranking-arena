@@ -5,6 +5,13 @@ import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
 import type { PersonalityType } from '../../components/types'
 
+/** Forced dark-theme palette */
+const Q = {
+  TEXT_PRIMARY: '#FFFFFF',
+  BTN_BG: 'rgba(255,255,255,0.06)',
+  BTN_BORDER: 'rgba(255,255,255,0.10)',
+} as const
+
 interface ShareActionsProps {
   type: PersonalityType
   matchPercent: number
@@ -86,9 +93,9 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
     minWidth: 80,
     padding: '10px 14px',
     borderRadius: 10,
-    border: '1px solid var(--glass-border-light)',
-    background: 'var(--color-overlay-subtle)',
-    color: 'var(--color-text-primary)',
+    border: `1px solid ${Q.BTN_BORDER}`,
+    background: Q.BTN_BG,
+    color: Q.TEXT_PRIMARY,
     fontSize: tokens.typography.fontSize.sm,
     fontWeight: tokens.typography.fontWeight.medium,
     cursor: 'pointer',

@@ -2,6 +2,16 @@
 
 import { tokens } from '@/lib/design-tokens'
 
+/** Forced dark-theme palette */
+const Q = {
+  TEXT_PRIMARY: '#FFFFFF',
+  TEXT_SECONDARY: 'rgba(255,255,255,0.7)',
+  BRAND: '#8B5CF6',
+  BRAND_DEEP: '#6D28D9',
+  BADGE_BG: 'rgba(139, 92, 246, 0.12)',
+  BADGE_BORDER: 'rgba(139, 92, 246, 0.25)',
+} as const
+
 interface StartStepProps {
   tr: (key: string) => string
   onStart: () => void
@@ -25,11 +35,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           width: 80,
           height: 80,
           borderRadius: 20,
-          background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+          background: `linear-gradient(135deg, ${Q.BRAND} 0%, ${Q.BRAND_DEEP} 100%)`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 8px 32px rgba(139, 92, 246, 0.3)',
+          boxShadow: `0 8px 32px rgba(139, 92, 246, 0.3)`,
         }}
       >
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -45,7 +55,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           style={{
             fontSize: 'clamp(28px, 6vw, 38px)',
             fontWeight: tokens.typography.fontWeight.bold,
-            color: 'var(--color-text-primary)',
+            color: Q.TEXT_PRIMARY,
             lineHeight: 1.2,
             margin: 0,
             letterSpacing: '-0.02em',
@@ -56,8 +66,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         <p
           style={{
             fontSize: tokens.typography.fontSize.base,
-            color: 'var(--color-text-primary)',
-            opacity: 0.75,
+            color: Q.TEXT_SECONDARY,
             lineHeight: 1.6,
             margin: 0,
             maxWidth: 400,
@@ -73,11 +82,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           style={{
             padding: '6px 14px',
             borderRadius: 8,
-            background: 'var(--color-accent-primary-08)',
-            border: '1px solid var(--color-accent-primary-20)',
+            background: Q.BADGE_BG,
+            border: `1px solid ${Q.BADGE_BORDER}`,
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.medium,
-            color: 'var(--color-text-primary)',
+            color: Q.TEXT_PRIMARY,
           }}
         >
           {tr('quizBadge15Q')}
@@ -86,11 +95,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           style={{
             padding: '6px 14px',
             borderRadius: 8,
-            background: 'var(--color-accent-primary-08)',
-            border: '1px solid var(--color-accent-primary-20)',
+            background: Q.BADGE_BG,
+            border: `1px solid ${Q.BADGE_BORDER}`,
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.medium,
-            color: 'var(--color-text-primary)',
+            color: Q.TEXT_PRIMARY,
           }}
         >
           {tr('quizBadge8Types')}
@@ -99,11 +108,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           style={{
             padding: '6px 14px',
             borderRadius: 8,
-            background: 'var(--color-accent-primary-08)',
-            border: '1px solid var(--color-accent-primary-20)',
+            background: Q.BADGE_BG,
+            border: `1px solid ${Q.BADGE_BORDER}`,
             fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.medium,
-            color: 'var(--color-text-primary)',
+            color: Q.TEXT_PRIMARY,
           }}
         >
           {tr('quizBadge2Min')}
@@ -116,7 +125,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         style={{
           padding: '16px 56px',
           borderRadius: 14,
-          background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+          background: `linear-gradient(135deg, ${Q.BRAND} 0%, ${Q.BRAND_DEEP} 100%)`,
           border: 'none',
           color: '#fff',
           fontSize: 'clamp(16px, 4vw, 20px)',
@@ -128,11 +137,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'translateY(-2px)'
-          e.currentTarget.style.boxShadow = '0 8px 30px rgba(139, 92, 246, 0.5)'
+          e.currentTarget.style.boxShadow = '0 8px 30px rgba(139, 92, 246, 0.5), 0 0 80px rgba(139, 92, 246, 0.2)'
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = 'translateY(0)'
-          e.currentTarget.style.boxShadow = '0 4px 20px rgba(139, 92, 246, 0.35)'
+          e.currentTarget.style.boxShadow = '0 4px 24px rgba(139, 92, 246, 0.4), 0 0 60px rgba(139, 92, 246, 0.15)'
         }}
       >
         {tr('quizStartBtn')}
