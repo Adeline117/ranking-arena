@@ -12,6 +12,7 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useRequireAuth } from '@/lib/hooks/useRequireAuth'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useNotificationsRealtime } from '@/lib/hooks/useRealtime'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
@@ -257,16 +258,10 @@ export default function NotificationsPage() {
   const { showToast } = useToast()
   const { language, t } = useLanguage()
   const { email, accessToken, authChecked } = useAuthSession()
+  useRequireAuth() // Centralized auth guard with returnUrl
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<string>('all')
-
-  // 未登录跳转
-  useEffect(() => {
-    if (authChecked && !accessToken) {
-      router.push('/login?returnUrl=/notifications')
-    }
-  }, [authChecked, accessToken, router])
 
   // Realtime: auto-prepend new notifications as they arrive
   const [userId, setUserId] = useState<string | undefined>()
