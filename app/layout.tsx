@@ -176,9 +176,7 @@ export default function RootLayout({
       >
         <script dangerouslySetInnerHTML={{ __html: `(function(){var origInsert=Node.prototype.insertBefore;Node.prototype.insertBefore=function(n,r){if(r&&r.parentNode!==this)return n;return origInsert.call(this,n,r)};var origRemove=Node.prototype.removeChild;Node.prototype.removeChild=function(c){if(c.parentNode!==this)return c;return origRemove.call(this,c)}})()` }} />
         <BetaBanner />
-        <main id="main-content" tabIndex={-1}>
-          {children}
-        </main>
+        {children}
       </body>
     </html>
   );
