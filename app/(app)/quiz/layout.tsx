@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
-
-const BASE_URL = 'https://www.arenafi.org'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Trading Personality Test | Arena',
