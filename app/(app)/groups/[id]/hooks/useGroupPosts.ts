@@ -144,11 +144,72 @@ export function useGroupPosts({
   // Comments state
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
   const [comments, setComments] = useState<Record<string, CommentWithAuthor[]>>({})
-  const [newComment, setNewComment] = useState<Record<string, string>>({})
+  const [newCommentRaw, setNewCommentRaw] = useState<Record<string, string>>({})
   const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({})
   const [replyingTo, setReplyingTo] = useState<Record<string, string | null>>({})
-  const [replyContent, setReplyContent] = useState<Record<string, string>>({})
+  const [replyContentRaw, setReplyContentRaw] = useState<Record<string, string>>({})
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
+
+  // Debounce timers for draft persistence
+  const commentDraftTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const replyDraftTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+
+  // Wrapped setters that auto-save drafts to localStorage
+  const newComment = newCommentRaw
+  const setNewComment: React.Dispatch<React.SetStateAction<Record<string, string>>> = useCallback((action) => {
+    setNewCommentRaw(prev => {
+      const next = typeof action === 'function' ? action(prev) : action
+      // Persist changed entries
+      for (const postId of Object.keys(next)) {
+        if (next[postId] !== prev[postId]) {
+          if (commentDraftTimerRef.current[postId]) clearTimeout(commentDraftTimerRef.current[postId])
+          const val = next[postId]
+          commentDraftTimerRef.current[postId] = setTimeout(() => {
+            try {
+              if (val?.trim()) localStorage.setItem(`comment-draft-${postId}`, val)
+              else localStorage.removeItem(`comment-draft-${postId}`)
+            } catch { /* ignore */ }
+          }, 500)
+        }
+      }
+      return next
+    })
+  }, [])
+
+  const replyContent = replyContentRaw
+  const setReplyContent: React.Dispatch<React.SetStateAction<Record<string, string>>> = useCallback((action) => {
+    setReplyContentRaw(prev => {
+      const next = typeof action === 'function' ? action(prev) : action
+      for (const commentId of Object.keys(next)) {
+        if (next[commentId] !== prev[commentId]) {
+          if (replyDraftTimerRef.current[commentId]) clearTimeout(replyDraftTimerRef.current[commentId])
+          const val = next[commentId]
+          replyDraftTimerRef.current[commentId] = setTimeout(() => {
+            try {
+              if (val?.trim()) localStorage.setItem(`reply-draft-${commentId}`, val)
+              else localStorage.removeItem(`reply-draft-${commentId}`)
+            } catch { /* ignore */ }
+          }, 500)
+        }
+      }
+      return next
+    })
+  }, [])
+
+  // Restore drafts when comments are expanded
+  const restoreCommentDraft = useCallback((postId: string) => {
+    try {
+      const saved = localStorage.getItem(`comment-draft-${postId}`)
+      if (saved) setNewCommentRaw(prev => ({ ...prev, [postId]: saved }))
+    } catch { /* ignore */ }
+  }, [])
+
+  const restoreReplyDraft = useCallback((commentId: string) => {
+    try {
+      const saved = localStorage.getItem(`reply-draft-${commentId}`)
+      if (saved) setReplyContentRaw(prev => ({ ...prev, [commentId]: saved }))
+    } catch { /* ignore */ }
+  }, [])
 
   // Content expansion
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
@@ -470,10 +531,11 @@ export function useGroupPosts({
   const toggleComments = useCallback((postId: string) => {
     const isExpanded = expandedComments[postId]
     setExpandedComments(prev => ({ ...prev, [postId]: !isExpanded }))
-    if (!isExpanded && !comments[postId]) {
-      loadComments(postId)
+    if (!isExpanded) {
+      restoreCommentDraft(postId)
+      if (!comments[postId]) loadComments(postId)
     }
-  }, [expandedComments, comments, loadComments])
+  }, [expandedComments, comments, loadComments, restoreCommentDraft])
 
   const submitComment = useCallback(async (postId: string) => {
     if (!accessToken) {
@@ -495,7 +557,8 @@ export function useGroupPosts({
 
     const data = result.data as { success: boolean; data?: { comment: CommentWithAuthor }; error?: string }
     if (data.success && data.data?.comment) {
-      setNewComment(prev => ({ ...prev, [postId]: '' }))
+      setNewCommentRaw(prev => ({ ...prev, [postId]: '' }))
+      try { localStorage.removeItem(`comment-draft-${postId}`) } catch { /* ignore */ }
       setExpandedComments(prev => ({ ...prev, [postId]: true }))
       setComments(prev => ({ ...prev, [postId]: [...(prev[postId] || []), data.data!.comment] }))
       setPosts(prev => prev.map(p =>
@@ -513,7 +576,8 @@ export function useGroupPosts({
       body: { content: replyContent[commentId].trim(), parent_id: commentId },
     })
     if (result.ok) {
-      setReplyContent(prev => ({ ...prev, [commentId]: '' }))
+      setReplyContentRaw(prev => ({ ...prev, [commentId]: '' }))
+      try { localStorage.removeItem(`reply-draft-${commentId}`) } catch { /* ignore */ }
       setReplyingTo(prev => ({ ...prev, [postId]: null }))
       loadComments(postId)
     }
@@ -564,7 +628,16 @@ export function useGroupPosts({
     setNewComment,
     commentLoading,
     replyingTo,
-    setReplyingTo,
+    setReplyingTo: useCallback((action: React.SetStateAction<Record<string, string | null>>) => {
+      setReplyingTo(prev => {
+        const next = typeof action === 'function' ? action(prev) : action
+        // Restore reply drafts for newly opened reply boxes
+        for (const [postId, commentId] of Object.entries(next)) {
+          if (commentId && commentId !== prev[postId]) restoreReplyDraft(commentId)
+        }
+        return next
+      })
+    }, [restoreReplyDraft]),
     replyContent,
     setReplyContent,
     expandedReplies,
