@@ -47,6 +47,7 @@ export default function NavSearchBar({
           placeholder={`${t('searchPlaceholder')} ⌘K`}
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          enterKeyHint="search"
           aria-label={t('searchTraders')}
           aria-expanded={showSearchDropdown}
           aria-haspopup="listbox"

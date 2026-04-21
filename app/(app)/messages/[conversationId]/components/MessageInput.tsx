@@ -196,6 +196,7 @@ export default function MessageInput({
             el.style.height = 'auto'
             el.style.height = `${Math.min(el.scrollHeight, 100)}px`
           }}
+          enterKeyHint="send"
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           placeholder={t('enterMessage')}

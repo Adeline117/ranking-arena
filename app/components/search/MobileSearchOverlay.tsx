@@ -108,6 +108,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
                 onClose()
               }
             }}
+            enterKeyHint="search"
             placeholder={t('searchPlaceholder')}
             aria-label={t('searchPlaceholder')}
             style={{

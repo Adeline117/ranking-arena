@@ -164,6 +164,7 @@ export default function RegisterForm({
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onBlur={() => markTouched('password')}
+            enterKeyHint="go"
             autoComplete="new-password"
             aria-invalid={touchedFields.password ? !passwordValidation.valid : undefined}
           />
