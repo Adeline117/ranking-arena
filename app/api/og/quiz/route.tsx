@@ -113,8 +113,8 @@ export async function GET(request: NextRequest) {
             </div>
           </div>
 
-          {/* Type name + match */}
-          <div style={{ display: 'flex', alignItems: 'baseline', gap: 20, marginBottom: 20 }}>
+          {/* Type name + tagline */}
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 20, marginBottom: 6 }}>
             <span style={{ fontSize: 48, fontWeight: 900, color: t.color, letterSpacing: '-1px', display: 'flex' }}>
               {typeName}
             </span>
@@ -122,9 +122,14 @@ export async function GET(request: NextRequest) {
               {matchClamped}%
             </span>
           </div>
+          <div style={{ display: 'flex', marginBottom: 20 }}>
+            <span style={{ fontSize: 16, color: C.dim, fontStyle: 'italic' }}>
+              &ldquo;{tagline}&rdquo;
+            </span>
+          </div>
 
           {/* 4-card stat row (matching rank card style) */}
-          <div style={{ display: 'flex', gap: 14, flex: 1, alignItems: 'stretch' }}>
+          <div style={{ display: 'flex', gap: 14, flex: 1 }}>
             {/* Master card (gold accent) */}
             <div style={{
               display: 'flex', flexDirection: 'column', flex: 1.5,
@@ -137,8 +142,8 @@ export async function GET(request: NextRequest) {
               <span style={{ fontSize: 28, fontWeight: 900, color: C.goldLight, lineHeight: 1.1, display: 'flex' }}>
                 {masterName}
               </span>
-              <span style={{ fontSize: 14, color: C.dim, fontStyle: 'italic', lineHeight: 1.3, display: 'flex', marginTop: 2 }}>
-                &ldquo;{tagline}&rdquo;
+              <span style={{ fontSize: 13, color: C.dim, lineHeight: 1.3, display: 'flex', marginTop: 2 }}>
+                {isZh ? '你的交易风格灵魂伴侣' : 'Your trading style soulmate'}
               </span>
             </div>
 
