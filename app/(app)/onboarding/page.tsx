@@ -60,8 +60,14 @@ export default function OnboardingPage() {
       return
     }
     supabase.auth.getUser().then(({ data }) => {
-      if (data.user) setUserId(data.user.id)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for onboarding */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      if (data.user) {
+        setUserId(data.user.id)
+      } else {
+        router.replace('/login?returnUrl=/onboarding')
+      }
+    }).catch(() => {
+      router.replace('/login?returnUrl=/onboarding')
+    })
   }, [router])
 
   const fetchTraders = useCallback(async () => {
