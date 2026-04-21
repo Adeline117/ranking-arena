@@ -105,7 +105,7 @@ CRON_COVERED=0
 for f in app/api/cron/*/route.ts; do
   [ -f "$f" ] || continue
   CRON_TOTAL=$((CRON_TOTAL + 1))
-  if grep -q 'PipelineLogger' "$f" 2>/dev/null; then
+  if grep -qE 'PipelineLogger|withCron|withCronBudget' "$f" 2>/dev/null; then
     CRON_COVERED=$((CRON_COVERED + 1))
   fi
 done
