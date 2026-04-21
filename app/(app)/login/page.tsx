@@ -29,7 +29,12 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [sendingCode, setSendingCode] = useState(false)
-  const [countdown, setCountdown] = useState(0)
+  const [countdown, setCountdown] = useState(() => {
+    if (typeof window === 'undefined') return 0
+    const savedEnd = Number(sessionStorage.getItem('otp_countdown_end') || 0)
+    const remaining = Math.max(0, Math.ceil((savedEnd - Date.now()) / 1000))
+    return remaining > 0 ? remaining : 0
+  })
   const [loginWithCode, setLoginWithCode] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [mounted, setMounted] = useState(false)
@@ -188,7 +193,7 @@ export default function LoginPage() {
         setSendingCode(false)
         return
       }
-      if (data) { setCodeSent(true); setCountdown(60); showToast(t('loginCodeSent'), 'success') }
+      if (data) { setCodeSent(true); setCountdown(60); sessionStorage.setItem('otp_countdown_end', String(Date.now() + 60000)); showToast(t('loginCodeSent'), 'success') }
       else { setError(t('loginSendFailed')) }
     } catch (err: unknown) { clearTimeout(timeoutId); logger.error('Login OTP error:', err); setError(t('loginSendFailedNetwork')) }
     finally { clearTimeout(timeoutId); setSendingCode(false); submittingRef.current = false }
@@ -221,7 +226,7 @@ export default function LoginPage() {
         setSendingCode(false)
         return
       }
-      if (data) { setCodeSent(true); setCountdown(60); showToast(t('loginCodeSent'), 'success') }
+      if (data) { setCodeSent(true); setCountdown(60); sessionStorage.setItem('otp_countdown_end', String(Date.now() + 60000)); showToast(t('loginCodeSent'), 'success') }
       else { setError(t('loginSendFailedShort')) }
     } catch (err: unknown) { clearTimeout(timeoutId); logger.error('Login OTP error:', err); setError(t('loginSendFailedSimple')) }
     finally { clearTimeout(timeoutId); setSendingCode(false); submittingRef.current = false }
@@ -391,7 +396,7 @@ export default function LoginPage() {
 
   const resetForm = () => {
     setCode(''); setCodeSent(false); setCodeVerified(false); setPassword(''); setHandle('')
-    setCountdown(0); setError(null); setLoginWithCode(false); setShowRecoveryPrompt(false)
+    setCountdown(0); sessionStorage.removeItem('otp_countdown_end'); setError(null); setLoginWithCode(false); setShowRecoveryPrompt(false)
     setTouchedFields({ email: false, password: false, handle: false })
   }
 
