@@ -141,12 +141,17 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
 
     setLoading(false)
     if (verifyError) {
-      setError(verifyError.message)
+      const msg = verifyError.message.toLowerCase()
+      if (msg.includes('expired') || msg.includes('过期')) {
+        setError(t('authCodeExpired'))
+      } else {
+        setError(t('authCodeInvalid'))
+      }
     } else {
       // Auth state change will be picked up by useAuthSession
       onClose()
     }
-  }, [email, otp, loading, onClose])
+  }, [email, otp, loading, onClose, t])
 
   if (!open) return null
 
