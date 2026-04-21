@@ -3264,3 +3264,25 @@ td[data-numeric],
   .ranking-table-container[data-hide-trades] .col-trades { display: none !important; }
 }
 
+/* ── dvh fallback for older browsers ──
+   Browsers without dvh support (Chrome <108, Safari <15.4) fall back to vh.
+   For React inline styles (can't have duplicate keys), use these CSS classes instead. */
+.h-dvh-minus-nav {
+  height: calc(100vh - 56px);
+  height: calc(100dvh - 56px);
+}
+.maxh-dvh-minus-spacing {
+  max-height: calc(100vh - 2.5rem);
+  max-height: calc(100dvh - 2.5rem);
+}
+
+/* ── color-mix() fallback strategy ──
+   All color-mix() usages in this codebase are for decorative purposes:
+   badge backgrounds, subtle tints, borders, and shadows. When a browser
+   does not support color-mix() (Chrome <111, Safari <16.2, Firefox <113),
+   it drops the entire property declaration. The result:
+   - background → transparent (text color is set separately, still readable)
+   - border → none (layout unaffected, purely visual)
+   - box-shadow → none (purely decorative)
+   No critical text-color or layout-affecting properties use color-mix(),
+   so graceful degradation is acceptable for all current usages. */

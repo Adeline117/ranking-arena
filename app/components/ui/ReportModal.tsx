@@ -191,10 +191,10 @@ export default function ReportModal({
           aria-modal="true"
           aria-labelledby="report-modal-title"
           onClick={(e) => e.stopPropagation()}
+          className="maxh-dvh-minus-spacing"
           style={{
             width: '100%',
             maxWidth: 420,
-            maxHeight: `calc(100dvh - ${tokens.spacing[10]})`,
             background: tokens.colors.bg.primary,
             borderRadius: tokens.radius.xl,
             boxShadow: 'var(--shadow-elevated)',

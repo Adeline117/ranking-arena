@@ -116,7 +116,7 @@ export default function DesktopSidebar() {
 
   return (
     <aside
-      className="desktop-sidebar"
+      className="desktop-sidebar h-dvh-minus-nav"
       role="navigation"
       aria-label="Main navigation"
       style={{
@@ -124,7 +124,6 @@ export default function DesktopSidebar() {
         top: 56,
         left: 0,
         width: 240,
-        height: 'calc(100dvh - 56px)',
         borderRight: `1px solid var(--color-border-primary)`,
         background: 'var(--color-bg-primary)',
         padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`,

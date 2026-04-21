@@ -42,13 +42,13 @@ export default function InboxPanel(): React.ReactElement | null {
   return (
     <div
       ref={panelRef}
+      className="h-dvh-minus-nav"
       style={{
         position: 'fixed',
         top: 56,
         right: 0,
         width: 'min(400px, 100vw)',
         maxWidth: '100vw',
-        height: 'calc(100dvh - 56px)',
         background: tokens.colors.bg.primary,
         borderLeft: `1px solid ${tokens.colors.border.primary}`,
         boxShadow: tokens.shadow.xl,
