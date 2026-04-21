@@ -149,7 +149,13 @@ function PaymentSuccessContent() {
   // 验证并同步订阅状态
   const verifyAndRefresh = useCallback(async () => {
     const sessionId = searchParams.get('session_id')
-    if (!sessionId || hasVerified) return
+    if (hasVerified) return
+
+    // No session_id means we can't verify — show error immediately
+    if (!sessionId) {
+      setVerificationStatus('error')
+      return
+    }
 
     setHasVerified(true)
     setVerificationStatus('verifying')
