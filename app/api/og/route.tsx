@@ -10,16 +10,16 @@ export async function GET(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   const { searchParams } = request.nextUrl
-  const type = searchParams.get('type') || 'default'
-  const title = searchParams.get('title') || 'Arena'
-  const subtitle = searchParams.get('subtitle') || ''
-  const stat1Label = searchParams.get('s1l') || ''
-  const stat1Value = searchParams.get('s1v') || ''
-  const stat2Label = searchParams.get('s2l') || ''
-  const stat2Value = searchParams.get('s2v') || ''
-  const stat3Label = searchParams.get('s3l') || ''
-  const stat3Value = searchParams.get('s3v') || ''
-  const avatarUrlParam = searchParams.get('avatar') || ''
+  const type = (searchParams.get('type') || 'default').slice(0, 20)
+  const title = (searchParams.get('title') || 'Arena').slice(0, 100)
+  const subtitle = (searchParams.get('subtitle') || '').slice(0, 200)
+  const stat1Label = (searchParams.get('s1l') || '').slice(0, 50)
+  const stat1Value = (searchParams.get('s1v') || '').slice(0, 50)
+  const stat2Label = (searchParams.get('s2l') || '').slice(0, 50)
+  const stat2Value = (searchParams.get('s2v') || '').slice(0, 50)
+  const stat3Label = (searchParams.get('s3l') || '').slice(0, 50)
+  const stat3Value = (searchParams.get('s3v') || '').slice(0, 50)
+  const avatarUrlParam = (searchParams.get('avatar') || '').slice(0, 2000)
 
   const stats = [
     stat1Label && { label: stat1Label, value: stat1Value },

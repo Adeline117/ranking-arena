@@ -130,16 +130,16 @@ export async function GET(request: NextRequest) {
 
   try {
     const { searchParams } = new URL(request.url)
-    const handle = searchParams.get('handle')
+    const handle = searchParams.get('handle')?.slice(0, 200) || ''
 
-    if (!handle || handle.length > 200) {
+    if (!handle) {
       return new Response('Missing or invalid handle parameter', { status: 400 })
     }
 
     // Only `source` is allowed as a hint for multi-platform traders.
     // ROI/score/rank overrides removed — prevents attackers from crafting
     // misleading share links with fake stats for any trader.
-    const overrideSource = searchParams.get('source')
+    const overrideSource = (searchParams.get('source') || '').slice(0, 50)
 
     const trader = await fetchTrader(handle)
 
@@ -426,7 +426,7 @@ export async function GET(request: NextRequest) {
     logger.error('[OG Trader] Error:', e)
     // Return a minimal fallback OG image instead of a 500 error.
     // A broken OG image means no social preview on Twitter/Discord — unacceptable.
-    const fallbackHandle = new URL(request.url).searchParams.get('handle') || 'Trader'
+    const fallbackHandle = (new URL(request.url).searchParams.get('handle') || 'Trader').slice(0, 200)
     try {
       return new ImageResponse(
         (
