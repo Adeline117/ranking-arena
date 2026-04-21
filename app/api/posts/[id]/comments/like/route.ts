@@ -8,6 +8,7 @@ import {
   getSupabaseAdmin,
   requireAuth,
   success,
+  badRequest,
   handleError,
   validateString,
   checkRateLimit,
@@ -32,7 +33,12 @@ export async function POST(request: NextRequest, _context: RouteContext) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    const body = await request.json()
+    let body: Record<string, unknown>
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
+    }
     const commentId = validateString(body.comment_id, {
       required: true,
       fieldName: 'comment ID',
