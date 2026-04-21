@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
 import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -56,8 +56,43 @@ export function usePostComments({
   const t = externalT || hookT
   const [comments, setComments] = useState<Comment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
-  const [newComment, setNewComment] = useState('')
+  const [newComment, setNewCommentRaw] = useState('')
   const [submittingComment, setSubmittingComment] = useState(false)
+
+  // Persist comment drafts to localStorage so they survive refresh/crash
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const currentPostIdRef = useRef<string | null>(null)
+
+  const getDraftKey = useCallback((postId: string) => `comment-draft-${postId}`, [])
+
+  const setNewComment = useCallback((value: string) => {
+    setNewCommentRaw(value)
+    // Debounced save to localStorage (500ms)
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    const postId = currentPostIdRef.current
+    if (!postId) return
+    draftTimerRef.current = setTimeout(() => {
+      try {
+        if (value.trim()) {
+          localStorage.setItem(getDraftKey(postId), value)
+        } else {
+          localStorage.removeItem(getDraftKey(postId))
+        }
+      } catch { /* quota exceeded — ignore */ }
+    }, 500)
+  }, [getDraftKey])
+
+  const restoreDraft = useCallback((postId: string) => {
+    currentPostIdRef.current = postId
+    try {
+      const saved = localStorage.getItem(getDraftKey(postId))
+      if (saved) setNewCommentRaw(saved)
+    } catch { /* ignore */ }
+  }, [getDraftKey])
+
+  const clearDraft = useCallback((postId: string) => {
+    try { localStorage.removeItem(getDraftKey(postId)) } catch { /* ignore */ }
+  }, [getDraftKey])
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; handle: string } | null>(null)
   const [replyContent, setReplyContent] = useState('')
   const [submittingReply, setSubmittingReply] = useState(false)
@@ -82,6 +117,8 @@ export function usePostComments({
   }, [accessToken, showToast, t])
 
   const loadComments = useCallback(async (postId: string, sort: 'best' | 'time' = 'best'): Promise<void> => {
+    // Restore any saved draft for this post
+    restoreDraft(postId)
     setLoadingComments(true)
     try {
       const { ok, data } = await authedFetch<{ success: boolean; data?: { comments: Comment[] } }>(
@@ -117,6 +154,7 @@ export function usePostComments({
     setComments(prev => [...prev, optimisticComment])
     const savedContent = newComment.trim()
     setNewComment('')
+    clearDraft(postId)
     onCommentCountChange?.(postId, 1)
 
     try {
@@ -445,6 +483,7 @@ export function usePostComments({
     startEditComment,
     cancelEditComment,
     submitEditComment,
+    restoreDraft,
     loadComments,
     submitComment,
     toggleCommentLike,
