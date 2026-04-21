@@ -4368,6 +4368,9 @@ userActivityJoinedGroup: 'Joined group ',
 activityFeedTitle: 'Activity Feed',
 activityFeedDesc: 'Auto-generated milestones from live trader data — rank climbs, ROI breakouts, win streaks, and large profits.',
 activityFilterAll: 'All',
+activityFeedEmpty: 'No activity events yet. Check back after the next data sync.',
+activityFeedLoading: 'Loading...',
+activityFeedLoadMore: 'Load More',
 
 // Market section error boundaries
 marketSectionError: 'Failed to load this section',
