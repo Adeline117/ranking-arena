@@ -33,6 +33,8 @@ export default function LoginPage() {
   const [loginWithCode, setLoginWithCode] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false)
+  const [recovering, setRecovering] = useState(false)
   
   const [touchedFields, setTouchedFields] = useState<{
     email: boolean;
@@ -103,12 +105,15 @@ export default function LoginPage() {
   useEffect(() => {
     injectStyles()
     setMounted(true)
-    // Show error from auth callback redirect (e.g. ?error=auth_failed or ?error=no_session)
+    // Show error from auth callback redirect or OAuth provider errors
     const errorParam = searchParams.get('error')
     if (errorParam === 'auth_failed') {
       setError(t('loginAuthFailed'))
     } else if (errorParam === 'no_session') {
       setError(t('loginNoSession'))
+    } else if (errorParam) {
+      // Generic error from OAuth callback or other redirects (e.g. provider cancelled)
+      setError(decodeURIComponent(errorParam))
     }
     // If user is already logged in, redirect them away from the login page
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -362,6 +367,10 @@ export default function LoginPage() {
         if (msg.includes('Invalid login credentials')) setError(lang === 'zh' ? '邮箱或密码不正确，请重试' : 'Incorrect email or password. Please try again.')
         else if (msg.includes('Email not confirmed')) setError(lang === 'zh' ? '邮箱尚未验证，请检查收件箱' : 'Email not yet verified. Please check your inbox.')
         else if (msg.includes('Too many requests') || msg.includes('rate limit')) setError(lang === 'zh' ? '操作过于频繁，请稍后重试' : 'Too many attempts. Please wait a moment and try again.')
+        else if (msg.toLowerCase().includes('banned')) {
+          setError(lang === 'zh' ? '此账号已申请注销。如需恢复账号，请点击下方按钮。' : 'This account is pending deletion. To recover your account, click the button below.')
+          setShowRecoveryPrompt(true)
+        }
         else setError(msg)
         setLoading(false)
         return
@@ -382,8 +391,47 @@ export default function LoginPage() {
 
   const resetForm = () => {
     setCode(''); setCodeSent(false); setCodeVerified(false); setPassword(''); setHandle('')
-    setCountdown(0); setError(null); setLoginWithCode(false)
+    setCountdown(0); setError(null); setLoginWithCode(false); setShowRecoveryPrompt(false)
     setTouchedFields({ email: false, password: false, handle: false })
+  }
+
+  const handleRecoverAccount = async () => {
+    if (recovering || !email || !password) return
+    setRecovering(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/account/recover', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      })
+      const data = await res.json()
+      if (res.ok && data.success) {
+        setShowRecoveryPrompt(false)
+        showToast(lang === 'zh' ? '账号已恢复，正在登录...' : 'Account recovered! Signing you in...', 'success')
+        // Now sign in normally since the ban has been lifted
+        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+        if (loginError) {
+          setError(loginError.message)
+        } else {
+          await saveNewAccountToStore()
+          const { data: { user } } = await supabase.auth.getUser()
+          if (user) {
+            const { data: userProfile } = await supabase.from('user_profiles').select('handle').eq('id', user.id).maybeSingle()
+            router.push(getRedirectUrl(userProfile?.handle, user.email))
+          } else {
+            router.push(getRedirectUrl())
+          }
+        }
+      } else {
+        setError(data.error || (lang === 'zh' ? '恢复失败，请重试' : 'Recovery failed. Please try again.'))
+      }
+    } catch (err) {
+      logger.error('Account recovery error:', err)
+      setError(lang === 'zh' ? '网络错误，请稍后重试' : 'Network error. Please try again later.')
+    } finally {
+      setRecovering(false)
+    }
   }
 
   if (!mounted) return null
@@ -592,18 +640,42 @@ export default function LoginPage() {
 
         {/* Error message */}
         {error && (
-          <div ref={errorRef} style={{ 
+          <div ref={errorRef} style={{
             marginTop: 20, padding: 14, borderRadius: tokens.radius.lg,
             background: 'var(--color-accent-error-10)', border: '1px solid var(--color-accent-error-20)',
             color: 'var(--color-accent-error)', fontSize: 13, fontWeight: 500,
-            display: 'flex', alignItems: 'center', gap: 8,
+            display: 'flex', flexDirection: 'column', gap: 8,
           }}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="8" x2="12" y2="12" />
-              <line x1="12" y1="16" x2="12.01" y2="16" />
-            </svg>
-            {error}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ flexShrink: 0 }}>
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="12" />
+                <line x1="12" y1="16" x2="12.01" y2="16" />
+              </svg>
+              {error}
+            </div>
+            {showRecoveryPrompt && (
+              <button
+                onClick={handleRecoverAccount}
+                disabled={recovering}
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: tokens.radius.md,
+                  border: '1px solid var(--color-accent-success-40)',
+                  background: 'var(--color-accent-success-10)',
+                  color: 'var(--color-accent-success)',
+                  fontWeight: 600,
+                  fontSize: 13,
+                  cursor: recovering ? 'wait' : 'pointer',
+                  opacity: recovering ? 0.6 : 1,
+                  transition: `all ${tokens.transition.base}`,
+                }}
+              >
+                {recovering
+                  ? (lang === 'zh' ? '恢复中...' : 'Recovering...')
+                  : (lang === 'zh' ? '恢复我的账号' : 'Recover My Account')}
+              </button>
+            )}
           </div>
         )}
       </div>
