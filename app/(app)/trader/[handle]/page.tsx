@@ -191,7 +191,12 @@ export async function generateStaticParams() {
 
   if (!data) return []
   return data
-    .filter((t: { handle: string | null }) => t.handle && t.handle.trim().length > 0 && t.handle.length <= 100)
+    .filter((t: { handle: string | null }) => {
+      if (!t.handle || !t.handle.trim()) return false
+      // Filter handles whose URL-encoded form would exceed filesystem limits
+      const encoded = encodeURIComponent(t.handle.trim())
+      return encoded.length <= 200
+    })
     .map((t: { handle: string | null }) => ({ handle: encodeURIComponent(t.handle!.trim()) }))
 }
 
