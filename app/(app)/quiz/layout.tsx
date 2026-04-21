@@ -4,12 +4,12 @@ import { BASE_URL } from '@/lib/constants/urls'
 export const metadata: Metadata = {
   title: 'Trading Personality Test | Arena',
   description:
-    'Discover your trading personality in 15 questions. Are you a Sniper, Whale, or Degen? Find your trading style and the legendary trader who matches you.',
+    'Discover your trading personality in 30 questions. Are you a Sniper, Whale, or Degen? 12 personalities to uncover. Find your trading style and the legendary trader who matches you.',
   alternates: { canonical: `${BASE_URL}/quiz` },
   openGraph: {
     title: 'Trading Personality Test | Arena',
     description:
-      'Discover your trading personality in 15 questions. Find your style and the legendary trader who matches you.',
+      'Discover your trading personality in 30 questions. 12 personalities to uncover. Find your style and the legendary trader who matches you.',
     url: `${BASE_URL}/quiz`,
     siteName: 'Arena',
     type: 'website',
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Trading Personality Test | Arena',
-    description: 'Discover your trading personality in 15 questions.',
+    description: 'Discover your trading personality in 30 questions. 12 personalities to uncover.',
     creator: '@arenafi',
   },
 }

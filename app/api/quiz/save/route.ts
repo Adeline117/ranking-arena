@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
-const VALID_TYPES = new Set(['sniper', 'scalper', 'whale', 'analyst', 'contrarian', 'hodler', 'degen', 'strategist'])
+const VALID_TYPES = new Set(['sniper', 'scalper', 'whale', 'analyst', 'contrarian', 'hodler', 'degen', 'strategist', 'copycat', 'arbitrageur', 'gridbot', 'narrator'])
 
 export async function POST(request: NextRequest) {
   try {
@@ -43,10 +43,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate answers/scores key count to prevent oversized payloads
-    if (answers && typeof answers === 'object' && Object.keys(answers).length > 15) {
+    if (answers && typeof answers === 'object' && Object.keys(answers).length > 30) {
       return NextResponse.json({ error: 'Too many answers' }, { status: 400 })
     }
-    if (scores && typeof scores === 'object' && Object.keys(scores).length > 8) {
+    if (scores && typeof scores === 'object' && Object.keys(scores).length > 12) {
       return NextResponse.json({ error: 'Too many scores' }, { status: 400 })
     }
 
