@@ -128,7 +128,13 @@ export default function BottomSheet({
   }, [open, handleClose])
 
   const heightVh = Math.min(SNAP_POINTS[snap], maxHeightVh)
+  // dvh fallback: use vh for browsers without dvh support, dvh for modern browsers.
+  // CSS custom property --bs-h is set on the sheet element; the @supports rule in
+  // the <style> block below upgrades it to dvh when available.
   const translateY = snap === 'closed'
+    ? '100%'
+    : `calc(${100 - heightVh}vh + ${Math.max(0, dragOffset)}px)`
+  const translateYDvh = snap === 'closed'
     ? '100%'
     : `calc(${100 - heightVh}dvh + ${Math.max(0, dragOffset)}px)`
 
@@ -151,13 +157,17 @@ export default function BottomSheet({
     >
       <div
         ref={sheetRef}
+        className="bottom-sheet-panel"
         style={{
           position: 'absolute',
           bottom: 0,
           left: 0,
           right: 0,
-          maxHeight: `${maxHeightVh}dvh`,
+          maxHeight: `${maxHeightVh}vh`,
           transform: `translateY(${translateY})`,
+          // CSS custom properties for dvh upgrade (see <style> block below)
+          '--bs-max-h-dvh': `${maxHeightVh}dvh`,
+          '--bs-translate-dvh': `translateY(${translateYDvh})`,
           transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
           background: 'var(--color-bg-primary)',
           borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
@@ -165,7 +175,7 @@ export default function BottomSheet({
           display: 'flex',
           flexDirection: 'column',
           paddingBottom: 'env(safe-area-inset-bottom, 0)',
-        }}
+        } as React.CSSProperties}
       >
         {/* Handle */}
         {showHandle && (
@@ -249,6 +259,16 @@ export default function BottomSheet({
           {children}
         </div>
       </div>
+      {/* dvh upgrade: when the browser supports dvh, override vh values with dvh
+          via the CSS custom properties set in the inline style above. */}
+      <style>{`
+        @supports (height: 1dvh) {
+          .bottom-sheet-panel {
+            max-height: var(--bs-max-h-dvh) !important;
+            transform: var(--bs-translate-dvh) !important;
+          }
+        }
+      `}</style>
     </div>
   )
 }
