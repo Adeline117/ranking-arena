@@ -40,9 +40,26 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
     onUnauthenticated: () => showToast(t('pleaseLogin'), 'warning'),
   })
 
-  const [newComment, setNewComment] = useState('')
+  // Restore draft comment from localStorage on mount
+  const draftKey = `comment-draft-${postId}`
+  const [newComment, setNewCommentRaw] = useState(() => {
+    try { return localStorage.getItem(draftKey) || '' } catch { return '' }
+  })
   const [submittingComment, setSubmittingComment] = useState(false)
   const [reacting, setReacting] = useState(false)
+
+  // Auto-save comment draft (debounced 500ms)
+  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const setNewComment = useCallback((value: string) => {
+    setNewCommentRaw(value)
+    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+    draftTimerRef.current = setTimeout(() => {
+      try {
+        if (value.trim()) localStorage.setItem(draftKey, value)
+        else localStorage.removeItem(draftKey)
+      } catch { /* quota exceeded */ }
+    }, 500)
+  }, [draftKey])
 
   // Prevent duplicate submissions
   const commentPendingRef = useRef(false)
@@ -121,7 +138,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       if ('error' in result) {
         showToast(result.error, 'error')
       } else {
-        setNewComment('')
+        setNewCommentRaw('')
+        try { localStorage.removeItem(draftKey) } catch { /* ignore */ }
       }
     } catch {
       showToast(t('commentFailedRetry'), 'error')
