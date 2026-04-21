@@ -16,6 +16,7 @@ export default function ErrorState({ title, description, retry, variant = 'defau
   const { t } = useLanguage()
   const isCompact = variant === 'compact'
   const displayTitle = title || t('somethingWentWrong')
+  const retryFn = retry ?? (() => window.location.reload())
 
   return (
     <Box
@@ -81,7 +82,7 @@ export default function ErrorState({ title, description, retry, variant = 'defau
           size={isCompact ? 'xs' : 'sm'}
           color="tertiary"
           style={{
-            marginBottom: retry ? tokens.spacing[5] : 0,
+            marginBottom: retryFn ? tokens.spacing[5] : 0,
             maxWidth: 360,
             marginLeft: 'auto',
             marginRight: 'auto',
@@ -93,9 +94,9 @@ export default function ErrorState({ title, description, retry, variant = 'defau
       )}
 
       {/* Retry button */}
-      {retry && (
+      {retryFn && (
         <Box style={{ marginTop: tokens.spacing[4] }}>
-          <Button variant="secondary" size="sm" onClick={retry}>
+          <Button variant="secondary" size="sm" onClick={retryFn}>
             {t('retry')}
           </Button>
         </Box>
