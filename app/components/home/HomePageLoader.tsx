@@ -24,6 +24,17 @@ const HomePage = dynamic(() => import('./HomePage'), {
   loading: () => null,
 })
 
+// Web Vitals + SpeedInsights: homepage uses root layout (not (app)/layout.tsx
+// where these live), so we lazy-load them here when Phase 2 activates.
+const WebVitals = dynamic(
+  () => import('../Providers/WebVitals').then(m => ({ default: m.WebVitals })),
+  { ssr: false }
+)
+const SpeedInsights = dynamic(
+  () => import('@vercel/speed-insights/next').then(m => ({ default: m.SpeedInsights })),
+  { ssr: false }
+)
+
 interface HomePageLoaderProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
@@ -101,5 +112,11 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
   }
   // Homepage root layout has no Providers (for LCP optimization).
   // Phase 2 needs ToastProvider, QueryClient, etc. — wrap here on client only.
-  return <Providers><HomePage {...props} /></Providers>
+  return (
+    <Providers>
+      <HomePage {...props} />
+      <WebVitals />
+      <SpeedInsights />
+    </Providers>
+  )
 }
