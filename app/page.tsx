@@ -6,13 +6,6 @@ import HomeHeroSSR from './components/home/HomeHeroSSR'
 import RankingControls from './components/home/RankingControls'
 import TopNav from './components/layout/TopNav'
 import HomePageLoader from './components/home/HomePageLoader'
-import dynamic from 'next/dynamic'
-
-// WelcomeBanner is non-critical UI — load client-side only to keep it
-// out of the SSR critical path (saves ~20ms TTFB + reduces HTML size).
-const WelcomeBanner = dynamic(() => import('./components/home/WelcomeBanner'), {
-  ssr: false,
-})
 import { JsonLd } from './components/Providers/JsonLd'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -93,7 +86,7 @@ export default async function Page({
         <TopNav />
       </div>
 
-      <WelcomeBanner />
+      {/* WelcomeBanner moved to HomePageLoader Phase 2 (client-only) */}
 
       {/* SSR Hero — visible until Phase 2 replaces it */}
       <div id="ssr-hero-shell">
