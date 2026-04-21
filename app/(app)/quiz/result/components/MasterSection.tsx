@@ -15,7 +15,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--glass-bg-secondary)',
+        background: 'var(--color-bg-secondary)',
         border: `1px solid ${type.color}25`,
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
@@ -60,7 +60,8 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         <span
           style={{
             fontSize: tokens.typography.fontSize.sm,
-            color: 'var(--color-text-tertiary)',
+            color: 'var(--color-text-primary)',
+            opacity: 0.6,
           }}
         >
           {tr(master.yearsKey)}
@@ -69,7 +70,8 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
           style={{
             fontSize: tokens.typography.fontSize.base,
             fontWeight: tokens.typography.fontWeight.semibold,
-            color: 'var(--color-text-secondary)',
+            color: 'var(--color-text-primary)',
+            opacity: 0.75,
             fontStyle: 'italic',
             marginTop: 4,
           }}
@@ -85,7 +87,8 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
             key={key}
             style={{
               fontSize: tokens.typography.fontSize.base,
-              color: 'var(--color-text-secondary)',
+              color: 'var(--color-text-primary)',
+              opacity: 0.75,
               lineHeight: 1.7,
               margin: 0,
             }}
@@ -117,7 +120,8 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         <p
           style={{
             fontSize: tokens.typography.fontSize.base,
-            color: 'var(--color-text-secondary)',
+            color: 'var(--color-text-primary)',
+            opacity: 0.75,
             lineHeight: 1.6,
             margin: 0,
           }}
@@ -133,7 +137,8 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
           padding: '12px 18px',
           borderLeft: `3px solid ${type.color}`,
           fontStyle: 'italic',
-          color: 'var(--color-text-secondary)',
+          color: 'var(--color-text-primary)',
+          opacity: 0.8,
           fontSize: tokens.typography.fontSize.base,
           lineHeight: 1.6,
         }}

@@ -59,10 +59,10 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
                 borderRadius: 12,
                 border: isSelected
                   ? '2px solid var(--color-brand)'
-                  : '2px solid var(--glass-border-light)',
+                  : '2px solid var(--color-accent-primary-15)',
                 background: isSelected
-                  ? 'linear-gradient(135deg, var(--color-accent-primary-15) 0%, var(--color-accent-primary-08) 100%)'
-                  : 'var(--color-overlay-subtle)',
+                  ? 'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)'
+                  : 'var(--color-bg-tertiary)',
                 color: 'var(--color-text-primary)',
                 fontSize: tokens.typography.fontSize.base,
                 fontWeight: isSelected ? tokens.typography.fontWeight.semibold : tokens.typography.fontWeight.medium,
@@ -89,8 +89,8 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'scale(1)'
                 if (!isSelected) {
-                  e.currentTarget.style.borderColor = 'var(--glass-border-light)'
-                  e.currentTarget.style.background = 'var(--color-overlay-subtle)'
+                  e.currentTarget.style.borderColor = 'var(--color-accent-primary-15)'
+                  e.currentTarget.style.background = 'var(--color-bg-tertiary)'
                 }
               }}
             >
@@ -101,7 +101,7 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
                   borderRadius: 8,
                   background: isSelected
                     ? 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)'
-                    : 'var(--color-overlay-medium)',
+                    : 'var(--color-accent-primary-10)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

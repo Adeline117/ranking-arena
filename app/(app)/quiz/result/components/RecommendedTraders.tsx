@@ -17,8 +17,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--glass-bg-secondary)',
-        border: '1px solid var(--glass-border-light)',
+        background: 'var(--color-bg-secondary)',
+        border: '1px solid var(--color-accent-primary-15)',
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
         flexDirection: 'column',
@@ -56,8 +56,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
             style={{
               padding: '12px 16px',
               borderRadius: 12,
-              background: 'var(--color-overlay-subtle)',
-              border: '1px solid var(--glass-border-light)',
+              background: 'var(--color-bg-tertiary)',
+              border: '1px solid var(--color-accent-primary-10)',
               display: 'flex',
               alignItems: 'center',
               gap: 12,
@@ -69,8 +69,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               e.currentTarget.style.background = 'var(--color-overlay-medium)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--glass-border-light)'
-              e.currentTarget.style.background = 'var(--color-overlay-subtle)'
+              e.currentTarget.style.borderColor = 'var(--color-accent-primary-10)'
+              e.currentTarget.style.background = 'var(--color-bg-tertiary)'
             }}
           >
             {/* Avatar */}
@@ -124,7 +124,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               <div
                 style={{
                   fontSize: tokens.typography.fontSize.xs,
-                  color: 'var(--color-text-tertiary)',
+                  color: 'var(--color-text-primary)',
+                  opacity: 0.5,
                   textTransform: 'capitalize',
                 }}
               >
@@ -149,7 +150,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   <div
                     style={{
                       fontSize: tokens.typography.fontSize.xs,
-                      color: 'var(--color-text-tertiary)',
+                      color: 'var(--color-text-primary)',
+                  opacity: 0.5,
                     }}
                   >
                     ROI
@@ -170,7 +172,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   <div
                     style={{
                       fontSize: tokens.typography.fontSize.xs,
-                      color: 'var(--color-text-tertiary)',
+                      color: 'var(--color-text-primary)',
+                  opacity: 0.5,
                     }}
                   >
                     Score
@@ -185,7 +188,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               height="16"
               viewBox="0 0 24 24"
               fill="none"
-              stroke="var(--color-text-tertiary)"
+              stroke="var(--color-text-secondary)"
               strokeWidth="2"
               strokeLinecap="round"
               strokeLinejoin="round"

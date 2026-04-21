@@ -19,8 +19,8 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--glass-bg-secondary)',
-        border: '1px solid var(--glass-border-light)',
+        background: 'var(--color-bg-secondary)',
+        border: '1px solid var(--color-accent-primary-15)',
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
         flexDirection: 'column',
@@ -77,7 +77,8 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.xs,
               fontWeight: tokens.typography.fontWeight.semibold,
-              color: 'var(--color-text-tertiary)',
+              color: 'var(--color-text-primary)',
+              opacity: 0.55,
               letterSpacing: '1px',
               textTransform: 'uppercase',
             }}
@@ -104,7 +105,8 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             style={{
               fontSize: tokens.typography.fontSize.xs,
               fontWeight: tokens.typography.fontWeight.semibold,
-              color: 'var(--color-text-tertiary)',
+              color: 'var(--color-text-primary)',
+              opacity: 0.55,
               letterSpacing: '1px',
               textTransform: 'uppercase',
             }}
@@ -142,7 +144,8 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
               <span
                 style={{
                   fontSize: tokens.typography.fontSize.sm,
-                  color: 'var(--color-text-secondary)',
+                  color: 'var(--color-text-primary)',
+                  opacity: 0.75,
                   lineHeight: 1.5,
                 }}
               >
@@ -169,7 +172,8 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
               <span
                 style={{
                   fontSize: tokens.typography.fontSize.sm,
-                  color: 'var(--color-text-secondary)',
+                  color: 'var(--color-text-primary)',
+                  opacity: 0.75,
                   lineHeight: 1.5,
                 }}
               >

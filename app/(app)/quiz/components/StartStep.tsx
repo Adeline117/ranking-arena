@@ -33,9 +33,9 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         }}
       >
         <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-          <path d="M12 2L2 7l10 5 10-5-10-5z" />
-          <path d="M2 17l10 5 10-5" />
-          <path d="M2 12l10 5 10-5" />
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
       </div>
 
@@ -43,11 +43,12 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <h1
           style={{
-            fontSize: 'clamp(24px, 5vw, 32px)',
+            fontSize: 'clamp(28px, 6vw, 38px)',
             fontWeight: tokens.typography.fontWeight.bold,
             color: 'var(--color-text-primary)',
             lineHeight: 1.2,
             margin: 0,
+            letterSpacing: '-0.02em',
           }}
         >
           {tr('quizTitle')}
@@ -55,7 +56,8 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         <p
           style={{
             fontSize: tokens.typography.fontSize.base,
-            color: 'var(--color-text-secondary)',
+            color: 'var(--color-text-primary)',
+            opacity: 0.75,
             lineHeight: 1.6,
             margin: 0,
             maxWidth: 400,
@@ -71,10 +73,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           style={{
             padding: '6px 14px',
             borderRadius: 8,
-            background: 'var(--color-overlay-subtle)',
-            border: '1px solid var(--glass-border-light)',
+            background: 'var(--color-accent-primary-08)',
+            border: '1px solid var(--color-accent-primary-20)',
             fontSize: tokens.typography.fontSize.sm,
-            color: 'var(--color-text-secondary)',
+            fontWeight: tokens.typography.fontWeight.medium,
+            color: 'var(--color-text-primary)',
           }}
         >
           {tr('quizBadge15Q')}
@@ -83,10 +86,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           style={{
             padding: '6px 14px',
             borderRadius: 8,
-            background: 'var(--color-overlay-subtle)',
-            border: '1px solid var(--glass-border-light)',
+            background: 'var(--color-accent-primary-08)',
+            border: '1px solid var(--color-accent-primary-20)',
             fontSize: tokens.typography.fontSize.sm,
-            color: 'var(--color-text-secondary)',
+            fontWeight: tokens.typography.fontWeight.medium,
+            color: 'var(--color-text-primary)',
           }}
         >
           {tr('quizBadge8Types')}
@@ -95,10 +99,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           style={{
             padding: '6px 14px',
             borderRadius: 8,
-            background: 'var(--color-overlay-subtle)',
-            border: '1px solid var(--glass-border-light)',
+            background: 'var(--color-accent-primary-08)',
+            border: '1px solid var(--color-accent-primary-20)',
             fontSize: tokens.typography.fontSize.sm,
-            color: 'var(--color-text-secondary)',
+            fontWeight: tokens.typography.fontWeight.medium,
+            color: 'var(--color-text-primary)',
           }}
         >
           {tr('quizBadge2Min')}
@@ -109,16 +114,17 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
       <button
         onClick={onStart}
         style={{
-          padding: '14px 48px',
-          borderRadius: 12,
+          padding: '16px 56px',
+          borderRadius: 14,
           background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
           border: 'none',
           color: '#fff',
-          fontSize: tokens.typography.fontSize.lg,
+          fontSize: 'clamp(16px, 4vw, 20px)',
           fontWeight: tokens.typography.fontWeight.bold,
           cursor: 'pointer',
           transition: 'transform 0.2s, box-shadow 0.2s',
-          boxShadow: '0 4px 20px rgba(139, 92, 246, 0.35)',
+          boxShadow: '0 4px 24px rgba(139, 92, 246, 0.4), 0 0 60px rgba(139, 92, 246, 0.15)',
+          letterSpacing: '0.02em',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'translateY(-2px)'
