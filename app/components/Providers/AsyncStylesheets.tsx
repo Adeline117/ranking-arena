@@ -12,9 +12,11 @@ import { useEffect } from 'react'
  * 3. Uses requestIdleCallback to avoid blocking the main thread
  */
 
-// responsive.css loads first (layout-critical breakpoints not in critical-css.ts)
-// animations.css deferred further — purely decorative, never affects LCP
-const PRIORITY_STYLESHEETS = ['/styles/responsive.css']
+// responsive.css is loaded by the root layout's print-media trick (app/layout.tsx)
+// which works without JS and fires earlier than post-hydration. No need to
+// duplicate it here — the loadStylesheet() dedup check would catch it anyway,
+// but removing the entry avoids the unnecessary querySelector probe.
+const PRIORITY_STYLESHEETS: string[] = []
 const DEFERRED_STYLESHEETS = ['/styles/animations.css']
 
 function loadStylesheet(href: string): Promise<void> {
