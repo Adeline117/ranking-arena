@@ -1,12 +1,12 @@
 'use client'
 
 interface ProgressBarProps {
-  current: number // 1-15
-  total: number // 15
+  answered: number
+  total: number
 }
 
-export default function ProgressBar({ current, total }: ProgressBarProps) {
-  const percent = (current / total) * 100
+export default function ProgressBar({ answered, total }: ProgressBarProps) {
+  const percent = (answered / total) * 100
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -19,14 +19,14 @@ export default function ProgressBar({ current, total }: ProgressBarProps) {
         }}
         aria-hidden="true"
       >
-        {current} / {total}
+        {answered} / {total}
       </span>
       <div
         role="progressbar"
-        aria-valuenow={current}
-        aria-valuemin={1}
+        aria-valuenow={answered}
+        aria-valuemin={0}
         aria-valuemax={total}
-        aria-label={`Question ${current} of ${total}`}
+        aria-label={`${answered} of ${total} answered`}
         style={{
           width: '100%',
           height: 3,

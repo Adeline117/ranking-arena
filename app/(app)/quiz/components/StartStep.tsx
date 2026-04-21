@@ -65,7 +65,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
 
       {/* Info badges */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
-        {['quizBadge15Q', 'quizBadge8Types', 'quizBadge2Min'].map((key) => (
+        {['quizBadge30Q', 'quizBadge12Types', 'quizBadge5Min'].map((key) => (
           <span
             key={key}
             style={{

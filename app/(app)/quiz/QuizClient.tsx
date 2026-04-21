@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
@@ -15,15 +15,17 @@ import QuestionStep from './components/QuestionStep'
 import ProgressBar from './components/ProgressBar'
 import CalculatingStep from './components/CalculatingStep'
 
-const TOTAL_QUESTIONS = QUIZ_QUESTIONS.length // 15
+const TOTAL_QUESTIONS = QUIZ_QUESTIONS.length
+
+type Step = 'start' | 'questions' | 'calculating'
 
 export default function QuizClient() {
   const router = useRouter()
   const { language, t } = useLanguage()
-  const { currentQuestion, answers, setAnswer, goToQuestion, setResult, reset } = useQuizStore()
+  const { answers, setAnswer, setResult, reset } = useQuizStore()
   const [mounted, setMounted] = useState(false)
   const [txnReady, setTxnReady] = useState(false)
-  const autoAdvanceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [step, setStep] = useState<Step>('start')
 
   useEffect(() => {
     setMounted(true)
@@ -35,43 +37,24 @@ export default function QuizClient() {
     if (t('quizTitle') !== 'quizTitle') setTxnReady(true)
     return () => {
       unsub()
-      if (autoAdvanceTimer.current) {
-        clearTimeout(autoAdvanceTimer.current)
-      }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleStart = useCallback(() => {
-    goToQuestion(1)
-  }, [goToQuestion])
-
-  const handleSelectOption = useCallback(
-    (optionId: string) => {
-      const qId = currentQuestion
-      setAnswer(qId, optionId)
-      // Auto-advance after 300ms
-      if (autoAdvanceTimer.current) {
-        clearTimeout(autoAdvanceTimer.current)
-      }
-      autoAdvanceTimer.current = setTimeout(() => {
-        if (qId < TOTAL_QUESTIONS) {
-          goToQuestion(qId + 1)
-        } else {
-          // Last question — go to calculating
-          goToQuestion(TOTAL_QUESTIONS + 1)
-        }
-      }, 300)
-    },
-    [currentQuestion, setAnswer, goToQuestion]
+  const answeredCount = useMemo(
+    () => Object.keys(answers).length,
+    [answers]
   )
 
-  const handleBack = useCallback(() => {
-    if (currentQuestion > 1) {
-      goToQuestion(currentQuestion - 1)
-    } else {
-      goToQuestion(0) // Back to start
-    }
-  }, [currentQuestion, goToQuestion])
+  const handleStart = useCallback(() => {
+    setStep('questions')
+  }, [])
+
+  const handleSelectOption = useCallback(
+    (questionId: number, optionId: string) => {
+      setAnswer(questionId, optionId)
+    },
+    [setAnswer]
+  )
 
   const handleCalculationDone = useCallback(() => {
     const result = calculateResult(answers)
@@ -101,40 +84,9 @@ export default function QuizClient() {
     router.push(`/quiz/result?type=${result.primaryType}&match=${result.matchPercent}`)
   }, [answers, setResult, router])
 
-  // Keyboard navigation
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
-      if (currentQuestion === 0 && e.key === 'Enter') {
-        e.preventDefault()
-        handleStart()
-      } else if (currentQuestion >= 1 && currentQuestion <= TOTAL_QUESTIONS) {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          handleBack()
-        } else {
-          // A/B/C/D or 1/2/3/4 to select options
-          const currentQ = QUIZ_QUESTIONS[currentQuestion - 1]
-          if (currentQ) {
-            const keyLower = e.key.toLowerCase()
-            const letterIndex = keyLower.charCodeAt(0) - 97 // a=0, b=1, c=2, d=3
-            const digitIndex = parseInt(e.key, 10) - 1 // 1=0, 2=1, 3=2, 4=3
-            const idx = letterIndex >= 0 && letterIndex < currentQ.options.length
-              ? letterIndex
-              : digitIndex >= 0 && digitIndex < currentQ.options.length
-                ? digitIndex
-                : -1
-            if (idx >= 0) {
-              e.preventDefault()
-              handleSelectOption(currentQ.options[idx].id)
-            }
-          }
-        }
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  }, [currentQuestion, handleStart, handleBack, handleSelectOption])
+  const handleSubmit = useCallback(() => {
+    setStep('calculating')
+  }, [])
 
   // Show loading until both mounted AND translations ready
   if (!mounted || !txnReady) {
@@ -169,84 +121,164 @@ export default function QuizClient() {
     setLanguage(newLang)
   }
 
-  const isQuestion = currentQuestion >= 1 && currentQuestion <= TOTAL_QUESTIONS
-  const isCalculating = currentQuestion === TOTAL_QUESTIONS + 1
-
-  const currentQ = isQuestion ? QUIZ_QUESTIONS[currentQuestion - 1] : null
-
-  return (
-    <Box
+  const langToggleButton = (
+    <button
+      type="button"
+      onClick={handleToggleLanguage}
       style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '80vh',
-        padding: 20,
+        padding: '4px 10px',
+        borderRadius: 6,
+        border: '1px solid var(--glass-border-light)',
+        background: 'transparent',
+        color: 'var(--color-text-tertiary)',
+        fontSize: 12,
+        fontWeight: 600,
+        cursor: 'pointer',
       }}
+      aria-label="Toggle language"
     >
-      {/* Card */}
+      {language === 'en' ? '\u4E2D\u6587' : 'EN'}
+    </button>
+  )
+
+  // Start screen
+  if (step === 'start') {
+    return (
       <Box
         style={{
-          maxWidth: 520,
-          width: '100%',
-          background: 'var(--color-bg-secondary)',
-          border: '1px solid var(--glass-border-light)',
-          borderRadius: 12,
-          padding: 'clamp(20px, 4vw, 32px)',
-          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '80vh',
+          padding: 20,
         }}
       >
-        {/* Language toggle — top-right of card */}
-        <div
+        <Box
           style={{
-            position: 'absolute',
-            top: 12,
-            right: 12,
-            zIndex: 1,
+            maxWidth: 520,
+            width: '100%',
+            background: 'var(--color-bg-secondary)',
+            border: '1px solid var(--glass-border-light)',
+            borderRadius: 12,
+            padding: 'clamp(20px, 4vw, 32px)',
+            position: 'relative',
           }}
         >
-          <button
-            type="button"
-            onClick={handleToggleLanguage}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 6,
-              border: '1px solid var(--glass-border-light)',
-              background: 'transparent',
-              color: 'var(--color-text-tertiary)',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-            aria-label="Toggle language"
-          >
-            {language === 'en' ? '\u4E2D\u6587' : 'EN'}
-          </button>
+          {/* Language toggle */}
+          <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1 }}>
+            {langToggleButton}
+          </div>
+          <StartStep tr={t} onStart={handleStart} />
+        </Box>
+      </Box>
+    )
+  }
+
+  // Calculating screen
+  if (step === 'calculating') {
+    return (
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '80vh',
+          padding: 20,
+        }}
+      >
+        <Box
+          style={{
+            maxWidth: 520,
+            width: '100%',
+            background: 'var(--color-bg-secondary)',
+            border: '1px solid var(--glass-border-light)',
+            borderRadius: 12,
+            padding: 'clamp(20px, 4vw, 32px)',
+          }}
+        >
+          <CalculatingStep tr={t} onDone={handleCalculationDone} />
+        </Box>
+      </Box>
+    )
+  }
+
+  // Questions — scrollable flow
+  return (
+    <Box style={{ minHeight: '80vh', padding: 20 }}>
+      <div style={{ maxWidth: 520, width: '100%', margin: '0 auto' }}>
+        {/* Sticky progress bar at top */}
+        <div
+          style={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 10,
+            background: 'var(--color-bg-primary)',
+            padding: '8px 0',
+          }}
+        >
+          <ProgressBar answered={answeredCount} total={TOTAL_QUESTIONS} />
         </div>
 
-        {/* Progress bar (visible during questions) */}
-        {isQuestion && (
-          <div style={{ marginBottom: 24 }}>
-            <ProgressBar current={currentQuestion} total={TOTAL_QUESTIONS} />
+        {/* Language toggle */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+          {langToggleButton}
+        </div>
+
+        {/* All questions rendered */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {QUIZ_QUESTIONS.map((q, idx) => (
+            <QuestionStep
+              key={q.id}
+              question={q}
+              questionNumber={idx + 1}
+              totalQuestions={TOTAL_QUESTIONS}
+              selectedOption={answers[q.id]}
+              tr={t}
+              onSelect={(optionId) => handleSelectOption(q.id, optionId)}
+            />
+          ))}
+        </div>
+
+        {/* Submit button — appears when all answered */}
+        {answeredCount === TOTAL_QUESTIONS && (
+          <div
+            style={{
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 10,
+              background: 'var(--color-bg-primary)',
+              padding: '16px 0',
+              marginTop: 16,
+            }}
+          >
+            <button
+              type="button"
+              onClick={handleSubmit}
+              style={{
+                width: '100%',
+                padding: '14px 32px',
+                borderRadius: 10,
+                background: 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))',
+                border: 'none',
+                color: '#fff',
+                fontSize: 16,
+                fontWeight: 600,
+                cursor: 'pointer',
+                transition: 'transform 0.2s, box-shadow 0.2s',
+                boxShadow: '0 4px 16px color-mix(in srgb, var(--color-brand) 30%, transparent)',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.transform = 'translateY(-1px)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)'
+              }}
+            >
+              {t('quizSeeResults')}
+            </button>
           </div>
         )}
-
-        {/* Steps */}
-        {currentQuestion === 0 && <StartStep tr={t} onStart={handleStart} />}
-
-        {isQuestion && currentQ && (
-          <QuestionStep
-            key={currentQ.id}
-            question={currentQ}
-            selectedOption={answers[currentQ.id]}
-            tr={t}
-            onSelect={handleSelectOption}
-            onBack={handleBack}
-          />
-        )}
-
-        {isCalculating && <CalculatingStep tr={t} onDone={handleCalculationDone} />}
-      </Box>
+      </div>
     </Box>
   )
 }
