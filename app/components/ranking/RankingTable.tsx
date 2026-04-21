@@ -123,6 +123,8 @@ function RankingTableInner(props: {
   const itemsPerPage = 50
 
   // Mobile card view: load more instead of pagination
+  // Cap at 200 to prevent unbounded DOM accumulation on mobile
+  const MAX_CARD_COUNT = 200
   const [cardVisibleCount, setCardVisibleCount] = useState(50)
 
   const [internalSearchQuery, setInternalSearchQuery] = useState('')
@@ -640,13 +642,13 @@ function RankingTableInner(props: {
               )
             })}
           </Box>
-          {cardVisibleCount < sortedTraders.length && (
+          {cardVisibleCount < sortedTraders.length && cardVisibleCount < MAX_CARD_COUNT && (
             <>
               {/* Auto-load more via IntersectionObserver */}
-              <CardLoadMoreSentinel onVisible={() => setCardVisibleCount(prev => Math.min(prev + 20, sortedTraders.length))} />
+              <CardLoadMoreSentinel onVisible={() => setCardVisibleCount(prev => Math.min(prev + 20, MAX_CARD_COUNT, sortedTraders.length))} />
               <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
                 <button
-                  onClick={() => setCardVisibleCount(prev => Math.min(prev + 20, sortedTraders.length))}
+                  onClick={() => setCardVisibleCount(prev => Math.min(prev + 20, MAX_CARD_COUNT, sortedTraders.length))}
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
                     borderRadius: tokens.radius.md,
@@ -666,7 +668,30 @@ function RankingTableInner(props: {
               </Box>
             </>
           )}
-          {cardVisibleCount >= sortedTraders.length && sortedTraders.length > 20 && (
+          {cardVisibleCount >= MAX_CARD_COUNT && sortedTraders.length > MAX_CARD_COUNT && (
+            <Box style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
+              <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
+                {t('showingTopN')?.replace('{n}', String(MAX_CARD_COUNT)) || `Showing top ${MAX_CARD_COUNT}.`}
+              </Text>
+              <button
+                onClick={() => setViewMode('table')}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                  borderRadius: tokens.radius.md,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  color: tokens.colors.accent.primary,
+                  background: `${tokens.colors.accent.primary}15`,
+                  border: `1px solid ${tokens.colors.accent.primary}40`,
+                  cursor: 'pointer',
+                  transition: `all ${tokens.transition.fast}`,
+                }}
+              >
+                {t('switchToTableView') || 'Switch to table view for full list'}
+              </button>
+            </Box>
+          )}
+          {cardVisibleCount >= sortedTraders.length && sortedTraders.length > 20 && sortedTraders.length <= MAX_CARD_COUNT && (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[4], opacity: 0.5 }}>
               <Text size="xs" color="tertiary">{t('endOfList') || `All ${sortedTraders.length} traders shown`}</Text>
             </Box>
