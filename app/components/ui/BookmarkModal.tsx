@@ -328,6 +328,7 @@ export default function BookmarkModal({ isOpen, onClose, onSelect, postId: _post
               type="text"
               aria-label={t('bookmarkFolderName')}
               placeholder={t('bookmarkFolderName')}
+              maxLength={50}
               value={newFolderName}
               onChange={(e) => setNewFolderName(e.target.value)}
               style={{
