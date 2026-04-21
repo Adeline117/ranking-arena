@@ -675,7 +675,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) { setDeleteError(t('pleaseLoginAgain')); return }
       const res = await fetch('/api/account/delete', {
-        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...getCsrfHeaders() },
         body: JSON.stringify({ password: deletePassword, reason: deleteReason }),
       })
       const data = await res.json()
