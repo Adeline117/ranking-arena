@@ -110,7 +110,13 @@ export default function LoginPage() {
     } else if (errorParam === 'no_session') {
       setError(t('loginNoSession'))
     }
-  }, [router, searchParams, t])
+    // If user is already logged in, redirect them away from the login page
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session && !isAddAccount) {
+        router.replace(getRedirectUrl())
+      }
+    })
+  }, [router, searchParams, t, isAddAccount, getRedirectUrl])
 
   useEffect(() => {
     if (error && errorRef.current) {
