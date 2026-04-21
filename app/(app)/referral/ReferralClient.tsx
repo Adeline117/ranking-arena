@@ -6,6 +6,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
+import { getCsrfHeaders } from '@/lib/api/client'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 
 interface ReferralData {
@@ -74,7 +75,10 @@ export default function ReferralClient() {
 
       const res = await fetch('/api/referral', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+          ...getCsrfHeaders(),
+        },
       })
       if (res.ok) {
         const json = await res.json()

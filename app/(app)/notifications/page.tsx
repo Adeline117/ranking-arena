@@ -153,6 +153,8 @@ const NOTIFICATION_TYPE_CONFIG: Record<string, { icon: string; color: string; fi
   system: { icon: 'bell', color: 'var(--color-score-low)' },
   mention: { icon: '@', color: 'var(--color-score-profitability)' },
   message: { icon: 'mail', color: 'var(--color-chart-indigo)' },
+  ranking_change: { icon: 'chart', color: 'var(--color-score-average)', filterLabel: { zh: '排名变动', en: 'Rankings' } },
+  referral_reward: { icon: 'bell', color: 'var(--color-score-great)' },
 }
 
 // SVG icon renderer for notification types (no emoji)

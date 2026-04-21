@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { trackEvent } from '@/lib/analytics/track'
+import { useInboxStore } from '@/lib/stores/inboxStore'
 
 // Lazy-load Supabase to keep it out of the initial client bundle (~50KB savings)
 const getSupabase = () => import('@/lib/supabase/client').then(m => m.supabase)
@@ -19,13 +20,21 @@ export function useTopNavState() {
   const [searchQuery, setSearchQuery] = useState('')
   const [showSearchDropdown, setShowSearchDropdown] = useState(false)
   const [showMobileSearch, setShowMobileSearch] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
   const [_unreadMessageCount, setUnreadMessageCount] = useState(0)
   const menuRef = useRef<HTMLDivElement>(null)
   const searchRef = useRef<HTMLDivElement>(null)
 
-  // Badge shows only notification count (not messages) to match /inbox notifications tab
-  const totalUnread = unreadCount
+  // Sync notification count with inbox store so InboxPanel mark-read updates the badge
+  const storeUnreadNotifications = useInboxStore((s) => s.unreadNotifications)
+  const setStoreUnreadNotifications = useInboxStore((s) => s.setUnreadNotifications)
+
+  // Wrapper that updates both local store and inbox store
+  const setUnreadCount = useCallback((count: number) => {
+    setStoreUnreadNotifications(count)
+  }, [setStoreUnreadNotifications])
+
+  // Badge shows inbox store count (synced by both TopNav fetches and InboxPanel mark-read)
+  const totalUnread = storeUnreadNotifications
 
   // Sync auth state from global hook immediately (prevents login flicker on navigation)
   useEffect(() => {
@@ -127,7 +136,7 @@ export function useTopNavState() {
     return () => {
       alive = false
     }
-  }, [isReady])
+  }, [isReady, setUnreadCount])
 
   // Real-time subscriptions deferred to after idle to avoid competing with LCP
   useEffect(() => {
@@ -192,7 +201,7 @@ export function useTopNavState() {
       if (notifChannel && sbRef) sbRef.removeChannel(notifChannel)
       if (msgChannel && sbRef) sbRef.removeChannel(msgChannel)
     }
-  }, [myId])
+  }, [myId, setUnreadCount])
 
   useEffect(() => {
     if (!showUserMenu && !showSearchDropdown) return
