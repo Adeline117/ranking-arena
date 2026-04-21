@@ -10,6 +10,7 @@ import { supabase } from '@/lib/supabase/client'
 import { formatPnL } from '@/lib/utils/format'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface WatchlistItem {
   source: string; source_trader_id: string; handle: string | null; created_at: string
@@ -69,7 +70,7 @@ export default function WatchlistClient() {
     try {
       const { data: { session } } = await supabase.auth.getSession()
       if (!session) return
-      const res = await fetch('/api/watchlist', { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ source, source_trader_id: id }) })
+      const res = await fetch('/api/watchlist', { method: 'DELETE', headers: { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json', ...getCsrfHeaders() }, body: JSON.stringify({ source, source_trader_id: id }) })
       if (res.ok) setWatchlist(prev => prev.filter(w => !(w.source === source && w.source_trader_id === id)))
     } catch (err) { console.error('[watchlist] remove failed:', err) }
     finally { setRemoving(null) }

@@ -5,6 +5,7 @@ import { Box, Text, Button } from '../base'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 // Sub-components
 import { AlertRow, AlertPriceRow } from './AlertRowComponents'
@@ -116,7 +117,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
     try {
       const res = await fetch('/api/trader-alerts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ trader_id: traderId, source, ...alert }),
       })
       const data = await res.json()
@@ -138,7 +139,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
   const handleDelete = async () => {
     if (!alert.id) return
     try {
-      const res = await fetch(`/api/trader-alerts?id=${alert.id}`, { method: 'DELETE' })
+      const res = await fetch(`/api/trader-alerts?id=${alert.id}`, { method: 'DELETE', headers: { ...getCsrfHeaders() } })
       if (res.ok) {
         setAlert(DEFAULT_ALERT)
         setHistory([])
@@ -155,7 +156,7 @@ export default function AlertConfig({ traderId, traderHandle, source, userId, on
     if (alert.id) {
       await fetch('/api/trader-alerts', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({ trader_id: traderId, source, ...alert, enabled: newEnabled }),
       })
       showToast(newEnabled ? t('alertEnabled') : t('alertDisabled'), 'success')
