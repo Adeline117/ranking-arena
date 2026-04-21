@@ -11,6 +11,11 @@
  * Why not the `file-type` package: this implementation is intentionally
  * dependency-free and Edge-runtime safe. Add the npm package later if we
  * start accepting more exotic formats (HEIC, AVIF beyond `ftypavif`, etc.).
+ *
+ * TODO: Add HEIC/HEIF support. HEIC files use ISOBMFF with ftyp brands
+ * 'heic', 'heix', 'mif1'. Decoding requires a server-side library such as
+ * `sharp` (with libheif) or `heic-convert`. Until then, HEIC uploads are
+ * rejected as 'unknown'.
  */
 
 export type SniffedImageKind = 'jpeg' | 'png' | 'gif' | 'webp' | 'avif' | 'unknown'
