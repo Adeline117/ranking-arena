@@ -40,7 +40,10 @@ export function validateHandle(handle: string): { valid: boolean; messageKey: st
   if (handle.length < 1) {
     return { valid: false, messageKey: 'loginHandleTooShort' }
   }
-  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5]+$/.test(handle)) {
+  if (handle.length > 30) {
+    return { valid: false, messageKey: 'loginHandleTooLong' }
+  }
+  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF]+$/.test(handle)) {
     return { valid: false, messageKey: 'loginHandleInvalidChars' }
   }
   return { valid: true, messageKey: '' }
