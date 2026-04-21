@@ -157,12 +157,25 @@ export default function TokenRankingClient({ token }: { token: string }) {
   const urlPeriod = (searchParams.get('period')?.toUpperCase() || '90D') as Period
   const validPeriod = (['7D', '30D', '90D'] as const).includes(urlPeriod) ? urlPeriod : ('90D' as Period)
 
+  const urlPage = Math.max(0, parseInt(searchParams.get('page') || '0', 10) || 0)
   const [period, setPeriod] = useState<Period>(validPeriod)
   const [traders, setTraders] = useState<TokenTrader[]>([])
   const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
-  const [page, setPage] = useState(0)
+  const [page, setPageRaw] = useState(urlPage)
   const PAGE_SIZE = 50
+
+  const setPage = useCallback((p: number | ((prev: number) => number)) => {
+    setPageRaw(prev => {
+      const next = typeof p === 'function' ? p(prev) : p
+      // Sync page to URL
+      const params = new URLSearchParams(searchParams.toString())
+      if (next > 0) params.set('page', String(next))
+      else params.delete('page')
+      router.replace(`${pathname}${params.size ? '?' + params.toString() : ''}`, { scroll: false })
+      return next
+    })
+  }, [searchParams, router, pathname])
   const abortRef = useRef<AbortController | null>(null)
 
   const tokenColor = TOKEN_COLORS[token] || tokens.colors.accent.primary
@@ -199,10 +212,12 @@ export default function TokenRankingClient({ token }: { token: string }) {
   const handlePeriodChange = useCallback(
     (newPeriod: Period) => {
       setPeriod(newPeriod)
-      setPage(0)
+      setPageRaw(0)
+      // Update both period and page in a single URL write
       const params = new URLSearchParams(searchParams.toString())
       if (newPeriod === '90D') params.delete('period')
       else params.set('period', newPeriod)
+      params.delete('page') // reset to page 0
       const qs = params.toString()
       router.replace(`${pathname}${qs ? '?' + qs : ''}`, { scroll: false })
     },
