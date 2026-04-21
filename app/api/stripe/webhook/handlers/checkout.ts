@@ -49,6 +49,27 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
+  // If user already has an active subscription with a DIFFERENT stripe_subscription_id,
+  // cancel the new one automatically to prevent double billing
+  const { data: existingSub } = await getSupabase()
+    .from('subscriptions')
+    .select('stripe_subscription_id, status')
+    .eq('user_id', userId)
+    .in('status', ['active', 'trialing'])
+    .maybeSingle()
+
+  if (existingSub?.stripe_subscription_id &&
+      existingSub.stripe_subscription_id !== subscriptionId) {
+    // Cancel the NEW subscription to keep the existing one
+    await stripe.subscriptions.cancel(subscriptionId)
+    logger.warn('Duplicate subscription detected and cancelled', {
+      userId,
+      existing: existingSub.stripe_subscription_id,
+      cancelled: subscriptionId,
+    })
+    return // Don't update DB with the cancelled subscription
+  }
+
   try {
     const subscription = await stripe.subscriptions.retrieve(subscriptionId)
 
