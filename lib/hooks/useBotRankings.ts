@@ -46,7 +46,11 @@ export interface BotRankingsResponse {
 const fetcher = async (url: string) => {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
+  try {
+    return await res.json()
+  } catch {
+    return null
+  }
 }
 
 export interface UseBotRankingsOptions {
