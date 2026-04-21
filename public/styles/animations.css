@@ -170,6 +170,8 @@
 .glass {
   background: var(--glass-bg-primary);
   border: 1px solid var(--glass-border-light);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
 }
 
 /* glass-light, glass-dark: removed (unused in codebase) */
