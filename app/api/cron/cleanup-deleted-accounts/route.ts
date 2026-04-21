@@ -9,6 +9,7 @@ import { NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { withCron } from '@/lib/api/with-cron'
+import { getStripe } from '@/lib/stripe'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -45,6 +46,25 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
 
     const results = await Promise.allSettled(
       batch.map(async (account) => {
+        // Safety net: cancel any remaining Stripe subscription before hard delete
+        try {
+          const { data: subscription } = await supabase
+            .from('subscriptions')
+            .select('stripe_subscription_id, status')
+            .eq('user_id', account.id)
+            .in('status', ['active', 'trialing', 'past_due'])
+            .maybeSingle()
+
+          if (subscription?.stripe_subscription_id) {
+            const stripe = getStripe()
+            await stripe.subscriptions.cancel(subscription.stripe_subscription_id)
+            logger.info(`[cleanup-deleted-accounts] Cancelled Stripe subscription ${subscription.stripe_subscription_id} for user ${account.id}`)
+          }
+        } catch (stripeErr) {
+          logger.warn(`[cleanup-deleted-accounts] Failed to cancel Stripe subscription for ${account.id}:`, stripeErr)
+          // Continue with deletion — don't block on Stripe failure
+        }
+
         // Hard delete from auth
         const { error: deleteError } = await supabase.auth.admin.deleteUser(account.id)
         if (deleteError) {
