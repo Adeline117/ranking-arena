@@ -300,7 +300,13 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   const { handle } = await params
   if (handle.length > 300) notFound()
   const allSearchParams = await searchParams
-  const platform = allSearchParams.platform
+  const rawPlatform = allSearchParams.platform
+
+  // Validate platform param: reject if it's not a known exchange (avoids wasted DB query)
+  // Only lowercase alphanumeric + underscore allowed; must exist in EXCHANGE_CONFIG
+  const platform = rawPlatform && /^[a-z0-9_]{1,40}$/.test(rawPlatform) && rawPlatform in EXCHANGE_CONFIG
+    ? rawPlatform
+    : undefined
 
   let decodedHandle = handle
   try {
