@@ -267,7 +267,16 @@ export function CommentInput({
             </button>
           </div>
 
-          {/* Right: send button */}
+          {/* Right: character counter + send button */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{
+            fontSize: 11,
+            color: newComment.length > 1900 ? 'var(--color-accent-error)' : tokens.colors.text.tertiary,
+            fontVariantNumeric: 'tabular-nums',
+            whiteSpace: 'nowrap',
+          }}>
+            {newComment.length}/2000
+          </span>
           <button
             onClick={() => onSubmitComment(postId)}
             disabled={submittingComment || !newComment.trim()}
@@ -289,6 +298,7 @@ export function CommentInput({
           >
             {submittingComment ? <ButtonSpinner size="xs" /> : t('send')}
           </button>
+          </div>
         </div>
       </div>
     </div>
