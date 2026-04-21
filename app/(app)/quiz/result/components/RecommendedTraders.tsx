@@ -52,7 +52,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
         {traders.map((trader) => (
           <Link
             key={trader.handle}
-            href={`/trader/${trader.handle}`}
+            href={`/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.platform)}`}
             style={{
               padding: '12px 16px',
               borderRadius: 12,
