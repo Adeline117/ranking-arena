@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { uiLogger } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
+import { getCsrfHeaders } from '@/lib/api/client'
 import { validateHandle } from '../validation'
 
 interface UseSettingsHandlersProps {
@@ -457,7 +458,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   }
 
   const handleChangePassword = async () => {
-    if (submittingRef.current || savingPassword || !currentPassword || !email) return
+    if (submittingRef.current || savingPassword || !currentPassword || !newPassword || !email) return
+    if (newPassword !== confirmNewPassword) { showToast(t('validationPasswordMismatch') || 'Passwords do not match', 'error'); return }
+    if (newPassword.length < 6) { showToast(t('validationPasswordMinLength') || 'Password must be at least 6 characters', 'error'); return }
     submittingRef.current = true
     setSavingPassword(true)
     try {
@@ -471,7 +474,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         if (currentSession?.access_token) {
           await fetch('/api/settings/sessions', {
             method: 'DELETE',
-            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${currentSession.access_token}` },
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${currentSession.access_token}`, ...getCsrfHeaders() },
             body: JSON.stringify({ all: true }),
           })
         }
@@ -587,7 +590,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       const res = await fetch('/api/settings/sessions', {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...getCsrfHeaders() },
         body: JSON.stringify({ sessionId }),
       })
       if (res.ok) { setSessions(prev => prev.filter(s => s.id !== sessionId)); showToast(t('sessionRevoked'), 'success') }
@@ -602,7 +605,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       const { data: { session } } = await supabase.auth.getSession()
       if (!session?.access_token) return
       const res = await fetch('/api/settings/sessions', {
-        method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}` },
+        method: 'DELETE', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.access_token}`, ...getCsrfHeaders() },
         body: JSON.stringify({ all: true }),
       })
       if (res.ok) { setSessions(prev => prev.filter(s => s.isCurrent)); showToast(t('logoutAllSuccess'), 'success') }
