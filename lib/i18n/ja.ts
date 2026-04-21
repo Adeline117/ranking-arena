@@ -3193,6 +3193,7 @@ const ja = {
     nameRequiredError: 'グループ名を1つ以上入力してください（中国語または英語）',
     imageSizeExceed5MB: '画像サイズは5MBを超えてはいけません',
     networkErrorCheckConnection: 'ネットワークエラー。接続を確認してください',
+    offlineError: 'オフラインです。接続を確認してください。',
     cannotConnectToServer: 'サーバーに接続できません。接続を確認してください',
     addLanguageBtn: '言語を追加',
     groupNameRequired: 'グループ名 *',

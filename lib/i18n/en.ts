@@ -3441,6 +3441,7 @@ const en = {
     nameRequiredError: 'Please enter at least one group name (Chinese or English)',
     imageSizeExceed5MB: 'Image size cannot exceed 5MB',
     networkErrorCheckConnection: 'Network error, please check your connection',
+    offlineError: 'You are offline. Please check your connection.',
     cannotConnectToServer: 'Unable to connect to server, please check your connection',
     addLanguageBtn: 'Add Language',
     groupNameRequired: 'Group Name *',
