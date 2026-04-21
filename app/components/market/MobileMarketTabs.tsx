@@ -19,7 +19,9 @@ export default function MobileMarketTabs({ children }: {
   const [mountedTabs, setMountedTabs] = useState<Set<string>>(new Set(['overview']))
   const containerRef = useRef<HTMLDivElement>(null)
   const startXRef = useRef(0)
+  const startYRef = useRef(0)
   const currentXRef = useRef(0)
+  const currentYRef = useRef(0)
   const isDragging = useRef(false)
 
   const currentIndex = TAB_KEYS.findIndex(tab => tab.key === activeTab)
@@ -39,21 +41,27 @@ export default function MobileMarketTabs({ children }: {
 
     const onTouchStart = (e: TouchEvent) => {
       startXRef.current = e.touches[0].clientX
+      startYRef.current = e.touches[0].clientY
       isDragging.current = true
     }
     const onTouchMove = (e: TouchEvent) => {
       if (!isDragging.current) return
       currentXRef.current = e.touches[0].clientX
+      currentYRef.current = e.touches[0].clientY
     }
     const onTouchEnd = () => {
       if (!isDragging.current) return
       isDragging.current = false
-      const diff = startXRef.current - currentXRef.current
+      const dx = startXRef.current - currentXRef.current
+      const dy = startYRef.current - currentYRef.current
       const threshold = 60
 
-      if (diff > threshold && currentIndex < TAB_KEYS.length - 1) {
+      // Only trigger tab switch if horizontal intent (dx > dy)
+      if (Math.abs(dx) <= Math.abs(dy)) return
+
+      if (dx > threshold && currentIndex < TAB_KEYS.length - 1) {
         setActiveTab(TAB_KEYS[currentIndex + 1].key)
-      } else if (diff < -threshold && currentIndex > 0) {
+      } else if (dx < -threshold && currentIndex > 0) {
         setActiveTab(TAB_KEYS[currentIndex - 1].key)
       }
     }
