@@ -89,6 +89,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
           <input
             ref={inputRef}
             type="text"
+            maxLength={200}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
