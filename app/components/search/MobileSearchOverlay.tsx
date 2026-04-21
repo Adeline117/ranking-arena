@@ -144,6 +144,9 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
                 padding: tokens.spacing[1],
                 display: 'flex',
                 alignItems: 'center',
+                justifyContent: 'center',
+                minWidth: 44,
+                minHeight: 44,
               }}
             >
               <CloseIcon size={16} />
