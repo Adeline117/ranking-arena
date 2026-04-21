@@ -120,7 +120,7 @@ function AuthCallbackContent() {
         }
       } else {
         // Retry with backoff: supabase may need time to process the hash fragment
-        const tryGetSession = async (retries = 0): Promise<typeof session> => {
+        const tryGetSession = async (retries = 0): Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']> => {
           await new Promise(r => setTimeout(r, 1000))
           const { data } = await supabase.auth.getSession()
           if (data.session) return data.session
