@@ -84,10 +84,11 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
           >
             {tr('quizRiskLevel')}
           </span>
-          <div style={{ display: 'flex', gap: 4 }}>
+          <div style={{ display: 'flex', gap: 4 }} role="img" aria-label={`Risk level ${type.riskLevel} out of 5`}>
             {[1, 2, 3, 4, 5].map((level) => (
               <div
                 key={level}
+                aria-hidden="true"
                 style={{
                   width: 10,
                   height: 10,
