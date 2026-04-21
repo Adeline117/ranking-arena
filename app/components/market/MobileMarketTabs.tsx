@@ -85,7 +85,7 @@ export default function MobileMarketTabs({ children }: {
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
         background: tokens.colors.bg.secondary,
         position: 'sticky',
-        top: 48, // below SentimentBar
+        top: 'var(--top-nav-height, 48px)',
         zIndex: tokens.zIndex.dropdown,
       }}>
         {TAB_KEYS.map(tab => (
