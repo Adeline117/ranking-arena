@@ -2930,6 +2930,14 @@ td[data-numeric],
   }
 }
 
+/* Prevent scroll chaining from modal content to background */
+[role="dialog"] > div,
+.modal-content,
+.bottom-sheet-content,
+.comments-modal-content {
+  overscroll-behavior: contain;
+}
+
 /* Consistent border radius across components */
 .card,
 .glass-card,
