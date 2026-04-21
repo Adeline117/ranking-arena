@@ -28,6 +28,10 @@ const TRADER_QUERIES: Record<PersonalityTypeId, { orderBy: string; ascending: bo
   hodler: { orderBy: 'roi', ascending: false },
   degen: { orderBy: 'roi', ascending: false },
   strategist: { orderBy: 'arena_score', ascending: false },
+  copycat: { orderBy: 'arena_score', ascending: false },
+  arbitrageur: { orderBy: 'pnl', ascending: false },
+  gridbot: { orderBy: 'trades_count', ascending: false },
+  narrator: { orderBy: 'arena_score', ascending: false },
 }
 
 async function getRecommendedTraders(typeId: PersonalityTypeId): Promise<RecommendedTrader[]> {

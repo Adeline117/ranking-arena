@@ -1,11 +1,13 @@
 /**
  * Trading Personality Quiz — Scoring algorithm
  *
- * Tallies weighted scores from all 15 answers,
- * produces primary + secondary type and a match percentage (60-99%).
+ * Tallies weighted scores from all 15 answers, normalizes per-type,
+ * applies softmax with temperature 1.5 for smooth probability distribution,
+ * then produces primary + secondary type, match percentage (55-99%),
+ * and allTypePercents (summing to 100).
  */
 
-import type { PersonalityTypeId, QuizOption, QuizQuestion, QuizResult } from './types'
+import type { PersonalityTypeId, QuizQuestion, QuizResult } from './types'
 import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from './quiz-data'
 
 const ALL_TYPE_IDS: PersonalityTypeId[] = PERSONALITY_TYPES.map((t) => t.id)
@@ -27,10 +29,23 @@ function getMaxPossibleScore(typeId: PersonalityTypeId, questions: QuizQuestion[
   return max
 }
 
+/**
+ * Softmax with temperature for smooth probability distribution.
+ * Higher temperature → flatter distribution; lower → more peaked.
+ * Uses max-subtraction for numerical stability.
+ */
+function softmax(values: number[], temperature: number = 1.5): number[] {
+  const scaled = values.map((v) => v / temperature)
+  const maxVal = Math.max(...scaled)
+  const exps = scaled.map((s) => Math.exp(s - maxVal))
+  const sumExps = exps.reduce((a, b) => a + b, 0)
+  return exps.map((e) => e / sumExps)
+}
+
 export function calculateResult(answers: Record<number, string>): QuizResult {
   const questions = QUIZ_QUESTIONS
 
-  // Tally scores
+  // 1. Tally raw scores for all 12 types
   const scores: Record<PersonalityTypeId, number> = {
     sniper: 0,
     scalper: 0,
@@ -40,6 +55,10 @@ export function calculateResult(answers: Record<number, string>): QuizResult {
     hodler: 0,
     degen: 0,
     strategist: 0,
+    copycat: 0,
+    arbitrageur: 0,
+    gridbot: 0,
+    narrator: 0,
   }
 
   for (const q of questions) {
@@ -52,25 +71,53 @@ export function calculateResult(answers: Record<number, string>): QuizResult {
     }
   }
 
-  // Sort types by score descending, tiebreak by ID alphabetically
-  const sorted = ALL_TYPE_IDS.slice().sort((a, b) => {
-    const diff = scores[b] - scores[a]
-    if (diff !== 0) return diff
-    return a.localeCompare(b)
+  // 2. Normalize each type: normalized[i] = rawScore[i] / maxPossible[i]
+  const normalized = ALL_TYPE_IDS.map((typeId) => {
+    const maxPossible = getMaxPossibleScore(typeId, questions)
+    return maxPossible > 0 ? scores[typeId] / maxPossible : 0
   })
 
-  const primaryType = sorted[0]
-  const secondaryType = sorted[1]
+  // 3. Apply softmax with temperature 1.5
+  const probabilities = softmax(normalized, 1.5)
 
-  // Normalize match percentage to 60-99 range
-  const maxPossible = getMaxPossibleScore(primaryType, questions)
-  const rawRatio = maxPossible > 0 ? scores[primaryType] / maxPossible : 0.5
-  const matchPercent = Math.round(60 + rawRatio * 39)
+  // 4. Primary = argmax, Secondary = second argmax
+  const indexed = ALL_TYPE_IDS.map((id, i) => ({ id, prob: probabilities[i] }))
+  indexed.sort((a, b) => {
+    const diff = b.prob - a.prob
+    if (diff !== 0) return diff
+    return a.id.localeCompare(b.id)
+  })
+
+  const primaryType = indexed[0].id
+  const secondaryType = indexed[1].id
+
+  // 5. matchPercent = floor(55 + softmaxProb[primary] * 44), clamped [55, 99]
+  const primaryProb = indexed[0].prob
+  const matchPercent = Math.min(99, Math.max(55, Math.floor(55 + primaryProb * 44)))
+
+  // 6. allTypePercents: softmax probabilities * 100, rounded to integers summing to 100
+  const rawPercents = probabilities.map((p) => Math.round(p * 100))
+  let currentSum = rawPercents.reduce((a, b) => a + b, 0)
+
+  // Adjust the largest value so the total sums to exactly 100
+  if (currentSum !== 100) {
+    let largestIdx = 0
+    for (let i = 1; i < rawPercents.length; i++) {
+      if (rawPercents[i] > rawPercents[largestIdx]) largestIdx = i
+    }
+    rawPercents[largestIdx] += 100 - currentSum
+  }
+
+  const allTypePercents = {} as Record<PersonalityTypeId, number>
+  ALL_TYPE_IDS.forEach((id, i) => {
+    allTypePercents[id] = rawPercents[i]
+  })
 
   return {
     primaryType,
     secondaryType,
     scores,
-    matchPercent: Math.min(99, Math.max(60, matchPercent)),
+    matchPercent,
+    allTypePercents,
   }
 }
