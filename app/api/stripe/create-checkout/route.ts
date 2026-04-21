@@ -53,6 +53,22 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Prevent duplicate subscriptions — check before doing anything else
+    const supabaseAdmin = getSupabaseAdmin()
+    const { data: existingSub } = await supabaseAdmin
+      .from('subscriptions')
+      .select('status, tier, stripe_subscription_id')
+      .eq('user_id', user.id)
+      .in('status', ['active', 'trialing'])
+      .maybeSingle()
+
+    if (existingSub?.tier === 'pro' || existingSub?.tier === 'elite') {
+      return NextResponse.json(
+        { error: 'You already have an active subscription. Manage it from your account settings.', code: 'ALREADY_SUBSCRIBED' },
+        { status: 409 }
+      )
+    }
+
     // 验证计划类型
     if (!['monthly', 'yearly', 'lifetime'].includes(plan)) {
       return NextResponse.json(
