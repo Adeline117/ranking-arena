@@ -9,7 +9,6 @@ import {
   getFeatureLimits,
   getPlan,
 } from '../index'
-import { formatPrice } from '@/lib/types/premium'
 import type { SubscriptionTier, PremiumFeatureId } from '../index'
 
 describe('SUBSCRIPTION_PLANS', () => {
@@ -130,16 +129,3 @@ describe('getPlan', () => {
   })
 })
 
-describe('formatPrice', () => {
-  test('格式化价格', () => {
-    expect(formatPrice(9.99)).toMatch(/\$9\.99/)
-  })
-
-  test('免费显示为 "免费"', () => {
-    expect(formatPrice(0)).toBe('免费')
-  })
-
-  test('联系销售显示正确', () => {
-    expect(formatPrice(-1)).toBe('联系销售')
-  })
-})

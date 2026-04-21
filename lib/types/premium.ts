@@ -394,15 +394,6 @@ export function getFeatureLimits(tier: SubscriptionTier): FeatureLimits {
 }
 
 /**
- * 格式化价格显示
- */
-export function formatPrice(price: number, currency: string = 'USD'): string {
-  if (price === -1) return '联系销售'
-  if (price === 0) return '免费'
-  return `$${price}/${currency === 'USD' ? 'mo' : currency}`
-}
-
-/**
  * 获取核心功能列表
  */
 export function getCoreFeatures(): PremiumFeature[] {
