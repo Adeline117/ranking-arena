@@ -14,6 +14,7 @@ export async function generateMetadata({
 
   let groupName = 'Group'
   let groupDescription = 'Join this trading group on Arena to discuss strategies and market trends.'
+  let memberCount = 0
 
   try {
     const supabase = createClient(supabaseUrl, supabaseAnonKey)
@@ -25,13 +26,15 @@ export async function generateMetadata({
 
     if (group) {
       groupName = group.name
-      groupDescription = group.description || `${group.name} — ${group.member_count || 0} members on Arena`
+      memberCount = group.member_count || 0
+      groupDescription = group.description || `${group.name} — ${memberCount} members on Arena`
     }
   } catch {
     // Intentionally swallowed: metadata generation failure is non-critical, default metadata used
   }
 
   const title = `${groupName} · Arena`
+  const ogImage = `${BASE_URL}/api/og?title=${encodeURIComponent(groupName)}&subtitle=${encodeURIComponent(`${memberCount} members`)}`
 
   return {
     title,
@@ -45,12 +48,14 @@ export async function generateMetadata({
       url: `${BASE_URL}/groups/${id}`,
       siteName: 'Arena',
       type: 'website',
+      images: [{ url: ogImage, width: 1200, height: 630, alt: groupName }],
     },
     twitter: {
-      card: 'summary',
+      card: 'summary_large_image',
       title,
       description: groupDescription,
       creator: '@arenafi',
+      images: [ogImage],
     },
   }
 }
