@@ -13,6 +13,12 @@ import {
   getCommentCount,
 } from './comments'
 
+// Mock sanitize to avoid isomorphic-dompurify/jsdom/undici ReadableStream issue in test env
+jest.mock('@/lib/utils/sanitize', () => ({
+  sanitizeText: jest.fn((text: string) => text),
+  sanitizeHtml: jest.fn((html: string) => html),
+}))
+
 // Create mock Supabase client with proper chaining
 const createMockSupabase = () => {
   const mockClient: Record<string, jest.Mock> = {

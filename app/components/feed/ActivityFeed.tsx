@@ -12,7 +12,7 @@
 
 import { useState, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
 import ActivityFeedItem from './ActivityFeedItem'

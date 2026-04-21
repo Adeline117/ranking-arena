@@ -42,7 +42,7 @@ interface TraderCompareData {
  * GET - 获取多traders allowed for comparison的对比数据
  * Query params: ids=trader1,trader2,trader3 (最多10个)
  */
-export const GET = withAuth(async ({ supabase, user }) => {
+export const GET = withAuth(async ({ supabase, user, request }) => {
 
     // 获取用户订阅等级
     const { data: subscription } = await supabase
