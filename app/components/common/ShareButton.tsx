@@ -7,6 +7,19 @@ import { useToast } from '@/app/components/ui/Toast'
 
 export type ShareContentType = 'trader' | 'post' | 'library'
 
+/** Append UTM tracking params to a share URL for marketing attribution */
+function withUtm(url: string, medium: string): string {
+  try {
+    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : undefined)
+    u.searchParams.set('utm_source', 'arena')
+    u.searchParams.set('utm_medium', medium)
+    u.searchParams.set('utm_campaign', 'share')
+    return u.toString()
+  } catch {
+    return url
+  }
+}
+
 interface ShareData {
   type: ShareContentType
   url: string
@@ -136,16 +149,22 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
   }, [showToast, t])
 
   const shareToTwitter = useCallback(() => {
-    openPopup(`https://x.com/intent/post?text=${encodeURIComponent(text)}`)
-  }, [text, openPopup])
+    const shareUrl = withUtm(data.url, 'twitter')
+    const shareText = text.replace(data.url, shareUrl)
+    openPopup(`https://x.com/intent/post?text=${encodeURIComponent(shareText)}`)
+  }, [text, data.url, openPopup])
 
   const shareToTelegram = useCallback(() => {
-    openPopup(`https://t.me/share/url?url=${encodeURIComponent(data.url)}&text=${encodeURIComponent(text)}`)
+    const shareUrl = withUtm(data.url, 'telegram')
+    const shareText = text.replace(data.url, shareUrl)
+    openPopup(`https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`)
   }, [text, data.url, openPopup])
 
   const shareToWhatsApp = useCallback(() => {
-    openPopup(`https://wa.me/?text=${encodeURIComponent(text)}`)
-  }, [text, openPopup])
+    const shareUrl = withUtm(data.url, 'whatsapp')
+    const shareText = text.replace(data.url, shareUrl)
+    openPopup(`https://wa.me/?text=${encodeURIComponent(shareText)}`)
+  }, [text, data.url, openPopup])
 
   const pad = size === 'sm' ? `${tokens.spacing[2]} ${tokens.spacing[3]}` : `${tokens.spacing[2]} ${tokens.spacing[4]}`
   const fontSize = size === 'sm' ? tokens.typography.fontSize.sm : tokens.typography.fontSize.base
