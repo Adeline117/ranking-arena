@@ -47,6 +47,7 @@ export default function NetworkStatusBanner() {
         right: 0,
         zIndex: tokens.zIndex.toast,
         padding: `${tokens.spacing[2.5]} ${tokens.spacing[4]}`,
+        paddingTop: `calc(env(safe-area-inset-top, 0px) + ${tokens.spacing[2.5]})`,
         textAlign: 'center',
         fontSize: 13,
         fontWeight: 500,
