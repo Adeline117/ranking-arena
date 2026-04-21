@@ -1,16 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
 import type { PersonalityType } from '../../components/types'
-
-/** Forced dark-theme palette */
-const Q = {
-  TEXT_PRIMARY: '#FFFFFF',
-  BTN_BG: 'rgba(255,255,255,0.06)',
-  BTN_BORDER: 'rgba(255,255,255,0.10)',
-} as const
 
 interface ShareActionsProps {
   type: PersonalityType
@@ -88,26 +80,26 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
     }
   }
 
-  const btnStyle = {
+  const btnStyle: React.CSSProperties = {
     flex: 1,
     minWidth: 80,
-    padding: '10px 14px',
-    borderRadius: 10,
-    border: `1px solid ${Q.BTN_BORDER}`,
-    background: Q.BTN_BG,
-    color: Q.TEXT_PRIMARY,
-    fontSize: tokens.typography.fontSize.sm,
-    fontWeight: tokens.typography.fontWeight.medium,
+    padding: '8px 12px',
+    borderRadius: 8,
+    border: '1px solid var(--glass-border-light)',
+    background: 'var(--color-bg-tertiary)',
+    color: 'var(--color-text-primary)',
+    fontSize: 13,
+    fontWeight: 500,
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    transition: 'border-color 0.2s, background 0.2s',
-  } as const
+    transition: 'border-color 0.2s',
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {/* Share buttons row */}
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
         <button onClick={handleShareX} style={btnStyle}>

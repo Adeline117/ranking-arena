@@ -1,16 +1,6 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
-
-/** Forced dark-theme palette */
-const Q = {
-  TEXT_PRIMARY: '#FFFFFF',
-  TRACK: 'rgba(255,255,255,0.08)',
-  SPINNER_BG: 'rgba(139, 92, 246, 0.2)',
-  BRAND: '#8B5CF6',
-  BRAND_DEEP: '#6D28D9',
-} as const
 
 interface CalculatingStepProps {
   tr: (key: string) => string
@@ -46,19 +36,19 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 24,
-        minHeight: 300,
+        gap: 20,
+        minHeight: 260,
         animation: 'fadeIn 0.3s ease-out',
       }}
     >
       {/* Spinner */}
       <div
         style={{
-          width: 64,
-          height: 64,
+          width: 48,
+          height: 48,
           borderRadius: '50%',
-          border: `3px solid ${Q.SPINNER_BG}`,
-          borderTopColor: Q.BRAND,
+          border: '3px solid var(--color-bg-tertiary)',
+          borderTopColor: 'var(--color-brand)',
           animation: 'spin 1s linear infinite',
         }}
       />
@@ -66,9 +56,9 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
       {/* Text */}
       <p
         style={{
-          fontSize: tokens.typography.fontSize.lg,
-          fontWeight: tokens.typography.fontWeight.semibold,
-          color: Q.TEXT_PRIMARY,
+          fontSize: 15,
+          fontWeight: 600,
+          color: 'var(--color-text-primary)',
           margin: 0,
         }}
       >
@@ -79,10 +69,10 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
       <div
         style={{
           width: '100%',
-          maxWidth: 280,
-          height: 4,
+          maxWidth: 240,
+          height: 3,
           borderRadius: 2,
-          background: Q.TRACK,
+          background: 'var(--color-bg-tertiary)',
           overflow: 'hidden',
         }}
       >
@@ -91,7 +81,7 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
             width: `${progress}%`,
             height: '100%',
             borderRadius: 2,
-            background: `linear-gradient(90deg, ${Q.BRAND} 0%, ${Q.BRAND_DEEP} 100%)`,
+            background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-deep))',
             transition: 'width 0.05s linear',
           }}
         />
