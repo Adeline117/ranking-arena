@@ -6,12 +6,29 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
 const VALID_TYPES = new Set(['sniper', 'scalper', 'whale', 'analyst', 'contrarian', 'hodler', 'degen', 'strategist'])
 
 export async function POST(request: NextRequest) {
   try {
+    // Rate limiting
+    const rateLimitResp = await checkRateLimit(request, RateLimitPresets.public)
+    if (rateLimitResp) return rateLimitResp
+
+    // Content-Type validation
+    const contentType = request.headers.get('content-type')
+    if (!contentType || !contentType.includes('application/json')) {
+      return NextResponse.json({ error: 'Content-Type must be application/json' }, { status: 415 })
+    }
+
     const body = await request.json()
+
+    // Body size validation
+    if (JSON.stringify(body).length > 2000) {
+      return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
+    }
+
     const { sessionId, primaryType, secondaryType, matchPercent, scores, answers } = body
 
     // Validate required fields
@@ -23,6 +40,14 @@ export async function POST(request: NextRequest) {
     }
     if (secondaryType && !VALID_TYPES.has(secondaryType)) {
       return NextResponse.json({ error: 'Invalid secondaryType' }, { status: 400 })
+    }
+
+    // Validate answers/scores key count to prevent oversized payloads
+    if (answers && typeof answers === 'object' && Object.keys(answers).length > 15) {
+      return NextResponse.json({ error: 'Too many answers' }, { status: 400 })
+    }
+    if (scores && typeof scores === 'object' && Object.keys(scores).length > 8) {
+      return NextResponse.json({ error: 'Too many scores' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
