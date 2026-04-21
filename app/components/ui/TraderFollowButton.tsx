@@ -48,6 +48,8 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
   const expectedStateRef = useRef<boolean | null>(null)
   // 超时保护计时器
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+  // Network error retry counter (max 2 retries)
+  const retryCountRef = useRef(0)
 
   // 清理超时计时器
   useEffect(() => {
@@ -142,6 +144,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
 
       setFollowing(data.following)
       onFollowChange?.(data.following)
+      retryCountRef.current = 0
 
       // Trigger pulse animation
       setShowPulse(true)
@@ -182,10 +185,11 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         setFeatureDisabled(true)
         showToast(t('followFeatureComingSoon'), 'info')
       } else {
-        // #22: Show retry hint on network error
+        // #22: Show retry hint on network error (max 2 auto-retries)
         const isNetworkError = error instanceof TypeError && error.message.includes('fetch')
         showToast(isNetworkError ? `${errorMsg} — ${t('tapToRetry') || 'Tap to retry'}` : errorMsg, 'error')
-        if (isNetworkError) {
+        if (isNetworkError && retryCountRef.current < 2) {
+          retryCountRef.current++
           setTimeout(() => executeFollow(failedAction), 2000)
         }
       }
