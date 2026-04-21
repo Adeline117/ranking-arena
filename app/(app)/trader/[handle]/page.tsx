@@ -337,27 +337,19 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     redirect(`/trader/${encodeURIComponent(resolved.handle)}?${redirectParams.toString()}`)
   }
 
-  // Phase 2: Fetch trader detail + claimed user profile in parallel.
+  // Phase 2: Fetch trader detail.
   // cachedGetTraderDetail serves the ~11-query fetch from Next.js data cache.
-  const userProfilePromise = userHandle
-    ? getReadReplica()
-        .from('user_profiles')
-        .select('id, handle, bio, avatar_url, cover_url')
-        .eq('handle', userHandle)
-        .maybeSingle()
-        .then(({ data }) => data as { id: string; handle: string; bio?: string | null; avatar_url?: string | null; cover_url?: string | null } | null)
-    : Promise.resolve(null as null)
+  // Note: userHandle is always falsy here (truthy case redirects above), so
+  // claimedUserProfile is always null — no need to fetch user_profiles.
+  const claimedUserProfile = null
 
-  const [detailResult, claimedUserProfile] = await Promise.all([
-    cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch((err) => {
-      // Log real fetch failures so they aren't silently masked as "no data".
-      // cachedGetTraderDetail already handles TRADER_DETAIL_NULL internally;
-      // errors reaching here are unexpected (e.g. network/timeout).
-      logger.error('[trader/page] cachedGetTraderDetail unexpected error:', err instanceof Error ? err.message : err)
-      return null
-    }),
-    userProfilePromise,
-  ])
+  const detailResult = await cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch((err) => {
+    // Log real fetch failures so they aren't silently masked as "no data".
+    // cachedGetTraderDetail already handles TRADER_DETAIL_NULL internally;
+    // errors reaching here are unexpected (e.g. network/timeout).
+    logger.error('[trader/page] cachedGetTraderDetail unexpected error:', err instanceof Error ? err.message : err)
+    return null
+  })
 
   const serverTraderData = detailResult ? toTraderPageData(detailResult) : null
 
