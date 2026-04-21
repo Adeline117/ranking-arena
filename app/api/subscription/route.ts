@@ -20,7 +20,7 @@ export const GET = withAuth(async ({ user, supabase: sb }) => {
   const [subResult, followsResult] = await Promise.all([
     supabase
       .from('subscriptions')
-      .select('user_id, tier, status, created_at, current_period_start, current_period_end, stripe_subscription_id, api_calls_today, comparison_reports_this_month, exports_this_month')
+      .select('user_id, tier, status, plan, created_at, current_period_start, current_period_end, cancel_at_period_end, stripe_subscription_id, api_calls_today, comparison_reports_this_month, exports_this_month')
       .eq('user_id', user.id)
       .in('status', ['active', 'trialing'])
       .maybeSingle(),
@@ -88,7 +88,7 @@ export const GET = withAuth(async ({ user, supabase: sb }) => {
     startDate: sub.created_at || sub.current_period_start || new Date().toISOString(),
     endDate: sub.current_period_end,
     trialEndDate: null,
-    autoRenew: sub.status === 'active',
+    autoRenew: sub.status === 'active' && !sub.cancel_at_period_end,
     paymentMethod: sub.stripe_subscription_id ? 'stripe' : undefined,
     usage: {
       apiCallsToday: sub.api_calls_today || 0,
@@ -99,5 +99,13 @@ export const GET = withAuth(async ({ user, supabase: sb }) => {
     },
   }
 
-  return NextResponse.json({ subscription: userSubscription })
+  // Include additional fields needed by the membership UI
+  return NextResponse.json({
+    subscription: {
+      ...userSubscription,
+      plan: sub.plan || undefined,
+      currentPeriodEnd: sub.current_period_end || undefined,
+      cancelAtPeriodEnd: sub.cancel_at_period_end || false,
+    },
+  })
 }, { name: 'subscription', rateLimit: 'authenticated' })

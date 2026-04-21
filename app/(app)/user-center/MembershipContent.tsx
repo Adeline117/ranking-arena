@@ -53,8 +53,20 @@ export default function MembershipContent() {
       const nftData = nftRes.ok ? await nftRes.json() : null
       const usageData = usageRes.ok ? await usageRes.json() : { followedTraders: 0, apiCallsToday: 0 }
 
+      // Map API response to MembershipInfo shape.
+      // The API returns both UserSubscription fields (endDate, autoRenew) and
+      // extended fields (currentPeriodEnd, cancelAtPeriodEnd, plan) for the UI.
+      const rawSub = subData?.subscription
+      const mappedSub = rawSub ? {
+        tier: rawSub.tier,
+        status: rawSub.status,
+        plan: rawSub.plan || undefined,
+        currentPeriodEnd: rawSub.currentPeriodEnd || rawSub.endDate || undefined,
+        cancelAtPeriodEnd: rawSub.cancelAtPeriodEnd ?? (rawSub.autoRenew === false && rawSub.tier === 'pro'),
+      } : null
+
       setInfo({
-        subscription: subData?.subscription || null,
+        subscription: mappedSub,
         nft: nftData || null,
         usage: usageData,
       })
