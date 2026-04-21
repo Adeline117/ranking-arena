@@ -6,6 +6,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { usePostStore } from '@/lib/stores/postStore'
 import { logger } from '@/lib/logger'
 import { haptic } from '@/lib/utils/haptics'
+import { getNetworkErrorMessage } from '@/lib/utils/network-error'
 import { type PollChoice, type PostWithUserState } from '@/lib/types'
 
 type Post = PostWithUserState
@@ -143,7 +144,7 @@ export function usePostActions({
       }
     } catch (err) {
       if (prevPost) { setPosts(prev => prev.map(p => p.id === postId ? { ...p, like_count: prevPost.like_count, dislike_count: prevPost.dislike_count, user_reaction: prevPost.user_reaction } : p)); if (prevOpenPost) setOpenPost(prevOpenPost) }
-      logger.error('[PostFeed] toggleReaction error:', err); showToast(t('networkError'), 'error')
+      logger.error('[PostFeed] toggleReaction error:', err); showToast(getNetworkErrorMessage(err, t), 'error')
     } finally { lockRef.current.delete(key) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- t/setPosts/setOpenPost are stable refs; only re-create when auth or active post changes
   }, [accessToken, openPost?.id, showToast])
@@ -165,7 +166,7 @@ export function usePostActions({
         setPosts(prev => prev.map(p => p.id === postId ? { ...p, poll_bull: result.poll.bull, poll_bear: result.poll.bear, poll_wait: result.poll.wait, user_vote: result.vote } : p))
         if (openPost?.id === postId) setOpenPost({ ...openPost!, poll_bull: result.poll.bull, poll_bear: result.poll.bear, poll_wait: result.poll.wait, user_vote: result.vote })
       } else { showToast(json.error || json.message || t('voteFailed'), 'error') }
-    } catch (err) { logger.error('[PostFeed] toggleVote error:', err); showToast(t('networkError'), 'error') }
+    } catch (err) { logger.error('[PostFeed] toggleVote error:', err); showToast(getNetworkErrorMessage(err, t), 'error') }
     finally { lockRef.current.delete(key) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- t/setPosts/setOpenPost are stable refs; only re-create when auth or active post changes
   }, [accessToken, openPost?.id, showToast])
@@ -234,11 +235,11 @@ export function usePostActions({
         setBookmarkCounts(prev => ({ ...prev, [postId]: prevCount }))
         showToast(result.error || t('operationFailed'), 'error')
       }
-    } catch {
+    } catch (err) {
       // Rollback on network error
       setUserBookmarks(prev => ({ ...prev, [postId]: prevBookmarked }))
       setBookmarkCounts(prev => ({ ...prev, [postId]: prevCount }))
-      showToast(t('networkError'), 'error')
+      showToast(getNetworkErrorMessage(err, t), 'error')
     } finally { bookmarkLockRef.current.delete(postId); setBookmarkLoading(prev => ({ ...prev, [postId]: false })) }
   }, [accessToken, showToast, t, userBookmarks, bookmarkCounts])
 
@@ -256,7 +257,7 @@ export function usePostActions({
       const result = await response.json()
       if (response.ok) { setUserBookmarks(prev => ({ ...prev, [bookmarkingPostId]: result.bookmarked })); setBookmarkCounts(prev => ({ ...prev, [bookmarkingPostId]: result.bookmark_count })); showToast(t('bookmarked'), 'success') }
       else { showToast(result.error || t('operationFailed'), 'error') }
-    } catch { showToast(t('networkError'), 'error') }
+    } catch (err) { showToast(getNetworkErrorMessage(err, t), 'error') }
     finally { setBookmarkLoading(prev => ({ ...prev, [bookmarkingPostId]: false })); setShowBookmarkModal(false); setBookmarkingPostId(null) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [accessToken, bookmarkingPostId, showToast])
@@ -272,7 +273,7 @@ export function usePostActions({
       const result = await response.json()
       if (response.ok) { setShowRepostModal(null); setRepostComment(''); showToast(t('reposted'), 'success') }
       else { showToast(result.error || t('repostFailed'), 'error') }
-    } catch (err) { logger.error('[PostFeed] repost failed:', err); showToast(t('networkError'), 'error') }
+    } catch (err) { logger.error('[PostFeed] repost failed:', err); showToast(getNetworkErrorMessage(err, t), 'error') }
     finally { setRepostLoading(prev => ({ ...prev, [postId]: false })) }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [accessToken, posts, openPost, currentUserId, showToast])
