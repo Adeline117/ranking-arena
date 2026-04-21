@@ -133,9 +133,8 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // TODO: Add 'alipay' and 'wechat_pay' to payment_method_types once configured
-      // in Stripe Dashboard. i18n strings (supportedPayments, faqPaymentA,
-      // helpPaymentMethodsA) already advertise Alipay & WeChat Pay support.
+      // payment_method_types: card + link. Apple Pay / Google Pay are enabled
+      // automatically via Stripe's card payment method when configured in Dashboard.
       checkoutSession = await getStripe().checkout.sessions.create({
         customer: customerId,
         payment_method_types: ['card', 'link'],
