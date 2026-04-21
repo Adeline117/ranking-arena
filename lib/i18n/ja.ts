@@ -4567,6 +4567,7 @@ compFieldMaxParticipants: '最大参加人数',
     tokenRankingPrev: '前へ',
     tokenRankingNext: '次へ',
     rankingsSubNavTokens: 'トークン',
+    rankingsSubNavBots: 'ボット',
 
     // Achievements
     achievementUnlocked: '実績解除',
