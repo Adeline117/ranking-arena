@@ -178,22 +178,22 @@ function CompareContent() {
       showToast(t('compareMax10'), 'warning')
       return
     }
-    if (traders.some(t => t.id === traderId)) {
+    if (traders.some(tr => tr.id === traderId)) {
       showToast(t('compareAlreadyAdded'), 'warning')
       return
     }
 
-    const newIds = [...traders.map(t => t.id), traderId]
+    const newIds = [...traders.map(tr => tr.id), traderId]
     await loadTraders(newIds)
     router.replace(`/compare?ids=${newIds.join(',')}`, { scroll: false })
   }
 
   // Remove trader
   const handleRemoveTrader = (traderId: string) => {
-    const newTraders = traders.filter(t => t.id !== traderId)
+    const newTraders = traders.filter(tr => tr.id !== traderId)
     setTraders(newTraders)
     if (newTraders.length > 0) {
-      router.replace(`/compare?ids=${newTraders.map(t => t.id).join(',')}`, { scroll: false })
+      router.replace(`/compare?ids=${newTraders.map(tr => tr.id).join(',')}`, { scroll: false })
     } else {
       router.replace('/compare', { scroll: false })
     }
@@ -240,19 +240,19 @@ function CompareContent() {
             <ExportButton
               onExport={async (format) => {
                 const { exportToCSV, exportToJSON, exportToPDF } = await import('@/lib/utils/export')
-                const rows = traders.map(t => ({
-                  handle: t.handle || t.id,
-                  source: t.source,
-                  roi: t.roi,
-                  roi_7d: t.roi_7d ?? '',
-                  roi_30d: t.roi_30d ?? '',
-                  pnl: t.pnl ?? '',
-                  win_rate: t.win_rate ?? '',
-                  max_drawdown: t.max_drawdown ?? '',
-                  arena_score: t.arena_score ?? '',
-                  trades_count: t.trades_count ?? '',
+                const rows = traders.map(tr => ({
+                  handle: tr.handle || tr.id,
+                  source: tr.source,
+                  roi: tr.roi,
+                  roi_7d: tr.roi_7d ?? '',
+                  roi_30d: tr.roi_30d ?? '',
+                  pnl: tr.pnl ?? '',
+                  win_rate: tr.win_rate ?? '',
+                  max_drawdown: tr.max_drawdown ?? '',
+                  arena_score: tr.arena_score ?? '',
+                  trades_count: tr.trades_count ?? '',
                 }))
-                const filename = `compare-${traders.map(t => t.handle || t.id).join('-')}`
+                const filename = `compare-${traders.map(tr => tr.handle || tr.id).join('-')}`
                 if (format === 'json') exportToJSON(rows, filename)
                 else if (format === 'pdf') exportToPDF(rows as unknown as Record<string, unknown>[], filename)
                 else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
@@ -355,7 +355,7 @@ function CompareContent() {
                 }}
               >
                 {followedTraders.map((ft) => {
-                  const isAdded = traders.some(t => t.id === ft.id)
+                  const isAdded = traders.some(tr => tr.id === ft.id)
                   return (
                     <Box
                       key={ft.id}

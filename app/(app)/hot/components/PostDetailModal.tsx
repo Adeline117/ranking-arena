@@ -241,6 +241,13 @@ export function PostDetailModal({
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
+              onKeyDown={(e) => {
+                // Cmd+Enter or Ctrl+Enter to submit
+                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && newComment.trim() && !submittingComment) {
+                  e.preventDefault()
+                  onSubmitComment(post.id)
+                }
+              }}
               placeholder={accessToken ? t('writeComment') : t('loginToComment')}
               disabled={!accessToken || submittingComment}
               style={{

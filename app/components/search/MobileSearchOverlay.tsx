@@ -7,6 +7,7 @@ import { Box, Text } from '../base'
 import { CloseIcon } from '../ui/icons'
 import SearchDropdown from './SearchDropdown'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { addToHistory } from '@/lib/services/search-history'
 
 interface MobileSearchOverlayProps {
   open: boolean
@@ -22,30 +23,13 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
   const { t, language: _language } = useLanguage()
   const router = useRouter()
   const [query, setQuery] = useState('')
-  const [searchHistory, setSearchHistory] = useState<string[]>([])
   const inputRef = useRef<HTMLInputElement>(null)
-
-  // Load search history
-  useEffect(() => {
-    try {
-      const stored = localStorage.getItem('arena_search_history')
-      if (stored) setSearchHistory(JSON.parse(stored))
-    } catch { /* ignore */ }
-  }, [])
 
   const saveToHistory = useCallback((q: string) => {
     const trimmed = q.trim()
     if (!trimmed) return
-    setSearchHistory(prev => {
-      const updated = [trimmed, ...prev.filter(h => h !== trimmed)].slice(0, 10)
-      try { localStorage.setItem('arena_search_history', JSON.stringify(updated)) } catch { /* ignore */ }
-      return updated
-    })
-  }, [])
-
-  const clearHistory = useCallback(() => {
-    setSearchHistory([])
-    try { localStorage.removeItem('arena_search_history') } catch { /* ignore */ }
+    // Use the shared search-history service for consistency
+    addToHistory(trimmed)
   }, [])
 
   useEffect(() => {
@@ -116,6 +100,10 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && query.trim()) {
+                // If the dropdown has a highlighted item, let the dropdown handle Enter
+                const dropdownEl = document.getElementById('search-dropdown-listbox')
+                const hasSelection = dropdownEl?.querySelector('[aria-selected="true"]')
+                if (hasSelection) return
                 e.preventDefault()
                 saveToHistory(query.trim())
                 router.push(`/search?q=${encodeURIComponent(query.trim())}`)
@@ -186,47 +174,6 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
           position: 'relative',
         }}
       >
-        {/* Search history when no query */}
-        {!query && searchHistory.length > 0 && (
-          <Box style={{ padding: tokens.spacing[4] }}>
-            <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[3] }}>
-              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.secondary }}>
-                {t('recentSearches')}
-              </Text>
-              <button
-                onClick={clearHistory}
-                style={{ background: 'none', border: 'none', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer', padding: tokens.spacing[1] }}
-              >
-                {t('clearButton')}
-              </button>
-            </Box>
-            <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
-              {searchHistory.map((term, i) => (
-                <button
-                  key={i}
-                  onClick={() => {
-                    saveToHistory(term)
-                    router.push(`/search?q=${encodeURIComponent(term)}`)
-                    onClose()
-                  }}
-                  style={{
-                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                    background: tokens.colors.bg.tertiary,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    borderRadius: tokens.radius.full,
-                    color: tokens.colors.text.secondary,
-                    fontSize: tokens.typography.fontSize.sm,
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
-                >
-                  {term}
-                </button>
-              ))}
-            </Box>
-          </Box>
-        )}
-
         {/* Override dropdown absolute positioning for mobile overlay context */}
         <style>{`.mobile-search-results > div { position: relative !important; top: auto !important; max-height: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }`}</style>
         <SearchDropdown

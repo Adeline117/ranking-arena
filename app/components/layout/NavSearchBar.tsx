@@ -82,6 +82,14 @@ export default function NavSearchBar({
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
+              // If the search dropdown has a highlighted item, let the dropdown's
+              // document-level keydown handler navigate to that item instead.
+              const dropdownEl = searchRef.current?.querySelector('#search-dropdown-listbox')
+              const hasSelection = dropdownEl?.querySelector('[aria-selected="true"]')
+              if (hasSelection) {
+                // Don't navigate to /search?q=X — let the dropdown handle Enter
+                return
+              }
               e.preventDefault()
               onSearch(e)
             } else if (e.key === 'Escape') {
