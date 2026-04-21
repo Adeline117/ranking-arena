@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ARTICLES, getArticleBySlug } from '../articles'
+import { sanitizeHtml } from '@/lib/utils/sanitize'
 
 export const revalidate = 3600
 
@@ -135,10 +136,13 @@ export default async function LearnArticlePage({
         \u2190 Back to Learn
       </Link>
 
-      {/* SAFETY: article.content is static markdown from lib/data/learn-articles.ts (not user input).
-         renderMarkdown() is a simple markdown-to-HTML converter with no external content injection. */}
+      {/* Defense-in-depth: content is static markdown from lib/data/learn-articles.ts,
+         but we sanitize anyway to guard against future content source changes. */}
       <article
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(article.content) }}
+        dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMarkdown(article.content), {
+          allowedTags: ['p', 'br', 'strong', 'em', 'b', 'i', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'a', 'code', 'pre', 'span'],
+          allowedAttr: ['href', 'target', 'rel', 'class', 'style'],
+        }) }}
       />
     </div>
   )
