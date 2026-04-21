@@ -7,6 +7,7 @@ import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { getCsrfHeaders } from '@/lib/api/client'
 import Link from 'next/link'
 
 interface Competition {
@@ -397,6 +398,7 @@ export default function CompetitionDetailPage() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({ trader_id: traderId, platform }),
       })

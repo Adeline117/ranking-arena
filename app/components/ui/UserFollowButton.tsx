@@ -10,6 +10,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 import { haptic } from '@/lib/utils/haptics'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type UserFollowButtonProps = {
   targetUserId: string
@@ -136,6 +137,7 @@ export default function UserFollowButton({
         headers: {
           'Content-Type': 'application/json',
           ...authHeaders,
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({
           followingId: targetUserId,

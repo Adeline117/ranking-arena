@@ -12,6 +12,7 @@ import PortfolioAnalytics from '@/app/components/portfolio/PortfolioAnalytics'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface Portfolio {
   id: string
@@ -70,8 +71,8 @@ export default function PortfolioPage() {
   }, [router])
 
   const fetchHeaders = useCallback((): Record<string, string> => {
-    if (!token) return {}
-    return { Authorization: `Bearer ${token}` }
+    if (!token) return { ...getCsrfHeaders() }
+    return { Authorization: `Bearer ${token}`, ...getCsrfHeaders() }
   }, [token])
 
   // Load portfolios + positions in parallel with request dedup

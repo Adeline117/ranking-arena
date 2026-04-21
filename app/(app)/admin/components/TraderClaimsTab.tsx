@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 interface TraderClaim {
   id: string
@@ -64,6 +65,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({
           claimId,

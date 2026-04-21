@@ -5,6 +5,7 @@ import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getCsrfHeaders } from '@/lib/api/client'
 import {
   initializeHistory,
   addToHistory,
@@ -186,7 +187,7 @@ export function useSearchData(open: boolean, query: string) {
       try {
         const res = await fetch('/api/translate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
           body: JSON.stringify({
             items: postsToTranslate.map((p) => ({
               id: p.id, text: p.title, contentType: 'post_title', contentId: p.id,

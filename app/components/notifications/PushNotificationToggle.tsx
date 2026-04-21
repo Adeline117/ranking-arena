@@ -6,6 +6,7 @@ import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ToggleSwitch } from '@/app/(app)/settings/components/shared'
 import { logger } from '@/lib/logger'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 type PushStatus = 'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'
 
@@ -73,7 +74,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       const json = sub.toJSON()
       await fetch('/api/push/subscribe', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
         body: JSON.stringify({
           token: sub.endpoint,
           provider: 'web',
@@ -102,6 +103,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       if (sub) {
         await fetch(`/api/push/subscribe?token=${encodeURIComponent(sub.endpoint)}`, {
           method: 'DELETE',
+          headers: { ...getCsrfHeaders() },
         })
         await sub.unsubscribe()
       }
