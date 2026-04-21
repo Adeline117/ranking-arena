@@ -13,6 +13,7 @@ import { verifyQStashSignature } from '@/lib/cron/qstash-client'
 import { createLogger } from '@/lib/utils/logger'
 import { circuitBreaker as circuitBreakerManager, withCircuitBreaker } from '@/lib/middleware/circuit-breaker'
 import { env } from '@/lib/env'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 const logger = createLogger('CronRoute')
 
@@ -86,6 +87,8 @@ export async function POST(
   const pathname = request.nextUrl.pathname
   const platform = pathname.split('/').filter(Boolean).pop() || params.platform
   const startTime = Date.now()
+
+  const plog = await PipelineLogger.start(`cron-${platform}`)
 
   try {
     // 1. 验证请求来源
@@ -214,6 +217,8 @@ export async function POST(
     const durationMs = Date.now() - startTime
     logger.info(`[OK] ${platform} refresh complete: ${validTraders.length} traders in ${durationMs}ms${rejected > 0 ? ` (${rejected} rejected)` : ''}`)
 
+    await plog.success(validTraders.length)
+
     return NextResponse.json({
       success: true,
       platform,
@@ -225,6 +230,8 @@ export async function POST(
   } catch (error) {
     const durationMs = Date.now() - startTime
     logger.error(`[ERROR] ${platform} refresh failed after ${durationMs}ms:`, error)
+
+    await plog.error(error instanceof Error ? error : new Error(String(error)))
 
     return NextResponse.json({
       success: false,
