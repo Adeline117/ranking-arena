@@ -8,6 +8,7 @@
 
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
+import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
 export const runtime = 'edge'
 
@@ -35,10 +36,13 @@ const C = {
 }
 
 export async function GET(request: NextRequest) {
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.public)
+  if (rateLimitResp) return rateLimitResp
+
   const { searchParams } = new URL(request.url)
-  const typeId = searchParams.get('type') || 'sniper'
-  const match = parseInt(searchParams.get('match') || '85', 10)
-  const lang = searchParams.get('lang') || 'en'
+  const typeId = (searchParams.get('type') || 'sniper').slice(0, 20)
+  const match = parseInt((searchParams.get('match') || '85').slice(0, 20), 10)
+  const lang = (searchParams.get('lang') || 'en').slice(0, 20)
 
   const t = TYPES[typeId] || TYPES.sniper
   const isZh = lang === 'zh'
