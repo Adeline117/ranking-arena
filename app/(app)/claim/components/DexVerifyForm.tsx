@@ -72,7 +72,8 @@ export function DexVerifyForm({
         const encodedMessage = new TextEncoder().encode(message)
         const signedMessage = await solanaProvider.signMessage(encodedMessage, 'utf8')
         // Convert Uint8Array signature to base64 for transmission
-        signature = Buffer.from(signedMessage.signature).toString('base64')
+        // Use btoa instead of Buffer.from to avoid Node.js-only API in browser
+        signature = btoa(String.fromCharCode(...signedMessage.signature))
       } else {
         // EVM wallet signing
         if (!window.ethereum) {

@@ -31,7 +31,7 @@ export const dynamic = 'force-dynamic'
 const VALID_TYPES = [
   'follow', 'like', 'comment', 'mention', 'system',
   'copy_trade', 'trader_alert', 'message', 'post_reply',
-  'new_follower', 'group_update',
+  'new_follower', 'group_update', 'ranking_change', 'referral_reward',
 ]
 
 /**

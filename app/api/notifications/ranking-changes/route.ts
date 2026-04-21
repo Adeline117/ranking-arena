@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       user_id: string
       type: string
       title: string
-      body: string
+      message: string
       data: Record<string, unknown>
     }> = []
 
@@ -145,13 +145,13 @@ export async function POST(request: NextRequest) {
         const title = direction === 'up'
           ? `${handle} rose ${absChange} ranks`
           : `${handle} dropped ${absChange} ranks`
-        const body = `Now ranked #${current.rank} (was #${prevRank})`
+        const message = `Now ranked #${current.rank} (was #${prevRank})`
 
         notificationRows.push({
           user_id: userId,
           type: 'ranking_change',
           title,
-          body,
+          message,
           data: { source, source_trader_id: sourceId, handle, old_rank: prevRank, new_rank: current.rank, change: rankChange },
         })
       }

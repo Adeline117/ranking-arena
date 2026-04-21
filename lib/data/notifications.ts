@@ -33,6 +33,8 @@ export type NotificationType =
   | 'post_reply'
   | 'new_follower'
   | 'group_update'
+  | 'ranking_change'
+  | 'referral_reward'
 
 export interface NotificationListOptions {
   limit?: number
