@@ -93,7 +93,8 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
   const [search, setSearch] = useState('')
 
   useEffect(() => {
-    fetch('/api/rankings/by-token?action=popular-tokens')
+    const controller = new AbortController()
+    fetch('/api/rankings/by-token?action=popular-tokens', { signal: controller.signal })
       .then(r => {
         if (!r.ok) throw new Error(`popular-tokens: ${r.status}`)
         return r.json()
@@ -101,8 +102,9 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
       .then(data => {
         if (data.tokens) setPopularTokens(data.tokens)
       })
-      .catch(() => { /* fire-and-forget: SSR data is the fallback */ })
-      .finally(() => setLoading(false))
+      .catch((err) => { if (err.name !== 'AbortError') { /* fire-and-forget: SSR data is the fallback */ } })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
   }, [])
 
   // Merge featured tokens with popular tokens
