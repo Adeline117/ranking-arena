@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -33,6 +33,7 @@ export default function MembershipContent() {
   const [loading, setLoading] = useState(true)
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('yearly')
   const [subscribing, setSubscribing] = useState(false)
+  const submittingRef = useRef(false)
 
   useEffect(() => {
     fetchMembershipInfo()
@@ -78,6 +79,10 @@ export default function MembershipContent() {
   }
 
   const handleSubscribe = async () => {
+    // Ref-based guard: synchronous check prevents duplicate Stripe checkout
+    // sessions even when React batches the setState(subscribing) update.
+    if (submittingRef.current) return
+    submittingRef.current = true
     setSubscribing(true)
     // Funnel event #2: user clicked the subscribe button. CEO review
     // 2026-04-09 flagged that there's no visibility between view_pricing and
@@ -134,7 +139,10 @@ export default function MembershipContent() {
     } catch {
       showToast(t('subscriptionFailed'), 'error')
     } finally {
+      // Only reset on error paths — successful checkout navigates away to
+      // Stripe, so we keep the guard active to prevent duplicate sessions.
       setSubscribing(false)
+      submittingRef.current = false
     }
   }
 
