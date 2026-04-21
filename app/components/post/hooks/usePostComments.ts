@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
 import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -135,7 +135,7 @@ export function usePostComments({
     } finally {
       setLoadingComments(false)
     }
-  }, [accessToken])
+  }, [accessToken, restoreDraft])
 
   const submitComment = useCallback(async (postId: string): Promise<void> => {
     if (!requireAuth() || !newComment.trim()) return
@@ -196,7 +196,7 @@ export function usePostComments({
       submittingCommentRef.current = false
       setSubmittingComment(false)
     }
-  }, [accessToken, newComment, requireAuth, showToast, onCommentCountChange, t])
+  }, [accessToken, newComment, requireAuth, showToast, onCommentCountChange, t, clearDraft, setNewComment])
 
   const toggleCommentLike = useCallback(async (postId: string, commentId: string): Promise<void> => {
     if (!requireAuth() || commentLikeLoading[commentId]) return
