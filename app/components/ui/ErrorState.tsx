@@ -82,7 +82,7 @@ export default function ErrorState({ title, description, retry, variant = 'defau
           size={isCompact ? 'xs' : 'sm'}
           color="tertiary"
           style={{
-            marginBottom: retryFn ? tokens.spacing[5] : 0,
+            marginBottom: tokens.spacing[5],
             maxWidth: 360,
             marginLeft: 'auto',
             marginRight: 'auto',
@@ -93,14 +93,12 @@ export default function ErrorState({ title, description, retry, variant = 'defau
         </Text>
       )}
 
-      {/* Retry button */}
-      {retryFn && (
-        <Box style={{ marginTop: tokens.spacing[4] }}>
-          <Button variant="secondary" size="sm" onClick={retryFn}>
-            {t('retry')}
-          </Button>
-        </Box>
-      )}
+      {/* Retry button — always shown; defaults to page reload if no retry prop */}
+      <Box style={{ marginTop: tokens.spacing[4] }}>
+        <Button variant="secondary" size="sm" onClick={retryFn}>
+          {t('retry')}
+        </Button>
+      </Box>
     </Box>
   )
 }
