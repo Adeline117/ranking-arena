@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
@@ -351,8 +351,23 @@ function RepostModal({
 }) {
   const { t } = useLanguage()
 
+  const closeModal = () => { setShowRepostModal(null); setRepostComment('') }
+
+  // Scroll lock + Escape key
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal() }
+    document.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- closeModal is stable within this render
+  }, [])
+
   return (
     <Box
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('repostToFeed')}
       style={{
         position: 'fixed',
         top: 0, left: 0, right: 0, bottom: 0,
@@ -362,7 +377,7 @@ function RepostModal({
         justifyContent: 'center',
         zIndex: tokens.zIndex.modal,
       }}
-      onClick={() => { setShowRepostModal(null); setRepostComment('') }}
+      onClick={closeModal}
     >
       <Box
         style={{
@@ -397,7 +412,7 @@ function RepostModal({
           maxLength={280}
         />
         <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'flex-end' }}>
-          <Button variant="secondary" size="sm" onClick={() => { setShowRepostModal(null); setRepostComment('') }}>
+          <Button variant="secondary" size="sm" onClick={closeModal}>
             {t('cancel')}
           </Button>
           <Button

@@ -160,6 +160,16 @@ export default function ChatSettingsDrawer({
 
   const profileUrl = getProfileUrl(otherUser)
 
+  // Scroll lock + Escape key when drawer is open
+  useEffect(() => {
+    if (!isOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+  }, [isOpen, onClose])
+
   if (!isOpen) return null
 
   return (
@@ -167,7 +177,7 @@ export default function ChatSettingsDrawer({
       {/* Overlay */}
       <Box
         onClick={onClose}
-            aria-label="Close settings"
+        aria-label="Close settings"
         style={{
           position: 'fixed',
           inset: 0,

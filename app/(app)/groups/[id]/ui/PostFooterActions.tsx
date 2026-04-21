@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { ThumbsUpIcon, CommentIcon } from "@/app/components/ui/icons";
 import { useToast } from '@/app/components/ui/Toast';
 import { useLanguage } from '@/app/components/Providers/LanguageProvider';
@@ -98,11 +98,8 @@ export default function PostFooterActions({ post }: { post: Post }) {
 
       {/* 打赏弹窗 */}
       {showTipModal && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-          onClick={() => setShowTipModal(false)}
-        >
-          <div 
+        <TipModalOverlay onClose={() => setShowTipModal(false)}>
+          <div
             className="w-full max-w-sm rounded-lg p-6"
             style={{ background: 'var(--color-bg-secondary)', boxShadow: 'var(--shadow-elevated)' }}
             onClick={e => e.stopPropagation()}
@@ -151,8 +148,31 @@ export default function PostFooterActions({ post }: { post: Post }) {
               </button>
             </div>
           </div>
-        </div>
+        </TipModalOverlay>
       )}
     </>
+  )
+}
+
+/** Overlay wrapper: scroll lock + Escape key + backdrop click */
+function TipModalOverlay({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- onClose is stable
+  }, [])
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={onClose}
+    >
+      {children}
+    </div>
   )
 }

@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
@@ -18,8 +19,20 @@ interface MediaPreviewProps {
 }
 
 export default function MediaPreview({ preview, onClose, t }: MediaPreviewProps) {
+  // Scroll lock + Escape key
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+  }, [onClose])
+
   return (
     <Box
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('mediaPreview') || 'Media preview'}
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'var(--color-backdrop-heavy)',

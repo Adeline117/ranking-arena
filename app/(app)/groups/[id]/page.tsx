@@ -598,6 +598,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             isMember={isMember}
             userRole={userRole}
             joining={joining}
+            isDissolved={!!group?.dissolved_at}
             onJoin={() => handleJoin()}
             onLeave={handleLeave}
             onShowGroupInfo={() => setShowGroupInfo(true)}

@@ -275,16 +275,18 @@ export default function GroupHeader({
             {userId ? (
               isMember ? (
                 <>
-                  <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
-                    <Button variant="primary" size="sm">
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
-                        </svg>
-                        {t('groupPost')}
-                      </span>
-                    </Button>
-                  </Link>
+                  {!isDissolved && (
+                    <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
+                      <Button variant="primary" size="sm">
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                          </svg>
+                          {t('groupPost')}
+                        </span>
+                      </Button>
+                    </Link>
+                  )}
                   {(userRole === 'owner' || userRole === 'admin') && (
                     <Link href={`/groups/${groupId}/manage`} style={{ textDecoration: 'none' }}>
                       <Button variant="secondary" size="sm">
@@ -305,7 +307,7 @@ export default function GroupHeader({
                     </Button>
                   )}
                 </>
-              ) : (
+              ) : !isDissolved ? (
                 <Button
                   variant="primary"
                   size="sm"
@@ -316,12 +318,12 @@ export default function GroupHeader({
                     ? t('groupJoining')
                     : t('groupJoinBtn')}
                 </Button>
-              )
-            ) : (
+              ) : null
+            ) : !isDissolved ? (
               <Button variant="primary" size="sm" onClick={() => useLoginModal.getState().openLoginModal()}>
                 {t('groupLoginToJoin')}
               </Button>
-            )}
+            ) : null}
           </Box>
         </Box>
       </Box>
