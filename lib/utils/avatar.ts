@@ -312,6 +312,9 @@ export function needsProxy(url: string | null | undefined): boolean {
  */
 function isLikelyImageUrl(url: string): boolean {
   try {
+    // data: URIs are inline images — not remote URLs to check
+    if (url.startsWith('data:')) return false
+
     const parsed = new URL(url)
     const pathname = parsed.pathname.toLowerCase()
     const hash = parsed.hash
@@ -405,6 +408,11 @@ function isLikelyImageUrl(url: string): boolean {
  */
 export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string | null {
   if (!avatarUrl || avatarUrl.trim() === '') return null
+
+  // data: URIs (e.g. inline SVG identicons/blockies) — return as-is, never proxy.
+  // These are tiny inline images; proxying them creates absurdly long URLs that
+  // cause 400 errors from Next.js Image Optimization (_next/image).
+  if (avatarUrl.startsWith('data:')) return null
 
   // 过滤掉明显无效的URL（但保留交易所默认头像如 default-avatar.png）
   if (
