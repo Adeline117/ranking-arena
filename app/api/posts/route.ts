@@ -30,6 +30,7 @@ import { getServerCache, setServerCache, deleteServerCacheByPrefix, CacheTTL } f
 import { get as cacheGet, set as cacheSet, del as cacheDel } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { extractAndSyncHashtags } from '@/lib/data/hashtags'
+import { sanitizeInput, sanitizeText } from '@/lib/utils/sanitize'
 
 // Zod schema for POST /api/posts
 const CreatePostSchema = z.object({
@@ -316,7 +317,11 @@ export const POST = withAuth(async ({ user, supabase, request }) => {
       details: { errors: parsed.error.flatten() },
     })
   }
-  const { title, content, poll_enabled, visibility, is_sensitive, content_warning } = parsed.data
+  // Sanitize user content — strip HTML/scripts before DB storage (defense-in-depth)
+  const title = sanitizeInput(parsed.data.title, { maxLength: 200 })
+  const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 10000 })
+  const content_warning = parsed.data.content_warning ? sanitizeInput(parsed.data.content_warning, { maxLength: 200 }) : undefined
+  const { poll_enabled, visibility, is_sensitive } = parsed.data
   const group_id = parsed.data.group_id ?? undefined
 
   // 并行获取用户 handle + reputation data

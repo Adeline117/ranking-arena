@@ -9,6 +9,7 @@ import { validateEnum, success, handleError } from '@/lib/api'
 import { togglePostReaction, getPostById } from '@/lib/data/posts'
 import { createNotificationDeduped } from '@/lib/data/notifications'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
@@ -18,6 +19,10 @@ type RouteContext = { params: Promise<{ id: string }> }
 export async function POST(request: NextRequest, context: RouteContext) {
   const guard = socialFeatureGuard()
   if (guard) return guard
+
+  // Rate limit: prevent like-bombing
+  const rl = await checkRateLimit(request, RateLimitPresets.write)
+  if (rl) return rl
 
   const { id } = await context.params
 

@@ -21,6 +21,7 @@ import { createNotificationDeduped } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
+import { sanitizeText } from '@/lib/utils/sanitize'
 
 // Zod schema for POST (create comment)
 const CreateCommentSchema = z.object({
@@ -112,7 +113,8 @@ export const POST = withAuth(
     if (!parsed.success) {
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
-    const { content } = parsed.data
+    // Sanitize comment content — strip HTML/scripts before DB storage
+    const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 2000 })
     const parent_id = parsed.data.parent_id ?? undefined
 
     // Check if user is muted in group
@@ -208,7 +210,9 @@ export const PUT = withAuth(
     if (!parsed.success) {
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
-    const { comment_id, content } = parsed.data
+    const comment_id = parsed.data.comment_id
+    // Sanitize edited content — strip HTML/scripts before DB storage
+    const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 2000 })
 
     // Verify ownership
     const { data: existing, error: fetchError } = await supabase
