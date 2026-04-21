@@ -106,9 +106,11 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
                 const hasSelection = dropdownEl?.querySelector('[aria-selected="true"]')
                 if (hasSelection) {
                   e.preventDefault()
+                  e.stopPropagation()
                   return
                 }
                 e.preventDefault()
+                e.stopPropagation()
                 saveToHistory(query.trim())
                 router.push(`/search?q=${encodeURIComponent(query.trim())}`)
                 onClose()
