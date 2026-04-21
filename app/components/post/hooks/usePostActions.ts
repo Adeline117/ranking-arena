@@ -75,6 +75,7 @@ export function usePostActions({
 }): PostActionsReturn {
   const router = useRouter()
   const lockRef = useRef<Set<string>>(new Set())
+  const bookmarkLockRef = useRef<Set<string>>(new Set())
   const postsRef = useRef(posts); postsRef.current = posts
 
   // Edit state
@@ -202,9 +203,12 @@ export function usePostActions({
   }, [accessToken, selectedPollOptions])
 
   // Bookmark (with optimistic update, matching toggleReaction pattern)
+  // Uses ref-based lock (synchronous) to prevent duplicate clicks — state-based
+  // guards have a tiny race window because React batches setState calls.
   const handleBookmark = useCallback(async (postId: string) => {
     if (!accessToken) { const { useLoginModal } = await import('@/lib/hooks/useLoginModal'); useLoginModal.getState().openLoginModal(); return }
-    if (bookmarkLoading[postId]) return
+    if (bookmarkLockRef.current.has(postId)) return
+    bookmarkLockRef.current.add(postId)
     setBookmarkLoading(prev => ({ ...prev, [postId]: true }))
 
     // Save previous state for rollback
@@ -235,8 +239,8 @@ export function usePostActions({
       setUserBookmarks(prev => ({ ...prev, [postId]: prevBookmarked }))
       setBookmarkCounts(prev => ({ ...prev, [postId]: prevCount }))
       showToast(t('networkError'), 'error')
-    } finally { setBookmarkLoading(prev => ({ ...prev, [postId]: false })) }
-  }, [accessToken, showToast, t, bookmarkLoading, userBookmarks, bookmarkCounts])
+    } finally { bookmarkLockRef.current.delete(postId); setBookmarkLoading(prev => ({ ...prev, [postId]: false })) }
+  }, [accessToken, showToast, t, userBookmarks, bookmarkCounts])
 
   const openBookmarkFolderModal = useCallback((postId: string) => {
     if (!accessToken) { showToast(t('pleaseLogin'), 'warning'); return }
