@@ -1883,6 +1883,7 @@ const ko = {
     loginInvalidEmail: '유효한 이메일을 입력해 주세요',
     loginPasswordTooShort: '비밀번호는 최소 6자 이상이어야 합니다',
     loginHandleTooShort: '사용자 이름은 최소 1자 이상이어야 합니다',
+    loginHandleTooLong: '사용자 이름은 30자 이하여야 합니다',
     loginHandleInvalidChars: '영문, 숫자, 밑줄, 한자만 사용할 수 있습니다',
     loginPasswordWeak: '약함',
     loginPasswordFair: '보통',

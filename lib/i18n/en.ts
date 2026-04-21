@@ -1924,6 +1924,7 @@ const en = {
     loginInvalidEmail: 'Please enter a valid email',
     loginPasswordTooShort: 'Password must be at least 6 characters',
     loginHandleTooShort: 'Username must be at least 1 character',
+    loginHandleTooLong: 'Username must be 30 characters or fewer',
     loginHandleInvalidChars: 'Only letters, numbers, underscores and Chinese',
     loginPasswordWeak: 'Weak',
     loginPasswordFair: 'Fair',

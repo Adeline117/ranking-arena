@@ -1774,6 +1774,7 @@ const ja = {
     loginInvalidEmail: '有効なメールアドレスを入力してください',
     loginPasswordTooShort: 'パスワードは6文字以上である必要があります',
     loginHandleTooShort: 'ユーザー名は1文字以上である必要があります',
+    loginHandleTooLong: 'ユーザー名は30文字以内にしてください',
     loginHandleInvalidChars: '英数字、アンダースコア、漢字のみ使用できます',
     loginPasswordWeak: '弱い',
     loginPasswordFair: '普通',
