@@ -75,21 +75,19 @@ export async function POST(request: NextRequest) {
     const sniffed = sniffVideoFormat(headerBytes)
 
     if (!sniffed) {
-      // Fall back to client-supplied type but only if it's in the allowlist
-      if (!ALLOWED_VIDEO_TYPES.includes(file.type)) {
-        return NextResponse.json(
-          {
-            error: 'Unsupported video format. Supported formats: MP4, WebM, MOV, AVI, MKV',
-            supportedFormats: ['MP4', 'WebM', 'MOV', 'AVI', 'MKV']
-          },
-          { status: 400 }
-        )
-      }
+      // Reject the file — magic bytes don't match any known video format
+      return NextResponse.json(
+        {
+          error: 'Unsupported video format. File content does not match any known video format. Supported formats: MP4, WebM, MOV, AVI, MKV',
+          supportedFormats: ['MP4', 'WebM', 'MOV', 'AVI', 'MKV']
+        },
+        { status: 400 }
+      )
     }
 
-    // Use sniffed content type and extension, falling back to client values only for allowlisted types
-    const contentType = sniffed?.type || file.type
-    const fileExt = sniffed?.ext || (file.name.split('.').pop()?.toLowerCase() || 'mp4')
+    // Use sniffed content type and extension (no client-supplied fallback)
+    const contentType = sniffed.type
+    const fileExt = sniffed.ext
 
     // 创建 Supabase 客户端（使用 service key 以绕过 RLS）
     const supabase = getSupabaseAdmin()
