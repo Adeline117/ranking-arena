@@ -62,6 +62,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: `Upstream ${resp.status}` }, { status: resp.status })
     }
 
+    // Reject responses larger than 50 MB to prevent memory abuse
+    const MAX_BODY_SIZE = 50 * 1024 * 1024
+    const contentLength = resp.headers.get('Content-Length')
+    if (contentLength && parseInt(contentLength, 10) > MAX_BODY_SIZE) {
+      return NextResponse.json({ error: 'Response too large' }, { status: 413 })
+    }
+
     const buffer = await resp.arrayBuffer()
     const origin = request.headers.get('Origin')
     return new NextResponse(buffer, {
