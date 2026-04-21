@@ -142,7 +142,9 @@ export default function QuizClient() {
       <Box
         data-theme="dark"
         style={{
-          minHeight: '100vh',
+          position: 'fixed',
+          inset: 0,
+          zIndex: 50,
           background: Q.BG_PAGE,
           display: 'flex',
           alignItems: 'center',
@@ -171,26 +173,18 @@ export default function QuizClient() {
     <Box
       data-theme="dark"
       style={{
-        minHeight: '100vh',
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         padding: 20,
-        position: 'relative',
-        overflow: 'hidden',
+        overflow: 'auto',
         background: Q.BG_PAGE,
         color: '#FFFFFF',
       }}
     >
-      {/* Background with subtle radial glow */}
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: Q.BG_PAGE,
-          zIndex: -1,
-        }}
-      />
       <div
         style={{
           position: 'fixed',

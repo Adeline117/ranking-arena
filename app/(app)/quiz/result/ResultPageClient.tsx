@@ -49,10 +49,14 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
     <div
       data-theme="dark"
       style={{
-        minHeight: '100vh',
+        position: 'fixed',
+        inset: 0,
+        zIndex: 50,
         padding: 'clamp(16px, 4vw, 32px)',
+        paddingBottom: 80,
         display: 'flex',
         justifyContent: 'center',
+        overflow: 'auto',
         background: Q.BG_PAGE,
         color: Q.TEXT_PRIMARY,
       }}
