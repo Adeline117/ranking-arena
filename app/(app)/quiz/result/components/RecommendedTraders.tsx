@@ -17,7 +17,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
     <div
       style={{
         borderRadius: 16,
-        background: 'var(--color-backdrop-heavy)',
+        background: 'var(--glass-bg-secondary)',
         border: '1px solid var(--glass-border-light)',
         padding: 'clamp(20px, 4vw, 28px)',
         display: 'flex',
@@ -140,7 +140,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                     style={{
                       fontSize: tokens.typography.fontSize.sm,
                       fontWeight: tokens.typography.fontWeight.bold,
-                      color: trader.roi_90d >= 0 ? '#2FE57D' : '#FF5555',
+                      color: trader.roi_90d >= 0 ? 'var(--color-sentiment-bull)' : 'var(--color-sentiment-bear)',
                     }}
                   >
                     {trader.roi_90d >= 0 ? '+' : ''}
@@ -162,7 +162,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                     style={{
                       fontSize: tokens.typography.fontSize.sm,
                       fontWeight: tokens.typography.fontWeight.bold,
-                      color: '#D4AF37',
+                      color: 'var(--color-accent-warning)',
                     }}
                   >
                     {Math.round(trader.arena_score)}

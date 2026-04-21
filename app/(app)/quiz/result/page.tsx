@@ -6,14 +6,13 @@
  */
 
 import type { Metadata } from 'next'
-import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { BASE_URL } from '@/lib/constants/urls'
 import { PERSONALITY_TYPE_MAP, PERSONALITY_TYPES } from '../components/quiz-data'
 import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
 import ResultPageClient from './ResultPageClient'
 
-export const revalidate = 300
+export const revalidate = 3600
 
 interface Props {
   searchParams: Promise<{ type?: string; match?: string; lang?: string }>
@@ -106,6 +105,7 @@ export default async function QuizResultPage({ searchParams }: Props) {
   const params = await searchParams
   const typeId = (params.type || 'sniper') as PersonalityTypeId
   const match = parseInt(params.match || '85', 10)
+  const matchClamped = isNaN(match) ? 85 : Math.min(99, Math.max(60, match))
 
   const pType = PERSONALITY_TYPE_MAP[typeId]
   if (!pType) {
@@ -118,8 +118,6 @@ export default async function QuizResultPage({ searchParams }: Props) {
   const traders = await getRecommendedTraders(typeId)
 
   return (
-    <Suspense>
-      <ResultPageClient typeId={typeId} matchPercent={match} recommendedTraders={traders} />
-    </Suspense>
+    <ResultPageClient typeId={typeId} matchPercent={matchClamped} recommendedTraders={traders} />
   )
 }

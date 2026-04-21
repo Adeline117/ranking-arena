@@ -59,7 +59,7 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
                 borderRadius: 12,
                 border: isSelected
                   ? '2px solid var(--color-brand)'
-                  : '1px solid var(--glass-border-light)',
+                  : '2px solid var(--glass-border-light)',
                 background: isSelected
                   ? 'linear-gradient(135deg, var(--color-accent-primary-15) 0%, var(--color-accent-primary-08) 100%)'
                   : 'var(--color-overlay-subtle)',
@@ -74,6 +74,12 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
                 gap: 12,
                 animation: `fadeIn 0.3s ease-out ${idx * 0.05}s both`,
               }}
+              onMouseDown={(e) => {
+                e.currentTarget.style.transform = 'scale(0.97)'
+              }}
+              onMouseUp={(e) => {
+                e.currentTarget.style.transform = 'scale(1)'
+              }}
               onMouseEnter={(e) => {
                 if (!isSelected) {
                   e.currentTarget.style.borderColor = 'var(--color-accent-primary-40)'
@@ -81,6 +87,7 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
                 }
               }}
               onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'scale(1)'
                 if (!isSelected) {
                   e.currentTarget.style.borderColor = 'var(--glass-border-light)'
                   e.currentTarget.style.background = 'var(--color-overlay-subtle)'
@@ -117,7 +124,8 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
         onClick={onBack}
         style={{
           alignSelf: 'flex-start',
-          padding: '8px 16px',
+          padding: '12px 16px',
+          minHeight: 44,
           borderRadius: 8,
           border: 'none',
           background: 'transparent',

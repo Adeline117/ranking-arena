@@ -39,6 +39,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
       }}
     >
       <div
+        className="stagger-children"
         style={{
           maxWidth: 560,
           width: '100%',
@@ -62,6 +63,42 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         {/* Style Analysis */}
         <StyleAnalysis type={pType} tr={t} />
 
+        {/* Type Compatibility */}
+        <div style={{ borderRadius: 16, background: 'var(--glass-bg-secondary)', border: '1px solid var(--glass-border-light)', padding: 'clamp(20px, 4vw, 28px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <div style={{ width: 4, height: 24, borderRadius: 2, background: pType.gradient }} />
+            <h3 style={{ fontSize: '18px', fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>
+              {t('quizCompatTitle')}
+            </h3>
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+            {t('quizCompatWith')}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {pType.compatibleTypes.map(id => {
+              const ct = PERSONALITY_TYPE_MAP[id]
+              return ct ? (
+                <span key={id} style={{ padding: '6px 12px', borderRadius: 8, background: ct.color + '15', border: '1px solid ' + ct.color + '25', fontSize: '14px', color: ct.color, fontWeight: 600 }}>
+                  {t(ct.nameKey)}
+                </span>
+              ) : null
+            })}
+          </div>
+          <div style={{ fontSize: '13px', color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+            {t('quizIncompatWith')}
+          </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {pType.incompatibleTypes.map(id => {
+              const ct = PERSONALITY_TYPE_MAP[id]
+              return ct ? (
+                <span key={id} style={{ padding: '6px 12px', borderRadius: 8, background: 'var(--color-accent-error-10, rgba(239,68,68,0.1))', border: '1px solid var(--color-accent-error-20, rgba(239,68,68,0.2))', fontSize: '14px', color: 'var(--color-accent-error)', fontWeight: 600 }}>
+                  {t(ct.nameKey)}
+                </span>
+              ) : null
+            })}
+          </div>
+        </div>
+
         {/* Recommended Arena Traders */}
         <RecommendedTraders type={pType} traders={recommendedTraders} tr={t} />
 
@@ -69,7 +106,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         <div
           style={{
             borderRadius: 16,
-            background: 'var(--color-backdrop-heavy)',
+            background: 'var(--glass-bg-secondary)',
             border: '1px solid var(--glass-border-light)',
             padding: 'clamp(20px, 4vw, 28px)',
             display: 'flex',
