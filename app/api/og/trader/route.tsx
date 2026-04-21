@@ -113,15 +113,44 @@ async function fetchTrader(handle: string) {
 
   if (!source) return null
 
-  const { data: rankData } = await supabase
-    .from('leaderboard_ranks')
-    .select('roi, pnl, win_rate, max_drawdown, arena_score, rank')
-    .eq('source', source.source)
-    .eq('source_trader_id', source.source_trader_id)
-    .eq('season_id', '90D')
-    .maybeSingle()
+  // Cascade through season_ids: 90D → 30D → 7D
+  let rankData: { roi: number | null; pnl: number | null; win_rate: number | null; max_drawdown: number | null; arena_score: number | null; rank: number | null; season_id?: string } | null = null
+  let usedSeason = '90D'
 
-  return { ...source, platform: source.source, ...(rankData || {}) }
+  for (const season of ['90D', '30D', '7D'] as const) {
+    const { data } = await supabase
+      .from('leaderboard_ranks')
+      .select('roi, pnl, win_rate, max_drawdown, arena_score, rank')
+      .eq('source', source.source)
+      .eq('source_trader_id', source.source_trader_id)
+      .eq('season_id', season)
+      .maybeSingle()
+
+    if (data) {
+      rankData = data
+      usedSeason = season
+      break
+    }
+  }
+
+  // Final fallback: try trader_snapshots for latest data
+  if (!rankData) {
+    const { data: snapshot } = await supabase
+      .from('trader_snapshots')
+      .select('roi, pnl, win_rate, max_drawdown, arena_score')
+      .eq('source', source.source)
+      .eq('source_trader_id', source.source_trader_id)
+      .order('snapshot_date', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (snapshot) {
+      rankData = { ...snapshot, rank: null }
+      usedSeason = 'latest'
+    }
+  }
+
+  return { ...source, platform: source.source, season: usedSeason, ...(rankData || {}) }
 }
 
 export async function GET(request: NextRequest) {
@@ -151,12 +180,20 @@ export async function GET(request: NextRequest) {
     const mdd = trader?.max_drawdown ?? null
     const platform = overrideSource || trader?.platform || ''
     const avatarUrl = trader?.avatar_url || null
+    const season = trader?.season ?? '90D'
+    const seasonLabel = season === 'latest' ? 'Latest' : season
 
     const roiValid = roi != null
     const roiColor = roiValid && roi >= 0 ? C.success : C.error
     const roiStr = roiValid ? formatRoi(roi) : '--'
     const platformLabel = PLATFORM_NAMES[platform] || platform.replace(/_/g, ' ').toUpperCase()
     const platformColor = PLATFORM_COLORS[platform] || C.purpleLight
+
+    // Only show stat cards that have real data
+    const showWinRate = winRate != null
+    const showMdd = mdd != null
+    // Count visible optional cards for flex sizing
+    const optionalCardCount = (showWinRate ? 1 : 0) + (showMdd ? 1 : 0)
 
     // Pre-fetch avatar as base64 data URL so Satori (next/og) doesn't have to
     // make a network request itself — self-referential proxy calls from Edge
@@ -243,7 +280,7 @@ export async function GET(request: NextRequest) {
                 background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
               }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: C.dim, letterSpacing: '1px' }}>
-                  90D
+                  {seasonLabel}
                 </span>
               </div>
             </div>
@@ -323,11 +360,11 @@ export async function GET(request: NextRequest) {
               </div>
             </div>
 
-            {/* Stats cards row */}
+            {/* Stats cards row — only show cards with real data */}
             <div style={{ display: 'flex', gap: 16, flex: 1, alignItems: 'stretch' }}>
-              {/* Arena Score */}
+              {/* Arena Score — always shown */}
               <div style={{
-                display: 'flex', flexDirection: 'column', flex: 1,
+                display: 'flex', flexDirection: 'column', flex: optionalCardCount === 0 ? 1.2 : 1,
                 padding: '20px 24px', borderRadius: 16,
                 background: C.goldDim, border: '1px solid ' + C.borderGold, gap: 8,
               }}>
@@ -342,16 +379,16 @@ export async function GET(request: NextRequest) {
                 </span>
               </div>
 
-              {/* ROI */}
+              {/* ROI — always shown */}
               <div style={{
-                display: 'flex', flexDirection: 'column', flex: 1,
+                display: 'flex', flexDirection: 'column', flex: optionalCardCount === 0 ? 1.2 : 1,
                 padding: '20px 24px', borderRadius: 16,
                 background: roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
                 border: roiValid && roi >= 0 ? '1px solid rgba(47,229,125,0.25)' : '1px solid rgba(255,85,85,0.25)',
                 gap: 8,
               }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
-                  ROI (90D)
+                  ROI ({seasonLabel})
                 </span>
                 <span style={{
                   fontSize: 48, fontWeight: 900, color: roiColor,
@@ -361,41 +398,45 @@ export async function GET(request: NextRequest) {
                 </span>
               </div>
 
-              {/* Win Rate */}
-              <div style={{
-                display: 'flex', flexDirection: 'column', flex: 0.8,
-                padding: '20px 24px', borderRadius: 16,
-                background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                gap: 8,
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
-                  WIN RATE
-                </span>
-                <span style={{
-                  fontSize: 40, fontWeight: 900, color: C.offWhite,
-                  letterSpacing: '-1px', lineHeight: 1, display: 'flex',
+              {/* Win Rate — only when data exists */}
+              {showWinRate && (
+                <div style={{
+                  display: 'flex', flexDirection: 'column', flex: 0.8,
+                  padding: '20px 24px', borderRadius: 16,
+                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
+                  gap: 8,
                 }}>
-                  {winRate != null ? winRate.toFixed(0) + '%' : '--'}
-                </span>
-              </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
+                    WIN RATE
+                  </span>
+                  <span style={{
+                    fontSize: 40, fontWeight: 900, color: C.offWhite,
+                    letterSpacing: '-1px', lineHeight: 1, display: 'flex',
+                  }}>
+                    {winRate.toFixed(0) + '%'}
+                  </span>
+                </div>
+              )}
 
-              {/* Max Drawdown */}
-              <div style={{
-                display: 'flex', flexDirection: 'column', flex: 0.8,
-                padding: '20px 24px', borderRadius: 16,
-                background: 'rgba(255,85,85,0.05)', border: '1px solid rgba(255,85,85,0.15)',
-                gap: 8,
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
-                  MAX DD
-                </span>
-                <span style={{
-                  fontSize: 40, fontWeight: 900, color: mdd != null ? C.error : C.offWhite,
-                  letterSpacing: '-1px', lineHeight: 1, display: 'flex',
+              {/* Max Drawdown — only when data exists */}
+              {showMdd && (
+                <div style={{
+                  display: 'flex', flexDirection: 'column', flex: 0.8,
+                  padding: '20px 24px', borderRadius: 16,
+                  background: 'rgba(255,85,85,0.05)', border: '1px solid rgba(255,85,85,0.15)',
+                  gap: 8,
                 }}>
-                  {mdd != null ? `-${Math.abs(mdd).toFixed(0)}%` : '--'}
-                </span>
-              </div>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
+                    MAX DD
+                  </span>
+                  <span style={{
+                    fontSize: 40, fontWeight: 900, color: C.error,
+                    letterSpacing: '-1px', lineHeight: 1, display: 'flex',
+                  }}>
+                    {`-${Math.abs(mdd).toFixed(0)}%`}
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Footer */}
