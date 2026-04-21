@@ -127,12 +127,12 @@ export function DeleteAccountModal({
           <label htmlFor="delete-account-password">
             <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('enterPasswordToConfirm')}</Text>
           </label>
-          <input
+          <PasswordInput
             id="delete-account-password"
-            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder={t('enterCurrentPassword')}
+            autoComplete="current-password"
             style={{
               width: '100%',
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
