@@ -1613,3 +1613,15 @@
     background: var(--color-bg-tertiary);
   }
 }
+
+/* ============================================
+   Landscape: hide bottom nav on small-height devices
+   Prevents nav from eating >20% of viewport in landscape
+   ============================================ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .mobile-bottom-nav,
+  .mobile-bottom-nav-spacer {
+    display: none !important;
+  }
+}
