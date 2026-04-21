@@ -100,15 +100,34 @@ export default function ShareButton({ data, size = 'sm', variant = 'ghost', show
     return () => document.removeEventListener('mousedown', handler)
   }, [open])
 
-  const copyLink = useCallback(async () => {
+  const copyToClipboard = useCallback(async (text: string): Promise<boolean> => {
     try {
-      await navigator.clipboard.writeText(data.url)
-      showToast(t('linkCopied'), 'success', 2000)
+      await navigator.clipboard.writeText(text)
+      return true
     } catch {
-      showToast(t('copyFailed'), 'error', 2000)
+      // Fallback for browsers without clipboard API
+      const textarea = document.createElement('textarea')
+      textarea.value = text
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.select()
+      try {
+        document.execCommand('copy')
+        return true
+      } catch {
+        return false
+      } finally {
+        document.body.removeChild(textarea)
+      }
     }
+  }, [])
+
+  const copyLink = useCallback(async () => {
+    const success = await copyToClipboard(data.url)
+    showToast(success ? t('linkCopied') : t('copyFailed'), success ? 'success' : 'error', 2000)
     setOpen(false)
-  }, [data.url, showToast, t])
+  }, [data.url, showToast, t, copyToClipboard])
 
   const openPopup = useCallback((url: string) => {
     const popup = window.open(url, '_blank', 'noopener')
