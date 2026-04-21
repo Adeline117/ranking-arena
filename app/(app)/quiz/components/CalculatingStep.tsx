@@ -7,10 +7,38 @@ interface CalculatingStepProps {
   onDone: () => void
 }
 
+const MESSAGES_EN = [
+  'Analyzing your answers...',
+  'Matching your trading style...',
+  'Finding your legendary match...',
+]
+
+const MESSAGES_ZH = [
+  '\u5206\u6790\u4F60\u7684\u7B54\u6848\u4E2D\u2026',
+  '\u5339\u914D\u4F60\u7684\u4EA4\u6613\u98CE\u683C\u2026',
+  '\u5BFB\u627E\u4F60\u7684\u4F20\u5947\u5339\u914D\u2026',
+]
+
 export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
   const [progress, setProgress] = useState(0)
+  const [messageIdx, setMessageIdx] = useState(0)
   const onDoneRef = useRef(onDone)
   onDoneRef.current = onDone
+
+  // Determine language from the tr function
+  const isZh = tr('quizCalculating').length > 0 && /[\u4e00-\u9fff]/.test(tr('quizCalculating'))
+  const messages = isZh ? MESSAGES_ZH : MESSAGES_EN
+
+  useEffect(() => {
+    // Rotate messages every 500ms
+    const msgInterval = setInterval(() => {
+      setMessageIdx((prev) => {
+        const next = prev + 1
+        return next < messages.length ? next : prev
+      })
+    }, 500)
+    return () => clearInterval(msgInterval)
+  }, [messages.length])
 
   useEffect(() => {
     // Animate progress from 0 to 100 over 1.5s
@@ -53,16 +81,19 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
         }}
       />
 
-      {/* Text */}
+      {/* Text — rotating messages */}
       <p
         style={{
           fontSize: 15,
           fontWeight: 600,
           color: 'var(--color-text-primary)',
           margin: 0,
+          transition: 'opacity 0.25s ease',
+          minHeight: 22,
         }}
+        key={messageIdx}
       >
-        {tr('quizCalculating')}
+        {messages[messageIdx]}
       </p>
 
       {/* Progress bar */}
