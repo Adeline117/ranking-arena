@@ -20,16 +20,17 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
       {/* Icon */}
       <div
         style={{
-          width: 48,
-          height: 48,
-          borderRadius: 12,
+          width: 64,
+          height: 64,
+          borderRadius: 16,
           background: 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          boxShadow: '0 4px 16px color-mix(in srgb, var(--color-brand) 25%, transparent)',
         }}
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="10" />
           <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
           <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -70,11 +71,11 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
             style={{
               padding: '4px 10px',
               borderRadius: 6,
-              background: 'var(--color-bg-tertiary)',
-              border: '1px solid var(--glass-border-light)',
+              background: 'var(--color-accent-primary-08)',
+              border: '1px solid transparent',
               fontSize: 12,
-              fontWeight: 500,
-              color: 'var(--color-text-secondary)',
+              fontWeight: 600,
+              color: 'var(--color-brand)',
             }}
           >
             {tr(key)}
@@ -95,6 +96,9 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           fontWeight: 600,
           cursor: 'pointer',
           transition: 'transform 0.2s',
+          minWidth: 200,
+          width: '100%',
+          maxWidth: 280,
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = 'translateY(-1px)'

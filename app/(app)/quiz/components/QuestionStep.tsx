@@ -82,12 +82,14 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
               onMouseEnter={(e) => {
                 if (!isSelected) {
                   e.currentTarget.style.borderColor = 'var(--color-text-tertiary)'
+                  e.currentTarget.style.background = 'var(--color-bg-secondary)'
                 }
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'scale(1)'
                 if (!isSelected) {
                   e.currentTarget.style.borderColor = 'var(--glass-border-light)'
+                  e.currentTarget.style.background = 'var(--color-bg-tertiary)'
                 }
               }}
             >

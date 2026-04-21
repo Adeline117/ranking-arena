@@ -12,9 +12,10 @@ export default function ProgressBar({ current, total }: ProgressBarProps) {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <span
         style={{
-          fontSize: 12,
+          fontSize: 11,
           fontWeight: 500,
           color: 'var(--color-text-tertiary)',
+          opacity: 0.7,
         }}
       >
         {current} / {total}
