@@ -15,7 +15,7 @@ export const criticalCss = `
 .ssr-only { display: block; }
 /* 基础重置和布局 */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html{-webkit-text-size-adjust:100%;tab-size:4;scroll-behavior:smooth}
+html{-webkit-text-size-adjust:100%;tab-size:4;scroll-behavior:auto}
 body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden}
 
 /* 关键布局样式 */
