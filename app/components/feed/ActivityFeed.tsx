@@ -10,8 +10,9 @@
  *   - Real-time feel: newest first
  */
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/lib/i18n'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
 import ActivityFeedItem from './ActivityFeedItem'
@@ -65,8 +66,29 @@ export default function ActivityFeed({
   initialNextCursor,
   fixedPlatform,
   fixedHandle,
-  title = 'Trader Activity Feed',
+  title,
 }: ActivityFeedProps) {
+  const { t } = useLanguage()
+  const localTitle = title || t('activityFeedTitle')
+
+  const platformOptions = useMemo(() => [
+    { label: t('activityFilterAll'), value: null as string | null },
+    { label: 'Binance', value: 'binance_futures' },
+    { label: 'Bybit', value: 'bybit' },
+    { label: 'OKX', value: 'okx_futures' },
+    { label: 'Bitget', value: 'bitget_futures' },
+    { label: 'Hyperliquid', value: 'hyperliquid' },
+    { label: 'GMX', value: 'gmx' },
+  ], [t])
+
+  const typeOptions = useMemo(() => [
+    { label: t('activityFilterAll'), value: null as ActivityType | null },
+    ...Object.entries(ACTIVITY_META).map(([key, meta]) => ({
+      label: meta.label,
+      value: key as ActivityType,
+    })),
+  ], [t])
+
   const [platform, setPlatform] = useState<string | null>(fixedPlatform ?? null)
   const [typeFilter, setTypeFilter] = useState<ActivityType | null>(null)
   const [activities, setActivities] = useState<TraderActivity[]>(initialActivities)
@@ -179,7 +201,7 @@ export default function ActivityFeed({
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
             }}
           >
-            {title}
+            {localTitle}
           </span>
           {activities.length > 0 && (
             <span
@@ -234,7 +256,7 @@ export default function ActivityFeed({
             overflowX: 'auto',
           }}
         >
-          {PLATFORM_OPTIONS.map((opt) => (
+          {platformOptions.map((opt) => (
             <FilterChip
               key={opt.label}
               label={opt.label}
@@ -255,7 +277,7 @@ export default function ActivityFeed({
           overflowX: 'auto',
         }}
       >
-        {TYPE_OPTIONS.map((opt) => (
+        {typeOptions.map((opt) => (
           <FilterChip
             key={opt.label}
             label={opt.label}

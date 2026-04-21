@@ -4362,6 +4362,18 @@ userActivityReviewed: 'Reviewed ',
 userActivityFollowedTrader: 'Followed trader ',
 userActivityFollowedUser: 'Followed ',
 userActivityJoinedGroup: 'Joined group ',
+
+// Activity Feed (global feed page)
+activityFeedTitle: 'Activity Feed',
+activityFeedDesc: 'Auto-generated milestones from live trader data — rank climbs, ROI breakouts, win streaks, and large profits.',
+activityFilterAll: 'All',
+
+// Market section error boundaries
+marketSectionError: 'Failed to load this section',
+marketCoreMetricsError: 'Failed to load core metrics',
+marketDataError: 'Market data failed to load',
+marketTickerError: 'Failed to load price ticker',
+marketFearGreedError: 'Failed to load Fear & Greed index',
 userActivityPublishedPost: 'Published post ',
 userActivityView: 'View',
 

@@ -105,32 +105,7 @@ export default async function FeedPage() {
           padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
         }}
       >
-        {/* Page header */}
-        <div style={{ marginBottom: tokens.spacing[5] }}>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: tokens.typography.fontSize['2xl'],
-              fontWeight: tokens.typography.fontWeight.black,
-              color: tokens.colors.text.primary,
-              fontFamily: tokens.typography.fontFamily.sans.join(', '),
-            }}
-          >
-            Activity Feed
-          </h1>
-          <p
-            style={{
-              margin: `${tokens.spacing[1]} 0 0`,
-              fontSize: tokens.typography.fontSize.sm,
-              color: tokens.colors.text.tertiary,
-              fontFamily: tokens.typography.fontFamily.sans.join(', '),
-            }}
-          >
-            Auto-generated milestones from live trader data — rank climbs, ROI breakouts, win streaks, and large profits.
-          </p>
-        </div>
-
-        {/* Feed */}
+        {/* Feed — title rendered by ActivityFeed client component with i18n */}
         <Suspense fallback={<RankingSkeleton />}>
           <ActivityFeed
             initialActivities={activities}
