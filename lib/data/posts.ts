@@ -4,7 +4,9 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
-import { sanitizeText } from '@/lib/utils/sanitize'
+// Dynamic import: sanitize.ts pulls in isomorphic-dompurify + jsdom (~10MB)
+// which crashes Vercel serverless cold starts. Only needed for write operations.
+const loadSanitize = () => import('@/lib/utils/sanitize').then(m => m.sanitizeText)
 
 /**
  * Simple language detection heuristic.
@@ -569,8 +571,8 @@ export async function createPost(
   const { data, error } = await supabase
     .from('posts')
     .insert({
-      title: input.title ? sanitizeText(input.title) : input.title,
-      content: sanitizeText(input.content),
+      title: input.title ? (await loadSanitize())(input.title) : input.title,
+      content: (await loadSanitize())(input.content),
       author_id: userId,
       author_handle: userHandle,
       group_id: input.group_id || null,
@@ -599,8 +601,9 @@ export async function updatePost(
   updates: { title?: string; content?: string; poll_enabled?: boolean; visibility?: PostVisibility; is_sensitive?: boolean; content_warning?: string | null }
 ): Promise<Post> {
   const sanitizedUpdates = { ...updates, updated_at: new Date().toISOString() }
-  if (sanitizedUpdates.title) sanitizedUpdates.title = sanitizeText(sanitizedUpdates.title)
-  if (sanitizedUpdates.content) sanitizedUpdates.content = sanitizeText(sanitizedUpdates.content)
+  const sanitize = await loadSanitize()
+  if (sanitizedUpdates.title) sanitizedUpdates.title = sanitize(sanitizedUpdates.title)
+  if (sanitizedUpdates.content) sanitizedUpdates.content = sanitize(sanitizedUpdates.content)
   const { data, error } = await supabase
     .from('posts')
     .update(sanitizedUpdates)
