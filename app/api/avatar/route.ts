@@ -4,9 +4,48 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { lookup as dnsLookup } from 'node:dns/promises'
 import logger from '@/lib/logger'
 import { getCorsOrigin } from '@/lib/utils/cors'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+
+/** Reject IPv4/IPv6 addresses that point at private, loopback, link-local, or cloud-metadata ranges. */
+function isPrivateIP(ip: string): boolean {
+  // IPv4
+  const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/)
+  if (v4) {
+    const a = Number(v4[1])
+    const b = Number(v4[2])
+    if (a === 0) return true                                    // 0.0.0.0/8
+    if (a === 10) return true                                   // 10.0.0.0/8 private
+    if (a === 100 && b >= 64 && b <= 127) return true           // 100.64.0.0/10 CGNAT
+    if (a === 127) return true                                  // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254) return true                     // 169.254.0.0/16 link-local + cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true            // 172.16.0.0/12 private
+    if (a === 192 && b === 0) return true                       // 192.0.0.0/24 IETF
+    if (a === 192 && b === 168) return true                     // 192.168.0.0/16 private
+    if (a >= 224) return true                                   // 224.0.0.0/4 multicast + reserved
+    return false
+  }
+
+  // IPv6 (normalize to lowercase, strip brackets)
+  const v6 = ip.toLowerCase().replace(/^\[|\]$/g, '')
+  if (v6.includes(':')) {
+    if (v6 === '::' || v6 === '::1') return true               // unspecified, loopback
+    if (v6.startsWith('fe80:') || v6.startsWith('fe8') ||
+        v6.startsWith('fe9') || v6.startsWith('fea') ||
+        v6.startsWith('feb')) return true                       // fe80::/10 link-local
+    if (v6.startsWith('fc') || v6.startsWith('fd')) return true // fc00::/7 unique-local
+    if (v6.startsWith('ff')) return true                        // ff00::/8 multicast
+    // IPv4-mapped IPv6: ::ffff:127.0.0.1, ::ffff:169.254.169.254
+    const mapped = v6.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
+    if (mapped) return isPrivateIP(mapped[1])
+    // 2002::/16 6to4 — could tunnel to private, treat as suspicious
+    if (v6.startsWith('2002:')) return true
+    return false
+  }
+  return false
+}
 
 // Avatar proxy is a read-only, cacheable operation — do NOT force-dynamic.
 // Removing force-dynamic allows Vercel's CDN to cache each unique avatar URL
@@ -177,6 +216,19 @@ export async function GET(request: NextRequest) {
     
     if (!isAllowed) {
       return new NextResponse('Domain not allowed', { status: 403 })
+    }
+
+    // SSRF defense: resolve hostname and reject if it points to a private/reserved IP.
+    // This prevents DNS rebinding attacks where an allowed domain resolves to an internal IP.
+    try {
+      const records = await dnsLookup(urlObj.hostname, { all: true })
+      for (const r of records) {
+        if (isPrivateIP(r.address)) {
+          return new NextResponse('Blocked: private IP', { status: 403 })
+        }
+      }
+    } catch {
+      // DNS resolution failed — let the fetch handle it (will likely fail with ENOTFOUND)
     }
 
     // 请求图片 - 模拟浏览器请求（5s timeout 防止 function 挂起 + SSRF mitigation）
