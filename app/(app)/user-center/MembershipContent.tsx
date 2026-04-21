@@ -123,7 +123,9 @@ export default function MembershipContent() {
 
       const data = await response.json()
       if (data.url) {
+        // Don't re-enable the button — we're navigating away to Stripe
         window.location.href = data.url
+        return
       } else if (data.error) {
         showToast(data.error, 'error')
       } else {
