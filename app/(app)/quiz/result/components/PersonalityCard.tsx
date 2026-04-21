@@ -80,6 +80,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
       {/* Match percentage */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6, width: '100%', maxWidth: 240 }}>
         <div
+          aria-hidden="true"
           style={{
             width: '100%',
             height: 6,
