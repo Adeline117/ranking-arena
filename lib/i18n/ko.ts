@@ -1872,6 +1872,7 @@ const ko = {
     loginTimeout: '로그인에 시간이 걸리고 있습니다. 연결을 확인하고 다시 시도해 주세요.',
     loginAuthFailed: '로그인에 실패했습니다. 다시 시도해 주세요.',
     loginNoSession: '세션을 생성할 수 없습니다. 다시 로그인해 주세요.',
+    loginEmailNotRegistered: '이 이메일로 등록된 계정이 없습니다. 먼저 회원가입해 주세요.',
     loginWithPassword: '비밀번호로 로그인',
     loginUsernamePlaceholder: '사용자 이름',
     loginSetPasswordPlaceholder: '비밀번호 설정 (최소 6자)',

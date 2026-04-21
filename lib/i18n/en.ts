@@ -1913,6 +1913,7 @@ const en = {
     loginTimeout: 'Login is taking too long. Please check your connection and try again.',
     loginAuthFailed: 'Sign-in failed. Please try again.',
     loginNoSession: 'Session could not be created. Please try signing in again.',
+    loginEmailNotRegistered: 'No account found with this email. Please sign up first.',
     loginWithPassword: 'Login with password',
     loginUsernamePlaceholder: 'Username',
     loginSetPasswordPlaceholder: 'Set password (min 6 chars)',
