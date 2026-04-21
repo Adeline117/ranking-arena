@@ -82,7 +82,9 @@ export default function QuestionStep({ question, questionNumber, totalQuestions,
           aria-label={`Question ${questionNumber} of ${totalQuestions}`}
           style={{ display: 'flex', gap: 8 }}
         >
-          {question.options.map((option) => {
+          {/* Render order: Yes, Unsure, No (unsure in the middle) */}
+          {['yes', 'unsure', 'no'].map((id) => question.options.find(o => o.id === id)).filter(Boolean).map((option) => {
+            if (!option) return null
             const cfg = YESNO_CONFIG[option.id] ?? YESNO_CONFIG.unsure
             const isSelected = selectedOption === option.id
             return (
