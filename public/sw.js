@@ -257,12 +257,11 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// 后台同步
-self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-posts') {
-    event.waitUntil(syncPosts());
-  }
-});
+// Background Sync: intentionally removed.
+// The previous 'sync-posts' handler was a non-functional stub that logged but
+// never replayed queued mutations. A real offline queue would require IndexedDB
+// persistence + conflict resolution, which is out of scope. Removing the
+// listener avoids misleading devtools output suggesting sync is operational.
 
 // 推送通知
 self.addEventListener('push', (event) => {
@@ -340,8 +339,3 @@ async function trimCache() {
   }
 }
 
-// 同步帖子函数（示例）
-async function syncPosts() {
-  // 实现离线时保存的帖子同步逻辑
-  console.warn('[SW] 同步帖子');
-}
