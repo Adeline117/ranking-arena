@@ -11,6 +11,10 @@ export type PersonalityTypeId =
   | 'hodler'
   | 'degen'
   | 'strategist'
+  | 'copycat'
+  | 'arbitrageur'
+  | 'gridbot'
+  | 'narrator'
 
 export interface PersonalityType {
   id: PersonalityTypeId
@@ -55,10 +59,11 @@ export interface QuizResult {
   secondaryType: PersonalityTypeId
   scores: Record<PersonalityTypeId, number>
   matchPercent: number
+  allTypePercents: Record<PersonalityTypeId, number>
 }
 
 export interface QuizState {
-  currentQuestion: number // 0 = start, 1-15 = questions, 16 = calculating
+  currentQuestion: number // 0 = start, 1-30 = questions, 31 = calculating
   answers: Record<number, string>
   result: QuizResult | null
 
