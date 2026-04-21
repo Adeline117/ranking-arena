@@ -1,58 +1,65 @@
 'use client'
 
-import { useState } from 'react'
 import type { QuizQuestion } from './types'
 
 interface QuestionStepProps {
   question: QuizQuestion
+  questionNumber: number
+  totalQuestions: number
   selectedOption: string | undefined
   tr: (key: string) => string
   onSelect: (optionId: string) => void
-  onBack: () => void
 }
 
-export default function QuestionStep({ question, selectedOption, tr, onSelect, onBack }: QuestionStepProps) {
-  const [animating, setAnimating] = useState(false)
-
-  const handleSelect = (optionId: string) => {
-    if (animating) return
-    setAnimating(true)
-    onSelect(optionId)
-    // Reset animation state after transition
-    setTimeout(() => setAnimating(false), 400)
-  }
-
+export default function QuestionStep({ question, questionNumber, totalQuestions, selectedOption, tr, onSelect }: QuestionStepProps) {
   return (
     <div
+      id={`quiz-q-${question.id}`}
       style={{
         display: 'flex',
         flexDirection: 'column',
-        gap: 20,
-        animation: 'fadeIn 0.35s ease-out',
+        gap: 16,
+        padding: 'clamp(16px, 3vw, 24px)',
+        background: 'var(--color-bg-secondary)',
+        border: '1px solid var(--glass-border-light)',
+        borderRadius: 12,
       }}
     >
       {/* Question text */}
       <h2
         style={{
-          fontSize: 'clamp(16px, 3.5vw, 18px)',
+          fontSize: 'clamp(15px, 3.5vw, 17px)',
           fontWeight: 600,
           color: 'var(--color-text-primary)',
           lineHeight: 1.4,
           margin: 0,
         }}
       >
+        <span
+          style={{
+            color: 'var(--color-brand)',
+            fontWeight: 700,
+            marginRight: 8,
+          }}
+        >
+          Q{questionNumber}
+        </span>
         {tr(question.titleKey)}
       </h2>
 
       {/* Options */}
-      <div role="group" aria-label={tr(question.titleKey)} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div
+        role="group"
+        aria-label={`Question ${questionNumber} of ${totalQuestions}`}
+        style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
+      >
         {question.options.map((option, idx) => {
           const isSelected = selectedOption === option.id
           return (
             <button
               key={option.id}
               type="button"
-              onClick={() => handleSelect(option.id)}
+              onClick={() => onSelect(option.id)}
               aria-pressed={isSelected}
               style={{
                 width: '100%',
@@ -73,7 +80,6 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
                 display: 'flex',
                 alignItems: 'center',
                 gap: 10,
-                animation: `fadeIn 0.3s ease-out ${idx * 0.05}s both`,
               }}
               onMouseDown={(e) => {
                 e.currentTarget.style.transform = 'scale(0.98)'
@@ -119,35 +125,6 @@ export default function QuestionStep({ question, selectedOption, tr, onSelect, o
           )
         })}
       </div>
-
-      {/* Back button */}
-      <button
-        type="button"
-        aria-label={tr('quizBack')}
-        onClick={onBack}
-        style={{
-          alignSelf: 'flex-start',
-          padding: '8px 0',
-          minHeight: 36,
-          borderRadius: 0,
-          border: 'none',
-          background: 'transparent',
-          color: 'var(--color-text-tertiary)',
-          fontSize: 13,
-          cursor: 'pointer',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          transition: 'color 0.2s',
-        }}
-        onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--color-text-primary)' }}
-        onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--color-text-tertiary)' }}
-      >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-          <polyline points="15 18 9 12 15 6" />
-        </svg>
-        {tr('quizBack')}
-      </button>
     </div>
   )
 }
