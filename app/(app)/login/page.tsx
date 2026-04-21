@@ -50,6 +50,8 @@ export default function LoginPage() {
   const errorRef = useRef<HTMLDivElement>(null)
   const submittingRef = useRef(false)
   const verifyingOtpRef = useRef(false)
+  const otpAttemptsRef = useRef(0)
+  const [otpLocked, setOtpLocked] = useState(false)
   const router = useRouter()
   const searchParams = useSearchParams()
   const { showToast } = useToast()
@@ -193,7 +195,7 @@ export default function LoginPage() {
         setSendingCode(false)
         return
       }
-      if (data) { setCodeSent(true); setCountdown(60); sessionStorage.setItem('otp_countdown_end', String(Date.now() + 60000)); showToast(t('loginCodeSent'), 'success') }
+      if (data) { setCodeSent(true); setCountdown(60); sessionStorage.setItem('otp_countdown_end', String(Date.now() + 60000)); otpAttemptsRef.current = 0; setOtpLocked(false); showToast(t('loginCodeSent'), 'success') }
       else { setError(t('loginSendFailed')) }
     } catch (err: unknown) { clearTimeout(timeoutId); logger.error('Login OTP error:', err); setError(t('loginSendFailedNetwork')) }
     finally { clearTimeout(timeoutId); setSendingCode(false); submittingRef.current = false }
@@ -226,7 +228,7 @@ export default function LoginPage() {
         setSendingCode(false)
         return
       }
-      if (data) { setCodeSent(true); setCountdown(60); sessionStorage.setItem('otp_countdown_end', String(Date.now() + 60000)); showToast(t('loginCodeSent'), 'success') }
+      if (data) { setCodeSent(true); setCountdown(60); sessionStorage.setItem('otp_countdown_end', String(Date.now() + 60000)); otpAttemptsRef.current = 0; setOtpLocked(false); showToast(t('loginCodeSent'), 'success') }
       else { setError(t('loginSendFailedShort')) }
     } catch (err: unknown) { clearTimeout(timeoutId); logger.error('Login OTP error:', err); setError(t('loginSendFailedSimple')) }
     finally { clearTimeout(timeoutId); setSendingCode(false); submittingRef.current = false }
@@ -234,6 +236,7 @@ export default function LoginPage() {
 
   const handleVerifyCode = async () => {
     if (submittingRef.current || loading) return
+    if (otpLocked) { setError(lang === 'zh' ? '尝试次数过多，请重新获取验证码' : 'Too many attempts, please request a new code'); return }
     if (!code) { setError(t('loginPleaseEnterCode')); return }
     submittingRef.current = true
     verifyingOtpRef.current = true
@@ -252,8 +255,15 @@ export default function LoginPage() {
       const { data, error: verifyError } = await supabase.auth.verifyOtp({ email, token: code, type: 'email' })
       clearTimeout(timeoutId)
       if (verifyError) {
-        if (verifyError.message.includes('expired') || verifyError.message.includes('过期')) setError(t('loginCodeExpired'))
-        else setError(t('loginVerificationFailed'))
+        otpAttemptsRef.current++
+        if (otpAttemptsRef.current >= 5) {
+          setOtpLocked(true)
+          setError(lang === 'zh' ? '尝试次数过多，请重新获取验证码' : 'Too many attempts, please request a new code')
+        } else if (verifyError.message.includes('expired') || verifyError.message.includes('过期')) {
+          setError(t('loginCodeExpired'))
+        } else {
+          setError(t('loginVerificationFailed'))
+        }
         setLoading(false)
         return
       }
@@ -396,7 +406,7 @@ export default function LoginPage() {
 
   const resetForm = () => {
     setCode(''); setCodeSent(false); setCodeVerified(false); setPassword(''); setHandle('')
-    setCountdown(0); sessionStorage.removeItem('otp_countdown_end'); setError(null); setLoginWithCode(false); setShowRecoveryPrompt(false)
+    setCountdown(0); sessionStorage.removeItem('otp_countdown_end'); setError(null); setLoginWithCode(false); otpAttemptsRef.current = 0; setOtpLocked(false); setShowRecoveryPrompt(false)
     setTouchedFields({ email: false, password: false, handle: false })
   }
 
