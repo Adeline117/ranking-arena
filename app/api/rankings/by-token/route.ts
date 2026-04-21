@@ -99,7 +99,8 @@ async function handlePopularTokens(): Promise<NextResponse> {
       { tokens: result },
       { headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800' } }
     )
-  } catch (_err) {
+  } catch (err) {
+    logger.error('[popular-tokens]', err instanceof Error ? err : new Error(String(err)))
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
