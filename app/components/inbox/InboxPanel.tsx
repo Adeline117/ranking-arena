@@ -48,7 +48,7 @@ export default function InboxPanel(): React.ReactElement | null {
         right: 0,
         width: 'min(400px, 100vw)',
         maxWidth: '100vw',
-        height: 'calc(100vh - 56px)',
+        height: 'calc(100dvh - 56px)',
         background: tokens.colors.bg.primary,
         borderLeft: `1px solid ${tokens.colors.border.primary}`,
         boxShadow: tokens.shadow.xl,
