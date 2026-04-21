@@ -1,5 +1,6 @@
 
 import { tokens } from '@/lib/design-tokens'
+import { t } from '@/lib/i18n'
 
 interface LoadingSpinnerProps {
   size?: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
@@ -46,7 +47,7 @@ export function LoadingSpinner({
       viewBox={`0 0 ${dimension} ${dimension}`}
       fill="none"
       role="status"
-      aria-label="Loading"
+      aria-label={t('loadingSpinnerDefault')}
       className={className}
       style={{
         animation: 'spinner-rotate 1s linear infinite',

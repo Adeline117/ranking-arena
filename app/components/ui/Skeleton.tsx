@@ -1,6 +1,7 @@
 
 import React from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { t } from '@/lib/i18n'
 import { Box } from '../base'
 
 interface SkeletonProps {
@@ -65,7 +66,7 @@ export function Skeleton({
     <div
       className={`skeleton ${className}`}
       aria-busy="true"
-      aria-label="Loading"
+      aria-label={t('loadingSkeleton')}
       style={{
         width: toPx(width),
         height: toPx(height),
@@ -155,7 +156,7 @@ export function ChartSkeleton({
   return (
     <Box
       role="status"
-      aria-label="Loading chart"
+      aria-label={t('loadingChart')}
       style={{
         minHeight: height,
         borderRadius: tokens.radius.lg,
@@ -242,7 +243,7 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
     <Box 
       className="stagger-children"
       role="status"
-      aria-label="Loading rankings"
+      aria-label={t('loadingSkeleton')}
       style={{ display: 'flex', flexDirection: 'column', gap: 0 }}
     >
       {/* Skeleton header */}
