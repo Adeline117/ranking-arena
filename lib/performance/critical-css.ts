@@ -92,6 +92,7 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 .show-mobile{display:block}
 .show-mobile-flex{display:flex}
 .hide-desktop{display:block}
+.show-below-lg{display:block}
 
 @media(min-width:768px){
   .hide-mobile{display:block}
