@@ -104,7 +104,7 @@ export function usePostActions({
   // Toggle reaction
   const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
     if (!accessToken) { const { useLoginModal } = await import('@/lib/hooks/useLoginModal'); useLoginModal.getState().openLoginModal(); return }
-    const key = `react-${postId}-${reactionType}`
+    const key = `react-${postId}`
     if (lockRef.current.has(key)) return
     lockRef.current.add(key)
 
