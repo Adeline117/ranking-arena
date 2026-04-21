@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { logger } from '@/lib/logger'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -102,7 +103,7 @@ function formatDate(dateStr: string): string {
 }
 
 function formatPnl(pnl: number | null): string {
-  if (pnl == null) return '-'
+  if (pnl == null) return NULL_DISPLAY
   const abs = Math.abs(pnl)
   const prefix = pnl >= 0 ? '+$' : '-$'
   if (abs >= 1_000_000) return `${prefix}${(abs / 1_000_000).toFixed(1)}M`
@@ -111,7 +112,7 @@ function formatPnl(pnl: number | null): string {
 }
 
 function formatRoi(roi: number | null): string {
-  if (roi == null) return '-'
+  if (roi == null) return NULL_DISPLAY
   const prefix = roi >= 0 ? '+' : ''
   return `${prefix}${roi.toFixed(1)}%`
 }

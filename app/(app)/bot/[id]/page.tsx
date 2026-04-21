@@ -1,6 +1,6 @@
 'use client'
 
-import { localizedLabel } from '@/lib/utils/format'
+import { localizedLabel, NULL_DISPLAY } from '@/lib/utils/format'
 /**
  * Bot Detail Page - /bot/[id]
  * Shows performance, stats, and on-chain info for a specific bot.
@@ -19,7 +19,7 @@ import { Box } from '@/app/components/base'
 import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
 
 function formatLargeNumber(n: number | null): string {
-  if (n == null) return '--'
+  if (n == null) return NULL_DISPLAY
   if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
   if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
   if (n >= 1e3) return `$${(n / 1e3).toFixed(0)}K`
@@ -27,14 +27,14 @@ function formatLargeNumber(n: number | null): string {
 }
 
 function formatUsers(n: number | null): string {
-  if (n == null) return '--'
+  if (n == null) return NULL_DISPLAY
   if (n >= 1e6) return `${(n / 1e6).toFixed(1)}M`
   if (n >= 1e3) return `${(n / 1e3).toFixed(1)}K`
   return n.toLocaleString('en-US')
 }
 
 function formatPercent(n: number | null): string {
-  if (n == null) return '--'
+  if (n == null) return NULL_DISPLAY
   return `${n.toFixed(2)}%`
 }
 

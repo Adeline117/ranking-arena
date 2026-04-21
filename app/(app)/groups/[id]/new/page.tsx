@@ -326,8 +326,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         setUploadProgress(Math.round((completed / totalFiles) * 100))
       } catch (error) {
         completed++
-        const errorMsg = error instanceof Error ? error.message : t('networkError')
-        showToast(`${file.name}: ${errorMsg}`, 'error')
+        showToast(`${file.name}: ${t('networkError')}`, 'error')
       }
     }
 
@@ -434,7 +433,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       showToast(t('videoUploadSuccess'), 'success')
     } catch (error) {
       logger.error('Video upload error:', error)
-      showToast(error instanceof Error ? error.message : t('videoUploadFailed'), 'error')
+      showToast(t('videoUploadFailed'), 'error')
     } finally {
       setVideoUploading(false)
       setVideoUploadProgress(0)
@@ -531,7 +530,7 @@ export default function NewGroupPostPage(): React.ReactElement {
         logger.error('Post creation error:', error)
         const errorMsg = error.code === '42501'
           ? t('permissionDeniedJoinGroup')
-          : (error.message || t('createPostFailed'))
+          : t('createPostFailed')
         showToast(errorMsg, 'error')
         setLoading(false)
         submitRef.current = false
@@ -547,8 +546,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       showToast(t('publishSuccess'), 'success')
       router.push(`/groups/${groupId}`)
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : t('publishFailed')
-      showToast(errorMessage, 'error')
+      showToast(t('publishFailed'), 'error')
     } finally {
       setLoading(false)
       submitRef.current = false

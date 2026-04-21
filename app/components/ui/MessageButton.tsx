@@ -78,7 +78,7 @@ export default function MessageButton({
         } else if (error.limitReached || error.code === 'PERMISSION_DENIED') {
           showToast(t('msgLimitReached'), 'warning')
         } else {
-          showToast(error.message || t('unexpectedError'), 'error')
+          showToast(t('unexpectedError'), 'error')
         }
       },
       showToast: false,
