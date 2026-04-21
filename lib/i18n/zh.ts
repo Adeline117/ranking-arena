@@ -4375,6 +4375,9 @@ userActivityJoinedGroup: '加入了小组 ',
 activityFeedTitle: '动态流',
 activityFeedDesc: '来自实时交易数据的自动生成里程碑 — 排名攀升、ROI 突破、连胜记录和大额盈利。',
 activityFilterAll: '全部',
+activityFeedEmpty: '暂无动态事件，请在下次数据同步后再来查看。',
+activityFeedLoading: '加载中...',
+activityFeedLoadMore: '加载更多',
 
 // Market section error boundaries
 marketSectionError: '加载此部分失败',

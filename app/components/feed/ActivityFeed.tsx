@@ -300,7 +300,7 @@ export default function ActivityFeed({
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
             }}
           >
-            No activity events yet. Check back after the next data sync.
+            {t('activityFeedEmpty')}
           </div>
         ) : (
           visibleActivities.map((activity, idx) => (
@@ -343,7 +343,7 @@ export default function ActivityFeed({
                 transition: `all ${tokens.transition.base}`,
               }}
             >
-              {loading ? 'Loading...' : 'Load More'}
+              {loading ? t('activityFeedLoading') : t('activityFeedLoadMore')}
             </button>
           </div>
         )}
