@@ -129,7 +129,7 @@ export default function BottomSheet({
   const heightVh = Math.min(SNAP_POINTS[snap], maxHeightVh)
   const translateY = snap === 'closed'
     ? '100%'
-    : `calc(${100 - heightVh}vh + ${Math.max(0, dragOffset)}px)`
+    : `calc(${100 - heightVh}dvh + ${Math.max(0, dragOffset)}px)`
 
   if (!open && snap === 'closed') return null
 
@@ -155,7 +155,7 @@ export default function BottomSheet({
           bottom: 0,
           left: 0,
           right: 0,
-          maxHeight: `${maxHeightVh}vh`,
+          maxHeight: `${maxHeightVh}dvh`,
           transform: `translateY(${translateY})`,
           transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
           background: 'var(--color-bg-primary)',

@@ -194,7 +194,7 @@ export default function ReportModal({
           style={{
             width: '100%',
             maxWidth: 420,
-            maxHeight: `calc(100vh - ${tokens.spacing[10]})`,
+            maxHeight: `calc(100dvh - ${tokens.spacing[10]})`,
             background: tokens.colors.bg.primary,
             borderRadius: tokens.radius.xl,
             boxShadow: 'var(--shadow-elevated)',
