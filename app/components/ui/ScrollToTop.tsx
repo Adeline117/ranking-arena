@@ -35,7 +35,7 @@ export default memo(function ScrollToTop() {
       className="scroll-to-top-btn"
       style={{
         position: 'fixed',
-        bottom: hasFab ? 'calc(var(--mobile-nav-height, 60px) + 80px)' : 'calc(var(--mobile-nav-height, 60px) + 16px)',
+        bottom: hasFab ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 80px)' : 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 16px)',
         right: 16,
         zIndex: tokens.zIndex.sticky + 1,
         width: 44,
