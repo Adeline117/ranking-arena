@@ -167,21 +167,16 @@ describe('BingxFuturesConnector', () => {
       expect(url).toContain('period=90')
     })
 
-    test('returns empty result on network error (catch block)', async () => {
+    test('throws on network error (re-throws for batch-fetch visibility)', async () => {
       const connector = createConnector()
       mockFetchNetworkError()
 
-      // BingX connector catches errors and returns empty result
-      const result = await connector.discoverLeaderboard('7d')
-
-      expect(result.traders).toHaveLength(0)
-      expect(result.total_available).toBe(0)
+      // BingX connector now re-throws errors so batch-fetch detects failures
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
-    test('returns empty result on rate limit (429) due to catch block', async () => {
+    test('throws on rate limit (429) for batch-fetch visibility', async () => {
       const connector = createConnector()
-      // VPS strategy 1 gets a 429 — ok: false → strategy 2 also fails → VPS returns null
-      // Then direct API fallback throws → caught by outer try/catch → empty result
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 429,
@@ -189,11 +184,8 @@ describe('BingxFuturesConnector', () => {
         json: async () => ({}),
       })
 
-      // BingX connector wraps in try-catch, returns empty on failure
-      const result = await connector.discoverLeaderboard('7d')
-
-      expect(result.traders).toHaveLength(0)
-      expect(result.total_available).toBe(0)
+      // BingX connector now re-throws so batch-fetch can trigger alerts
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
     test('handles null traderName gracefully', async () => {
@@ -209,26 +201,15 @@ describe('BingxFuturesConnector', () => {
 
     test('BingX direct API call includes correct headers when VPS unavailable', async () => {
       const connector = createConnector()
-      // Make VPS fail (ok: false) → direct API fallback is called
-      mockFetch.mockResolvedValueOnce({  // VPS strategy 1 fails
-        ok: false,
-        status: 503,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
-        json: async () => ({}),
-      })
-      mockFetch.mockResolvedValueOnce({  // VPS strategy 2 fails
-        ok: false,
-        status: 503,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
-        json: async () => ({}),
-      })
-      // Direct API call succeeds
+      // Mock fetchViaVPS to return null (VPS unavailable), then direct API succeeds
+      jest.spyOn(connector as unknown as { fetchViaVPS: () => Promise<null> }, 'fetchViaVPS')
+        .mockResolvedValueOnce(null)
       mockFetchResponse(validResponse)
 
       await connector.discoverLeaderboard('7d', 100)
 
-      // Find the direct API call (3rd call) — should have correct headers
-      const directCall = mockFetch.mock.calls[2]
+      // The first real fetch call should be the direct API with correct headers
+      const directCall = mockFetch.mock.calls[0]
       if (directCall) {
         const options = directCall[1]
         if (options?.headers) {
@@ -523,9 +504,8 @@ describe('BingxFuturesConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('handles server error (500) gracefully in discoverLeaderboard', async () => {
+    test('throws on server error (500) for batch-fetch visibility', async () => {
       const connector = createConnector()
-      // 500 on VPS — ok: false → VPS returns null → direct API also throws → caught → empty
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
@@ -533,9 +513,8 @@ describe('BingxFuturesConnector', () => {
         json: async () => ({ error: 'Internal Server Error' }),
       })
 
-      // BingX connector catches errors, returns empty
-      const result = await connector.discoverLeaderboard('7d')
-      expect(result.traders).toHaveLength(0)
+      // BingX connector now re-throws so batch-fetch detects the failure
+      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
     })
 
     test('handles server error (500) gracefully in fetchTraderProfile', async () => {
