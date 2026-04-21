@@ -382,6 +382,7 @@ export const GET = withPublic(
     // Sanitize
     const sanitizedQuery = query
       .slice(0, 100)
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
       .replace(/<[^>]*>/g, '')
       .replace(/[\\%_]/g, (c) => `\\${c}`)
       .replace(/[.,()]/g, '')
