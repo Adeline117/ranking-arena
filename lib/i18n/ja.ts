@@ -4410,6 +4410,8 @@ authCodeSentTo: 'コードを {email} に送信しました',
 authVerify: '認証する',
 authVerifying: '認証中...',
 authInAppBrowserError: 'システムブラウザ（Safari/Chrome）で開いてください。リンクをコピーしました。',
+authCodeExpired: 'コードの有効期限が切れました。新しいコードを取得してください。',
+authCodeInvalid: '無効なコードです。確認してもう一度お試しください。',
 
 tradingStyleScalper: 'スキャルピング',
 tradingStyleScalperDesc: '超短期の高頻度トレード',

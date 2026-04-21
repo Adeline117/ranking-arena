@@ -4738,6 +4738,8 @@ authCodeSentTo: '验证码已发送到 {email}',
 authVerify: '验证',
 authVerifying: '验证中...',
 authInAppBrowserError: '请在系统浏览器(Safari/Chrome)中打开此页面。链接已复制。',
+authCodeExpired: '验证码已过期，请重新获取。',
+authCodeInvalid: '验证码无效，请检查后重试。',
 
 tradingStyleScalper: '超短线',
 tradingStyleScalperDesc: '高频交易，持仓时间极短',

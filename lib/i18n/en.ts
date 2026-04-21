@@ -4691,6 +4691,8 @@ authCodeSentTo: 'Code sent to {email}',
 authVerify: 'Verify',
 authVerifying: 'Verifying...',
 authInAppBrowserError: 'Please open in your system browser (Safari/Chrome). Link copied.',
+authCodeExpired: 'Code expired. Please request a new one.',
+authCodeInvalid: 'Invalid code. Please check and try again.',
 
 tradingStyleScalper: 'Scalper',
 tradingStyleScalperDesc: 'High-frequency trading with very short holding periods',
