@@ -264,7 +264,7 @@ export default function NotificationsPage() {
   // 未登录跳转
   useEffect(() => {
     if (authChecked && !accessToken) {
-      router.push('/login')
+      router.push('/login?returnUrl=/notifications')
     }
   }, [authChecked, accessToken, router])
 
