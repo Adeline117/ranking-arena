@@ -161,61 +161,71 @@ export function useSearchData(open: boolean, query: string) {
     if (hotPosts.length === 0 || translating) return
 
     const langKey = (id: string) => `${language}:${id}`
-    const needsTranslation = hotPosts.some((post) => !translatedTitles[langKey(post.id)])
-    if (!needsTranslation) return
 
-    const isCJK = (text: string) => /[\u4e00-\u9fff\u3000-\u303f]/.test(text)
-    const postsToTranslate = hotPosts.filter((post) => {
-      if (translatedTitles[langKey(post.id)]) return false
-      const titleIsCJK = isCJK(post.title)
-      if (language === 'zh' && titleIsCJK) return false
-      if (language === 'en' && !titleIsCJK) return false
-      return true
-    })
+    // Use functional updater to read current translatedTitles without
+    // including it in the dependency array (which caused extra re-fires
+    // since the effect itself calls setTranslatedTitles).
+    setTranslatedTitles((prev) => {
+      const needsTranslation = hotPosts.some((post) => !prev[langKey(post.id)])
+      if (!needsTranslation) return prev
 
-    if (postsToTranslate.length === 0) {
-      const newTranslations = { ...translatedTitles }
-      hotPosts.forEach((post) => {
-        if (!newTranslations[langKey(post.id)]) newTranslations[langKey(post.id)] = post.title
+      const isCJK = (text: string) => /[\u4e00-\u9fff\u3000-\u303f]/.test(text)
+      const postsToTranslate = hotPosts.filter((post) => {
+        if (prev[langKey(post.id)]) return false
+        const titleIsCJK = isCJK(post.title)
+        if (language === 'zh' && titleIsCJK) return false
+        if (language === 'en' && !titleIsCJK) return false
+        return true
       })
-      setTranslatedTitles(newTranslations)
-      return
-    }
 
-    const translateTitles = async () => {
-      setTranslating(true)
-      try {
-        const res = await fetch('/api/translate', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-          body: JSON.stringify({
-            items: postsToTranslate.map((p) => ({
-              id: p.id, text: p.title, contentType: 'post_title', contentId: p.id,
-            })),
-            targetLang: language === 'zh' ? 'zh' : 'en',
-          }),
+      if (postsToTranslate.length === 0) {
+        const newTranslations = { ...prev }
+        hotPosts.forEach((post) => {
+          if (!newTranslations[langKey(post.id)]) newTranslations[langKey(post.id)] = post.title
         })
-        if (res.ok) {
-          const json = await res.json()
-          const results = json.data?.results || {}
-          const newTranslations: Record<string, string> = { ...translatedTitles }
-          postsToTranslate.forEach((post) => {
-            if (results[post.id]?.translatedText)
-              newTranslations[langKey(post.id)] = results[post.id].translatedText
-          })
-          hotPosts.forEach((post) => {
-            if (!newTranslations[langKey(post.id)]) newTranslations[langKey(post.id)] = post.title
-          })
-          setTranslatedTitles(newTranslations)
-        }
-      } catch (e) {
-        logger.error('Failed to translate hot posts:', e)
-      } finally {
-        setTranslating(false)
+        return newTranslations
       }
-    }
-    translateTitles()
-  }, [language, hotPosts, translatedTitles, translating])
+
+      // Kick off async translation (outside updater)
+      const doTranslate = async () => {
+        setTranslating(true)
+        try {
+          const res = await fetch('/api/translate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+            body: JSON.stringify({
+              items: postsToTranslate.map((p) => ({
+                id: p.id, text: p.title, contentType: 'post_title', contentId: p.id,
+              })),
+              targetLang: language === 'zh' ? 'zh' : 'en',
+            }),
+          })
+          if (res.ok) {
+            const json = await res.json()
+            const results = json.data?.results || {}
+            setTranslatedTitles((current) => {
+              const updated = { ...current }
+              postsToTranslate.forEach((post) => {
+                if (results[post.id]?.translatedText)
+                  updated[langKey(post.id)] = results[post.id].translatedText
+              })
+              hotPosts.forEach((post) => {
+                if (!updated[langKey(post.id)]) updated[langKey(post.id)] = post.title
+              })
+              return updated
+            })
+          }
+        } catch (e) {
+          logger.error('Failed to translate hot posts:', e)
+        } finally {
+          setTranslating(false)
+        }
+      }
+      doTranslate()
+      return prev // return unchanged until async finishes
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- translatedTitles intentionally omitted; read via functional updater to avoid re-fire loop
+  }, [language, hotPosts, translating])
 
   // Unified search with debounce
   useEffect(() => {
