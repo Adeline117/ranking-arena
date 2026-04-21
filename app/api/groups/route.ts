@@ -4,6 +4,7 @@ import { getOrSetWithLock } from '@/lib/cache'
 import { socialFeatureGuard } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 /**
  * GET /api/groups
@@ -17,6 +18,9 @@ import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 export async function GET(request: NextRequest) {
   const guard = socialFeatureGuard()
   if (guard) return guard
+
+  const rateLimitResult = await checkRateLimit(request, RateLimitPresets.authenticated)
+  if (rateLimitResult) return rateLimitResult
 
   try {
     const { searchParams } = new URL(request.url)
