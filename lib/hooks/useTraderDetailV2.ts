@@ -21,7 +21,11 @@ const fetcher = async (url: string): Promise<TraderDetailResponse> => {
     const error = await res.json().catch(() => ({ error: 'Network error' }))
     throw new Error(error.error || `HTTP ${res.status}`)
   }
-  return res.json()
+  try {
+    return await res.json()
+  } catch {
+    throw new Error('Invalid response format')
+  }
 }
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
