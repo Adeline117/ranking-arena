@@ -128,7 +128,8 @@ by-token/route
 lib/i18n/ja\.ts
 
 # ── Quiz feature (useLanguage hook not yet created) ──
-QuizClient\.tsx
+quiz/QuizClient\.tsx
+quiz/result/ResultPageClient\.tsx
 
 # ── Miscellaneous product surfaces ──
 FundingRatesClient
