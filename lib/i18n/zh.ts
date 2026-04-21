@@ -1925,6 +1925,7 @@ const zh = {
     loginInvalidEmail: '请输入有效的邮箱地址',
     loginPasswordTooShort: '密码至少需要6个字符',
     loginHandleTooShort: '用户名至少需要1个字符',
+    loginHandleTooLong: '用户名不能超过30个字符',
     loginHandleInvalidChars: '用户名只能包含字母、数字、下划线和中文',
     loginPasswordWeak: '弱',
     loginPasswordFair: '一般',

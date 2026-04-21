@@ -128,6 +128,7 @@ export default function RegisterForm({
           value={handle}
           onChange={(e) => setHandle(e.target.value)}
           onBlur={() => markTouched('handle')}
+          maxLength={30}
           autoComplete="username"
           aria-invalid={touchedFields.handle && handle ? !handleValidation.valid : undefined}
           aria-describedby={touchedFields.handle && handle && !handleValidation.valid ? 'register-handle-error' : undefined}
