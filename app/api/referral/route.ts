@@ -13,6 +13,9 @@ const logger = createLogger('referral-api')
  */
 export async function GET(req: NextRequest) {
   try {
+    const rateLimitResult = await checkRateLimit(req, RateLimitPresets.authenticated)
+    if (rateLimitResult) return rateLimitResult
+
     const user = await getAuthUser(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
