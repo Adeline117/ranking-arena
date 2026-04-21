@@ -1634,7 +1634,6 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
   }
   .ranking-table-container {
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
   }
   /* Ensure all cards respect viewport width */
   .glass-card, .card-hover {
@@ -1788,7 +1787,6 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
     border-radius: 16px 16px 0 0 !important;
     border-bottom: none !important;
     animation: slideUpSheet 0.3s ease-out;
-    -webkit-overflow-scrolling: touch;
     overscroll-behavior: contain;
   }
   @keyframes slideUpSheet {
@@ -2400,7 +2398,6 @@ input[type="search"]::-webkit-search-cancel-button:hover {
   .compare-table-wrapper,
   .portfolio-table-scroll {
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
     margin: 0 -12px;
     padding: 0 12px;
   }
@@ -2424,7 +2421,6 @@ input[type="search"]::-webkit-search-cancel-button:hover {
     margin: 0 !important;
     border-radius: 16px 16px 0 0 !important;
     overflow-y: auto !important;
-    -webkit-overflow-scrolling: touch;
   }
 
   /* Modal overlays: align to bottom on mobile */
@@ -2579,7 +2575,6 @@ html, body, main, #main-content {
   table {
     display: block;
     overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
     max-width: 100%;
   }
 
@@ -2592,7 +2587,6 @@ html, body, main, #main-content {
   /* Comparison grid: scroll horizontally within its container */
   .compare-grid-scroll {
     overflow-x: auto !important;
-    -webkit-overflow-scrolling: touch;
     max-width: 100% !important;
     margin: 0 -12px;
     padding: 0 12px;

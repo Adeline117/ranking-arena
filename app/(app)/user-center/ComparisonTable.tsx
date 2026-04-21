@@ -17,7 +17,7 @@ export default function ComparisonTable({ cardStyle, t }: ComparisonTableProps) 
         {t('freeVsProComparison')}
       </h3>
 
-      <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+      <div style={{ overflowX: 'auto' }}>
         <table style={{
           width: '100%',
           borderCollapse: 'collapse',

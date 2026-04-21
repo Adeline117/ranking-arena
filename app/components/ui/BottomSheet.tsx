@@ -241,7 +241,6 @@ export default function BottomSheet({
           style={{
             flex: 1,
             overflowY: 'auto',
-            WebkitOverflowScrolling: 'touch',
             padding: tokens.spacing[4],
             minHeight: 0,
           }}

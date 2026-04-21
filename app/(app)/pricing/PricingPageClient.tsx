@@ -440,7 +440,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             borderRadius: tokens.radius.lg,
             border: `1px solid ${tokens.colors.border.primary}`,
             overflowX: 'auto',
-            WebkitOverflowScrolling: 'touch',
           }}>
             {/* Header */}
             <div style={{

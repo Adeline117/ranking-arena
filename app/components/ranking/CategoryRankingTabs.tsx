@@ -83,7 +83,6 @@ export default function CategoryRankingTabs({
         borderRadius: tokens.radius.lg,
         border: '1px solid var(--color-border-secondary)',
         overflowX: 'auto',
-        WebkitOverflowScrolling: 'touch',
         scrollbarWidth: 'none',
         msOverflowStyle: 'none',
       }}

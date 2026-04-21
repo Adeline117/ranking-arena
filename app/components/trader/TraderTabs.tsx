@@ -109,7 +109,6 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
           padding: `${tokens.spacing[2]} ${tokens.spacing[2]}`,
           paddingBottom: tokens.spacing[2],
           overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
           scrollbarWidth: 'none',
           borderBottom: `1px solid ${tokens.colors.border.primary}40`,
         }}
