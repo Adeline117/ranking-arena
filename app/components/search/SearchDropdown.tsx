@@ -126,7 +126,7 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     let offset = 0
     for (const key of order) {
       if (key === category) break
-      offset += searchData.results[key].length
+      offset += (searchData.results[key] || []).length
     }
     return offset
   }
