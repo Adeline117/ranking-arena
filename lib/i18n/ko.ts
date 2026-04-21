@@ -4916,6 +4916,17 @@ compFieldMaxParticipants: '최대 참가자 수',
     watchlistConfirmYes: '예',
     watchlistConfirmNo: '아니오',
 
+    // RankingControls
+    rankingControlsOffline: '오프라인입니다. 순위 데이터는 볼 수 있지만 업데이트할 수 없습니다.',
+    rankingControlsDataAsOf: '데이터 기준 시각',
+    rankingControlsTakingLong: '예상보다 시간이 오래 걸리고 있습니다.',
+    rankingControlsRetry: '재시도',
+    rankingControlsPrev: '이전',
+    rankingControlsNext: '다음',
+    rankingControlsLoading: '로딩 중\u2026',
+    rankingControlsShowingTop: '상위 {count}명의 트레이더를 표시 중. Pro로 34,000+명 전체를 확인하세요',
+    rankingControlsUpgrade: '업그레이드 \u2192',
+
 } as const
 
 export default ko

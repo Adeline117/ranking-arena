@@ -4968,6 +4968,17 @@ compFieldMaxParticipants: '最大参与人数',
     watchlistConfirmYes: '确认',
     watchlistConfirmNo: '取消',
 
+    // RankingControls
+    rankingControlsOffline: '您已离线。排名数据仍可查看但无法更新。',
+    rankingControlsDataAsOf: '数据截至',
+    rankingControlsTakingLong: '加载时间超出预期。',
+    rankingControlsRetry: '重试',
+    rankingControlsPrev: '上一页',
+    rankingControlsNext: '下一页',
+    rankingControlsLoading: '加载中\u2026',
+    rankingControlsShowingTop: '显示前 {count} 名交易员。升级 Pro 解锁全部 34,000+',
+    rankingControlsUpgrade: '升级 \u2192',
+
     // Onboarding
     welcomeMessage: '欢迎！浏览排行榜找到你感兴趣的交易员并关注他们。',
 

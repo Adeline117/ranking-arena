@@ -4958,6 +4958,17 @@ compShareTitle: 'Check out this competition on Arena',
     watchlistConfirmYes: 'Yes',
     watchlistConfirmNo: 'No',
 
+    // RankingControls
+    rankingControlsOffline: 'You are offline. Rankings data is still visible but cannot be updated.',
+    rankingControlsDataAsOf: 'Data as of',
+    rankingControlsTakingLong: 'This is taking longer than expected.',
+    rankingControlsRetry: 'Retry',
+    rankingControlsPrev: 'Prev',
+    rankingControlsNext: 'Next',
+    rankingControlsLoading: 'Loading\u2026',
+    rankingControlsShowingTop: 'Showing top {count} traders. Unlock all 34,000+ with Pro',
+    rankingControlsUpgrade: 'Upgrade \u2192',
+
     // Onboarding
     welcomeMessage: 'Welcome! Browse the leaderboard to find traders you\'re interested in and follow them.',
 

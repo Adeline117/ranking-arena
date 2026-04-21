@@ -4628,6 +4628,17 @@ compFieldMaxParticipants: '最大参加人数',
     watchlistConfirmYes: 'はい',
     watchlistConfirmNo: 'いいえ',
 
+    // RankingControls
+    rankingControlsOffline: 'オフラインです。ランキングデータは表示されますが更新できません。',
+    rankingControlsDataAsOf: 'データ取得時刻',
+    rankingControlsTakingLong: '読み込みに予想以上の時間がかかっています。',
+    rankingControlsRetry: 'リトライ',
+    rankingControlsPrev: '前へ',
+    rankingControlsNext: '次へ',
+    rankingControlsLoading: '読み込み中\u2026',
+    rankingControlsShowingTop: '上位 {count} 名のトレーダーを表示中。Proで34,000+人全員を表示',
+    rankingControlsUpgrade: 'アップグレード \u2192',
+
 } as const
 
 export default ja

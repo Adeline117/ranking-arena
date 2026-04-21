@@ -8,6 +8,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useTransition, useState, useEffect, useRef, useCallback } from 'react'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const RANGES = ['90D', '30D', '7D'] as const
 
@@ -31,6 +32,7 @@ function formatTime(date: Date): string {
 
 export default function RankingControls({ activeRange, page, totalCount, perPage }: Props) {
   const router = useRouter()
+  const { t } = useLanguage()
   const [isPending, startTransition] = useTransition()
   const [isOffline, setIsOffline] = useState(false)
   const [navError, setNavError] = useState(false)
@@ -131,8 +133,8 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
           <span style={{ fontSize: 14 }}>⚠</span>
           <span style={{ flex: 1 }}>
             {isOffline
-              ? `You are offline. Rankings data is still visible but cannot be updated.${lastDataTime ? ` Data as of ${lastDataTime}.` : ''}`
-              : 'This is taking longer than expected.'}
+              ? `${t('rankingControlsOffline')}${lastDataTime ? ` ${t('rankingControlsDataAsOf')} ${lastDataTime}.` : ''}`
+              : t('rankingControlsTakingLong')}
           </span>
           {!isOffline && lastNavRef.current && (
             <button
@@ -151,7 +153,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
                 opacity: isPending ? 0.6 : 1,
               }}
             >
-              Retry
+              {t('rankingControlsRetry')}
             </button>
           )}
         </div>
@@ -185,7 +187,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             onClick={() => navigate(activeRange, page - 1)}
             disabled={page <= 0 || isPending}
           >
-            ‹ Prev
+            ‹ {t('rankingControlsPrev')}
           </button>
           <span className="ssr-page-info">
             {page + 1} / {totalPages}
@@ -195,7 +197,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             onClick={() => navigate(activeRange, page + 1)}
             disabled={page >= totalPages - 1 || isPending}
           >
-            Next ›
+            {t('rankingControlsNext')} ›
           </button>
           <button
             className="ssr-page-btn"
@@ -229,7 +231,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
           }}
         >
           <span style={{ flex: 1 }}>
-            Showing top {totalCount.toLocaleString()} traders. Unlock all 34,000+ with Pro
+            {t('rankingControlsShowingTop').replace('{count}', totalCount.toLocaleString())}
           </span>
           <span style={{
             fontSize: 12,
@@ -237,7 +239,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             color: 'var(--color-brand, #a78bfa)',
             whiteSpace: 'nowrap',
           }}>
-            Upgrade →
+            {t('rankingControlsUpgrade')}
           </span>
         </a>
       )}
@@ -271,7 +273,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
                 animation: 'rc-spin 0.8s linear infinite',
               }}
             />
-            <span>Loading…</span>
+            <span>{t('rankingControlsLoading')}</span>
           </div>
           <style>{`@keyframes rc-spin { to { transform: rotate(360deg); } }`}</style>
         </>
