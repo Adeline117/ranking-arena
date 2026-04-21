@@ -181,29 +181,20 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
           const img = e.currentTarget
           const wrapper = img.parentElement
           if (wrapper) {
-            // 替换为错误占位符
-            wrapper.innerHTML = `
-              <div style="
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: center;
-                background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
-                border-radius: 8px;
-                padding: 16px;
-                min-height: 80px;
-                min-width: 120px;
-                border: 1px dashed #444;
-              ">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-error)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 8px;">
-                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
-                  <circle cx="8.5" cy="8.5" r="1.5"></circle>
-                  <polyline points="21 15 16 10 5 21"></polyline>
-                  <line x1="4" y1="4" x2="20" y2="20"></line>
-                </svg>
-                <span style="font-size: 11px; color: #888;">图片加载失败</span>
-              </div>
-            `
+            // Replace with error placeholder using safe DOM API (no innerHTML)
+            while (wrapper.firstChild) wrapper.removeChild(wrapper.firstChild)
+            const errorDiv = document.createElement('div')
+            Object.assign(errorDiv.style, {
+              display: 'flex', flexDirection: 'column', alignItems: 'center',
+              justifyContent: 'center', background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+              borderRadius: '8px', padding: '16px', minHeight: '80px',
+              minWidth: '120px', border: '1px dashed #444',
+            })
+            const label = document.createElement('span')
+            Object.assign(label.style, { fontSize: '11px', color: '#888' })
+            label.textContent = '图片加载失败'
+            errorDiv.appendChild(label)
+            wrapper.appendChild(errorDiv)
           }
         },
         style: {
