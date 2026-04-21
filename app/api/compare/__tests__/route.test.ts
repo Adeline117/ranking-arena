@@ -97,6 +97,13 @@ jest.mock('@/lib/utils/logger', () => ({
   })),
 }))
 
+// Mock getAuthUser + getSupabaseAdmin used by withAuth middleware
+const mockGetAuthUser = jest.fn()
+jest.mock('@/lib/supabase/server', () => ({
+  getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
+  getSupabaseAdmin: jest.fn(() => ({ from: (...args: unknown[]) => mockSupabaseFrom(...args) })),
+}))
+
 // Skip CSRF and correlation in tests
 jest.mock('@/lib/utils/csrf', () => ({
   validateCsrfToken: jest.fn().mockReturnValue(true),
@@ -159,7 +166,7 @@ describe('GET /api/compare', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockCheckRateLimit.mockResolvedValue(null)
-    mockRequireAuth.mockResolvedValue(mockUser)
+    mockGetAuthUser.mockResolvedValue(mockUser)
     ;(hasFeatureAccess as jest.Mock).mockReturnValue(true)
     // Default: unified data layer returns null (trader not found)
     mockResolveTrader.mockResolvedValue(null)
@@ -197,8 +204,7 @@ describe('GET /api/compare', () => {
   // --- Authentication ---
 
   it('returns 401 when not authenticated', async () => {
-    const authError = Object.assign(new Error('Unauthorized'), { statusCode: 401 })
-    mockRequireAuth.mockRejectedValue(authError)
+    mockGetAuthUser.mockResolvedValue(null)
 
     const req = new NextRequest('http://localhost/api/compare?ids=t1,t2')
     const res = await GET(req)

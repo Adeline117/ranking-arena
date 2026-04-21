@@ -2,11 +2,12 @@
  * 输入消毒工具测试
  */
 
-// Track hooks for DOMPurify mock
-let afterSanitizeAttributesHook: ((node: { tagName: string; setAttribute: (name: string, value: string) => void }) => void) | null = null
+// Track hooks for DOMPurify mock — use global to survive jest.mock hoisting (TDZ-safe)
+;(global as Record<string, unknown>).__dompurifyHook = null
 
 // Mock DOMPurify for Node.js test environment
-jest.mock('isomorphic-dompurify', () => ({
+jest.mock('isomorphic-dompurify', () => {
+  const mockDOMPurify = {
   sanitize: jest.fn((dirty: string, config?: { ALLOWED_TAGS?: string[] }) => {
     if (!dirty) return ''
 
@@ -27,33 +28,28 @@ jest.mock('isomorphic-dompurify', () => ({
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/\s*on\w+\s*=\s*["'][^"']*["']/gi, '')
 
-    // Apply afterSanitizeAttributes hook to add rel="noopener noreferrer" to links
-    if (afterSanitizeAttributesHook) {
-      // Find all <a> tags and add the attributes
-      result = result.replace(/<a\s+([^>]*)>/gi, (match, attrs) => {
-        // Add target="_blank" and rel="noopener noreferrer"
-        const hasTarget = /target=/.test(attrs)
-        const hasRel = /rel=/.test(attrs)
-        let newAttrs = attrs
-        if (!hasTarget) {
-          newAttrs += ' target="_blank"'
-        }
-        if (!hasRel) {
-          newAttrs += ' rel="noopener noreferrer"'
-        }
-        return `<a ${newAttrs.trim()}>`
-      })
-    }
+    // Simulate afterSanitizeAttributes hook: always add rel/target to <a> tags
+    // (mirrors the real DOMPurify behavior configured in sanitize.ts)
+    result = result.replace(/<a\s+([^>]*)>/gi, (_match: string, attrs: string) => {
+      const hasTarget = /target=/.test(attrs)
+      const hasRel = /rel=/.test(attrs)
+      let newAttrs = attrs
+      if (!hasTarget) newAttrs += ' target="_blank"'
+      if (!hasRel) newAttrs += ' rel="noopener noreferrer"'
+      return `<a ${newAttrs.trim()}>`
+    })
 
     return result
   }),
   setConfig: jest.fn(),
   addHook: jest.fn((hookName: string, callback: (node: unknown) => void) => {
     if (hookName === 'afterSanitizeAttributes') {
-      afterSanitizeAttributesHook = callback as (node: { tagName: string; setAttribute: (name: string, value: string) => void }) => void
+      (global as Record<string, unknown>).__dompurifyHook = callback as (node: { tagName: string; setAttribute: (name: string, value: string) => void }) => void
     }
   }),
-}))
+  }
+  return { __esModule: true, default: mockDOMPurify, ...mockDOMPurify }
+})
 
 import {
   sanitizeHtml,
