@@ -37,7 +37,7 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
         },
       })
       if (res.status === 429) {
-        showToast(t('exportRateLimited') || 'Export limit reached. Try again in 24 hours.', 'error')
+        showToast(t('exportRateLimited'), 'error')
         return
       }
       if (!res.ok) {
@@ -54,7 +54,7 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
         document.body.appendChild(a)
         a.click()
         document.body.removeChild(a)
-        showToast(t('exportSuccess') || 'Data exported successfully!', 'success')
+        showToast(t('exportSuccess'), 'success')
       } finally {
         URL.revokeObjectURL(url) // Always revoke, even if download trigger fails
       }
@@ -71,8 +71,8 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
         {/* Data Export */}
         <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
-            <Text size="sm" weight="medium">{t('exportData') || 'Export Data'}</Text>
-            <Text size="xs" color="tertiary">{t('exportDataDesc') || 'Download all your data as JSON. Limited to once per 24 hours.'}</Text>
+            <Text size="sm" weight="medium">{t('exportData')}</Text>
+            <Text size="xs" color="tertiary">{t('exportDataDesc')}</Text>
           </Box>
           <Button
             variant="secondary"
@@ -80,7 +80,7 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
             onClick={handleExportData}
             disabled={exporting}
           >
-            {exporting ? (t('exporting') || 'Exporting...') : (t('exportData') || 'Export')}
+            {exporting ? t('exporting') : t('exportData')}
           </Button>
         </Box>
 

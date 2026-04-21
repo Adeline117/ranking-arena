@@ -2710,6 +2710,16 @@ const zh = {
     totalEquity: '总权益',
     openPositions: '当前持仓',
     noOpenPositions: '暂无持仓',
+    pnlPercent: '盈亏 %',
+    equityHistory: '权益历史',
+    posSymbol: '交易对',
+    posSide: '方向',
+    posEntry: '开仓价',
+    posMark: '标记价',
+    posSize: '仓位',
+    posLeverage: '杠杆',
+    posPnl: '盈亏',
+    posEntryMark: '开仓价 / 标记价',
     favorites: '收藏',
 
     // 通用 UI 文本（减少硬编码）

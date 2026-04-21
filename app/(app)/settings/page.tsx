@@ -290,7 +290,7 @@ function SettingsContent() {
           />
 
           {/* Referral Section */}
-          <SectionCard id="referral" title={t('referralTitle') || 'Referral Program'} description={t('referralDesc') || 'Invite friends and earn Pro rewards'}>
+          <SectionCard id="referral" title={t('referralTitle')} description={t('referralDesc')}>
             <ReferralCard />
           </SectionCard>
 

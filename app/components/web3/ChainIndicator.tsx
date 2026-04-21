@@ -81,7 +81,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           cursor: isPending ? 'wait' : 'pointer',
           transition: `all ${tokens.transition.base}`,
         }}
-        title={t('switchToBase') || 'Switch to Base'}
+        title={t('switchToBase')}
       >
         {/* Warning icon */}
         <svg
@@ -99,7 +99,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           <line x1="12" y1="17" x2="12.01" y2="17" />
         </svg>
         <span style={{ fontSize: s.text, fontWeight: 600, color: 'var(--color-accent-error)' }}>
-          {isPending ? (t('switching') || 'Switching...') : (t('wrongNetwork') || 'Wrong Network')}
+          {isPending ? t('switching') : t('wrongNetwork')}
         </span>
       </button>
     )
@@ -201,7 +201,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           >
             <div style={{ padding: '8px 12px', borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
               <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600, textTransform: 'uppercase' }}>
-                {t('selectNetwork') || 'Select Network'}
+                {t('selectNetwork')}
               </span>
             </div>
 

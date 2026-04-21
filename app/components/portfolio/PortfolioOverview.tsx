@@ -42,17 +42,17 @@ export default function PortfolioOverview({
     <div style={styles.container}>
       <div style={styles.grid}>
         <div style={styles.card}>
-          <span style={styles.label}>{t('totalEquity') || 'Total Equity'}</span>
+          <span style={styles.label}>{t('totalEquity')}</span>
           <span style={styles.value}>${totalEquity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
         </div>
         <div style={styles.card}>
-          <span style={styles.label}>{t('unrealizedPnl') || 'Unrealized PnL'}</span>
+          <span style={styles.label}>{t('unrealizedPnl')}</span>
           <span style={{ ...styles.value, color: pnlColor }}>
             {pnlSign}${totalPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </span>
         </div>
         <div style={styles.card}>
-          <span style={styles.label}>PnL %</span>
+          <span style={styles.label}>{t('pnlPercent')}</span>
           <span style={{ ...styles.value, color: pnlColor }}>
             {pnlSign}{totalPnlPct.toFixed(2)}%
           </span>
@@ -61,7 +61,7 @@ export default function PortfolioOverview({
 
       {snapshots.length > 1 && (
         <div style={styles.chartContainer}>
-          <span style={styles.label}>Equity History</span>
+          <span style={styles.label}>{t('equityHistory')}</span>
           <div style={styles.miniChart}>
             {(() => {
               const values = snapshots.map(s => s.total_equity)

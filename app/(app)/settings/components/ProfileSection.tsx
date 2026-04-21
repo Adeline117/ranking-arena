@@ -200,7 +200,7 @@ export const ProfileSection = React.memo(function ProfileSection({
             }}
           >
             <Text size="xs" color="tertiary" style={{ marginBottom: 2 }}>
-              {t('currentUsername') || 'Current username'}
+              {t('currentUsername')}
             </Text>
             <Text size="sm" weight="bold">
               @{initialHandle}

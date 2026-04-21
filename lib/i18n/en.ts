@@ -2709,6 +2709,16 @@ const en = {
     totalEquity: 'Total Equity',
     openPositions: 'Open Positions',
     noOpenPositions: 'No open positions',
+    pnlPercent: 'PnL %',
+    equityHistory: 'Equity History',
+    posSymbol: 'Symbol',
+    posSide: 'Side',
+    posEntry: 'Entry',
+    posMark: 'Mark',
+    posSize: 'Size',
+    posLeverage: 'Lev',
+    posPnl: 'PnL',
+    posEntryMark: 'Entry / Mark',
     favorites: 'Favorites',
 
     // Common UI text (reduce hardcoding)

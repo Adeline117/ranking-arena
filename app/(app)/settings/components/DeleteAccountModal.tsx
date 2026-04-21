@@ -171,7 +171,7 @@ export function DeleteAccountModal({
               {error}
             </Text>
             <Button variant="ghost" size="sm" onClick={onDelete} disabled={deleting} style={{ color: tokens.colors.accent.error, fontSize: tokens.typography.fontSize.xs, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}` }}>
-              {t('retry') || 'Retry'}
+              {t('retry')}
             </Button>
           </Box>
         )}

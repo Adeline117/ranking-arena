@@ -69,7 +69,7 @@ export default function PositionList({ positions, isLoading }: PositionListProps
   if (!positions.length) {
     return (
       <div style={styles.empty}>
-        <span style={styles.emptyText}>{t('noOpenPositions') || 'No open positions'}</span>
+        <span style={styles.emptyText}>{t('noOpenPositions')}</span>
       </div>
     )
   }
@@ -82,22 +82,22 @@ export default function PositionList({ positions, isLoading }: PositionListProps
           <thead>
             <tr>
               <th style={styles.th} onClick={() => toggleSort('symbol')}>
-                Symbol{sortIndicator('symbol')}
+                {t('posSymbol')}{sortIndicator('symbol')}
               </th>
-              <th style={styles.th}>Side</th>
-              <th style={styles.th}>Entry</th>
-              <th style={styles.th}>Mark</th>
+              <th style={styles.th}>{t('posSide')}</th>
+              <th style={styles.th}>{t('posEntry')}</th>
+              <th style={styles.th}>{t('posMark')}</th>
               <th style={styles.th} onClick={() => toggleSort('size')}>
-                Size{sortIndicator('size')}
+                {t('posSize')}{sortIndicator('size')}
               </th>
               <th style={styles.th} onClick={() => toggleSort('leverage')}>
-                Lev{sortIndicator('leverage')}
+                {t('posLeverage')}{sortIndicator('leverage')}
               </th>
               <th style={styles.th} onClick={() => toggleSort('pnl')}>
-                PnL{sortIndicator('pnl')}
+                {t('posPnl')}{sortIndicator('pnl')}
               </th>
               <th style={styles.th} onClick={() => toggleSort('pnl_pct')}>
-                PnL %{sortIndicator('pnl_pct')}
+                {t('pnlPercent')}{sortIndicator('pnl_pct')}
               </th>
             </tr>
           </thead>
@@ -158,17 +158,17 @@ export default function PositionList({ positions, isLoading }: PositionListProps
                 </span>
               </div>
               <div style={styles.mobileCardRow}>
-                <span style={styles.mobileLabel}>Entry / Mark</span>
+                <span style={styles.mobileLabel}>{t('posEntryMark')}</span>
                 <span style={styles.mobileValue}>
                   ${Number(pos.entry_price).toLocaleString('en-US')} / ${Number(pos.mark_price).toLocaleString('en-US')}
                 </span>
               </div>
               <div style={styles.mobileCardRow}>
-                <span style={styles.mobileLabel}>Size</span>
+                <span style={styles.mobileLabel}>{t('posSize')}</span>
                 <span style={styles.mobileValue}>{Number(pos.size).toLocaleString('en-US')}</span>
               </div>
               <div style={styles.mobileCardRow}>
-                <span style={styles.mobileLabel}>PnL</span>
+                <span style={styles.mobileLabel}>{t('posPnl')}</span>
                 <span style={{ ...styles.mobileValue, color: pnlColor, fontWeight: 600 }}>
                   {sign}${Number(pos.pnl).toLocaleString('en-US', { minimumFractionDigits: 2 })} ({sign}{Number(pos.pnl_pct).toFixed(2)}%)
                 </span>

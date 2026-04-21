@@ -32,7 +32,7 @@ export default function MediaPreview({ preview, onClose, t }: MediaPreviewProps)
     <Box
       role="dialog"
       aria-modal="true"
-      aria-label={t('mediaPreview') || 'Media preview'}
+      aria-label={t('mediaPreview')}
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, background: 'var(--color-backdrop-heavy)',
@@ -79,7 +79,7 @@ export default function MediaPreview({ preview, onClose, t }: MediaPreviewProps)
               {preview.fileName || t('file')}
             </Text>
             <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
-              {t('previewNotSupported') || '此文件类型不支持预览'}
+              {t('previewNotSupported')}
             </Text>
             <a href={preview.url} target="_blank" rel="noopener noreferrer" style={{
               display: 'inline-flex', alignItems: 'center', gap: 8, padding: '12px 24px',
@@ -89,7 +89,7 @@ export default function MediaPreview({ preview, onClose, t }: MediaPreviewProps)
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                 <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
               </svg>
-              {t('download') || '下载文件'}
+              {t('download')}
             </a>
           </Box>
         )

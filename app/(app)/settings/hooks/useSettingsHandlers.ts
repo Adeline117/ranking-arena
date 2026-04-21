@@ -279,10 +279,10 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setPreviewUrl(URL.createObjectURL(croppedBlob))
       setShowAvatarCropper(false)
       setCropImageSrc(null)
-      showToast(t('cropSuccess') || 'Crop successful! Click Save to upload.', 'success')
+      showToast(t('cropSuccess'), 'success')
     } catch (error) {
       logger.error('Error in handleAvatarCropComplete:', error)
-      showToast(t('cropFailed') || 'Failed to process cropped image', 'error')
+      showToast(t('cropFailed'), 'error')
     }
   }
 
@@ -303,10 +303,10 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setCoverPreviewUrl(URL.createObjectURL(croppedBlob))
       setShowCoverCropper(false)
       setCropImageSrc(null)
-      showToast(t('cropSuccess') || 'Crop successful! Click Save to upload.', 'success')
+      showToast(t('cropSuccess'), 'success')
     } catch (error) {
       logger.error('Error in handleCoverCropComplete:', error)
-      showToast(t('cropFailed') || 'Failed to process cropped image', 'error')
+      showToast(t('cropFailed'), 'error')
     }
   }
 
@@ -353,7 +353,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
     // Server-side bio length validation
     if (bio && bio.length > 200) {
-      showToast(t('bioTooLong') || 'Bio must be 200 characters or less', 'error')
+      showToast(t('bioTooLong'), 'error')
       return
     }
 
@@ -459,8 +459,8 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
   const handleChangePassword = async () => {
     if (submittingRef.current || savingPassword || !currentPassword || !newPassword || !email) return
-    if (newPassword !== confirmNewPassword) { showToast(t('validationPasswordMismatch') || 'Passwords do not match', 'error'); return }
-    if (newPassword.length < 6) { showToast(t('validationPasswordMinLength') || 'Password must be at least 6 characters', 'error'); return }
+    if (newPassword !== confirmNewPassword) { showToast(t('validationPasswordMismatch'), 'error'); return }
+    if (newPassword.length < 6) { showToast(t('validationPasswordMinLength'), 'error'); return }
     submittingRef.current = true
     setSavingPassword(true)
     try {
@@ -495,7 +495,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     // Basic server-side email format validation before calling Supabase Auth
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(newEmail.trim())) {
-      showToast(t('invalidEmailFormat') || 'Invalid email format', 'error')
+      showToast(t('invalidEmailFormat'), 'error')
       return
     }
     submittingRef.current = true
