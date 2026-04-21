@@ -77,7 +77,7 @@ function ensureCsrfToken(): string | null {
  */
 type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   body?: unknown
-  /** Request timeout in milliseconds (default: 30000) */
+  /** Request timeout in milliseconds (default: 20000) */
   timeoutMs?: number
   /** Number of retry attempts for retryable errors (default: 0) */
   retries?: number
@@ -111,7 +111,7 @@ export async function apiRequest<T = unknown>(
   const {
     body,
     headers: customHeaders,
-    timeoutMs = 30_000,
+    timeoutMs = 20_000,
     retries = 0,
     retryBaseDelayMs = 1000,
     ...restOptions
@@ -350,6 +350,8 @@ export async function authedFetch<T>(
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
   accessToken: string | null,
   body?: Record<string, unknown>,
+  /** Request timeout in milliseconds (default: 15000 — mobile-friendly) */
+  timeoutMs = 15_000,
 ): Promise<FetchResult<T>> {
   const headers: Record<string, string> = {}
 
@@ -362,22 +364,42 @@ export async function authedFetch<T>(
     Object.assign(headers, getCsrfHeaders())
   }
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: AbortSignal.timeout(timeoutMs),
+    })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      // Convert AbortError from timeout into a structured FetchResult
+      // so callers get a clear status instead of an unhandled exception
+      return { ok: false, status: 0, data: null }
+    }
+    throw error
+  }
 
   // On 401 with an auth token, attempt refresh and retry once
   if (response.status === 401 && accessToken && typeof window !== 'undefined') {
     const newToken = await tokenRefreshCoordinator.forceRefresh()
     if (newToken) {
       headers['Authorization'] = `Bearer ${newToken}`
-      const retryResponse = await fetch(url, {
-        method,
-        headers,
-        body: body ? JSON.stringify(body) : undefined,
-      })
+      let retryResponse: Response
+      try {
+        retryResponse = await fetch(url, {
+          method,
+          headers,
+          body: body ? JSON.stringify(body) : undefined,
+          signal: AbortSignal.timeout(timeoutMs),
+        })
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return { ok: false, status: 0, data: null }
+        }
+        throw error
+      }
       const retryData = await retryResponse.json().catch(() => {
         const ct = retryResponse.headers.get('content-type') || ''
         if (!ct.includes('application/json')) {
