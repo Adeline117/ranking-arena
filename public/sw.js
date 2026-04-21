@@ -127,7 +127,7 @@ self.addEventListener('fetch', (event) => {
           }
           // 如果缓存也没有，返回基本的离线响应
           return new Response(
-            '<!DOCTYPE html><html><head><meta charset="utf-8"><title>离线</title></head><body><h1>网络连接失败</h1><p>请检查您的网络连接后重试。</p></body></html>',
+            '<!DOCTYPE html><html><head><meta charset="utf-8"><title>Offline / 离线</title></head><body><h1>Connection Failed / 网络连接失败</h1><p>Please check your network connection and try again.<br>请检查您的网络连接后重试。</p></body></html>',
             {
               status: 503,
               headers: { 'Content-Type': 'text/html; charset=utf-8' }
