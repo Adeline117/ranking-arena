@@ -336,7 +336,7 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           </div>
           <span className="mini-name">{displayName}</span>
           {data.roi != null && (
-            <span className="mini-roi" style={{ color: data.roi >= 0 ? 'var(--color-success)' : 'var(--color-error)' }}>
+            <span className="mini-roi" style={{ color: data.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
               {formatROI(data.roi)}
             </span>
           )}
