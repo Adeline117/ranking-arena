@@ -123,22 +123,25 @@ async function validateUrl(rawUrl: string): Promise<URL> {
     throw new Error('URL not allowed')
   }
   // Resolve hostname → IP and reject if any resolved IP is private/reserved.
-  // We do not actually pin the resolved IP onto the fetch URL because Next.js's
-  // built-in fetch in serverless does not expose a custom dns lookup callback;
-  // instead we re-resolve at fetch time and trust that DNS TTLs are short
-  // enough that rebinding within a sub-second window is impractical for the
-  // attacker. The resolveAndPin call still catches static private records.
-  await resolveAndPin(hostname)
-  return parsed
+  // Pin the resolved IP into the URL to defeat DNS rebinding attacks.
+  const pinnedIp = await resolveAndPin(hostname)
+  // Replace hostname with the pinned IP in the URL to prevent TOCTOU
+  const pinnedUrl = new URL(parsed.toString())
+  pinnedUrl.hostname = pinnedIp.includes(':') ? `[${pinnedIp}]` : pinnedIp
+  // Store original hostname for Host header (needed for virtual hosting / TLS SNI)
+  ;(pinnedUrl as URL & { _originalHost?: string })._originalHost = hostname
+  return pinnedUrl
 }
 
 /** Fetch with size cap. Streams the response and rejects past MAX_BODY_BYTES. */
-async function fetchWithBodyCap(url: string): Promise<{ ok: boolean; status: number; body: string; redirect?: string }> {
+async function fetchWithBodyCap(url: string, originalHost?: string): Promise<{ ok: boolean; status: number; body: string; redirect?: string }> {
+  const headers: Record<string, string> = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    Accept: 'text/html,application/xhtml+xml',
+  }
+  if (originalHost) headers['Host'] = originalHost
   const response = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-      Accept: 'text/html,application/xhtml+xml',
-    },
+    headers,
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     redirect: 'manual',
   })
@@ -208,7 +211,7 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      const result = await fetchWithBodyCap(validUrl.href)
+      const result = await fetchWithBodyCap(validUrl.href, (validUrl as URL & { _originalHost?: string })._originalHost)
       if (result.status === 413) {
         return NextResponse.json({ error: 'Response body too large' }, { status: 413 })
       }
