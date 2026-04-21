@@ -50,11 +50,17 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
 
   const pendingRef = useRef(false)
   const mountedRef = useRef(true)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const fetchNotifications = useCallback(async (fetchOffset = 0, append = false) => {
     if (!accessToken || pendingRef.current) return
     pendingRef.current = true
     if (!append) setLoading(true)
+
+    // Abort any previous in-flight request before starting a new one
+    abortControllerRef.current?.abort()
+    const controller = new AbortController()
+    abortControllerRef.current = controller
 
     try {
       const params = new URLSearchParams({
@@ -65,11 +71,12 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
 
       const res = await fetch(`/api/notifications?${params}`, {
         headers: { Authorization: `Bearer ${accessToken}` },
+        signal: controller.signal,
       })
       if (!res.ok) throw new Error('Failed to fetch')
 
       const result = await res.json()
-      if (!mountedRef.current) return
+      if (!mountedRef.current || controller.signal.aborted) return
       const data = result.data || result
       const items: NotificationWithActor[] = data.notifications || []
       const count = data.unread_count ?? 0
@@ -84,6 +91,8 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
       setHasMore(items.length === limit)
       setOffset(fetchOffset + items.length)
     } catch (err) {
+      // Silently ignore abort errors (component unmounted or request replaced)
+      if (err instanceof DOMException && err.name === 'AbortError') return
       logger.error('[useNotifications] fetch error:', err)
     } finally {
       if (mountedRef.current) setLoading(false)
@@ -190,7 +199,11 @@ export function useNotifications(options: UseNotificationsOptions = {}): UseNoti
     if (autoFetch && accessToken) {
       fetchNotifications(0, false)
     }
-    return () => { mountedRef.current = false }
+    return () => {
+      mountedRef.current = false
+      // Cancel any in-flight request on unmount
+      abortControllerRef.current?.abort()
+    }
   }, [autoFetch, accessToken, fetchNotifications])
 
   return {
