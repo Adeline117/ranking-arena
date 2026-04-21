@@ -32,6 +32,18 @@ export default function LogoutPage() {
         try { sessionStorage.clear() } catch { /* ignore */ }
 
         await supabase.auth.signOut()
+
+        // Explicitly broadcast logout to all other tabs via BroadcastChannel
+        try {
+          const channel = new BroadcastChannel('ranking-arena:auth-state')
+          channel.postMessage({
+            type: 'USER_LOGGED_OUT',
+            payload: { userId: null, handle: null },
+            timestamp: Date.now(),
+            sourceTabId: `logout-page-${Date.now()}`,
+          })
+          channel.close()
+        } catch { /* BroadcastChannel not supported */ }
       } catch (err) {
         logger.error('Logout error:', err)
       } finally {
