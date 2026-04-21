@@ -285,8 +285,10 @@ export default function LoginPage() {
           if (updateError) logger.error('Error updating handle:', updateError)
         }
         await createUserProfile(user.id, email, handle)
-        router.push('/?welcome=1')
-      } else { router.push('/') }
+        const dest = getRedirectUrl(handle, email)
+        const separator = dest.includes('?') ? '&' : '?'
+        router.push(`${dest}${separator}welcome=1`)
+      } else { router.push(getRedirectUrl()) }
     } catch (err: unknown) { setError((err instanceof Error ? err.message : undefined) || t('loginSetupFailed')) }
     finally { setLoading(false); submittingRef.current = false }
   }
