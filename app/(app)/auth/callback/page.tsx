@@ -109,28 +109,34 @@ function AuthCallbackContent() {
           router.replace(defaultRedirect)
         }
       } else {
-        // Wait a moment for supabase to process the hash fragment
-        setTimeout(async () => {
-          const { data: { session: retrySession } } = await supabase.auth.getSession()
-          if (retrySession) {
-            await saveToStore(retrySession)
-            if (isAddAccount) try { localStorage.removeItem('arena_adding_account') } catch { /* intentional */ }
-            const createdAt = new Date(retrySession.user.created_at).getTime()
-            const now = Date.now()
-            const isNewUser = now - createdAt < 30_000
-            // New users → preserve returnUrl with welcome banner (consistent with immediate-session path)
-            if (isAddAccount) {
-              router.replace('/')
-            } else if (isNewUser) {
-              const target = isSafeReturn ? returnUrl! : '/'
-              router.replace(target + (target.includes('?') ? '&' : '?') + 'welcome=1')
-            } else {
-              router.replace(defaultRedirect)
-            }
+        // Retry with backoff: supabase may need time to process the hash fragment
+        const tryGetSession = async (retries = 0): Promise<typeof session> => {
+          await new Promise(r => setTimeout(r, 1000))
+          const { data } = await supabase.auth.getSession()
+          if (data.session) return data.session
+          if (retries < 2) return tryGetSession(retries + 1)
+          return null
+        }
+
+        const retrySession = await tryGetSession()
+        if (retrySession) {
+          await saveToStore(retrySession)
+          if (isAddAccount) try { localStorage.removeItem('arena_adding_account') } catch { /* intentional */ }
+          const createdAt = new Date(retrySession.user.created_at).getTime()
+          const now = Date.now()
+          const isNewUser = now - createdAt < 30_000
+          // New users → preserve returnUrl with welcome banner (consistent with immediate-session path)
+          if (isAddAccount) {
+            router.replace('/')
+          } else if (isNewUser) {
+            const target = isSafeReturn ? returnUrl! : '/'
+            router.replace(target + (target.includes('?') ? '&' : '?') + 'welcome=1')
           } else {
-            router.replace('/login?error=no_session')
+            router.replace(defaultRedirect)
           }
-        }, 1000)
+        } else {
+          router.replace('/login?error=no_session')
+        }
       }
     }
 
