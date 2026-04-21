@@ -16,6 +16,16 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     const handleCallback = async () => {
+      // Check for OAuth provider error params (e.g., user cancelled, access_denied)
+      const providerError = searchParams.get('error')
+      const errorDescription = searchParams.get('error_description')
+      if (providerError) {
+        const errorMsg = errorDescription || providerError
+        logger.warn('OAuth provider error:', { error: providerError, description: errorDescription })
+        router.replace(`/login?error=${encodeURIComponent(errorMsg)}`)
+        return
+      }
+
       const { data: { session }, error } = await supabase.auth.getSession()
 
       if (error) {
