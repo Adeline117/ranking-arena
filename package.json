@@ -2,6 +2,18 @@
   "name": "ranking-arena",
   "version": "0.1.0",
   "private": true,
+  "lint-staged": {
+    "*.{ts,tsx}": [
+      "eslint --no-warn-ignored --fix",
+      "prettier --write"
+    ],
+    "*.{js,jsx,mjs,cjs}": [
+      "prettier --write"
+    ],
+    "*.{json,css,md}": [
+      "prettier --write"
+    ]
+  },
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=3584' next dev",
     "build": "touch .env && TURBOPACK=0 next build",
@@ -154,6 +166,7 @@
     "jest": "^30.3.0",
     "jest-environment-jsdom": "^30.3.0",
     "lighthouse": "^13.0.3",
+    "lint-staged": "^16.4.0",
     "playwright": "^1.58.2",
     "prettier": "^3.8.1",
     "puppeteer": "^24.40.0",
