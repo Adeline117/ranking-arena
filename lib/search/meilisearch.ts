@@ -14,6 +14,27 @@ import { logger } from '@/lib/logger'
 const MEILI_URL = process.env.MEILISEARCH_URL || ''
 const MEILI_SEARCH_KEY = process.env.MEILISEARCH_SEARCH_KEY || ''
 
+// For VPS-hosted Meilisearch behind self-signed TLS, use undici Agent
+
+let vpsFetchOptions: Record<string, any> = {}
+if (MEILI_URL.startsWith('https://') && typeof window === 'undefined') {
+  try {
+    // Node.js 18+ undici dispatcher for self-signed certs
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const { Agent } = require('undici')
+    vpsFetchOptions = {
+      dispatcher: new Agent({ connect: { rejectUnauthorized: false } }),
+    }
+  } catch {
+    // undici not available, fall back to env var for this specific usage
+    if (!process.env.NODE_TLS_REJECT_UNAUTHORIZED) {
+      logger.warn(
+        '[Meilisearch] Self-signed TLS cert: set NODE_TLS_REJECT_UNAUTHORIZED=0 or install undici'
+      )
+    }
+  }
+}
+
 interface MeiliSearchResult {
   id: string
   handle: string
@@ -74,19 +95,33 @@ export async function searchTradersMeili(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${MEILI_SEARCH_KEY}`,
+        Authorization: `Bearer ${MEILI_SEARCH_KEY}`,
       },
       body: JSON.stringify({
         q: query,
         limit,
         filter: filters.join(' AND '),
         facets: ['platform', 'trader_type', 'season_id'],
-        attributesToRetrieve: ['id', 'handle', 'platform', 'platform_name', 'roi', 'pnl', 'arena_score', 'win_rate', 'rank', 'trader_type', 'avatar_url', 'season_id'],
+        attributesToRetrieve: [
+          'id',
+          'handle',
+          'platform',
+          'platform_name',
+          'roi',
+          'pnl',
+          'arena_score',
+          'win_rate',
+          'rank',
+          'trader_type',
+          'avatar_url',
+          'season_id',
+        ],
         attributesToHighlight: ['handle'],
         highlightPreTag: '<mark>',
         highlightPostTag: '</mark>',
       }),
       signal: AbortSignal.timeout(3000),
+      ...vpsFetchOptions,
     })
 
     if (!res.ok) {
