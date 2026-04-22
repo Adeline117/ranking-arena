@@ -8,15 +8,14 @@
 
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import {
-  success,
-  successWithPagination,
-  validateNumber,
-  ApiError,
-  ErrorCode,
-} from '@/lib/api'
+import { success, successWithPagination, validateNumber, ApiError, ErrorCode } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
-import { getPostComments, createComment, deleteComment, type CommentSortMode } from '@/lib/data/comments'
+import {
+  getPostComments,
+  createComment,
+  deleteComment,
+  type CommentSortMode,
+} from '@/lib/data/comments'
 import { createNotificationDeduped } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
@@ -25,14 +24,20 @@ import { sanitizeText } from '@/lib/utils/sanitize'
 
 // Zod schema for POST (create comment)
 const CreateCommentSchema = z.object({
-  content: z.string().min(1, 'Comment content is required').max(2000, 'Comment must be at most 2000 characters'),
+  content: z
+    .string()
+    .min(1, 'Comment content is required')
+    .max(2000, 'Comment must be at most 2000 characters'),
   parent_id: z.string().uuid().optional().nullable(),
 })
 
 // Zod schema for PUT (edit comment)
 const EditCommentSchema = z.object({
   comment_id: z.string().uuid('Invalid comment ID'),
-  content: z.string().min(1, 'Comment content is required').max(2000, 'Comment must be at most 2000 characters'),
+  content: z
+    .string()
+    .min(1, 'Comment content is required')
+    .max(2000, 'Comment must be at most 2000 characters'),
 })
 
 // Zod schema for DELETE (delete comment)
@@ -72,7 +77,9 @@ export const GET = withPublic(
     const authHeader = request.headers.get('Authorization')
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7)
-      const { data: { user } } = await supabase.auth.getUser(token)
+      const {
+        data: { user },
+      } = await supabase.auth.getUser(token)
       userId = user?.id
     }
 
@@ -98,10 +105,7 @@ export const POST = withAuth(
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
     const [, { data: post }] = await Promise.all([
@@ -137,6 +141,9 @@ export const POST = withAuth(
       parent_id,
     })
 
+    // Atomically increment comment count (trigger was non-atomic, now dropped)
+    await supabase.rpc('increment_comment_count' as never, { p_post_id: id })
+
     // Send comment notifications (fire-and-forget)
     try {
       const userHandle = await getUserHandle(user.id, user.email ?? undefined)
@@ -158,7 +165,7 @@ export const POST = withAuth(
           link: `/post/${id}`,
           reference_id: id,
           read: false,
-        }).catch(err => logger.warn('[comments] Post author notification failed:', err))
+        }).catch((err) => logger.warn('[comments] Post author notification failed:', err))
       }
 
       // If this is a reply, also notify the parent comment author
@@ -169,7 +176,11 @@ export const POST = withAuth(
           .eq('id', parent_id)
           .single()
 
-        if (parentComment?.user_id && parentComment.user_id !== user.id && parentComment.user_id !== postData?.author_id) {
+        if (
+          parentComment?.user_id &&
+          parentComment.user_id !== user.id &&
+          parentComment.user_id !== postData?.author_id
+        ) {
           createNotificationDeduped(supabase, {
             user_id: parentComment.user_id,
             type: 'post_reply',
@@ -179,7 +190,7 @@ export const POST = withAuth(
             link: `/post/${id}`,
             reference_id: id,
             read: false,
-          }).catch(err => logger.warn('[comments] Parent comment notification failed:', err))
+          }).catch((err) => logger.warn('[comments] Parent comment notification failed:', err))
         }
       }
     } catch (notifErr) {
@@ -200,10 +211,7 @@ export const PUT = withAuth(
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
     const parsed = EditCommentSchema.safeParse(body)
@@ -258,10 +266,7 @@ export const DELETE = withAuth(
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
     const parsed = DeleteCommentSchema.safeParse(body)
@@ -270,7 +275,11 @@ export const DELETE = withAuth(
     }
     const commentId = parsed.data.comment_id
 
+    const id = extractPostId(request.url)
     await deleteComment(supabase, commentId, user.id)
+
+    // Atomically decrement comment count (trigger was non-atomic, now dropped)
+    await supabase.rpc('decrement_comment_count' as never, { p_post_id: id })
 
     return success({ message: 'Comment deleted' })
   },

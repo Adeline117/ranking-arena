@@ -32,41 +32,10 @@ export async function DELETE(
         return NextResponse.json({ error: 'No permission to delete this post' }, { status: 403 })
       }
 
-      // 删除帖子相关的评论（记录错误但继续删除帖子）
-      const { error: commentsError } = await supabase
-        .from('comments')
-        .delete()
-        .eq('post_id', postId)
-
-      if (commentsError) {
-        logger.warn('Failed to delete comments', { error: commentsError.message, postId })
-      }
-
-      // 删除帖子相关的点赞（记录错误但继续删除帖子）
-      const { error: likesError } = await supabase
-        .from('post_likes')
-        .delete()
-        .eq('post_id', postId)
-
-      if (likesError) {
-        logger.warn('Failed to delete likes', { error: likesError.message, postId })
-      }
-
-      // 删除帖子收藏（记录错误但继续删除帖子）
-      const { error: bookmarksError } = await supabase
-        .from('post_bookmarks')
-        .delete()
-        .eq('post_id', postId)
-
-      if (bookmarksError) {
-        logger.warn('Failed to delete bookmarks', { error: bookmarksError.message, postId })
-      }
-
-      // 删除帖子
-      const { error: deleteError } = await supabase
-        .from('posts')
-        .delete()
-        .eq('id', postId)
+      // Delete the post — comments, likes, bookmarks, reactions cascade via FK constraints.
+      // Previous code manually deleted children before the post, which was both
+      // redundant (CASCADE handles it) and non-transactional (partial failure left orphans).
+      const { error: deleteError } = await supabase.from('posts').delete().eq('id', postId)
 
       if (deleteError) {
         logger.error('Delete error', { error: deleteError, postId, userId: user.id })
