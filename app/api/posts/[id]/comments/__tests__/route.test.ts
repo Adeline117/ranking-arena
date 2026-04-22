@@ -17,7 +17,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = new Map()
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -29,7 +31,10 @@ jest.mock('next/server', () => {
     headers: Map<string, string>
     method: string
     _body: unknown
-    constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
+    constructor(
+      url: string,
+      opts?: { headers?: Record<string, string>; method?: string; body?: unknown }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
       this.headers = new Map(Object.entries({ 'user-agent': 'Jest Test Runner', ...opts?.headers }))
@@ -64,7 +69,10 @@ jest.mock('@/lib/api/middleware', () => ({
         return NR.json({ success: false, error: 'Unauthorized' }, { status: 401 })
       }
       const mockSb = require('@/lib/supabase/server').getSupabaseAdmin()
-      return await handler({ user, supabase: mockSb, request: req, version: { current: 'v1' } }, ctx)
+      return await handler(
+        { user, supabase: mockSb, request: req, version: { current: 'v1' } },
+        ctx
+      )
     } catch (err: unknown) {
       const { NextResponse: NR } = require('next/server')
       const statusCode = (err as { statusCode?: number })?.statusCode || 500
@@ -79,8 +87,10 @@ jest.mock('@/lib/api/middleware', () => ({
   withApiMiddleware: (handler: Function) => handler,
 }))
 
+const mockRpc = jest.fn().mockResolvedValue({ data: null, error: null })
 const mockGetSupabaseAdmin = jest.fn(() => ({
   from: (...args: unknown[]) => mockSupabaseFrom(...args),
+  rpc: mockRpc,
   auth: {
     getUser: jest.fn().mockImplementation(() => Promise.resolve(mockSupabaseAuth)),
   },
@@ -97,13 +107,37 @@ jest.mock('@/lib/supabase/server', () => ({
 jest.mock('@/lib/api', () => ({
   getSupabaseAdmin: (...args: unknown[]) => mockGetSupabaseAdmin(...args),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
-  ApiError: { validation: (msg: string, details?: unknown) => Object.assign(new Error(msg), { statusCode: 400, details }) },
-  success: (data: unknown, status = 200) => ({ status, _body: { success: true, data }, async json() { return this._body }, headers: new Map() }),
-  successWithPagination: (data: unknown, pagination: unknown) => ({ status: 200, _body: { success: true, data, meta: { pagination } }, async json() { return this._body }, headers: new Map() }),
+  ApiError: {
+    validation: (msg: string, details?: unknown) =>
+      Object.assign(new Error(msg), { statusCode: 400, details }),
+  },
+  success: (data: unknown, status = 200) => ({
+    status,
+    _body: { success: true, data },
+    async json() {
+      return this._body
+    },
+    headers: new Map(),
+  }),
+  successWithPagination: (data: unknown, pagination: unknown) => ({
+    status: 200,
+    _body: { success: true, data, meta: { pagination } },
+    async json() {
+      return this._body
+    },
+    headers: new Map(),
+  }),
   handleError: (error: unknown, _context: string) => {
     const message = error instanceof Error ? error.message : 'Internal error'
     const statusCode = (error as { statusCode?: number })?.statusCode || 500
-    return { status: statusCode, _body: { success: false, error: message }, async json() { return this._body }, headers: new Map() }
+    return {
+      status: statusCode,
+      _body: { success: false, error: message },
+      async json() {
+        return this._body
+      },
+      headers: new Map(),
+    }
   },
   validateNumber: (val: unknown) => {
     if (val === null || val === undefined || val === '') return null
@@ -165,9 +199,7 @@ describe('/api/posts/[id]/comments', () => {
 
   describe('GET /api/posts/[id]/comments', () => {
     it('returns comments for a post with default pagination', async () => {
-      const mockComments = [
-        { id: 'c1', content: 'Great post!', author_id: 'user-2' },
-      ]
+      const mockComments = [{ id: 'c1', content: 'Great post!', author_id: 'user-2' }]
       mockGetPostComments.mockResolvedValue(mockComments)
 
       const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
@@ -182,7 +214,9 @@ describe('/api/posts/[id]/comments', () => {
     it('returns paginated comments', async () => {
       mockGetPostComments.mockResolvedValue([])
 
-      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments?limit=10&offset=5`)
+      const req = new NextRequest(
+        `http://localhost/api/posts/${TEST_POST_ID}/comments?limit=10&offset=5`
+      )
       const res = await GET(req, createContext())
       const body = await res.json()
 
