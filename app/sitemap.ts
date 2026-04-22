@@ -206,7 +206,13 @@ export async function generateSitemaps() {
 /**
  * Main sitemap function — called per ID by Next.js.
  */
-export default async function sitemap({ id }: { id: number }): Promise<MetadataRoute.Sitemap> {
+export default async function sitemap({
+  id: rawId,
+}: {
+  id: number
+}): Promise<MetadataRoute.Sitemap> {
+  // Next.js passes route params as strings — coerce to number for comparison
+  const id = Number(rawId)
   const now = new Date().toISOString()
 
   // ── Sitemap 0: static pages ───────────────────────────────────────────────
