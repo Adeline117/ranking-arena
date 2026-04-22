@@ -33,7 +33,7 @@ function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
     ok: status >= 200 && status < 300,
     status,
-    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+    headers: { get: (key: string) => (key === 'content-type' ? 'application/json' : null) },
     json: async () => body,
   })
 }
@@ -129,21 +129,19 @@ describe('DydxPerpConnector', () => {
       expect(result.total_available).toBe(0)
     })
 
-    test('falls back to dYdX indexer when Copin fails', async () => {
+    test('returns empty result when all Copin probes fail (no indexer fallback)', async () => {
       const connector = createConnector()
-      // Copin fails
+      // All Copin probes fail (connector probes 4 dates: 25d, 35d, 50d, 75d)
       mockFetchNetworkError('Copin down')
-      // Indexer succeeds with pnlRanking format
-      mockFetchResponse({
-        pnlRanking: [
-          { address: 'dydx1abc123', pnl: '50000', rank: 1 },
-        ],
-      })
+      mockFetchNetworkError('Copin down')
+      mockFetchNetworkError('Copin down')
+      mockFetchNetworkError('Copin down')
 
       const result = await connector.discoverLeaderboard('7d', 100)
 
-      expect(result.traders).toHaveLength(1)
-      expect(result.traders[0].trader_key).toBe('dydx1abc123')
+      // Falls back to DB seed, which is not available in tests, so empty result
+      expect(result.traders).toHaveLength(0)
+      expect(result.total_available).toBe(0)
     })
 
     test('sends correct statisticType for 7d window to Copin', async () => {
@@ -167,28 +165,39 @@ describe('DydxPerpConnector', () => {
       expect(callUrl).toContain('statisticType=MONTH')
     })
 
-    test('throws on network error when both Copin and indexer fail', async () => {
+    test('returns empty result on network error (errors caught internally)', async () => {
       const connector = createConnector()
+      // All Copin probes fail (connector probes 4 dates: 25d, 35d, 50d, 75d)
       mockFetchNetworkError('Copin down')
-      mockFetchNetworkError('Indexer down')
+      mockFetchNetworkError('Copin down')
+      mockFetchNetworkError('Copin down')
+      mockFetchNetworkError('Copin down')
 
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      const result = await connector.discoverLeaderboard('7d')
+
+      // Connector catches errors and returns empty result (no throw)
+      expect(result.traders).toHaveLength(0)
+      expect(result.total_available).toBe(0)
     })
 
-    test('indexer fallback uses correct period parameter', async () => {
+    test('probes multiple Copin queryDates on first failure', async () => {
       const connector = createConnector()
-      // Copin fails
-      mockFetchNetworkError('Copin down')
-      // Indexer returns valid data
+      // First Copin probe (25d) returns empty
+      mockFetchResponse({ data: [] })
+      // Second Copin probe (35d) returns data
       mockFetchResponse({
-        pnlRanking: [{ address: 'dydx1test', pnl: '100000', rank: 1 }],
+        data: [{ account: 'dydx1test', totalPnl: '100000', ranking: 1 }],
       })
 
-      await connector.discoverLeaderboard('7d')
+      const result = await connector.discoverLeaderboard('7d')
 
-      // Second call is to indexer with period=PERIOD_7D
-      const indexerCallUrl = mockFetch.mock.calls[1][0]
-      expect(indexerCallUrl).toContain('period=PERIOD_7D')
+      expect(result.traders).toHaveLength(1)
+      expect(result.traders[0].trader_key).toBe('dydx1test')
+      // Both calls go to Copin with statisticType=WEEK
+      const firstCallUrl = mockFetch.mock.calls[0][0]
+      const secondCallUrl = mockFetch.mock.calls[1][0]
+      expect(firstCallUrl).toContain('statisticType=WEEK')
+      expect(secondCallUrl).toContain('statisticType=WEEK')
     })
   })
 
@@ -211,9 +220,7 @@ describe('DydxPerpConnector', () => {
       expect(result!.profile.avatar_url).toBeNull()
       expect(result!.profile.bio).toBeNull()
       expect(result!.profile.tags).toEqual(['on-chain', 'perp-dex'])
-      expect(result!.profile.profile_url).toBe(
-        `https://trade.dydx.exchange/portfolio/${traderKey}`
-      )
+      expect(result!.profile.profile_url).toBe(`https://trade.dydx.exchange/portfolio/${traderKey}`)
       expect(result!.profile.followers).toBeNull()
       expect(result!.profile.copiers).toBeNull()
       expect(result!.profile.aum).toBeNull()
@@ -277,14 +284,21 @@ describe('DydxPerpConnector', () => {
 
     test('returns snapshot with correctly computed ROI and PnL', async () => {
       const connector = createConnector()
-      // First call: Copin API returns leaderboard with trader entry
+      // getCopinLeaderboard issues one fetch to Copin API
       mockFetchResponse({
         data: [
-          { account: 'dydx1traderA', totalPnl: '50000', totalVolume: '500000', totalWin: 30, totalLose: 10, totalTrade: 40, ranking: 1 },
+          {
+            account: 'dydx1traderA',
+            totalPnl: '50000',
+            totalVolume: '500000',
+            totalWin: 30,
+            totalLose: 10,
+            totalTrade: 40,
+            ranking: 1,
+          },
         ],
       })
-      // Second call: subaccount endpoint
-      mockFetchResponse(validSubaccountResponse)
+      // No subaccount fetch - isUsingProxy() is false in tests
 
       const result = await connector.fetchTraderSnapshot('dydx1traderA', '7d')
 
@@ -292,7 +306,8 @@ describe('DydxPerpConnector', () => {
       expect(result!.metrics.pnl).toBe(50000)
       // ROI from Copin: pnl / (volume/5) * 100 = 50000 / 100000 * 100 = 50
       expect(result!.metrics.roi).toBe(50)
-      expect(result!.metrics.aum).toBe(150000)
+      // aum is null because subaccount is not fetched without proxy
+      expect(result!.metrics.aum).toBeNull()
       expect(result!.metrics.platform_rank).toBe(1)
     })
 
@@ -300,12 +315,8 @@ describe('DydxPerpConnector', () => {
       const connector = createConnector()
       // Copin returns data but trader not found
       mockFetchResponse({
-        data: [
-          { account: 'dydx1other', totalPnl: '10000', ranking: 1 },
-        ],
+        data: [{ account: 'dydx1other', totalPnl: '10000', ranking: 1 }],
       })
-      // Subaccount endpoint
-      mockFetchResponse(validSubaccountResponse)
 
       const result = await connector.fetchTraderSnapshot('dydx1unknown', '7d')
 
@@ -313,62 +324,49 @@ describe('DydxPerpConnector', () => {
       expect(result!.metrics.pnl).toBeNull()
       expect(result!.metrics.roi).toBeNull()
       expect(result!.metrics.platform_rank).toBeNull()
-      // AUM should still come from subaccount
-      expect(result!.metrics.aum).toBe(150000)
+      // AUM is null because subaccount is not fetched without proxy
+      expect(result!.metrics.aum).toBeNull()
     })
 
-    test('handles zero equity gracefully (no ROI division by zero)', async () => {
+    test('handles zero volume gracefully (no ROI division by zero)', async () => {
       const connector = createConnector()
-      // Copin returns trader with PnL but no volume (so Copin ROI is null)
+      // Copin returns trader with PnL but no volume (so ROI is null)
       mockFetchResponse({
-        data: [
-          { account: 'dydx1zero', totalPnl: '1000', ranking: 1 },
-        ],
-      })
-      // Subaccount returns 0 equity
-      mockFetchResponse({
-        subaccount: { equity: '0', freeCollateral: '0' },
+        data: [{ account: 'dydx1zero', totalPnl: '1000', ranking: 1 }],
       })
 
       const result = await connector.fetchTraderSnapshot('dydx1zero', '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.pnl).toBe(1000)
-      // equity=0, startEquity = 0 - 1000 = -1000, which is <= 0, so ROI stays null
+      // No totalVolume provided, so ROI cannot be computed
       expect(result!.metrics.roi).toBeNull()
-      // equity is 0, Number(0) || null = null
+      // aum is null because subaccount is not fetched without proxy
       expect(result!.metrics.aum).toBeNull()
     })
 
-    test('handles negative PnL correctly for ROI calculation', async () => {
+    test('handles negative PnL correctly', async () => {
       const connector = createConnector()
-      // Copin returns trader with negative PnL but no volume
+      // Copin returns trader with negative PnL and volume so ROI can be computed
       mockFetchResponse({
-        data: [
-          { account: 'dydx1loser', totalPnl: '-20000', ranking: 50 },
-        ],
-      })
-      // Subaccount with equity
-      mockFetchResponse({
-        subaccount: { equity: '80000.00', freeCollateral: '40000.00' },
+        data: [{ account: 'dydx1loser', totalPnl: '-20000', totalVolume: '500000', ranking: 50 }],
       })
 
       const result = await connector.fetchTraderSnapshot('dydx1loser', '30d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.pnl).toBe(-20000)
-      // startEquity = 80000 - (-20000) = 100000, ROI = -20000/100000 * 100 = -20
+      // ROI from Copin: pnl / (volume/5) * 100 = -20000 / 100000 * 100 = -20
       expect(result!.metrics.roi).toBe(-20)
-      expect(result!.metrics.aum).toBe(80000)
+      // aum is null because subaccount is not fetched without proxy
+      expect(result!.metrics.aum).toBeNull()
       expect(result!.metrics.platform_rank).toBe(50)
     })
 
     test('sends correct statisticType in Copin request for 30d', async () => {
       const connector = createConnector()
-      // First call: Copin API
+      // getCopinLeaderboard issues one fetch to Copin API
       mockFetchResponse({ data: [{ account: 'dydx1traderA', totalPnl: '25000', ranking: 2 }] })
-      // Second call: subaccount
-      mockFetchResponse(validSubaccountResponse)
 
       await connector.fetchTraderSnapshot('dydx1traderA', '30d')
 
@@ -380,8 +378,10 @@ describe('DydxPerpConnector', () => {
 
     test('returns null metrics fields that dYdX does not provide', async () => {
       const connector = createConnector()
-      mockFetchResponse(validSubaccountResponse)
-      mockFetchResponse(validLeaderboardResponse)
+      // getCopinLeaderboard: Copin returns trader with no win/loss/trade data
+      mockFetchResponse({
+        data: [{ account: 'dydx1traderA', totalPnl: '50000', ranking: 1 }],
+      })
 
       const result = await connector.fetchTraderSnapshot('dydx1traderA', '7d')
 
@@ -397,8 +397,10 @@ describe('DydxPerpConnector', () => {
 
     test('quality flags indicate missing fields and notes', async () => {
       const connector = createConnector()
-      mockFetchResponse(validSubaccountResponse)
-      mockFetchResponse(validLeaderboardResponse)
+      // getCopinLeaderboard: Copin returns trader with no win/loss/trade data
+      mockFetchResponse({
+        data: [{ account: 'dydx1traderA', totalPnl: '50000', ranking: 1 }],
+      })
 
       const result = await connector.fetchTraderSnapshot('dydx1traderA', '7d')
 
@@ -418,26 +420,26 @@ describe('DydxPerpConnector', () => {
       expect(result!.quality_flags.notes!.length).toBeGreaterThan(0)
     })
 
-    test('handles null subaccount gracefully', async () => {
+    test('aum is null when no proxy configured (no subaccount fetch)', async () => {
       const connector = createConnector()
-      // First call: Copin API returns trader data
+      // getCopinLeaderboard: Copin returns trader data
       mockFetchResponse({
         data: [{ account: 'dydx1nosub', totalPnl: '5000', ranking: 10 }],
       })
-      // Second call: subaccount returns null
-      mockFetchResponse({ subaccount: null })
 
       const result = await connector.fetchTraderSnapshot('dydx1nosub', '7d')
 
       expect(result).not.toBeNull()
-      // equity is null when subaccount is null
+      // aum is null because subaccount is not fetched without DYDX_PROXY_URL
       expect(result!.metrics.aum).toBeNull()
       expect(result!.metrics.pnl).toBe(5000)
     })
 
     test('returns snapshot with null metrics on network error (catches internally)', async () => {
       const connector = createConnector()
-      // Both Copin and subaccount fail
+      // getCopinLeaderboard probes 4 dates (25d, 35d, 50d, 75d) — all fail
+      mockFetchNetworkError('Connection refused')
+      mockFetchNetworkError('Connection refused')
       mockFetchNetworkError('Connection refused')
       mockFetchNetworkError('Connection refused')
 
@@ -527,30 +529,36 @@ describe('DydxPerpConnector', () => {
   // ============================================
 
   describe('error handling', () => {
-    test('throws ConnectorError on rate limit (429) in discoverLeaderboard Copin call', async () => {
+    test('returns empty result on rate limit (429) — errors caught internally', async () => {
       const connector = createConnector()
-      // Copin API returns 429 — request() throws ConnectorError
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 429,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null },
-        json: async () => ({}),
-      })
-      // Indexer also fails
-      mockFetchNetworkError('Indexer also down')
+      // All Copin probes return 429 (connector probes 4 dates: 25d, 35d, 50d, 75d)
+      for (let i = 0; i < 4; i++) {
+        mockFetch.mockResolvedValueOnce({
+          ok: false,
+          status: 429,
+          headers: {
+            get: (key: string) =>
+              key === 'content-type' ? 'application/json' : key === 'Retry-After' ? '60' : null,
+          },
+          json: async () => ({}),
+        })
+      }
 
-      // ConnectorError from Copin propagates
-      await expect(connector.discoverLeaderboard('7d')).rejects.toThrow()
+      // discoverLeaderboard catches errors internally and returns empty result
+      const result = await connector.discoverLeaderboard('7d')
+      expect(result.traders).toHaveLength(0)
+      expect(result.total_available).toBe(0)
     })
 
-    test('handles invalid JSON response gracefully via warnValidate in indexer fallback', async () => {
+    test('handles invalid JSON response gracefully — empty data field', async () => {
       const connector = createConnector()
-      // Copin fails
-      mockFetchNetworkError('Copin down')
-      // Indexer returns unexpected structure
+      // All 4 Copin probes return unexpected structure (no .data array)
+      mockFetchResponse({ unexpected: 'structure', somethingElse: true })
+      mockFetchResponse({ unexpected: 'structure', somethingElse: true })
+      mockFetchResponse({ unexpected: 'structure', somethingElse: true })
       mockFetchResponse({ unexpected: 'structure', somethingElse: true })
 
-      // warnValidate does graceful degradation — empty result
+      // Copin parsing returns empty .data → empty result
       const result = await connector.discoverLeaderboard('7d')
       expect(result.traders).toHaveLength(0)
     })
