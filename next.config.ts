@@ -510,6 +510,14 @@ const nextConfig = {
   // 响应头配置 - 缓存优化 + 安全头
   async headers() {
     // Content Security Policy - 允许必要的第三方服务
+    // Security note on script-src:
+    // 'unsafe-inline' is a fallback for pre-CSP3 browsers only.
+    // 'strict-dynamic' (CSP Level 3, supported by 95%+ of browsers) overrides
+    // 'unsafe-inline' in modern browsers, providing nonce-equivalent protection
+    // without per-request nonce generation.
+    // Full nonce support would require per-request middleware which conflicts
+    // with ISR/static pages in Next.js App Router — the marginal security gain
+    // does not justify the architectural complexity.
     const cspDirectives = [
       "default-src 'self'",
       `script-src 'self' 'unsafe-inline' 'strict-dynamic' ${process.env.NODE_ENV === 'development' ? "'unsafe-eval'" : ''} https://js.stripe.com https://challenges.cloudflare.com`,
