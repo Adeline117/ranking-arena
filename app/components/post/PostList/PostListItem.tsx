@@ -123,7 +123,7 @@ export const PostListItem = memo(function PostListItem({
       </div>
 
       {/* Title + Tags */}
-      <div style={{ marginTop: 6, fontWeight: 900, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: isMasonry ? 'nowrap' : 'wrap', minWidth: 0 }}>
+      <div style={{ marginTop: 6, fontWeight: 900, lineHeight: 1.25, display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', minWidth: 0 }}>
         <span style={{
           color: translatedListPosts[p.id]?.title ? tokens.colors.accent.translated : tokens.colors.text.primary,
           ...(isMasonry ? {

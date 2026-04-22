@@ -354,6 +354,7 @@
   font-weight: 700;
   color: var(--color-text-quaternary, var(--color-text-tertiary));
   transition: color 0.15s;
+  min-height: 44px; /* Touch-friendly target size for mobile */
 }
 
 .sort-header:hover {
