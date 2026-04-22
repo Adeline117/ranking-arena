@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -133,25 +133,21 @@ export default function WatchlistMarket() {
     }
   }, [watchIds])
 
-  // Defer SWR key until after LCP — prevents simultaneous sidebar fetches from blocking main thread
-  const immediateKey = pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null
-  const swrKey = useDeferredKey(immediateKey, 1200)
+  // Defer query activation until after LCP — prevents simultaneous sidebar fetches from blocking main thread
+  const marketUrl = pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null
+  const deferredReady = useDeferredKey(!!marketUrl, 1200)
 
-  const { data: coins = [], isLoading: loading, error: swrError, mutate: mutateMarket } = useSWR(
-    swrKey,
-    marketFetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 30000,
-      refreshInterval: 60000, // Refresh every 60s
-      keepPreviousData: true,
-      errorRetryCount: 3,
-      errorRetryInterval: 5000,
-      // Suppress error state propagation — fetcher returns [] on failure, so this
-      // only fires for genuine network-level throws (which we already catch).
-      onError: () => { /* silently ignore; UI shows keepPreviousData or empty state */ },
-    }
-  )
+  const { data: coins = [], isLoading: loading, error: swrError, refetch: mutateMarket } = useQuery({
+    queryKey: ['watchlist-market', pairsParam],
+    queryFn: () => marketFetcher(marketUrl!),
+    enabled: !!deferredReady && !!marketUrl,
+    refetchOnWindowFocus: false,
+    staleTime: 30000,
+    refetchInterval: 60000,
+    placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: 5000,
+  })
 
   const toggleCoin = (coinId: string) => {
     setWatchIds(prev => {

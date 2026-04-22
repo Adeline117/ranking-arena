@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import Link from 'next/link'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { formatROI } from '@/lib/utils/format'
 import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
@@ -103,16 +103,15 @@ const fetcher = async (url: string) => {
 export default function TopTraders() {
   const { t } = useLanguage()
 
-  const { data, error, isLoading, mutate } = useSWR<{ traders: Trader[] }>(
-    '/api/sidebar/top-traders',
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 300000, // 5 minute dedup
-      refreshInterval: 600000, // Refresh every 10 min (data updates hourly via cron)
-      errorRetryCount: 2,
-    }
-  )
+  const { data, error, isLoading, refetch } = useQuery<{ traders: Trader[] }>({
+    queryKey: ['sidebar-top-traders'],
+    queryFn: () => fetcher('/api/sidebar/top-traders'),
+    refetchOnWindowFocus: false,
+    staleTime: 300000,
+    refetchInterval: 600000,
+    retry: 2,
+  })
+  const mutate = () => refetch()
 
   const traders = data?.traders || []
   const loading = isLoading
