@@ -16,6 +16,7 @@ const MobileSearchButton = dynamic(() => import('./MobileSearchButton'), { ssr: 
 // Auth-dependent components: only needed when logged in, dynamic to reduce initial bundle
 const NotificationButton = dynamic(() => import('./NotificationButton'), { ssr: false })
 const UserMenuDropdown = dynamic(() => import('./UserMenuDropdown'), { ssr: false })
+const GoProButton = dynamic(() => import('./GoProButton'), { ssr: false })
 
 // Lazy load non-critical components
 const MobileSearchOverlay = dynamic(() => import('../search/MobileSearchOverlay'), { ssr: false })
@@ -121,6 +122,7 @@ export default function TopNavClient({ email = null }: { email?: string | null }
         }}
       >
         <MobileSearchButton onOpen={() => setShowMobileSearch(true)} />
+        <GoProButton />
         <LanguageSwitcher />
         <ThemeToggle />
         {!isReady ? (
