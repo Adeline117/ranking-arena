@@ -20,6 +20,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { logger } from '@/lib/logger'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
@@ -44,18 +45,12 @@ type CronHandler = (
 /**
  * Wrap a cron job handler with auth, logging, and safety timeout.
  */
-export function withCron(
-  jobName: string,
-  handler: CronHandler,
-  options: CronOptions = {}
-) {
+export function withCron(jobName: string, handler: CronHandler, options: CronOptions = {}) {
   const { safetyTimeoutMs = 580_000 } = options
 
   return async (request: NextRequest) => {
-    // 1. Auth verification
-    const authHeader = request.headers.get('authorization')
-    const cronSecret = process.env.CRON_SECRET
-    if (!cronSecret || authHeader !== `Bearer ${cronSecret}`) {
+    // 1. Auth verification (timing-safe)
+    if (!verifyCronSecret(request)) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
@@ -70,7 +65,6 @@ export function withCron(
   }
 
   async function runCron(request: NextRequest, correlationId: string): Promise<NextResponse> {
-
     // 2. Distributed lock — prevent concurrent execution of the same cron job
     const lockKey = `cron:lock:${jobName}`
     const lockTtlSec = Math.ceil(safetyTimeoutMs / 1000)
@@ -117,7 +111,9 @@ export function withCron(
       try {
         await plog.timeout({ reason: 'safety_timeout', safetyTimeoutMs })
         logger.error(`[${jobName}] Safety timeout fired at ${safetyTimeoutMs}ms`)
-      } catch (err) { /* best effort - Telegram/Sentry alert */ }
+      } catch (err) {
+        /* best effort - Telegram/Sentry alert */
+      }
     }, safetyTimeoutMs)
 
     // 6. Execute handler
@@ -128,7 +124,11 @@ export function withCron(
 
       if (safetyFired) {
         // Safety already logged timeout — don't overwrite
-        const timeoutRes = NextResponse.json({ ok: false, error: 'safety_timeout', partial: result })
+        const timeoutRes = NextResponse.json({
+          ok: false,
+          error: 'safety_timeout',
+          partial: result,
+        })
         timeoutRes.headers.set('X-Correlation-ID', correlationId)
         return timeoutRes
       }

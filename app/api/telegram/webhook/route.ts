@@ -9,6 +9,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { handleTelegramUpdate } from '@/lib/services/telegram-bot'
+import { safeCompare } from '@/lib/auth/verify-service-auth'
 import { logger } from '@/lib/logger'
 
 export const runtime = 'nodejs'
@@ -18,7 +19,7 @@ export async function POST(request: NextRequest) {
   // Validate webhook secret
   const secret = request.nextUrl.searchParams.get('secret')
   const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET
-  if (!expectedSecret || secret !== expectedSecret) {
+  if (!expectedSecret || !secret || !safeCompare(secret, expectedSecret)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
