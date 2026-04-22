@@ -22,13 +22,13 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
   return (
     <div
       style={{
-        borderRadius: 12,
+        borderRadius: 14,
         background: 'var(--color-bg-secondary)',
         border: '1px solid var(--glass-border-light)',
-        padding: 'clamp(16px, 3vw, 24px)',
+        padding: 'clamp(18px, 3.5vw, 28px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 14,
       }}
     >
       {/* Section header */}
@@ -36,7 +36,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
         <div
           style={{
             width: 3,
-            height: 20,
+            height: 22,
             borderRadius: 2,
             background: type.gradient,
           }}
@@ -44,9 +44,10 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
         <h3
           style={{
             fontSize: tokens.typography.fontSize.lg,
-            fontWeight: tokens.typography.fontWeight.bold,
+            fontWeight: 700,
             color: 'var(--color-text-primary)',
             margin: 0,
+            letterSpacing: '-0.01em',
           }}
         >
           {tr('quizRecommendTitle')}
@@ -105,21 +106,25 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
             href={`/trader/${encodeURIComponent(trader.handle)}?platform=${encodeURIComponent(trader.platform)}`}
             aria-label={`View ${trader.name} on ${trader.platform.replace(/_/g, ' ')}`}
             style={{
-              padding: '10px 14px',
-              borderRadius: 8,
+              padding: '11px 14px',
+              borderRadius: 10,
               background: 'var(--color-bg-tertiary)',
               border: '1px solid var(--glass-border-light)',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
               textDecoration: 'none',
-              transition: 'border-color 0.2s',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = `${type.color}40`
+              e.currentTarget.style.transform = 'translateY(-1px)'
+              e.currentTarget.style.boxShadow = `0 4px 12px ${type.color}15`
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = 'var(--glass-border-light)'
+              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
             }}
           >
             {/* Avatar */}
@@ -127,7 +132,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               style={{
                 width: 36,
                 height: 36,
-                borderRadius: 8,
+                borderRadius: 10,
                 background: `${type.color}15`,
                 border: `1px solid ${type.color}25`,
                 display: 'flex',
