@@ -1,6 +1,6 @@
 'use client'
 
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 
 export interface LinkedAccountData {
   id: string
@@ -56,7 +56,7 @@ function parseBundledAggregate(
 }
 
 /**
- * SWR-based hook for fetching linked trader accounts.
+ * React Query hook for fetching linked trader accounts.
  * Replaces raw useEffect + fetch in TraderProfileClient and TraderProfileView.
  *
  * P7: Accepts optional `bundledData` from the merged trader detail endpoint.
@@ -70,22 +70,22 @@ export function useLinkedAccounts(
   const parsedBundled = parseBundledAggregate(bundledData)
 
   // P7: Skip separate fetch when bundled data is available
-  const key = (!parsedBundled && platform && traderKey)
-    ? `/api/traders/aggregate?platform=${encodeURIComponent(platform)}&trader_key=${encodeURIComponent(traderKey)}`
-    : null
+  const shouldFetch = !parsedBundled && !!platform && !!traderKey
+  const url = shouldFetch
+    ? `/api/traders/aggregate?platform=${encodeURIComponent(platform!)}&trader_key=${encodeURIComponent(traderKey!)}`
+    : ''
 
-  const { data: swrData, error, isLoading } = useSWR<LinkedAccountsResponse | null>(
-    key,
-    linkedAccountsFetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 60_000,
-      errorRetryCount: 1,
-    }
-  )
+  const { data: queryData, error, isLoading } = useQuery<LinkedAccountsResponse | null>({
+    queryKey: ['linked-accounts', platform, traderKey],
+    queryFn: () => linkedAccountsFetcher(url),
+    enabled: shouldFetch,
+    refetchOnWindowFocus: false,
+    staleTime: 60_000,
+    retry: 1,
+  })
 
-  // Prefer bundled data, fall back to SWR data
-  const data = parsedBundled ?? swrData
+  // Prefer bundled data, fall back to query data
+  const data = parsedBundled ?? queryData
 
   return {
     linkedAccounts: data?.accounts ?? [],
