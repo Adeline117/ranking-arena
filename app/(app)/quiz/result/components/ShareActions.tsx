@@ -83,8 +83,8 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
   const btnStyle: React.CSSProperties = {
     flex: 1,
     minWidth: 80,
-    padding: '8px 12px',
-    borderRadius: 8,
+    padding: '9px 12px',
+    borderRadius: 10,
     border: '1px solid var(--glass-border-light)',
     background: 'var(--color-bg-tertiary)',
     color: 'var(--color-text-primary)',
@@ -95,15 +95,15 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    transition: 'border-color 0.2s',
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
   }
 
   const xPrimaryStyle: React.CSSProperties = {
     width: '100%',
-    padding: '12px 16px',
-    borderRadius: 8,
+    padding: '13px 16px',
+    borderRadius: 12,
     border: 'none',
-    background: 'linear-gradient(135deg, #1a1a2e, #16213e)',
+    background: 'linear-gradient(135deg, #0a0a0a, #1a1a2e)',
     color: '#fff',
     fontSize: 15,
     fontWeight: 600,
@@ -112,8 +112,9 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    transition: 'transform 0.2s, box-shadow 0.2s',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+    transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+    boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+    letterSpacing: '0.01em',
   }
 
   return (

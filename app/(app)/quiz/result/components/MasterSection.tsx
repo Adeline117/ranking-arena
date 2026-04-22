@@ -14,21 +14,21 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
   return (
     <div
       style={{
-        borderRadius: 12,
+        borderRadius: 14,
         background: 'var(--color-bg-secondary)',
         border: '1px solid var(--glass-border-light)',
-        padding: 'clamp(16px, 3vw, 24px)',
+        padding: 'clamp(18px, 3.5vw, 28px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 0, /* Controlled spacing for rhythm */
       }}
     >
       {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
         <div
           style={{
             width: 3,
-            height: 20,
+            height: 22,
             borderRadius: 2,
             background: type.gradient,
           }}
@@ -36,57 +36,64 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         <h3
           style={{
             fontSize: tokens.typography.fontSize.lg,
-            fontWeight: tokens.typography.fontWeight.bold,
+            fontWeight: 700,
             color: 'var(--color-text-primary)',
             margin: 0,
+            letterSpacing: '-0.01em',
           }}
         >
           {tr('quizMasterTitle')}
         </h3>
       </div>
 
-      {/* Master name + years */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {/* Master name + years — tight grouping */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 2, marginBottom: 6 }}>
         <h4
           style={{
-            fontSize: 'clamp(16px, 3.5vw, 20px)',
-            fontWeight: tokens.typography.fontWeight.bold,
+            fontSize: 'clamp(17px, 4vw, 22px)',
+            fontWeight: 800,
             color: type.color,
             margin: 0,
+            letterSpacing: '-0.01em',
           }}
         >
           {tr(master.nameKey)}
         </h4>
         <span
           style={{
-            fontSize: tokens.typography.fontSize.sm,
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: 400,
             color: 'var(--color-text-tertiary)',
           }}
         >
           {tr(master.yearsKey)}
         </span>
-        <span
-          style={{
-            fontSize: tokens.typography.fontSize.base,
-            fontWeight: tokens.typography.fontWeight.semibold,
-            color: 'var(--color-text-secondary)',
-            fontStyle: 'italic',
-            marginTop: 4,
-          }}
-        >
-          {tr(master.taglineKey)}
-        </span>
       </div>
 
-      {/* Bio paragraphs */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* Tagline — italic, moderate weight */}
+      <span
+        style={{
+          fontSize: tokens.typography.fontSize.base,
+          fontWeight: 500,
+          color: 'var(--color-text-secondary)',
+          fontStyle: 'italic',
+          marginBottom: 16,
+          lineHeight: 1.5,
+        }}
+      >
+        {tr(master.taglineKey)}
+      </span>
+
+      {/* Bio paragraphs — generous line height for readability */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 18 }}>
         {master.bioKeys.map((key) => (
           <p
             key={key}
             style={{
               fontSize: tokens.typography.fontSize.base,
+              fontWeight: 400,
               color: 'var(--color-text-secondary)',
-              lineHeight: 1.7,
+              lineHeight: 1.75,
               margin: 0,
             }}
           >
@@ -95,21 +102,24 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         ))}
       </div>
 
-      {/* Famous trade */}
+      {/* Famous trade — highlighted card */}
       <div
         style={{
-          padding: '12px 16px',
-          borderRadius: 8,
-          background: `${type.color}12`,
-          border: `1px solid ${type.color}20`,
+          padding: '14px 16px',
+          borderRadius: 10,
+          background: `${type.color}0A`,
+          border: `1px solid ${type.color}18`,
+          marginBottom: 14,
         }}
       >
         <p
           style={{
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: tokens.typography.fontWeight.semibold,
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: 700,
             color: type.color,
-            margin: '0 0 4px 0',
+            margin: '0 0 6px 0',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
           }}
         >
           {tr('quizFamousTrade')}
@@ -117,8 +127,9 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         <p
           style={{
             fontSize: tokens.typography.fontSize.base,
+            fontWeight: 400,
             color: 'var(--color-text-secondary)',
-            lineHeight: 1.6,
+            lineHeight: 1.65,
             margin: 0,
           }}
         >
@@ -126,16 +137,19 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         </p>
       </div>
 
-      {/* Quote */}
+      {/* Quote — larger border accent */}
       <blockquote
         style={{
           margin: 0,
-          padding: '10px 16px',
+          padding: '12px 18px',
           borderLeft: `3px solid ${type.color}`,
           fontStyle: 'italic',
+          fontWeight: 400,
           color: 'var(--color-text-secondary)',
-          fontSize: tokens.typography.fontSize.base,
-          lineHeight: 1.6,
+          fontSize: '15px',
+          lineHeight: 1.65,
+          background: `${type.color}05`,
+          borderRadius: '0 8px 8px 0',
         }}
       >
         &ldquo;{tr(master.quoteKey)}&rdquo;
