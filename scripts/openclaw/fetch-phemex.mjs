@@ -116,20 +116,73 @@ function parseLeader(item, period) {
   }
 }
 
+// ── Chrome lifecycle helpers ──
+
+import { execSync } from 'child_process'
+
+/** Kill orphan Chrome processes from previous cron runs (not user Chrome) */
+function killOrphanChromeProcesses() {
+  try {
+    // Only kill headless Chrome launched by node/puppeteer — skip user Chrome
+    const out = execSync(
+      `pgrep -f 'Google Chrome.*--headless' 2>/dev/null || true`,
+      { encoding: 'utf8', timeout: 5000 }
+    ).trim()
+    if (out) {
+      const pids = out.split('\n').filter(Boolean)
+      for (const pid of pids) {
+        try { process.kill(Number(pid), 'SIGKILL') } catch {}
+      }
+      console.log(`  [cleanup] Killed ${pids.length} orphan headless Chrome process(es)`)
+    }
+  } catch {}
+}
+
+async function launchBrowserWithRetry(maxRetries = 3) {
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const browser = await puppeteer.launch({
+        headless: 'new',
+        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        args: [
+          '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
+          '--disable-gpu', '--window-size=1440,900',
+          '--disable-blink-features=AutomationControlled',
+        ],
+        timeout: 30000,
+      })
+      // Validate the connection is alive
+      await browser.version()
+      return browser
+    } catch (err) {
+      console.warn(`  [launch] Attempt ${attempt}/${maxRetries} failed: ${err.message}`)
+      if (attempt < maxRetries) {
+        killOrphanChromeProcesses()
+        await new Promise(r => setTimeout(r, 3000 * attempt))
+      } else {
+        throw err
+      }
+    }
+  }
+}
+
+async function closeBrowserSafely(browser) {
+  try {
+    await Promise.race([
+      browser.close(),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('close timeout')), 10000)),
+    ])
+  } catch {
+    const proc = browser.process()
+    if (proc) { proc.kill('SIGKILL'); console.warn('  [cleanup] Force-killed Chrome process') }
+  }
+}
+
 // ── Browser session ──
 
 async function fetchWithBrowser(periods) {
-  const browser = await puppeteer.launch({
-    headless: 'shell',
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    args: [
-      '--no-sandbox',
-      '--disable-setuid-sandbox',
-      '--disable-dev-shm-usage',
-      '--disable-gpu',
-      '--window-size=1440,900',
-    ],
-  })
+  killOrphanChromeProcesses()
+  const browser = await launchBrowserWithRetry()
 
   const results = {}
 
@@ -312,7 +365,7 @@ async function fetchWithBrowser(periods) {
       if (!results[period]) results[period] = { total: 0, saved: 0, error: err.message }
     }
   } finally {
-    await browser.close()
+    await closeBrowserSafely(browser)
   }
 
   return results
