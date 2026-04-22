@@ -3699,6 +3699,7 @@ const ja = {
     footerStatus: 'ステータス',
     footerSlogan: '暗号資産のすべてのランキング',
     footerDisclaimerText: '提供されるデータは情報提供のみを目的としており、投資助言を構成しません。暗号資産取引には重大なリスクが伴います。',
+    footerLegalEntity: 'Arena Team · お問い合わせ: support@arenafi.org',
 
     scoreNoDetails: 'スコアの詳細がありません',
     scoreBreakdownTitle: 'スコア内訳',

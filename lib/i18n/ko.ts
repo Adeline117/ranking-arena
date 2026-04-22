@@ -3935,6 +3935,7 @@ const ko = {
     footerStatus: '상태',
     footerSlogan: '암호화폐의 모든 순위',
     footerDisclaimerText: '제공되는 데이터는 정보 제공 목적으로만 사용되며 투자 조언을 구성하지 않습니다. 암호화폐 거래에는 상당한 위험이 수반됩니다.',
+    footerLegalEntity: 'Arena Team · 연락처: support@arenafi.org',
 
     // Score breakdown
     scoreNoDetails: '점수 상세 정보가 없습니다',

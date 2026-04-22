@@ -205,6 +205,20 @@ export default function Footer() {
       >
         {t('footerDisclaimerText')}
       </p>
+
+      {/* Legal entity + contact */}
+      <p
+        style={{
+          fontSize: tokens.typography.fontSize.xs,
+          color: 'var(--color-text-tertiary)',
+          lineHeight: 1.6,
+          marginTop: 8,
+          marginBottom: 0,
+        }}
+      >
+        {t('footerLegalEntity')}
+        {/* TODO: Add ICP filing number when obtained from legal */}
+      </p>
     </footer>
   )
 }
