@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 import { tokens, newsCategories, newsImportance } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -45,19 +45,19 @@ const fetcher = async (url: string) => {
 export default function NewsFlash() {
   const { language, t } = useLanguage()
 
-  // Defer SWR key until after LCP — prevents simultaneous sidebar fetches from blocking main thread
-  const swrKey = useDeferredKey('/api/flash-news?limit=5&sort=published_at', 1000)
+  // Defer query activation until after LCP — prevents simultaneous sidebar fetches from blocking main thread
+  const deferredReady = useDeferredKey(true, 1000)
 
-  const { data, error, isLoading, mutate } = useSWR(
-    swrKey,
-    fetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 60000,
-      refreshInterval: 120000, // Refresh every 2 minutes
-      errorRetryCount: 2,
-    }
-  )
+  const { data, error, isLoading, refetch } = useQuery({
+    queryKey: ['flash-news'],
+    queryFn: () => fetcher('/api/flash-news?limit=5&sort=published_at'),
+    enabled: !!deferredReady,
+    refetchOnWindowFocus: false,
+    staleTime: 60000,
+    refetchInterval: 120000,
+    retry: 2,
+  })
+  const mutate = () => refetch()
 
   const rawNews: NewsItem[] = data?.data?.news || data?.news || []
   // 去重：按标题去重（防止重复抓取的新闻）

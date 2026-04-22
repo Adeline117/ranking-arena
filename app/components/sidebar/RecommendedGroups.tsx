@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase/client'
 import { localizedLabel } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
@@ -90,20 +90,16 @@ export default function RecommendedGroups() {
   const { language, t } = useLanguage()
   const auth = useUnifiedAuth()
 
-  const { data, error, isLoading: loading, mutate } = useSWR(
-    ['recommended-groups', auth.accessToken],
-    ([, token]) => fetchRecommendedGroups(token),
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 300000,
-      keepPreviousData: true,
-      errorRetryCount: 3,
-      onErrorRetry: (err, _key, _config, revalidate, { retryCount }) => {
-        if (retryCount >= 3) return
-        setTimeout(() => revalidate({ retryCount }), 1000 * Math.pow(2, retryCount))
-      },
-    }
-  )
+  const { data, error, isLoading: loading, refetch } = useQuery({
+    queryKey: ['recommended-groups', auth.accessToken],
+    queryFn: () => fetchRecommendedGroups(auth.accessToken),
+    refetchOnWindowFocus: false,
+    staleTime: 300000,
+    placeholderData: (prev) => prev,
+    retry: 3,
+    retryDelay: (attempt) => 1000 * Math.pow(2, attempt),
+  })
+  const mutate = () => refetch()
 
   const groups = data?.groups || []
   const isPersonalized = data?.personalized || false

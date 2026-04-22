@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 // Use plain <img> for crypto icons (SVGs cause 400 on Vercel image optimizer)
 import { tokens } from '@/lib/design-tokens'
 
@@ -38,11 +38,13 @@ const spotFetcher = async (url: string): Promise<TickerCoin[]> => {
 }
 
 export default function PriceTicker() {
-  const { data: coins = [], error: swrError, isLoading: loading } = useSWR<TickerCoin[]>(
-    '/api/market/spot',
-    spotFetcher,
-    { refreshInterval: 30_000, revalidateOnFocus: true, dedupingInterval: 10_000 }
-  )
+  const { data: coins = [], error: swrError, isLoading: loading } = useQuery<TickerCoin[]>({
+    queryKey: ['price-ticker'],
+    queryFn: () => spotFetcher('/api/market/spot'),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    staleTime: 10_000,
+  })
   const [imgErrors, setImgErrors] = useState<Set<string>>(new Set())
   const error = swrError ? (swrError instanceof Error ? swrError.message : 'Failed to load') : null
 

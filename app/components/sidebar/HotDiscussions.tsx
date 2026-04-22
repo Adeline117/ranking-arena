@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import useSWR from 'swr'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 // Supabase: dynamic import — only used for auth check in translate call (non-critical)
 const getSb = () => import('@/lib/supabase/client').then(m => m.supabase as import('@supabase/supabase-js').SupabaseClient)
 import { tokens } from '@/lib/design-tokens'
@@ -149,23 +149,20 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
 
   const targetLang = language
-  // Defer SWR key until after LCP — prevents simultaneous sidebar fetches from blocking main thread
-  const immediateKey = ['hot-discussions', limit, language] as const
-  const swrKey = useDeferredKey(immediateKey, 1400)
+  const queryClient = useQueryClient()
+  // Defer query activation until after LCP — prevents simultaneous sidebar fetches from blocking main thread
+  const deferredReady = useDeferredKey(true, 1400)
 
-  const { data: posts = [], isLoading: loading, error: swrError, mutate } = useSWR(
-    swrKey,
-    ([key, lim, _lang]) => fetchHotPosts(key, lim, targetLang),
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 180000,
-      errorRetryCount: 3,
-      onErrorRetry: (err, _key, _config, revalidate, { retryCount }) => {
-        if (retryCount >= 3) return
-        setTimeout(() => revalidate({ retryCount }), 1000 * Math.pow(2, retryCount))
-      },
-    }
-  )
+  const { data: posts = [], isLoading: loading, error: swrError, refetch } = useQuery({
+    queryKey: ['hot-discussions', limit, language],
+    queryFn: () => fetchHotPosts('hot-discussions', limit, targetLang),
+    enabled: !!deferredReady,
+    refetchOnWindowFocus: false,
+    staleTime: 180000,
+    retry: 3,
+    retryDelay: (attempt) => 1000 * Math.pow(2, attempt),
+  })
+  const mutate = () => refetch()
 
   function getTitle(post: HotPost): string {
     const text = (post.title || post.content || '').replace(/\[sticker:\w+\]/g, '').trim()
