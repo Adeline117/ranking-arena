@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
@@ -10,6 +10,7 @@ import { logger } from '@/lib/logger'
 
 export function useAdminAuth() {
   const router = useRouter()
+  const pathname = usePathname()
   const [email, setEmail] = useState<string | null>(null)
   const [accessToken, setAccessToken] = useState<string | null>(null)
   const [isAdmin, setIsAdmin] = useState(false)
@@ -27,7 +28,7 @@ export function useAdminAuth() {
       const { data: { session } } = await supabase.auth.getSession()
       
       if (!session?.user) {
-        router.push('/login?redirect=/admin')
+        router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`)
         return
       }
 
@@ -52,7 +53,7 @@ export function useAdminAuth() {
       setAuthChecking(false)
     } catch (error) {
       logger.error('Auth check failed:', error)
-      router.push('/login')
+      router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`)
     }
   }
 
