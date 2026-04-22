@@ -174,6 +174,21 @@ const prevPost = posts.find((p) => p.id === id) // stale after re-render!
 // On error: setPosts(prev => prev.map(p => p.id === id ? { ...p, like_count: prevPost.like_count } : p))
 ```
 
+### Notifications — MANDATORY
+
+All user-facing API routes MUST use `sendNotification()` or `sendNotifications()` from `lib/data/notifications.ts`. NEVER use raw `supabase.from('notifications').insert()` in API routes.
+
+```typescript
+import { sendNotification } from '@/lib/data/notifications'
+sendNotification(
+  supabase,
+  { user_id, type, title, message, actor_id, link, reference_id },
+  'Context'
+)
+```
+
+These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same actor+type+reference within 1h skipped), (3) error isolation (failures don't affect main flow). Only cron batch jobs may use direct insert.
+
 ### Database
 
 - Always use RLS policies (enabled on all tables)
