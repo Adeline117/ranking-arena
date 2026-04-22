@@ -16,6 +16,7 @@ import { fetchBinancePositionHistory } from '@/lib/cron/fetchers/enrichment-bina
 import { upsertPositionHistory } from '@/lib/cron/fetchers/enrichment-db'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { logger } from '@/lib/logger'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -31,6 +32,11 @@ function sleep(ms: number) {
 export async function GET(req: Request) {
   if (!isAuthorized(req)) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
+
+  const releaseLock = await acquireCronLock('snapshot-positions', { ttlSeconds: 180 })
+  if (!releaseLock) {
+    return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
 
   const plog = await PipelineLogger.start('snapshot-positions')
@@ -58,9 +64,12 @@ export async function GET(req: Request) {
         .order('arena_score', { ascending: false })
         .limit(50)
       if (error) {
-        if (attempt >= 3) throw new Error(`Failed to query traders (attempt ${attempt}): ${error.message}`)
+        if (attempt >= 3)
+          throw new Error(`Failed to query traders (attempt ${attempt}): ${error.message}`)
         const backoffMs = 2000 * attempt
-        logger.warn(`[snapshot-positions] query attempt ${attempt} failed (${error.message}), retrying in ${backoffMs}ms`)
+        logger.warn(
+          `[snapshot-positions] query attempt ${attempt} failed (${error.message}), retrying in ${backoffMs}ms`
+        )
         await sleep(backoffMs)
         return queryTraders(attempt + 1)
       }
@@ -91,7 +100,9 @@ export async function GET(req: Request) {
     for (let i = 0; i < traderIds.length; i += CONCURRENCY) {
       // Time budget check — finalize plog.success(partial) before Vercel kills us
       if (Date.now() - startedAt > TIME_BUDGET_MS) {
-        logger.warn(`[snapshot-positions] time budget exceeded at trader ${i}/${traderIds.length}, finalizing partial`)
+        logger.warn(
+          `[snapshot-positions] time budget exceeded at trader ${i}/${traderIds.length}, finalizing partial`
+        )
         timedOut = true
         break
       }
@@ -134,13 +145,17 @@ export async function GET(req: Request) {
     }
 
     if (timedOut) {
-      await plog.partialSuccess(totalPositions, [`time_budget_exceeded:${successCount}/${traderIds.length}`], {
-        traders: traderIds.length,
-        success: successCount,
-        failed: failCount,
-        positions: totalPositions,
-        timedOut: true,
-      })
+      await plog.partialSuccess(
+        totalPositions,
+        [`time_budget_exceeded:${successCount}/${traderIds.length}`],
+        {
+          traders: traderIds.length,
+          success: successCount,
+          failed: failCount,
+          positions: totalPositions,
+          timedOut: true,
+        }
+      )
     } else {
       await plog.success(totalPositions, {
         traders: traderIds.length,
@@ -163,5 +178,7 @@ export async function GET(req: Request) {
     const message = error instanceof Error ? error.message : 'Unknown error'
     logger.error(`[snapshot-positions] ${message}`)
     return NextResponse.json({ error: message }, { status: 500 })
+  } finally {
+    await releaseLock()
   }
 }

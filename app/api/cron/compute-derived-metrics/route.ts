@@ -16,6 +16,7 @@ import { env } from '@/lib/env'
 import { DATA_QUALITY_BOUNDARY, VALIDATION_BOUNDS } from '@/lib/pipeline/types'
 import { calculateBeta, calculateAlpha } from '@/lib/utils/market-correlation'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -23,6 +24,11 @@ export const maxDuration = 300
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const releaseLock = await acquireCronLock('compute-derived-metrics', { ttlSeconds: 300 })
+  if (!releaseLock) {
+    return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
 
   const supabase = getSupabaseAdmin()
@@ -41,8 +47,11 @@ export async function GET(request: NextRequest) {
 
     // Get distinct platforms from daily snapshots (more reliable)
     // Use the later of 90-days-ago or DATA_QUALITY_BOUNDARY (imported from lib/pipeline/types.ts)
-    const rawNinetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000).toISOString().split('T')[0]
-    const ninetyDaysAgo = rawNinetyDaysAgo > DATA_QUALITY_BOUNDARY ? rawNinetyDaysAgo : DATA_QUALITY_BOUNDARY
+    const rawNinetyDaysAgo = new Date(Date.now() - 90 * 24 * 3600 * 1000)
+      .toISOString()
+      .split('T')[0]
+    const ninetyDaysAgo =
+      rawNinetyDaysAgo > DATA_QUALITY_BOUNDARY ? rawNinetyDaysAgo : DATA_QUALITY_BOUNDARY
 
     // Fetch all platform names from recent daily snapshots
     const { data: distinctPlatforms } = await readDb
@@ -51,7 +60,7 @@ export async function GET(request: NextRequest) {
       .gte('date', ninetyDaysAgo)
       .limit(50000)
 
-    const platforms = [...new Set((distinctPlatforms || []).map(r => r.platform))]
+    const platforms = [...new Set((distinctPlatforms || []).map((r) => r.platform))]
 
     if (platforms.length === 0) {
       await plog.success(0)
@@ -113,7 +122,8 @@ export async function GET(request: NextRequest) {
     }
 
     // Compute Sharpe ratio from daily returns
-    const sharpeUpdates: Array<{ source: string; source_trader_id: string; sharpe_ratio: number }> = []
+    const sharpeUpdates: Array<{ source: string; source_trader_id: string; sharpe_ratio: number }> =
+      []
     // Compute win_rate from daily returns
     const wrUpdates: Array<{ source: string; source_trader_id: string; win_rate: number }> = []
 
@@ -128,7 +138,10 @@ export async function GET(request: NextRequest) {
         const stdDev = Math.sqrt(variance)
         if (stdDev > 0) {
           const sharpe = (mean / stdDev) * Math.sqrt(365)
-          if (sharpe >= VALIDATION_BOUNDS.sharpe_ratio.min && sharpe <= VALIDATION_BOUNDS.sharpe_ratio.max) {
+          if (
+            sharpe >= VALIDATION_BOUNDS.sharpe_ratio.min &&
+            sharpe <= VALIDATION_BOUNDS.sharpe_ratio.max
+          ) {
             sharpeUpdates.push({
               source: platform,
               source_trader_id: trader_key,
@@ -140,9 +153,13 @@ export async function GET(request: NextRequest) {
 
       // Win rate: need at least 5 trading days
       if (returns.length >= 5) {
-        const wins = returns.filter(r => r > 0).length
+        const wins = returns.filter((r) => r > 0).length
         const wr = (wins / returns.length) * 100
-        wrUpdates.push({ source: platform, source_trader_id: trader_key, win_rate: Math.round(wr * 10) / 10 })
+        wrUpdates.push({
+          source: platform,
+          source_trader_id: trader_key,
+          win_rate: Math.round(wr * 10) / 10,
+        })
       }
     }
 
@@ -162,12 +179,21 @@ export async function GET(request: NextRequest) {
       }
       if (maxDD > 0 && maxDD <= 100) {
         const [platform, ...parts] = key.split(':')
-        mddUpdates.push({ source: platform, source_trader_id: parts.join(':'), max_drawdown: Math.round(maxDD * 100) / 100 })
+        mddUpdates.push({
+          source: platform,
+          source_trader_id: parts.join(':'),
+          max_drawdown: Math.round(maxDD * 100) / 100,
+        })
       }
     }
 
     // ── Compute beta_btc, beta_eth, alpha from daily returns vs market benchmarks ──
-    const betaAlphaUpdates: Array<{ key: string; beta_btc: number; beta_eth: number; alpha: number | null }> = []
+    const betaAlphaUpdates: Array<{
+      key: string
+      beta_btc: number
+      beta_eth: number
+      alpha: number | null
+    }> = []
 
     // Fetch BTC and ETH daily returns from market_benchmarks table
     const { data: benchmarkRows } = await readDb
@@ -215,9 +241,10 @@ export async function GET(request: NextRequest) {
         // Compute alpha (Jensen's Alpha) using total returns
         const traderTotalReturn = traderReturns.reduce((a, b) => a + b, 0)
         const btcTotalReturn = btcReturns.reduce((a, b) => a + b, 0)
-        const alpha = betaBtc != null
-          ? calculateAlpha(traderTotalReturn, btcTotalReturn, betaBtc, traderReturns.length)
-          : null
+        const alpha =
+          betaBtc != null
+            ? calculateAlpha(traderTotalReturn, btcTotalReturn, betaBtc, traderReturns.length)
+            : null
 
         betaAlphaUpdates.push({
           key,
@@ -227,16 +254,26 @@ export async function GET(request: NextRequest) {
         })
       }
 
-      logger.info(`[compute-derived-metrics] Computed beta/alpha for ${betaAlphaUpdates.length} traders (BTC dates: ${btcReturnsByDate.size}, ETH dates: ${ethReturnsByDate.size})`)
+      logger.info(
+        `[compute-derived-metrics] Computed beta/alpha for ${betaAlphaUpdates.length} traders (BTC dates: ${btcReturnsByDate.size}, ETH dates: ${ethReturnsByDate.size})`
+      )
     } else {
-      logger.warn(`[compute-derived-metrics] Insufficient benchmark data for beta/alpha (BTC: ${btcReturnsByDate.size} days, ETH: ${ethReturnsByDate.size} days, need 14+)`)
+      logger.warn(
+        `[compute-derived-metrics] Insufficient benchmark data for beta/alpha (BTC: ${btcReturnsByDate.size} days, ETH: ${ethReturnsByDate.size} days, need 14+)`
+      )
     }
 
     // Build unified update records for bulk RPC
     const allMetricUpdates: Array<{
-      platform: string; trader_key: string; window: string;
-      sharpe_ratio: number | null; max_drawdown: number | null; win_rate: number | null;
-      beta_btc: number | null; beta_eth: number | null; alpha: number | null;
+      platform: string
+      trader_key: string
+      window: string
+      sharpe_ratio: number | null
+      max_drawdown: number | null
+      win_rate: number | null
+      beta_btc: number | null
+      beta_eth: number | null
+      alpha: number | null
     }> = []
 
     const mddByKey = new Map<string, number>()
@@ -251,9 +288,16 @@ export async function GET(request: NextRequest) {
     for (const upd of sharpeUpdates) {
       sharpeByKey.set(`${upd.source}:${upd.source_trader_id}`, upd.sharpe_ratio)
     }
-    const betaAlphaByKey = new Map<string, { beta_btc: number; beta_eth: number; alpha: number | null }>()
+    const betaAlphaByKey = new Map<
+      string,
+      { beta_btc: number; beta_eth: number; alpha: number | null }
+    >()
     for (const upd of betaAlphaUpdates) {
-      betaAlphaByKey.set(upd.key, { beta_btc: upd.beta_btc, beta_eth: upd.beta_eth, alpha: upd.alpha })
+      betaAlphaByKey.set(upd.key, {
+        beta_btc: upd.beta_btc,
+        beta_eth: upd.beta_eth,
+        alpha: upd.alpha,
+      })
     }
 
     const allTraderKeys = new Set<string>()
@@ -287,11 +331,15 @@ export async function GET(request: NextRequest) {
       const RPC_BATCH = 1000
       for (let i = 0; i < allMetricUpdates.length; i += RPC_BATCH) {
         const batch = allMetricUpdates.slice(i, i + RPC_BATCH)
-        const { data: count, error: rpcError } = await supabase
-          .rpc('bulk_update_snapshot_metrics', { updates: batch })
+        const { data: count, error: rpcError } = await supabase.rpc(
+          'bulk_update_snapshot_metrics',
+          { updates: batch }
+        )
 
         if (rpcError) {
-          logger.warn(`[compute-derived-metrics] bulk_update_snapshot_metrics RPC error: ${rpcError.message}`)
+          logger.warn(
+            `[compute-derived-metrics] bulk_update_snapshot_metrics RPC error: ${rpcError.message}`
+          )
         } else {
           totalUpdated += (count as number) || 0
         }
@@ -300,7 +348,9 @@ export async function GET(request: NextRequest) {
 
     const duration = Date.now() - startTime
 
-    logger.info(`[compute-derived-metrics] Updated ${totalUpdated} rows (sharpe=${sharpeUpdates.length}, mdd=${mddUpdates.length}, wr=${wrUpdates.length}, beta/alpha=${betaAlphaUpdates.length} traders) in ${duration}ms`)
+    logger.info(
+      `[compute-derived-metrics] Updated ${totalUpdated} rows (sharpe=${sharpeUpdates.length}, mdd=${mddUpdates.length}, wr=${wrUpdates.length}, beta/alpha=${betaAlphaUpdates.length} traders) in ${duration}ms`
+    )
 
     await plog.success(totalUpdated, {
       sharpeTraders: sharpeUpdates.length,
@@ -324,8 +374,13 @@ export async function GET(request: NextRequest) {
     logger.apiError('/api/cron/compute-derived-metrics', error, {})
     await plog.error(error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     )
+  } finally {
+    await releaseLock()
   }
 }

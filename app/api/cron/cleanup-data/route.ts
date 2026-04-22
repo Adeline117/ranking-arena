@@ -21,6 +21,7 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { refreshComputedMetrics } from '@/lib/cron/metrics-backfill'
 import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -28,6 +29,11 @@ export const maxDuration = 300
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const releaseLock = await acquireCronLock('cleanup-data', { ttlSeconds: 300 })
+  if (!releaseLock) {
+    return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -130,7 +136,9 @@ export async function GET(request: NextRequest) {
           }
         }
         if (notificationsCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned up ${notificationsCleaned} old notifications (read>90d + all>365d)`)
+          logger.info(
+            `[cleanup-data] Cleaned up ${notificationsCleaned} old notifications (read>90d + all>365d)`
+          )
         }
       } catch (err) {
         logger.warn(`[cleanup-data] notifications cleanup failed: ${err}`)
@@ -150,7 +158,9 @@ export async function GET(request: NextRequest) {
         let batchCount = 0
         do {
           if (!hasTimeBudget()) {
-            logger.warn(`[cleanup-data] pipeline_logs: time budget exceeded after ${batchCount} batches, ${pipelineLogsCleaned} deleted`)
+            logger.warn(
+              `[cleanup-data] pipeline_logs: time budget exceeded after ${batchCount} batches, ${pipelineLogsCleaned} deleted`
+            )
             break
           }
           const { count, error: logsErr } = await supabase
@@ -167,7 +177,9 @@ export async function GET(request: NextRequest) {
           batchCount++
         } while (batchDeleted === DELETE_BATCH_SIZE && batchCount < MAX_BATCHES)
         if (pipelineLogsCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned up ${pipelineLogsCleaned} old pipeline_logs (>30d) in ${batchCount} batches`)
+          logger.info(
+            `[cleanup-data] Cleaned up ${pipelineLogsCleaned} old pipeline_logs (>30d) in ${batchCount} batches`
+          )
         }
       } catch (err) {
         logger.warn(`[cleanup-data] pipeline_logs cleanup failed: ${err}`)
@@ -187,7 +199,9 @@ export async function GET(request: NextRequest) {
         let batchCount = 0
         do {
           if (!hasTimeBudget()) {
-            logger.warn(`[cleanup-data] trader_activities: time budget exceeded after ${batchCount} batches, ${traderActivitiesCleaned} deleted`)
+            logger.warn(
+              `[cleanup-data] trader_activities: time budget exceeded after ${batchCount} batches, ${traderActivitiesCleaned} deleted`
+            )
             break
           }
           const { count, error: actErr } = await supabase
@@ -206,7 +220,9 @@ export async function GET(request: NextRequest) {
           batchCount++
         } while (batchDeleted === DELETE_BATCH_SIZE && batchCount < MAX_ACT_BATCHES)
         if (traderActivitiesCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned up ${traderActivitiesCleaned} old trader_activities (>90d) in ${batchCount} batches`)
+          logger.info(
+            `[cleanup-data] Cleaned up ${traderActivitiesCleaned} old trader_activities (>90d) in ${batchCount} batches`
+          )
         }
       } catch (err) {
         logger.warn(`[cleanup-data] trader_activities cleanup failed: ${err}`)
@@ -226,7 +242,9 @@ export async function GET(request: NextRequest) {
         let batchCount = 0
         do {
           if (!hasTimeBudget()) {
-            logger.warn(`[cleanup-data] authorization_sync_logs: time budget exceeded after ${batchCount} batches, ${authSyncLogsCleaned} deleted`)
+            logger.warn(
+              `[cleanup-data] authorization_sync_logs: time budget exceeded after ${batchCount} batches, ${authSyncLogsCleaned} deleted`
+            )
             break
           }
           const { count, error: syncErr } = await supabase
@@ -236,7 +254,9 @@ export async function GET(request: NextRequest) {
             .limit(DELETE_BATCH_SIZE)
           if (syncErr) {
             if (!syncErr.message?.includes('does not exist')) {
-              logger.warn(`[cleanup-data] authorization_sync_logs cleanup error: ${syncErr.message}`)
+              logger.warn(
+                `[cleanup-data] authorization_sync_logs cleanup error: ${syncErr.message}`
+              )
             }
             break
           }
@@ -245,7 +265,9 @@ export async function GET(request: NextRequest) {
           batchCount++
         } while (batchDeleted === DELETE_BATCH_SIZE && batchCount < MAX_AUTH_BATCHES)
         if (authSyncLogsCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned up ${authSyncLogsCleaned} old authorization_sync_logs (>30d) in ${batchCount} batches`)
+          logger.info(
+            `[cleanup-data] Cleaned up ${authSyncLogsCleaned} old authorization_sync_logs (>30d) in ${batchCount} batches`
+          )
         }
       } catch (err) {
         logger.warn(`[cleanup-data] authorization_sync_logs cleanup failed: ${err}`)
@@ -266,7 +288,9 @@ export async function GET(request: NextRequest) {
           .limit(5000)
         if (!rejErr && count) rejectedWritesCleaned = count
         if (rejectedWritesCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned ${rejectedWritesCleaned} old pipeline_rejected_writes (>7d)`)
+          logger.info(
+            `[cleanup-data] Cleaned ${rejectedWritesCleaned} old pipeline_rejected_writes (>7d)`
+          )
         }
       } catch (err) {
         logger.warn(`[cleanup-data] pipeline_rejected_writes cleanup failed: ${err}`)
@@ -337,7 +361,9 @@ export async function GET(request: NextRequest) {
         const { PipelineState } = await import('@/lib/services/pipeline-state')
         pipelineStateCleaned = await PipelineState.cleanupStale(7 * 24 * 3600 * 1000)
         if (pipelineStateCleaned > 0) {
-          logger.info(`[cleanup-data] Cleaned up ${pipelineStateCleaned} stale pipeline_state entries (>7d)`)
+          logger.info(
+            `[cleanup-data] Cleaned up ${pipelineStateCleaned} stale pipeline_state entries (>7d)`
+          )
         }
       } catch (err) {
         logger.warn(`[cleanup-data] pipeline_state cleanup failed: ${err}`)
@@ -356,17 +382,27 @@ export async function GET(request: NextRequest) {
         metricsResult = await Promise.race([
           refreshComputedMetrics(supabase),
           new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error(`Metrics refresh timed out after ${Math.round(metricsTimeout / 1000)}s`)), metricsTimeout)
+            setTimeout(
+              () =>
+                reject(
+                  new Error(`Metrics refresh timed out after ${Math.round(metricsTimeout / 1000)}s`)
+                ),
+              metricsTimeout
+            )
           ),
         ])
-        logger.info(`[cleanup-data] Metrics refresh: sharpe=${metricsResult.sharpeUpdated}, wr=${metricsResult.winRateUpdated}, mdd=${metricsResult.maxDrawdownUpdated}, score=${metricsResult.arenaScoreUpdated}`)
+        logger.info(
+          `[cleanup-data] Metrics refresh: sharpe=${metricsResult.sharpeUpdated}, wr=${metricsResult.winRateUpdated}, mdd=${metricsResult.maxDrawdownUpdated}, score=${metricsResult.arenaScoreUpdated}`
+        )
       } catch (err) {
         logger.warn(`[cleanup-data] Metrics refresh failed: ${err}`)
         stepErrors.push(`metrics_refresh: ${err instanceof Error ? err.message : String(err)}`)
       }
     } else {
       skippedSteps.push('metrics_refresh')
-      logger.warn(`[cleanup-data] Skipping metrics refresh — only ${Math.round(metricsTimeRemaining / 1000)}s left in time budget`)
+      logger.warn(
+        `[cleanup-data] Skipping metrics refresh — only ${Math.round(metricsTimeRemaining / 1000)}s left in time budget`
+      )
     }
 
     // ── ANALYZE on large tables (with per-table timeout) ─────────
@@ -396,10 +432,21 @@ export async function GET(request: NextRequest) {
     const duration = Date.now() - startTime
     const hasErrors = stepErrors.length > 0
 
-    const totalCleaned = hotTopicsCleaned + flashNewsCleaned + notificationsCleaned + pipelineLogsCleaned + traderActivitiesCleaned + authSyncLogsCleaned + stripeEventsCleaned + liquidationsCleaned + pipelineStateCleaned
+    const totalCleaned =
+      hotTopicsCleaned +
+      flashNewsCleaned +
+      notificationsCleaned +
+      pipelineLogsCleaned +
+      traderActivitiesCleaned +
+      authSyncLogsCleaned +
+      stripeEventsCleaned +
+      liquidationsCleaned +
+      pipelineStateCleaned
 
     if (skippedSteps.length > 0) {
-      logger.warn(`[cleanup-data] Time budget: skipped ${skippedSteps.length} steps after ${Math.round(duration / 1000)}s: ${skippedSteps.join(', ')}`)
+      logger.warn(
+        `[cleanup-data] Time budget: skipped ${skippedSteps.length} steps after ${Math.round(duration / 1000)}s: ${skippedSteps.join(', ')}`
+      )
     }
 
     const resultMeta = {
@@ -419,7 +466,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (skippedSteps.length > 0 || hasErrors) {
-      await plog.partialSuccess(totalCleaned, [...stepErrors, ...skippedSteps.map(s => `skipped:${s}`)], resultMeta)
+      await plog.partialSuccess(
+        totalCleaned,
+        [...stepErrors, ...skippedSteps.map((s) => `skipped:${s}`)],
+        resultMeta
+      )
     } else {
       await plog.success(totalCleaned, resultMeta)
     }
@@ -433,8 +484,13 @@ export async function GET(request: NextRequest) {
     logger.apiError('/api/cron/cleanup-data', error, {})
     await plog.error(error)
     return NextResponse.json(
-      { error: 'Internal server error', details: error instanceof Error ? error.message : 'Unknown error' },
+      {
+        error: 'Internal server error',
+        details: error instanceof Error ? error.message : 'Unknown error',
+      },
       { status: 500 }
     )
+  } finally {
+    await releaseLock()
   }
 }

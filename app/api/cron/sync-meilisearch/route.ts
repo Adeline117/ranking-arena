@@ -20,6 +20,7 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { env } from '@/lib/env'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120 // Increased from 60s — paginated Supabase queries can be slow
@@ -35,10 +36,11 @@ const SEASONS = ['7D', '30D', '90D'] as const
 const TIME_BUDGET_MS = 90_000 // 90s — leaves 30s buffer for response + cleanup
 
 async function meiliRequest(path: string, method: string, body?: unknown) {
-  if (!MEILI_URL || !MEILI_KEY) throw new Error('MEILISEARCH_URL or MEILISEARCH_ADMIN_KEY not configured')
+  if (!MEILI_URL || !MEILI_KEY)
+    throw new Error('MEILISEARCH_URL or MEILISEARCH_ADMIN_KEY not configured')
   const res = await fetch(`${MEILI_URL}${path}`, {
     method,
-    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${MEILI_KEY}` },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${MEILI_KEY}` },
     ...(body ? { body: JSON.stringify(body) } : {}),
     signal: AbortSignal.timeout(30000),
   })
@@ -53,6 +55,11 @@ export async function GET(request: NextRequest) {
 
   if (!MEILI_URL || !MEILI_KEY) {
     return NextResponse.json({ error: 'Meilisearch not configured' }, { status: 200 })
+  }
+
+  const releaseLock = await acquireCronLock('sync-meilisearch', { ttlSeconds: 180 })
+  if (!releaseLock) {
+    return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
 
   const plog = await PipelineLogger.start('sync-meilisearch')
@@ -76,9 +83,14 @@ export async function GET(request: NextRequest) {
 
     // Ensure season_id is filterable in Meilisearch index
     try {
-      await meiliRequest('/indexes/traders/settings/filterable-attributes', 'PUT',
-        ['platform', 'trader_type', 'arena_score', 'roi', 'rank', 'season_id']
-      )
+      await meiliRequest('/indexes/traders/settings/filterable-attributes', 'PUT', [
+        'platform',
+        'trader_type',
+        'arena_score',
+        'roi',
+        'rank',
+        'season_id',
+      ])
     } catch {
       // Non-critical — settings may already be configured
     }
@@ -91,7 +103,9 @@ export async function GET(request: NextRequest) {
       // Time budget check: stop starting new seasons if we're running low
       const elapsed = Date.now() - startTime
       if (elapsed > TIME_BUDGET_MS) {
-        logger.warn(`Time budget exhausted (${elapsed}ms > ${TIME_BUDGET_MS}ms), skipping season ${season}`)
+        logger.warn(
+          `Time budget exhausted (${elapsed}ms > ${TIME_BUDGET_MS}ms), skipping season ${season}`
+        )
         seasonErrors[season] = 'skipped: time budget exhausted'
         continue
       }
@@ -100,13 +114,15 @@ export async function GET(request: NextRequest) {
         // Paginated fetch from leaderboard_ranks (incremental: only changed since lastSync)
         const allData: Record<string, unknown>[] = []
         let offset = 0
-        const pageSize = 500  // Reduced from 1000 to avoid statement_timeout on large windows
-        const MAX_PAGES = 10  // 5K traders per season is plenty for search (reduced from 20)
+        const pageSize = 500 // Reduced from 1000 to avoid statement_timeout on large windows
+        const MAX_PAGES = 10 // 5K traders per season is plenty for search (reduced from 20)
         let pageCount = 0
         while (true) {
           // Check time budget before each page fetch
           if (Date.now() - startTime > TIME_BUDGET_MS) {
-            logger.warn(`Time budget hit during ${season} pagination at page ${pageCount}, using ${allData.length} traders fetched so far`)
+            logger.warn(
+              `Time budget hit during ${season} pagination at page ${pageCount}, using ${allData.length} traders fetched so far`
+            )
             break
           }
 
@@ -119,10 +135,12 @@ export async function GET(request: NextRequest) {
           // The is_outlier filter is baked into the partial index, no need for .or() in query.
           let query = supabase
             .from('leaderboard_ranks')
-            .select('source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at')
+            .select(
+              'source, source_trader_id, handle, avatar_url, roi, pnl, arena_score, win_rate, max_drawdown, followers, rank, trader_type, computed_at'
+            )
             .eq('season_id', season)
             .gt('arena_score', 0)
-            .eq('is_outlier', false)  // All 44K active rows are false; .or() defeats index
+            .eq('is_outlier', false) // All 44K active rows are false; .or() defeats index
 
           // Incremental: only fetch traders updated since last sync
           if (!isFull) {
@@ -135,8 +153,13 @@ export async function GET(request: NextRequest) {
 
           if (error) {
             // If statement timeout, log and break out of this season (don't crash the whole sync)
-            if (error.message.includes('statement timeout') || error.message.includes('canceling statement')) {
-              logger.warn(`Statement timeout on season ${season} page ${pageCount}, using ${allData.length} traders fetched so far`)
+            if (
+              error.message.includes('statement timeout') ||
+              error.message.includes('canceling statement')
+            ) {
+              logger.warn(
+                `Statement timeout on season ${season} page ${pageCount}, using ${allData.length} traders fetched so far`
+              )
               break
             }
             throw new Error(`Supabase query failed (${season}): ${error.message}`)
@@ -152,7 +175,9 @@ export async function GET(request: NextRequest) {
           id: `${String(r.source)}--${String(r.source_trader_id || '').replace(/[^a-zA-Z0-9_-]/g, '_')}--${season}`,
           handle: String(r.handle || r.source_trader_id || ''),
           platform: String(r.source || ''),
-          platform_name: EXCHANGE_CONFIG[r.source as keyof typeof EXCHANGE_CONFIG]?.name || String(r.source || ''),
+          platform_name:
+            EXCHANGE_CONFIG[r.source as keyof typeof EXCHANGE_CONFIG]?.name ||
+            String(r.source || ''),
           season_id: season,
           roi: Number(r.roi ?? 0),
           pnl: Number(r.pnl ?? 0),
@@ -187,7 +212,13 @@ export async function GET(request: NextRequest) {
       const elapsed = Date.now() - startTime
       logger.info(`Meilisearch incremental sync: no changes since ${lastSync} (${elapsed}ms)`)
       await plog.success(0, { elapsed_ms: elapsed, message: 'no changes', errors: seasonErrors })
-      return NextResponse.json({ ok: true, traders: 0, message: 'no changes', elapsed_ms: elapsed, errors: seasonErrors })
+      return NextResponse.json({
+        ok: true,
+        traders: 0,
+        message: 'no changes',
+        elapsed_ms: elapsed,
+        errors: seasonErrors,
+      })
     }
 
     // Update last sync timestamp in DB (persistent, no TTL expiry risk)
@@ -198,15 +229,29 @@ export async function GET(request: NextRequest) {
 
     const elapsed = Date.now() - startTime
     const hasErrors = Object.keys(seasonErrors).length > 0
-    logger.info(`Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms${isFull ? ' [full]' : ' [incremental]'}${hasErrors ? ` errors: ${JSON.stringify(seasonErrors)}` : ''}`)
+    logger.info(
+      `Meilisearch synced: ${totalSynced} traders (${JSON.stringify(seasonCounts)}) in ${elapsed}ms${isFull ? ' [full]' : ' [incremental]'}${hasErrors ? ` errors: ${JSON.stringify(seasonErrors)}` : ''}`
+    )
 
     if (hasErrors && totalSynced > 0) {
       // Partial success — log as success with warnings
-      await plog.success(totalSynced, { elapsed_ms: elapsed, seasons: seasonCounts, errors: seasonErrors, mode: isFull ? 'full' : 'incremental' })
+      await plog.success(totalSynced, {
+        elapsed_ms: elapsed,
+        seasons: seasonCounts,
+        errors: seasonErrors,
+        mode: isFull ? 'full' : 'incremental',
+      })
     } else if (hasErrors) {
-      await plog.error(new Error(`All seasons failed: ${JSON.stringify(seasonErrors)}`), { elapsed_ms: elapsed, seasons: seasonCounts })
+      await plog.error(new Error(`All seasons failed: ${JSON.stringify(seasonErrors)}`), {
+        elapsed_ms: elapsed,
+        seasons: seasonCounts,
+      })
     } else {
-      await plog.success(totalSynced, { elapsed_ms: elapsed, seasons: seasonCounts, mode: isFull ? 'full' : 'incremental' })
+      await plog.success(totalSynced, {
+        elapsed_ms: elapsed,
+        seasons: seasonCounts,
+        mode: isFull ? 'full' : 'incremental',
+      })
     }
 
     return NextResponse.json({
@@ -222,5 +267,7 @@ export async function GET(request: NextRequest) {
     logger.error('Meilisearch sync failed:', err)
     await plog.error(err instanceof Error ? err : new Error(errorMessage))
     return NextResponse.json({ ok: false, error: errorMessage }, { status: 500 })
+  } finally {
+    await releaseLock()
   }
 }
