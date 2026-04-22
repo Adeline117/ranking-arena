@@ -22,8 +22,7 @@
 # for the original.
 # ─────────────────────────────────────────────────────────────
 
-# ── SWRConfig hook (referenced but not yet created) ──
-SWRConfig\.tsx
+# ── SWRConfig hook — REMOVED (migrated to React Query, files deleted 2026-04) ──
 
 # ── Mobile / Capacitor scaffolding (not in the web build) ──
 useCapacitor
