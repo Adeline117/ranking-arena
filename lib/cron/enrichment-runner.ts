@@ -1185,7 +1185,8 @@ export async function runEnrichment(params: {
                             }
                           }
                           // Max drawdown from equity curve if not from stats (or if stats returned 0 — likely bad data)
-                          if (!snapshotUpdate.max_drawdown && curve.length >= 3) {
+                          // Threshold: 2 points (MDD only needs peak-to-trough, not 3-point series)
+                          if (!snapshotUpdate.max_drawdown && curve.length >= 2) {
                             let peak = -Infinity
                             let maxDD = 0
                             for (const pt of curve) {
