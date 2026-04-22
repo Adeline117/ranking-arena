@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
             // Fallback to hot_score on RPC error
             const { data: fallbackData } = await supabase
               .from('posts')
-              .select('*, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
+              .select('id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
               .order('hot_score', { ascending: false })
               .range(offset, offset + limit - 1)
 
@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
               const postIds = feedData.map((r: Record<string, unknown>) => r.post_id as string)
               const { data: fullPosts } = await supabase
                 .from('posts')
-                .select('*, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
+                .select('id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
                 .in('id', postIds)
 
               // Preserve RPC ordering
@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
           // Unauthenticated: fallback to hot_score
           const { data: fallbackData } = await supabase
             .from('posts')
-            .select('*, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
+            .select('id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
             .order('hot_score', { ascending: false })
             .range(offset, offset + limit - 1)
 

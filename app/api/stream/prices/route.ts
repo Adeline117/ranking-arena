@@ -6,6 +6,7 @@
 import { NextRequest } from 'next/server'
 import { getCorsOrigin } from '@/lib/utils/cors'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import logger from '@/lib/logger'
 
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
@@ -35,7 +36,9 @@ async function getLatestPrices(): Promise<Record<string, PriceData>> {
   for (let i = 0; i < result.length; i += 2) {
     try {
       prices[result[i]] = JSON.parse(result[i + 1])
-    } catch { /* ignore parse errors */ }
+    } catch (err) {
+      logger.debug('Non-critical error parsing price entry:', err instanceof Error ? err.message : String(err))
+    }
   }
   return prices
 }
@@ -67,8 +70,8 @@ export async function GET(request: NextRequest) {
             const data = `data: ${JSON.stringify(prices)}\n\n`
             controller.enqueue(encoder.encode(data))
           }
-        } catch {
-          // Skip individual tick errors to keep SSE stream alive; next interval will retry
+        } catch (err) {
+          logger.debug('Non-critical error fetching prices:', err instanceof Error ? err.message : String(err))
         }
       }
 
@@ -82,7 +85,8 @@ export async function GET(request: NextRequest) {
         if (closed) return
         try {
           controller.enqueue(encoder.encode(': keepalive\n\n'))
-        } catch {
+        } catch (err) {
+          logger.debug('Non-critical error sending keepalive:', err instanceof Error ? err.message : String(err))
           cleanup()
         }
       }, 15000)
