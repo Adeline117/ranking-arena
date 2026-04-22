@@ -9,30 +9,17 @@
 
 import { NextResponse } from 'next/server'
 import { buildFreshnessReport } from '@/app/api/cron/check-data-freshness/route'
-import { env } from '@/lib/env'
 import { createLogger } from '@/lib/utils/logger'
-import { timingSafeEqual } from 'crypto'
+import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 
 const log = createLogger('api:data-freshness')
-
-function safeCompare(a: string, b: string): boolean {
-  const bufA = Buffer.from(a)
-  const bufB = Buffer.from(b)
-  if (bufA.length !== bufB.length) return false
-  return timingSafeEqual(bufA, bufB)
-}
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export async function GET(req: Request) {
-  // 简单鉴权：需要 CRON_SECRET 或 ADMIN_SECRET
-  const authHeader = req.headers.get('authorization')
-  const token = authHeader?.replace('Bearer ', '')
-  const validSecret =
-    env.ADMIN_SECRET || env.CRON_SECRET
-
-  if (!validSecret || !token || !safeCompare(token, validSecret)) {
+  // Admin auth: CRON_SECRET, x-admin-token, or admin JWT
+  if (!(await verifyAdminAuth(req))) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
@@ -40,9 +27,11 @@ export async function GET(req: Request) {
     const report = await buildFreshnessReport()
     return NextResponse.json(report)
   } catch (error: unknown) {
-    const message =
-      error instanceof Error ? error.message : 'Unknown error'
+    const message = error instanceof Error ? error.message : 'Unknown error'
     log.error(message)
-    return NextResponse.json({ error: 'Internal server error', code: 'INTERNAL_ERROR' }, { status: 500 })
+    return NextResponse.json(
+      { error: 'Internal server error', code: 'INTERNAL_ERROR' },
+      { status: 500 }
+    )
   }
 }
