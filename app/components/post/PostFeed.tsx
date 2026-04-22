@@ -320,7 +320,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   if (error) return (
     <div style={{ padding: tokens.spacing[6], textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
       <div style={{ color: tokens.colors.accent.error, fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.bold }}>{t('failedToLoad')}</div>
-      <div style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>{error}</div>
+      <div style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>{t('networkError')}</div>
       <button onClick={loadPosts} style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, background: tokens.colors.accent.primary, color: tokens.colors.white, border: 'none', borderRadius: tokens.radius.md, cursor: 'pointer', fontWeight: tokens.typography.fontWeight.bold, fontSize: tokens.typography.fontSize.sm, transition: tokens.transition.base }} onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.9' }} onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}>{t('tryAgain')}</button>
     </div>
   )
