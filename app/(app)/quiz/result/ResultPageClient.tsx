@@ -138,7 +138,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
             padding: 'clamp(16px, 3vw, 24px)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 12,
+            gap: 16,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -187,7 +187,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
             padding: 'clamp(16px, 3vw, 24px)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 14,
+            gap: 16,
           }}
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>

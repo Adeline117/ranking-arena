@@ -16,7 +16,7 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
     .sort((a, b) => b.percent - a.percent)
 
   return (
-    <div style={{ borderRadius: 12, background: 'var(--color-bg-secondary)', border: '1px solid var(--glass-border-light)', padding: 'clamp(16px, 3vw, 24px)', display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div style={{ borderRadius: 12, background: 'var(--color-bg-secondary)', border: '1px solid var(--glass-border-light)', padding: 'clamp(16px, 3vw, 24px)', display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* Section header with accent bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 3, height: 20, borderRadius: 2, background: 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))' }} />
