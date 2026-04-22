@@ -4,9 +4,9 @@ import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
-import { fetcher } from '@/lib/hooks/useSWR'
+import { fetcher } from '@/lib/hooks/fetchers'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -179,33 +179,28 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     }
     return base
   }, [effectivePlatform, effectiveHandle, isPrimaryAccount])
-  const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData & {
+  type TraderDataWithExtras = TraderPageData & {
     claim_status?: { is_verified: boolean; owner_id?: string | null; profile?: Record<string, unknown> }
     aggregate?: { aggregated: unknown; accounts: unknown[]; totalAccounts: number }
     rank_history?: { history: { date: string; rank: number; arena_score: number }[] }
-  }>(
-    traderApiUrl,
-    traderFetcher,
-    {
-      revalidateOnFocus: false,
-      // Pause auto-refresh when the tab is hidden to save bandwidth/CPU/battery.
-      // SWR's default (refreshWhenHidden: false) skips ticks when hidden, but
-      // returning 0 from this function halts the timer entirely. The interval
-      // resumes automatically on visibilitychange because SWR re-evaluates
-      // this function on revalidation.
-      refreshInterval: () =>
-        typeof document !== 'undefined' && document.visibilityState === 'hidden'
-          ? 0
-          : 5 * 60 * 1000,
-      refreshWhenHidden: false,
-      dedupingInterval: 5000,
-      errorRetryCount: 2,
-      fallbackData: isPrimaryAccount ? (serverTraderData ?? undefined) : undefined,
-      keepPreviousData: true,
-      // #30: Skip revalidation on mount when serverTraderData is provided (ISR freshness)
-      revalidateOnMount: isPrimaryAccount && serverTraderData ? false : undefined,
-    }
-  )
+  }
+  const { data: traderData, error: traderError, isLoading: traderLoading } = useQuery<TraderDataWithExtras>({
+    queryKey: ['trader-profile', traderApiUrl],
+    queryFn: () => traderFetcher<TraderDataWithExtras>(traderApiUrl),
+    refetchOnWindowFocus: false,
+    // Pause auto-refresh when the tab is hidden to save bandwidth/CPU/battery
+    refetchInterval: () =>
+      typeof document !== 'undefined' && document.visibilityState === 'hidden'
+        ? false
+        : 5 * 60 * 1000,
+    refetchIntervalInBackground: false,
+    staleTime: 5000,
+    retry: 2,
+    initialData: isPrimaryAccount ? (serverTraderData as TraderDataWithExtras ?? undefined) : undefined,
+    placeholderData: (prev) => prev,
+    // #30: Skip refetch on mount when serverTraderData is provided (ISR freshness)
+    refetchOnMount: isPrimaryAccount && serverTraderData ? false : true,
+  })
 
   // P7: Extract bundled data from merged response
   const bundledClaimData = traderData?.claim_status
@@ -227,11 +222,13 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const claimUrl = (!bundledClaimData && data.source_trader_id && data.source)
     ? `/api/traders/claim/status?trader_id=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}`
     : null
-  const { data: claimData } = useSWR<{ success: boolean; data: { is_verified: boolean; owner_id: string | null } }>(
-    claimUrl,
-    fetcher,
-    { revalidateOnFocus: true, dedupingInterval: 30_000 }
-  )
+  const { data: claimData } = useQuery<{ success: boolean; data: { is_verified: boolean; owner_id: string | null } }>({
+    queryKey: ['trader-claim-status', data.source_trader_id, data.source],
+    queryFn: () => fetcher(claimUrl!),
+    enabled: !!claimUrl,
+    refetchOnWindowFocus: true,
+    staleTime: 30_000,
+  })
 
   // Derive verified/owner state from SWR claim data or bundled claim data
   useEffect(() => {
@@ -247,11 +244,14 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const rankHistoryUrl = (!bundledRankHistory && effectivePlatform && effectiveHandle)
     ? `/api/trader/rank-history?platform=${encodeURIComponent(effectivePlatform)}&trader_key=${encodeURIComponent(data.source_trader_id)}&period=90D&days=7`
     : null
-  const { data: rankHistoryData } = useSWR<{ history: { date: string; rank: number; arena_score: number }[] }>(
-    rankHistoryUrl,
-    traderFetcher,
-    { revalidateOnFocus: false, dedupingInterval: 60000, errorRetryCount: 1 }
-  )
+  const { data: rankHistoryData } = useQuery<{ history: { date: string; rank: number; arena_score: number }[] }>({
+    queryKey: ['trader-rank-history', effectivePlatform, data.source_trader_id],
+    queryFn: () => traderFetcher(rankHistoryUrl!),
+    enabled: !!rankHistoryUrl,
+    refetchOnWindowFocus: false,
+    staleTime: 60000,
+    retry: 1,
+  })
   const rankSparklineData = (bundledRankHistory?.history ?? rankHistoryData?.history)?.map(h => ({ rank: h.rank })) ?? []
 
   // Stable references for derived SWR data — memoize so child components
