@@ -262,31 +262,17 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
         alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
       }
     }
-  } catch { /* fall through */ }
-
-  // Fallback — no DB data
-  const fallbackOgImage = `${BASE}/api/og/trader?handle=${encodeURIComponent(decoded)}`
-  return {
-    title: `${decoded} | Crypto Trader Rankings`,
-    description: `View ${decoded}'s crypto trading performance, PnL, ROI, win rate, and rank on Arena — 34,000+ traders across 30+ exchanges.`,
-    openGraph: {
-      title: `${decoded} | Crypto Trader`,
-      description: `View ${decoded}'s crypto trading performance, analytics, and rank on Arena among 34,000+ traders across 30+ exchanges.`,
-      url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
-      siteName: 'Arena',
-      type: 'profile',
-      images: [{ url: fallbackOgImage, width: 1200, height: 630 }],
-    },
-    twitter: {
-      card: 'summary_large_image',
-      title: `${decoded} | Crypto Trader`,
-      description: `View ${decoded}'s trading performance and rank on Arena.`,
-      images: [fallbackOgImage],
-      creator: '@arenafi',
-      site: '@arenafi',
-    },
-    alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
+  } catch (err) {
+    // Re-throw Next.js navigation errors (notFound, redirect) — they use special
+    // error types that must propagate to the framework, not be swallowed.
+    if (err && typeof err === 'object' && 'digest' in err) throw err
+    /* other errors: fall through to notFound below */
   }
+
+  // Trader not found — trigger 404 before streaming starts.
+  // This MUST happen in generateMetadata (not just in the page component)
+  // because Next.js sends the HTTP status code before the page body streams.
+  notFound()
 }
 
 // Allow non-pre-rendered trader pages to be dynamically generated at runtime
