@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from '@supabase/supabase-js'
 /**
  * Comments Data Layer Tests
  * 测试评论数据层
@@ -38,7 +38,7 @@ const createMockSupabase = () => {
   }
 
   // Chain all methods to return the client by default
-  Object.keys(mockClient).forEach(key => {
+  Object.keys(mockClient).forEach((key) => {
     mockClient[key].mockReturnValue(mockClient)
   })
 
@@ -58,9 +58,12 @@ describe('getPostComments', () => {
 
   test('should throw error on database error', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.limit.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
+    // range() is now the terminal call (was limit() before SQL-level pagination)
+    mockSupabase.range.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
 
-    await expect(getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')).rejects.toThrow()
+    await expect(
+      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
+    ).rejects.toThrow()
   })
 
   test('should query correct table with correct filters', async () => {
@@ -77,19 +80,28 @@ describe('getPostComments', () => {
   test('should handle comments with replies and profiles', async () => {
     const mockSupabase = createMockSupabase()
     const mockComments = [
-      { id: 'c1', post_id: 'post1', user_id: 'u1', content: 'Comment 1', like_count: 2, created_at: '2024-01-01T00:00:00Z', updated_at: '2024-01-01T00:00:00Z' },
+      {
+        id: 'c1',
+        post_id: 'post1',
+        user_id: 'u1',
+        content: 'Comment 1',
+        like_count: 2,
+        dislike_count: 0,
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
     ]
 
-    // 1st query chain: from().select().eq().is().order().limit() — limit() is terminal
-    mockSupabase.limit.mockResolvedValueOnce({ data: mockComments, error: null })
-    // 2nd query: from().select().in().order() — order() terminal for replies
-    // 3rd query: from().select().in() — in() terminal for profiles
-    // Use limit as terminal for all subsequent queries (chain returns self for non-terminal)
-    mockSupabase.limit
-      .mockResolvedValueOnce({ data: [], error: null })  // replies
-      .mockResolvedValueOnce({ data: [], error: null })  // profiles (if chained further)
-    mockSupabase.order.mockReturnValue(mockSupabase)  // ensure order always chains
-    mockSupabase.in.mockReturnValue(mockSupabase)  // ensure in always chains
+    // 1st query chain: from().select().eq().is().order().range() — range() is terminal
+    mockSupabase.range.mockResolvedValueOnce({ data: mockComments, error: null })
+    // Subsequent queries for replies + profiles resolve via the default chain
+    mockSupabase.order.mockReturnValue(mockSupabase)
+    mockSupabase.in
+      .mockReturnValueOnce(mockSupabase) // replies: in() chains to order()
+      .mockResolvedValueOnce({ data: [], error: null }) // profiles: in() is terminal
+
+    // Promise.all for profiles + likes — both resolve via in()
+    mockSupabase.in.mockResolvedValue({ data: null, error: null })
 
     const result = await getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
 
@@ -158,7 +170,10 @@ describe('createComment', () => {
     mockSupabase.single.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
 
     await expect(
-      createComment(mockSupabase as unknown as SupabaseClient, 'user1', { post_id: 'post1', content: 'Test' })
+      createComment(mockSupabase as unknown as SupabaseClient, 'user1', {
+        post_id: 'post1',
+        content: 'Test',
+      })
     ).rejects.toThrow()
   })
 })
@@ -174,7 +189,12 @@ describe('updateComment', () => {
 
     mockSupabase.single.mockResolvedValueOnce({ data: updatedComment, error: null })
 
-    const result = await updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated content')
+    const result = await updateComment(
+      mockSupabase as unknown as SupabaseClient,
+      'comment1',
+      'user1',
+      'Updated content'
+    )
 
     expect(result.content).toBe('Updated content')
     expect(mockSupabase.update).toHaveBeenCalled()
