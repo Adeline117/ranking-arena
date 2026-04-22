@@ -1276,19 +1276,19 @@
    ============================================ */
 
 @media (max-width: 767px) {
-  /* Global overflow prevention */
+  /* Global overflow prevention — use clip, not hidden.
+     hidden creates a scroll container trapping trackpad events in Safari. */
   html, body {
-    overflow-x: hidden !important;
+    overflow-x: clip !important;
     max-width: 100vw !important;
   }
 
-  /* All containers respect viewport */
+  /* All containers respect viewport (NOT main — breaks trackpad scroll) */
   .three-col-center,
   .page-container,
-  .feed-main-content,
-  main {
+  .feed-main-content {
     max-width: 100vw !important;
-    overflow-x: hidden !important;
+    overflow-x: clip !important;
     box-sizing: border-box !important;
   }
 
