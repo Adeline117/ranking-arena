@@ -5422,6 +5422,10 @@ compShareTitle: 'Check out this competition on Arena',
     quizQ30C: 'Mastery of the craft. Being consistently right about the market',
     quizQ30D: 'Beating the consensus. Seeing what others miss and profiting from it',
 
+    // SSR ranking table empty state
+    ssrLoadingRanking: 'Loading ranking data...',
+    ssrDataRefreshHint: 'Data refreshes automatically. Try refreshing in a moment.',
+
 } as const
 
 export default en

@@ -4675,6 +4675,10 @@ compFieldMaxParticipants: '最大参加人数',
     rankingControlsShowingTop: '上位 {count} 名のトレーダーを表示中。Proで34,000+人全員を表示',
     rankingControlsUpgrade: 'アップグレード \u2192',
 
+    // SSR ranking table empty state
+    ssrLoadingRanking: 'ランキングデータを読み込み中...',
+    ssrDataRefreshHint: 'データは自動更新されます。しばらくしてからリフレッシュしてください。',
+
 } as const
 
 export default ja

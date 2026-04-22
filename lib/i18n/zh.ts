@@ -5432,6 +5432,10 @@ compFieldMaxParticipants: '最大参与人数',
     quizQ30C: '掌握这门手艺。持续判断对市场走势',
     quizQ30D: '打败共识。看到别人没看到的，然后获利',
 
+    // SSR ranking table empty state
+    ssrLoadingRanking: '正在加载排名数据...',
+    ssrDataRefreshHint: '数据会自动刷新，请稍后再试。',
+
 } as const
 
 export default zh

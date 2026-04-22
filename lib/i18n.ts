@@ -110,6 +110,8 @@ export function setLanguage(lang: Language) {
   currentLanguage = lang
   if (typeof window !== 'undefined') {
     localStorage.setItem('language', lang)
+    // Sync to cookie so Server Components can read the language preference
+    document.cookie = `language=${lang};path=/;max-age=31536000;SameSite=Lax`
     window.dispatchEvent(new CustomEvent('languageChange', { detail: lang }))
   }
 }
