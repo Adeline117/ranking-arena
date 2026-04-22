@@ -248,13 +248,34 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
     traderData = await fetchTraderData(profile.traderHandle)
   }
 
+  // JSON-LD structured data for search engines
+  const personSchema = profile ? {
+    '@context': 'https://schema.org',
+    '@type': 'ProfilePage',
+    mainEntity: {
+      '@type': 'Person',
+      name: profile.handle,
+      ...(profile.avatar_url ? { image: profile.avatar_url } : {}),
+      ...(profile.bio ? { description: profile.bio } : {}),
+      url: `${BASE_URL}/u/${encodeURIComponent(profile.handle)}`,
+    },
+  } : null
+
   return (
-    <Suspense>
-      <UserProfileClient
-        handle={handle}
-        serverProfile={profile}
-        serverTraderData={traderData}
-      />
-    </Suspense>
+    <>
+      {personSchema && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(personSchema).replace(/</g, '\\u003c') }}
+        />
+      )}
+      <Suspense>
+        <UserProfileClient
+          handle={handle}
+          serverProfile={profile}
+          serverTraderData={traderData}
+        />
+      </Suspense>
+    </>
   )
 }

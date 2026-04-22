@@ -27,21 +27,26 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
           ? bot.description.substring(0, 160)
           : `${bot.name} — ${bot.category || 'Trading Bot'} on Arena`
 
+        const ogImage = `${BASE_URL}/api/og?title=${encodeURIComponent(bot.name)}&subtitle=${encodeURIComponent(bot.category || 'Trading Bot')}`
+
         return {
           title,
           description,
           alternates: { canonical: `${BASE_URL}/bot/${id}` },
           openGraph: {
-            title: `${title}`,
+            title,
             description,
             url: `${BASE_URL}/bot/${id}`,
             siteName: 'Arena',
             type: 'website',
+            images: [{ url: ogImage, width: 1200, height: 630, alt: bot.name }],
           },
           twitter: {
-            card: 'summary',
-            title: `${title}`,
+            card: 'summary_large_image',
+            title,
             description,
+            creator: '@arenafi',
+            images: [ogImage],
           },
         }
       }
