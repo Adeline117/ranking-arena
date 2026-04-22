@@ -11,6 +11,7 @@ import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
 import PersonalityCard from './components/PersonalityCard'
 import MasterSection from './components/MasterSection'
 import StyleAnalysis from './components/StyleAnalysis'
+import TypeBreakdown from './components/TypeBreakdown'
 import RecommendedTraders from './components/RecommendedTraders'
 import ShareActions from './components/ShareActions'
 
@@ -22,7 +23,7 @@ interface ResultPageClientProps {
   allTypePercents?: Record<PersonalityTypeId, number> | null
 }
 
-export default function ResultPageClient({ typeId, matchPercent, recommendedTraders }: ResultPageClientProps) {
+export default function ResultPageClient({ typeId, matchPercent, recommendedTraders, secondaryTypeId, allTypePercents }: ResultPageClientProps) {
   const { language, t } = useLanguage()
   const [mounted, setMounted] = useState(false)
   const [txnReady, setTxnReady] = useState(false)
@@ -36,8 +37,8 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
 
   const pType = PERSONALITY_TYPE_MAP[typeId] || PERSONALITY_TYPES[0]
 
-  // Find secondary type (next in compatibility list)
-  const secondaryId = pType.compatibleTypes[0] || 'analyst'
+  // Use actual secondary type from quiz scores if available, otherwise fall back to compatibility list
+  const secondaryId = secondaryTypeId || pType.compatibleTypes[0] || 'analyst'
   const secondaryType = PERSONALITY_TYPE_MAP[secondaryId]
   const secondaryLabel = secondaryType ? t(secondaryType.nameKey) : secondaryId
 
@@ -130,10 +131,21 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           <MasterSection type={pType} tr={t} />
         </div>
 
-        {/* Style Analysis — new conceptual section, wider gap */}
+        {/* Style Analysis �� new conceptual section, wider gap */}
         <div style={{ marginTop: 24 }}>
           <StyleAnalysis type={pType} tr={t} />
         </div>
+
+        {/* Type Breakdown — show score distribution across all types (only if data available) */}
+        {allTypePercents && (
+          <div style={{ marginTop: 16 }}>
+            <TypeBreakdown
+              allTypePercents={allTypePercents}
+              primaryTypeId={typeId}
+              tr={t}
+            />
+          </div>
+        )}
 
         {/* Type Compatibility — companion to style, tighter */}
         <div
