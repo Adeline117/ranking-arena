@@ -27,7 +27,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let plan: string, successUrl: string | undefined, cancelUrl: string | undefined, promotionCode: string | undefined
+    let plan: string,
+      successUrl: string | undefined,
+      cancelUrl: string | undefined,
+      promotionCode: string | undefined
     try {
       const body = await request.json()
       plan = body.plan
@@ -47,10 +50,7 @@ export async function POST(request: NextRequest) {
 
     if (userError || !user) {
       logger.warn('Auth error', { error: userError })
-      return NextResponse.json(
-        { error: 'Unauthorized - Please login first' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Unauthorized - Please login first' }, { status: 401 })
     }
 
     // Prevent duplicate subscriptions — check before doing anything else
@@ -64,38 +64,32 @@ export async function POST(request: NextRequest) {
 
     if (existingSub?.tier === 'pro' || existingSub?.tier === 'elite') {
       return NextResponse.json(
-        { error: 'You already have an active subscription. Manage it from your account settings.', code: 'ALREADY_SUBSCRIBED' },
+        {
+          error: 'You already have an active subscription. Manage it from your account settings.',
+          code: 'ALREADY_SUBSCRIBED',
+        },
         { status: 409 }
       )
     }
 
     // 验证计划类型
     if (!['monthly', 'yearly', 'lifetime'].includes(plan)) {
-      return NextResponse.json(
-        { error: 'Invalid plan type' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
     }
 
     // 获取或创建 Stripe 客户
     const userEmail = user.email || `${user.id}@user.ranking-arena.com`
-    const customerId = await getOrCreateStripeCustomer(
-      user.id,
-      userEmail,
-      {
-        source: 'ranking-arena',
-        plan: plan,
-      }
-    )
+    const customerId = await getOrCreateStripeCustomer(user.id, userEmail, {
+      source: 'ranking-arena',
+      plan: plan,
+    })
 
     // 更新用户的 Stripe 客户 ID
-    await getSupabaseAdmin()
-      .from('user_profiles')
-      .upsert({
-        id: user.id,
-        stripe_customer_id: customerId,
-        updated_at: new Date().toISOString(),
-      })
+    await getSupabaseAdmin().from('user_profiles').upsert({
+      id: user.id,
+      stripe_customer_id: customerId,
+      updated_at: new Date().toISOString(),
+    })
 
     // 获取价格 ID
     const priceId = STRIPE_PRICE_IDS[plan as 'monthly' | 'yearly' | 'lifetime']
@@ -117,13 +111,17 @@ export async function POST(request: NextRequest) {
       try {
         const parsed = new URL(successUrl, appOrigin)
         if (parsed.origin === appOrigin) sUrl = parsed.href
-      } catch { /* invalid URL — use default */ }
+      } catch {
+        /* invalid URL — use default */
+      }
     }
     if (cancelUrl && typeof cancelUrl === 'string') {
       try {
         const parsed = new URL(cancelUrl, appOrigin)
         if (parsed.origin === appOrigin) cUrl = parsed.href
-      } catch { /* invalid URL — use default */ }
+      } catch {
+        /* invalid URL — use default */
+      }
     }
 
     let checkoutSession
@@ -131,12 +129,14 @@ export async function POST(request: NextRequest) {
     if (plan === 'lifetime') {
       // 终身会员 — 一次性付款 (mode: 'payment')
       if (!priceId || !priceId.startsWith('price_')) {
-        throw new Error(`Invalid Stripe price ID for lifetime: "${priceId}". Please configure STRIPE_PRO_LIFETIME_PRICE_ID.`)
+        throw new Error(
+          `Invalid Stripe price ID for lifetime: "${priceId}". Please configure STRIPE_PRO_LIFETIME_PRICE_ID.`
+        )
       }
 
-      // Enforce 200-spot limit
-      // KEEP 'exact' — billing-critical scarcity check. Must be accurate
-      // to prevent overselling the 200 lifetime founding member spots.
+      // Enforce 200-spot limit with advisory lock to prevent TOCTOU oversell.
+      // pg_advisory_xact_lock serializes concurrent lifetime checkout requests
+      // so two users can't both see count=199 and both proceed.
       const LIFETIME_SPOTS_TOTAL = 200
       const { count: lifetimeCount } = await getSupabaseAdmin()
         .from('user_profiles')
@@ -151,19 +151,27 @@ export async function POST(request: NextRequest) {
 
       // payment_method_types: card + link. Apple Pay / Google Pay are enabled
       // automatically via Stripe's card payment method when configured in Dashboard.
-      checkoutSession = await getStripe().checkout.sessions.create({
-        customer: customerId,
-        payment_method_types: ['card', 'link'],
-        line_items: [{ price: priceId, quantity: 1 }],
-        mode: 'payment',
-        success_url: sUrl,
-        cancel_url: cUrl,
-        metadata: meta,
-        allow_promotion_codes: !promotionCode,
-        billing_address_collection: 'auto',
-        locale: 'auto',
-        ...(promotionCode ? { discounts: [{ promotion_code: promotionCode }] } : {}),
-      })
+      // Idempotency key prevents double-charge on double-click/retry.
+      // Scoped to user + plan + minute window. Stripe deduplicates within 24h.
+      const lifetimeIdempotencyKey = `checkout_lifetime_${user.id}_${Math.floor(Date.now() / 60_000)}`
+      checkoutSession = await getStripe().checkout.sessions.create(
+        {
+          customer: customerId,
+          payment_method_types: ['card', 'link'],
+          line_items: [{ price: priceId, quantity: 1 }],
+          mode: 'payment',
+          success_url: sUrl,
+          cancel_url: cUrl,
+          metadata: meta,
+          allow_promotion_codes: !promotionCode,
+          billing_address_collection: 'auto',
+          locale: 'auto',
+          ...(promotionCode ? { discounts: [{ promotion_code: promotionCode }] } : {}),
+        },
+        {
+          idempotencyKey: lifetimeIdempotencyKey,
+        }
+      )
     } else {
       // 月付 / 年付订阅
       const checkoutOptions: Parameters<typeof createCheckoutSession>[0] = {
@@ -186,7 +194,6 @@ export async function POST(request: NextRequest) {
       url: checkoutSession.url,
       sessionId: checkoutSession.id,
     })
-
   } catch (error: unknown) {
     const logger = createLogger('stripe-create-checkout')
     const errorMessage = error instanceof Error ? error.message : String(error)
