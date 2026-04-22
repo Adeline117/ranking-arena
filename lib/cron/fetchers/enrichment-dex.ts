@@ -6,6 +6,7 @@
  * - Asset breakdown (computed from position history)
  */
 
+import { getAddress } from 'viem'
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 import type {
@@ -334,34 +335,14 @@ const GMX_SUBSQUID_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/a
  * Required because Subsquid stores checksummed addresses and
  * account_containsInsensitive is broken (returns 0 for all queries).
  * Verified 2026-04-22: lowercase → 0 results, checksummed → correct results.
- *
- * Pure implementation (no external deps) — keccak256 from Node.js crypto
- * is actually sha3-256 (NOT the Ethereum keccak variant). We use a simple
- * approach: try importing viem lazily, fallback to manual implementation.
  */
-let _getAddress: ((addr: string) => string) | null = null
-async function loadGetAddress() {
-  if (_getAddress) return _getAddress
-  try {
-    const viem = await import('viem')
-    _getAddress = viem.getAddress
-  } catch {
-    // Fallback: identity function (will fail on Subsquid but won't crash enrichment)
-    _getAddress = (addr: string) => addr
-  }
-  return _getAddress
-}
-// Synchronous version using cached import (after first async call resolves)
 function toChecksumAddress(address: string): string {
-  if (_getAddress) return _getAddress(address)
-  // Before async import resolves, return original — first batch may miss,
-  // but subsequent batches will have the cached import
-  return address
+  try {
+    return getAddress(address)
+  } catch {
+    return address
+  }
 }
-// Eagerly load on module init
-loadGetAddress().catch(() => {
-  /* non-critical */
-})
 const GMX_VALUE_SCALE = 1e30
 
 function safeBigIntToNum(val: string | number | null | undefined, scale: number): number {
