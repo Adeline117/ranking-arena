@@ -18,6 +18,8 @@ interface ResultPageClientProps {
   typeId: PersonalityTypeId
   matchPercent: number
   recommendedTraders: RecommendedTrader[]
+  secondaryTypeId?: PersonalityTypeId
+  allTypePercents?: Record<PersonalityTypeId, number> | null
 }
 
 export default function ResultPageClient({ typeId, matchPercent, recommendedTraders }: ResultPageClientProps) {
@@ -89,7 +91,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           width: '100%',
           display: 'flex',
           flexDirection: 'column',
-          gap: 16,
+          gap: 0, /* Intentional: each section controls its own marginTop for rhythm */
           animation: 'fadeIn 0.5s ease-out',
           position: 'relative',
         }}
@@ -115,7 +117,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           </button>
         </div>
 
-        {/* Personality Card */}
+        {/* Personality Card — hero, generous spacing after */}
         <PersonalityCard
           type={pType}
           matchPercent={matchPercent}
@@ -123,16 +125,21 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           tr={t}
         />
 
-        {/* Master Biography */}
-        <MasterSection type={pType} tr={t} />
+        {/* Master Biography — closely related to personality, moderate gap */}
+        <div style={{ marginTop: 20 }}>
+          <MasterSection type={pType} tr={t} />
+        </div>
 
-        {/* Style Analysis */}
-        <StyleAnalysis type={pType} tr={t} />
+        {/* Style Analysis — new conceptual section, wider gap */}
+        <div style={{ marginTop: 24 }}>
+          <StyleAnalysis type={pType} tr={t} />
+        </div>
 
-        {/* Type Compatibility */}
+        {/* Type Compatibility — companion to style, tighter */}
         <div
           style={{
-            borderRadius: 12,
+            marginTop: 14,
+            borderRadius: 14,
             background: 'var(--color-bg-secondary)',
             border: '1px solid var(--glass-border-light)',
             padding: 'clamp(16px, 3vw, 24px)',
@@ -175,13 +182,16 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           </div>
         </div>
 
-        {/* Recommended Arena Traders */}
-        <RecommendedTraders type={pType} traders={recommendedTraders} tr={t} />
+        {/* Recommended Arena Traders — action-oriented, generous gap */}
+        <div style={{ marginTop: 24 }}>
+          <RecommendedTraders type={pType} traders={recommendedTraders} tr={t} />
+        </div>
 
-        {/* Share Actions */}
+        {/* Share Actions — final section, moderate gap */}
         <div
           style={{
-            borderRadius: 12,
+            marginTop: 18,
+            borderRadius: 14,
             background: 'var(--color-bg-secondary)',
             border: '1px solid var(--glass-border-light)',
             padding: 'clamp(16px, 3vw, 24px)',
@@ -206,15 +216,15 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
         </div>
 
-        {/* CTAs */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 8 }}>
+        {/* CTAs — final call-to-action, generous top gap */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 28 }}>
           <Link
             href="/quiz"
             style={{
               flex: 1,
               minWidth: 140,
-              padding: '12px 20px',
-              borderRadius: 8,
+              padding: '13px 20px',
+              borderRadius: 10,
               border: '1px solid var(--glass-border-light)',
               background: 'transparent',
               color: 'var(--color-text-primary)',
@@ -222,15 +232,17 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               fontWeight: 500,
               textAlign: 'center',
               textDecoration: 'none',
-              transition: 'border-color 0.2s, transform 0.2s',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
             onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = 'var(--color-text-tertiary)'
-              e.currentTarget.style.transform = 'translateY(-1px)'
+              e.currentTarget.style.transform = 'translateY(-2px)'
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
             }}
             onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = 'var(--glass-border-light)'
               e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.boxShadow = 'none'
             }}
           >
             {t('quizRetake')}
@@ -240,8 +252,8 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
             style={{
               flex: 1,
               minWidth: 140,
-              padding: '12px 20px',
-              borderRadius: 8,
+              padding: '13px 20px',
+              borderRadius: 10,
               border: 'none',
               background: 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))',
               color: '#fff',
@@ -249,13 +261,16 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               fontWeight: 600,
               textAlign: 'center',
               textDecoration: 'none',
-              transition: 'transform 0.2s',
+              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+              boxShadow: '0 2px 8px color-mix(in srgb, var(--color-brand) 25%, transparent)',
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-1px)'
+              e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)'
+              e.currentTarget.style.boxShadow = '0 6px 20px color-mix(in srgb, var(--color-brand) 35%, transparent)'
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
+              e.currentTarget.style.transform = 'translateY(0) scale(1)'
+              e.currentTarget.style.boxShadow = '0 2px 8px color-mix(in srgb, var(--color-brand) 25%, transparent)'
             }}
           >
             {t('quizFindTraders')}
