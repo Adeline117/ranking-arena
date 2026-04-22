@@ -34,16 +34,12 @@ function getUpstashRedis(): Redis | null {
   }
 
   try {
-    // ISR-safe fetch: Upstash SDK defaults to cache:'no-store' which breaks Next.js static pages
-    const isrSafeFetch: typeof fetch = (input, init) => {
-      if (init?.cache === 'no-store') {
-        const { cache: _, ...rest } = init
-        return fetch(input, { ...rest, next: { revalidate: 60 } })
-      }
-      return fetch(input, init)
-    }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Upstash SDK types omit `fetch` but runtime accepts it for ISR-safe override
-    redis = new Redis({ url, token, fetch: isrSafeFetch } as any)
+    // Rate limiter MUST always read fresh counters from Redis — never cache.
+    // The Upstash SDK defaults to cache:'no-store' which is exactly what we need.
+    // Previously an ISR-safe fetch wrapper replaced 'no-store' with revalidate:60,
+    // which cached Redis responses and broke the sliding window counter entirely
+    // (55+ requests could pass without any 429).
+    redis = new Redis({ url, token })
     rateLimitLogger.info('Upstash Redis 连接成功')
     return redis
   } catch (error) {
@@ -87,7 +83,7 @@ const rateLimiters = new Map<string, Ratelimit>()
  */
 function getRateLimiter(config: RateLimitConfig, redisClient: Redis): Ratelimit {
   const key = `${config.prefix}:${config.requests}:${config.window}`
-  
+
   let limiter = rateLimiters.get(key)
   if (!limiter) {
     limiter = new Ratelimit({
@@ -98,7 +94,7 @@ function getRateLimiter(config: RateLimitConfig, redisClient: Redis): Ratelimit 
     })
     rateLimiters.set(key, limiter)
   }
-  
+
   return limiter
 }
 
@@ -128,17 +124,15 @@ export function getIdentifier(request: NextRequest, userId?: string): string {
 
   // Prefer Vercel's authenticated edge headers when available (only Vercel's
   // edge can set these in production — they bypass any client-supplied XFF).
-  const vercelIp = request.headers.get('x-vercel-forwarded-for') ||
-                   request.headers.get('x-vercel-ip-country')  // presence implies edge handled it
-                     ? request.headers.get('x-vercel-forwarded-for')
-                     : null
+  const vercelIp =
+    request.headers.get('x-vercel-forwarded-for') || request.headers.get('x-vercel-ip-country') // presence implies edge handled it
+      ? request.headers.get('x-vercel-forwarded-for')
+      : null
 
   // Generic XFF fallback. Trustworthy on Vercel; document carefully if
   // moving to a different host.
   const forwarded = vercelIp || request.headers.get('x-forwarded-for')
-  const ip = forwarded?.split(',')[0]?.trim() ||
-             request.headers.get('x-real-ip') ||
-             'unknown'
+  const ip = forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'unknown'
 
   // Fingerprint stability: hash a short tuple of (IP, UA fragment, AL fragment)
   // so a single attacker rotating XFF still maps to one bucket as long as
@@ -219,7 +213,9 @@ export async function checkRateLimitFull(
     // Redis 不可用时，使用内存限流作为后备（不再完全跳过）
     if (!redisClient) {
       if (process.env.NODE_ENV === 'production') {
-        rateLimitLogger.warn('[RATE-LIMIT] Falling back to in-memory rate limiting — not suitable for horizontal scaling')
+        rateLimitLogger.warn(
+          '[RATE-LIMIT] Falling back to in-memory rate limiting — not suitable for horizontal scaling'
+        )
       }
       const memResult = checkMemoryRateLimit(identifier, finalConfig)
       if (!memResult.success) {
@@ -248,7 +244,11 @@ export async function checkRateLimitFull(
       }
       return {
         response: null,
-        meta: { limit: finalConfig.requests, remaining: memResult.remaining, reset: memResult.reset },
+        meta: {
+          limit: finalConfig.requests,
+          remaining: memResult.remaining,
+          reset: memResult.reset,
+        },
       }
     }
 
