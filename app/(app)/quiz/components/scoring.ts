@@ -56,8 +56,8 @@ export function calculateResult(answers: Record<number, string>): QuizResult {
     degen: 0,
     strategist: 0,
     copycat: 0,
-    arbitrageur: 0,
-    gridbot: 0,
+    tourist: 0,
+    paperhands: 0,
     narrator: 0,
   }
 

@@ -29,8 +29,8 @@ const TRADER_QUERIES: Record<PersonalityTypeId, { orderBy: string; ascending: bo
   degen: { orderBy: 'roi', ascending: false },
   strategist: { orderBy: 'arena_score', ascending: false },
   copycat: { orderBy: 'win_rate', ascending: false },
-  arbitrageur: { orderBy: 'roi', ascending: false },
-  gridbot: { orderBy: 'roi', ascending: false },
+  tourist: { orderBy: 'roi', ascending: false },
+  paperhands: { orderBy: 'roi', ascending: false },
   narrator: { orderBy: 'roi', ascending: false },
 }
 

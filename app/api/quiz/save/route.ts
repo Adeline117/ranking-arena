@@ -8,7 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
-const VALID_TYPES = new Set(['sniper', 'scalper', 'whale', 'analyst', 'contrarian', 'hodler', 'degen', 'strategist', 'copycat', 'arbitrageur', 'gridbot', 'narrator'])
+const VALID_TYPES = new Set(['sniper', 'scalper', 'whale', 'analyst', 'contrarian', 'hodler', 'degen', 'strategist', 'copycat', 'tourist', 'paperhands', 'narrator'])
 
 export async function POST(request: NextRequest) {
   try {

@@ -12,8 +12,8 @@ export type PersonalityTypeId =
   | 'degen'
   | 'strategist'
   | 'copycat'
-  | 'arbitrageur'
-  | 'gridbot'
+  | 'tourist'
+  | 'paperhands'
   | 'narrator'
 
 export interface PersonalityType {
