@@ -6,7 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
-import { useDeferredKey } from '@/lib/hooks/useDeferredSWR'
+import { useDeferredKey } from '@/lib/hooks/useDeferredKey'
 
 type CoinPrice = {
   id: string
