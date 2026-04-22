@@ -17,6 +17,7 @@ import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { logger } from '@/lib/logger'
 import { env } from '@/lib/env'
+import { safeCompare } from '@/lib/auth/verify-service-auth'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { truncateToHour } from '@/lib/utils/date'
 
@@ -45,13 +46,13 @@ interface IngestBody {
 }
 
 export async function POST(request: NextRequest) {
-  // Auth: accept either VPS proxy key or CRON_SECRET
-  const proxyKey = request.headers.get('x-proxy-key') || request.headers.get('authorization')?.replace('Bearer ', '')
-  const validKeys = [
-    process.env.VPS_PROXY_KEY,
-    env.CRON_SECRET,
-  ].filter(Boolean)
-  if (validKeys.length === 0 || !validKeys.includes(proxyKey || '')) {
+  // Auth: accept either VPS proxy key or CRON_SECRET (timing-safe)
+  const proxyKey =
+    request.headers.get('x-proxy-key') ||
+    request.headers.get('authorization')?.replace('Bearer ', '')
+  const validKeys = [process.env.VPS_PROXY_KEY, env.CRON_SECRET].filter(Boolean) as string[]
+  const isAuthed = proxyKey && validKeys.some((k) => safeCompare(proxyKey, k))
+  if (!validKeys.length || !isAuthed) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -59,7 +60,7 @@ export async function POST(request: NextRequest) {
   const plog = await PipelineLogger.start('pipeline-ingest')
 
   try {
-    const body = await request.json() as IngestBody
+    const body = (await request.json()) as IngestBody
     const { platform, window: win, traders } = body
 
     if (!platform || !win || !Array.isArray(traders) || traders.length === 0) {
@@ -70,7 +71,7 @@ export async function POST(request: NextRequest) {
     const asOfTs = truncateToHour()
 
     // Build snapshot rows
-    const rows = traders.map(t => ({
+    const rows = traders.map((t) => ({
       platform,
       market_type: marketType,
       trader_key: t.trader_key,
@@ -114,8 +115,8 @@ export async function POST(request: NextRequest) {
 
     // Also upsert trader identities
     const traderRows = traders
-      .filter(t => t.trader_key)
-      .map(t => ({
+      .filter((t) => t.trader_key)
+      .map((t) => ({
         platform,
         trader_key: t.trader_key,
         market_type: marketType,
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
     if (traderRows.length > 0) {
       // Dedupe by trader_key
       const seen = new Set<string>()
-      const unique = traderRows.filter(r => {
+      const unique = traderRows.filter((r) => {
         if (seen.has(r.trader_key)) return false
         seen.add(r.trader_key)
         return true
@@ -137,7 +138,9 @@ export async function POST(request: NextRequest) {
       await supabase
         .from('traders')
         .upsert(unique, { onConflict: 'platform,trader_key' })
-        .then(({ error }) => { if (error) logger.warn(`[ingest] Traders upsert: ${error.message}`) })
+        .then(({ error }) => {
+          if (error) logger.warn(`[ingest] Traders upsert: ${error.message}`)
+        })
     }
 
     const elapsed = Date.now() - startTime
