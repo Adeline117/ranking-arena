@@ -129,7 +129,20 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
     })
   }, [traders])
 
-  if (uniqueTraders.length === 0) return null
+  if (uniqueTraders.length === 0) {
+    return (
+      <div
+        style={{
+          padding: 16,
+          textAlign: 'center',
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.sm,
+        }}
+      >
+        {t('noSimilarTraders')}
+      </div>
+    )
+  }
 
   return (
     <Box 

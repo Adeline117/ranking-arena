@@ -171,6 +171,7 @@ const ja = {
     labelAvgRoi: '平均ROI',
     labelAvgWinRate: '平均勝率',
     similarTraders: '類似トレーダー',
+    noSimilarTraders: '類似トレーダーが見つかりません',
     traderNotRegistered: '未登録トレーダー',
     traderNotRegisteredDesc: 'このトレーダーはこのアカウントを申請していません',
     unclaimedBadge: '未申請',

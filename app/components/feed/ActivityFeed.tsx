@@ -356,9 +356,28 @@ export default function ActivityFeed({
               color: tokens.colors.accent.error,
               fontSize: tokens.typography.fontSize.sm,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
             }}
           >
-            {error}
+            <span>{error}</span>
+            <button
+              onClick={() => handlePlatformChange(platform)}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                background: tokens.colors.accent.primary,
+                color: tokens.colors.white,
+                border: 'none',
+                borderRadius: tokens.radius.md,
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+                fontFamily: tokens.typography.fontFamily.sans.join(', '),
+              }}
+            >
+              {t('tryAgain')}
+            </button>
           </div>
         )}
       </div>
