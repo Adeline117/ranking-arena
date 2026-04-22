@@ -53,4 +53,23 @@ if [ -n "$ERRORS" ]; then
   exit 1
 fi
 
+# Guard 3: Run related tests for changed source files
+SOURCE_FILES=$(echo "$CHANGED_FILES" | grep -E '\.(ts|tsx)$' | grep -v '\.test\.\|\.spec\.\|__tests__' || true)
+SOURCE_FILES_EXISTING=""
+if [ -n "$SOURCE_FILES" ]; then
+  while IFS= read -r f; do
+    [ -f "$f" ] && SOURCE_FILES_EXISTING="$SOURCE_FILES_EXISTING $f"
+  done <<< "$SOURCE_FILES"
+fi
+
+if [ -n "$SOURCE_FILES_EXISTING" ]; then
+  # shellcheck disable=SC2086
+  if ! npx jest --findRelatedTests $SOURCE_FILES_EXISTING --passWithNoTests --ci --silent 2>&1; then
+    echo ""
+    echo "═══ Related Tests Failed ═══"
+    echo "Fix the failing tests before pushing."
+    exit 1
+  fi
+fi
+
 exit 0
