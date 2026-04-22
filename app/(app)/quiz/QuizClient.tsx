@@ -233,7 +233,12 @@ export default function QuizClient() {
             borderBottom: '1px solid var(--glass-border-light)',
           }}
         >
-          <ProgressBar answered={answeredCount} total={TOTAL_QUESTIONS} />
+          <ProgressBar
+            answered={answeredCount}
+            total={TOTAL_QUESTIONS}
+            questionIds={QUIZ_QUESTIONS.map(q => q.id)}
+            answeredIds={new Set(Object.keys(answers).map(Number))}
+          />
         </div>
 
         {/* Language toggle */}
