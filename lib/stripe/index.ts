@@ -11,7 +11,7 @@ function requireEnv(name: string): string {
   if (!value) {
     throw new Error(
       `${name} is not configured. ` +
-      `Please set it in your environment variables (Vercel Dashboard → Settings → Environment Variables).`
+        `Please set it in your environment variables (Vercel Dashboard → Settings → Environment Variables).`
     )
   }
   return value
@@ -33,18 +33,37 @@ export function getStripe(): Stripe {
 
 // 保留 stripe 导出以保持兼容性（但现在是 getter）
 export const stripe = {
-  get customers() { return getStripe().customers },
-  get subscriptions() { return getStripe().subscriptions },
-  get checkout() { return getStripe().checkout },
-  get billingPortal() { return getStripe().billingPortal },
-  get webhooks() { return getStripe().webhooks },
+  get customers() {
+    return getStripe().customers
+  },
+  get subscriptions() {
+    return getStripe().subscriptions
+  },
+  get checkout() {
+    return getStripe().checkout
+  },
+  get billingPortal() {
+    return getStripe().billingPortal
+  },
+  get webhooks() {
+    return getStripe().webhooks
+  },
 }
 
 // 价格 ID 配置 - Pro 会员的月付/年付/终身价格
 // Falls back to STRIPE_PRO_PRICE_ID for both if specific monthly/yearly IDs not set
 export const STRIPE_PRICE_IDS = {
-  monthly: process.env.STRIPE_PRO_MONTHLY_PRICE_ID || process.env.STRIPE_PRICE_MONTHLY_ID || process.env.STRIPE_PRO_PRICE_ID || '',
-  yearly: process.env.STRIPE_PRO_YEARLY_PRICE_ID || process.env.STRIPE_PRICE_YEARLY_ID || process.env.STRIPE_ELITE_PRICE_ID || process.env.STRIPE_PRO_PRICE_ID || '',
+  monthly:
+    process.env.STRIPE_PRO_MONTHLY_PRICE_ID ||
+    process.env.STRIPE_PRICE_MONTHLY_ID ||
+    process.env.STRIPE_PRO_PRICE_ID ||
+    '',
+  yearly:
+    process.env.STRIPE_PRO_YEARLY_PRICE_ID ||
+    process.env.STRIPE_PRICE_YEARLY_ID ||
+    process.env.STRIPE_ELITE_PRICE_ID ||
+    process.env.STRIPE_PRO_PRICE_ID ||
+    '',
   lifetime: process.env.STRIPE_PRO_LIFETIME_PRICE_ID || '',
 }
 
@@ -73,11 +92,7 @@ export const SUBSCRIPTION_PLANS = {
     price: PRICING.yearly.price,
     originalPrice: PRICING.yearly.original,
     interval: 'year' as const,
-    features: [
-      'All monthly features',
-      'Save 50%',
-      'Priority support',
-    ],
+    features: ['All monthly features', 'Save 50%', 'Priority support'],
   },
   lifetime: {
     name: 'Founding Member Lifetime',
@@ -109,7 +124,7 @@ export const SUBSCRIPTION_STATUS_MAP: Record<Stripe.Subscription.Status, string>
 
 // 获取 Stripe 客户 ID 或创建新客户
 export async function getOrCreateStripeCustomer(
-  userId: string, 
+  userId: string,
   email: string,
   metadata?: Record<string, string>
 ): Promise<string> {
@@ -148,7 +163,7 @@ export async function createCheckoutSession(params: {
   if (!params.priceId || !params.priceId.startsWith('price_')) {
     throw new Error(
       `Invalid Stripe price ID: "${params.priceId}". ` +
-      `Please configure STRIPE_PRO_MONTHLY_PRICE_ID and STRIPE_PRO_YEARLY_PRICE_ID environment variables.`
+        `Please configure STRIPE_PRO_MONTHLY_PRICE_ID and STRIPE_PRO_YEARLY_PRICE_ID environment variables.`
     )
   }
 
@@ -180,13 +195,19 @@ export async function createCheckoutSession(params: {
     sessionParams.discounts = [{ promotion_code: params.promotionCode }]
   }
 
-  const session = await stripe.checkout.sessions.create(sessionParams)
+  // Idempotency key prevents duplicate checkout sessions if the client retries
+  // (double-click, network retry, browser prefetch). Stripe deduplicates within 24h.
+  // Key is scoped to customer + price so switching plans creates a new session.
+  const idempotencyKey = `checkout_${params.customerId}_${params.priceId}_${Math.floor(Date.now() / 60_000)}`
+  const session = await stripe.checkout.sessions.create(sessionParams, {
+    idempotencyKey,
+  })
   return session
 }
 
 // 创建客户门户会话 (用于管理订阅)
 export async function createPortalSession(
-  customerId: string, 
+  customerId: string,
   returnUrl: string
 ): Promise<Stripe.BillingPortal.Session> {
   const session = await stripe.billingPortal.sessions.create({
@@ -205,7 +226,7 @@ export async function cancelSubscription(
   if (immediately) {
     return await stripe.subscriptions.cancel(subscriptionId)
   }
-  
+
   // 在当前周期结束时取消
   return await stripe.subscriptions.update(subscriptionId, {
     cancel_at_period_end: true,
@@ -213,25 +234,19 @@ export async function cancelSubscription(
 }
 
 // 恢复已取消的订阅
-export async function resumeSubscription(
-  subscriptionId: string
-): Promise<Stripe.Subscription> {
+export async function resumeSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
   return await stripe.subscriptions.update(subscriptionId, {
     cancel_at_period_end: false,
   })
 }
 
 // 获取订阅详情
-export async function getSubscription(
-  subscriptionId: string
-): Promise<Stripe.Subscription> {
+export async function getSubscription(subscriptionId: string): Promise<Stripe.Subscription> {
   return await stripe.subscriptions.retrieve(subscriptionId)
 }
 
 // 获取客户的所有订阅
-export async function getCustomerSubscriptions(
-  customerId: string
-): Promise<Stripe.Subscription[]> {
+export async function getCustomerSubscriptions(customerId: string): Promise<Stripe.Subscription[]> {
   const subscriptions = await stripe.subscriptions.list({
     customer: customerId,
     status: 'all',
@@ -241,14 +256,7 @@ export async function getCustomerSubscriptions(
 }
 
 // Webhook 签名验证
-export function constructWebhookEvent(
-  payload: string | Buffer,
-  signature: string
-): Stripe.Event {
+export function constructWebhookEvent(payload: string | Buffer, signature: string): Stripe.Event {
   const webhookSecret = requireEnv('STRIPE_WEBHOOK_SECRET')
-  return stripe.webhooks.constructEvent(
-    payload,
-    signature,
-    webhookSecret
-  )
+  return stripe.webhooks.constructEvent(payload, signature, webhookSecret)
 }
