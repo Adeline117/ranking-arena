@@ -97,8 +97,8 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           position: 'relative',
         }}
       >
-        {/* Language toggle */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        {/* Language toggle — fixed top-right of container */}
+        <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 2 }}>
           <button
             type="button"
             onClick={handleToggleLanguage}
@@ -106,7 +106,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               padding: '4px 10px',
               borderRadius: 6,
               border: '1px solid var(--glass-border-light)',
-              background: 'transparent',
+              background: 'var(--color-bg-secondary)',
               color: 'var(--color-text-tertiary)',
               fontSize: 12,
               fontWeight: 600,

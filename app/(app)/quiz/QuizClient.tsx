@@ -196,7 +196,7 @@ export default function QuizClient() {
   return (
     <Box style={{ minHeight: '80vh', padding: 20, paddingBottom: 80, touchAction: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
       <div style={{ maxWidth: 'clamp(520px, 90vw, 640px)', width: '100%', margin: '0 auto' }}>
-        {/* Sticky progress bar at top */}
+        {/* Sticky progress bar at top with language toggle */}
         <div
           style={{
             position: 'sticky',
@@ -205,18 +205,19 @@ export default function QuizClient() {
             background: 'var(--color-bg-primary)',
             padding: '10px 0',
             borderBottom: '1px solid var(--glass-border-light)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
           }}
         >
-          <ProgressBar
-            answered={answeredCount}
-            total={TOTAL_QUESTIONS}
-            questionIds={QUIZ_QUESTIONS.map(q => q.id)}
-            answeredIds={new Set(Object.keys(answers).map(Number))}
-          />
-        </div>
-
-        {/* Language toggle */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8, marginTop: 4 }}>
+          <div style={{ flex: 1 }}>
+            <ProgressBar
+              answered={answeredCount}
+              total={TOTAL_QUESTIONS}
+              questionIds={QUIZ_QUESTIONS.map(q => q.id)}
+              answeredIds={new Set(Object.keys(answers).map(Number))}
+            />
+          </div>
           {langToggleButton}
         </div>
 
