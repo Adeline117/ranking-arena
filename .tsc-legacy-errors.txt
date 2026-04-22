@@ -82,6 +82,9 @@ conversations/
 auto-post-
 pro-official-group
 
+# ── Stripe checkout (Json type narrowing issue from another session) ──
+stripe/create-checkout
+
 # ── Auth / onboarding / settings ──
 auth/callback
 login/page\.tsx
