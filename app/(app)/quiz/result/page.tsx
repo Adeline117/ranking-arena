@@ -15,7 +15,7 @@ import ResultPageClient from './ResultPageClient'
 export const revalidate = 3600
 
 interface Props {
-  searchParams: Promise<{ type?: string; match?: string; lang?: string }>
+  searchParams: Promise<{ type?: string; match?: string; lang?: string; secondary?: string; percents?: string }>
 }
 
 // Type-specific trader query criteria
@@ -107,11 +107,31 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   }
 }
 
+/**
+ * Parse compact percents param ("12,8,5,...") back into Record<PersonalityTypeId, number>.
+ * Returns null if param is missing or malformed.
+ */
+function parsePercentsParam(percents: string | undefined): Record<PersonalityTypeId, number> | null {
+  if (!percents) return null
+  const parts = percents.split(',').map(Number)
+  if (parts.length !== PERSONALITY_TYPES.length || parts.some(isNaN)) return null
+  const result = {} as Record<PersonalityTypeId, number>
+  PERSONALITY_TYPES.forEach((pt, i) => {
+    result[pt.id] = parts[i]
+  })
+  return result
+}
+
 export default async function QuizResultPage({ searchParams }: Props) {
   const params = await searchParams
   const typeId = (params.type || 'sniper') as PersonalityTypeId
   const match = parseInt(params.match || '85', 10)
   const matchClamped = isNaN(match) ? 85 : Math.min(99, Math.max(55, match))
+
+  // Parse optional secondary type and type breakdown percents from URL
+  const secondaryRaw = params.secondary as string | undefined
+  const secondaryType = (secondaryRaw && PERSONALITY_TYPE_MAP[secondaryRaw] ? secondaryRaw : undefined) as PersonalityTypeId | undefined
+  const allTypePercents = parsePercentsParam(params.percents)
 
   const pType = PERSONALITY_TYPE_MAP[typeId]
   if (!pType) {
@@ -124,6 +144,12 @@ export default async function QuizResultPage({ searchParams }: Props) {
   const traders = await getRecommendedTraders(typeId)
 
   return (
-    <ResultPageClient typeId={typeId} matchPercent={matchClamped} recommendedTraders={traders} />
+    <ResultPageClient
+      typeId={typeId}
+      matchPercent={matchClamped}
+      recommendedTraders={traders}
+      secondaryTypeId={secondaryType}
+      allTypePercents={allTypePercents}
+    />
   )
 }
