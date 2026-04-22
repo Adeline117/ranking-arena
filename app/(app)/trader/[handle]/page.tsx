@@ -348,7 +348,10 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   }
 
   // Redirect raw address URLs to human-readable handle URLs (better SEO)
-  if (resolved.handle && resolved.handle !== decodedHandle) {
+  // Skip redirect for non-ASCII handles (Chinese, Korean, etc.) — Vercel's
+  // routing layer returns 500 for percent-encoded multi-byte UTF-8 paths.
+  const isAsciiHandle = resolved.handle && /^[\x20-\x7E]+$/.test(resolved.handle)
+  if (isAsciiHandle && resolved.handle !== decodedHandle) {
     redirect(
       `/trader/${encodeURIComponent(resolved.handle)}?platform=${encodeURIComponent(resolved.platform)}`
     )
