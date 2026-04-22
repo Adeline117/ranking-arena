@@ -547,7 +547,7 @@ export default function NewPostPage() {
       }
 
       clearDraft()
-      trackEvent('create_post')
+      trackEvent('create_post', { has_images: images.length > 0 ? 1 : 0 })
       showToast(t('publishSuccess'), 'success')
       router.push(`/u/${encodeURIComponent(decodedHandle)}`)
     } catch (_error) {

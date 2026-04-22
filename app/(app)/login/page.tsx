@@ -274,6 +274,7 @@ export default function LoginPage() {
           trackEvent('signup')
           showToast(t('loginCodeVerified'), 'success')
         } else {
+          trackEvent('login')
           await saveNewAccountToStore()
           const { data: userProfile } = await supabase.from('user_profiles').select('handle').eq('id', data.user.id).maybeSingle()
           router.push(getRedirectUrl(userProfile?.handle, data.user.email))

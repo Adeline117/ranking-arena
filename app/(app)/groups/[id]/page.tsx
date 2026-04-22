@@ -25,6 +25,7 @@ import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
+import { trackEvent } from '@/lib/analytics/track'
 
 interface Group {
   id: string
@@ -443,6 +444,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setGroup(prev => prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : prev)
       setIsMember(true)
       setUserRole('member')
+      trackEvent('group_join', { group_id: groupId })
       showToast(t('joinSuccess'), 'success')
     } catch (err) {
       logger.error('Join error:', err)

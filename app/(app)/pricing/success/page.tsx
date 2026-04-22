@@ -192,7 +192,7 @@ function PaymentSuccessContent() {
         clearSubscriptionCache()
         await refreshPremium()
         setVerificationStatus('success')
-        trackEvent('pro_subscribe')
+        trackEvent('pro_subscribe', { source: 'verify_api' })
         showToast(
           t('membershipActivated'),
           'success'
@@ -243,7 +243,7 @@ function PaymentSuccessContent() {
       if (isProNow) {
         await refreshPremium()
         setVerificationStatus('success')
-        trackEvent('pro_subscribe')
+        trackEvent('pro_subscribe', { source: 'verify_api' })
         showToast(
           t('membershipActivated'),
           'success'
