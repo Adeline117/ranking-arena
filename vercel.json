@@ -483,16 +483,6 @@
       ]
     }
   ],
-  "rewrites": [
-    {
-      "source": "/trader/:handle*",
-      "destination": "/trader/:handle*"
-    },
-    {
-      "source": "/u/:handle*",
-      "destination": "/u/:handle*"
-    }
-  ],
   "git": {
     "deploymentEnabled": true
   }
