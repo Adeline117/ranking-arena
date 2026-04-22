@@ -116,6 +116,11 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   // Period URL ↔ store sync extracted into hook (see ./hooks/useTraderPeriodSync)
   const selectedPeriod = useTraderPeriodSync()
 
+  // Track trader profile page view (funnel: browse → trader detail)
+  useEffect(() => {
+    trackEvent('view_trader', { platform: data.source, handle: data.handle || data.source_trader_id })
+  }, [data.source, data.handle, data.source_trader_id])
+
   const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
 
