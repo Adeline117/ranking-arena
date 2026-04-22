@@ -322,23 +322,27 @@ export class DydxPerpConnector extends BaseConnector {
       )
     }
 
-    // Try to get equity from indexer subaccount (may still work)
-    try {
-      const subUrl = this.buildUrl(`/v4/addresses/${traderKey}/subaccounts/0`)
-      const _rawSub = await this.request<Record<string, unknown>>(subUrl, { method: 'GET' })
-      const subData = warnValidate(DydxSubaccountResponseSchema, _rawSub, 'dydx-perp/subaccount')
-      equity = Number(subData?.subaccount?.equity) || null
+    // Try to get equity from indexer subaccount — only if proxy is configured.
+    // Without proxy, indexer.dydx.trade is geo-blocked and every call wastes
+    // ~10s on timeout. With 1000 traders that's 10000s = safety timeout.
+    if (isUsingProxy()) {
+      try {
+        const subUrl = this.buildUrl(`/v4/addresses/${traderKey}/subaccounts/0`)
+        const _rawSub = await this.request<Record<string, unknown>>(subUrl, { method: 'GET' })
+        const subData = warnValidate(DydxSubaccountResponseSchema, _rawSub, 'dydx-perp/subaccount')
+        equity = Number(subData?.subaccount?.equity) || null
 
-      // If we have equity and PnL but no ROI, compute it
-      if (roi === null && pnl !== null && equity != null) {
-        const startEquity = equity - pnl
-        if (startEquity > 0) roi = (pnl / startEquity) * 100
+        // If we have equity and PnL but no ROI, compute it
+        if (roi === null && pnl !== null && equity != null) {
+          const startEquity = equity - pnl
+          if (startEquity > 0) roi = (pnl / startEquity) * 100
+        }
+      } catch (err) {
+        this.logger.debug(
+          'dYdX subaccount fallback:',
+          err instanceof Error ? err.message : String(err)
+        )
       }
-    } catch (err) {
-      this.logger.debug(
-        'dYdX subaccount fallback:',
-        err instanceof Error ? err.message : String(err)
-      )
     }
 
     const metrics: SnapshotMetrics = {
