@@ -9,6 +9,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { success, badRequest, serverError } from '@/lib/api/response'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
+import { createNotificationDeduped } from '@/lib/data/notifications'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
 const logger = createLogger('follow-api')
@@ -91,7 +92,10 @@ export const POST = withAuth(
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
-          throw new ApiError('Follow feature not available yet', { code: ErrorCode.SERVICE_UNAVAILABLE, statusCode: 503 })
+          throw new ApiError('Follow feature not available yet', {
+            code: ErrorCode.SERVICE_UNAVAILABLE,
+            statusCode: 503,
+          })
         }
         logger.error('Follow failed', { error, traderId, userId: user.id })
         return serverError('Follow failed')
@@ -101,15 +105,15 @@ export const POST = withAuth(
       fireAndForget(invalidateFollowingCache(user.id), 'invalidate-following-cache')
 
       // Fire-and-forget: notify the followed trader's claimed user (if any)
-      ;(async () => {
-        try {
+      fireAndForget(
+        (async () => {
           const { data: claim } = await supabase
             .from('verified_traders')
             .select('user_id')
             .eq('trader_id', traderId)
             .maybeSingle()
           if (claim?.user_id && claim.user_id !== user.id) {
-            const { error: notifError } = await supabase.from('notifications').insert({
+            await createNotificationDeduped(supabase, {
               user_id: claim.user_id,
               type: 'new_follower',
               title: 'New Follower',
@@ -118,14 +122,10 @@ export const POST = withAuth(
               actor_id: user.id,
               reference_id: traderId,
             })
-            if (notifError) {
-              logger.error('Failed to insert follow notification', { error: notifError, traderId, claimUserId: claim.user_id })
-            }
           }
-        } catch (err) {
-          logger.error('Follow notification fire-and-forget failed', { error: err, traderId, userId: user.id })
-        }
-      })()
+        })(),
+        'Trader follow notification'
+      )
 
       return { following: true }
     } else {
@@ -140,7 +140,10 @@ export const POST = withAuth(
         // 如果表不存在
         if (error.message?.includes('Could not find the table')) {
           logger.warn('trader_follows 表不存在')
-          throw new ApiError('Follow feature not available yet', { code: ErrorCode.SERVICE_UNAVAILABLE, statusCode: 503 })
+          throw new ApiError('Follow feature not available yet', {
+            code: ErrorCode.SERVICE_UNAVAILABLE,
+            statusCode: 503,
+          })
         }
         logger.error('Unfollow failed', { error, traderId, userId: user.id })
         return serverError('Unfollow failed')

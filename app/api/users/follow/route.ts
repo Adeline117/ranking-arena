@@ -9,6 +9,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
+import { createNotificationDeduped } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
@@ -27,13 +28,25 @@ async function updateFollowCounts(
   // follow/unfollow. The count MUST be exact here since downstream
   // reads trust those cached columns.
   const [followerCountRes, followingCountRes] = await Promise.all([
-    supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('following_id', followingId),
-    supabase.from('user_follows').select('id', { count: 'exact', head: true }).eq('follower_id', followerId),
+    supabase
+      .from('user_follows')
+      .select('id', { count: 'exact', head: true })
+      .eq('following_id', followingId),
+    supabase
+      .from('user_follows')
+      .select('id', { count: 'exact', head: true })
+      .eq('follower_id', followerId),
   ])
 
   await Promise.all([
-    supabase.from('user_profiles').update({ follower_count: followerCountRes.count ?? 0 }).eq('id', followingId),
-    supabase.from('user_profiles').update({ following_count: followingCountRes.count ?? 0 }).eq('id', followerId),
+    supabase
+      .from('user_profiles')
+      .update({ follower_count: followerCountRes.count ?? 0 })
+      .eq('id', followingId),
+    supabase
+      .from('user_profiles')
+      .update({ following_count: followingCountRes.count ?? 0 })
+      .eq('id', followerId),
   ])
 }
 
@@ -41,7 +54,10 @@ async function updateFollowCounts(
  * 验证用户身份并返回用户ID
  */
 
-async function authenticateUser(request: NextRequest, _supabase: ReturnType<typeof getSupabaseAdmin>): Promise<{ userId: string } | { error: string; status: number }> {
+async function authenticateUser(
+  request: NextRequest,
+  _supabase: ReturnType<typeof getSupabaseAdmin>
+): Promise<{ userId: string } | { error: string; status: number }> {
   const { extractUserFromRequest } = await import('@/lib/auth/extract-user')
   const { user, error: authError } = await extractUserFromRequest(request)
 
@@ -101,7 +117,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       following: !!followData,
       followedBy: !!reverseData,
-      mutual: !!followData && !!reverseData
+      mutual: !!followData && !!reverseData,
     })
   } catch (error: unknown) {
     logger.error('[User Follow API] 错误:', error)
@@ -150,7 +166,10 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ success: true, following: true })
         }
         if (error.message?.includes('Could not find the table')) {
-          return NextResponse.json({ error: 'Follow feature not available yet', tableNotFound: true }, { status: 503 })
+          return NextResponse.json(
+            { error: 'Follow feature not available yet', tableNotFound: true },
+            { status: 503 }
+          )
         }
         logger.error('[User Follow API] 关注错误:', error)
         return NextResponse.json({ error: 'Follow operation failed' }, { status: 500 })
@@ -167,7 +186,7 @@ export async function POST(request: NextRequest) {
       // Update follower/following counts (best-effort, recount from source of truth)
       fireAndForget(updateFollowCounts(supabase, followerId, followingId), 'Update follow counts')
 
-      // Send follow notification (fire-and-forget)
+      // Send follow notification (fire-and-forget, deduped)
       fireAndForget(
         (async () => {
           const { data: followerProfile } = await supabase
@@ -177,24 +196,23 @@ export async function POST(request: NextRequest) {
             .maybeSingle()
 
           const followerHandle = followerProfile?.handle || 'Someone'
-          await supabase
-            .from('notifications')
-            .insert({
-              user_id: followingId,
-              type: 'new_follower',
-              title: 'New Follower',
-              message: `${followerHandle} started following you`,
-              actor_id: followerId,
-              link: `/u/${followerHandle}`,
-            })
+          await createNotificationDeduped(supabase, {
+            user_id: followingId,
+            type: 'new_follower',
+            title: 'New Follower',
+            message: `${followerHandle} started following you`,
+            actor_id: followerId,
+            link: `/u/${followerHandle}`,
+            reference_id: followerId,
+          })
         })(),
         'Send follow notification'
       )
 
-      return NextResponse.json({ 
-        success: true, 
+      return NextResponse.json({
+        success: true,
         following: true,
-        mutual: !!reverseData
+        mutual: !!reverseData,
       })
     } else if (action === 'unfollow') {
       // 取消关注
@@ -206,7 +224,10 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         if (error.message?.includes('Could not find the table')) {
-          return NextResponse.json({ error: 'Follow feature not available yet', tableNotFound: true }, { status: 503 })
+          return NextResponse.json(
+            { error: 'Follow feature not available yet', tableNotFound: true },
+            { status: 503 }
+          )
         }
         logger.error('[User Follow API] 取消关注错误:', error)
         return NextResponse.json({ error: 'Unfollow operation failed' }, { status: 500 })
@@ -224,5 +245,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
-
-
