@@ -8,10 +8,7 @@
 
 import { NextResponse } from 'next/server'
 import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
-import {
-  createSupabaseAdmin,
-  getSupabaseEnv,
-} from '@/lib/cron/utils'
+import { createSupabaseAdmin, getSupabaseEnv } from '@/lib/cron/utils'
 import { logger } from '@/lib/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
@@ -28,7 +25,7 @@ export const maxDuration = 300 // 5 min (Pro plan)
 type Params = { params: Promise<{ platform: string }> }
 
 function isVercelCronAuthorized(request: Request): boolean {
-  if (!process.env.CRON_SECRET && process.env.NODE_ENV === 'development') return true
+  // No dev bypass — if CRON_SECRET is missing, reject (fail closed)
   return verifyCronSecret(request)
 }
 
@@ -45,10 +42,7 @@ export async function GET(request: Request, { params }: Params) {
     // 2) Verify env
     const { url, serviceKey } = getSupabaseEnv()
     if (!url || !serviceKey) {
-      return NextResponse.json(
-        { error: 'Supabase environment variables missing' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Supabase environment variables missing' }, { status: 500 })
     }
 
     const supabase = createSupabaseAdmin()
@@ -69,7 +63,10 @@ export async function GET(request: Request, { params }: Params) {
 
     if (!connector) {
       return NextResponse.json(
-        { error: `No connector for platform: ${platform}`, supported: getSupportedInlinePlatforms() },
+        {
+          error: `No connector for platform: ${platform}`,
+          supported: getSupportedInlinePlatforms(),
+        },
         { status: 400 }
       )
     }
@@ -90,7 +87,10 @@ export async function GET(request: Request, { params }: Params) {
       durationMs: result.duration,
       recordCount: totalSaved,
       error: hasErrors
-        ? Object.entries(result.periods).filter(([, p]) => p.error).map(([k, p]) => `${k}: ${p.error}`).join('; ')
+        ? Object.entries(result.periods)
+            .filter(([, p]) => p.error)
+            .map(([k, p]) => `${k}: ${p.error}`)
+            .join('; ')
         : undefined,
       metadata: { periods: result.periods },
     })
@@ -119,11 +119,10 @@ export async function GET(request: Request, { params }: Params) {
           error: msg,
         })
       }
-    } catch { /* ignore metric recording failures */ }
+    } catch {
+      /* ignore metric recording failures */
+    }
 
-    return NextResponse.json(
-      { ok: false, platform, error: msg },
-      { status: 500 }
-    )
+    return NextResponse.json({ ok: false, platform, error: msg }, { status: 500 })
   }
 }

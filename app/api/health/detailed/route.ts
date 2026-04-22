@@ -109,10 +109,7 @@ async function checkDatabaseAndCron(): Promise<{
     const supabase = getSupabaseAdmin() as SupabaseClient
 
     // 1. 测试数据库连接
-    const { error: dbError } = await supabase
-      .from('leaderboard_ranks')
-      .select('count')
-      .limit(1)
+    const { error: dbError } = await supabase.from('leaderboard_ranks').select('count').limit(1)
 
     if (dbError) {
       return {
@@ -123,7 +120,7 @@ async function checkDatabaseAndCron(): Promise<{
 
     // 2. 获取最近的 Cron 运行记录 (filter out dead/blocked platforms)
     const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-    const platforms = getSupportedPlatforms().filter(p => !deadSet.has(p))
+    const platforms = getSupportedPlatforms().filter((p) => !deadSet.has(p))
     const cronRuns: CronRunInfo[] = []
 
     try {
@@ -144,7 +141,8 @@ async function checkDatabaseAndCron(): Promise<{
             let success = true
             try {
               const result = JSON.parse(platformLog.result || '[]')
-              success = Array.isArray(result) && result.every((r: { success?: boolean }) => r.success)
+              success =
+                Array.isArray(result) && result.every((r: { success?: boolean }) => r.success)
             } catch {
               success = false
             }
@@ -233,7 +231,9 @@ async function getCacheStatus(): Promise<CacheStatus> {
 /**
  * 计算整体状态
  */
-function calculateStatus(checks: DetailedHealthResponse['checks']): DetailedHealthResponse['status'] {
+function calculateStatus(
+  checks: DetailedHealthResponse['checks']
+): DetailedHealthResponse['status'] {
   // 数据库失败 = 不健康
   if (checks.database.status === 'fail') {
     return 'unhealthy'
@@ -260,11 +260,31 @@ function calculateStatus(checks: DetailedHealthResponse['checks']): DetailedHeal
 // ---------- Connectors section (was /api/health/connectors) ----------
 
 const ACTIVE_PLATFORMS = [
-  'binance_futures', 'binance_spot', 'bitget_futures', 'okx_futures',
-  'htx_futures', 'mexc', 'coinex', 'bingx', 'gateio', 'xt', 'btcc',
-  'bitunix', 'bitfinex', 'toobit', 'etoro',
-  'hyperliquid', 'gmx', 'dydx', 'gains', 'jupiter_perps', 'aevo', 'drift',
-  'okx_web3', 'binance_web3', 'web3_bot',
+  'binance_futures',
+  'binance_spot',
+  'bitget_futures',
+  'okx_futures',
+  'htx_futures',
+  'mexc',
+  'coinex',
+  'bingx',
+  'gateio',
+  'xt',
+  'btcc',
+  'bitunix',
+  'bitfinex',
+  'toobit',
+  'etoro',
+  'hyperliquid',
+  'gmx',
+  'dydx',
+  'gains',
+  'jupiter_perps',
+  'aevo',
+  'drift',
+  'okx_web3',
+  'binance_web3',
+  'web3_bot',
 ]
 
 async function getConnectorsSection(request: Request) {
@@ -280,16 +300,15 @@ async function getConnectorsSection(request: Request) {
   const [{ data: logs }, { data: freshness }] = await Promise.all([
     supabase
       .from('pipeline_logs')
-      .select('job_name, status, started_at, ended_at, duration_ms, records_processed, error_message')
+      .select(
+        'job_name, status, started_at, ended_at, duration_ms, records_processed, error_message'
+      )
       .like('job_name', 'batch-fetch-traders%')
       .gte('started_at', oneDayAgo)
       .order('started_at', { ascending: false }),
     // Get latest computed_at per source using leaderboard_count_cache
     // (was: fetch 5000 rows and dedupe in JS)
-    supabase
-      .from('leaderboard_count_cache')
-      .select('source, updated_at')
-      .neq('source', '_all'),
+    supabase.from('leaderboard_count_cache').select('source, updated_at').neq('source', '_all'),
   ])
 
   const latestByPlatform = new Map<string, string>()
@@ -307,25 +326,35 @@ async function getConnectorsSection(request: Request) {
     groupStats.set(group, stats)
   }
 
-  const connectors: Record<string, {
-    status: 'healthy' | 'stale' | 'critical'
-    last_update: string | null
-    staleness_hours: number | null
-  }> = {}
+  const connectors: Record<
+    string,
+    {
+      status: 'healthy' | 'stale' | 'critical'
+      last_update: string | null
+      staleness_hours: number | null
+    }
+  > = {}
 
   for (const platform of ACTIVE_PLATFORMS) {
     const latest = latestByPlatform.get(platform)
     const hoursAgo = latest ? (Date.now() - new Date(latest).getTime()) / (60 * 60 * 1000) : null
     connectors[platform] = {
-      status: hoursAgo === null ? 'critical' : hoursAgo > 24 ? 'critical' : hoursAgo > 8 ? 'stale' : 'healthy',
+      status:
+        hoursAgo === null
+          ? 'critical'
+          : hoursAgo > 24
+            ? 'critical'
+            : hoursAgo > 8
+              ? 'stale'
+              : 'healthy',
       last_update: latest || null,
       staleness_hours: hoursAgo ? Math.round(hoursAgo * 10) / 10 : null,
     }
   }
 
-  const healthy = Object.values(connectors).filter(c => c.status === 'healthy').length
-  const stale = Object.values(connectors).filter(c => c.status === 'stale').length
-  const critical = Object.values(connectors).filter(c => c.status === 'critical').length
+  const healthy = Object.values(connectors).filter((c) => c.status === 'healthy').length
+  const stale = Object.values(connectors).filter((c) => c.status === 'stale').length
+  const critical = Object.values(connectors).filter((c) => c.status === 'critical').length
 
   return NextResponse.json({
     status: critical > 0 ? 'degraded' : 'healthy',
@@ -335,7 +364,11 @@ async function getConnectorsSection(request: Request) {
     pipeline_groups: Object.fromEntries(
       Array.from(groupStats.entries()).map(([k, v]) => [
         k,
-        { runs_24h: v.total, success_rate: v.total > 0 ? Math.round((v.success / v.total) * 100) : 0, recent_errors: v.errors.slice(0, 3) },
+        {
+          runs_24h: v.total,
+          success_rate: v.total > 0 ? Math.round((v.success / v.total) * 100) : 0,
+          recent_errors: v.errors.slice(0, 3),
+        },
       ])
     ),
   })
@@ -363,7 +396,14 @@ async function checkWithTimeout(
     ])
     return [name, result]
   } catch (err) {
-    return [name, { status: 'down', latencyMs: timeoutMs, message: err instanceof Error ? err.message : 'Unknown error' }]
+    return [
+      name,
+      {
+        status: 'down',
+        latencyMs: timeoutMs,
+        message: err instanceof Error ? err.message : 'Unknown error',
+      },
+    ]
   }
 }
 
@@ -372,8 +412,15 @@ async function checkSupabaseDep(): Promise<DependencyStatus> {
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
   if (!url || !key) return { status: 'skip', latencyMs: 0, message: 'Not configured' }
   const start = Date.now()
-  const res = await fetch(`${url}/rest/v1/`, { method: 'HEAD', headers: { apikey: key, Authorization: `Bearer ${key}` } })
-  return { status: res.ok ? 'up' : 'down', latencyMs: Date.now() - start, message: res.ok ? undefined : `HTTP ${res.status}` }
+  const res = await fetch(`${url}/rest/v1/`, {
+    method: 'HEAD',
+    headers: { apikey: key, Authorization: `Bearer ${key}` },
+  })
+  return {
+    status: res.ok ? 'up' : 'down',
+    latencyMs: Date.now() - start,
+    message: res.ok ? undefined : `HTTP ${res.status}`,
+  }
 }
 
 async function checkRedisDep(): Promise<DependencyStatus> {
@@ -384,13 +431,21 @@ async function checkRedisDep(): Promise<DependencyStatus> {
   const res = await fetch(`${url}/ping`, { headers: { Authorization: `Bearer ${token}` } })
   const body = await res.json().catch(() => null)
   const pong = body?.result === 'PONG'
-  return { status: pong ? 'up' : 'down', latencyMs: Date.now() - start, message: pong ? undefined : `Response: ${JSON.stringify(body)}` }
+  return {
+    status: pong ? 'up' : 'down',
+    latencyMs: Date.now() - start,
+    message: pong ? undefined : `Response: ${JSON.stringify(body)}`,
+  }
 }
 
 async function checkUrl(url: string): Promise<DependencyStatus> {
   const start = Date.now()
   const res = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) })
-  return { status: res.ok || res.status === 403 ? 'up' : 'degraded', latencyMs: Date.now() - start, message: res.ok ? undefined : `HTTP ${res.status}` }
+  return {
+    status: res.ok || res.status === 403 ? 'up' : 'degraded',
+    latencyMs: Date.now() - start,
+    message: res.ok ? undefined : `HTTP ${res.status}`,
+  }
 }
 
 const EXCHANGE_ENDPOINTS: Record<string, string> = {
@@ -429,7 +484,10 @@ async function getDependenciesSection() {
 
   return NextResponse.json(
     { status, timestamp: new Date().toISOString(), dependencies },
-    { status: status === 'unhealthy' ? 503 : 200, headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' } }
+    {
+      status: status === 'unhealthy' ? 503 : 200,
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    }
   )
 }
 
@@ -443,6 +501,10 @@ export async function GET(request: NextRequest) {
     return getConnectorsSection(request)
   }
   if (section === 'dependencies') {
+    // SECURITY: dependencies section reveals infrastructure topology
+    if (!verifyCronSecret(request)) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
     return getDependenciesSection()
   }
 
@@ -457,7 +519,7 @@ export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
     return NextResponse.json(
       { error: 'Unauthorized — use /api/health for public liveness' },
-      { status: 401 },
+      { status: 401 }
     )
   }
 
@@ -520,7 +582,8 @@ export async function GET(request: NextRequest) {
       ...(Object.keys(authFailures).length > 0 ? { authFailures } : {}),
     }
 
-    const httpStatus = response.status === 'healthy' ? 200 : response.status === 'degraded' ? 200 : 503
+    const httpStatus =
+      response.status === 'healthy' ? 200 : response.status === 'degraded' ? 200 : 503
 
     return NextResponse.json(response, {
       status: httpStatus,
