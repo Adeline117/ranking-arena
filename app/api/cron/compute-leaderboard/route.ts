@@ -13,15 +13,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
-import {
-  calculateArenaScore,
-  type Period,
-} from '@/lib/utils/arena-score'
-import {
-  SOURCES_WITH_DATA,
-  SOURCE_TYPE_MAP,
-  SOURCE_TRUST_WEIGHT,
-} from '@/lib/constants/exchanges'
+import { calculateArenaScore, type Period } from '@/lib/utils/arena-score'
+import { SOURCES_WITH_DATA, SOURCE_TYPE_MAP, SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import {
   syncSubscoresToV2,
@@ -32,7 +25,12 @@ import {
 } from './post-processing'
 import { detectTraderType, deriveWinRateMDD } from './helpers'
 import { type TraderRow, makeAddToTraderMap } from './trader-row'
-import { computeLastResortCalmar, classifyTradingStyle, markOutliers, applyArenaFollowers } from './scoring-helpers'
+import {
+  computeLastResortCalmar,
+  classifyTradingStyle,
+  markOutliers,
+  applyArenaFollowers,
+} from './scoring-helpers'
 import { checkPlatformFreshness } from './freshness-check'
 import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
@@ -48,6 +46,7 @@ import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { MIN_TRADES } from '@/lib/constants/trader-thresholds'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -59,8 +58,9 @@ export const maxDuration = 300
 const logger = createLogger('compute-leaderboard')
 
 const SEASONS: Period[] = ['7D', '30D', '90D']
-const MIN_TRADES_COUNT = 5 // Require 5+ trades for ranking — 1-trade wonders have meaningless stats
-const DEGRADATION_THRESHOLD = 0.70 // 70% — block catastrophic drops only; 85% was too tight (7D hovers at 84% due to ROI filters)
+// H-7: Use centralized threshold from lib/constants/trader-thresholds.ts
+// Previously hardcoded as 5 here vs 10 in lib/utils/ranking.ts — now unified to MIN_TRADES (10).
+const DEGRADATION_THRESHOLD = 0.7 // 70% — block catastrophic drops only; 85% was too tight (7D hovers at 84% due to ROI filters)
 
 // P1-3: ROI anomaly thresholds per period
 // Must align with arena-score.ts ROI_CAP (10000). Previously 90D was 50000,
@@ -79,10 +79,11 @@ export async function GET(request: NextRequest) {
 
   // Accept ?season=7D|30D|90D to process a single season (staggered cron)
   // When no season param, process all seasons (fallback / legacy behavior)
-  const seasonParam = request.nextUrl.searchParams.get('season')?.toUpperCase() as Period | undefined
-  const targetSeasons: Period[] = seasonParam && SEASONS.includes(seasonParam)
-    ? [seasonParam]
-    : SEASONS
+  const seasonParam = request.nextUrl.searchParams.get('season')?.toUpperCase() as
+    | Period
+    | undefined
+  const targetSeasons: Period[] =
+    seasonParam && SEASONS.includes(seasonParam) ? [seasonParam] : SEASONS
 
   // Idempotency: atomic SET NX EX (no race window between get and set)
   // Per-season lock when running single season to allow parallel staggered runs
@@ -93,18 +94,31 @@ export async function GET(request: NextRequest) {
     const { getSharedRedis } = await import('@/lib/cache/redis-client')
     const redis = await getSharedRedis()
     if (redis) {
-      const result = await redis.set(IDEMPOTENCY_KEY, new Date().toISOString(), { nx: true, ex: 300 })
+      const result = await redis.set(IDEMPOTENCY_KEY, new Date().toISOString(), {
+        nx: true,
+        ex: 300,
+      })
       lockAcquired = result === 'OK'
     } else {
       const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
-      if (!cached.data) { await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', []); lockAcquired = true }
+      if (!cached.data) {
+        await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', [])
+        lockAcquired = true
+      }
     }
   } catch (err) {
-    logger.warn('[compute-leaderboard] Redis lock failed, proceeding without lock:', err instanceof Error ? err.message : String(err))
+    logger.warn(
+      '[compute-leaderboard] Redis lock failed, proceeding without lock:',
+      err instanceof Error ? err.message : String(err)
+    )
     lockAcquired = true
   }
   if (!lockAcquired) {
-    return NextResponse.json({ ok: true, message: `Already running (atomic lock${lockSuffix})`, cached: true })
+    return NextResponse.json({
+      ok: true,
+      message: `Already running (atomic lock${lockSuffix})`,
+      cached: true,
+    })
   }
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -150,7 +164,13 @@ export async function GET(request: NextRequest) {
     const results: Array<{ season: string; count: number; error: unknown }> = []
     for (const season of targetSeasons) {
       try {
-        const count = await computeSeason(supabase, season, previousCounts[season], forceWrite, computeDeadline)
+        const count = await computeSeason(
+          supabase,
+          season,
+          previousCounts[season],
+          forceWrite,
+          computeDeadline
+        )
         results.push({ season, count, error: null })
       } catch (err) {
         logger.error(`[${season}] computeSeason failed:`, err)
@@ -183,12 +203,16 @@ export async function GET(request: NextRequest) {
     if (warnings.length > 0) {
       try {
         const { sendRateLimitedAlert } = await import('@/lib/alerts/send-alert')
-        await sendRateLimitedAlert({
-          title: '排行榜降级告警',
-          message: warnings.join('\n'),
-          level: 'critical',
-          details: { seasons_affected: rolledBack.join(', ') },
-        }, 'leaderboard:degradation', 6 * 60 * 60 * 1000)
+        await sendRateLimitedAlert(
+          {
+            title: '排行榜降级告警',
+            message: warnings.join('\n'),
+            level: 'critical',
+            details: { seasons_affected: rolledBack.join(', ') },
+          },
+          'leaderboard:degradation',
+          6 * 60 * 60 * 1000
+        )
       } catch (e) {
         logger.error('[compute-leaderboard] 告警发送失败:', e)
       }
@@ -208,7 +232,9 @@ export async function GET(request: NextRequest) {
         logger.warn('Failed to refresh leaderboard_count_cache:', cacheErr)
       }
     } else {
-      logger.warn(`Skipping leaderboard_count_cache refresh — only ${Math.round(remainingMs() / 1000)}s remaining`)
+      logger.warn(
+        `Skipping leaderboard_count_cache refresh — only ${Math.round(remainingMs() / 1000)}s remaining`
+      )
     }
 
     // Sync arena_score from leaderboard_ranks → trader_snapshots_v2 flat column
@@ -227,7 +253,7 @@ export async function GET(request: NextRequest) {
 
         if (missingScores && missingScores.length > 0) {
           // Batch lookup from leaderboard_ranks
-          const traderKeys = [...new Set(missingScores.map(r => r.trader_key))]
+          const traderKeys = [...new Set(missingScores.map((r) => r.trader_key))]
           const { data: ranks } = await readDb
             .from('leaderboard_ranks')
             .select('source, source_trader_id, season_id, arena_score')
@@ -235,7 +261,9 @@ export async function GET(request: NextRequest) {
             .not('arena_score', 'is', null)
 
           if (ranks && ranks.length > 0) {
-            const scoreMap = new Map(ranks.map(r => [`${r.source}:${r.source_trader_id}:${r.season_id}`, r.arena_score]))
+            const scoreMap = new Map(
+              ranks.map((r) => [`${r.source}:${r.source_trader_id}:${r.season_id}`, r.arena_score])
+            )
             // Batch updates instead of N+1 individual queries
             const updates: { id: string; arena_score: number }[] = []
             for (const row of missingScores) {
@@ -249,7 +277,9 @@ export async function GET(request: NextRequest) {
             let synced = 0
             for (let i = 0; i < updates.length; i += 100) {
               if (remainingMs() < 30_000) {
-                logger.warn(`arena_score sync aborted at batch ${i} — only ${Math.round(remainingMs() / 1000)}s remaining`)
+                logger.warn(
+                  `arena_score sync aborted at batch ${i} — only ${Math.round(remainingMs() / 1000)}s remaining`
+                )
                 break
               }
               const chunk = updates.slice(i, i + 100)
@@ -258,30 +288,42 @@ export async function GET(request: NextRequest) {
                 .upsert(chunk, { onConflict: 'id' })
               if (!upsertErr) synced += chunk.length
             }
-            logger.info(`Synced arena_score to v2: ${synced}/${missingScores.length} rows (${updates.length} updates, batched)`)
+            logger.info(
+              `Synced arena_score to v2: ${synced}/${missingScores.length} rows (${updates.length} updates, batched)`
+            )
           }
         }
       } catch (syncErr) {
         logger.warn('arena_score sync to v2 failed (non-critical):', syncErr)
       }
     } else {
-      logger.warn(`Skipping arena_score v2 sync — only ${Math.round(remainingMs() / 1000)}s remaining`)
+      logger.warn(
+        `Skipping arena_score v2 sync — only ${Math.round(remainingMs() / 1000)}s remaining`
+      )
     }
 
     // Save last-known-good snapshot marker for fallback resilience.
     // Rankings API reads this to verify compute health; if stale, it serves
     // cached data instead of failing when the DB query errors out.
     {
-      const successfulSeasons = results.filter(r => !r.error && r.count > 0)
+      const successfulSeasons = results.filter((r) => !r.error && r.count > 0)
       if (successfulSeasons.length > 0) {
         try {
-          await tieredSet('leaderboard:last-success', {
-            timestamp: new Date().toISOString(),
-            seasons: successfulSeasons.map(r => r.season),
-            traderCounts: Object.fromEntries(successfulSeasons.map(r => [r.season, r.count])),
-          }, 'warm', ['leaderboard']) // 900s TTL (warm tier)
+          await tieredSet(
+            'leaderboard:last-success',
+            {
+              timestamp: new Date().toISOString(),
+              seasons: successfulSeasons.map((r) => r.season),
+              traderCounts: Object.fromEntries(successfulSeasons.map((r) => [r.season, r.count])),
+            },
+            'warm',
+            ['leaderboard']
+          ) // 900s TTL (warm tier)
         } catch (e) {
-          logger.warn('Failed to write leaderboard:last-success marker:', e instanceof Error ? e.message : String(e))
+          logger.warn(
+            'Failed to write leaderboard:last-success marker:',
+            e instanceof Error ? e.message : String(e)
+          )
         }
       }
     }
@@ -301,7 +343,9 @@ export async function GET(request: NextRequest) {
         logger.warn('WR/MDD derivation failed (non-critical):', e)
       }
     } else {
-      logger.warn(`Skipping WR/MDD derivation — only ${Math.round(remainingMs() / 1000)}s remaining`)
+      logger.warn(
+        `Skipping WR/MDD derivation — only ${Math.round(remainingMs() / 1000)}s remaining`
+      )
     }
 
     // Post-processing blocks extracted to post-processing.ts.
@@ -311,17 +355,29 @@ export async function GET(request: NextRequest) {
     fireAndForget(revalidateRankingPages(), 'revalidate-ranking-pages')
 
     // Release idempotency lock (atomic Redis DEL with fallback)
-    try { const { getSharedRedis: r } = await import('@/lib/cache/redis-client'); const c = await r(); if (c) await c.del(IDEMPOTENCY_KEY); else await tieredDel(IDEMPOTENCY_KEY) } catch { await tieredDel(IDEMPOTENCY_KEY).catch(() => {}) }
+    try {
+      const { getSharedRedis: r } = await import('@/lib/cache/redis-client')
+      const c = await r()
+      if (c) await c.del(IDEMPOTENCY_KEY)
+      else await tieredDel(IDEMPOTENCY_KEY)
+    } catch {
+      await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
+    }
 
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     // Distinguish between computation FAILUREs (real errors) and degradation SKIPs (auto-recoverable)
-    const hasRealFailures = results.some(r => r.error && r.count !== -1)
+    const hasRealFailures = results.some((r) => r.error && r.count !== -1)
     if (hasRealFailures) {
       // Real computation failure — report as error
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
     } else if (warnings.length > 0) {
       // Only degradation skips — report as partial success (auto-recovers next run)
-      await plog.success(totalRanked, { stats, warnings, rolledBack, note: 'degradation skips are auto-recoverable' })
+      await plog.success(totalRanked, {
+        stats,
+        warnings,
+        rolledBack,
+        note: 'degradation skips are auto-recoverable',
+      })
     } else {
       await plog.success(totalRanked, { stats })
     }
@@ -337,13 +393,17 @@ export async function GET(request: NextRequest) {
     })
   } catch (error: unknown) {
     // Release idempotency lock on failure (atomic Redis DEL with fallback)
-    try { const { getSharedRedis: r } = await import('@/lib/cache/redis-client'); const c = await r(); if (c) await c.del(IDEMPOTENCY_KEY); else await tieredDel(IDEMPOTENCY_KEY) } catch { await tieredDel(IDEMPOTENCY_KEY).catch(() => {}) }
+    try {
+      const { getSharedRedis: r } = await import('@/lib/cache/redis-client')
+      const c = await r()
+      if (c) await c.del(IDEMPOTENCY_KEY)
+      else await tieredDel(IDEMPOTENCY_KEY)
+    } catch {
+      await tieredDel(IDEMPOTENCY_KEY).catch(() => {})
+    }
     logger.error('Failed to compute leaderboard', error)
     await plog.error(error)
-    return NextResponse.json(
-      { error: 'Compute failed', detail: String(error) },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Compute failed', detail: String(error) }, { status: 500 })
   }
 }
 
@@ -352,7 +412,7 @@ async function computeSeason(
   season: Period,
   previousCount?: number,
   forceWrite?: boolean,
-  deadlineMs: number = Date.now() + 270_000,
+  deadlineMs: number = Date.now() + 270_000
 ): Promise<number> {
   // Deadline helpers — any phase can call these to abort early when time runs out.
   // Prevents cumulative Phase 3/4/4b/4b2 enrichment queries from blowing past
@@ -369,11 +429,15 @@ async function computeSeason(
   try {
     const { data: checkpoint } = await tieredGet<{ count: number }>(checkpointKey, 'warm')
     if (checkpoint && checkpoint.count > 0 && !forceWrite) {
-      logger.info(`[${season}] Checkpoint hit — already computed this hour (${checkpoint.count} traders). Skipping.`)
+      logger.info(
+        `[${season}] Checkpoint hit — already computed this hour (${checkpoint.count} traders). Skipping.`
+      )
       return checkpoint.count
     }
   } catch (e) {
-    logger.warn(`[${season}] Checkpoint read failed (proceeding): ${e instanceof Error ? e.message : String(e)}`)
+    logger.warn(
+      `[${season}] Checkpoint read failed (proceeding): ${e instanceof Error ? e.message : String(e)}`
+    )
   }
 
   // Upsert abort flag (set inside the upsert loop when time runs out, consumed
@@ -402,7 +466,9 @@ async function computeSeason(
     sourceCounts.set(t.source, (sourceCounts.get(t.source) || 0) + 1)
   }
   const jupiterCount = sourceCounts.get('jupiter_perps') || 0
-  logger.info(`[${season}] ${traderMap.size} unique traders from v2 (jupiter_perps: ${jupiterCount}, sources: ${sourceCounts.size})`)
+  logger.info(
+    `[${season}] ${traderMap.size} unique traders from v2 (jupiter_perps: ${jupiterCount}, sources: ${sourceCounts.size})`
+  )
 
   // Cross-window backfill REMOVED — now handled at fetch time in connector-db-adapter.ts.
   // runConnectorBatch() builds a union of all traders across all windows and ensures
@@ -411,31 +477,49 @@ async function computeSeason(
   // Data freshness check: classify each source as fresh / stale / query-failed.
   // If ALL platforms are stale (>48h) we skip computation to avoid publishing
   // a stale leaderboard. Logic lives in freshness-check.ts.
-  const { freshPlatforms, stalePlatforms, queryFailedPlatforms } =
-    await checkPlatformFreshness(supabase, traderMap)
+  const { freshPlatforms, stalePlatforms, queryFailedPlatforms } = await checkPlatformFreshness(
+    supabase,
+    traderMap
+  )
 
   if (queryFailedPlatforms.length > 0) {
-    logger.warn(`[${season}] ${queryFailedPlatforms.length} platforms had query failures but DB has fresh data: ${queryFailedPlatforms.join(', ')}`)
+    logger.warn(
+      `[${season}] ${queryFailedPlatforms.length} platforms had query failures but DB has fresh data: ${queryFailedPlatforms.join(', ')}`
+    )
   }
 
   if (freshPlatforms.length === 0 && SOURCES_WITH_DATA.length > 0) {
     if (queryFailedPlatforms.length > 0) {
-      logger.error(`[${season}] No fresh platforms loaded but ${queryFailedPlatforms.length} had DB fresh-data (query failures). Transient Supabase issue — skipping this run.`, { queryFailedPlatforms, stalePlatforms })
-      throw new Error(`Query failures prevented loading ${queryFailedPlatforms.length} fresh platforms — will retry next cron cycle.`)
+      logger.error(
+        `[${season}] No fresh platforms loaded but ${queryFailedPlatforms.length} had DB fresh-data (query failures). Transient Supabase issue — skipping this run.`,
+        { queryFailedPlatforms, stalePlatforms }
+      )
+      throw new Error(
+        `Query failures prevented loading ${queryFailedPlatforms.length} fresh platforms — will retry next cron cycle.`
+      )
     }
-    logger.error(`[${season}] ALL platforms are stale (>48h). Skipping computation to prevent stale leaderboard.`, { stalePlatforms })
-    throw new Error(`All ${stalePlatforms.length} platforms are stale (>48h). Blocking computation.`)
+    logger.error(
+      `[${season}] ALL platforms are stale (>48h). Skipping computation to prevent stale leaderboard.`,
+      { stalePlatforms }
+    )
+    throw new Error(
+      `All ${stalePlatforms.length} platforms are stale (>48h). Blocking computation.`
+    )
   }
 
   if (stalePlatforms.length > 0) {
-    logger.warn(`[${season}] ${stalePlatforms.length} platforms have stale data (>48h): ${stalePlatforms.join(', ')}. Computing with ${freshPlatforms.length} fresh platforms.`)
+    logger.warn(
+      `[${season}] ${stalePlatforms.length} platforms have stale data (>48h): ${stalePlatforms.join(', ')}. Computing with ${freshPlatforms.length} fresh platforms.`
+    )
   }
 
   // Phase 3: Fill missing metrics from trader_stats_detail (enrichment table).
   // Catches data from the enrichment cron that was written to stats_detail but
   // never propagated back to trader_snapshots_v2. Logic in enrich-stats-detail.ts.
   if (isOutOfTime(90_000)) {
-    logger.warn(`[${season}] SKIPPING Phase 3 (stats_detail enrichment) — only ${Math.round(timeLeftMs() / 1000)}s left`)
+    logger.warn(
+      `[${season}] SKIPPING Phase 3 (stats_detail enrichment) — only ${Math.round(timeLeftMs() / 1000)}s left`
+    )
   } else {
     const enrichedCount = await enrichFromStatsDetail(supabase, traderMap, season, isOutOfTime)
     if (enrichedCount > 0) {
@@ -447,7 +531,9 @@ async function computeSeason(
   // Universal fallback for platforms that don't provide WR/MDD natively.
   // Logic in enrich-equity-curve.ts.
   if (isOutOfTime(75_000)) {
-    logger.warn(`[${season}] SKIPPING Phase 4 (equity_curve WR/MDD derivation) — only ${Math.round(timeLeftMs() / 1000)}s left`)
+    logger.warn(
+      `[${season}] SKIPPING Phase 4 (equity_curve WR/MDD derivation) — only ${Math.round(timeLeftMs() / 1000)}s left`
+    )
   } else {
     const derived = await deriveWrMddFromEquityCurve(supabase, traderMap, isOutOfTime)
     if (derived > 0) {
@@ -459,11 +545,20 @@ async function computeSeason(
   // trader_equity_curve. Also estimates trades_count from equity-curve point
   // count for platforms that don't return one. Logic in enrich-equity-curve.ts.
   if (isOutOfTime(60_000)) {
-    logger.warn(`[${season}] SKIPPING Phase 4b (advanced metrics from equity_curve) — only ${Math.round(timeLeftMs() / 1000)}s left`)
+    logger.warn(
+      `[${season}] SKIPPING Phase 4b (advanced metrics from equity_curve) — only ${Math.round(timeLeftMs() / 1000)}s left`
+    )
   } else {
-    const advancedDerived = await deriveAdvancedFromEquityCurve(supabase, traderMap, season, isOutOfTime)
+    const advancedDerived = await deriveAdvancedFromEquityCurve(
+      supabase,
+      traderMap,
+      season,
+      isOutOfTime
+    )
     if (advancedDerived > 0) {
-      logger.info(`[${season}] Derived ${advancedDerived} sharpe/sortino/calmar/PF/trades values from equity curves`)
+      logger.info(
+        `[${season}] Derived ${advancedDerived} sharpe/sortino/calmar/PF/trades values from equity curves`
+      )
     }
   }
 
@@ -472,11 +567,20 @@ async function computeSeason(
   // top-N enrichment cut-off whose equity_curve is empty. Logic in
   // enrich-daily-snapshots.ts.
   if (isOutOfTime(50_000)) {
-    logger.warn(`[${season}] SKIPPING Phase 4b2 (advanced metrics from daily_snapshots) — only ${Math.round(timeLeftMs() / 1000)}s left`)
+    logger.warn(
+      `[${season}] SKIPPING Phase 4b2 (advanced metrics from daily_snapshots) — only ${Math.round(timeLeftMs() / 1000)}s left`
+    )
   } else {
-    const dailyDerived = await deriveAdvancedFromDailySnapshots(supabase, traderMap, season, isOutOfTime)
+    const dailyDerived = await deriveAdvancedFromDailySnapshots(
+      supabase,
+      traderMap,
+      season,
+      isOutOfTime
+    )
     if (dailyDerived > 0) {
-      logger.info(`[${season}] Derived ${dailyDerived} sharpe/sortino/calmar/PF values from daily_snapshots (fallback)`)
+      logger.info(
+        `[${season}] Derived ${dailyDerived} sharpe/sortino/calmar/PF values from daily_snapshots (fallback)`
+      )
     }
   }
 
@@ -485,7 +589,9 @@ async function computeSeason(
   {
     const calmarOnly = computeLastResortCalmar(traderMap, season)
     if (calmarOnly > 0) {
-      logger.info(`[${season}] Computed ${calmarOnly} calmar ratios from ROI/MDD (no daily returns needed)`)
+      logger.info(
+        `[${season}] Computed ${calmarOnly} calmar ratios from ROI/MDD (no daily returns needed)`
+      )
     }
   }
 
@@ -500,26 +606,32 @@ async function computeSeason(
 
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
   const uniqueTraders = Array.from(traderMap.values())
-    .filter(t => t.source !== 'web3_bot') // DeFi protocol contracts, not real traders — exclude entirely
-    .filter(t => t.roi != null)
-    .filter(t => Math.abs(t.roi!) <= roiThreshold)
-    .filter(t => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
-    .filter(t => t.trades_count == null || t.trades_count === 0 || t.trades_count >= MIN_TRADES_COUNT) // 0 = unknown (API doesn't provide), treat same as null
+    .filter((t) => t.source !== 'web3_bot') // DeFi protocol contracts, not real traders — exclude entirely
+    .filter((t) => t.roi != null)
+    .filter((t) => Math.abs(t.roi!) <= roiThreshold)
+    .filter((t) => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
+    .filter((t) => t.trades_count == null || t.trades_count === 0 || t.trades_count >= MIN_TRADES) // 0 = unknown (API doesn't provide), treat same as null
 
   // Debug: jupiter_perps filter analysis
-  const jupiterInMap = Array.from(traderMap.values()).filter(t => t.source === 'jupiter_perps')
-  const jupiterWithRoi = jupiterInMap.filter(t => t.roi != null)
-  const jupiterPassAll = uniqueTraders.filter(t => t.source === 'jupiter_perps')
+  const jupiterInMap = Array.from(traderMap.values()).filter((t) => t.source === 'jupiter_perps')
+  const jupiterWithRoi = jupiterInMap.filter((t) => t.roi != null)
+  const jupiterPassAll = uniqueTraders.filter((t) => t.source === 'jupiter_perps')
   if (jupiterInMap.length > 0 || jupiterPassAll.length > 0) {
-    logger.info(`[${season}] jupiter_perps filter: inMap=${jupiterInMap.length}, hasRoi=${jupiterWithRoi.length}, passAll=${jupiterPassAll.length}, roiThreshold=${roiThreshold}`)
+    logger.info(
+      `[${season}] jupiter_perps filter: inMap=${jupiterInMap.length}, hasRoi=${jupiterWithRoi.length}, passAll=${jupiterPassAll.length}, roiThreshold=${roiThreshold}`
+    )
     if (jupiterInMap.length > 0 && jupiterPassAll.length === 0) {
       const sample = jupiterInMap[0]
-      logger.warn(`[${season}] jupiter_perps SAMPLE: roi=${sample.roi} (type=${typeof sample.roi}), trades=${sample.trades_count} (type=${typeof sample.trades_count})`)
+      logger.warn(
+        `[${season}] jupiter_perps SAMPLE: roi=${sample.roi} (type=${typeof sample.roi}), trades=${sample.trades_count} (type=${typeof sample.trades_count})`
+      )
     }
   }
 
   if (!uniqueTraders.length) {
-    logger.warn(`[${season}] No traders passed filters! traderMap.size=${traderMap.size}, roiThreshold=${roiThreshold}`)
+    logger.warn(
+      `[${season}] No traders passed filters! traderMap.size=${traderMap.size}, roiThreshold=${roiThreshold}`
+    )
     return 0
   }
 
@@ -528,7 +640,7 @@ async function computeSeason(
   const handleMap = await fetchHandleAvatarMap(supabase, uniqueTraders)
 
   // Calculate arena_score and rank
-  const scored = uniqueTraders.map(t => {
+  const scored = uniqueTraders.map((t) => {
     // Win rate should already be percentage (0-100) from fetcher normalization.
     // Only clamp to valid range; don't re-normalize decimal→percentage.
     let normalizedWinRate: number | null = null
@@ -552,9 +664,12 @@ async function computeSeason(
     // Previous Wilson(5-signal) was wrong: even 5/5 capped multiplier at 0.696.
     const hasRoi = t.roi != null
     const hasPnl = t.pnl != null && Number(t.pnl) > 0
-    const confidenceMultiplier = (hasRoi && hasPnl) ? 1.0
-      : hasRoi ? 0.85   // ROI only, no PnL data
-      : 0.50            // neither (shouldn't happen, but safe fallback)
+    const confidenceMultiplier =
+      hasRoi && hasPnl
+        ? 1.0
+        : hasRoi
+          ? 0.85 // ROI only, no PnL data
+          : 0.5 // neither (shouldn't happen, but safe fallback)
     // Estimation penalty kept for future use — currently always 1.0 since Phase 5 estimation was removed
     const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
     // Low trade count penalty: traders with very few trades have unreliable metrics
@@ -564,20 +679,30 @@ async function computeSeason(
     if (t.trades_count != null && t.trades_count >= 0 && t.trades_count < 10) {
       tradeCountPenalty = 0.6 + 0.04 * t.trades_count // 0.6 at 0, 1.0 at 10
     }
-    const rawSubScores = scoreResult.returnScore + scoreResult.pnlScore +
-                         scoreResult.drawdownScore + scoreResult.stabilityScore
+    const rawSubScores =
+      scoreResult.returnScore +
+      scoreResult.pnlScore +
+      scoreResult.drawdownScore +
+      scoreResult.stabilityScore
     // Trust weight removed from score formula — same skill shouldn't get different
     // scores based on exchange. Trust weight used only as tie-breaker in sort below.
-    const finalScore = Math.round(
-      Math.max(0, Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty * tradeCountPenalty)) * 100
-    ) / 100
+    const finalScore =
+      Math.round(
+        Math.max(
+          0,
+          Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty * tradeCountPenalty)
+        ) * 100
+      ) / 100
 
-    const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || { handle: null, avatar_url: null }
+    const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || {
+      handle: null,
+      avatar_url: null,
+    }
     // Only use handle if it's a real nickname, not a numeric UID
     const rawHandle = info.handle?.trim() || null
     const isNumericUid = rawHandle && /^\d{7,}$/.test(rawHandle)
     // Apply profanity filter before storing in database
-    const displayHandle = (rawHandle && !isNumericUid) ? sanitizeDisplayName(rawHandle) : null
+    const displayHandle = rawHandle && !isNumericUid ? sanitizeDisplayName(rawHandle) : null
 
     return {
       source: t.source,
@@ -598,8 +723,12 @@ async function computeSeason(
       risk_control_score: Math.round(scoreResult.pnlScore * 100) / 100,
       execution_score: null, // V3 removed drawdown/stability sub-scores
       // Data completeness: derive from which metrics are available
-      score_completeness: (t.max_drawdown != null && t.win_rate != null) ? 'full'
-        : (t.max_drawdown != null || t.win_rate != null) ? 'partial' : 'minimal',
+      score_completeness:
+        t.max_drawdown != null && t.win_rate != null
+          ? 'full'
+          : t.max_drawdown != null || t.win_rate != null
+            ? 'partial'
+            : 'minimal',
       trading_style: t.trading_style,
       avg_holding_hours: t.avg_holding_hours,
       style_confidence: t.style_confidence,
@@ -607,7 +736,14 @@ async function computeSeason(
       sortino_ratio: t.sortino_ratio ?? null,
       profit_factor: t.profit_factor ?? null,
       calmar_ratio: t.calmar_ratio ?? null,
-      trader_type: detectTraderType(t.source, t.source_trader_id, t.trades_count, t.trader_type, t.avg_holding_hours, t.win_rate),
+      trader_type: detectTraderType(
+        t.source,
+        t.source_trader_id,
+        t.trades_count,
+        t.trader_type,
+        t.avg_holding_hours,
+        t.win_rate
+      ),
       metrics_estimated: t.metrics_estimated || false,
     }
   })
@@ -618,14 +754,18 @@ async function computeSeason(
   // column. Heuristics live in scoring-helpers.markOutliers.
   const outlierCount = markOutliers(scored)
   if (outlierCount > 0) {
-    logger.info(`[${season}] Marked ${outlierCount} outliers (kept in leaderboard with is_outlier=true)`)
+    logger.info(
+      `[${season}] Marked ${outlierCount} outliers (kept in leaderboard with is_outlier=true)`
+    )
   }
 
   // Phase: Replace exchange followers with Arena internal follower counts.
   // Logic + RPC fallback live in scoring-helpers.applyArenaFollowers.
   {
     const { applied, uniqueIds } = await applyArenaFollowers(supabase, scored, season)
-    logger.info(`[${season}] Arena followers: ${applied} traders have followers (${uniqueIds} unique trader_ids queried)`)
+    logger.info(
+      `[${season}] Arena followers: ${applied} traders have followers (${uniqueIds} unique trader_ids queried)`
+    )
   }
 
   // Sort by arena_score desc, then trust weight (higher trust = higher for ties),
@@ -657,20 +797,30 @@ async function computeSeason(
     if (stored && typeof stored === 'number' && stored > 0) {
       baselineCount = stored
       _baselineSource = 'pipeline-state'
-      logger.info(`[${season}] Using DB baseline (last scored count): ${baselineCount} (table count: ${previousCount})`)
+      logger.info(
+        `[${season}] Using DB baseline (last scored count): ${baselineCount} (table count: ${previousCount})`
+      )
     } else if (previousCount && previousCount > 0) {
       // Cold start: pipeline_state has no baseline yet (table may not exist or first run).
       // The table count includes zombie rows from incremental upsert, so it's inflated.
       // Use 60% of table count as conservative baseline to avoid false degradation alerts.
-      baselineCount = Math.round(previousCount * 0.60)
+      baselineCount = Math.round(previousCount * 0.6)
       _baselineSource = 'table-count-discounted'
-      logger.info(`[${season}] No pipeline_state baseline — using discounted table count: ${baselineCount} (raw: ${previousCount})`)
+      logger.info(
+        `[${season}] No pipeline_state baseline — using discounted table count: ${baselineCount} (raw: ${previousCount})`
+      )
     }
-  } catch (e) { logger.warn(`[${season}] pipeline_state read failed: ${e instanceof Error ? e.message : String(e)}`) }
+  } catch (e) {
+    logger.warn(
+      `[${season}] pipeline_state read failed: ${e instanceof Error ? e.message : String(e)}`
+    )
+  }
 
   const MAX_CONSECUTIVE_SKIPS = 1 // Force-compute on 2nd attempt to prevent stale data (was 2)
   const ratio = baselineCount ? scored.length / baselineCount : 1
-  logger.info(`[${season}] Degradation check: scored=${scored.length}, baseline=${baselineCount}, tableCount=${previousCount}, ratio=${(ratio * 100).toFixed(1)}%, threshold=${DEGRADATION_THRESHOLD * 100}%`)
+  logger.info(
+    `[${season}] Degradation check: scored=${scored.length}, baseline=${baselineCount}, tableCount=${previousCount}, ratio=${(ratio * 100).toFixed(1)}%, threshold=${DEGRADATION_THRESHOLD * 100}%`
+  )
 
   if (baselineCount && baselineCount > 500 && !forceWrite) {
     if (scored.length < 500 || ratio < DEGRADATION_THRESHOLD) {
@@ -681,22 +831,48 @@ async function computeSeason(
         const stored = await PipelineState.get<number>(skipKey)
         consecutiveSkips = (typeof stored === 'number' ? stored : 0) + 1
         await PipelineState.set(skipKey, consecutiveSkips)
-      } catch (e) { logger.warn(`[${season}] skip counter DB failure: ${e instanceof Error ? e.message : String(e)}`) }
+      } catch (e) {
+        logger.warn(
+          `[${season}] skip counter DB failure: ${e instanceof Error ? e.message : String(e)}`
+        )
+      }
 
       if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
-        logger.warn(`${season}: degradation detected (${scored.length}/${baselineCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`)
+        logger.warn(
+          `${season}: degradation detected (${scored.length}/${baselineCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`
+        )
         // Reset counter and fall through to upsert
         try {
           await PipelineState.del(skipKey)
-        } catch (e) { logger.warn(`[${season}] skip counter reset failed: ${e instanceof Error ? e.message : String(e)}`) }
+        } catch (e) {
+          logger.warn(
+            `[${season}] skip counter reset failed: ${e instanceof Error ? e.message : String(e)}`
+          )
+        }
       } else {
-        logger.error(`${season}: computed ${scored.length} traders (baseline: ${baselineCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`)
-        sendRateLimitedAlert({
-          title: `Leaderboard ${season} degradation skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}`,
-          message: `${season}: ${scored.length}/${baselineCount} traders (${(ratio * 100).toFixed(1)}%). Data preserved but stale. Force-compute at skip ${MAX_CONSECUTIVE_SKIPS}.`,
-          level: consecutiveSkips >= 2 ? 'critical' : 'warning',
-          details: { season, scored: scored.length, baseline: baselineCount, ratio, skip: consecutiveSkips },
-        }, `leaderboard-degrade:${season}`, 60 * 60 * 1000).catch(err => logger.warn(`[compute-leaderboard] Degradation alert failed: ${err instanceof Error ? err.message : String(err)}`))
+        logger.error(
+          `${season}: computed ${scored.length} traders (baseline: ${baselineCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`
+        )
+        sendRateLimitedAlert(
+          {
+            title: `Leaderboard ${season} degradation skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}`,
+            message: `${season}: ${scored.length}/${baselineCount} traders (${(ratio * 100).toFixed(1)}%). Data preserved but stale. Force-compute at skip ${MAX_CONSECUTIVE_SKIPS}.`,
+            level: consecutiveSkips >= 2 ? 'critical' : 'warning',
+            details: {
+              season,
+              scored: scored.length,
+              baseline: baselineCount,
+              ratio,
+              skip: consecutiveSkips,
+            },
+          },
+          `leaderboard-degrade:${season}`,
+          60 * 60 * 1000
+        ).catch((err) =>
+          logger.warn(
+            `[compute-leaderboard] Degradation alert failed: ${err instanceof Error ? err.message : String(err)}`
+          )
+        )
 
         // ROOT CAUSE FIX: Run stale-row cleanup EVEN ON DEGRADATION SKIP.
         // Previously, if degradation was detected, we returned immediately and
@@ -718,28 +894,54 @@ async function computeSeason(
             const staleIds = staleRows.map((r: { id: number }) => r.id)
             // Batch size 200 (down from 500) to reduce lock hold time
             for (let i = 0; i < staleIds.length; i += 200) {
-              await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 200))
+              await supabase
+                .from('leaderboard_ranks')
+                .delete()
+                .in('id', staleIds.slice(i, i + 200))
             }
-            logger.info(`${season}: cleaned ${staleIds.length} stale rows (>5d old) despite degradation skip`)
+            logger.info(
+              `${season}: cleaned ${staleIds.length} stale rows (>5d old) despite degradation skip`
+            )
           }
         } catch (cleanupErr) {
-          logger.warn(`${season}: cleanup-on-degradation failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`)
+          logger.warn(
+            `${season}: cleanup-on-degradation failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`
+          )
         }
 
         return -1
       }
     }
   } else if (forceWrite) {
-    logger.warn(`${season}: force write enabled, skipping degradation check (scored: ${scored.length}, baseline: ${baselineCount})`)
+    logger.warn(
+      `${season}: force write enabled, skipping degradation check (scored: ${scored.length}, baseline: ${baselineCount})`
+    )
   }
   // Reset consecutive skip counter on successful computation
   try {
     await PipelineState.del(`leaderboard:degradation-skips:${season}`)
-  } catch (e) { logger.warn(`[${season}] skip counter cleanup failed: ${e instanceof Error ? e.message : String(e)}`) }
+  } catch (e) {
+    logger.warn(
+      `[${season}] skip counter cleanup failed: ${e instanceof Error ? e.message : String(e)}`
+    )
+  }
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
   // Fetch current arena_scores to diff against
-  const currentScoreMap = new Map<string, { arena_score: number; rank: number; handle: string | null; avatar_url: string | null; sharpe_ratio: number | null; sortino_ratio: number | null; calmar_ratio: number | null; profit_factor: number | null; trading_style: string | null }>()
+  const currentScoreMap = new Map<
+    string,
+    {
+      arena_score: number
+      rank: number
+      handle: string | null
+      avatar_url: string | null
+      sharpe_ratio: number | null
+      sortino_ratio: number | null
+      calmar_ratio: number | null
+      profit_factor: number | null
+      trading_style: string | null
+    }
+  >()
   {
     // Fetch in pages of 1000 to handle large leaderboards
     let offset = 0
@@ -752,12 +954,16 @@ async function computeSeason(
         break
       }
       if (isOutOfTime(45_000)) {
-        logger.warn(`[${season}] aborting currentScoreMap fetch at page ${pageCount} — only ${Math.round(timeLeftMs() / 1000)}s left`)
+        logger.warn(
+          `[${season}] aborting currentScoreMap fetch at page ${pageCount} — only ${Math.round(timeLeftMs() / 1000)}s left`
+        )
         break
       }
       const { data: currentScores } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, arena_score, rank, handle, avatar_url, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trading_style')
+        .select(
+          'source, source_trader_id, arena_score, rank, handle, avatar_url, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trading_style'
+        )
         .eq('season_id', season)
         .range(offset, offset + PAGE - 1)
       if (!currentScores?.length) break
@@ -797,7 +1003,9 @@ async function computeSeason(
     return Math.abs(t.arena_score - current.arena_score) > current.arena_score * 0.005 // >0.5% score change
   })
 
-  logger.info(`[${season}] Incremental upsert: ${changedTraders.length}/${scored.length} changed (${((1 - changedTraders.length / scored.length) * 100).toFixed(1)}% skipped)`)
+  logger.info(
+    `[${season}] Incremental upsert: ${changedTraders.length}/${scored.length} changed (${((1 - changedTraders.length / scored.length) * 100).toFixed(1)}% skipped)`
+  )
 
   // Build a rank lookup from the full sorted scored array
   const rankMap = new Map<string, number>()
@@ -817,7 +1025,9 @@ async function computeSeason(
   const batchUpsertSize = 50 // Reduced from 200 — DB pool exhaustion causes upsert timeouts; 50 rows fits within statement_timeout
   for (let i = 0; i < changedTraders.length; i += batchUpsertSize) {
     if (isOutOfTime(20_000)) {
-      logger.warn(`[${season}] upsert loop aborted at ${i}/${changedTraders.length} — only ${Math.round(timeLeftMs() / 1000)}s left`)
+      logger.warn(
+        `[${season}] upsert loop aborted at ${i}/${changedTraders.length} — only ${Math.round(timeLeftMs() / 1000)}s left`
+      )
       upsertAborted = true
       break
     }
@@ -828,41 +1038,45 @@ async function computeSeason(
       const rankChange = prevRank != null ? prevRank - newRank : null
       const isNew = prevRank == null
       return {
-      season_id: season,
-      source: t.source,
-      source_type: SOURCE_TYPE_MAP[t.source] || 'futures',
-      source_trader_id: t.source_trader_id,
-      rank: newRank,
-      rank_change: rankChange,
-      is_new: isNew,
-      arena_score: t.arena_score,
-      roi: t.roi,
-      pnl: t.pnl,
-      win_rate: t.win_rate,
-      max_drawdown: t.max_drawdown,
-      followers: t.followers,
-      copiers: t.copiers ?? null,
-      trades_count: t.trades_count,
-      handle: t.handle,
-      avatar_url: t.avatar_url,
-      computed_at: new Date().toISOString(),
-      profitability_score: t.profitability_score,
-      risk_control_score: t.risk_control_score,
-      execution_score: t.execution_score,
-      score_completeness: t.score_completeness,
-      trading_style: t.trading_style,
-      avg_holding_hours: t.avg_holding_hours,
-      style_confidence: t.style_confidence,
-      sharpe_ratio: t.sharpe_ratio,
-      sortino_ratio: t.sortino_ratio ?? null,
-      profit_factor: t.profit_factor ?? null,
-      calmar_ratio: t.calmar_ratio ?? null,
-      trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
-      is_outlier: (t as Record<string, unknown>).is_outlier === true ? true : false,
-    }})
+        season_id: season,
+        source: t.source,
+        source_type: SOURCE_TYPE_MAP[t.source] || 'futures',
+        source_trader_id: t.source_trader_id,
+        rank: newRank,
+        rank_change: rankChange,
+        is_new: isNew,
+        arena_score: t.arena_score,
+        roi: t.roi,
+        pnl: t.pnl,
+        win_rate: t.win_rate,
+        max_drawdown: t.max_drawdown,
+        followers: t.followers,
+        copiers: t.copiers ?? null,
+        trades_count: t.trades_count,
+        handle: t.handle,
+        avatar_url: t.avatar_url,
+        computed_at: new Date().toISOString(),
+        profitability_score: t.profitability_score,
+        risk_control_score: t.risk_control_score,
+        execution_score: t.execution_score,
+        score_completeness: t.score_completeness,
+        trading_style: t.trading_style,
+        avg_holding_hours: t.avg_holding_hours,
+        style_confidence: t.style_confidence,
+        sharpe_ratio: t.sharpe_ratio,
+        sortino_ratio: t.sortino_ratio ?? null,
+        profit_factor: t.profit_factor ?? null,
+        calmar_ratio: t.calmar_ratio ?? null,
+        trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
+        is_outlier: (t as Record<string, unknown>).is_outlier === true ? true : false,
+      }
+    })
 
     // Data gatekeeper: validate batch before write
-    const { valid: validBatch, rejected } = validateBeforeWrite(batch as Record<string, unknown>[], 'leaderboard_ranks')
+    const { valid: validBatch, rejected } = validateBeforeWrite(
+      batch as Record<string, unknown>[],
+      'leaderboard_ranks'
+    )
     if (rejected.length) logRejectedWrites(rejected, supabase)
 
     if (validBatch.length > 0) {
@@ -872,7 +1086,7 @@ async function computeSeason(
       // 10,662 orphan traders in migration 20260416162636). ON CONFLICT
       // DO NOTHING preserves existing rows — only new (source,trader_id)
       // combinations are inserted.
-      const parentRows = (validBatch as Array<Record<string, unknown>>).map(r => ({
+      const parentRows = (validBatch as Array<Record<string, unknown>>).map((r) => ({
         source: r.source as string,
         source_trader_id: r.source_trader_id as string,
         source_type: r.source_type as string | null,
@@ -880,10 +1094,23 @@ async function computeSeason(
         avatar_url: r.avatar_url as string | null,
         is_active: true,
         identity_type: 'public',
-        source_kind: (r.source as string).startsWith('binance_web3') || (r.source as string).startsWith('okx_web3')
-          || ['hyperliquid','gmx','dydx','vertex','drift','aevo','gains','kwenta','jupiter_perps','polymarket'].includes(r.source as string)
-          ? 'dex_leaderboard'
-          : 'cex_leaderboard',
+        source_kind:
+          (r.source as string).startsWith('binance_web3') ||
+          (r.source as string).startsWith('okx_web3') ||
+          [
+            'hyperliquid',
+            'gmx',
+            'dydx',
+            'vertex',
+            'drift',
+            'aevo',
+            'gains',
+            'kwenta',
+            'jupiter_perps',
+            'polymarket',
+          ].includes(r.source as string)
+            ? 'dex_leaderboard'
+            : 'cex_leaderboard',
         last_seen_at: new Date().toISOString(),
       }))
       const { error: parentErr } = await supabase
@@ -893,7 +1120,6 @@ async function computeSeason(
         logger.warn(`[${season}] trader_sources parent-upsert non-fatal: ${parentErr.message}`)
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PostgREST: validBatch comes from validateBeforeWrite (Record<string,unknown>[]) which is not assignable to the generated row type
       const { error } = await supabase
         .from('leaderboard_ranks')
         .upsert(validBatch as any, { onConflict: 'season_id,source,source_trader_id' })
@@ -913,12 +1139,15 @@ async function computeSeason(
   // UPDATEs which is the most expensive cleanup in the route.
   if (upsertAborted || isOutOfTime(25_000)) {
     if (upsertAborted) logger.warn(`[${season}] SKIPPING zero-out (upsert aborted)`)
-    else logger.warn(`[${season}] SKIPPING zero-out — only ${Math.round(timeLeftMs() / 1000)}s left`)
+    else
+      logger.warn(`[${season}] SKIPPING zero-out — only ${Math.round(timeLeftMs() / 1000)}s left`)
   } else {
-    const computedTraderIds = new Set(uniqueTraders.map(t => `${t.source}:${t.source_trader_id}`))
-    const allInTraderMap = new Set(Array.from(traderMap.values()).map(t => `${t.source}:${t.source_trader_id}`))
+    const computedTraderIds = new Set(uniqueTraders.map((t) => `${t.source}:${t.source_trader_id}`))
+    const allInTraderMap = new Set(
+      Array.from(traderMap.values()).map((t) => `${t.source}:${t.source_trader_id}`)
+    )
     // Traders in traderMap but NOT in uniqueTraders = filtered out (bad ROI, too few trades, etc.)
-    const excludedTraders = Array.from(allInTraderMap).filter(k => !computedTraderIds.has(k))
+    const excludedTraders = Array.from(allInTraderMap).filter((k) => !computedTraderIds.has(k))
     if (excludedTraders.length > 0) {
       // PERF FIX: was N+1 individual UPDATEs (30-120s). Now batched by source.
       const excludedBySource = new Map<string, string[]>()
@@ -971,7 +1200,9 @@ async function computeSeason(
   // would persist at the top of rankings forever without this cleanup.
   // Logic in rerank-cleanup.ts.
   if (isOutOfTime(10_000)) {
-    logger.warn(`[${season}] SKIPPING stale-row cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`)
+    logger.warn(
+      `[${season}] SKIPPING stale-row cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`
+    )
   } else {
     const cleaned = await cleanupStaleRows(supabase, season)
     if (cleaned > 0) logger.info(`${season}: cleaned ${cleaned} stale rows (>5d old)`)
@@ -985,15 +1216,21 @@ async function computeSeason(
   } catch (e) {
     // CRITICAL: This write prevents the 6-day leaderboard freeze (pipeline_state baseline).
     // If this fails repeatedly, the degradation check uses inflated table counts.
-    logger.error(`[${season}] CRITICAL: failed to write scored count to pipeline_state: ${e instanceof Error ? e.message : String(e)}`)
+    logger.error(
+      `[${season}] CRITICAL: failed to write scored count to pipeline_state: ${e instanceof Error ? e.message : String(e)}`
+    )
   }
 
   // Write per-season checkpoint so retries within the same hour skip this season.
   // TTL = warm (900s) — survives the cron interval but doesn't linger.
   try {
-    await tieredSet(checkpointKey, { count: scored.length, at: new Date().toISOString() }, 'warm', ['leaderboard'])
+    await tieredSet(checkpointKey, { count: scored.length, at: new Date().toISOString() }, 'warm', [
+      'leaderboard',
+    ])
   } catch (e) {
-    logger.warn(`[${season}] Checkpoint write failed: ${e instanceof Error ? e.message : String(e)}`)
+    logger.warn(
+      `[${season}] Checkpoint write failed: ${e instanceof Error ? e.message : String(e)}`
+    )
   }
 
   const actualUpserted = scored.length - upsertErrors
@@ -1002,7 +1239,6 @@ async function computeSeason(
 }
 
 // deriveWinRateMDD lives in ./helpers.ts (single source of truth, 2026-04-09)
-
 
 /**
  * Pre-populate Redis with top 100 leaderboard rows for each season.
