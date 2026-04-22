@@ -63,6 +63,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/recount-follow-counts",
+      "schedule": "15 */6 * * *"
+    },
+    {
       "path": "/api/cron/cleanup-stuck-logs",
       "schedule": "27 */6 * * *"
     },

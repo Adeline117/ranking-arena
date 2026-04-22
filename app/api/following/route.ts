@@ -59,9 +59,9 @@ type FollowingResult = { items: FollowItem[]; traderCount: number; userCount: nu
 async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
   const supabase = getSupabaseAdmin() as SupabaseClient
 
-  const QUERY_TIMEOUT_MS = 5000
+  const QUERY_TIMEOUT_MS = 15000
 
-  // 并行获取关注的交易员和用户 (with 5s timeout + limit 500)
+  // 并行获取关注的交易员和用户 (with 15s timeout + limit 500)
   const [traderFollowsResult, userFollowsResult] = await Promise.race([
     Promise.all([
       supabase
@@ -71,7 +71,8 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
         .limit(500),
       supabase
         .from('user_follows')
-        .select(`
+        .select(
+          `
           created_at,
           following:user_profiles!user_follows_following_id_fkey(
             id,
@@ -79,9 +80,10 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
             bio,
             avatar_url
           )
-        `)
+        `
+        )
         .eq('follower_id', userId)
-        .limit(500)
+        .limit(500),
     ]),
     new Promise<never>((_, reject) =>
       setTimeout(() => reject(new Error('Following queries timed out after 5s')), QUERY_TIMEOUT_MS)
@@ -90,7 +92,7 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
 
   const traderFollows = traderFollowsResult.data || []
   const userFollows = userFollowsResult.data || []
-  
+
   const items: FollowItem[] = []
 
   // 处理关注的用户
@@ -105,33 +107,44 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
         type: 'user',
         avatar_url: userObj.avatar_url,
         bio: userObj.bio,
-        followed_at: follow.created_at
+        followed_at: follow.created_at,
       })
     }
   }
 
   // 处理关注的交易员
   if (traderFollows.length > 0) {
-    const traderIds = traderFollows.map(f => f.trader_id)
-    const followedAtMap = new Map(traderFollows.map(f => [f.trader_id, f.created_at]))
+    const traderIds = traderFollows.map((f) => f.trader_id)
+    const followedAtMap = new Map(traderFollows.map((f) => [f.trader_id, f.created_at]))
 
     // Use leaderboard_ranks as the single source of truth (unified data layer)
     // instead of separate trader_snapshots v1 + trader_sources + leaderboard_ranks queries.
     // leaderboard_ranks already has handle, avatar_url, roi, pnl, win_rate, followers, arena_score.
     const { data: lrData } = await supabase
       .from('leaderboard_ranks')
-      .select('source_trader_id, handle, source, avatar_url, roi, pnl, win_rate, followers, arena_score, rank')
+      .select(
+        'source_trader_id, handle, source, avatar_url, roi, pnl, win_rate, followers, arena_score, rank'
+      )
       .in('source_trader_id', traderIds)
       .eq('season_id', '90D')
       .not('arena_score', 'is', null)
 
     // Build map: best arena_score row per trader
-    const traderDataMap = new Map<string, {
-      handle: string; source: string; avatar_url?: string
-      roi: number; pnl?: number; win_rate: number; followers: number; arena_score?: number
-    }>()
+    const traderDataMap = new Map<
+      string,
+      {
+        handle: string
+        source: string
+        avatar_url?: string
+        roi: number
+        pnl?: number
+        win_rate: number
+        followers: number
+        arena_score?: number
+      }
+    >()
 
-    for (const row of (lrData || [])) {
+    for (const row of lrData || []) {
       const existing = traderDataMap.get(row.source_trader_id)
       if (!existing || (row.arena_score || 0) > (existing.arena_score || 0)) {
         traderDataMap.set(row.source_trader_id, {
@@ -167,7 +180,7 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
         followers: data.followers,
         source: data.source || 'binance_futures',
         arena_score: data.arena_score,
-        followed_at: followedAtMap.get(traderId)
+        followed_at: followedAtMap.get(traderId),
       })
     }
   }
@@ -182,56 +195,62 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
   return { items, traderCount: traderFollows.length, userCount: userFollows.length }
 }
 
-export const GET = withAuth(async ({ user: authUser, request }) => {
-  const userId = request.nextUrl.searchParams.get('userId')
-  const limitParam = request.nextUrl.searchParams.get('limit')
-  const offsetParam = request.nextUrl.searchParams.get('offset')
+export const GET = withAuth(
+  async ({ user: authUser, request }) => {
+    const userId = request.nextUrl.searchParams.get('userId')
+    const limitParam = request.nextUrl.searchParams.get('limit')
+    const offsetParam = request.nextUrl.searchParams.get('offset')
 
-  if (!userId) {
-    return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
-  }
+    if (!userId) {
+      return NextResponse.json({ error: 'Missing userId' }, { status: 400 })
+    }
 
-  // SECURITY: Verify that userId matches authenticated user
-  if (userId !== authUser.id) {
-    logger.warn('User attempted to access another user\'s following list', {
-      authUserId: authUser.id,
-      requestedUserId: userId
+    // SECURITY: Verify that userId matches authenticated user
+    if (userId !== authUser.id) {
+      logger.warn("User attempted to access another user's following list", {
+        authUserId: authUser.id,
+        requestedUserId: userId,
+      })
+      return NextResponse.json(
+        { error: "Unauthorized: Cannot access other users' following lists" },
+        { status: 403 }
+      )
+    }
+
+    // Try cache first (hot tier: 1min memory, 5min redis)
+    const cacheKey = followingCacheKey(userId)
+    const cached = await tieredGet<FollowingResult>(cacheKey, 'hot')
+
+    let result: FollowingResult
+    if (cached.data) {
+      result = cached.data
+    } else {
+      result = await fetchFollowingItems(userId)
+      fireAndForget(tieredSet(cacheKey, result, 'hot', ['following']), 'Cache following list')
+    }
+
+    let { items, userCount } = result
+    const { traderCount } = result
+
+    // When social features are off, filter to trader items only
+    if (!features.social) {
+      items = items.filter((item) => item.type === 'trader')
+      userCount = 0
+    }
+
+    // Apply pagination if limit is provided
+    const limit = limitParam ? Math.min(Math.max(safeParseInt(limitParam, 50), 1), 200) : undefined
+    const offset = offsetParam ? Math.max(safeParseInt(offsetParam, 0), 0) : 0
+
+    const paginatedItems = limit !== undefined ? items.slice(offset, offset + limit) : items
+
+    return NextResponse.json({
+      items: paginatedItems,
+      count: items.length,
+      traderCount,
+      userCount,
+      ...(limit !== undefined ? { limit, offset, hasMore: offset + limit < items.length } : {}),
     })
-    return NextResponse.json({ error: 'Unauthorized: Cannot access other users\' following lists' }, { status: 403 })
-  }
-
-  // Try cache first (hot tier: 1min memory, 5min redis)
-  const cacheKey = followingCacheKey(userId)
-  const cached = await tieredGet<FollowingResult>(cacheKey, 'hot')
-
-  let result: FollowingResult
-  if (cached.data) {
-    result = cached.data
-  } else {
-    result = await fetchFollowingItems(userId)
-    fireAndForget(tieredSet(cacheKey, result, 'hot', ['following']), 'Cache following list')
-  }
-
-  let { items, userCount } = result
-  const { traderCount } = result
-
-  // When social features are off, filter to trader items only
-  if (!features.social) {
-    items = items.filter(item => item.type === 'trader')
-    userCount = 0
-  }
-
-  // Apply pagination if limit is provided
-  const limit = limitParam ? Math.min(Math.max(safeParseInt(limitParam, 50), 1), 200) : undefined
-  const offset = offsetParam ? Math.max(safeParseInt(offsetParam, 0), 0) : 0
-
-  const paginatedItems = limit !== undefined ? items.slice(offset, offset + limit) : items
-
-  return NextResponse.json({
-    items: paginatedItems,
-    count: items.length,
-    traderCount,
-    userCount,
-    ...(limit !== undefined ? { limit, offset, hasMore: offset + limit < items.length } : {})
-  })
-}, { name: 'get-following', rateLimit: 'authenticated' })
+  },
+  { name: 'get-following', rateLimit: 'authenticated' }
+)
