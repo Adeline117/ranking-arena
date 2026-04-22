@@ -30,8 +30,8 @@ const ETORO_HEADERS = {
 }
 
 interface EtoroGainEntry {
-  start: string  // ISO timestamp
-  gain: number   // Percentage return
+  start: string // ISO timestamp
+  gain: number // Percentage return
   isSimulation: boolean
 }
 
@@ -74,10 +74,13 @@ interface EtoroCopySimChart {
 }
 
 interface EtoroCopySimResponse {
-  simulation?: Record<string, {
-    period?: string
-    chart?: EtoroCopySimChart[]
-  }>
+  simulation?: Record<
+    string,
+    {
+      period?: string
+      chart?: EtoroCopySimChart[]
+    }
+  >
 }
 
 /**
@@ -117,22 +120,23 @@ export async function fetchEtoroEquityCurve(
 
     // Filter to relevant time range and skip initial 10000 equity (before trading starts)
     const cutoff = Date.now() - days * 86400000
-    const activeChart = chart.filter(p =>
-      new Date(p.timestamp).getTime() >= cutoff &&
-      (p.equity !== 10000 || p.pnL !== 0)
+    const activeChart = chart.filter(
+      (p) => new Date(p.timestamp).getTime() >= cutoff && (p.equity !== 10000 || p.pnL !== 0)
     )
 
     if (activeChart.length < 2) return []
 
     // Convert to equity curve points with ROI relative to first point
     const baseEquity = activeChart[0].equity
-    return activeChart.map(p => ({
+    return activeChart.map((p) => ({
       date: new Date(p.timestamp).toISOString().split('T')[0],
       roi: baseEquity > 0 ? ((p.equity - baseEquity) / baseEquity) * 100 : 0,
       pnl: p.pnL,
     }))
   } catch (err) {
-    logger.warn(`[etoro] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[etoro] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }
@@ -141,9 +145,7 @@ export async function fetchEtoroEquityCurve(
  * Fetch stats detail for an eToro trader.
  * Combines ranking data (cached) with portfolio data.
  */
-export async function fetchEtoroStatsDetail(
-  traderId: string
-): Promise<StatsDetail | null> {
+export async function fetchEtoroStatsDetail(traderId: string): Promise<StatsDetail | null> {
   try {
     // Get basic stats from ranking cache
     const ranking = await findTraderInRanking(traderId)
@@ -159,21 +161,24 @@ export async function fetchEtoroStatsDetail(
         positionCount = portfolio.AggregatedPositions.length
       }
     } catch (err) {
-      logger.warn('[enrichment-etoro] portfolio fetch failed:', err instanceof Error ? err.message : String(err))
+      logger.warn(
+        '[enrichment-etoro] portfolio fetch failed:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
 
     if (!ranking) {
       if (positionCount == null) return null
       return {
         totalTrades: null,
-        profitableTradesPct: null,
+        profitableTradesPct: null, // Cannot compute: eToro ranking endpoint omits win-rate when no ranking data available
         avgHoldingTimeHours: null,
         avgProfit: null,
         avgLoss: null,
         largestWin: null,
         largestLoss: null,
-        sharpeRatio: null,
-        maxDrawdown: null,
+        sharpeRatio: null, // Cannot compute: eToro API provides no return-series data; derived from equity curve in enrichment-runner
+        maxDrawdown: null, // Cannot compute: eToro PeakToValley unavailable in fallback path (no ranking data)
         currentDrawdown: null,
         volatility: null,
         copiersCount: null,
@@ -185,9 +190,7 @@ export async function fetchEtoroStatsDetail(
     }
 
     const winRate = ranking.WinRatio ?? null
-    const maxDrawdown = ranking.PeakToValley != null
-      ? Math.abs(ranking.PeakToValley)
-      : null
+    const maxDrawdown = ranking.PeakToValley != null ? Math.abs(ranking.PeakToValley) : null
 
     return {
       totalTrades: null,
@@ -197,20 +200,20 @@ export async function fetchEtoroStatsDetail(
       avgLoss: null,
       largestWin: null,
       largestLoss: null,
-      sharpeRatio: null,
+      sharpeRatio: null, // Cannot compute: eToro API provides no return-series data; derived from equity curve in enrichment-runner
       maxDrawdown,
       currentDrawdown: null,
       volatility: null,
       copiersCount: ranking.Copiers ?? null,
       copiersPnl: null,
-      aum: ranking.AUMValue != null && ranking.AUMValue > 0
-        ? ranking.AUMValue
-        : null,
+      aum: ranking.AUMValue != null && ranking.AUMValue > 0 ? ranking.AUMValue : null,
       winningPositions: null,
       totalPositions: positionCount,
     }
   } catch (err) {
-    logger.warn(`[etoro] Stats detail failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[etoro] Stats detail failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return null
   }
 }
@@ -218,28 +221,30 @@ export async function fetchEtoroStatsDetail(
 /**
  * Fetch current portfolio positions for an eToro trader.
  */
-export async function fetchEtoroPortfolio(
-  traderId: string
-): Promise<PortfolioPosition[]> {
+export async function fetchEtoroPortfolio(traderId: string): Promise<PortfolioPosition[]> {
   try {
-    const data = await fetchJson<EtoroPortfolioResponse>(
-      `${PORTFOLIO_URL}?cid=${traderId}`,
-      { timeoutMs: 8000, headers: ETORO_HEADERS }
-    )
+    const data = await fetchJson<EtoroPortfolioResponse>(`${PORTFOLIO_URL}?cid=${traderId}`, {
+      timeoutMs: 8000,
+      headers: ETORO_HEADERS,
+    })
 
     if (!data?.AggregatedPositions || data.AggregatedPositions.length === 0) {
       return []
     }
 
-    return data.AggregatedPositions.map(pos => ({
+    return data.AggregatedPositions.map((pos) => ({
       symbol: `Instrument#${pos.InstrumentID}`,
-      direction: (pos.Direction || 'Buy').toLowerCase().includes('sell') ? 'short' as const : 'long' as const,
+      direction: (pos.Direction || 'Buy').toLowerCase().includes('sell')
+        ? ('short' as const)
+        : ('long' as const),
       investedPct: pos.Invested ?? null,
       entryPrice: null,
       pnl: pos.NetProfit ?? null,
     }))
   } catch (err) {
-    logger.warn(`[etoro] Portfolio failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[etoro] Portfolio failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }
@@ -284,7 +289,9 @@ async function populateTraderCache(): Promise<void> {
 
         if (data.Items.length < 100) break
       } catch (err) {
-        logger.warn(`[etoro] Cache populate page ${page} (${period}) failed: ${err instanceof Error ? err.message : String(err)}`)
+        logger.warn(
+          `[etoro] Cache populate page ${page} (${period}) failed: ${err instanceof Error ? err.message : String(err)}`
+        )
         break
       }
     }

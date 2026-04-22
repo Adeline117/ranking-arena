@@ -51,7 +51,10 @@ let extendedInflight: Promise<typeof extendedCache> | null = null
 
 type BitfinexRow = [number, unknown, string, number, unknown, unknown, number, ...unknown[]]
 
-async function fetchRankings(key: string, timeframe: string): Promise<Map<string, BitfinexRankingEntry>> {
+async function fetchRankings(
+  key: string,
+  timeframe: string
+): Promise<Map<string, BitfinexRankingEntry>> {
   const map = new Map<string, BitfinexRankingEntry>()
   try {
     const rows = await fetchJson<BitfinexRow[]>(
@@ -205,9 +208,7 @@ export async function fetchBitfinexRoi(
  * win_rate and MDD will primarily be populated by the derived metrics calculator
  * in enhanceStatsWithDerivedMetrics() from the equity curve built from daily snapshots.
  */
-export async function fetchBitfinexStatsDetail(
-  traderId: string
-): Promise<StatsDetail | null> {
+export async function fetchBitfinexStatsDetail(traderId: string): Promise<StatsDetail | null> {
   try {
     const cache = await ensureRankingsCache()
 
@@ -261,7 +262,10 @@ export async function fetchBitfinexStatsDetail(
         }
       }
     } catch (err) {
-      logger.warn('[enrichment-bitfinex] extended cache fetch failed:', err instanceof Error ? err.message : String(err))
+      logger.warn(
+        '[enrichment-bitfinex] extended cache fetch failed:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
 
     return {
@@ -272,7 +276,7 @@ export async function fetchBitfinexStatsDetail(
       avgLoss: null,
       largestWin: null,
       largestLoss: null,
-      sharpeRatio: null,
+      sharpeRatio: null, // Cannot compute: Bitfinex leaderboard API provides no return-series data; derived from equity curve in enrichment-runner
       maxDrawdown,
       currentDrawdown: null,
       volatility: null,

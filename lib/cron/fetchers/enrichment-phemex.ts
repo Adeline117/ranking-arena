@@ -38,8 +38,8 @@ interface PhemexTraderDetail {
   nickname?: string
   roi?: number
   pnl?: number
-  winRate?: number       // decimal 0-1
-  maxDrawdown?: number   // decimal 0-1
+  winRate?: number // decimal 0-1
+  maxDrawdown?: number // decimal 0-1
   followers?: number
   copiers?: number
   totalTrades?: number
@@ -57,9 +57,7 @@ function safeNum(val: unknown): number | null {
  * Fetch stats from Phemex copy-trading public trader detail.
  * Provides win_rate, max_drawdown, followers, copiers.
  */
-export async function fetchPhemexStatsDetail(
-  traderId: string
-): Promise<StatsDetail | null> {
+export async function fetchPhemexStatsDetail(traderId: string): Promise<StatsDetail | null> {
   try {
     const response = await fetchJson<{ data?: PhemexTraderDetail }>(
       `https://api.phemex.com/copy-trading/public/trader/${traderId}/detail?period=90d`,
@@ -87,7 +85,7 @@ export async function fetchPhemexStatsDetail(
       avgLoss: null,
       largestWin: null,
       largestLoss: null,
-      sharpeRatio: null,
+      sharpeRatio: null, // Cannot compute: Phemex copy-trade API provides no return-series data; derived from equity curve in enrichment-runner
       maxDrawdown,
       currentDrawdown: null,
       volatility: null,
