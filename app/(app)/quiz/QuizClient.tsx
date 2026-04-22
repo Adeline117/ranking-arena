@@ -273,7 +273,7 @@ export default function QuizClient() {
             style={{
               width: '100%',
               padding: '14px 32px',
-              borderRadius: 10,
+              borderRadius: 8,
               background: answeredCount === TOTAL_QUESTIONS
                 ? 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))'
                 : 'var(--color-bg-tertiary)',
