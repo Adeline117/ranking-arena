@@ -4,23 +4,22 @@ import type { NextRequest } from 'next/server'
 /**
  * Edge Middleware
  *
- * Handles non-ASCII path segments (Chinese, Korean, etc.) that cause 500
- * on Vercel's routing layer. Rewrites percent-encoded multi-byte UTF-8
- * paths to a normalized form that Vercel can route correctly.
+ * Fixes: Vercel's routing layer returns 500 for dynamic routes with
+ * non-ASCII path segments (Chinese, Korean, etc.). The percent-encoded
+ * multi-byte UTF-8 paths fail to match /trader/[handle] and /u/[handle].
+ *
+ * Solution: Intercept these requests and rewrite them, forcing Next.js
+ * to handle routing internally.
  */
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Only intercept /trader/ and /u/ routes with percent-encoded non-ASCII chars
-  // Pattern: %XX where XX > 7E (multi-byte UTF-8)
+  // Only act on /trader/ and /u/ routes containing percent-encoded
+  // multi-byte UTF-8 characters (bytes 0x80+)
   if (
     (pathname.startsWith('/trader/') || pathname.startsWith('/u/')) &&
     /%[89A-Fa-f][0-9A-Fa-f]/.test(pathname)
   ) {
-    // Rewrite to the same URL — this forces Next.js to handle
-    // the routing internally rather than letting Vercel's edge
-    // router reject it. The rewrite preserves the original URL
-    // in the browser.
     const url = request.nextUrl.clone()
     return NextResponse.rewrite(url)
   }
@@ -28,6 +27,10 @@ export function middleware(request: NextRequest) {
   return NextResponse.next()
 }
 
+// Use a broad negative matcher so Vercel runs middleware on ALL
+// non-static paths. The narrow /trader/:path* matcher failed to
+// match percent-encoded non-ASCII paths, causing the middleware
+// to be skipped entirely.
 export const config = {
-  matcher: ['/trader/:path*', '/u/:path*'],
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|icons|images|api/).*)'],
 }
