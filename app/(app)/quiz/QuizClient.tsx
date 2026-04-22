@@ -67,6 +67,12 @@ export default function QuizClient() {
   )
 
   const handleCalculationDone = useCallback(() => {
+    // Defense-in-depth: do not calculate if quiz is incomplete
+    if (Object.keys(answers).length < TOTAL_QUESTIONS) {
+      // eslint-disable-next-line no-console
+      console.error(`[Quiz] Incomplete answers (${Object.keys(answers).length}/${TOTAL_QUESTIONS}), aborting calculation`)
+      return
+    }
     const result = calculateResult(answers)
     setResult(result)
     // Save result (fire-and-forget)
@@ -165,7 +171,7 @@ export default function QuizClient() {
       >
         <Box
           style={{
-            maxWidth: 520,
+            maxWidth: 'clamp(520px, 90vw, 640px)',
             width: '100%',
             background: 'var(--color-bg-secondary)',
             border: '1px solid var(--glass-border-light)',
@@ -198,7 +204,7 @@ export default function QuizClient() {
       >
         <Box
           style={{
-            maxWidth: 520,
+            maxWidth: 'clamp(520px, 90vw, 640px)',
             width: '100%',
             background: 'var(--color-bg-secondary)',
             border: '1px solid var(--glass-border-light)',
@@ -215,7 +221,7 @@ export default function QuizClient() {
   // Questions — scrollable flow
   return (
     <Box style={{ minHeight: '80vh', padding: 20, paddingBottom: 80, touchAction: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
-      <div style={{ maxWidth: 520, width: '100%', margin: '0 auto' }}>
+      <div style={{ maxWidth: 'clamp(520px, 90vw, 640px)', width: '100%', margin: '0 auto' }}>
         {/* Sticky progress bar at top */}
         <div
           style={{

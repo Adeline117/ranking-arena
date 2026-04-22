@@ -85,7 +85,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
     >
       <div
         style={{
-          maxWidth: 520,
+          maxWidth: 'clamp(520px, 90vw, 640px)',
           width: '100%',
           display: 'flex',
           flexDirection: 'column',
