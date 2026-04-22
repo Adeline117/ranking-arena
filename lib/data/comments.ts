@@ -111,7 +111,10 @@ function wilsonScoreLower(ups: number, downs: number): number {
   if (n === 0) return 0
   const z = 1.96 // 95% confidence
   const phat = ups / n
-  return (phat + z * z / (2 * n) - z * Math.sqrt((phat * (1 - phat) + z * z / (4 * n)) / n)) / (1 + z * z / n)
+  return (
+    (phat + (z * z) / (2 * n) - z * Math.sqrt((phat * (1 - phat) + (z * z) / (4 * n)) / n)) /
+    (1 + (z * z) / n)
+  )
 }
 
 export type CommentSortMode = 'best' | 'time'
@@ -123,7 +126,9 @@ export type CommentSortMode = 'best' | 'time'
  */
 function sortComments(comments: CommentRow[], mode: CommentSortMode = 'best'): CommentRow[] {
   if (mode === 'time') {
-    return [...comments].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+    return [...comments].sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    )
   }
   // 'best': Wilson score descending, then created_at descending as tiebreaker
   return [...comments].sort((a, b) => {
@@ -146,11 +151,13 @@ export async function getPostComments(
 
   const { data: allTopComments, error } = await supabase
     .from('comments')
-    .select('id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at')
+    .select(
+      'id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at'
+    )
     .eq('post_id', postId)
     .is('parent_id', null)
     .order('like_count', { ascending: false, nullsFirst: false })
-    .limit(500)
+    .limit(200)
 
   if (error) throw error
   if (!allTopComments || allTopComments.length === 0) return []
@@ -168,23 +175,25 @@ export async function getPostComments(
         if (b.blocker_id === userId) blockedIds.add(b.blocked_id)
         else blockedIds.add(b.blocker_id)
       }
-      filteredComments = allTopComments.filter(c => !blockedIds.has(c.user_id))
+      filteredComments = allTopComments.filter((c) => !blockedIds.has(c.user_id))
     }
   }
 
   const comments = sortComments(filteredComments, sort).slice(offset, offset + limit)
   if (comments.length === 0) return []
 
-  const commentIds = comments.map(c => c.id)
+  const commentIds = comments.map((c) => c.id)
   const { data: replies } = await supabase
     .from('comments')
-    .select('id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at')
+    .select(
+      'id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at'
+    )
     .in('parent_id', commentIds)
     .order('created_at', { ascending: true })
 
   const allComments = [...comments, ...(replies || [])]
-  const userIds = [...new Set(allComments.map(c => c.user_id))]
-  const allCommentIds = allComments.map(c => c.id)
+  const userIds = [...new Set(allComments.map((c) => c.user_id))]
+  const allCommentIds = allComments.map((c) => c.id)
 
   const [profilesResult, likesResult] = await Promise.all([
     supabase
@@ -192,7 +201,11 @@ export async function getPostComments(
       .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
       .in('id', userIds),
     userId
-      ? supabase.from('comment_likes').select('comment_id, reaction_type').eq('user_id', userId).in('comment_id', allCommentIds)
+      ? supabase
+          .from('comment_likes')
+          .select('comment_id, reaction_type')
+          .eq('user_id', userId)
+          .in('comment_id', allCommentIds)
       : Promise.resolve({ data: null }),
   ])
 
@@ -211,14 +224,25 @@ export async function getPostComments(
   const repliesMap = new Map<string, Comment[]>()
   for (const reply of replies || []) {
     if (!reply.parent_id) continue
-    const comment = toComment(reply, profileMap.get(reply.user_id), userLikedSet.has(reply.id), userDislikedSet.has(reply.id))
+    const comment = toComment(
+      reply,
+      profileMap.get(reply.user_id),
+      userLikedSet.has(reply.id),
+      userDislikedSet.has(reply.id)
+    )
     const parentReplies = repliesMap.get(reply.parent_id) || []
     parentReplies.push(comment)
     repliesMap.set(reply.parent_id, parentReplies)
   }
 
   return comments.map((c: CommentRow) =>
-    toComment(c, profileMap.get(c.user_id), userLikedSet.has(c.id), userDislikedSet.has(c.id), repliesMap.get(c.id) || [])
+    toComment(
+      c,
+      profileMap.get(c.user_id),
+      userLikedSet.has(c.id),
+      userDislikedSet.has(c.id),
+      repliesMap.get(c.id) || []
+    )
   )
 }
 
@@ -231,7 +255,9 @@ export async function getCommentById(
 ): Promise<Comment | null> {
   const { data, error } = await supabase
     .from('comments')
-    .select('id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at')
+    .select(
+      'id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at'
+    )
     .eq('id', commentId)
     .maybeSingle()
 
@@ -326,10 +352,7 @@ export async function deleteComment(
 /**
  * 获取评论数量
  */
-export async function getCommentCount(
-  supabase: SupabaseClient,
-  postId: string
-): Promise<number> {
+export async function getCommentCount(supabase: SupabaseClient, postId: string): Promise<number> {
   // KEEP 'exact' — scoped to a single post via (post_id) index and
   // shown as the exact comment count on the post card. Per-post row
   // sets are small (<<1k typical) so the count is cheap.
@@ -341,4 +364,3 @@ export async function getCommentCount(
   if (error) return 0
   return count || 0
 }
-
