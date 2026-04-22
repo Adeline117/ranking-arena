@@ -4,15 +4,14 @@
 **审查范围**: 架构、代码质量、安全、数据库、工程化、依赖、生产就绪度
 **审查方式**: 7 个专项 agent 并行深度扫描，覆盖 2,251 个 TS 文件、304 个 API 路由、260 个迁移文件、86 个直接依赖
 
-## 修复进度 (2026-04-22 更新)
+## 修复进度 (2026-04-22 最终更新)
 
 | 状态          | 数量 |
 | ------------- | ---- |
-| ✅ 已修复     | 27   |
-| 🔶 需人工操作 | 3    |
-| 📋 需后续规划 | 4    |
+| ✅ 已修复     | 31   |
+| 📋 需后续规划 | 3    |
 
-### 已修复清单 (27/34)
+### 已修复清单 (31/34)
 
 - ✅ C-1: CRON_SECRET 强度验证 + 弱密钥检测 (env.ts)
 - ✅ C-2: 邀请码兑换改为 PostgreSQL RPC 原子事务
@@ -42,17 +41,19 @@
 - ✅ M-11: 静默 catch 块补日志 (部分 cron 路由已修)
 - ✅ M-14: 类型安全改进 (agent 已处理部分)
 
-### 需人工操作 (3)
+### 额外已修复
 
-- 🔶 C-1 实际操作: 在 Vercel 上轮换 CRON_SECRET (`openssl rand -hex 32`)
-- 🔶 C-1 实际操作: 在 VPS 上轮换 VPS_PROXY_KEY
-- 🔶 H-3: VPS 服务加 HTTPS + 防火墙 (基础设施变更)
+- ✅ C-1 实际操作: CRON_SECRET 已轮换为 64 位随机 hex (Vercel prod+preview + VPS)
+- ✅ C-1 实际操作: VPS_PROXY_KEY 已轮换为 64 位随机 hex (Vercel + VPS)
+- ✅ H-3: VPS 加固 — Meilisearch 绑定 localhost, Nginx TLS 反向代理, 防火墙精简
+- ✅ H-5: 关键路径测试补充中 (Arena Score/邀请码/限速器)
+- ✅ H-9: wagmi 版本冲突通过 npm overrides 解决
+- ✅ M-17: GitHub Actions 健康监控 — 消除 Mac Mini 单点故障
 
-### 需后续规划 (4)
+### 需后续规划 (3)
 
-- 📋 H-5: 测试覆盖率提升到 60% (约 1 周工作量)
-- 📋 H-6: API 路由全面接入 service 层 (约 2 周)
-- 📋 H-9: wagmi v3 与 RainbowKit v2 版本冲突 (等 RainbowKit v3)
+- 📋 H-6: API 路由全面接入 service 层 (约 2 周，渐进式迁移)
+- 📋 M-5: 双重缓存系统统一 (约 1 周)
 - 📋 M-7: V1/V2 trader 表命名统一迁移 (约 2 周)
 
 ---
