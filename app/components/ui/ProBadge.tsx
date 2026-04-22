@@ -21,19 +21,7 @@ const PRO_CONFIG = {
   iconColor: tokens.colors.medal.gold,
 }
 
-// 淡淡发光动画样式（注入一次）
-const glowKeyframes = `
-@keyframes proBadgeGlow {
-  0%, 100% { box-shadow: 0 2px 8px var(--color-pro-badge-shadow), 0 0 12px var(--color-pro-gold-glow); }
-  50% { box-shadow: 0 2px 12px var(--color-pro-badge-shadow), 0 0 20px var(--color-pro-gold-glow); }
-}
-`
-if (typeof document !== 'undefined' && !document.getElementById('pro-badge-glow')) {
-  const style = document.createElement('style')
-  style.id = 'pro-badge-glow'
-  style.textContent = glowKeyframes
-  document.head.appendChild(style)
-}
+// Static subtle glow — no animation (the 3s pulse was AI slop)
 
 // 尺寸配置
 const SIZE_CONFIG = {
@@ -66,8 +54,7 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: `0 2px 8px ${config.glow}, 0 0 12px var(--color-pro-gold-glow)`,
-          animation: 'proBadgeGlow 3s ease-in-out infinite',
+          boxShadow: `0 1px 6px ${config.glow}`,
           flexShrink: 0,
           ...style,
         }}

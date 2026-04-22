@@ -15,33 +15,7 @@ const injectStyles = () => {
   const style = document.createElement('style')
   style.id = 'not-found-styles'
   style.textContent = `
-    @keyframes float404 {
-      0%, 100% { transform: translateY(0) rotate(0deg); }
-      25% { transform: translateY(-15px) rotate(-2deg); }
-      75% { transform: translateY(-8px) rotate(2deg); }
-    }
-    
-    @keyframes glitch {
-      0%, 100% { text-shadow: 0 0 60px var(--color-accent-primary-30); }
-      20% { text-shadow: -3px 0 var(--color-accent-error), 3px 0 var(--color-accent-primary-60); }
-      40% { text-shadow: 3px 0 var(--color-accent-error), -3px 0 var(--color-accent-primary-60); }
-      60% { text-shadow: 0 0 60px var(--color-accent-primary-30); }
-    }
-    
-    @keyframes orbitParticle {
-      from { transform: rotate(0deg) translateX(120px) rotate(0deg); }
-      to { transform: rotate(360deg) translateX(120px) rotate(-360deg); }
-    }
-    
-    @keyframes pulseGlow {
-      0%, 100% { opacity: 0.3; transform: scale(1); }
-      50% { opacity: 0.6; transform: scale(1.05); }
-    }
-    
-    @keyframes floatUp {
-      0%, 100% { transform: translateY(0); opacity: 0.4; }
-      50% { transform: translateY(-30px); opacity: 0.8; }
-    }
+    /* Simplified 404 — removed float/glitch/orbit/pulse animations (AI slop) */
     
     @keyframes fadeInUp {
       from { 
@@ -54,10 +28,7 @@ const injectStyles = () => {
       }
     }
     
-    @keyframes buttonHover {
-      0%, 100% { box-shadow: 0 4px 20px var(--color-accent-primary-30); }
-      50% { box-shadow: 0 6px 30px var(--color-accent-primary-60); }
-    }
+    /* Removed buttonHover infinite pulse — static hover shadow instead */
     
     @keyframes lineGrow {
       from { width: 0; opacity: 0; }
@@ -75,37 +46,15 @@ const injectStyles = () => {
       position: absolute;
       border-radius: 50%;
       filter: blur(60px);
-      animation: pulseGlow 6s ease-in-out infinite;
+      opacity: 0.4;
     }
-    
+
     .number-404 {
-      animation: float404 6s ease-in-out infinite, glitch 8s ease-in-out infinite;
+      /* Static — no float/glitch animation */
     }
-    
-    .orbit-container {
-      position: absolute;
-      width: 240px;
-      height: 240px;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      pointer-events: none;
-    }
-    
-    .orbit-particle {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      width: 8px;
-      height: 8px;
-      margin: -4px 0 0 -4px;
-      border-radius: 50%;
-      animation: orbitParticle linear infinite;
-    }
-    
+
     .floating-element {
       position: absolute;
-      animation: floatUp 4s ease-in-out infinite;
     }
     
     .content-section {
@@ -133,8 +82,8 @@ const injectStyles = () => {
     }
     
     .action-button.primary:hover {
-      transform: translateY(-3px);
-      animation: buttonHover 2s ease infinite;
+      transform: translateY(-2px);
+      box-shadow: 0 4px 16px var(--color-accent-primary-30);
     }
     
     .action-button.secondary:hover {
