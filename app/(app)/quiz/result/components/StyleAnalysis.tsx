@@ -90,10 +90,11 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
                 key={level}
                 aria-hidden="true"
                 style={{
-                  width: 10,
-                  height: 10,
+                  width: 14,
+                  height: 14,
                   borderRadius: '50%',
-                  background: level <= type.riskLevel ? type.color : 'var(--color-bg-tertiary)',
+                  background: level <= type.riskLevel ? type.color : 'transparent',
+                  border: level <= type.riskLevel ? 'none' : '1px solid var(--color-border-secondary, var(--glass-border-light))',
                   transition: 'background 0.3s',
                 }}
               />
