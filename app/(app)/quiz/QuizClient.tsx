@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
@@ -13,7 +13,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import StartStep from './components/StartStep'
 import QuestionStep from './components/QuestionStep'
 import ProgressBar from './components/ProgressBar'
-import CalculatingStep from './components/CalculatingStep'
+const CalculatingStep = lazy(() => import('./components/CalculatingStep'))
 import './quiz.css'
 
 const TOTAL_QUESTIONS = QUIZ_QUESTIONS.length
@@ -208,7 +208,13 @@ export default function QuizClient() {
           <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 2 }}>
             {langToggleButton}
           </div>
-          <CalculatingStep tr={t} onDone={handleCalculationDone} />
+          <Suspense fallback={
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 260 }}>
+              <div role="status" aria-label="Loading" style={{ width: 40, height: 40, border: '3px solid var(--color-bg-tertiary)', borderTopColor: 'var(--color-brand)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+            </div>
+          }>
+            <CalculatingStep tr={t} onDone={handleCalculationDone} />
+          </Suspense>
         </div>
       </div>
     )
