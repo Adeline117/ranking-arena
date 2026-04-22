@@ -1,9 +1,18 @@
 /**
  * 通知数据层
+ *
+ * 所有 API route 发送通知必须使用 sendNotification()。
+ * 它强制 fire-and-forget + dedup，防止：
+ * 1. 通知阻塞 API 响应
+ * 2. 重复通知轰炸用户
+ * 3. 通知失败影响主流程
+ *
+ * 仅 cron 批量通知可直接 insert（已有自己的 dedup 逻辑）。
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { fireAndForget } from '@/lib/utils/logger'
 
 export interface Notification {
   id: string
@@ -172,6 +181,63 @@ export async function markNotificationAsRead(
   if (error) {
     throw error
   }
+}
+
+/**
+ * 统一通知入口 — 所有 API route 必须使用这个函数发送通知。
+ * 强制 fire-and-forget + dedup，不阻塞响应，不影响主流程。
+ *
+ * @example
+ * sendNotification(supabase, {
+ *   user_id: targetUserId,
+ *   type: 'comment',
+ *   title: `${handle} commented on your post`,
+ *   message: content.slice(0, 100),
+ *   actor_id: currentUserId,
+ *   link: `/post/${postId}`,
+ *   reference_id: postId,
+ * }, 'Comment notification')
+ */
+export function sendNotification(
+  supabase: SupabaseClient,
+  notification: {
+    user_id: string
+    type: NotificationType
+    title: string
+    message: string
+    link?: string
+    actor_id?: string
+    reference_id?: string
+    read?: boolean
+  },
+  context: string
+): void {
+  fireAndForget(createNotificationDeduped(supabase, notification), context)
+}
+
+/**
+ * 批量通知入口 — fire-and-forget，每条独立 dedup。
+ * 用于 @mentions 等一次通知多人的场景。
+ */
+export function sendNotifications(
+  supabase: SupabaseClient,
+  notifications: Array<{
+    user_id: string
+    type: NotificationType
+    title: string
+    message: string
+    link?: string
+    actor_id?: string
+    reference_id?: string
+    read?: boolean
+  }>,
+  context: string
+): void {
+  if (notifications.length === 0) return
+  fireAndForget(
+    Promise.all(notifications.map((n) => createNotificationDeduped(supabase, n))),
+    context
+  )
 }
 
 /**

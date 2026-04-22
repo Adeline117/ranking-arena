@@ -7,10 +7,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { validateEnum, success, handleError } from '@/lib/api'
 import { togglePostReaction, getPostById } from '@/lib/data/posts'
-import { createNotificationDeduped } from '@/lib/data/notifications'
+import { sendNotification } from '@/lib/data/notifications'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
+import { fireAndForget } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 
@@ -35,11 +36,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ success: false, error: 'Invalid JSON body' }, { status: 400 })
       }
 
-      const reactionType = validateEnum(
-        body.reaction_type || 'up',
-        ['up', 'down'] as const,
-        { fieldName: 'reaction_type' }
-      ) ?? 'up'
+      const reactionType =
+        validateEnum(body.reaction_type || 'up', ['up', 'down'] as const, {
+          fieldName: 'reaction_type',
+        }) ?? 'up'
 
       // 执行点赞/踩操作
       const result = await togglePostReaction(supabase, id, user.id, reactionType)
@@ -65,23 +65,31 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // Send like notification (fire-and-forget, deduped — same actor+post within 1h won't send again)
-      if (result.action === 'added' && reactionType === 'up' && post?.author_id && post.author_id !== user.id) {
-        getUserHandle(user.id, user.email ?? undefined)
-          .then(userHandle => {
-            createNotificationDeduped(supabase, {
-              user_id: post!.author_id,
-              type: 'like',
-              title: `${userHandle} liked your post`,
-              message: (post!.title || '').slice(0, 100) || 'your post',
-              actor_id: user.id,
-              link: `/post/${id}`,
-              reference_id: id,
-              read: false,
-            })
-          })
-          .catch(notifErr => {
-            logger.warn('[posts/[id]/like] Notification error:', notifErr)
-          })
+      if (
+        result.action === 'added' &&
+        reactionType === 'up' &&
+        post?.author_id &&
+        post.author_id !== user.id
+      ) {
+        fireAndForget(
+          getUserHandle(user.id, user.email ?? undefined).then((userHandle) => {
+            sendNotification(
+              supabase,
+              {
+                user_id: post!.author_id,
+                type: 'like',
+                title: `${userHandle} liked your post`,
+                message: (post!.title || '').slice(0, 100) || 'your post',
+                actor_id: user.id,
+                link: `/post/${id}`,
+                reference_id: id,
+                read: false,
+              },
+              'Like notification'
+            )
+          }),
+          'Like notification setup'
+        )
       }
 
       return success({

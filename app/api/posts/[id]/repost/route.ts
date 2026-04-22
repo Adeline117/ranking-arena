@@ -10,8 +10,8 @@
 
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import logger, { fireAndForget } from '@/lib/logger'
-import { createNotificationDeduped } from '@/lib/data/notifications'
+import logger from '@/lib/logger'
+import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 
 // 转发帖子 - 创建新帖子
@@ -84,8 +84,9 @@ export const POST = withAuth(
 
     // Notify original post author (fire-and-forget, deduped)
     if (originalPost.author_id && originalPost.author_id !== user.id) {
-      fireAndForget(
-        createNotificationDeduped(supabase, {
+      sendNotification(
+        supabase,
+        {
           user_id: originalPost.author_id,
           type: 'comment',
           title: `${userHandle} reposted your post`,
@@ -94,7 +95,7 @@ export const POST = withAuth(
           link: `/post/${newPost.id}`,
           reference_id: originalPost.id,
           read: false,
-        }),
+        },
         'Repost notification'
       )
     }

@@ -9,7 +9,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
-import { createNotificationDeduped } from '@/lib/data/notifications'
+import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 
 export const dynamic = 'force-dynamic'
@@ -196,15 +196,19 @@ export async function POST(request: NextRequest) {
             .maybeSingle()
 
           const followerHandle = followerProfile?.handle || 'Someone'
-          await createNotificationDeduped(supabase, {
-            user_id: followingId,
-            type: 'new_follower',
-            title: 'New Follower',
-            message: `${followerHandle} started following you`,
-            actor_id: followerId,
-            link: `/u/${followerHandle}`,
-            reference_id: followerId,
-          })
+          sendNotification(
+            supabase,
+            {
+              user_id: followingId,
+              type: 'new_follower',
+              title: 'New Follower',
+              message: `${followerHandle} started following you`,
+              actor_id: followerId,
+              link: `/u/${followerHandle}`,
+              reference_id: followerId,
+            },
+            'User follow notification'
+          )
         })(),
         'Send follow notification'
       )

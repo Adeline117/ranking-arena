@@ -16,7 +16,7 @@ import {
   deleteComment,
   type CommentSortMode,
 } from '@/lib/data/comments'
-import { createNotificationDeduped } from '@/lib/data/notifications'
+import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 import logger, { fireAndForget } from '@/lib/logger'
@@ -157,16 +157,20 @@ export const POST = withAuth(
           .single()
 
         if (postData?.author_id && postData.author_id !== user.id) {
-          await createNotificationDeduped(supabase, {
-            user_id: postData.author_id,
-            type: 'comment',
-            title: `${userHandle} commented on your post`,
-            message: content.slice(0, 100),
-            actor_id: user.id,
-            link: `/post/${id}`,
-            reference_id: id,
-            read: false,
-          })
+          sendNotification(
+            supabase,
+            {
+              user_id: postData.author_id,
+              type: 'comment',
+              title: `${userHandle} commented on your post`,
+              message: content.slice(0, 100),
+              actor_id: user.id,
+              link: `/post/${id}`,
+              reference_id: id,
+              read: false,
+            },
+            'Comment notification'
+          )
         }
 
         // If this is a reply, also notify the parent comment author
@@ -182,16 +186,20 @@ export const POST = withAuth(
             parentComment.user_id !== user.id &&
             parentComment.user_id !== postData?.author_id
           ) {
-            await createNotificationDeduped(supabase, {
-              user_id: parentComment.user_id,
-              type: 'post_reply',
-              title: `${userHandle} replied to your comment`,
-              message: content.slice(0, 100),
-              actor_id: user.id,
-              link: `/post/${id}`,
-              reference_id: id,
-              read: false,
-            })
+            sendNotification(
+              supabase,
+              {
+                user_id: parentComment.user_id,
+                type: 'post_reply',
+                title: `${userHandle} replied to your comment`,
+                message: content.slice(0, 100),
+                actor_id: user.id,
+                link: `/post/${id}`,
+                reference_id: id,
+                read: false,
+              },
+              'Reply notification'
+            )
           }
         }
       })(),
