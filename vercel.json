@@ -120,7 +120,7 @@
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=a2",
-      "schedule": "7 */2 * * *"
+      "schedule": "9 */2 * * *"
     },
     {
       "path": "/api/cron/batch-fetch-traders?group=b1&windows=30d",
@@ -212,7 +212,7 @@
     },
     {
       "path": "/api/cron/precompute-composite",
-      "schedule": "21 */4 * * *"
+      "schedule": "24 */4 * * *"
     },
     {
       "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,etoro,web3_bot,gains&limit=400",
