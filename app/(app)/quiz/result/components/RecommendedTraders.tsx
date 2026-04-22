@@ -155,7 +155,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   </div>
                 </div>
               )}
-              {trader.arena_score != null && (
+              {trader.arena_score != null && trader.arena_score > 0 && (
                 <div style={{ textAlign: 'right' }}>
                   <div
                     style={{

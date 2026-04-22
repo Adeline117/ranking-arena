@@ -48,13 +48,12 @@ export default function QuestionStep({ question, questionNumber, totalQuestions,
           <>
             <span
               style={{
-                color: 'var(--color-text-tertiary)',
-                fontWeight: 500,
-                fontSize: 13,
+                color: 'var(--color-brand)',
+                fontWeight: 700,
                 marginRight: 8,
               }}
             >
-              {questionNumber}.
+              Q{questionNumber}
             </span>
             {tr(question.titleKey)}
           </>
@@ -98,7 +97,7 @@ export default function QuestionStep({ question, questionNumber, totalQuestions,
                   height: 48,
                   borderRadius: 8,
                   border: isSelected
-                    ? `2px solid ${cfg.selectedBorder}`
+                    ? `1px solid ${cfg.selectedBorder}`
                     : '1px solid var(--glass-border-light)',
                   background: isSelected
                     ? cfg.selectedBg

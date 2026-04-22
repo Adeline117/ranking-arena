@@ -52,6 +52,15 @@ export default function QuizClient() {
   const handleSelectOption = useCallback(
     (questionId: number, optionId: string) => {
       setAnswer(questionId, optionId)
+      // Auto-scroll to next question after short delay
+      const currentIdx = QUIZ_QUESTIONS.findIndex(q => q.id === questionId)
+      if (currentIdx < QUIZ_QUESTIONS.length - 1) {
+        const nextId = QUIZ_QUESTIONS[currentIdx + 1].id
+        setTimeout(() => {
+          const el = document.getElementById(`quiz-q-${nextId}`)
+          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        }, 300)
+      }
     },
     [setAnswer]
   )
@@ -204,7 +213,7 @@ export default function QuizClient() {
 
   // Questions — scrollable flow
   return (
-    <Box style={{ minHeight: '80vh', padding: 20 }}>
+    <Box style={{ minHeight: '80vh', padding: 20, paddingBottom: 80 }}>
       <div style={{ maxWidth: 520, width: '100%', margin: '0 auto' }}>
         {/* Sticky progress bar at top */}
         <div
@@ -214,6 +223,7 @@ export default function QuizClient() {
             zIndex: 10,
             background: 'var(--color-bg-primary)',
             padding: '8px 0',
+            borderBottom: '1px solid var(--glass-border-light)',
           }}
         >
           <ProgressBar answered={answeredCount} total={TOTAL_QUESTIONS} />
@@ -225,7 +235,7 @@ export default function QuizClient() {
         </div>
 
         {/* All questions rendered */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
           {QUIZ_QUESTIONS.map((q, idx) => (
             <QuestionStep
               key={q.id}
@@ -244,7 +254,7 @@ export default function QuizClient() {
           <div
             style={{
               position: 'sticky',
-              bottom: 0,
+              bottom: 64,
               zIndex: 10,
               background: 'var(--color-bg-primary)',
               padding: '16px 0',
