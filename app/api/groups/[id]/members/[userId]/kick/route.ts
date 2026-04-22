@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
+import { updateCount } from '@/lib/services/counters'
+import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 
 type RouteContext = { params: Promise<{ id: string; userId: string }> }
@@ -27,7 +29,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
         .eq('user_id', user.id)
         .maybeSingle()
 
-      if (!requesterMembership || (requesterMembership.role !== 'owner' && requesterMembership.role !== 'admin')) {
+      if (
+        !requesterMembership ||
+        (requesterMembership.role !== 'owner' && requesterMembership.role !== 'admin')
+      ) {
         return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
       }
 
@@ -65,56 +70,41 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ error: 'Operation failed' }, { status: 500 })
       }
 
-      // Atomically decrement member_count to avoid race conditions
-      const { error: decrementError } = await supabase.rpc('increment_member_count', {
-        p_group_id: groupId,
-        p_delta: -1,
-      })
-
-      if (decrementError) {
-        // Fallback: read-then-write if RPC not available
-        const { data: groupData, error: groupError } = await supabase
-          .from('groups')
-          .select('member_count')
-          .eq('id', groupId)
-          .single()
-
-        if (groupError) {
-          logger.error('Failed to fetch group for member_count update:', groupError)
-        } else if (groupData) {
-          await supabase
-            .from('groups')
-            .update({ member_count: Math.max(0, (groupData.member_count || 1) - 1) })
-            .eq('id', groupId)
-        }
-      }
+      // Decrement member count (fire-and-forget)
+      updateCount(
+        supabase,
+        'increment_member_count',
+        { p_group_id: groupId, p_delta: -1 },
+        'Kick: decrement member count'
+      )
 
       // Send notification to kicked user
-      const { error: notifyError } = await supabase
-        .from('notifications')
-        .insert({
+      sendNotification(
+        supabase,
+        {
           user_id: targetUserId,
-          type: 'system',
+          type: 'group_update',
           title: 'You have been removed from the group',
-          message: `You have been removed from the group by admin`,
+          message: 'You have been removed from the group by admin',
           link: `/groups/${groupId}`,
           actor_id: user.id,
           reference_id: groupId,
-        })
-
-      if (notifyError) {
-        logger.error('Failed to send kick notification:', notifyError)
-      }
+        },
+        'Kick notification'
+      )
 
       // Audit log (fire-and-forget)
       fireAndForget(
-        supabase.from('group_audit_log').insert({
-          group_id: groupId,
-          actor_id: user.id,
-          action: 'kick',
-          target_id: targetUserId,
-          details: { reason: null },
-        }).then(),
+        supabase
+          .from('group_audit_log')
+          .insert({
+            group_id: groupId,
+            actor_id: user.id,
+            action: 'kick',
+            target_id: targetUserId,
+            details: { reason: null },
+          })
+          .then(),
         'Group audit log: kick'
       )
 

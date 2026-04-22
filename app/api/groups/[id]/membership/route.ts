@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/api/middleware'
 import { sendNotification } from '@/lib/data/notifications'
+import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 
 /** Extract group id from URL path */
@@ -100,11 +101,12 @@ export const POST = withAuth(
         return NextResponse.json({ error: 'Failed to join' }, { status: 500 })
       }
 
-      // Increment count + notify owner (fire-and-forget, don't block response)
-      sb.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 }).then(
-        ({ error: rpcErr }) => {
-          if (rpcErr) logger.error('increment_member_count failed:', rpcErr)
-        }
+      // Increment count (fire-and-forget)
+      updateCount(
+        sb,
+        'increment_member_count',
+        { p_group_id: groupId, p_delta: 1 },
+        'Increment member count'
       )
 
       if (group.created_by && group.created_by !== user.id) {
@@ -144,10 +146,11 @@ export const POST = withAuth(
       }
 
       // Decrement count (fire-and-forget)
-      sb.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 }).then(
-        ({ error: rpcErr }) => {
-          if (rpcErr) logger.error('decrement_member_count failed:', rpcErr)
-        }
+      updateCount(
+        sb,
+        'increment_member_count',
+        { p_group_id: groupId, p_delta: -1 },
+        'Decrement member count'
       )
 
       return NextResponse.json({ success: true, action: 'left' })

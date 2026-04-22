@@ -16,8 +16,15 @@ import {
   validateString,
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { getPostById, updatePost, deletePost, getUserPostReaction, getUserPostVote } from '@/lib/data/posts'
+import {
+  getPostById,
+  updatePost,
+  deletePost,
+  getUserPostReaction,
+  getUserPostVote,
+} from '@/lib/data/posts'
 import logger from '@/lib/logger'
+import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 
 type RouteContext = { params: Promise<{ id: string }> }
@@ -42,28 +49,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
       return notFound('Post not found')
     }
 
-    // 增加浏览次数（使用原子操作，不阻塞响应）
-    Promise.resolve(supabase.rpc('increment_view_count', { post_id: id }))
-      .then(({ error }) => {
-        if (error) {
-          // 回退到非原子操作
-          Promise.resolve(
-            supabase
-              .from('posts')
-              .update({ view_count: (post.view_count || 0) + 1 })
-              .eq('id', id)
-          ).then(({ error: fallbackError }) => {
-            if (fallbackError) {
-              logger.error('[posts/[id]] Failed to increment view count:', fallbackError.message)
-            }
-          }).catch((err: unknown) => {
-            logger.error('[posts/[id]] Fallback view count error:', err)
-          })
-        }
-      })
-      .catch((err: unknown) => {
-        logger.error('[posts/[id]] RPC view count error:', err)
-      })
+    // 增加浏览次数（fire-and-forget，原子操作）
+    updateCount(supabase, 'increment_view_count', { post_id: id }, 'Increment view count')
 
     // 如果用户已登录，并行获取用户的点赞和投票状态
     let user_reaction: 'up' | 'down' | null = null

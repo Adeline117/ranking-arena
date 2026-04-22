@@ -17,6 +17,7 @@ import {
   type CommentSortMode,
 } from '@/lib/data/comments'
 import { sendNotification } from '@/lib/data/notifications'
+import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 import logger, { fireAndForget } from '@/lib/logger'
@@ -141,8 +142,8 @@ export const POST = withAuth(
       parent_id,
     })
 
-    // Atomically increment comment count (trigger was non-atomic, now dropped)
-    await supabase.rpc('increment_comment_count' as never, { p_post_id: id })
+    // Atomically increment comment count (fire-and-forget)
+    updateCount(supabase, 'increment_comment_count', { p_post_id: id }, 'Increment comment count')
 
     // Send comment notifications (truly fire-and-forget — don't block response)
     fireAndForget(
@@ -288,7 +289,7 @@ export const DELETE = withAuth(
     await deleteComment(supabase, commentId, user.id)
 
     // Atomically decrement comment count (trigger was non-atomic, now dropped)
-    await supabase.rpc('decrement_comment_count' as never, { p_post_id: id })
+    updateCount(supabase, 'decrement_comment_count', { p_post_id: id }, 'Decrement comment count')
 
     return success({ message: 'Comment deleted' })
   },
