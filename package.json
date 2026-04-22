@@ -16,7 +16,7 @@
   },
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=3584' next dev",
-    "build": "touch .env && TURBOPACK=0 next build",
+    "build": "touch .env && next build",
     "build:turbopack": "touch .env && next build",
     "analyze": "ANALYZE=true TURBOPACK=0 next build",
     "start": "next start",
