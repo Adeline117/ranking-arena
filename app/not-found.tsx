@@ -196,11 +196,36 @@ export default function NotFoundPage() {
   }, [])
   
   if (!mounted) {
+    // SSR / no-JS fallback — renders basic content before hydration
     return (
-      <div style={{ 
+      <div style={{
         minHeight: '100vh',
         background: tokens.colors.bg.primary,
-      }} />
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        color: tokens.colors.text.primary,
+      }}>
+        <h1 style={{ fontSize: 64, fontWeight: 900, marginBottom: 16, color: tokens.colors.accent.brand }}>404</h1>
+        <p style={{ fontSize: 18, marginBottom: 24, color: tokens.colors.text.secondary }}>Page not found</p>
+        <a
+          href="/"
+          style={{
+            padding: '12px 24px',
+            background: tokens.colors.accent.brand,
+            color: '#fff',
+            borderRadius: tokens.radius.md,
+            textDecoration: 'none',
+            fontSize: 16,
+            fontWeight: 600,
+          }}
+        >
+          Back to Home
+        </a>
+      </div>
     )
   }
 
