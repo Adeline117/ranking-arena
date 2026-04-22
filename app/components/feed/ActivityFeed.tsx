@@ -118,7 +118,7 @@ export default function ActivityFeed({
       const json = await res.json()
 
       if (!res.ok) {
-        setError(json.error ?? 'Failed to load activities')
+        setError(t('loadFailed'))
         return
       }
 
@@ -127,7 +127,7 @@ export default function ActivityFeed({
       setHasMore(data.pagination.hasMore)
       setCursor(data.pagination.nextCursor)
     } catch {
-      setError('Network error')
+      setError(t('networkError'))
     } finally {
       setLoading(false)
     }
@@ -150,7 +150,7 @@ export default function ActivityFeed({
       const json = await res.json()
 
       if (!res.ok) {
-        setError(json.error ?? 'Failed to load activities')
+        setError(t('loadFailed'))
         return
       }
 
@@ -159,7 +159,7 @@ export default function ActivityFeed({
       setHasMore(data.pagination.hasMore)
       setCursor(data.pagination.nextCursor)
     } catch {
-      setError('Network error')
+      setError(t('networkError'))
     } finally {
       setLoading(false)
     }
