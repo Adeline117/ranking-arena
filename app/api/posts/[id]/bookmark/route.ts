@@ -11,9 +11,11 @@ import { apiLogger } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
 // Zod schema for POST /api/posts/[id]/bookmark (body is optional)
-const BookmarkSchema = z.object({
-  folder_id: z.string().uuid().optional().nullable(),
-}).optional()
+const BookmarkSchema = z
+  .object({
+    folder_id: z.string().uuid().optional().nullable(),
+  })
+  .optional()
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -73,11 +75,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
       // 并行检查帖子是否存在 + 是否已收藏
       const [{ data: post }, { data: existingBookmark }] = await Promise.all([
-        supabase
-          .from('posts')
-          .select('id')
-          .eq('id', id)
-          .maybeSingle(),
+        supabase.from('posts').select('id').eq('id', id).maybeSingle(),
         supabase
           .from('post_bookmarks')
           .select('id, folder_id')
@@ -115,7 +113,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
             action: 'moved',
             bookmarked: true,
             bookmark_count: currentPost?.bookmark_count || 1,
-            folder_id: folder_id
+            folder_id: folder_id,
           })
         }
 
@@ -131,10 +129,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         // 使用原子递减操作避免竞态条件
-        const { data: updatedPost, error: rpcError } = await supabase.rpc(
-          'decrement_bookmark_count',
-          { post_id: id }
-        ).maybeSingle()
+        const { data: updatedPost, error: rpcError } = await supabase
+          .rpc('decrement_bookmark_count', { post_id: id })
+          .maybeSingle()
 
         // 如果 RPC 不存在，回退到非原子操作（但记录警告）
         let newCount = 0
@@ -162,7 +159,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         return NextResponse.json({
           action: 'removed',
           bookmarked: false,
-          bookmark_count: newCount
+          bookmark_count: newCount,
         })
       } else {
         // 未收藏，添加收藏
@@ -184,18 +181,32 @@ export async function POST(request: NextRequest, context: RouteContext) {
             folder_id = defaultFolder.id
           } else if (!folderQueryError) {
             // 只有在表存在时才尝试创建默认收藏夹
+            // Use upsert-like pattern: try insert, on unique violation re-query.
+            // The partial unique index (idx_bookmark_folders_one_default_per_user)
+            // prevents the TOCTOU race where two requests both create a default folder.
             const { data: newFolder, error: createFolderError } = await supabase
               .from('bookmark_folders')
               .insert({
                 user_id: user.id,
                 name: 'Default',
-                is_default: true
+                is_default: true,
               })
               .select('id')
               .single()
 
             if (createFolderError) {
-              apiLogger.error('Error creating default folder:', createFolderError)
+              // 23505 = unique violation → another request created it first, re-query
+              if (createFolderError.code === '23505') {
+                const { data: existingFolder } = await supabase
+                  .from('bookmark_folders')
+                  .select('id')
+                  .eq('user_id', user.id)
+                  .eq('is_default', true)
+                  .maybeSingle()
+                if (existingFolder) folder_id = existingFolder.id
+              } else {
+                apiLogger.error('Error creating default folder:', createFolderError)
+              }
               // 继续但不设置 folder_id
             } else if (newFolder) {
               folder_id = newFolder.id
@@ -212,9 +223,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           insertData.folder_id = folder_id
         }
 
-        const { error: insertError } = await supabase
-          .from('post_bookmarks')
-          .insert(insertData)
+        const { error: insertError } = await supabase.from('post_bookmarks').insert(insertData)
 
         if (insertError) {
           apiLogger.error('Error adding bookmark:', insertError)
@@ -229,10 +238,9 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }
 
         // 使用原子递增操作避免竞态条件
-        const { data: updatedPost, error: rpcError } = await supabase.rpc(
-          'increment_bookmark_count',
-          { post_id: id }
-        ).maybeSingle()
+        const { data: updatedPost, error: rpcError } = await supabase
+          .rpc('increment_bookmark_count', { post_id: id })
+          .maybeSingle()
 
         // 如果 RPC 不存在，回退到非原子操作（但记录警告）
         let newCount = 1
@@ -261,7 +269,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           action: 'added',
           bookmarked: true,
           bookmark_count: newCount,
-          folder_id: folder_id
+          folder_id: folder_id,
         })
       }
     },
