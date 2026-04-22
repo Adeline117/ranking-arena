@@ -29,7 +29,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { config as dotenvConfig } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
-import puppeteer from 'puppeteer'
+import { launchBrowser, closeBrowser, createPage } from './browser-utils.mjs'
 import { validateRow } from './validate-snapshot.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -57,18 +57,18 @@ const RANGE_TIME = { '7D': '1', '30D': '2', '90D': '3' }
 
 // Arena Score
 const ARENA_PARAMS = {
-  '7D':  { tanhCoeff: 0.08, roiExponent: 1.8 },
+  '7D': { tanhCoeff: 0.08, roiExponent: 1.8 },
   '30D': { tanhCoeff: 0.15, roiExponent: 1.6 },
   '90D': { tanhCoeff: 0.18, roiExponent: 1.6 },
 }
 const PNL_PARAMS = {
-  '7D':  { base: 300,  coeff: 0.42 },
-  '30D': { base: 600,  coeff: 0.30 },
-  '90D': { base: 650,  coeff: 0.27 },
+  '7D': { base: 300, coeff: 0.42 },
+  '30D': { base: 600, coeff: 0.3 },
+  '90D': { base: 650, coeff: 0.27 },
 }
 const clip = (v, min, max) => Math.max(min, Math.min(max, v))
-const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
-const getPeriodDays = p => p === '7D' ? 7 : p === '30D' ? 30 : 90
+const safeLog1p = (x) => (x <= -1 ? 0 : Math.log(1 + x))
+const getPeriodDays = (p) => (p === '7D' ? 7 : p === '30D' ? 30 : 90)
 
 function calculateArenaScore(roi, pnl, period) {
   const params = ARENA_PARAMS[period] || ARENA_PARAMS['90D']
@@ -114,9 +114,14 @@ function parseTrader(item, period) {
   const followers = item.followers != null ? Math.round(item.followers) : null
 
   return {
-    source: SOURCE, source_trader_id: id, handle,
+    source: SOURCE,
+    source_trader_id: id,
+    handle,
     profile_url: `https://blofin.com/en/copy-trade/trader/${id}`,
-    season_id: period, rank: 0, roi, pnl,
+    season_id: period,
+    rank: 0,
+    roi,
+    pnl,
     win_rate: null, // BloFin API does not return win_rate in list endpoint
     max_drawdown: mdd,
     sharpe_ratio: sharpeRatio,
@@ -129,30 +134,23 @@ function parseTrader(item, period) {
 }
 
 async function fetchWithBrowser(periods) {
-  const browser = await puppeteer.launch({
-    headless: 'new', // CRITICAL: 'new' bypasses CF challenge, 'shell' does NOT
-    executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-    args: [
-      '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-      '--disable-gpu', '--window-size=1440,900',
-      '--disable-blink-features=AutomationControlled',
-    ],
-  })
+  const browser = await launchBrowser()
 
   const results = {}
 
   try {
-    const page = await browser.newPage()
-    await page.setViewport({ width: 1440, height: 900 })
-    await page.setUserAgent('Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36')
+    const page = await createPage(browser)
 
     // Step 1: Navigate to copy-trade page to establish session + pass CF
     console.log('  Loading blofin.com/en/copy-trade...')
-    await page.goto('https://blofin.com/en/copy-trade', { waitUntil: 'domcontentloaded', timeout: 45000 })
+    await page.goto('https://blofin.com/en/copy-trade', {
+      waitUntil: 'domcontentloaded',
+      timeout: 45000,
+    })
 
     // Wait for CF challenge to resolve
     for (let i = 0; i < 6; i++) {
-      await new Promise(r => setTimeout(r, 3000))
+      await new Promise((r) => setTimeout(r, 3000))
       const title = await page.title()
       if (!title.includes('moment')) {
         console.log(`  CF challenge passed (title: ${title.slice(0, 50)})`)
@@ -160,7 +158,7 @@ async function fetchWithBrowser(periods) {
       }
       if (i === 5) console.log('  WARNING: CF challenge may not have resolved')
     }
-    await new Promise(r => setTimeout(r, 2000))
+    await new Promise((r) => setTimeout(r, 2000))
 
     // Step 2: For each period, paginate through /uapi/v1/copy/v2/trader/list
     for (const period of periods) {
@@ -173,35 +171,40 @@ async function fetchWithBrowser(periods) {
 
       for (let pageNum = 1; pageNum <= MAX_PAGES && emptyPages < 2; pageNum++) {
         try {
-          const data = await page.evaluate(async (opts) => {
-            try {
-              const r = await fetch('/uapi/v1/copy/v2/trader/list', {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  'Accept': 'application/json',
-                  'blofin-copy-trading-user': '1',
-                },
-                body: JSON.stringify({
-                  hide_full_portfolios: 0,
-                  sort_field: 'roi',
-                  range_time: opts.rt,
-                  sort_order: 'DESC',
-                  nick_name: '',
-                  trading_bots_type: [],
-                  tag_list: [],
-                  page_num: opts.pn,
-                  page_size: 50,
-                  pnl_lower: '',
-                  pnl_upper: '',
-                  copier_pnl_lower: '',
-                  copier_pnl_upper: '',
-                }),
-                credentials: 'include',
-              })
-              return await r.json()
-            } catch (e) { return { error: e.message } }
-          }, { rt: rangeTime, pn: pageNum })
+          const data = await page.evaluate(
+            async (opts) => {
+              try {
+                const r = await fetch('/uapi/v1/copy/v2/trader/list', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Accept: 'application/json',
+                    'blofin-copy-trading-user': '1',
+                  },
+                  body: JSON.stringify({
+                    hide_full_portfolios: 0,
+                    sort_field: 'roi',
+                    range_time: opts.rt,
+                    sort_order: 'DESC',
+                    nick_name: '',
+                    trading_bots_type: [],
+                    tag_list: [],
+                    page_num: opts.pn,
+                    page_size: 50,
+                    pnl_lower: '',
+                    pnl_upper: '',
+                    copier_pnl_lower: '',
+                    copier_pnl_upper: '',
+                  }),
+                  credentials: 'include',
+                })
+                return await r.json()
+              } catch (e) {
+                return { error: e.message }
+              }
+            },
+            { rt: rangeTime, pn: pageNum }
+          )
 
           if (data.error) {
             console.log(`    Page ${pageNum}: fetch error: ${data.error}`)
@@ -238,7 +241,7 @@ async function fetchWithBrowser(periods) {
           }
 
           // Brief delay between pages
-          if (pageNum < MAX_PAGES) await new Promise(r => setTimeout(r, 500))
+          if (pageNum < MAX_PAGES) await new Promise((r) => setTimeout(r, 500))
         } catch (err) {
           console.log(`    Page ${pageNum}: error: ${err.message}`)
           emptyPages++
@@ -257,18 +260,25 @@ async function fetchWithBrowser(periods) {
                 method: 'POST',
                 headers: {
                   'Content-Type': 'application/json',
-                  'Accept': 'application/json',
+                  Accept: 'application/json',
                   'blofin-copy-trading-user': '1',
                 },
                 body: JSON.stringify({ nick_name: '', limit: 15 }),
                 credentials: 'include',
               })
               return await r.json()
-            } catch (e) { return { error: e.message } }
+            } catch (e) {
+              return { error: e.message }
+            }
           })
 
           if (rankData.code === 200 && rankData.data) {
-            for (const listName of ['top_roi_list', 'top_predunt_list', 'highest_copier_pnl_list', 'top_new_talent_list']) {
+            for (const listName of [
+              'top_roi_list',
+              'top_predunt_list',
+              'highest_copier_pnl_list',
+              'top_new_talent_list',
+            ]) {
               const list = rankData.data[listName] || []
               for (const item of list) {
                 const uid = String(item.uid || '')
@@ -293,7 +303,9 @@ async function fetchWithBrowser(periods) {
       }
       traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
       const top = traders.slice(0, TARGET)
-      top.forEach((t, i) => { t.rank = i + 1 })
+      top.forEach((t, i) => {
+        t.rank = i + 1
+      })
 
       if (top.length > 0) {
         results[period] = await saveTraders(top)
@@ -307,15 +319,7 @@ async function fetchWithBrowser(periods) {
       if (!results[period]) results[period] = { total: 0, saved: 0, error: err.message }
     }
   } finally {
-    try {
-      await Promise.race([
-        browser.close(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('close timeout')), 10000)),
-      ])
-    } catch {
-      const proc = browser.process()
-      if (proc) { proc.kill('SIGKILL'); console.warn('  [cleanup] Force-killed Chrome process') }
-    }
+    await closeBrowser(browser)
   }
   return results
 }
@@ -323,21 +327,40 @@ async function fetchWithBrowser(periods) {
 async function saveTraders(traders) {
   if (traders.length === 0) return { total: 0, saved: 0, error: 'Empty' }
 
-  const sources = traders.map(t => ({
-    source: t.source, source_trader_id: t.source_trader_id,
-    handle: t.handle, profile_url: t.profile_url, avatar_url: t.avatar_url,
+  const sources = traders.map((t) => ({
+    source: t.source,
+    source_trader_id: t.source_trader_id,
+    handle: t.handle,
+    profile_url: t.profile_url,
+    avatar_url: t.avatar_url,
   }))
-  const { error: srcErr } = await supabase.from('trader_sources').upsert(sources, { onConflict: 'source,source_trader_id' })
+  const { error: srcErr } = await supabase
+    .from('trader_sources')
+    .upsert(sources, { onConflict: 'source,source_trader_id' })
   if (srcErr) console.error('trader_sources error:', srcErr.message)
 
-  const profiles = traders.map(t => ({
-    platform: t.source, market_type: 'futures', trader_key: t.source_trader_id,
-    display_name: t.handle || null, avatar_url: t.avatar_url, profile_url: t.profile_url,
-    followers: t.followers ?? 0, copiers: 0, tags: [], bio: null, aum: t.aum ?? null,
-    provenance: { source_url: t.profile_url, created_by: 'mac-mini-fetcher', created_at: new Date().toISOString() },
+  const profiles = traders.map((t) => ({
+    platform: t.source,
+    market_type: 'futures',
+    trader_key: t.source_trader_id,
+    display_name: t.handle || null,
+    avatar_url: t.avatar_url,
+    profile_url: t.profile_url,
+    followers: t.followers ?? 0,
+    copiers: 0,
+    tags: [],
+    bio: null,
+    aum: t.aum ?? null,
+    provenance: {
+      source_url: t.profile_url,
+      created_by: 'mac-mini-fetcher',
+      created_at: new Date().toISOString(),
+    },
     updated_at: new Date().toISOString(),
   }))
-  const { error: profileErr } = await supabase.from('trader_profiles_v2').upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
+  const { error: profileErr } = await supabase
+    .from('trader_profiles_v2')
+    .upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
   if (profileErr) console.error('trader_profiles_v2 error:', profileErr.message)
 
   // v1 writes removed — v2 is sole snapshot table since 2026-03-18
@@ -358,31 +381,54 @@ async function saveTraders(traders) {
     console.warn(`  [VALIDATION] Rejected ${rejectedCount}/${traders.length} traders`)
   }
 
-  const snapshotsV2 = validTraders.map(t => ({
-    platform: t.source, market_type: 'futures', trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
+  const snapshotsV2 = validTraders.map((t) => ({
+    platform: t.source,
+    market_type: 'futures',
+    trader_key: t.source_trader_id,
+    window: t.season_id,
+    as_of_ts: t.captured_at,
     metrics: {
-      roi: t.roi ?? 0, pnl: t.pnl ?? 0, win_rate: t.win_rate ?? null,
-      max_drawdown: t.max_drawdown ?? null, sharpe_ratio: t.sharpe_ratio ?? null,
-      followers: t.followers ?? null, arena_score: t.arena_score ?? null,
+      roi: t.roi ?? 0,
+      pnl: t.pnl ?? 0,
+      win_rate: t.win_rate ?? null,
+      max_drawdown: t.max_drawdown ?? null,
+      sharpe_ratio: t.sharpe_ratio ?? null,
+      followers: t.followers ?? null,
+      arena_score: t.arena_score ?? null,
       aum: t.aum ?? null,
     },
     quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.8 },
     updated_at: new Date().toISOString(),
   }))
-  const validatedV2 = snapshotsV2.filter(s => {
+  const validatedV2 = snapshotsV2.filter((s) => {
     const roi = s.metrics.roi
     const pnl = s.metrics.pnl
     const wr = s.metrics.win_rate
     const mdd = s.metrics.max_drawdown
-    if (roi != null && (Math.abs(roi) > 10000)) { console.warn(`[validate] rejected roi=${roi} for ${s.trader_key}`); return false }
-    if (pnl != null && (Math.abs(pnl) > 100_000_000)) { console.warn(`[validate] rejected pnl=${pnl} for ${s.trader_key}`); return false }
-    if (wr != null && (wr < 0 || wr > 100)) { console.warn(`[validate] rejected wr=${wr} for ${s.trader_key}`); return false }
-    if (mdd != null && (mdd < 0 || mdd > 100)) { console.warn(`[validate] rejected mdd=${mdd} for ${s.trader_key}`); return false }
+    if (roi != null && Math.abs(roi) > 10000) {
+      console.warn(`[validate] rejected roi=${roi} for ${s.trader_key}`)
+      return false
+    }
+    if (pnl != null && Math.abs(pnl) > 100_000_000) {
+      console.warn(`[validate] rejected pnl=${pnl} for ${s.trader_key}`)
+      return false
+    }
+    if (wr != null && (wr < 0 || wr > 100)) {
+      console.warn(`[validate] rejected wr=${wr} for ${s.trader_key}`)
+      return false
+    }
+    if (mdd != null && (mdd < 0 || mdd > 100)) {
+      console.warn(`[validate] rejected mdd=${mdd} for ${s.trader_key}`)
+      return false
+    }
     return true
   })
   if (validatedV2.length > 0) {
-    const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(validatedV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
-    if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique')) console.error('v2 error:', v2Err.message)
+    const { error: v2Err } = await supabase
+      .from('trader_snapshots_v2')
+      .upsert(validatedV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
+    if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique'))
+      console.error('v2 error:', v2Err.message)
   }
 
   return { total: traders.length, saved: validTraders.length, rejected: rejectedCount }
@@ -392,10 +438,13 @@ async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
   try {
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text, parse_mode: 'HTML' }),
     })
-  } catch (err) { console.error('Telegram failed:', err.message) }
+  } catch (err) {
+    console.error('Telegram failed:', err.message)
+  }
 }
 
 async function main() {
@@ -406,13 +455,26 @@ async function main() {
   const results = await fetchWithBrowser(periods)
   const duration = ((Date.now() - start) / 1000).toFixed(1)
   const totalSaved = Object.values(results).reduce((s, r) => s + (r.saved || 0), 0)
-  for (const [p, r] of Object.entries(results)) console.log(`  ${p}: ${r.saved}/${r.total} saved ${r.error ? `(${r.error})` : ''}`)
+  for (const [p, r] of Object.entries(results))
+    console.log(`  ${p}: ${r.saved}/${r.total} saved ${r.error ? `(${r.error})` : ''}`)
   console.log(`\nDone in ${duration}s. Total saved: ${totalSaved}`)
   if (totalSaved > 0) {
-    await sendTelegram(`✅ <b>BloFin (Mac Mini)</b>\n${Object.entries(results).map(([p, r]) => `${p}: ${r.saved} traders`).join('\n')}\n⏱ ${duration}s`)
+    await sendTelegram(
+      `✅ <b>BloFin (Mac Mini)</b>\n${Object.entries(results)
+        .map(([p, r]) => `${p}: ${r.saved} traders`)
+        .join('\n')}\n⏱ ${duration}s`
+    )
   } else {
-    await sendTelegram(`❌ <b>BloFin (Mac Mini) failed</b>\n${Object.entries(results).filter(([, r]) => r.error).map(([p, r]) => `${p}: ${r.error}`).join('\n')}`)
+    await sendTelegram(
+      `❌ <b>BloFin (Mac Mini) failed</b>\n${Object.entries(results)
+        .filter(([, r]) => r.error)
+        .map(([p, r]) => `${p}: ${r.error}`)
+        .join('\n')}`
+    )
   }
 }
 
-main().catch(err => { console.error('Fatal:', err); process.exit(1) })
+main().catch((err) => {
+  console.error('Fatal:', err)
+  process.exit(1)
+})

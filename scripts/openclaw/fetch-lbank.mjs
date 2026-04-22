@@ -18,7 +18,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { config as dotenvConfig } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
-import puppeteer from 'puppeteer'
+import { launchBrowser, closeBrowser, createPage } from './browser-utils.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
@@ -42,18 +42,18 @@ const PERIODS = { '7D': 7, '30D': 30, '90D': 90 }
 
 // Arena Score (synced with lib/utils/arena-score.ts)
 const ARENA_PARAMS = {
-  '7D':  { tanhCoeff: 0.08, roiExponent: 1.8 },
+  '7D': { tanhCoeff: 0.08, roiExponent: 1.8 },
   '30D': { tanhCoeff: 0.15, roiExponent: 1.6 },
   '90D': { tanhCoeff: 0.18, roiExponent: 1.6 },
 }
 const PNL_PARAMS = {
-  '7D':  { base: 300,  coeff: 0.42 },
-  '30D': { base: 600,  coeff: 0.30 },
-  '90D': { base: 650,  coeff: 0.27 },
+  '7D': { base: 300, coeff: 0.42 },
+  '30D': { base: 600, coeff: 0.3 },
+  '90D': { base: 650, coeff: 0.27 },
 }
 const clip = (v, min, max) => Math.max(min, Math.min(max, v))
-const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
-const getPeriodDays = p => p === '7D' ? 7 : p === '30D' ? 30 : 90
+const safeLog1p = (x) => (x <= -1 ? 0 : Math.log(1 + x))
+const getPeriodDays = (p) => (p === '7D' ? 7 : p === '30D' ? 30 : 90)
 
 function calculateArenaScore(roi, pnl, period) {
   const params = ARENA_PARAMS[period] || ARENA_PARAMS['90D']
@@ -86,14 +86,20 @@ function normalizeRoi(roi) {
 
 function parseTrader(item, period) {
   // Try all known ID fields
-  const id = String(item.uuid || item.uid || item.userId || item.traderId || item.id || item.memberId || '')
+  const id = String(
+    item.uuid || item.uid || item.userId || item.traderId || item.id || item.memberId || ''
+  )
   if (!id || id === 'undefined' || id === '0') return null
 
   // Period-specific ROI
   let roi = null
   if (period === '7D') roi = parseNum(item.roi7d ?? item.omProfitRate7d)
-  else if (period === '30D') roi = parseNum(item.roi30d ?? item.omProfitRate30d ?? item.omProfitRate)
-  if (roi === null) roi = parseNum(item.roi ?? item.omProfitRate ?? item.returnRate ?? item.profitRate ?? item.yield)
+  else if (period === '30D')
+    roi = parseNum(item.roi30d ?? item.omProfitRate30d ?? item.omProfitRate)
+  if (roi === null)
+    roi = parseNum(
+      item.roi ?? item.omProfitRate ?? item.returnRate ?? item.profitRate ?? item.yield
+    )
   roi = normalizeRoi(roi)
   if (roi === null) return null
 
@@ -101,7 +107,15 @@ function parseTrader(item, period) {
   let pnl = null
   if (period === '7D') pnl = parseNum(item.followerProfit7d ?? item.followerIncome7d)
   else if (period === '30D') pnl = parseNum(item.followerProfit30d ?? item.followerIncome30d)
-  if (pnl === null) pnl = parseNum(item.pnl ?? item.profit ?? item.totalProfit ?? item.totalPnl ?? item.omProfit ?? item.followerIncome)
+  if (pnl === null)
+    pnl = parseNum(
+      item.pnl ??
+        item.profit ??
+        item.totalProfit ??
+        item.totalPnl ??
+        item.omProfit ??
+        item.followerIncome
+    )
 
   // Win rate
   let winRate = parseNum(item.winRate ?? item.winRatio ?? item.swinRate ?? item.winRate30d)
@@ -111,9 +125,13 @@ function parseTrader(item, period) {
   let mdd = parseNum(item.maxDrawdown ?? item.mdd ?? item.drawDown)
   if (mdd !== null && Math.abs(mdd) > 0 && Math.abs(mdd) <= 1) mdd *= 100
 
-  const handle = item.nickname || item.nickName || item.name || item.userName || `Trader_${id.slice(0, 8)}`
-  const avatar = item.avatar || item.headUrl || item.avatarUrl || item.headPhoto || item.photo || null
-  const followers = parseNum(item.followerCount ?? item.followers ?? item.copyCount ?? item.followNum)
+  const handle =
+    item.nickname || item.nickName || item.name || item.userName || `Trader_${id.slice(0, 8)}`
+  const avatar =
+    item.avatar || item.headUrl || item.avatarUrl || item.headPhoto || item.photo || null
+  const followers = parseNum(
+    item.followerCount ?? item.followers ?? item.copyCount ?? item.followNum
+  )
 
   return {
     source: SOURCE,
@@ -133,83 +151,27 @@ function parseTrader(item, period) {
   }
 }
 
-import { execSync } from 'child_process'
-
-/** Kill orphan Chrome processes from previous cron runs (not user Chrome) */
-function killOrphanChromeProcesses() {
-  try {
-    const out = execSync(
-      `pgrep -f 'Google Chrome.*--headless' 2>/dev/null || true`,
-      { encoding: 'utf8', timeout: 5000 }
-    ).trim()
-    if (out) {
-      const pids = out.split('\n').filter(Boolean)
-      for (const pid of pids) {
-        try { process.kill(Number(pid), 'SIGKILL') } catch {}
-      }
-      console.log(`  [cleanup] Killed ${pids.length} orphan headless Chrome process(es)`)
-    }
-  } catch {}
-}
-
-async function launchBrowserWithRetry(maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const browser = await puppeteer.launch({
-        headless: 'new',
-        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        args: [
-          '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-          '--disable-gpu', '--window-size=1440,900',
-          '--disable-blink-features=AutomationControlled',
-        ],
-        timeout: 30000,
-      })
-      await browser.version()
-      return browser
-    } catch (err) {
-      console.warn(`  [launch] Attempt ${attempt}/${maxRetries} failed: ${err.message}`)
-      if (attempt < maxRetries) {
-        killOrphanChromeProcesses()
-        await new Promise(r => setTimeout(r, 3000 * attempt))
-      } else {
-        throw err
-      }
-    }
-  }
-}
-
-async function closeBrowserSafely(browser) {
-  try {
-    await Promise.race([
-      browser.close(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('close timeout')), 10000)),
-    ])
-  } catch {
-    const proc = browser.process()
-    if (proc) { proc.kill('SIGKILL'); console.warn('  [cleanup] Force-killed Chrome process') }
-  }
-}
-
 async function fetchWithBrowser(periods) {
-  killOrphanChromeProcesses()
-  const browser = await launchBrowserWithRetry()
+  const browser = await launchBrowser()
 
   const results = {}
 
   try {
-    const page = await browser.newPage()
-    await page.setViewport({ width: 1440, height: 900 })
-    await page.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-    )
+    const page = await createPage(browser)
 
     const allCaptured = []
     const capturedApiUrls = []
 
     page.on('response', async (response) => {
       const url = response.url()
-      if (url.includes('copy') || url.includes('trader') || url.includes('ranking') || url.includes('leader') || url.includes('getAll') || url.includes('rerrkvifj')) {
+      if (
+        url.includes('copy') ||
+        url.includes('trader') ||
+        url.includes('ranking') ||
+        url.includes('leader') ||
+        url.includes('getAll') ||
+        url.includes('rerrkvifj')
+      ) {
         try {
           const ct = response.headers()['content-type'] || ''
           if (!ct.includes('json') && !ct.includes('text')) return
@@ -223,15 +185,21 @@ async function fetchWithBrowser(periods) {
           else if (Array.isArray(json.data)) list = json.data
           else if (json.rows) list = json.rows
 
-          list = list.filter(item => item && typeof item === 'object' &&
-            (item.uuid || item.uid || item.userId || item.traderId || item.memberId))
+          list = list.filter(
+            (item) =>
+              item &&
+              typeof item === 'object' &&
+              (item.uuid || item.uid || item.userId || item.traderId || item.memberId)
+          )
 
           if (list.length > 0) {
             console.log(`  [capture] ${list.length} traders from ${url.slice(0, 120)}`)
             allCaptured.push(...list)
             capturedApiUrls.push(url)
           }
-        } catch { /* not JSON */ }
+        } catch {
+          /* not JSON */
+        }
       }
     })
 
@@ -240,39 +208,54 @@ async function fetchWithBrowser(periods) {
       waitUntil: 'networkidle2',
       timeout: 60000,
     })
-    await new Promise(r => setTimeout(r, 5000))
+    await new Promise((r) => setTimeout(r, 5000))
     console.log(`  After initial load: ${allCaptured.length} traders captured`)
 
     // Scroll to trigger lazy loading
     for (let round = 0; round < 10; round++) {
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight))
-      await new Promise(r => setTimeout(r, 2000))
+      await new Promise((r) => setTimeout(r, 2000))
     }
     console.log(`  After scrolling: ${allCaptured.length} traders`)
 
     // Try XHR pagination from browser context if we found the API URL
-    const apiBase = capturedApiUrls.find(u => u.includes('getAll') || u.includes('rerrkvifj'))
+    const apiBase = capturedApiUrls.find((u) => u.includes('getAll') || u.includes('rerrkvifj'))
     if (apiBase && allCaptured.length < TARGET) {
       console.log('  Trying XHR pagination from browser context...')
       for (let pageNum = 2; pageNum <= 20; pageNum++) {
-        const xhrResult = await page.evaluate(async (params) => {
-          return new Promise((resolve) => {
-            const xhr = new XMLHttpRequest()
-            xhr.open('GET', `${params.origin}/futures-follow-center/trader/stat/v1/getAll?size=50&current=${params.page}&topFlag=1&sortField=omProfitRate&sortDirection=1`)
-            xhr.withCredentials = true
-            xhr.onload = () => { try { resolve(JSON.parse(xhr.responseText)) } catch { resolve(null) } }
-            xhr.onerror = () => resolve(null)
-            xhr.send()
-          })
-        }, { origin: new URL(apiBase).origin, page: pageNum })
+        const xhrResult = await page.evaluate(
+          async (params) => {
+            return new Promise((resolve) => {
+              const xhr = new XMLHttpRequest()
+              xhr.open(
+                'GET',
+                `${params.origin}/futures-follow-center/trader/stat/v1/getAll?size=50&current=${params.page}&topFlag=1&sortField=omProfitRate&sortDirection=1`
+              )
+              xhr.withCredentials = true
+              xhr.onload = () => {
+                try {
+                  resolve(JSON.parse(xhr.responseText))
+                } catch {
+                  resolve(null)
+                }
+              }
+              xhr.onerror = () => resolve(null)
+              xhr.send()
+            })
+          },
+          { origin: new URL(apiBase).origin, page: pageNum }
+        )
 
         const list = xhrResult?.data?.records || xhrResult?.data?.list || []
-        const newTraders = list.filter(item => item?.uuid || item?.uid || item?.memberId)
-        if (newTraders.length === 0) { console.log(`    XHR page ${pageNum}: empty`); break }
+        const newTraders = list.filter((item) => item?.uuid || item?.uid || item?.memberId)
+        if (newTraders.length === 0) {
+          console.log(`    XHR page ${pageNum}: empty`)
+          break
+        }
         allCaptured.push(...newTraders)
         console.log(`    XHR page ${pageNum}: +${newTraders.length} (total: ${allCaptured.length})`)
         if (newTraders.length < 50) break
-        await new Promise(r => setTimeout(r, 500))
+        await new Promise((r) => setTimeout(r, 500))
       }
     }
 
@@ -288,19 +271,23 @@ async function fetchWithBrowser(periods) {
         ]
         for (const sel of selectors) {
           const el = document.querySelector(sel)
-          if (el) { el.click(); return sel }
+          if (el) {
+            el.click()
+            return sel
+          }
         }
         return null
       })
       if (!clicked) break
-      await new Promise(r => setTimeout(r, 2500))
+      await new Promise((r) => setTimeout(r, 2500))
       noNewStreak = allCaptured.length > countBefore ? 0 : noNewStreak + 1
     }
 
     console.log(`  Total captured: ${allCaptured.length} traders`)
 
     if (allCaptured.length === 0) {
-      for (const period of periods) results[period] = { total: 0, saved: 0, error: 'No data captured' }
+      for (const period of periods)
+        results[period] = { total: 0, saved: 0, error: 'No data captured' }
     } else {
       for (const period of periods) {
         const seen = new Set()
@@ -313,8 +300,13 @@ async function fetchWithBrowser(periods) {
         }
         traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
         const top = traders.slice(0, TARGET)
-        top.forEach((t, i) => { t.rank = i + 1 })
-        results[period] = top.length > 0 ? await saveTraders(top) : { total: 0, saved: 0, error: 'No parseable traders' }
+        top.forEach((t, i) => {
+          t.rank = i + 1
+        })
+        results[period] =
+          top.length > 0
+            ? await saveTraders(top)
+            : { total: 0, saved: 0, error: 'No parseable traders' }
       }
     }
   } catch (err) {
@@ -323,7 +315,7 @@ async function fetchWithBrowser(periods) {
       if (!results[period]) results[period] = { total: 0, saved: 0, error: err.message }
     }
   } finally {
-    await closeBrowserSafely(browser)
+    await closeBrowser(browser)
   }
   return results
 }
@@ -331,42 +323,89 @@ async function fetchWithBrowser(periods) {
 async function saveTraders(traders) {
   if (traders.length === 0) return { total: 0, saved: 0, error: 'Empty' }
 
-  const sources = traders.map(t => ({
-    source: t.source, source_trader_id: t.source_trader_id,
-    handle: t.handle, profile_url: t.profile_url, avatar_url: t.avatar_url,
+  const sources = traders.map((t) => ({
+    source: t.source,
+    source_trader_id: t.source_trader_id,
+    handle: t.handle,
+    profile_url: t.profile_url,
+    avatar_url: t.avatar_url,
   }))
-  const { error: srcErr } = await supabase.from('trader_sources').upsert(sources, { onConflict: 'source,source_trader_id' })
+  const { error: srcErr } = await supabase
+    .from('trader_sources')
+    .upsert(sources, { onConflict: 'source,source_trader_id' })
   if (srcErr) console.error('trader_sources error:', srcErr.message)
 
-  const profiles = traders.map(t => ({
-    platform: t.source, market_type: 'futures', trader_key: t.source_trader_id,
-    display_name: t.handle || null, avatar_url: t.avatar_url, profile_url: t.profile_url,
-    followers: t.followers || 0, copiers: 0, tags: [], bio: null, aum: null,
-    provenance: { source_url: t.profile_url, created_by: 'mac-mini-fetcher', created_at: new Date().toISOString() },
+  const profiles = traders.map((t) => ({
+    platform: t.source,
+    market_type: 'futures',
+    trader_key: t.source_trader_id,
+    display_name: t.handle || null,
+    avatar_url: t.avatar_url,
+    profile_url: t.profile_url,
+    followers: t.followers || 0,
+    copiers: 0,
+    tags: [],
+    bio: null,
+    aum: null,
+    provenance: {
+      source_url: t.profile_url,
+      created_by: 'mac-mini-fetcher',
+      created_at: new Date().toISOString(),
+    },
     updated_at: new Date().toISOString(),
   }))
-  const { error: profileErr } = await supabase.from('trader_profiles_v2').upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
+  const { error: profileErr } = await supabase
+    .from('trader_profiles_v2')
+    .upsert(profiles, { onConflict: 'platform,market_type,trader_key' })
   if (profileErr) console.error('trader_profiles_v2 error:', profileErr.message)
 
-  const snapshotsV2 = traders.map(t => ({
-    platform: t.source, market_type: 'futures', trader_key: t.source_trader_id, window: t.season_id, as_of_ts: t.captured_at,
-    metrics: { roi: t.roi ?? 0, pnl: t.pnl ?? 0, win_rate: t.win_rate ?? null, max_drawdown: t.max_drawdown ?? null, followers: t.followers ?? null, arena_score: t.arena_score ?? null },
-    quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.7 },
-    updated_at: new Date().toISOString(),
-  })).filter(s => {
-    // Inline validation — these scripts bypass validateBeforeWrite
-    const roi = s.metrics.roi
-    const pnl = s.metrics.pnl
-    const wr = s.metrics.win_rate
-    const mdd = s.metrics.max_drawdown
-    if (roi != null && (Math.abs(roi) > 10000)) { console.warn(`[validate] rejected roi=${roi} for ${s.trader_key}`); return false }
-    if (pnl != null && (Math.abs(pnl) > 100_000_000)) { console.warn(`[validate] rejected pnl=${pnl} for ${s.trader_key}`); return false }
-    if (wr != null && (wr < 0 || wr > 100)) { console.warn(`[validate] rejected wr=${wr} for ${s.trader_key}`); return false }
-    if (mdd != null && (mdd < 0 || mdd > 100)) { console.warn(`[validate] rejected mdd=${mdd} for ${s.trader_key}`); return false }
-    return true
-  })
-  const { error: v2Err } = await supabase.from('trader_snapshots_v2').upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
-  if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique')) console.error('v2 error:', v2Err.message)
+  const snapshotsV2 = traders
+    .map((t) => ({
+      platform: t.source,
+      market_type: 'futures',
+      trader_key: t.source_trader_id,
+      window: t.season_id,
+      as_of_ts: t.captured_at,
+      metrics: {
+        roi: t.roi ?? 0,
+        pnl: t.pnl ?? 0,
+        win_rate: t.win_rate ?? null,
+        max_drawdown: t.max_drawdown ?? null,
+        followers: t.followers ?? null,
+        arena_score: t.arena_score ?? null,
+      },
+      quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.7 },
+      updated_at: new Date().toISOString(),
+    }))
+    .filter((s) => {
+      // Inline validation — these scripts bypass validateBeforeWrite
+      const roi = s.metrics.roi
+      const pnl = s.metrics.pnl
+      const wr = s.metrics.win_rate
+      const mdd = s.metrics.max_drawdown
+      if (roi != null && Math.abs(roi) > 10000) {
+        console.warn(`[validate] rejected roi=${roi} for ${s.trader_key}`)
+        return false
+      }
+      if (pnl != null && Math.abs(pnl) > 100_000_000) {
+        console.warn(`[validate] rejected pnl=${pnl} for ${s.trader_key}`)
+        return false
+      }
+      if (wr != null && (wr < 0 || wr > 100)) {
+        console.warn(`[validate] rejected wr=${wr} for ${s.trader_key}`)
+        return false
+      }
+      if (mdd != null && (mdd < 0 || mdd > 100)) {
+        console.warn(`[validate] rejected mdd=${mdd} for ${s.trader_key}`)
+        return false
+      }
+      return true
+    })
+  const { error: v2Err } = await supabase
+    .from('trader_snapshots_v2')
+    .upsert(snapshotsV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
+  if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique'))
+    console.error('v2 error:', v2Err.message)
 
   return { total: traders.length, saved: traders.length }
 }
@@ -375,10 +414,13 @@ async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) return
   try {
     await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text, parse_mode: 'HTML' }),
     })
-  } catch (err) { console.error('Telegram failed:', err.message) }
+  } catch (err) {
+    console.error('Telegram failed:', err.message)
+  }
 }
 
 async function main() {
@@ -389,15 +431,21 @@ async function main() {
   const results = await fetchWithBrowser(periods)
   const duration = ((Date.now() - start) / 1000).toFixed(1)
   const totalSaved = Object.values(results).reduce((s, r) => s + (r.saved || 0), 0)
-  for (const [p, r] of Object.entries(results)) console.log(`  ${p}: ${r.saved}/${r.total} saved ${r.error ? `(${r.error})` : ''}`)
+  for (const [p, r] of Object.entries(results))
+    console.log(`  ${p}: ${r.saved}/${r.total} saved ${r.error ? `(${r.error})` : ''}`)
   console.log(`\nDone in ${duration}s. Total saved: ${totalSaved}`)
   if (totalSaved > 0) {
     const lines = Object.entries(results).map(([p, r]) => `${p}: ${r.saved} traders`)
     await sendTelegram(`✅ <b>LBank (Mac Mini)</b>\n${lines.join('\n')}\n⏱ ${duration}s`)
   } else {
-    const errors = Object.entries(results).filter(([, r]) => r.error).map(([p, r]) => `${p}: ${r.error}`)
+    const errors = Object.entries(results)
+      .filter(([, r]) => r.error)
+      .map(([p, r]) => `${p}: ${r.error}`)
     await sendTelegram(`❌ <b>LBank (Mac Mini) failed</b>\n${errors.join('\n')}`)
   }
 }
 
-main().catch(err => { console.error('Fatal:', err); process.exit(1) })
+main().catch((err) => {
+  console.error('Fatal:', err)
+  process.exit(1)
+})
