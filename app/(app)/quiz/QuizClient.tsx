@@ -176,7 +176,7 @@ export default function QuizClient() {
         fontWeight: 600,
         cursor: 'pointer',
       }}
-      aria-label="Toggle language"
+      aria-label={language === 'en' ? 'Switch to Chinese / \u5207\u6362\u5230\u4E2D\u6587' : 'Switch to English / \u5207\u6362\u5230\u82F1\u6587'}
     >
       {language === 'en' ? '\u4E2D\u6587' : 'EN'}
     </button>
