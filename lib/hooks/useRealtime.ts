@@ -110,10 +110,13 @@ function useRealtimePooled<T extends Record<string, unknown>>(
   const [status, setStatusInternal] = useState<ConnectionStatus>('disconnected')
   const unsubscribeRef = useRef<(() => void) | null>(null)
 
-  const setStatus = useCallback((newStatus: ConnectionStatus) => {
-    setStatusInternal(newStatus)
-    onStatusChange?.(newStatus)
-  }, [onStatusChange])
+  const setStatus = useCallback(
+    (newStatus: ConnectionStatus) => {
+      setStatusInternal(newStatus)
+      onStatusChange?.(newStatus)
+    },
+    [onStatusChange]
+  )
 
   // Subscribe using pool
   useEffect(() => {
@@ -128,7 +131,9 @@ function useRealtimePooled<T extends Record<string, unknown>>(
       { schema, table, event, filter },
       {
         onInsert: onInsert as ((payload: Record<string, unknown>) => void) | undefined,
-        onUpdate: onUpdate as ((payload: { old: Record<string, unknown>; new: Record<string, unknown> }) => void) | undefined,
+        onUpdate: onUpdate as
+          | ((payload: { old: Record<string, unknown>; new: Record<string, unknown> }) => void)
+          | undefined,
         onDelete: onDelete as ((payload: Record<string, unknown>) => void) | undefined,
       }
     )
@@ -149,7 +154,19 @@ function useRealtimePooled<T extends Record<string, unknown>>(
       }
       onDisconnect?.()
     }
-  }, [enabled, table, event, schema, filter, onInsert, onUpdate, onDelete, setStatus, onConnect, onDisconnect])
+  }, [
+    enabled,
+    table,
+    event,
+    schema,
+    filter,
+    onInsert,
+    onUpdate,
+    onDelete,
+    setStatus,
+    onConnect,
+    onDisconnect,
+  ])
 
   const disconnect = useCallback(() => {
     if (unsubscribeRef.current) {
@@ -210,11 +227,16 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
   const channelRef = useRef<RealtimeChannel | null>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isReconnectingRef = useRef(false)
+  // Guard against state updates after unmount (subscribe callback can fire after disconnect)
+  const mountedRef = useRef(true)
 
-  const setStatus = useCallback((newStatus: ConnectionStatus) => {
-    setStatusInternal(newStatus)
-    onStatusChange?.(newStatus)
-  }, [onStatusChange])
+  const setStatus = useCallback(
+    (newStatus: ConnectionStatus) => {
+      setStatusInternal(newStatus)
+      onStatusChange?.(newStatus)
+    },
+    [onStatusChange]
+  )
 
   const handleChange = useCallback(
     (payload: { eventType: string; new: unknown; old: unknown }) => {
@@ -241,6 +263,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
   }, [])
 
   const disconnect = useCallback(() => {
+    mountedRef.current = false // prevent subscribe callback from firing after cleanup
     clearRetryTimeout()
     isReconnectingRef.current = false
 
@@ -270,7 +293,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     isReconnectingRef.current = true
 
     retryTimeoutRef.current = setTimeout(() => {
-      setRetryCount(prev => prev + 1)
+      setRetryCount((prev) => prev + 1)
       connect()
     }, delay)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- connect excluded to break circular dependency with scheduleReconnect
@@ -278,6 +301,8 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
 
   const connect = useCallback(() => {
     if (!enabled) return
+
+    mountedRef.current = true // re-arm for reconnect scenarios
 
     if (channelRef.current) {
       supabase.removeChannel(channelRef.current)
@@ -294,6 +319,11 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     channel
       .on('postgres_changes', { event, schema, table, ...(filter ? { filter } : {}) }, handleChange)
       .subscribe((subscribeStatus: string) => {
+        // Guard: if component unmounted while subscribe was in-flight, bail out.
+        // Without this, the callback would call setState on an unmounted component
+        // and potentially scheduleReconnect, leaking a new channel.
+        if (!mountedRef.current) return
+
         if (subscribeStatus === 'SUBSCRIBED') {
           setStatus('connected')
           setRetryCount(0)
@@ -320,7 +350,19 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
       })
 
     channelRef.current = channel
-  }, [enabled, table, event, schema, filter, handleChange, autoReconnect, setStatus, onConnect, onError, scheduleReconnect])
+  }, [
+    enabled,
+    table,
+    event,
+    schema,
+    filter,
+    handleChange,
+    autoReconnect,
+    setStatus,
+    onConnect,
+    onError,
+    scheduleReconnect,
+  ])
 
   const reconnect = useCallback(() => {
     clearRetryTimeout()
