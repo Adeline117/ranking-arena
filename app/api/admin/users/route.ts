@@ -11,6 +11,17 @@ import { parsePage, parseLimit } from '@/lib/utils/safe-parse'
 
 const logger = createLogger('admin-users')
 
+/**
+ * Mask email addresses for admin display.
+ * "alice@example.com" → "a***@example.com"
+ */
+function maskEmail(email: string | null): string | null {
+  if (!email) return null
+  const [local, domain] = email.split('@')
+  if (!domain) return '***'
+  return `${local[0]}***@${domain}`
+}
+
 export const dynamic = 'force-dynamic'
 
 export const GET = withAdminAuth(
@@ -28,7 +39,10 @@ export const GET = withAdminAuth(
     // the correct total when paging through ban/search filters.
     let query = supabase
       .from('user_profiles')
-      .select('id, handle, email, avatar_url, bio, follower_count, following_count, role, banned_at, banned_reason, banned_by, created_at, updated_at', { count: 'exact' })
+      .select(
+        'id, handle, email, avatar_url, bio, follower_count, following_count, role, banned_at, banned_reason, banned_by, created_at, updated_at',
+        { count: 'exact' }
+      )
 
     // Apply search filter — defense in depth.
     //
@@ -48,8 +62,12 @@ export const GET = withAdminAuth(
     if (search) {
       const sanitizedSearch = search
         .slice(0, 80)
-        // Allowlist: a-z A-Z 0-9 dash underscore dot @ + space (handles + emails)
-        .replace(/[^a-zA-Z0-9_\-.@\s]/g, '')
+        // Strict allowlist: alphanumeric + dash + underscore + @ + space.
+        // Strips ALL PostgREST metacharacters: . , ( ) : ! % * \
+        // Dot is excluded even though it appears in emails — admin can search
+        // "gmail" instead of "gmail.com". This closes any theoretical
+        // filter-injection vector through the . field separator.
+        .replace(/[^a-zA-Z0-9_\-@\s]/g, '')
         .trim()
       if (sanitizedSearch.length > 0 && sanitizedSearch.length <= 80) {
         query = query.or(`handle.ilike.%${sanitizedSearch}%,email.ilike.%${sanitizedSearch}%`)
@@ -64,24 +82,29 @@ export const GET = withAdminAuth(
     }
 
     // Apply pagination and ordering
-    const { data: users, count, error } = await query
-      .order('created_at', { ascending: false })
-      .range(offset, offset + limit - 1)
+    const {
+      data: users,
+      count,
+      error,
+    } = await query.order('created_at', { ascending: false }).range(offset, offset + limit - 1)
 
     if (error) {
       logger.error('Error fetching users', { error, page, limit, search, filter })
       throw ApiError.database('Database operation failed')
     }
 
-    return successWithPagination(
-      users || [],
-      {
-        limit,
-        offset,
-        has_more: (count || 0) > offset + limit,
-        total: count || 0,
-      }
-    )
+    // M-2: Mask email addresses before returning to admin UI
+    const maskedUsers = (users || []).map((user: Record<string, unknown>) => ({
+      ...user,
+      email: maskEmail(user.email as string | null),
+    }))
+
+    return successWithPagination(maskedUsers, {
+      limit,
+      offset,
+      has_more: (count || 0) > offset + limit,
+      total: count || 0,
+    })
   },
   { name: 'admin-users' }
 )
