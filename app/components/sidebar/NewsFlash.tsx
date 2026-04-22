@@ -6,7 +6,7 @@ import { tokens, newsCategories, newsImportance } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { formatTimeAgo } from '@/lib/utils/date'
-import { useDeferredKey } from '@/lib/hooks/useDeferredSWR'
+import { useDeferredKey } from '@/lib/hooks/useDeferredKey'
 
 type NewsItem = {
   id: string

@@ -8,7 +8,7 @@ const getSb = () => import('@/lib/supabase/client').then(m => m.supabase as impo
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
-import { useDeferredKey } from '@/lib/hooks/useDeferredSWR'
+import { useDeferredKey } from '@/lib/hooks/useDeferredKey'
 import { getCsrfHeaders } from '@/lib/api/client'
 
 type HotPost = {
