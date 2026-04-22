@@ -352,29 +352,7 @@ export class ApiError extends Error {
   }
 }
 
-// ============================================
-// Quick error response helper (low-friction adoption for API routes)
-// ============================================
-
-import { NextResponse } from 'next/server'
-
-/**
- * One-liner error response for API routes. Always returns consistent shape:
- * { error: { code, message }, success: false }
- *
- * Usage: return apiError(401) or apiError(400, 'Invalid input', 'VALIDATION_ERROR')
- */
-export function apiError(status: number, message?: string, code?: ErrorCodeType): NextResponse {
-  const errorCode = code || httpStatusToErrorCode(status)
-  const errorMessage = message || ErrorMessages[errorCode]?.en || 'Unknown error'
-  return NextResponse.json(
-    {
-      success: false,
-      error: { code: errorCode, message: errorMessage },
-    },
-    { status }
-  )
-}
+// Note: apiError() convenience function is in lib/api/response.ts
 
 // ============================================
 // HTTP 状态码到错误码映射
