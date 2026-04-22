@@ -181,7 +181,11 @@ export default function QuizClient() {
   if (step === 'calculating') {
     return (
       <div className="quiz-start-wrapper">
-        <div className="quiz-start-card">
+        <div className="quiz-start-card" style={{ position: 'relative' }}>
+          {/* Language toggle */}
+          <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 2 }}>
+            {langToggleButton}
+          </div>
           <CalculatingStep tr={t} onDone={handleCalculationDone} />
         </div>
       </div>
