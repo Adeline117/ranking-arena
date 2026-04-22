@@ -203,6 +203,10 @@
       "schedule": "52 6 * * *"
     },
     {
+      "path": "/api/cron/monitor-data-coverage",
+      "schedule": "15 */6 * * *"
+    },
+    {
       "path": "/api/cron/backfill-data?type=snapshots&limit=50",
       "schedule": "49 3 * * *"
     },
