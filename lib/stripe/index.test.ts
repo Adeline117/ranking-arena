@@ -107,7 +107,6 @@ describe('getStripe', () => {
     // Clear the cached instance
     jest.resetModules()
     expect(() => {
-       
       const { getStripe: getStripeNew } = require('./index')
       getStripeNew()
     }).toThrow('STRIPE_SECRET_KEY is not configured')
@@ -198,7 +197,8 @@ describe('createCheckoutSession', () => {
         mode: 'subscription',
         success_url: 'https://example.com/success',
         cancel_url: 'https://example.com/cancel',
-      })
+      }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) })
     )
   })
 
@@ -219,7 +219,8 @@ describe('createCheckoutSession', () => {
         subscription_data: {
           metadata: { source: 'homepage' },
         },
-      })
+      }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) })
     )
   })
 })
