@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { sendNotification } from '@/lib/data/notifications'
 
 const logger = createLogger('referral-apply')
 
@@ -45,7 +46,9 @@ export const POST = withAuth(
     const { data: referrer } = await supabase
       .from('user_profiles')
       .select('id, referral_code, handle')
-      .or(`referral_code.eq.${code.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${code.replace(/[,.()\[\]\\%_]/g, '')}`)
+      .or(
+        `referral_code.eq.${code.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${code.replace(/[,.()\[\]\\%_]/g, '')}`
+      )
       .limit(1)
       .maybeSingle()
 
@@ -83,7 +86,9 @@ export const POST = withAuth(
     // Check if referrer just hit the reward threshold
     if (totalReferrals === REFERRAL_REWARD_THRESHOLD) {
       await grantProExtension(supabase, referrer.id)
-      logger.info(`Referrer ${referrer.id} reached ${REFERRAL_REWARD_THRESHOLD} referrals — granted ${PRO_EXTENSION_DAYS}-day Pro extension`)
+      logger.info(
+        `Referrer ${referrer.id} reached ${REFERRAL_REWARD_THRESHOLD} referrals — granted ${PRO_EXTENSION_DAYS}-day Pro extension`
+      )
     }
 
     return NextResponse.json({
@@ -99,10 +104,7 @@ export const POST = withAuth(
 /**
  * Grant or extend Pro subscription by PRO_EXTENSION_DAYS for the referrer.
  */
-async function grantProExtension(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  userId: string,
-) {
+async function grantProExtension(supabase: ReturnType<typeof getSupabaseAdmin>, userId: string) {
   try {
     // Check if user already has an active subscription
     const { data: existingSub } = await supabase
@@ -150,13 +152,17 @@ async function grantProExtension(
     }
 
     // Send notification to referrer
-    await supabase.from('notifications').insert({
-      user_id: userId,
-      type: 'referral_reward',
-      title: 'Referral reward earned!',
-      message: `You referred ${REFERRAL_REWARD_THRESHOLD} friends and earned ${PRO_EXTENSION_DAYS} days of Pro! Thank you for spreading the word.`,
-      link: '/settings',
-    })
+    sendNotification(
+      supabase,
+      {
+        user_id: userId,
+        type: 'referral_reward',
+        title: 'Referral reward earned!',
+        message: `You referred ${REFERRAL_REWARD_THRESHOLD} friends and earned ${PRO_EXTENSION_DAYS} days of Pro! Thank you for spreading the word.`,
+        link: '/settings',
+      },
+      'Referral reward notification'
+    )
   } catch (err) {
     logger.error('Failed to grant Pro extension:', err)
   }

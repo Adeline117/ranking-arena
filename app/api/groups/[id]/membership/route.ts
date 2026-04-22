@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/api/middleware'
+import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 
 /** Extract group id from URL path */
@@ -57,18 +58,24 @@ export const POST = withAuth(
           .maybeSingle()
 
         if (group.is_verified_only && !profile?.is_verified_trader) {
-          return NextResponse.json({
-            error: 'This group is restricted to verified traders only',
-            code: 'VERIFIED_ONLY',
-          }, { status: 403 })
+          return NextResponse.json(
+            {
+              error: 'This group is restricted to verified traders only',
+              code: 'VERIFIED_ONLY',
+            },
+            { status: 403 }
+          )
         }
 
         if (group.min_arena_score > 0 && (profile?.reputation_score ?? 0) < group.min_arena_score) {
-          return NextResponse.json({
-            error: `This group requires Arena Score of ${group.min_arena_score}+`,
-            code: 'SCORE_TOO_LOW',
-            required_score: group.min_arena_score,
-          }, { status: 403 })
+          return NextResponse.json(
+            {
+              error: `This group requires Arena Score of ${group.min_arena_score}+`,
+              code: 'SCORE_TOO_LOW',
+              required_score: group.min_arena_score,
+            },
+            { status: 403 }
+          )
         }
       }
 
@@ -94,23 +101,26 @@ export const POST = withAuth(
       }
 
       // Increment count + notify owner (fire-and-forget, don't block response)
-      sb.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 })
-        .then(({ error: rpcErr }) => {
+      sb.rpc('increment_member_count', { p_group_id: groupId, p_delta: 1 }).then(
+        ({ error: rpcErr }) => {
           if (rpcErr) logger.error('increment_member_count failed:', rpcErr)
-        })
+        }
+      )
 
       if (group.created_by && group.created_by !== user.id) {
-        sb.from('notifications').insert({
-          user_id: group.created_by,
-          type: 'system',
-          title: 'New member joined',
-          message: 'A new member has joined your group',
-          link: `/groups/${groupId}`,
-          actor_id: user.id,
-          reference_id: groupId,
-        }).then(({ error: notifErr }) => {
-          if (notifErr) logger.warn('Join notification failed:', notifErr)
-        })
+        sendNotification(
+          sb,
+          {
+            user_id: group.created_by,
+            type: 'group_update',
+            title: 'New member joined',
+            message: 'A new member has joined your group',
+            link: `/groups/${groupId}`,
+            actor_id: user.id,
+            reference_id: groupId,
+          },
+          'Group join notification'
+        )
       }
 
       return NextResponse.json({ success: true, action: 'joined' })
@@ -134,10 +144,11 @@ export const POST = withAuth(
       }
 
       // Decrement count (fire-and-forget)
-      sb.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 })
-        .then(({ error: rpcErr }) => {
+      sb.rpc('increment_member_count', { p_group_id: groupId, p_delta: -1 }).then(
+        ({ error: rpcErr }) => {
           if (rpcErr) logger.error('decrement_member_count failed:', rpcErr)
-        })
+        }
+      )
 
       return NextResponse.json({ success: true, action: 'left' })
     }

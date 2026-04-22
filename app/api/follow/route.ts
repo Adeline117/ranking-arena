@@ -9,7 +9,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { success, badRequest, serverError } from '@/lib/api/response'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
-import { createNotificationDeduped } from '@/lib/data/notifications'
+import { sendNotification } from '@/lib/data/notifications'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
 const logger = createLogger('follow-api')
@@ -113,18 +113,22 @@ export const POST = withAuth(
             .eq('trader_id', traderId)
             .maybeSingle()
           if (claim?.user_id && claim.user_id !== user.id) {
-            await createNotificationDeduped(supabase, {
-              user_id: claim.user_id,
-              type: 'new_follower',
-              title: 'New Follower',
-              message: 'Someone started following your trader profile',
-              link: `/trader/${encodeURIComponent(traderId)}`,
-              actor_id: user.id,
-              reference_id: traderId,
-            })
+            sendNotification(
+              supabase,
+              {
+                user_id: claim.user_id,
+                type: 'new_follower',
+                title: 'New Follower',
+                message: 'Someone started following your trader profile',
+                link: `/trader/${encodeURIComponent(traderId)}`,
+                actor_id: user.id,
+                reference_id: traderId,
+              },
+              'Trader follow notification'
+            )
           }
         })(),
-        'Trader follow notification'
+        'Trader follow notification lookup'
       )
 
       return { following: true }
