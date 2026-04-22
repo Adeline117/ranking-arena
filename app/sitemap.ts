@@ -4,13 +4,21 @@
  *   sitemap/0 → static + exchange pages
  *   sitemap/1..N → trader pages (5000 per file)
  *   sitemap/N+1 → posts, groups, user profiles
+ *
+ * IMPORTANT: force dynamic rendering so sitemaps are generated at request time
+ * (not build time). At build time, Supabase env vars are placeholders, so all
+ * DB queries fail silently and every sitemap shard comes back empty (0 URLs).
  */
 
-import type { MetadataRoute } from "next"
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { getSupabaseAdmin } from "@/lib/supabase/server"
-import { dataLogger } from "@/lib/utils/logger"
+import type { MetadataRoute } from 'next'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { BASE_URL } from '@/lib/constants/urls'
+
+// Force-dynamic ensures sitemap() runs at request time (not build time).
+// At build time, Supabase env vars are placeholders so all queries fail.
+// Combined with revalidate=3600, the first request generates the sitemap,
+// then it's served from cache for 1 hour before being re-generated.
+export const dynamic = 'force-dynamic'
 
 export const maxDuration = 60
 
@@ -25,11 +33,44 @@ const STATIC_SITEMAP_ID = 0
 const EXTRA_SITEMAP_ID = 999 // posts, groups, user profiles
 
 /**
+ * Create a fresh Supabase admin client for sitemap generation.
+ * We intentionally do NOT use the singleton from lib/supabase/server.ts
+ * because that singleton may have been initialized at build time with
+ * placeholder env vars and then cached in the module-level variable.
+ * A fresh client ensures we read the real runtime env vars.
+ */
+function getSitemapSupabase(): SupabaseClient {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+  if (!url || !key || url.includes('placeholder')) {
+    console.error(
+      '[sitemap] CRITICAL: Supabase env vars missing or placeholder — sitemaps will be empty',
+      {
+        hasUrl: !!url,
+        hasKey: !!key,
+        urlPrefix: url?.slice(0, 30),
+      }
+    )
+  }
+
+  return createClient(url || '', key || '', {
+    auth: { persistSession: false, autoRefreshToken: false },
+    global: {
+      fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+        const signal = init?.signal ?? AbortSignal.timeout(30_000)
+        return globalThis.fetch(input, { ...init, signal })
+      },
+    },
+  })
+}
+
+/**
  * Fetch all trader handles from leaderboard_ranks
  */
 async function getAllTraders(): Promise<Array<{ handle: string; updated_at: string }>> {
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSitemapSupabase()
 
     const { data, error } = await supabase
       .from('leaderboard_ranks')
@@ -39,7 +80,7 @@ async function getAllTraders(): Promise<Array<{ handle: string; updated_at: stri
       .limit(49000)
 
     if (error) {
-      dataLogger.error('sitemap getAllTraders error:', error)
+      console.error('[sitemap] getAllTraders query error:', error.message, error.code)
       return []
     }
 
@@ -55,55 +96,94 @@ async function getAllTraders(): Promise<Array<{ handle: string; updated_at: stri
       })
     }
 
+    // eslint-disable-next-line no-console
+    console.log(`[sitemap] getAllTraders: ${results.length} traders fetched`)
     return results
   } catch (error) {
-    dataLogger.error('sitemap getAllTraders error:', error)
+    console.error(
+      '[sitemap] getAllTraders exception:',
+      error instanceof Error ? error.message : error
+    )
     return []
   }
 }
 
 async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string }>> {
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSitemapSupabase()
     const { data, error } = await supabase
       .from('posts')
       .select('id, updated_at, created_at')
       .order('hot_score', { ascending: false })
       .limit(MAX_OTHER_URLS)
-    if (error) return []
-    return (data || []).map(p => ({ id: p.id, updated_at: p.updated_at || p.created_at }))
-  } catch { return [] }
+    if (error) {
+      console.error('[sitemap] getPopularPosts error:', error.message)
+      return []
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[sitemap] getPopularPosts: ${(data || []).length} posts fetched`)
+    return (data || []).map((p) => ({ id: p.id, updated_at: p.updated_at || p.created_at }))
+  } catch (error) {
+    console.error(
+      '[sitemap] getPopularPosts exception:',
+      error instanceof Error ? error.message : error
+    )
+    return []
+  }
 }
 
 async function getUserProfiles(): Promise<Array<{ handle: string; updated_at: string }>> {
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSitemapSupabase()
     const { data, error } = await supabase
       .from('user_profiles')
       .select('handle, updated_at')
       .not('handle', 'is', null)
       .limit(5000)
-    if (error) return []
-    return (data || [])
+    if (error) {
+      console.error('[sitemap] getUserProfiles error:', error.message)
+      return []
+    }
+    const results = (data || [])
       .filter((u: { handle: string | null }) => u.handle)
       .map((u: { handle: string; updated_at: string }) => ({
         handle: u.handle,
         updated_at: u.updated_at || new Date().toISOString(),
       }))
-  } catch { return [] }
+    // eslint-disable-next-line no-console
+    console.log(`[sitemap] getUserProfiles: ${results.length} profiles fetched`)
+    return results
+  } catch (error) {
+    console.error(
+      '[sitemap] getUserProfiles exception:',
+      error instanceof Error ? error.message : error
+    )
+    return []
+  }
 }
 
 async function getAllGroups(): Promise<Array<{ id: string; updated_at: string }>> {
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSitemapSupabase()
     const { data, error } = await supabase
       .from('groups')
       .select('id, created_at')
       .order('member_count', { ascending: false })
       .limit(500)
-    if (error) return []
-    return (data || []).map(g => ({ id: g.id, updated_at: g.created_at }))
-  } catch { return [] }
+    if (error) {
+      console.error('[sitemap] getAllGroups error:', error.message)
+      return []
+    }
+    // eslint-disable-next-line no-console
+    console.log(`[sitemap] getAllGroups: ${(data || []).length} groups fetched`)
+    return (data || []).map((g) => ({ id: g.id, updated_at: g.created_at }))
+  } catch (error) {
+    console.error(
+      '[sitemap] getAllGroups exception:',
+      error instanceof Error ? error.message : error
+    )
+    return []
+  }
 }
 
 /**
@@ -116,9 +196,9 @@ export async function generateSitemaps() {
   // Empty shards are fine — Next.js returns an empty sitemap for them.
   const traderShardCount = 10
   const ids = [
-    { id: STATIC_SITEMAP_ID },     // static + exchange pages
+    { id: STATIC_SITEMAP_ID }, // static + exchange pages
     ...Array.from({ length: traderShardCount }, (_, i) => ({ id: i + 1 })), // 1..10 trader shards
-    { id: EXTRA_SITEMAP_ID },       // posts, groups, user profiles
+    { id: EXTRA_SITEMAP_ID }, // posts, groups, user profiles
   ]
   return ids
 }
@@ -140,23 +220,53 @@ export default async function sitemap({ id }: { id: number }): Promise<MetadataR
       { url: `${BASE_URL}/`, lastModified: now, changeFrequency: 'hourly', priority: 1 },
       { url: `${BASE_URL}/hot`, lastModified: now, changeFrequency: 'hourly', priority: 0.9 },
       { url: `${BASE_URL}/groups`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
-      { url: `${BASE_URL}/rankings/bots`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
-      { url: `${BASE_URL}/rankings/tokens`, lastModified: now, changeFrequency: 'daily', priority: 0.8 },
+      {
+        url: `${BASE_URL}/rankings/bots`,
+        lastModified: now,
+        changeFrequency: 'daily',
+        priority: 0.8,
+      },
+      {
+        url: `${BASE_URL}/rankings/tokens`,
+        lastModified: now,
+        changeFrequency: 'daily',
+        priority: 0.8,
+      },
       { url: `${BASE_URL}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
-      { url: `${BASE_URL}/methodology`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
+      {
+        url: `${BASE_URL}/methodology`,
+        lastModified: now,
+        changeFrequency: 'monthly',
+        priority: 0.7,
+      },
       { url: `${BASE_URL}/compare`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
       { url: `${BASE_URL}/search`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
-      { url: `${BASE_URL}/flash-news`, lastModified: now, changeFrequency: 'hourly', priority: 0.7 },
+      {
+        url: `${BASE_URL}/flash-news`,
+        lastModified: now,
+        changeFrequency: 'hourly',
+        priority: 0.7,
+      },
       { url: `${BASE_URL}/market`, lastModified: now, changeFrequency: 'hourly', priority: 0.8 },
       { url: `${BASE_URL}/learn`, lastModified: now, changeFrequency: 'weekly', priority: 0.75 },
-      { url: `${BASE_URL}/competitions`, lastModified: now, changeFrequency: 'daily', priority: 0.7 },
+      {
+        url: `${BASE_URL}/competitions`,
+        lastModified: now,
+        changeFrequency: 'daily',
+        priority: 0.7,
+      },
       { url: `${BASE_URL}/help`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
       { url: `${BASE_URL}/feed`, lastModified: now, changeFrequency: 'hourly', priority: 0.7 },
       { url: `${BASE_URL}/claim`, lastModified: now, changeFrequency: 'monthly', priority: 0.6 },
       { url: `${BASE_URL}/about`, lastModified: now, changeFrequency: 'monthly', priority: 0.4 },
       { url: `${BASE_URL}/privacy`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
       { url: `${BASE_URL}/terms`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
-      { url: `${BASE_URL}/disclaimer`, lastModified: now, changeFrequency: 'yearly', priority: 0.2 },
+      {
+        url: `${BASE_URL}/disclaimer`,
+        lastModified: now,
+        changeFrequency: 'yearly',
+        priority: 0.2,
+      },
     ]
 
     return staticPages
@@ -170,21 +280,21 @@ export default async function sitemap({ id }: { id: number }): Promise<MetadataR
       getUserProfiles(),
     ])
 
-    const postPages: MetadataRoute.Sitemap = posts.map(post => ({
+    const postPages: MetadataRoute.Sitemap = posts.map((post) => ({
       url: `${BASE_URL}/post/${post.id}`,
       lastModified: post.updated_at,
       changeFrequency: 'weekly' as const,
       priority: 0.6,
     }))
 
-    const groupPages: MetadataRoute.Sitemap = groups.map(group => ({
+    const groupPages: MetadataRoute.Sitemap = groups.map((group) => ({
       url: `${BASE_URL}/groups/${group.id}`,
       lastModified: group.updated_at,
       changeFrequency: 'daily' as const,
       priority: 0.7,
     }))
 
-    const userPages: MetadataRoute.Sitemap = userProfiles.map(user => ({
+    const userPages: MetadataRoute.Sitemap = userProfiles.map((user) => ({
       url: `${BASE_URL}/u/${encodeURIComponent(user.handle)}`,
       lastModified: user.updated_at,
       changeFrequency: 'weekly' as const,
@@ -203,7 +313,7 @@ export default async function sitemap({ id }: { id: number }): Promise<MetadataR
   const start = shardIndex * TRADERS_PER_SITEMAP
   const slice = traders.slice(start, start + TRADERS_PER_SITEMAP)
 
-  return slice.map(trader => ({
+  return slice.map((trader) => ({
     url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
     lastModified: trader.updated_at,
     changeFrequency: 'daily' as const,
@@ -211,5 +321,7 @@ export default async function sitemap({ id }: { id: number }): Promise<MetadataR
   }))
 }
 
-// Revalidate every hour
-export const revalidate = 3600
+// Note: revalidate is not needed with dynamic = 'force-dynamic'.
+// Vercel CDN will still cache the response via s-maxage headers.
+// Sitemaps are only requested by crawlers (infrequent), so
+// generating on every request is acceptable.
