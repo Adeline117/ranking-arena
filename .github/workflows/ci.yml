@@ -44,6 +44,30 @@ jobs:
             echo "No migrations directory found, skipping check"
           fi
 
+      - name: Security — npm audit
+        run: |
+          npm install --package-lock-only --ignore-scripts 2>/dev/null || true
+          npm audit --audit-level=high || {
+            echo "::warning::npm audit found high/critical vulnerabilities"
+            # Don't fail CI — just warn. Upgrade to 'exit 1' when ready to enforce.
+          }
+
+      - name: Security — no unsafe secret comparison
+        run: |
+          # Detect !== used to compare auth secrets (should use safeCompare/verifyCronSecret)
+          # Pattern: variable containing "secret"/"Secret" compared with !==
+          # Excludes: null checks, typeof checks, type guards, test files
+          UNSAFE=$(grep -rn 'authHeader !== \|cronSecret\|CRON_SECRET.*!==' \
+            app/api/ lib/api/ --include="*.ts" \
+            | grep -v node_modules | grep -v __tests__ | grep -v '.test.' \
+            | grep '!==' | grep -v 'safeCompare\|verifyCronSecret\|verifyAdminAuth' || true)
+          if [ -n "$UNSAFE" ]; then
+            echo "::error::Unsafe secret comparison found (use safeCompare/verifyCronSecret instead of !==):"
+            echo "$UNSAFE"
+            exit 1
+          fi
+          echo "No unsafe secret comparisons found ✅"
+
   # ─────────────────────────────────────────────
   # Stage 2: Lint + Type Check
   # ─────────────────────────────────────────────

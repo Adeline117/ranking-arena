@@ -13,7 +13,7 @@
 
 import { NextResponse } from 'next/server'
 import { createSupabaseAdmin } from '@/lib/cron/utils'
-import { env } from '@/lib/env'
+import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { createScheduleManager } from '@/lib/services/schedule-manager'
 import { TIER_SCHEDULES } from '@/lib/services/smart-scheduler'
 import { createLogger } from '@/lib/utils/logger'
@@ -35,12 +35,8 @@ function isSmartSchedulerEnabled(): boolean {
  */
 export async function GET(_req: Request) {
   try {
-    // Security: Verify admin/cron secret
-    const authHeader = _req.headers.get('authorization')
-    const token = authHeader?.replace('Bearer ', '')
-    const cronSecret = env.CRON_SECRET
-    const adminSecret = env.ADMIN_SECRET
-    if (!token || (token !== cronSecret && token !== adminSecret)) {
+    // Security: admin auth (timing-safe)
+    if (!(await verifyAdminAuth(_req))) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
@@ -75,7 +71,9 @@ export async function GET(_req: Request) {
     // 4. Query refresh queue from database views
     const { data: queueData, error: queueError } = await supabase
       .from('v_scheduler_refresh_queue')
-      .select('platform, market_type, trader_key, activity_tier, next_refresh_at, last_refreshed_at, priority_score')
+      .select(
+        'platform, market_type, trader_key, activity_tier, next_refresh_at, last_refreshed_at, priority_score'
+      )
 
     if (queueError) {
       logger.error('Failed to query refresh queue', { error: queueError })
@@ -209,10 +207,9 @@ function calculateExpectedCalls(stats: {
 /**
  * Group overdue traders by tier
  */
-function getOverdueByTier(overdueTraders: Array<{ activity_tier: string | null }>): Record<
-  string,
-  number
-> {
+function getOverdueByTier(
+  overdueTraders: Array<{ activity_tier: string | null }>
+): Record<string, number> {
   const result: Record<string, number> = {
     hot: 0,
     active: 0,
