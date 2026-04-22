@@ -714,7 +714,9 @@ export async function getUserPostReaction(
 }
 
 /**
- * 点赞/踩帖子
+ * 点赞/踩帖子 — atomic via PostgreSQL RPC to prevent TOCTOU race condition.
+ * The RPC uses SELECT FOR UPDATE to serialize concurrent toggles for the same
+ * (post_id, user_id) pair and maintains like_count/dislike_count atomically.
  */
 export async function togglePostReaction(
   supabase: SupabaseClient,
@@ -722,51 +724,17 @@ export async function togglePostReaction(
   userId: string,
   reactionType: 'up' | 'down'
 ): Promise<{ action: 'added' | 'removed' | 'changed'; reaction: 'up' | 'down' | null }> {
-  // 检查是否已有反应
-  const { data: existing } = await supabase
-    .from('post_likes')
-    .select('id, reaction_type')
-    .eq('post_id', postId)
-    .eq('user_id', userId)
-    .maybeSingle()
+  const { data, error } = await supabase.rpc('toggle_post_reaction', {
+    p_post_id: postId,
+    p_user_id: userId,
+    p_reaction_type: reactionType,
+  })
 
-  if (existing) {
-    if (existing.reaction_type === reactionType) {
-      // 取消点赞/踩 - use compound match to avoid deleting wrong row in race
-      const { count } = await supabase
-        .from('post_likes')
-        .delete({ count: 'exact' })
-        .eq('post_id', postId)
-        .eq('user_id', userId)
-        .eq('reaction_type', reactionType)
-      if (count === 0) {
-        // Row already changed by concurrent request, re-check
-        return { action: 'removed', reaction: null }
-      }
-      return { action: 'removed', reaction: null }
-    } else {
-      // 切换点赞/踩
-      await supabase
-        .from('post_likes')
-        .update({ reaction_type: reactionType })
-        .eq('post_id', postId)
-        .eq('user_id', userId)
-      return { action: 'changed', reaction: reactionType }
-    }
-  } else {
-    // 新增点赞/踩 - use upsert to handle race where two requests both see no existing row
-    const { error } = await supabase.from('post_likes').upsert(
-      {
-        post_id: postId,
-        user_id: userId,
-        reaction_type: reactionType,
-      },
-      { onConflict: 'post_id,user_id' }
-    )
-    if (error) {
-      throw error
-    }
-    return { action: 'added', reaction: reactionType }
+  if (error) throw error
+
+  return {
+    action: data.action as 'added' | 'removed' | 'changed',
+    reaction: (data.reaction as 'up' | 'down') ?? null,
   }
 }
 

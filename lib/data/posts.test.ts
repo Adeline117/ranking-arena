@@ -4,7 +4,7 @@ jest.mock('@/lib/utils/sanitize', () => ({
   sanitizeHtml: jest.fn((html: string) => html),
 }))
 
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from '@supabase/supabase-js'
 /**
  * Posts Data Layer Tests
  * 测试帖子数据层
@@ -70,10 +70,11 @@ describe('getPosts', () => {
 
     mockSupabase.in.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: MockResolve<unknown>) => resolve({
-        data: [{ handle: 'testUser', avatar_url: 'https://example.com/avatar.png' }],
-        error: null,
-      }),
+      then: (resolve: MockResolve<unknown>) =>
+        resolve({
+          data: [{ handle: 'testUser', avatar_url: 'https://example.com/avatar.png' }],
+          error: null,
+        }),
     })
 
     const result = await getPosts(mockSupabase as unknown as SupabaseClient)
@@ -98,7 +99,8 @@ describe('getPosts', () => {
 
     mockSupabase.range.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: MockResolve<unknown>) => resolve({ data: null, error: new Error('DB Error') }),
+      then: (resolve: MockResolve<unknown>) =>
+        resolve({ data: null, error: new Error('DB Error') }),
     })
 
     await expect(getPosts(mockSupabase as unknown as SupabaseClient)).rejects.toThrow()
@@ -199,10 +201,15 @@ describe('createPost', () => {
 
     mockSupabase.single.mockResolvedValueOnce({ data: mockPost, error: null })
 
-    const result = await createPost(mockSupabase as unknown as SupabaseClient, 'user1', 'testUser', {
-      title: 'New Post',
-      content: 'New content',
-    })
+    const result = await createPost(
+      mockSupabase as unknown as SupabaseClient,
+      'user1',
+      'testUser',
+      {
+        title: 'New Post',
+        content: 'New content',
+      }
+    )
 
     expect(result.title).toBe('New Post')
     expect(mockSupabase.insert).toHaveBeenCalled()
@@ -214,7 +221,10 @@ describe('createPost', () => {
     mockSupabase.single.mockResolvedValueOnce({ data: null, error: new Error('Creation failed') })
 
     await expect(
-      createPost(mockSupabase as unknown as SupabaseClient, 'user1', 'testUser', { title: 'Test', content: 'Test' })
+      createPost(mockSupabase as unknown as SupabaseClient, 'user1', 'testUser', {
+        title: 'Test',
+        content: 'Test',
+      })
     ).rejects.toThrow()
   })
 })
@@ -254,10 +264,14 @@ describe('deletePost', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      eq: jest.fn().mockReturnValue({ then: (resolve: MockResolve<unknown>) => resolve({ error: null }) }),
+      eq: jest
+        .fn()
+        .mockReturnValue({ then: (resolve: MockResolve<unknown>) => resolve({ error: null }) }),
     })
 
-    await expect(deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')).resolves.toBeUndefined()
+    await expect(
+      deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).resolves.toBeUndefined()
   })
 
   test('should throw error on deletion failure', async () => {
@@ -265,10 +279,16 @@ describe('deletePost', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      eq: jest.fn().mockReturnValue({ then: (resolve: MockResolve<unknown>) => resolve({ error: new Error('Delete failed') }) }),
+      eq: jest
+        .fn()
+        .mockReturnValue({
+          then: (resolve: MockResolve<unknown>) => resolve({ error: new Error('Delete failed') }),
+        }),
     })
 
-    await expect(deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')).rejects.toThrow()
+    await expect(
+      deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).rejects.toThrow()
   })
 })
 
@@ -288,7 +308,11 @@ describe('getUserPostReaction', () => {
 
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
 
-    const result = await getUserPostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    const result = await getUserPostReaction(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1'
+    )
     expect(result).toBeNull()
   })
 
@@ -297,51 +321,86 @@ describe('getUserPostReaction', () => {
 
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { reaction_type: 'up' }, error: null })
 
-    const result = await getUserPostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    const result = await getUserPostReaction(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1'
+    )
     expect(result).toBe('up')
   })
 })
 
 describe('togglePostReaction', () => {
-  test('should add new reaction', async () => {
+  test('should add new reaction via RPC', async () => {
     const mockSupabase = createMockSupabase()
 
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
-    mockSupabase.insert.mockReturnValueOnce({
-      then: (resolve: MockResolve<unknown>) => resolve({ error: null }),
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: { action: 'added', reaction: 'up' },
+      error: null,
     })
 
-    const result = await togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
+    const result = await togglePostReaction(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1',
+      'up'
+    )
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('toggle_post_reaction', {
+      p_post_id: 'post1',
+      p_user_id: 'user1',
+      p_reaction_type: 'up',
+    })
     expect(result.action).toBe('added')
     expect(result.reaction).toBe('up')
   })
 
-  test('should remove existing same reaction', async () => {
+  test('should remove existing same reaction via RPC', async () => {
     const mockSupabase = createMockSupabase()
 
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'reaction1', reaction_type: 'up' }, error: null })
-    mockSupabase.eq.mockReturnValueOnce({
-      ...mockSupabase,
-      then: (resolve: MockResolve<unknown>) => resolve({ error: null }),
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: { action: 'removed', reaction: null },
+      error: null,
     })
 
-    const result = await togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
+    const result = await togglePostReaction(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1',
+      'up'
+    )
     expect(result.action).toBe('removed')
     expect(result.reaction).toBeNull()
   })
 
-  test('should change reaction type', async () => {
+  test('should change reaction type via RPC', async () => {
     const mockSupabase = createMockSupabase()
 
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'reaction1', reaction_type: 'up' }, error: null })
-    mockSupabase.eq.mockReturnValueOnce({
-      ...mockSupabase,
-      then: (resolve: MockResolve<unknown>) => resolve({ error: null }),
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: { action: 'changed', reaction: 'down' },
+      error: null,
     })
 
-    const result = await togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'down')
+    const result = await togglePostReaction(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1',
+      'down'
+    )
     expect(result.action).toBe('changed')
     expect(result.reaction).toBe('down')
+  })
+
+  test('should throw on RPC error', async () => {
+    const mockSupabase = createMockSupabase()
+
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: null,
+      error: new Error('RPC failed'),
+    })
+
+    await expect(
+      togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
+    ).rejects.toThrow('RPC failed')
   })
 })
 
@@ -351,7 +410,11 @@ describe('getUserPostVote', () => {
 
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
 
-    const result = await getUserPostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    const result = await getUserPostVote(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1'
+    )
     expect(result).toBeNull()
   })
 
@@ -360,7 +423,11 @@ describe('getUserPostVote', () => {
 
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { choice: 'bull' }, error: null })
 
-    const result = await getUserPostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    const result = await getUserPostVote(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1'
+    )
     expect(result).toBe('bull')
   })
 })
@@ -374,7 +441,12 @@ describe('togglePostVote', () => {
       then: (resolve: MockResolve<unknown>) => resolve({ error: null }),
     })
 
-    const result = await togglePostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'bull')
+    const result = await togglePostVote(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1',
+      'bull'
+    )
     expect(result.action).toBe('added')
     expect(result.vote).toBe('bull')
   })
@@ -382,13 +454,21 @@ describe('togglePostVote', () => {
   test('should remove existing same vote', async () => {
     const mockSupabase = createMockSupabase()
 
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { id: 'vote1', choice: 'bull' }, error: null })
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { id: 'vote1', choice: 'bull' },
+      error: null,
+    })
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
       then: (resolve: MockResolve<unknown>) => resolve({ error: null }),
     })
 
-    const result = await togglePostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'bull')
+    const result = await togglePostVote(
+      mockSupabase as unknown as SupabaseClient,
+      'post1',
+      'user1',
+      'bull'
+    )
     expect(result.action).toBe('removed')
     expect(result.vote).toBeNull()
   })
@@ -400,16 +480,21 @@ describe('getUserPostReactions', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: MockResolve<unknown>) => resolve({
-        data: [
-          { post_id: 'post1', reaction_type: 'up' },
-          { post_id: 'post2', reaction_type: 'down' },
-        ],
-        error: null,
-      }),
+      then: (resolve: MockResolve<unknown>) =>
+        resolve({
+          data: [
+            { post_id: 'post1', reaction_type: 'up' },
+            { post_id: 'post2', reaction_type: 'down' },
+          ],
+          error: null,
+        }),
     })
 
-    const result = await getUserPostReactions(mockSupabase as unknown as SupabaseClient, ['post1', 'post2'], 'user1')
+    const result = await getUserPostReactions(
+      mockSupabase as unknown as SupabaseClient,
+      ['post1', 'post2'],
+      'user1'
+    )
     expect(result.get('post1')).toBe('up')
     expect(result.get('post2')).toBe('down')
   })
@@ -421,16 +506,21 @@ describe('getUserPostVotes', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      then: (resolve: MockResolve<unknown>) => resolve({
-        data: [
-          { post_id: 'post1', choice: 'bull' },
-          { post_id: 'post2', choice: 'bear' },
-        ],
-        error: null,
-      }),
+      then: (resolve: MockResolve<unknown>) =>
+        resolve({
+          data: [
+            { post_id: 'post1', choice: 'bull' },
+            { post_id: 'post2', choice: 'bear' },
+          ],
+          error: null,
+        }),
     })
 
-    const result = await getUserPostVotes(mockSupabase as unknown as SupabaseClient, ['post1', 'post2'], 'user1')
+    const result = await getUserPostVotes(
+      mockSupabase as unknown as SupabaseClient,
+      ['post1', 'post2'],
+      'user1'
+    )
     expect(result.get('post1')).toBe('bull')
     expect(result.get('post2')).toBe('bear')
   })
