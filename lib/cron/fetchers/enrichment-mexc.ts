@@ -11,7 +11,8 @@ import type { EquityCurvePoint, StatsDetail } from './enrichment-types'
 import { fetchWithProxyFallback } from './enrichment-types'
 import { logger } from '@/lib/logger'
 
-const DETAIL_URL = 'https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/detail'
+const DETAIL_URL =
+  'https://futures.mexc.com/api/v1/private/account/assets/copy-trading/trader/detail'
 
 interface MexcTraderDetail {
   nickname?: string
@@ -51,15 +52,27 @@ export async function fetchMexcEquityCurve(
 /**
  * Fetch stats detail for a MEXC trader.
  */
-export async function fetchMexcStatsDetail(
-  traderId: string
-): Promise<StatsDetail | null> {
+export async function fetchMexcStatsDetail(traderId: string): Promise<StatsDetail | null> {
   const detail = await fetchMexcDetail(traderId)
   if (!detail) return null
 
   const winRate = detail.winRate != null ? Number(detail.winRate) * 100 : null
   const maxDrawdown = detail.maxRetrace != null ? Number(detail.maxRetrace) * 100 : null
   const aum = detail.aum != null ? Number(detail.aum) : null
+
+  // Compute Sharpe from profitList daily yields (root cause fix: was hardcoded null)
+  let sharpeRatio: number | null = null
+  if (detail.profitList && detail.profitList.length >= 3) {
+    const dailyReturns = detail.profitList.map((p) => p.yield ?? 0)
+    const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
+    const std = Math.sqrt(
+      dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyReturns.length
+    )
+    if (std > 0) {
+      const raw = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+      sharpeRatio = Math.max(-10, Math.min(10, raw))
+    }
+  }
 
   return {
     totalTrades: detail.totalOrderNum ?? null,
@@ -69,7 +82,7 @@ export async function fetchMexcStatsDetail(
     avgLoss: null,
     largestWin: null,
     largestLoss: null,
-    sharpeRatio: null,
+    sharpeRatio,
     maxDrawdown,
     currentDrawdown: null,
     volatility: null,
@@ -106,7 +119,9 @@ async function fetchMexcDetail(traderId: string): Promise<MexcTraderDetail | nul
     detailCache.set(traderId, null)
     return null
   } catch (err) {
-    logger.warn(`[mexc] Detail fetch failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[mexc] Detail fetch failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     detailCache.set(traderId, null)
     return null
   }

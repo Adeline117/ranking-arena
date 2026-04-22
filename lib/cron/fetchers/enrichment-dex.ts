@@ -8,7 +8,12 @@
 
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
-import type { EquityCurvePoint, PositionHistoryItem, PortfolioPosition, StatsDetail } from './enrichment-types'
+import type {
+  EquityCurvePoint,
+  PositionHistoryItem,
+  PortfolioPosition,
+  StatsDetail,
+} from './enrichment-types'
 import { createTraderResponseCache } from './trader-response-cache'
 
 // ============================================
@@ -30,12 +35,10 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
   const winCount = wins.length
   const profitableTradesPct = totalTrades > 0 ? (winCount / totalTrades) * 100 : null
 
-  const avgProfit = wins.length > 0
-    ? wins.reduce((sum, p) => sum + (p.pnlUsd ?? 0), 0) / wins.length
-    : null
-  const avgLoss = losses.length > 0
-    ? losses.reduce((sum, p) => sum + (p.pnlUsd ?? 0), 0) / losses.length
-    : null
+  const avgProfit =
+    wins.length > 0 ? wins.reduce((sum, p) => sum + (p.pnlUsd ?? 0), 0) / wins.length : null
+  const avgLoss =
+    losses.length > 0 ? losses.reduce((sum, p) => sum + (p.pnlUsd ?? 0), 0) / losses.length : null
 
   const allPnls = withPnl.map((p) => p.pnlUsd ?? 0)
   const largestWin = wins.length > 0 ? Math.max(...wins.map((p) => p.pnlUsd ?? 0)) : null
@@ -58,9 +61,9 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
   // Clamp MDD to 100% (can't lose more than 100% of peak equity)
   maxDD = Math.min(maxDD, 100)
 
-  // Compute Sharpe from daily PnL aggregation (benefits all DEX platforms)
-  // Threshold lowered to 3 days: many DEX traders (especially GMX) trade in short bursts
-  // spanning only 3-4 unique days, but with dozens of trades per day
+  // Compute Sharpe: prefer daily PnL aggregation, fallback to trade-level returns.
+  // Root cause fix: GMX/MEXC traders often trade on <3 unique days but have 10-50+
+  // individual trades. Daily method requires ≥3 days; trade-level only needs ≥5 trades.
   let sharpeRatio: number | null = null
   const positionsWithTime = withPnl.filter((p) => p.closeTime)
   if (positionsWithTime.length >= 3) {
@@ -71,8 +74,22 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
     }
     const dailyValues = [...dailyPnl.values()]
     if (dailyValues.length >= 3) {
+      // Primary: daily PnL Sharpe (more stable, standard method)
       const mean = dailyValues.reduce((a, b) => a + b, 0) / dailyValues.length
-      const std = Math.sqrt(dailyValues.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyValues.length)
+      const std = Math.sqrt(
+        dailyValues.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyValues.length
+      )
+      if (std > 0) {
+        const raw = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+        sharpeRatio = Math.max(-10, Math.min(10, raw))
+      }
+    }
+    // Fallback: trade-level Sharpe when <3 unique days but ≥5 trades
+    // Annualize by √(trades_per_year) assuming avg 1 trade/day
+    if (sharpeRatio == null && withPnl.length >= 5) {
+      const tradePnls = withPnl.map((p) => p.pnlUsd ?? 0)
+      const mean = tradePnls.reduce((a, b) => a + b, 0) / tradePnls.length
+      const std = Math.sqrt(tradePnls.reduce((a, r) => a + (r - mean) ** 2, 0) / tradePnls.length)
       if (std > 0) {
         const raw = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
         sharpeRatio = Math.max(-10, Math.min(10, raw))
@@ -82,7 +99,8 @@ export function computeStatsFromPositions(positions: PositionHistoryItem[]): Par
 
   return {
     totalTrades,
-    profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
+    profitableTradesPct:
+      profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
     winningPositions: winCount,
     totalPositions: totalTrades,
     avgProfit: avgProfit != null ? Math.round(avgProfit * 100) / 100 : null,
@@ -200,15 +218,12 @@ async function fetchHyperliquidFills(address: string, days = 90): Promise<Hyperl
     // Use userFillsByTime with startTime for full time range coverage
     // userFills only returns latest 2000 which for active traders covers < 5 days
     const startTime = Date.now() - days * 86400000
-    const fills = await fetchJson<HyperliquidFill[]>(
-      'https://api.hyperliquid.xyz/info',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: { type: 'userFillsByTime', user: address, startTime },
-        timeoutMs: 15000,
-      }
-    )
+    const fills = await fetchJson<HyperliquidFill[]>('https://api.hyperliquid.xyz/info', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: { type: 'userFillsByTime', user: address, startTime },
+      timeoutMs: 15000,
+    })
     return Array.isArray(fills) ? fills : []
   })
 }
@@ -223,11 +238,12 @@ function parseFillsToPositions(fills: HyperliquidFill[], limit = 2000): Position
 
   return closingFills.map((f) => {
     const dir = (f.dir || '').toLowerCase()
-    const isShort = dir.includes('short') || (dir === 'buy' && parseFloat(f.startPosition || '0') < 0)
+    const isShort =
+      dir.includes('short') || (dir === 'buy' && parseFloat(f.startPosition || '0') < 0)
 
     return {
       symbol: (f.coin || '').replace('@', 'HL-'),
-      direction: isShort ? 'short' as const : 'long' as const,
+      direction: isShort ? ('short' as const) : ('long' as const),
       positionType: 'perpetual',
       marginMode: f.crossed ? 'cross' : 'isolated',
       openTime: null,
@@ -260,9 +276,7 @@ export async function fetchHyperliquidPositionHistory(
 /**
  * Fetch current portfolio (open positions) from Hyperliquid clearinghouse state.
  */
-export async function fetchHyperliquidPortfolio(
-  address: string,
-): Promise<PortfolioPosition[]> {
+export async function fetchHyperliquidPortfolio(address: string): Promise<PortfolioPosition[]> {
   try {
     const res = await fetch('https://api.hyperliquid.xyz/info', {
       method: 'POST',
@@ -270,32 +284,34 @@ export async function fetchHyperliquidPortfolio(
       body: JSON.stringify({ type: 'clearinghouseState', user: address }),
     })
     if (!res.ok) return []
-    const state = await res.json() as Record<string, unknown>
-    const assetPositions = state.assetPositions as Array<{
-      type: string
-      position: {
-        coin: string
-        szi: string
-        leverage: { type: string; value: number }
-        entryPx: string
-        positionValue: string
-        unrealizedPnl: string
-        returnOnEquity: string
-        marginUsed: string
-      }
-    }> | undefined
+    const state = (await res.json()) as Record<string, unknown>
+    const assetPositions = state.assetPositions as
+      | Array<{
+          type: string
+          position: {
+            coin: string
+            szi: string
+            leverage: { type: string; value: number }
+            entryPx: string
+            positionValue: string
+            unrealizedPnl: string
+            returnOnEquity: string
+            marginUsed: string
+          }
+        }>
+      | undefined
 
     if (!assetPositions || assetPositions.length === 0) return []
 
     const accountValue = Number((state.marginSummary as Record<string, unknown>)?.accountValue) || 1
     return assetPositions
-      .filter(ap => ap.position && Number(ap.position.szi) !== 0)
-      .map(ap => {
+      .filter((ap) => ap.position && Number(ap.position.szi) !== 0)
+      .map((ap) => {
         const pos = ap.position
         const posValue = Math.abs(Number(pos.positionValue) || 0)
         return {
           symbol: pos.coin,
-          direction: Number(pos.szi) > 0 ? 'long' as const : 'short' as const,
+          direction: Number(pos.szi) > 0 ? ('long' as const) : ('short' as const),
           investedPct: accountValue > 0 ? (posValue / accountValue) * 100 : 0,
           entryPrice: Number(pos.entryPx) || null,
           pnl: Number(pos.unrealizedPnl) || null,
@@ -316,7 +332,15 @@ const GMX_VALUE_SCALE = 1e30
 
 function safeBigIntToNum(val: string | number | null | undefined, scale: number): number {
   if (val == null || val === '') return 0
-  try { return Number(BigInt(String(val).split('.')[0])) / scale } catch (err) { logger.warn('[enrichment-dex] BigInt conversion failed:', err instanceof Error ? err.message : String(err)); return 0 }
+  try {
+    return Number(BigInt(String(val).split('.')[0])) / scale
+  } catch (err) {
+    logger.warn(
+      '[enrichment-dex] BigInt conversion failed:',
+      err instanceof Error ? err.message : String(err)
+    )
+    return 0
+  }
 }
 
 // Common GMX v2 market address → symbol mapping (Arbitrum)
@@ -387,10 +411,15 @@ export async function fetchGmxPositionHistory(
     const actions = result?.data?.tradeActions
     if (!actions || actions.length === 0) return []
 
+    // Root cause fix: previously filtered out zero-PnL trades, dropping 70%+ of GMX
+    // trades (breakeven, partial closes). Now include all closing actions — zero-PnL
+    // trades still contribute to trade count, daily activity, and win rate calculation.
     const closingActions = actions.filter((a) => {
       if (!a.basePnlUsd) return false
       try {
-        return Number(BigInt(a.basePnlUsd)) / GMX_VALUE_SCALE !== 0
+        // Parse but don't reject zero — zero PnL is a valid trade outcome
+        BigInt(a.basePnlUsd)
+        return true
       } catch (err) {
         logger.warn(`[enrichment] Error: ${err instanceof Error ? err.message : String(err)}`)
         return false
@@ -404,7 +433,7 @@ export async function fetchGmxPositionHistory(
 
       return {
         symbol: resolveGmxMarketSymbol(a.marketAddress),
-        direction: a.isLong ? 'long' as const : 'short' as const,
+        direction: a.isLong ? ('long' as const) : ('short' as const),
         positionType: 'perpetual',
         marginMode: 'cross',
         openTime: null,
@@ -484,35 +513,52 @@ export async function fetchHyperliquidEquityCurve(
  * Hyperliquid stats from clearinghouse state + computed from fills.
  * Combines account info (AUM, open positions) with trade stats (win rate, drawdown).
  */
-export async function fetchHyperliquidStatsDetail(
-  address: string
-): Promise<StatsDetail | null> {
+export async function fetchHyperliquidStatsDetail(address: string): Promise<StatsDetail | null> {
   try {
     // Fetch both clearinghouse state and fills in parallel (with error tolerance)
     const results = await Promise.allSettled([
       fetchJson<{
         marginSummary?: { accountValue?: string; totalMarginUsed?: string }
         assetPositions?: Array<{ position?: { unrealizedPnl?: string; positionValue?: string } }>
-      }>(
-        'https://api.hyperliquid.xyz/info',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: { type: 'clearinghouseState', user: address },
-          timeoutMs: 10000,
-        }
-      ).catch((err) => { logger.warn(`[enrichment-dex] Hyperliquid clearinghouseState failed for ${address}:`, err instanceof Error ? err.message : String(err)); return null }),
-      fetchHyperliquidFills(address).catch((err) => { logger.warn(`[enrichment-dex] Hyperliquid fills failed for ${address}:`, err instanceof Error ? err.message : String(err)); return [] as HyperliquidFill[] }),
+      }>('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: { type: 'clearinghouseState', user: address },
+        timeoutMs: 10000,
+      }).catch((err) => {
+        logger.warn(
+          `[enrichment-dex] Hyperliquid clearinghouseState failed for ${address}:`,
+          err instanceof Error ? err.message : String(err)
+        )
+        return null
+      }),
+      fetchHyperliquidFills(address).catch((err) => {
+        logger.warn(
+          `[enrichment-dex] Hyperliquid fills failed for ${address}:`,
+          err instanceof Error ? err.message : String(err)
+        )
+        return [] as HyperliquidFill[]
+      }),
     ])
-    
+
     const state = results[0].status === 'fulfilled' ? results[0].value : null
     const fills = results[1].status === 'fulfilled' ? results[1].value : []
-    
+
     if (results[0].status === 'rejected') {
-      logger.error(`Hyperliquid state fetch failed for ${address}`, { error: results[0].reason instanceof Error ? results[0].reason.message : String(results[0].reason) })
+      logger.error(`Hyperliquid state fetch failed for ${address}`, {
+        error:
+          results[0].reason instanceof Error
+            ? results[0].reason.message
+            : String(results[0].reason),
+      })
     }
     if (results[1].status === 'rejected') {
-      logger.error(`Hyperliquid fills fetch failed for ${address}`, { error: results[1].reason instanceof Error ? results[1].reason.message : String(results[1].reason) })
+      logger.error(`Hyperliquid fills fetch failed for ${address}`, {
+        error:
+          results[1].reason instanceof Error
+            ? results[1].reason.message
+            : String(results[1].reason),
+      })
     }
 
     const accountValue = state?.marginSummary
@@ -557,9 +603,7 @@ export async function fetchHyperliquidStatsDetail(
  * Uses the positions query with isSnapshot_eq: false to get live positions.
  * sizeInUsd and collateralAmount are in 1e30 scale.
  */
-export async function fetchGmxPortfolio(
-  address: string,
-): Promise<PortfolioPosition[]> {
+export async function fetchGmxPortfolio(address: string): Promise<PortfolioPosition[]> {
   try {
     const query = `{
       positions(
@@ -620,7 +664,7 @@ export async function fetchGmxPortfolio(
 
       return {
         symbol: resolveGmxMarketSymbol(p.market),
-        direction: p.isLong ? 'long' as const : 'short' as const,
+        direction: p.isLong ? ('long' as const) : ('short' as const),
         investedPct: totalValue > 0 ? (sizeUsd / totalValue) * 100 : null,
         entryPrice: entry,
         pnl,
@@ -656,9 +700,7 @@ export async function fetchGmxEquityCurve(
 /**
  * GMX stats computed from position history.
  */
-export async function fetchGmxStatsDetail(
-  address: string
-): Promise<StatsDetail | null> {
+export async function fetchGmxStatsDetail(address: string): Promise<StatsDetail | null> {
   try {
     const positions = await fetchGmxPositionHistory(address, 200)
     if (positions.length === 0) return null
