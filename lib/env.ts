@@ -22,7 +22,10 @@ const CriticalEnvSchema = z.object({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: z.string().min(1, 'NEXT_PUBLIC_SUPABASE_ANON_KEY is required'),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, 'SUPABASE_SERVICE_ROLE_KEY is required').optional(),
   NODE_ENV: z.enum(['development', 'production', 'test']).optional().default('development'),
-  CRON_SECRET: z.string().min(1, 'CRON_SECRET is required').optional(),
+  CRON_SECRET: z
+    .string()
+    .min(32, 'CRON_SECRET must be at least 32 characters (use: openssl rand -hex 32)')
+    .optional(),
   // Redis / Upstash
   UPSTASH_REDIS_REST_URL: z.string().url('UPSTASH_REDIS_REST_URL must be a valid URL').optional(),
   UPSTASH_REDIS_REST_TOKEN: z.string().min(1).optional(),
@@ -47,7 +50,9 @@ if (!criticalResult.success) {
     const formatted = criticalResult.error.format()
     const messages = Object.entries(formatted)
       .filter(([k]) => k !== '_errors')
-      .map(([k, v]) => `  - ${k}: ${(v as { _errors?: string[] })?._errors?.join(', ') ?? 'invalid'}`)
+      .map(
+        ([k, v]) => `  - ${k}: ${(v as { _errors?: string[] })?._errors?.join(', ') ?? 'invalid'}`
+      )
       .join('\n')
     logger.error(`[env] Critical environment validation failed:\n${messages}`)
     // Do not throw in test/dev to avoid breaking HMR; throw in production
@@ -67,7 +72,7 @@ function getEnv(key: string, required: boolean, fallback?: string): string | und
   if (!required) return fallback
   throw new Error(
     `❌ Missing required environment variable: ${key}\n` +
-    `   → Add it to .env.local (see .env.example for reference)`
+      `   → Add it to .env.local (see .env.example for reference)`
   )
 }
 
@@ -95,10 +100,14 @@ const NEXT_PUBLIC_SUPABASE_ANON_KEY = getEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY', tr
 
 // Server-only — required in production, optional in dev
 const SUPABASE_URL = isServer
-  ? (process.env.NODE_ENV === 'production' ? getEnv('SUPABASE_URL', true) : getEnv('SUPABASE_URL', false))
+  ? process.env.NODE_ENV === 'production'
+    ? getEnv('SUPABASE_URL', true)
+    : getEnv('SUPABASE_URL', false)
   : undefined
 const SUPABASE_SERVICE_ROLE_KEY = isServer
-  ? (process.env.NODE_ENV === 'production' ? getEnv('SUPABASE_SERVICE_ROLE_KEY', true) : getEnv('SUPABASE_SERVICE_ROLE_KEY', false))
+  ? process.env.NODE_ENV === 'production'
+    ? getEnv('SUPABASE_SERVICE_ROLE_KEY', true)
+    : getEnv('SUPABASE_SERVICE_ROLE_KEY', false)
   : undefined
 const DATABASE_URL = isServer ? getEnv('DATABASE_URL', false) : undefined
 
@@ -114,9 +123,26 @@ const INVITE_SECRET = isServer ? getEnv('INVITE_SECRET', false) : undefined
 const STRIPE_SECRET_KEY = isServer ? getEnv('STRIPE_SECRET_KEY', false) : undefined
 const STRIPE_WEBHOOK_SECRET = isServer ? getEnv('STRIPE_WEBHOOK_SECRET', false) : undefined
 
-// Cron / Workers
-const CRON_SECRET = isServer ? getEnv('CRON_SECRET', false) : undefined
+// Cron / Workers — required in production (protects 50+ endpoints)
+const CRON_SECRET = isServer
+  ? process.env.NODE_ENV === 'production'
+    ? getEnv('CRON_SECRET', true)
+    : getEnv('CRON_SECRET', false)
+  : undefined
 const WORKER_SECRET = isServer ? getEnv('WORKER_SECRET', false) : undefined
+
+// ─── Weak secret detection (defense in depth) ──────────────────────────────
+if (isServer && process.env.NODE_ENV === 'production') {
+  const weakSecretPattern = /^[a-z0-9-]{5,30}$/i
+  for (const key of ['CRON_SECRET', 'VPS_PROXY_KEY', 'ADMIN_SECRET'] as const) {
+    const val = process.env[key]
+    if (val && (val.length < 32 || weakSecretPattern.test(val))) {
+      logger.error(
+        `[env] SECURITY: ${key} appears to be a weak secret (${val.length} chars). Rotate immediately with: openssl rand -hex 32`
+      )
+    }
+  }
+}
 
 // ─── Export typed env object ──────────────────────────────────────────────────
 
@@ -207,9 +233,18 @@ export const env = {
 
   // ── Smart Scheduler Config ──
   SMART_SCHEDULER_HOT_INTERVAL_MINUTES: getEnvNumber('SMART_SCHEDULER_HOT_INTERVAL_MINUTES', 30),
-  SMART_SCHEDULER_ACTIVE_INTERVAL_MINUTES: getEnvNumber('SMART_SCHEDULER_ACTIVE_INTERVAL_MINUTES', 60),
-  SMART_SCHEDULER_NORMAL_INTERVAL_MINUTES: getEnvNumber('SMART_SCHEDULER_NORMAL_INTERVAL_MINUTES', 240),
-  SMART_SCHEDULER_DORMANT_INTERVAL_MINUTES: getEnvNumber('SMART_SCHEDULER_DORMANT_INTERVAL_MINUTES', 720),
+  SMART_SCHEDULER_ACTIVE_INTERVAL_MINUTES: getEnvNumber(
+    'SMART_SCHEDULER_ACTIVE_INTERVAL_MINUTES',
+    60
+  ),
+  SMART_SCHEDULER_NORMAL_INTERVAL_MINUTES: getEnvNumber(
+    'SMART_SCHEDULER_NORMAL_INTERVAL_MINUTES',
+    240
+  ),
+  SMART_SCHEDULER_DORMANT_INTERVAL_MINUTES: getEnvNumber(
+    'SMART_SCHEDULER_DORMANT_INTERVAL_MINUTES',
+    720
+  ),
   SMART_SCHEDULER_MAX_BATCH_SIZE: getEnvNumber('SMART_SCHEDULER_MAX_BATCH_SIZE', 50),
 
   // ── Meilisearch ──
