@@ -18,7 +18,8 @@ export default function CookieConsent() {
 
   useEffect(() => {
     try {
-      if (localStorage.getItem(LS_KEY) !== 'accepted') {
+      const consent = localStorage.getItem(LS_KEY)
+      if (consent !== 'accepted' && consent !== 'rejected') {
         setVisible(true)
       }
     } catch {
@@ -35,12 +36,14 @@ export default function CookieConsent() {
     setVisible(false)
   }
 
-  // Auto-dismiss after 8 seconds — continued browsing implies consent
-  useEffect(() => {
-    if (!visible) return
-    const timer = setTimeout(handleAccept, 8000)
-    return () => clearTimeout(timer)
-  }, [visible]) // handleAccept is stable (no deps)
+  const handleReject = () => {
+    try {
+      localStorage.setItem(LS_KEY, 'rejected')
+    } catch {
+      // localStorage unavailable
+    }
+    setVisible(false)
+  }
 
   if (!visible) return null
 
@@ -77,8 +80,8 @@ export default function CookieConsent() {
           </Link>
         </p>
         <div style={{ display: 'flex', gap: tokens.spacing[2], flexShrink: 0 }}>
-          <Link
-            href="/legal/privacy"
+          <button
+            onClick={handleReject}
             className="interactive-scale"
             style={{
               padding: '6px 14px',
@@ -89,7 +92,7 @@ export default function CookieConsent() {
               color: 'var(--color-text-secondary)',
               fontSize: 13,
               fontWeight: 600,
-              textDecoration: 'none',
+              cursor: 'pointer',
               display: 'inline-flex',
               alignItems: 'center',
               transition: 'background 0.15s, border-color 0.15s',
@@ -97,8 +100,8 @@ export default function CookieConsent() {
             onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg-tertiary)' }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
           >
-            Manage
-          </Link>
+            Reject
+          </button>
           <button
             onClick={handleAccept}
             className="interactive-scale"
