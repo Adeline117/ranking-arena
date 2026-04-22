@@ -81,7 +81,7 @@ export default function InfoTooltip({ text, size = 12 }: InfoTooltipProps) {
         left: pos.left,
         visibility: ready ? 'visible' : 'hidden',
         maxWidth: 260,
-        padding: '8px 12px',
+        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
         background: tokens.colors.bg.primary,
         border: `1px solid ${tokens.colors.border.primary}`,
         borderRadius: tokens.radius.md,

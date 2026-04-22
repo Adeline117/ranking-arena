@@ -193,9 +193,9 @@ export default function UserFollowButton({
   }, [currentUserId, targetUserId, following, loading, getAuthHeadersAsync, showToast, t, onFollowChange, openLoginModal])
 
   const sizeStyles = {
-    sm: { padding: '10px 16px', fontSize: tokens.typography.fontSize.sm, borderRadius: tokens.radius.md, minHeight: '44px' },
-    md: { padding: '12px 20px', fontSize: tokens.typography.fontSize.base, borderRadius: tokens.radius.lg, minHeight: '44px' },
-    lg: { padding: '14px 24px', fontSize: tokens.typography.fontSize.md, borderRadius: tokens.radius.lg, minHeight: '48px' },
+    sm: { padding: `${tokens.spacing[2.5]} ${tokens.spacing[4]}`, fontSize: tokens.typography.fontSize.sm, borderRadius: tokens.radius.md, minHeight: '44px' },
+    md: { padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`, fontSize: tokens.typography.fontSize.base, borderRadius: tokens.radius.lg, minHeight: '44px' },
+    lg: { padding: `${tokens.spacing[3.5]} ${tokens.spacing[6]}`, fontSize: tokens.typography.fontSize.md, borderRadius: tokens.radius.lg, minHeight: '48px' },
   }
 
   const isMutual = following && followedBy
@@ -271,7 +271,7 @@ export default function UserFollowButton({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        gap: '6px',
+        gap: tokens.spacing[1.5],
       }}
       onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = '0.85' }}
       onMouseLeave={(e) => { if (!loading) e.currentTarget.style.opacity = '1' }}

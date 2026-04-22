@@ -77,7 +77,7 @@ export default function FollowingFeed() {
   if (!authLoading && !user) {
     return (
       <div style={{
-        textAlign: 'center', padding: '60px 20px',
+        textAlign: 'center', padding: `${tokens.spacing[16]} ${tokens.spacing[5]}`,
         color: tokens.colors.text.secondary,
       }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>--</div>
@@ -85,7 +85,7 @@ export default function FollowingFeed() {
           {t('followingFeedLoginPrompt')}
         </p>
         <button onClick={() => useLoginModal.getState().openLoginModal()} style={{
-          display: 'inline-block', padding: '8px 24px', borderRadius: tokens.radius.md,
+          display: 'inline-block', padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`, borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           border: 'none', cursor: 'pointer', fontWeight: 600, fontSize: 14,
         }}>
@@ -108,7 +108,7 @@ export default function FollowingFeed() {
   if (error) {
     return (
       <div style={{
-        textAlign: 'center', padding: '40px 20px',
+        textAlign: 'center', padding: `${tokens.spacing[10]} ${tokens.spacing[5]}`,
         color: tokens.colors.text.tertiary,
       }}>
         <p style={{ fontSize: 14, marginBottom: 8 }}>{t('loadFailed')}</p>
@@ -130,7 +130,7 @@ export default function FollowingFeed() {
   if (followingIds.length === 0) {
     return (
       <div style={{
-        textAlign: 'center', padding: '60px 20px',
+        textAlign: 'center', padding: `${tokens.spacing[16]} ${tokens.spacing[5]}`,
         color: tokens.colors.text.secondary,
       }}>
         <Image src="/stickers/happy.webp" alt="No posts yet" width={48} height={48} style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
@@ -141,7 +141,7 @@ export default function FollowingFeed() {
           {t('followingFeedDiscoverTraders')}
         </p>
         <Link href="/rankings" style={{
-          display: 'inline-block', marginTop: 16, padding: '8px 24px', borderRadius: tokens.radius.md,
+          display: 'inline-block', marginTop: 16, padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`, borderRadius: tokens.radius.md,
           background: tokens.colors.accent.brand, color: tokens.colors.white,
           textDecoration: 'none', fontWeight: 600, fontSize: 14,
         }}>
@@ -154,7 +154,7 @@ export default function FollowingFeed() {
   if (posts.length === 0) {
     return (
       <div style={{
-        textAlign: 'center', padding: '60px 20px',
+        textAlign: 'center', padding: `${tokens.spacing[16]} ${tokens.spacing[5]}`,
         color: tokens.colors.text.secondary,
       }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>--</div>
