@@ -95,6 +95,8 @@ import {
   upsertPortfolio,
   enhanceStatsWithDerivedMetrics,
   calculateAssetBreakdown,
+  computeStatsFromPositions,
+  buildEquityCurveFromPositions,
   type StatsDetail,
   type EquityCurvePoint,
   type PositionHistoryItem,
@@ -147,7 +149,7 @@ async function withRetry<T>(
   fn: () => Promise<T>,
   context: string,
   options = RETRY_CONFIG,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<T> {
   let lastError: Error | undefined
   for (let attempt = 1; attempt <= options.maxAttempts; attempt++) {
@@ -170,7 +172,9 @@ async function withRetry<T>(
         options.baseDelayMs * Math.pow(2, attempt - 1) + Math.random() * 500,
         options.maxDelayMs
       )
-      logger.warn(`Enrichment ${context} attempt ${attempt} failed, retrying`, { delay: Math.round(delay) })
+      logger.warn(`Enrichment ${context} attempt ${attempt} failed, retrying`, {
+        delay: Math.round(delay),
+      })
       await sleep(delay)
     }
   }
@@ -216,7 +220,10 @@ async function buildEquityCurveFromSnapshots(
 
 interface EnrichmentConfig {
   platform: string
-  fetchEquityCurve?: (traderId: string, days: number) => Promise<Array<{ date: string; roi: number; pnl: number | null }>>
+  fetchEquityCurve?: (
+    traderId: string,
+    days: number
+  ) => Promise<Array<{ date: string; roi: number; pnl: number | null }>>
   fetchStatsDetail?: (traderId: string) => Promise<StatsDetail | null>
   fetchPositionHistory?: (traderId: string) => Promise<PositionHistoryItem[]>
   fetchCurrentPositions?: (traderId: string) => Promise<(PortfolioPosition | PositionHistoryItem)[]>
@@ -235,7 +242,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchBinanceStatsDetail,
     fetchCurrentPositions: fetchBinancePositionHistory,
     fetchPositionHistory: fetchBinancePositionHistory,
-    concurrency: 3, delayMs: 1200, // Reduced from 5/800: concurrency 5 caused zombie hangs (16 errors/day)
+    concurrency: 3,
+    delayMs: 1200, // Reduced from 5/800: concurrency 5 caused zombie hangs (16 errors/day)
   },
   // binance_spot: PERMANENTLY REMOVED (2026-03-14) - repeatedly hangs 45-76min, blocks entire pipeline
   // Bybit enrichment re-enabled (2026-03-18) — routes through VPS scraper
@@ -243,7 +251,9 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bybit',
     fetchEquityCurve: fetchBybitEquityCurve,
     fetchStatsDetail: fetchBybitStatsDetail,
-    concurrency: 2, delayMs: 2000, limit: 20, // VPS scraper: ~20s/trader (2 Playwright calls), 2 concurrent = ~200s for 20 traders
+    concurrency: 2,
+    delayMs: 2000,
+    limit: 20, // VPS scraper: ~20s/trader (2 Playwright calls), 2 concurrent = ~200s for 20 traders
   },
   okx_futures: {
     platform: 'okx_futures',
@@ -251,20 +261,23 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchOkxStatsDetail,
     fetchPositionHistory: fetchOkxPositionHistory,
     fetchCurrentPositions: fetchOkxCurrentPositions,
-    concurrency: 8, delayMs: 500, // Increased: direct API, not geo-blocked
+    concurrency: 8,
+    delayMs: 500, // Increased: direct API, not geo-blocked
   },
   okx_spot: {
     platform: 'okx_spot',
     fetchEquityCurve: fetchOkxSpotEquityCurve,
     fetchStatsDetail: fetchOkxSpotStatsDetail,
     fetchCurrentPositions: fetchOkxSpotCurrentPositions,
-    concurrency: 3, delayMs: 1500,
+    concurrency: 3,
+    delayMs: 1500,
   },
   okx_web3: {
     platform: 'okx_web3',
     fetchEquityCurve: fetchOkxWeb3EquityCurve,
     fetchStatsDetail: fetchOkxWeb3StatsDetail,
-    concurrency: 2, delayMs: 2000,
+    concurrency: 2,
+    delayMs: 2000,
   },
   // weex: DISABLED 2026-04-01 — 75% timeout rate, VPS scraper unreliable, platform removed from fetch groups
   // weex: {
@@ -289,7 +302,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchBitgetEquityCurve,
     fetchStatsDetail: fetchBitgetStatsDetail,
     fetchPositionHistory: fetchBitgetPositionHistory,
-    concurrency: 3, delayMs: 1000, // Increased from 1/2000: CF Worker proxy handles 3 concurrent fine
+    concurrency: 3,
+    delayMs: 1000, // Increased from 1/2000: CF Worker proxy handles 3 concurrent fine
   },
   // bybit_spot: VPS trader-detail may or may not support spot leaderMarks.
   // Even if VPS fails, the enrichment runner's buildEquityCurveFromSnapshots
@@ -298,7 +312,9 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     platform: 'bybit_spot',
     fetchEquityCurve: fetchBybitEquityCurve,
     fetchStatsDetail: fetchBybitStatsDetail,
-    concurrency: 2, delayMs: 2000, limit: 20, // Reduced from 3/1500/50: VPS scraper is slow (~20s/trader), 50 traders = 750s which always times out
+    concurrency: 2,
+    delayMs: 2000,
+    limit: 20, // Reduced from 3/1500/50: VPS scraper is slow (~20s/trader), 50 traders = 750s which always times out
   },
   hyperliquid: {
     platform: 'hyperliquid',
@@ -306,7 +322,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchHyperliquidStatsDetail,
     fetchPositionHistory: fetchHyperliquidPositionHistory,
     fetchCurrentPositions: fetchHyperliquidPortfolio,
-    concurrency: 10, delayMs: 200, // No rate limit, fast API
+    concurrency: 10,
+    delayMs: 200, // No rate limit, fast API
   },
   gmx: {
     platform: 'gmx',
@@ -314,32 +331,37 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchGmxStatsDetail,
     fetchPositionHistory: fetchGmxPositionHistory,
     fetchCurrentPositions: fetchGmxPortfolio,
-    concurrency: 8, delayMs: 300,
+    concurrency: 8,
+    delayMs: 300,
   },
   htx_futures: {
     platform: 'htx_futures',
     fetchEquityCurve: fetchHtxEquityCurve,
     fetchStatsDetail: fetchHtxStatsDetail,
-    concurrency: 5, delayMs: 800,
+    concurrency: 5,
+    delayMs: 800,
   },
   gateio: {
     platform: 'gateio',
     fetchEquityCurve: fetchGateioEquityCurve,
     fetchStatsDetail: fetchGateioStatsDetail,
     fetchCurrentPositions: fetchGateioCurrentPositions,
-    concurrency: 3, delayMs: 1000, // Reduced from 8/300: 64% failure rate indicates rate limiting
+    concurrency: 3,
+    delayMs: 1000, // Reduced from 8/300: 64% failure rate indicates rate limiting
   },
   mexc: {
     platform: 'mexc',
     fetchEquityCurve: fetchMexcEquityCurve,
     fetchStatsDetail: fetchMexcStatsDetail,
-    concurrency: 5, delayMs: 500, // Reduced delay from 800: MEXC mobile UA bypass is fast
+    concurrency: 5,
+    delayMs: 500, // Reduced delay from 800: MEXC mobile UA bypass is fast
   },
   bingx_spot: {
     platform: 'bingx_spot',
     fetchEquityCurve: fetchBingxEquityCurve,
     fetchStatsDetail: fetchBingxStatsDetail,
-    concurrency: 3, delayMs: 1000,
+    concurrency: 3,
+    delayMs: 1000,
   },
   drift: {
     platform: 'drift',
@@ -350,21 +372,24 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
       if (s3Positions.length > 0) return s3Positions
       return fetchDriftPositionHistory(traderId)
     },
-    concurrency: 3, delayMs: 800, // Reduced from 8/300: 78% failure rate, API rate-limiting
+    concurrency: 3,
+    delayMs: 800, // Reduced from 8/300: 78% failure rate, API rate-limiting
   },
   dydx: {
     platform: 'dydx',
     fetchEquityCurve: fetchDydxEquityCurve,
     fetchStatsDetail: fetchDydxStatsDetail,
     fetchPositionHistory: fetchDydxV4PositionHistory,
-    concurrency: 5, delayMs: 500, // Increased from 3/1000: Copin API handles higher concurrency
+    concurrency: 5,
+    delayMs: 500, // Increased from 3/1000: Copin API handles higher concurrency
   },
   aevo: {
     platform: 'aevo',
     fetchEquityCurve: fetchAevoEquityCurve,
     fetchStatsDetail: fetchAevoStatsDetail,
     fetchPositionHistory: fetchAevoPositionHistory,
-    concurrency: 8, delayMs: 300, // Native API + Copin fallback
+    concurrency: 8,
+    delayMs: 300, // Native API + Copin fallback
   },
   gains: {
     platform: 'gains',
@@ -388,7 +413,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
       if (onchain.length > 0) return onchain
       return fetchGainsPositionHistory(traderId)
     },
-    concurrency: 2, delayMs: 1500, // Slower due to Etherscan rate limits
+    concurrency: 2,
+    delayMs: 1500, // Slower due to Etherscan rate limits
   },
   kwenta: {
     platform: 'kwenta',
@@ -412,57 +438,66 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
       if (onchain.length > 0) return onchain
       return fetchKwentaPositionHistory(traderId)
     },
-    concurrency: 2, delayMs: 1500, // Slower due to Blockscout rate limits
+    concurrency: 2,
+    delayMs: 1500, // Slower due to Blockscout rate limits
   },
   jupiter_perps: {
     platform: 'jupiter_perps',
     fetchEquityCurve: fetchJupiterEquityCurve,
     fetchStatsDetail: fetchJupiterStatsDetail,
     fetchPositionHistory: fetchJupiterPositionHistory,
-    concurrency: 2, delayMs: 1000, // Reduced from 3/300: 75% failure rate, Solana RPC limits
+    concurrency: 2,
+    delayMs: 1000, // Reduced from 3/300: 75% failure rate, Solana RPC limits
   },
   btcc: {
     platform: 'btcc',
     fetchEquityCurve: fetchBtccEquityCurve,
     fetchStatsDetail: fetchBtccStatsDetail,
-    concurrency: 2, delayMs: 1500,
+    concurrency: 2,
+    delayMs: 1500,
   },
   etoro: {
     platform: 'etoro',
     fetchEquityCurve: fetchEtoroEquityCurve,
     fetchStatsDetail: fetchEtoroStatsDetail,
     fetchCurrentPositions: fetchEtoroPortfolio,
-    concurrency: 2, delayMs: 2000, // Reduced from 5/800: eToro rate-limits aggressively (81% failure rate)
+    concurrency: 2,
+    delayMs: 2000, // Reduced from 5/800: eToro rate-limits aggressively (81% failure rate)
   },
   coinex: {
     platform: 'coinex',
     fetchEquityCurve: fetchCoinexEquityCurve,
     fetchStatsDetail: fetchCoinexStatsDetail,
-    concurrency: 20, delayMs: 0, // Batch-cached from public traders list
+    concurrency: 20,
+    delayMs: 0, // Batch-cached from public traders list
   },
   bitunix: {
     platform: 'bitunix',
     fetchEquityCurve: fetchBitunixEquityCurve,
     fetchStatsDetail: fetchBitunixStatsDetail,
-    concurrency: 50, delayMs: 0, // Batch-cached: all lookups from memory, no API calls
+    concurrency: 50,
+    delayMs: 0, // Batch-cached: all lookups from memory, no API calls
   },
   xt: {
     platform: 'xt',
     fetchEquityCurve: fetchXtEquityCurve,
     fetchStatsDetail: fetchXtStatsDetail,
-    concurrency: 50, delayMs: 0, // Batch-cached: all lookups from memory, no API calls
+    concurrency: 50,
+    delayMs: 0, // Batch-cached: all lookups from memory, no API calls
   },
   bitfinex: {
     platform: 'bitfinex',
     fetchEquityCurve: fetchBitfinexEquityCurve,
     fetchStatsDetail: fetchBitfinexStatsDetail,
-    concurrency: 20, delayMs: 0, // Batch-cached from rankings, no per-trader API
+    concurrency: 20,
+    delayMs: 0, // Batch-cached from rankings, no per-trader API
   },
   blofin: {
     platform: 'blofin',
     fetchEquityCurve: fetchBlofinEquityCurve,
     fetchStatsDetail: fetchBlofinStatsDetail,
-    concurrency: 2, delayMs: 1500, // Direct API returns 401, relies on CF proxy fallback
+    concurrency: 2,
+    delayMs: 1500, // Direct API returns 401, relies on CF proxy fallback
   },
   // phemex: REMOVED 2026-04-01 — API returns 404 (confirmed dead), removed from fetch groups too
   bingx: {
@@ -470,13 +505,15 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: fetchBingxEquityCurve,
     fetchStatsDetail: fetchBingxStatsDetail,
     fetchCurrentPositions: fetchBingxCurrentPositions,
-    concurrency: 2, delayMs: 2000, // Via CF proxy
+    concurrency: 2,
+    delayMs: 2000, // Via CF proxy
   },
   toobit: {
     platform: 'toobit',
     fetchEquityCurve: fetchToobitEquityCurve,
     fetchStatsDetail: fetchToobitStatsDetail,
-    concurrency: 20, delayMs: 0, // Batch-cached from rankings list
+    concurrency: 20,
+    delayMs: 0, // Batch-cached from rankings list
   },
   binance_spot: {
     platform: 'binance_spot',
@@ -485,7 +522,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
       return fetchBinanceSpotEquityCurve(traderId, timeRangeMap[days] || '90D')
     },
     fetchStatsDetail: fetchBinanceSpotStatsDetail,
-    concurrency: 3, delayMs: 1500,
+    concurrency: 3,
+    delayMs: 1500,
   },
   // New platforms (Wave 2)
   woox: {
@@ -494,7 +532,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchWooxStatsDetail,
     fetchCurrentPositions: fetchWooxCurrentPositions,
     fetchPositionHistory: fetchWooxPositionHistory,
-    concurrency: 3, delayMs: 1000,
+    concurrency: 3,
+    delayMs: 1000,
   },
   polymarket: {
     platform: 'polymarket',
@@ -502,7 +541,8 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchStatsDetail: fetchPolymarketStatsDetail,
     fetchCurrentPositions: fetchPolymarketCurrentPositions,
     fetchPositionHistory: fetchPolymarketPositionHistory,
-    concurrency: 5, delayMs: 500,
+    concurrency: 5,
+    delayMs: 500,
   },
 }
 
@@ -511,7 +551,10 @@ export interface EnrichmentResult {
   duration: number
   period: string
   summary: { total: number; enriched: number; failed: number; suppressedErrors: number }
-  results: Record<string, { enriched: number; failed: number; errors: string[]; suppressedErrors: number }>
+  results: Record<
+    string,
+    { enriched: number; failed: number; errors: string[]; suppressedErrors: number }
+  >
 }
 
 /**
@@ -525,15 +568,18 @@ export interface EnrichmentResult {
 // 3. Daily snapshot accumulation → computed equity curve
 export const NO_ENRICHMENT_PLATFORMS = new Set([
   // Dead platforms — 0 traders or API 404, no data to enrich
-  'bitmart', 'paradex', 'lbank', 'phemex',
+  'bitmart',
+  'paradex',
+  'lbank',
+  'phemex',
   // Leaderboard-only platforms — all metrics already from normalize(), no separate detail API
   // Equity curves auto-generated from daily snapshots by aggregate-daily-snapshots cron
   // bybit_spot: REMOVED — now has enrichment config (2026-04-01), VPS trader-detail reuses same leaderMark format
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
-  'web3_bot',     // small platform (19 traders), all metrics from leaderboard
-  'vertex',       // DEAD: No public leaderboard API — competition backend DNS dead, SDK has 0 leaderboard endpoints (2026-04-01)
-  'apex_pro',     // DEAD: No public leaderboard API — tested 8+ endpoint patterns all 404, docs have 0 leaderboard endpoints (2026-04-01)
-  'rabbitx',      // DEAD: All domains DNS dead — platform shut down, all infrastructure offline (2026-04-01)
+  'web3_bot', // small platform (19 traders), all metrics from leaderboard
+  'vertex', // DEAD: No public leaderboard API — competition backend DNS dead, SDK has 0 leaderboard endpoints (2026-04-01)
+  'apex_pro', // DEAD: No public leaderboard API — tested 8+ endpoint patterns all 404, docs have 0 leaderboard endpoints (2026-04-01)
+  'rabbitx', // DEAD: All domains DNS dead — platform shut down, all infrastructure offline (2026-04-01)
   // 2026-03-31: dydx re-enabled — rewritten to use Copin API with AbortSignal.timeout(8s).
   // Original indexer (TCP hang) removed. All fetch calls use hardFetch() with runtime-level timeouts.
   // kucoin: REMOVED — now has dedicated enrichment module (2026-03-19)
@@ -547,37 +593,53 @@ export const NO_ENRICHMENT_PLATFORMS = new Set([
 // serve as a secondary safety net. With reduced trader limits (bitget 40, etoro 30,
 // bybit 5), platforms complete well within these budgets.
 const PLATFORM_TIMEOUT_MS: Record<string, number> = {
-  'bitget_futures': 80_000,  // 80s (was 180s) — 40 traders × concurrency 3 × 18s = ~240s theoretical max, but most finish in <5s
-  'binance_spot': 50_000,  // 50s (was 60s)
-  'bybit': 80_000, // 80s (was 240s) — 5 traders × concurrency 2 × 20s = ~50s realistic max
-  'bybit_spot': 80_000, // 80s (was 240s) — same as bybit
-  'etoro': 80_000, // 80s (was 180s) — 30 traders × concurrency 2 × 20s = ~300s theoretical, but route caps at 90s
+  bitget_futures: 80_000, // 80s (was 180s) — 40 traders × concurrency 3 × 18s = ~240s theoretical max, but most finish in <5s
+  binance_spot: 50_000, // 50s (was 60s)
+  bybit: 80_000, // 80s (was 240s) — 5 traders × concurrency 2 × 20s = ~50s realistic max
+  bybit_spot: 80_000, // 80s (was 240s) — same as bybit
+  etoro: 80_000, // 80s (was 180s) — 30 traders × concurrency 2 × 20s = ~300s theoretical, but route caps at 90s
   // Batch-cached: instant, but set generous limit
-  'bitunix': 15_000, 'xt': 15_000, 'blofin': 30_000,
-  'bitfinex': 30_000, 'toobit': 30_000, 'coinex': 30_000,
+  bitunix: 15_000,
+  xt: 15_000,
+  blofin: 30_000,
+  bitfinex: 30_000,
+  toobit: 30_000,
+  coinex: 30_000,
 }
-const DEFAULT_PLATFORM_TIMEOUT_MS = 50_000  // 50s for CEX (was 120s) — route caps at 50s anyway
-const ONCHAIN_PLATFORM_TIMEOUT_MS = 60_000  // 60s for onchain (was 180s) — route caps at 50s
-const ONCHAIN_SET = new Set(['gmx', 'dydx', 'jupiter_perps', 'hyperliquid', 'drift', 'aevo', 'gains', 'kwenta'])
+const DEFAULT_PLATFORM_TIMEOUT_MS = 50_000 // 50s for CEX (was 120s) — route caps at 50s anyway
+const ONCHAIN_PLATFORM_TIMEOUT_MS = 60_000 // 60s for onchain (was 180s) — route caps at 50s
+const ONCHAIN_SET = new Set([
+  'gmx',
+  'dydx',
+  'jupiter_perps',
+  'hyperliquid',
+  'drift',
+  'aevo',
+  'gains',
+  'kwenta',
+])
 
 // Per-trader timeout: ultra-aggressive timeout for platforms that hang
 // 2026-03-21: Reduced binance_futures from 20s→12s after VPS proxy testing showed <500ms responses
 // 2026-03-22: Added dydx 15s timeout (similar to bitget_futures pattern)
 const PER_TRADER_TIMEOUT_MS: Record<string, number> = {
-  'bitget_futures': 18_000,  // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
-  'binance_futures': 30_000, // 30s per trader (was 20s) — Binance API intermittently slow under load
-  'binance_spot': 30_000,    // 30s per trader — same as binance_futures
-  'dydx': 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
-  'bybit': 75_000, // 75s per trader — VPS fetch has 60s timeout
-  'bybit_spot': 75_000, // 75s per trader — same VPS scraper as bybit
-  'etoro': 20_000, // 20s per trader - CopySim + ranking cache + portfolio fetch
-  'woox': 25_000, // 25s per trader (was default 15s) — woox API consistently slow, was 100% failure
-  'okx_spot': 30_000, // 30s per trader — OKX API intermittently slow
-  'okx_futures': 30_000, // 30s per trader — same as spot
+  bitget_futures: 18_000, // 18s per trader - equity 15s + detail 10s run in parallel, 18s is generous
+  binance_futures: 30_000, // 30s per trader (was 20s) — Binance API intermittently slow under load
+  binance_spot: 30_000, // 30s per trader — same as binance_futures
+  dydx: 15_000, // 15s per trader - 3 APIs × 5-6s timeout + fallback buffer
+  bybit: 75_000, // 75s per trader — VPS fetch has 60s timeout
+  bybit_spot: 75_000, // 75s per trader — same VPS scraper as bybit
+  etoro: 20_000, // 20s per trader - CopySim + ranking cache + portfolio fetch
+  woox: 25_000, // 25s per trader (was default 15s) — woox API consistently slow, was 100% failure
+  okx_spot: 30_000, // 30s per trader — OKX API intermittently slow
+  okx_futures: 30_000, // 30s per trader — same as spot
 }
 
 function getPlatformTimeout(platform: string): number {
-  return PLATFORM_TIMEOUT_MS[platform] ?? (ONCHAIN_SET.has(platform) ? ONCHAIN_PLATFORM_TIMEOUT_MS : DEFAULT_PLATFORM_TIMEOUT_MS)
+  return (
+    PLATFORM_TIMEOUT_MS[platform] ??
+    (ONCHAIN_SET.has(platform) ? ONCHAIN_PLATFORM_TIMEOUT_MS : DEFAULT_PLATFORM_TIMEOUT_MS)
+  )
 }
 
 export async function runEnrichment(params: {
@@ -591,29 +653,42 @@ export async function runEnrichment(params: {
   /** Optional time budget in ms. Enrichment stops when elapsed time exceeds this. */
   timeBudgetMs?: number
 }): Promise<EnrichmentResult> {
-  const { platform: platformParam, period, limit, offset = 0, traderKeys: providedKeys, timeBudgetMs } = params
+  const {
+    platform: platformParam,
+    period,
+    limit,
+    offset = 0,
+    traderKeys: providedKeys,
+    timeBudgetMs,
+  } = params
   const startTime = Date.now()
-  
+
   // ✅ Parameter validation - prevent invalid/missing period
   if (!period || !['7D', '30D', '90D'].includes(period)) {
     throw new Error(`Invalid period: ${period}. Must be 7D, 30D, or 90D`)
   }
-  
+
   // 🚨 Blacklist check - prevent disabled platforms from running
   validatePlatform(platformParam)
-  
-  const plog = await PipelineLogger.start(`enrich-${platformParam}`, { 
-    platform: platformParam, 
-    period, 
-    limit, 
-    offset 
+
+  const plog = await PipelineLogger.start(`enrich-${platformParam}`, {
+    platform: platformParam,
+    period,
+    limit,
+    offset,
   })
 
   // Early exit for platforms that don't support enrichment
   if (NO_ENRICHMENT_PLATFORMS.has(platformParam)) {
     logger.info(`[enrich] Skipping ${platformParam} - enrichment not supported`)
     await plog.success(0, { reason: 'platform does not support enrichment' })
-    return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 }, results: {} }
+    return {
+      ok: true,
+      duration: 0,
+      period,
+      summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 },
+      results: {},
+    }
   }
 
   // Skip platforms that are circuit-broken in batch-fetch-traders.
@@ -622,9 +697,17 @@ export async function runEnrichment(params: {
     const deadKey = `dead:consecutive:${platformParam}`
     const deadEntry = await PipelineState.get(deadKey)
     if (typeof deadEntry === 'number' && deadEntry >= 3) {
-      logger.info(`[enrich] Skipping ${platformParam} - fetch circuit breaker active (${deadEntry} consecutive failures)`)
+      logger.info(
+        `[enrich] Skipping ${platformParam} - fetch circuit breaker active (${deadEntry} consecutive failures)`
+      )
       await plog.success(0, { reason: `fetch circuit breaker: ${deadEntry} failures` })
-      return { ok: true, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 }, results: {} }
+      return {
+        ok: true,
+        duration: 0,
+        period,
+        summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 },
+        results: {},
+      }
     }
   } catch {
     // Non-blocking: if PipelineState is down, proceed with enrichment
@@ -636,13 +719,22 @@ export async function runEnrichment(params: {
   const platforms = [platformParam].filter((p) => p in ENRICHMENT_PLATFORM_CONFIGS)
   if (platforms.length === 0) {
     await plog.error(new Error(`Unknown platform: ${platformParam}`))
-    return { ok: false, duration: 0, period, summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 }, results: {} }
+    return {
+      ok: false,
+      duration: 0,
+      period,
+      summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 },
+      results: {},
+    }
   }
 
   const daysMap: Record<string, number> = { '7D': 7, '30D': 30, '90D': 90 }
   const days = daysMap[period] || 90
 
-  const results: Record<string, { enriched: number; failed: number; errors: string[]; suppressedErrors: number }> = {}
+  const results: Record<
+    string,
+    { enriched: number; failed: number; errors: string[]; suppressedErrors: number }
+  > = {}
   let totalSuppressedErrors = 0
 
   for (const platformKey of platforms) {
@@ -665,422 +757,617 @@ export async function runEnrichment(params: {
     const platformTimer = setTimeout(() => platformController.abort(), platformTimeoutMs)
 
     try {
-      await raceWithTimeout((async () => {
-    // Get trader keys: either provided directly (inline from batch-fetch) or read from DB
-    let traders: Array<{ source_trader_id: string }>
-    if (providedKeys && providedKeys.length > 0) {
-      // Inline enrichment: trader keys provided by batch-fetch, skip DB read
-      traders = providedKeys.slice(offset, offset + limit).map(k => ({ source_trader_id: k }))
-      logger.info(`[enrich] ${platformKey}/${period}: using ${traders.length} provided trader keys (inline)`)
-    } else {
-      // Standard enrichment: read from leaderboard_ranks (canonical, has latest trader keys)
-      // Cached in Redis for 10 min — leaderboard updates hourly, enrichment runs every 4-12h.
-      // This eliminates ~90% of DB reads during enrichment batches (27 platforms × 3 periods).
-      const cacheKey = `enrich:traders:${platformKey}:${period}:${offset}:${limit}`
-      try {
-        traders = await getOrSet<Array<{ source_trader_id: string }>>(
-          cacheKey,
-          async () => {
-            let { data: dbTraders, error: fetchError } = await readDb
-              .from('leaderboard_ranks')
-              .select(LR.source_trader_id)
-              .eq(LR.source, platformKey)
-              .eq(LR.season_id, period)
-              .not(LR.arena_score, 'is', null)
-              .order(LR.arena_score, { ascending: false })
-              .range(offset, offset + limit - 1)
+      await raceWithTimeout(
+        (async () => {
+          // Get trader keys: either provided directly (inline from batch-fetch) or read from DB
+          let traders: Array<{ source_trader_id: string }>
+          if (providedKeys && providedKeys.length > 0) {
+            // Inline enrichment: trader keys provided by batch-fetch, skip DB read
+            traders = providedKeys
+              .slice(offset, offset + limit)
+              .map((k) => ({ source_trader_id: k }))
+            logger.info(
+              `[enrich] ${platformKey}/${period}: using ${traders.length} provided trader keys (inline)`
+            )
+          } else {
+            // Standard enrichment: read from leaderboard_ranks (canonical, has latest trader keys)
+            // Cached in Redis for 10 min — leaderboard updates hourly, enrichment runs every 4-12h.
+            // This eliminates ~90% of DB reads during enrichment batches (27 platforms × 3 periods).
+            const cacheKey = `enrich:traders:${platformKey}:${period}:${offset}:${limit}`
+            try {
+              traders = await getOrSet<Array<{ source_trader_id: string }>>(
+                cacheKey,
+                async () => {
+                  let { data: dbTraders, error: fetchError } = await readDb
+                    .from('leaderboard_ranks')
+                    .select(LR.source_trader_id)
+                    .eq(LR.source, platformKey)
+                    .eq(LR.season_id, period)
+                    .not(LR.arena_score, 'is', null)
+                    .order(LR.arena_score, { ascending: false })
+                    .range(offset, offset + limit - 1)
 
-            // Fallback: if no scored traders found, fetch by rank (handles compute-leaderboard lag)
-            if (!fetchError && (!dbTraders || dbTraders.length === 0)) {
-              logger.warn(`[enrich] ${platformKey}/${period}: no scored traders, falling back to rank-based query`)
-              const fallback = await readDb
-                .from('leaderboard_ranks')
-                .select(LR.source_trader_id)
-                .eq(LR.source, platformKey)
-                .eq(LR.season_id, period)
-                .order('rank', { ascending: true })
-                .range(offset, offset + limit - 1)
-              dbTraders = fallback.data
-              fetchError = fallback.error
+                  // Fallback: if no scored traders found, fetch by rank (handles compute-leaderboard lag)
+                  if (!fetchError && (!dbTraders || dbTraders.length === 0)) {
+                    logger.warn(
+                      `[enrich] ${platformKey}/${period}: no scored traders, falling back to rank-based query`
+                    )
+                    const fallback = await readDb
+                      .from('leaderboard_ranks')
+                      .select(LR.source_trader_id)
+                      .eq(LR.source, platformKey)
+                      .eq(LR.season_id, period)
+                      .order('rank', { ascending: true })
+                      .range(offset, offset + limit - 1)
+                    dbTraders = fallback.data
+                    fetchError = fallback.error
+                  }
+
+                  if (fetchError || !dbTraders) {
+                    throw new Error(`Failed to fetch traders: ${fetchError?.message}`)
+                  }
+                  return dbTraders
+                },
+                { ttl: 600 } // 10 min cache
+              )
+            } catch (err) {
+              results[platformKey].errors.push(err instanceof Error ? err.message : String(err))
+              return
             }
-
-            if (fetchError || !dbTraders) {
-              throw new Error(`Failed to fetch traders: ${fetchError?.message}`)
-            }
-            return dbTraders
-          },
-          { ttl: 600 } // 10 min cache
-        )
-      } catch (err) {
-        results[platformKey].errors.push(err instanceof Error ? err.message : String(err))
-        return
-      }
-    }
-
-    logger.warn(`[enrich] Processing ${traders.length} ${platformKey} traders for ${period} (timeout: ${platformTimeoutMs / 1000}s)`)
-
-    for (let i = 0; i < traders.length; i += config.concurrency) {
-      // Check per-platform time budget before each batch
-      const platformElapsed = Date.now() - platformStart
-      if (platformElapsed > platformTimeoutMs - 5000) {
-        const remaining = traders.length - i
-        logger.warn(`[enrich] ${platformKey} approaching timeout (${Math.round(platformElapsed / 1000)}s), skipping ${remaining} remaining traders`)
-        results[platformKey].errors.push(`Timeout: ${remaining} traders skipped after ${Math.round(platformElapsed / 1000)}s`)
-        break
-      }
-      // Check caller-provided time budget (used by inline enrichment from batch-fetch)
-      if (timeBudgetMs) {
-        const totalElapsed = Date.now() - startTime
-        if (totalElapsed > timeBudgetMs - 3000) {
-          const remaining = traders.length - i
-          logger.warn(`[enrich] ${platformKey} inline time budget exhausted (${Math.round(totalElapsed / 1000)}s/${Math.round(timeBudgetMs / 1000)}s), ${remaining} traders deferred to batch-enrich`)
-          results[platformKey].errors.push(`Time budget: ${remaining} traders deferred after ${Math.round(totalElapsed / 1000)}s`)
-          break
-        }
-      }
-
-      const batch = traders.slice(i, i + config.concurrency)
-
-      const batchResults = await Promise.allSettled(
-        batch.map(async (trader) => {
-          const traderId = trader.source_trader_id
-          // EMERGENCY FIX (2026-03-20): Aggressive per-trader timeout to prevent 44min hangs
-          // Was: 25-60s. Now: 15-30s. Batch-cached platforms (bitunix/xt) finish in <2s anyway.
-          // CEX with per-trader API: strict 15s limit forces fail-fast on slow responses.
-          // Onchain: 30s (RPC/GraphQL need slightly more time).
-          const traderTimeoutMs = PER_TRADER_TIMEOUT_MS[platformKey] 
-            ?? (ONCHAIN_SET.has(platformKey) ? 30_000 : 15_000) // Reduced from 60s/30s
-          const traderController = new AbortController()
-          const traderTimer = setTimeout(() => {
-            logger.warn(`Timeout in enrichTrader for trader ${traderId} on ${platformKey} (${traderTimeoutMs}ms)`)
-            traderController.abort()
-          }, traderTimeoutMs)
-          // Cascade: if platform aborts, abort all its traders
-          const onPlatformAbort = () => traderController.abort()
-          platformController.signal.addEventListener('abort', onPlatformAbort, { once: true })
-
-          try {
-            await raceWithTimeout((async () => {
-                // --- Phase 1: Parallel API fetches (independent network calls) ---
-                const fetchPromises: Record<string, Promise<unknown>> = {}
-
-                // All API fetches share the trader's AbortSignal for wall-clock enforcement
-                const traderSignal = traderController.signal
-
-                // Equity curve fetch
-                if (config.fetchEquityCurve) {
-                  fetchPromises.equityCurve = withRetry(
-                    () => config.fetchEquityCurve!(traderId, days),
-                    `${platformKey}:${traderId} equity curve`,
-                    RETRY_CONFIG,
-                    traderSignal,
-                  ).catch((err) => {
-                    suppressedErrors++
-                    logger.warn(`[enrich] ${platformKey}/${traderId} equity curve failed`, { error: err instanceof Error ? err.message : String(err) })
-                    return [] as EquityCurvePoint[]
-                  })
-                }
-
-                // Position history fetch
-                if (config.fetchPositionHistory) {
-                  fetchPromises.positions = withRetry(
-                    () => config.fetchPositionHistory!(traderId),
-                    `${platformKey}:${traderId} position history`,
-                    RETRY_CONFIG,
-                    traderSignal,
-                  ).catch((err) => {
-                    suppressedErrors++
-                    logger.warn(`[enrich] ${platformKey}/${traderId} position history failed`, { error: err instanceof Error ? err.message : String(err) })
-                    return [] as PositionHistoryItem[]
-                  })
-                }
-
-                // Current positions fetch
-                if (config.fetchCurrentPositions) {
-                  fetchPromises.currentPositions = withRetry(
-                    () => config.fetchCurrentPositions!(traderId),
-                    `${platformKey}:${traderId} current positions`,
-                    RETRY_CONFIG,
-                    traderSignal,
-                  ).catch((err) => {
-                    suppressedErrors++
-                    logger.warn(`[enrich] ${platformKey}/${traderId} current positions failed`, { error: err instanceof Error ? err.message : String(err) })
-                    return [] as (PortfolioPosition | PositionHistoryItem)[]
-                  })
-                }
-
-                // Stats detail fetch
-                if (config.fetchStatsDetail) {
-                  fetchPromises.stats = withRetry(
-                    () => config.fetchStatsDetail!(traderId),
-                    `${platformKey}:${traderId} stats detail`,
-                    RETRY_CONFIG,
-                    traderSignal,
-                  ).catch((err) => {
-                    suppressedErrors++
-                    logger.warn(`[enrich] ${platformKey}/${traderId} stats detail failed`, { error: err instanceof Error ? err.message : String(err) })
-                    return null as StatsDetail | null
-                  })
-                }
-
-                // DEX wallet AUM fetch (optional, failures logged)
-                if (isDexPlatform(platformKey)) {
-                  fetchPromises.walletAum = fetchWalletAUM(platformKey, traderId).catch(err => {
-                    logger.warn(`[enrich] ${platformKey}/${traderId} wallet AUM fetch failed: ${err instanceof Error ? err.message : String(err)}`)
-                    return null
-                  })
-                }
-
-                // Await all API fetches in parallel
-                const settled = await Promise.allSettled(Object.values(fetchPromises))
-                const keys = Object.keys(fetchPromises)
-                const fetchResults: Record<string, unknown> = {}
-                keys.forEach((key, idx) => {
-                  const result = settled[idx]
-                  fetchResults[key] = result.status === 'fulfilled' ? result.value : null
-                })
-
-                let curve = (fetchResults.equityCurve as EquityCurvePoint[] | null) ?? []
-                const positions = (fetchResults.positions as PositionHistoryItem[] | null) ?? []
-                const currentPos = (fetchResults.currentPositions as (PortfolioPosition | PositionHistoryItem)[] | null) ?? []
-                let stats = fetchResults.stats as StatsDetail | null
-                const walletAum = fetchResults.walletAum as number | null
-
-                // --- Phase 2: Fallback equity curve from DB snapshots ---
-                // If API returned sparse data (<5 points), check if daily snapshots have more.
-                // This catches platforms where the API returns 1-4 points but we've accumulated
-                // 10-20+ daily snapshots over time.
-                if (curve.length < 5) {
-                  const dbCurve = await buildEquityCurveFromSnapshots(supabase, platformKey, traderId, days)
-                  if (dbCurve.length > curve.length) {
-                    curve = dbCurve
-                  }
-                }
-
-                // --- Phase 3: Sequential DB writes (depend on fetch results) ---
-                if (curve.length > 0) {
-                  const ecResult = await withRetry(() => upsertEquityCurve(supabase, platformKey, traderId, period, curve, { skipV2Sync: true }), `${platformKey}:${traderId} save equity curve`, RETRY_CONFIG, traderSignal)
-                  if (ecResult.v2Update) pendingV2Updates.push(ecResult.v2Update)
-                }
-
-                if (config.fetchPositionHistory && positions.length > 0) {
-                  await withRetry(() => upsertPositionHistory(supabase, platformKey, traderId, positions), `${platformKey}:${traderId} save position history`, RETRY_CONFIG, traderSignal)
-                  const breakdown = calculateAssetBreakdown(positions)
-                  if (breakdown.length > 0) {
-                    await withRetry(() => upsertAssetBreakdown(supabase, platformKey, traderId, period, breakdown), `${platformKey}:${traderId} save asset breakdown`, RETRY_CONFIG, traderSignal)
-                  }
-                }
-
-                if (config.fetchCurrentPositions && currentPos.length > 0) {
-                  await withRetry(
-                    () => upsertPortfolio(supabase, platformKey, traderId,
-                      currentPos.map((p) => ({
-                        symbol: p.symbol,
-                        direction: p.direction,
-                        investedPct: 'investedPct' in p ? p.investedPct : null,
-                        entryPrice: p.entryPrice,
-                        pnl: 'pnl' in p ? p.pnl : ('pnlUsd' in p ? (p as PositionHistoryItem).pnlUsd : null),
-                      }))),
-                    `${platformKey}:${traderId} save current positions`,
-                    RETRY_CONFIG,
-                    traderSignal,
-                  )
-                }
-
-                if (config.fetchStatsDetail && stats) {
-                  // Pass position history to derive avg_holding_hours, avg_profit/loss, etc.
-                  stats = enhanceStatsWithDerivedMetrics(stats, curve, period, positions.length > 0 ? positions : undefined)
-                  const sdResult = await withRetry(() => upsertStatsDetail(supabase, platformKey, traderId, period, stats!, { skipV2Sync: true }), `${platformKey}:${traderId} save stats detail`, RETRY_CONFIG, traderSignal)
-                  if (sdResult.v2Update) pendingV2Updates.push(sdResult.v2Update)
-                }
-
-                // Always sync key metrics back to trader_snapshots_v2 from stats + equity curve.
-                // This ensures new traders are immediately complete without waiting for daily cron.
-                {
-                  const snapshotUpdate: Record<string, unknown> = {}
-                  if (stats?.profitableTradesPct != null) snapshotUpdate.win_rate = stats.profitableTradesPct
-                  if (stats?.maxDrawdown != null) snapshotUpdate.max_drawdown = stats.maxDrawdown
-                  if (stats?.totalTrades != null) snapshotUpdate.trades_count = stats.totalTrades
-                  if (stats?.sharpeRatio != null) snapshotUpdate.sharpe_ratio = stats.sharpeRatio
-                  // ROI from stats (e.g. Gains native API, Copin totalPnl/totalVolume)
-                  if (stats?.roi != null) snapshotUpdate.roi_pct = stats.roi
-                  if (stats?.pnl != null) snapshotUpdate.pnl_usd ??= stats.pnl
-
-                  // Compute from equity curve if stats didn't provide
-                  if (curve.length >= 2) {
-                    const lastPoint = curve[curve.length - 1]
-                    const firstPoint = curve[0]
-                    if (lastPoint.pnl != null) snapshotUpdate.pnl_usd ??= lastPoint.pnl
-                    // ROI from equity curve: (last.roi - first.roi) or last.roi if first is 0
-                    if (lastPoint.roi != null && !snapshotUpdate.roi_pct) {
-                      const roiVal = firstPoint.roi != null && firstPoint.roi !== 0
-                        ? lastPoint.roi - firstPoint.roi : lastPoint.roi
-                      if (roiVal !== 0) snapshotUpdate.roi_pct = roiVal
-                    }
-                    // Sharpe from daily returns if not from stats
-                    if (!snapshotUpdate.sharpe_ratio && curve.length >= 3) {
-                      const returns: number[] = []
-                      for (let j = 1; j < curve.length; j++) {
-                        if (curve[j].roi != null && curve[j - 1].roi != null) {
-                          returns.push(curve[j].roi! - curve[j - 1].roi!)
-                        }
-                      }
-                      if (returns.length >= 2) {
-                        const mean = returns.reduce((a, b) => a + b, 0) / returns.length
-                        const std = Math.sqrt(returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length)
-                        if (std > 0) snapshotUpdate.sharpe_ratio = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
-                      }
-                    }
-                    // Win rate from daily returns if not from stats (or if stats returned 0 — likely bad data)
-                    if (!snapshotUpdate.win_rate && curve.length >= 3) {
-                      const dailyReturns: number[] = []
-                      for (let j = 1; j < curve.length; j++) {
-                        if (curve[j].pnl != null && curve[j - 1].pnl != null) {
-                          dailyReturns.push(curve[j].pnl! - curve[j - 1].pnl!)
-                        }
-                      }
-                      if (dailyReturns.length >= 3) {
-                        const wins = dailyReturns.filter(r => r > 0).length
-                        snapshotUpdate.win_rate = Math.round((wins / dailyReturns.length) * 10000) / 100
-                        snapshotUpdate.trades_count ??= dailyReturns.length
-                      }
-                    }
-                    // Max drawdown from equity curve if not from stats (or if stats returned 0 — likely bad data)
-                    if (!snapshotUpdate.max_drawdown && curve.length >= 3) {
-                      let peak = -Infinity
-                      let maxDD = 0
-                      for (const pt of curve) {
-                        const val = pt.roi ?? pt.pnl ?? 0
-                        if (val > peak) peak = val
-                        if (peak > 0) {
-                          const dd = ((peak - val) / peak) * 100
-                          if (dd > maxDD) maxDD = dd
-                        }
-                      }
-                      if (maxDD > 0) snapshotUpdate.max_drawdown = Math.round(maxDD * 100) / 100
-                    }
-                  }
-
-                  // Bitfinex ROI fallback: compute from rankings data when equity curve is empty
-                  if (platformKey === 'bitfinex' && !snapshotUpdate.roi_pct) {
-                    const windowArg = period === '7D' ? '7d' as const : '30d' as const
-                    const roiFromRankings = await fetchBitfinexRoi(traderId, windowArg)
-                    if (roiFromRankings != null) {
-                      snapshotUpdate.roi_pct = Math.round(roiFromRankings * 100) / 100
-                    }
-                  }
-
-                  // Batch v2 sync: push to pendingV2Updates instead of per-row UPDATE.
-                  // The flush happens after each concurrency batch (line ~1042).
-                  // This eliminates ~5,000-6,000 per-row UPDATEs per enrichment cycle.
-                  const updates = Object.fromEntries(
-                    Object.entries(snapshotUpdate).filter(([, v]) => v != null)
-                  )
-                  if (Object.keys(updates).length > 0) {
-                    pendingV2Updates.push({
-                      platform: platformKey,
-                      trader_key: traderId,
-                      window: period,
-                      ...(updates.win_rate != null ? { win_rate: updates.win_rate as number } : {}),
-                      ...(updates.max_drawdown != null ? { max_drawdown: updates.max_drawdown as number } : {}),
-                      ...(updates.trades_count != null ? { trades_count: updates.trades_count as number } : {}),
-                      ...(updates.sharpe_ratio != null ? { sharpe_ratio: updates.sharpe_ratio as number } : {}),
-                      ...(updates.roi_pct != null ? { roi_pct: updates.roi_pct as number } : {}),
-                      ...(updates.pnl_usd != null ? { pnl_usd: updates.pnl_usd as number } : {}),
-                    })
-                  }
-                }
-
-                // On-chain wallet enrichment DB writes (AUM + portfolio)
-                if (isDexPlatform(platformKey) && walletAum != null && walletAum > 10) {
-                  const { error: aumErr } = await supabase
-                    .from('trader_stats_detail')
-                    .update({ aum: walletAum })
-                    .eq('source', platformKey)
-                    .eq('source_trader_id', traderId)
-                    .eq('period', period)
-                  if (aumErr) {
-                    logger.warn(`[enrich] AUM update failed for ${platformKey}/${traderId}: ${aumErr.message}`)
-                  }
-
-                  if (!config.fetchCurrentPositions) {
-                    try {
-                      const walletPortfolio = await fetchWalletPortfolio(platformKey, traderId)
-                      if (walletPortfolio.length > 0) {
-                        await upsertPortfolio(supabase, platformKey, traderId, walletPortfolio)
-                      }
-                    } catch (_err) {
-                      walletEnrichFailCount++ /* logged at platform level */
-                    }
-                  }
-                }
-
-                results[platformKey].enriched++
-              })(), traderTimeoutMs, `${platformKey}/${traderId}`)
-          } catch (err) {
-            results[platformKey].failed++
-            const errMsg = err instanceof Error ? err.message : String(err)
-            if (results[platformKey].errors.length < 5) {
-              results[platformKey].errors.push(`${traderId}: ${errMsg}`)
-            }
-            throw err // Re-throw to be caught by allSettled
-          } finally {
-            clearTimeout(traderTimer)
-            platformController.signal.removeEventListener('abort', onPlatformAbort)
           }
-        })
+
+          logger.warn(
+            `[enrich] Processing ${traders.length} ${platformKey} traders for ${period} (timeout: ${platformTimeoutMs / 1000}s)`
+          )
+
+          for (let i = 0; i < traders.length; i += config.concurrency) {
+            // Check per-platform time budget before each batch
+            const platformElapsed = Date.now() - platformStart
+            if (platformElapsed > platformTimeoutMs - 5000) {
+              const remaining = traders.length - i
+              logger.warn(
+                `[enrich] ${platformKey} approaching timeout (${Math.round(platformElapsed / 1000)}s), skipping ${remaining} remaining traders`
+              )
+              results[platformKey].errors.push(
+                `Timeout: ${remaining} traders skipped after ${Math.round(platformElapsed / 1000)}s`
+              )
+              break
+            }
+            // Check caller-provided time budget (used by inline enrichment from batch-fetch)
+            if (timeBudgetMs) {
+              const totalElapsed = Date.now() - startTime
+              if (totalElapsed > timeBudgetMs - 3000) {
+                const remaining = traders.length - i
+                logger.warn(
+                  `[enrich] ${platformKey} inline time budget exhausted (${Math.round(totalElapsed / 1000)}s/${Math.round(timeBudgetMs / 1000)}s), ${remaining} traders deferred to batch-enrich`
+                )
+                results[platformKey].errors.push(
+                  `Time budget: ${remaining} traders deferred after ${Math.round(totalElapsed / 1000)}s`
+                )
+                break
+              }
+            }
+
+            const batch = traders.slice(i, i + config.concurrency)
+
+            const batchResults = await Promise.allSettled(
+              batch.map(async (trader) => {
+                const traderId = trader.source_trader_id
+                // EMERGENCY FIX (2026-03-20): Aggressive per-trader timeout to prevent 44min hangs
+                // Was: 25-60s. Now: 15-30s. Batch-cached platforms (bitunix/xt) finish in <2s anyway.
+                // CEX with per-trader API: strict 15s limit forces fail-fast on slow responses.
+                // Onchain: 30s (RPC/GraphQL need slightly more time).
+                const traderTimeoutMs =
+                  PER_TRADER_TIMEOUT_MS[platformKey] ??
+                  (ONCHAIN_SET.has(platformKey) ? 30_000 : 15_000) // Reduced from 60s/30s
+                const traderController = new AbortController()
+                const traderTimer = setTimeout(() => {
+                  logger.warn(
+                    `Timeout in enrichTrader for trader ${traderId} on ${platformKey} (${traderTimeoutMs}ms)`
+                  )
+                  traderController.abort()
+                }, traderTimeoutMs)
+                // Cascade: if platform aborts, abort all its traders
+                const onPlatformAbort = () => traderController.abort()
+                platformController.signal.addEventListener('abort', onPlatformAbort, { once: true })
+
+                try {
+                  await raceWithTimeout(
+                    (async () => {
+                      // --- Phase 1: Parallel API fetches (independent network calls) ---
+                      const fetchPromises: Record<string, Promise<unknown>> = {}
+
+                      // All API fetches share the trader's AbortSignal for wall-clock enforcement
+                      const traderSignal = traderController.signal
+
+                      // Equity curve fetch
+                      if (config.fetchEquityCurve) {
+                        fetchPromises.equityCurve = withRetry(
+                          () => config.fetchEquityCurve!(traderId, days),
+                          `${platformKey}:${traderId} equity curve`,
+                          RETRY_CONFIG,
+                          traderSignal
+                        ).catch((err) => {
+                          suppressedErrors++
+                          logger.warn(`[enrich] ${platformKey}/${traderId} equity curve failed`, {
+                            error: err instanceof Error ? err.message : String(err),
+                          })
+                          return [] as EquityCurvePoint[]
+                        })
+                      }
+
+                      // Position history fetch
+                      if (config.fetchPositionHistory) {
+                        fetchPromises.positions = withRetry(
+                          () => config.fetchPositionHistory!(traderId),
+                          `${platformKey}:${traderId} position history`,
+                          RETRY_CONFIG,
+                          traderSignal
+                        ).catch((err) => {
+                          suppressedErrors++
+                          logger.warn(
+                            `[enrich] ${platformKey}/${traderId} position history failed`,
+                            { error: err instanceof Error ? err.message : String(err) }
+                          )
+                          return [] as PositionHistoryItem[]
+                        })
+                      }
+
+                      // Current positions fetch
+                      if (config.fetchCurrentPositions) {
+                        fetchPromises.currentPositions = withRetry(
+                          () => config.fetchCurrentPositions!(traderId),
+                          `${platformKey}:${traderId} current positions`,
+                          RETRY_CONFIG,
+                          traderSignal
+                        ).catch((err) => {
+                          suppressedErrors++
+                          logger.warn(
+                            `[enrich] ${platformKey}/${traderId} current positions failed`,
+                            { error: err instanceof Error ? err.message : String(err) }
+                          )
+                          return [] as (PortfolioPosition | PositionHistoryItem)[]
+                        })
+                      }
+
+                      // Stats detail fetch
+                      if (config.fetchStatsDetail) {
+                        fetchPromises.stats = withRetry(
+                          () => config.fetchStatsDetail!(traderId),
+                          `${platformKey}:${traderId} stats detail`,
+                          RETRY_CONFIG,
+                          traderSignal
+                        ).catch((err) => {
+                          suppressedErrors++
+                          logger.warn(`[enrich] ${platformKey}/${traderId} stats detail failed`, {
+                            error: err instanceof Error ? err.message : String(err),
+                          })
+                          return null as StatsDetail | null
+                        })
+                      }
+
+                      // DEX wallet AUM fetch (optional, failures logged)
+                      if (isDexPlatform(platformKey)) {
+                        fetchPromises.walletAum = fetchWalletAUM(platformKey, traderId).catch(
+                          (err) => {
+                            logger.warn(
+                              `[enrich] ${platformKey}/${traderId} wallet AUM fetch failed: ${err instanceof Error ? err.message : String(err)}`
+                            )
+                            return null
+                          }
+                        )
+                      }
+
+                      // Await all API fetches in parallel
+                      const settled = await Promise.allSettled(Object.values(fetchPromises))
+                      const keys = Object.keys(fetchPromises)
+                      const fetchResults: Record<string, unknown> = {}
+                      keys.forEach((key, idx) => {
+                        const result = settled[idx]
+                        fetchResults[key] = result.status === 'fulfilled' ? result.value : null
+                      })
+
+                      let curve = (fetchResults.equityCurve as EquityCurvePoint[] | null) ?? []
+                      const positions =
+                        (fetchResults.positions as PositionHistoryItem[] | null) ?? []
+                      const currentPos =
+                        (fetchResults.currentPositions as
+                          | (PortfolioPosition | PositionHistoryItem)[]
+                          | null) ?? []
+                      let stats = fetchResults.stats as StatsDetail | null
+                      const walletAum = fetchResults.walletAum as number | null
+
+                      // --- Phase 2: Fallback equity curve from DB snapshots ---
+                      // If API returned sparse data (<5 points), check if daily snapshots have more.
+                      // This catches platforms where the API returns 1-4 points but we've accumulated
+                      // 10-20+ daily snapshots over time.
+                      if (curve.length < 5) {
+                        const dbCurve = await buildEquityCurveFromSnapshots(
+                          supabase,
+                          platformKey,
+                          traderId,
+                          days
+                        )
+                        if (dbCurve.length > curve.length) {
+                          curve = dbCurve
+                        }
+                      }
+
+                      // --- Phase 2b: Fallback equity curve from position history ---
+                      // If API + DB snapshots both returned sparse data, build curve from
+                      // fetched position history. This is the key fix for DEX platforms
+                      // (Hyperliquid, dYdX, GMX) where equity curve APIs often return empty
+                      // but position history has closed trades with PnL data.
+                      if (curve.length < 5 && positions.length >= 3) {
+                        const posCurve = buildEquityCurveFromPositions(positions, days)
+                        if (posCurve.length > curve.length) {
+                          curve = posCurve
+                        }
+                      }
+
+                      // --- Phase 2c: Fallback stats from position history ---
+                      // When stats API returns null/empty but position history has data,
+                      // compute win_rate, trades_count, maxDrawdown, sharpeRatio from positions.
+                      const statsEmpty =
+                        !stats || (stats.totalTrades == null && stats.profitableTradesPct == null)
+                      if (statsEmpty && positions.length >= 3) {
+                        const derivedStats = computeStatsFromPositions(positions)
+                        if (derivedStats.totalTrades != null && derivedStats.totalTrades > 0) {
+                          stats = {
+                            totalTrades: derivedStats.totalTrades ?? null,
+                            profitableTradesPct: derivedStats.profitableTradesPct ?? null,
+                            avgHoldingTimeHours: null,
+                            avgProfit: derivedStats.avgProfit ?? null,
+                            avgLoss: derivedStats.avgLoss ?? null,
+                            largestWin: derivedStats.largestWin ?? null,
+                            largestLoss: derivedStats.largestLoss ?? null,
+                            sharpeRatio: derivedStats.sharpeRatio ?? null,
+                            maxDrawdown: derivedStats.maxDrawdown ?? null,
+                            currentDrawdown: null,
+                            volatility: null,
+                            copiersCount: null,
+                            copiersPnl: null,
+                            aum: stats?.aum ?? null,
+                            winningPositions: derivedStats.winningPositions ?? null,
+                            totalPositions: derivedStats.totalPositions ?? null,
+                          }
+                        }
+                      }
+
+                      // --- Phase 3: Sequential DB writes (depend on fetch results) ---
+                      if (curve.length > 0) {
+                        const ecResult = await withRetry(
+                          () =>
+                            upsertEquityCurve(supabase, platformKey, traderId, period, curve, {
+                              skipV2Sync: true,
+                            }),
+                          `${platformKey}:${traderId} save equity curve`,
+                          RETRY_CONFIG,
+                          traderSignal
+                        )
+                        if (ecResult.v2Update) pendingV2Updates.push(ecResult.v2Update)
+                      }
+
+                      if (config.fetchPositionHistory && positions.length > 0) {
+                        await withRetry(
+                          () => upsertPositionHistory(supabase, platformKey, traderId, positions),
+                          `${platformKey}:${traderId} save position history`,
+                          RETRY_CONFIG,
+                          traderSignal
+                        )
+                        const breakdown = calculateAssetBreakdown(positions)
+                        if (breakdown.length > 0) {
+                          await withRetry(
+                            () =>
+                              upsertAssetBreakdown(
+                                supabase,
+                                platformKey,
+                                traderId,
+                                period,
+                                breakdown
+                              ),
+                            `${platformKey}:${traderId} save asset breakdown`,
+                            RETRY_CONFIG,
+                            traderSignal
+                          )
+                        }
+                      }
+
+                      if (config.fetchCurrentPositions && currentPos.length > 0) {
+                        await withRetry(
+                          () =>
+                            upsertPortfolio(
+                              supabase,
+                              platformKey,
+                              traderId,
+                              currentPos.map((p) => ({
+                                symbol: p.symbol,
+                                direction: p.direction,
+                                investedPct: 'investedPct' in p ? p.investedPct : null,
+                                entryPrice: p.entryPrice,
+                                pnl:
+                                  'pnl' in p
+                                    ? p.pnl
+                                    : 'pnlUsd' in p
+                                      ? (p as PositionHistoryItem).pnlUsd
+                                      : null,
+                              }))
+                            ),
+                          `${platformKey}:${traderId} save current positions`,
+                          RETRY_CONFIG,
+                          traderSignal
+                        )
+                      }
+
+                      if (
+                        stats &&
+                        (stats.totalTrades != null || stats.profitableTradesPct != null)
+                      ) {
+                        // Pass position history to derive avg_holding_hours, avg_profit/loss, etc.
+                        stats = enhanceStatsWithDerivedMetrics(
+                          stats,
+                          curve,
+                          period,
+                          positions.length > 0 ? positions : undefined
+                        )
+                        const sdResult = await withRetry(
+                          () =>
+                            upsertStatsDetail(supabase, platformKey, traderId, period, stats!, {
+                              skipV2Sync: true,
+                            }),
+                          `${platformKey}:${traderId} save stats detail`,
+                          RETRY_CONFIG,
+                          traderSignal
+                        )
+                        if (sdResult.v2Update) pendingV2Updates.push(sdResult.v2Update)
+                      }
+
+                      // Always sync key metrics back to trader_snapshots_v2 from stats + equity curve.
+                      // This ensures new traders are immediately complete without waiting for daily cron.
+                      {
+                        const snapshotUpdate: Record<string, unknown> = {}
+                        if (stats?.profitableTradesPct != null)
+                          snapshotUpdate.win_rate = stats.profitableTradesPct
+                        if (stats?.maxDrawdown != null)
+                          snapshotUpdate.max_drawdown = stats.maxDrawdown
+                        if (stats?.totalTrades != null)
+                          snapshotUpdate.trades_count = stats.totalTrades
+                        if (stats?.sharpeRatio != null)
+                          snapshotUpdate.sharpe_ratio = stats.sharpeRatio
+                        // ROI from stats (e.g. Gains native API, Copin totalPnl/totalVolume)
+                        if (stats?.roi != null) snapshotUpdate.roi_pct = stats.roi
+                        if (stats?.pnl != null) snapshotUpdate.pnl_usd ??= stats.pnl
+
+                        // Compute from equity curve if stats didn't provide
+                        if (curve.length >= 2) {
+                          const lastPoint = curve[curve.length - 1]
+                          const firstPoint = curve[0]
+                          if (lastPoint.pnl != null) snapshotUpdate.pnl_usd ??= lastPoint.pnl
+                          // ROI from equity curve: (last.roi - first.roi) or last.roi if first is 0
+                          if (lastPoint.roi != null && !snapshotUpdate.roi_pct) {
+                            const roiVal =
+                              firstPoint.roi != null && firstPoint.roi !== 0
+                                ? lastPoint.roi - firstPoint.roi
+                                : lastPoint.roi
+                            if (roiVal !== 0) snapshotUpdate.roi_pct = roiVal
+                          }
+                          // Sharpe from daily returns if not from stats
+                          if (!snapshotUpdate.sharpe_ratio && curve.length >= 3) {
+                            const returns: number[] = []
+                            for (let j = 1; j < curve.length; j++) {
+                              if (curve[j].roi != null && curve[j - 1].roi != null) {
+                                returns.push(curve[j].roi! - curve[j - 1].roi!)
+                              }
+                            }
+                            if (returns.length >= 2) {
+                              const mean = returns.reduce((a, b) => a + b, 0) / returns.length
+                              const std = Math.sqrt(
+                                returns.reduce((a, r) => a + (r - mean) ** 2, 0) / returns.length
+                              )
+                              if (std > 0)
+                                snapshotUpdate.sharpe_ratio =
+                                  Math.round((mean / std) * Math.sqrt(365) * 100) / 100
+                            }
+                          }
+                          // Win rate from daily returns if not from stats (or if stats returned 0 — likely bad data)
+                          if (!snapshotUpdate.win_rate && curve.length >= 3) {
+                            const dailyReturns: number[] = []
+                            for (let j = 1; j < curve.length; j++) {
+                              if (curve[j].pnl != null && curve[j - 1].pnl != null) {
+                                dailyReturns.push(curve[j].pnl! - curve[j - 1].pnl!)
+                              }
+                            }
+                            if (dailyReturns.length >= 3) {
+                              const wins = dailyReturns.filter((r) => r > 0).length
+                              snapshotUpdate.win_rate =
+                                Math.round((wins / dailyReturns.length) * 10000) / 100
+                              snapshotUpdate.trades_count ??= dailyReturns.length
+                            }
+                          }
+                          // Max drawdown from equity curve if not from stats (or if stats returned 0 — likely bad data)
+                          if (!snapshotUpdate.max_drawdown && curve.length >= 3) {
+                            let peak = -Infinity
+                            let maxDD = 0
+                            for (const pt of curve) {
+                              const val = pt.roi ?? pt.pnl ?? 0
+                              if (val > peak) peak = val
+                              if (peak > 0) {
+                                const dd = ((peak - val) / peak) * 100
+                                if (dd > maxDD) maxDD = dd
+                              }
+                            }
+                            if (maxDD > 0)
+                              snapshotUpdate.max_drawdown = Math.round(maxDD * 100) / 100
+                          }
+                        }
+
+                        // Bitfinex ROI fallback: compute from rankings data when equity curve is empty
+                        if (platformKey === 'bitfinex' && !snapshotUpdate.roi_pct) {
+                          const windowArg = period === '7D' ? ('7d' as const) : ('30d' as const)
+                          const roiFromRankings = await fetchBitfinexRoi(traderId, windowArg)
+                          if (roiFromRankings != null) {
+                            snapshotUpdate.roi_pct = Math.round(roiFromRankings * 100) / 100
+                          }
+                        }
+
+                        // Batch v2 sync: push to pendingV2Updates instead of per-row UPDATE.
+                        // The flush happens after each concurrency batch (line ~1042).
+                        // This eliminates ~5,000-6,000 per-row UPDATEs per enrichment cycle.
+                        const updates = Object.fromEntries(
+                          Object.entries(snapshotUpdate).filter(([, v]) => v != null)
+                        )
+                        if (Object.keys(updates).length > 0) {
+                          pendingV2Updates.push({
+                            platform: platformKey,
+                            trader_key: traderId,
+                            window: period,
+                            ...(updates.win_rate != null
+                              ? { win_rate: updates.win_rate as number }
+                              : {}),
+                            ...(updates.max_drawdown != null
+                              ? { max_drawdown: updates.max_drawdown as number }
+                              : {}),
+                            ...(updates.trades_count != null
+                              ? { trades_count: updates.trades_count as number }
+                              : {}),
+                            ...(updates.sharpe_ratio != null
+                              ? { sharpe_ratio: updates.sharpe_ratio as number }
+                              : {}),
+                            ...(updates.roi_pct != null
+                              ? { roi_pct: updates.roi_pct as number }
+                              : {}),
+                            ...(updates.pnl_usd != null
+                              ? { pnl_usd: updates.pnl_usd as number }
+                              : {}),
+                          })
+                        }
+                      }
+
+                      // On-chain wallet enrichment DB writes (AUM + portfolio)
+                      if (isDexPlatform(platformKey) && walletAum != null && walletAum > 10) {
+                        const { error: aumErr } = await supabase
+                          .from('trader_stats_detail')
+                          .update({ aum: walletAum })
+                          .eq('source', platformKey)
+                          .eq('source_trader_id', traderId)
+                          .eq('period', period)
+                        if (aumErr) {
+                          logger.warn(
+                            `[enrich] AUM update failed for ${platformKey}/${traderId}: ${aumErr.message}`
+                          )
+                        }
+
+                        if (!config.fetchCurrentPositions) {
+                          try {
+                            const walletPortfolio = await fetchWalletPortfolio(
+                              platformKey,
+                              traderId
+                            )
+                            if (walletPortfolio.length > 0) {
+                              await upsertPortfolio(
+                                supabase,
+                                platformKey,
+                                traderId,
+                                walletPortfolio
+                              )
+                            }
+                          } catch (_err) {
+                            walletEnrichFailCount++ /* logged at platform level */
+                          }
+                        }
+                      }
+
+                      results[platformKey].enriched++
+                    })(),
+                    traderTimeoutMs,
+                    `${platformKey}/${traderId}`
+                  )
+                } catch (err) {
+                  results[platformKey].failed++
+                  const errMsg = err instanceof Error ? err.message : String(err)
+                  if (results[platformKey].errors.length < 5) {
+                    results[platformKey].errors.push(`${traderId}: ${errMsg}`)
+                  }
+                  throw err // Re-throw to be caught by allSettled
+                } finally {
+                  clearTimeout(traderTimer)
+                  platformController.signal.removeEventListener('abort', onPlatformAbort)
+                }
+              })
+            )
+
+            // Process allSettled results
+            const successful = batchResults.filter((r) => r.status === 'fulfilled')
+            const failed = batchResults.filter((r) => r.status === 'rejected')
+
+            if (failed.length > 0) {
+              logger.warn(
+                `[enrich] Batch ${platformKey}: ${successful.length} success, ${failed.length} failed`
+              )
+              failed.forEach((result, idx) => {
+                const reason =
+                  result.reason instanceof Error ? result.reason.message : String(result.reason)
+                logger.error(`[enrich] Failed trader ${idx}: ${reason}`)
+              })
+            }
+
+            // Flush accumulated v2 updates in batches of 500 to avoid oversized RPC payloads
+            if (pendingV2Updates.length >= 500) {
+              const toFlush = pendingV2Updates.splice(0, 500)
+              try {
+                const { data: updatedCount, error: rpcErr } = await supabase.rpc(
+                  'bulk_enrich_sync_v2',
+                  { updates: toFlush }
+                )
+                if (rpcErr) {
+                  logger.warn(
+                    `[enrich] bulk_enrich_sync_v2 mid-batch flush failed: ${rpcErr.message}`
+                  )
+                } else {
+                  logger.info(
+                    `[enrich] ${platformKey}: flushed ${toFlush.length} v2 updates (${updatedCount} rows updated)`
+                  )
+                }
+              } catch (flushErr) {
+                logger.warn(
+                  `[enrich] bulk_enrich_sync_v2 mid-batch flush exception: ${flushErr instanceof Error ? flushErr.message : String(flushErr)}`
+                )
+              }
+            }
+
+            if (i + config.concurrency < traders.length) {
+              await sleep(config.delayMs)
+            }
+          }
+
+          // Flush remaining v2 updates after all traders processed for this platform
+          if (pendingV2Updates.length > 0) {
+            for (let fi = 0; fi < pendingV2Updates.length; fi += 500) {
+              const batch = pendingV2Updates.slice(fi, fi + 500)
+              try {
+                const { data: updatedCount, error: rpcErr } = await supabase.rpc(
+                  'bulk_enrich_sync_v2',
+                  { updates: batch }
+                )
+                if (rpcErr) {
+                  logger.warn(`[enrich] bulk_enrich_sync_v2 final flush failed: ${rpcErr.message}`)
+                } else {
+                  logger.info(
+                    `[enrich] ${platformKey}: final flush ${batch.length} v2 updates (${updatedCount} rows updated)`
+                  )
+                }
+              } catch (flushErr) {
+                logger.warn(
+                  `[enrich] bulk_enrich_sync_v2 final flush exception: ${flushErr instanceof Error ? flushErr.message : String(flushErr)}`
+                )
+              }
+            }
+            pendingV2Updates.length = 0
+          }
+        })(),
+        platformTimeoutMs,
+        `platform:${platformKey}`
       )
-
-      // Process allSettled results
-      const successful = batchResults.filter(r => r.status === 'fulfilled')
-      const failed = batchResults.filter(r => r.status === 'rejected')
-
-      if (failed.length > 0) {
-        logger.warn(`[enrich] Batch ${platformKey}: ${successful.length} success, ${failed.length} failed`)
-        failed.forEach((result, idx) => {
-          const reason = result.reason instanceof Error ? result.reason.message : String(result.reason)
-          logger.error(`[enrich] Failed trader ${idx}: ${reason}`)
-        })
-      }
-
-      // Flush accumulated v2 updates in batches of 500 to avoid oversized RPC payloads
-      if (pendingV2Updates.length >= 500) {
-        const toFlush = pendingV2Updates.splice(0, 500)
-        try {
-          const { data: updatedCount, error: rpcErr } = await supabase.rpc('bulk_enrich_sync_v2', { updates: toFlush })
-          if (rpcErr) {
-            logger.warn(`[enrich] bulk_enrich_sync_v2 mid-batch flush failed: ${rpcErr.message}`)
-          } else {
-            logger.info(`[enrich] ${platformKey}: flushed ${toFlush.length} v2 updates (${updatedCount} rows updated)`)
-          }
-        } catch (flushErr) {
-          logger.warn(`[enrich] bulk_enrich_sync_v2 mid-batch flush exception: ${flushErr instanceof Error ? flushErr.message : String(flushErr)}`)
-        }
-      }
-
-      if (i + config.concurrency < traders.length) {
-        await sleep(config.delayMs)
-      }
-    }
-
-    // Flush remaining v2 updates after all traders processed for this platform
-    if (pendingV2Updates.length > 0) {
-      for (let fi = 0; fi < pendingV2Updates.length; fi += 500) {
-        const batch = pendingV2Updates.slice(fi, fi + 500)
-        try {
-          const { data: updatedCount, error: rpcErr } = await supabase.rpc('bulk_enrich_sync_v2', { updates: batch })
-          if (rpcErr) {
-            logger.warn(`[enrich] bulk_enrich_sync_v2 final flush failed: ${rpcErr.message}`)
-          } else {
-            logger.info(`[enrich] ${platformKey}: final flush ${batch.length} v2 updates (${updatedCount} rows updated)`)
-          }
-        } catch (flushErr) {
-          logger.warn(`[enrich] bulk_enrich_sync_v2 final flush exception: ${flushErr instanceof Error ? flushErr.message : String(flushErr)}`)
-        }
-      }
-      pendingV2Updates.length = 0
-    }
-        })(), platformTimeoutMs, `platform:${platformKey}`)
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       logger.error(`[enrich] Platform ${platformKey} failed/timed out: ${errMsg}`)
@@ -1096,19 +1383,24 @@ export async function runEnrichment(params: {
     totalSuppressedErrors += suppressedErrors
 
     if (walletEnrichFailCount > 0) {
-      logger.warn(`[Enrichment] ${walletEnrichFailCount} wallet enrichments failed for ${platformKey}`)
+      logger.warn(
+        `[Enrichment] ${walletEnrichFailCount} wallet enrichments failed for ${platformKey}`
+      )
     }
     if (suppressedErrors > 0) {
-      logger.warn(`[enrich] ${platformKey}: ${suppressedErrors} API calls failed silently (data returned as empty)`)
+      logger.warn(
+        `[enrich] ${platformKey}: ${suppressedErrors} API calls failed silently (data returned as empty)`
+      )
     }
-
   }
 
   const duration = Date.now() - startTime
   const totalEnriched = Object.values(results).reduce((sum, r) => sum + r.enriched, 0)
   const totalFailed = Object.values(results).reduce((sum, r) => sum + r.failed, 0)
 
-  logger.warn(`[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed, ${totalSuppressedErrors} API errors suppressed`)
+  logger.warn(
+    `[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed, ${totalSuppressedErrors} API errors suppressed`
+  )
 
   // Alert on high failure rate
   const total = totalEnriched + totalFailed
@@ -1117,14 +1409,26 @@ export async function runEnrichment(params: {
     await captureMessage(
       `[Enrichment] High failure rate: ${(failureRate * 100).toFixed(0)}% (${totalFailed}/${total})`,
       'error',
-      { period, platforms: platforms.join(', '), failureRate: failureRate.toFixed(2), totalFailed, totalEnriched }
+      {
+        period,
+        platforms: platforms.join(', '),
+        failureRate: failureRate.toFixed(2),
+        totalFailed,
+        totalEnriched,
+      }
     )
     await sendRateLimitedAlert(
       {
         title: 'Enrichment failure rate过高',
         message: `${period} period enrichment failure rate ${(failureRate * 100).toFixed(0)}%\nFailed: ${totalFailed}/${total}`,
         level: failureRate > 0.5 ? 'critical' : 'warning',
-        details: { '周期': period, '平台': platforms.join(', '), '成功': totalEnriched, '失败': totalFailed, 'failure rate': `${(failureRate * 100).toFixed(1)}%` },
+        details: {
+          周期: period,
+          平台: platforms.join(', '),
+          成功: totalEnriched,
+          失败: totalFailed,
+          'failure rate': `${(failureRate * 100).toFixed(1)}%`,
+        },
       },
       `enrichment:${period}`,
       600000
@@ -1144,8 +1448,24 @@ export async function runEnrichment(params: {
     )
   } else {
     // <50% failure → log as success with warning metadata
-    await plog.success(totalEnriched, { period, duration, totalFailed, note: `${totalFailed} partial failures (acceptable)` })
+    await plog.success(totalEnriched, {
+      period,
+      duration,
+      totalFailed,
+      note: `${totalFailed} partial failures (acceptable)`,
+    })
   }
 
-  return { ok: totalFailed === 0, duration, period, summary: { total, enriched: totalEnriched, failed: totalFailed, suppressedErrors: totalSuppressedErrors }, results }
+  return {
+    ok: totalFailed === 0,
+    duration,
+    period,
+    summary: {
+      total,
+      enriched: totalEnriched,
+      failed: totalFailed,
+      suppressedErrors: totalSuppressedErrors,
+    },
+    results,
+  }
 }
