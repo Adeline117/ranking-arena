@@ -214,7 +214,13 @@ export async function generateMetadata({
   const { handle } = await params
   // Reject absurdly long handles early to prevent cache key bloat and DB abuse
   if (handle.length > 300) return notFound()
-  const decoded = decodeURIComponent(handle)
+
+  let decoded: string
+  try {
+    decoded = decodeURIComponent(handle)
+  } catch {
+    decoded = handle
+  }
   const BASE = BASE_URL
 
   try {
@@ -227,8 +233,8 @@ export async function generateMetadata({
 
       const name = resolved.handle || decoded
       const exchange = EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto'
-      const roi = lr?.roi
-      const score = lr?.arena_score
+      const roi = typeof lr?.roi === 'number' ? lr.roi : null
+      const score = typeof lr?.arena_score === 'number' ? lr.arena_score : null
       const rank = lr?.rank
 
       const parts = [
@@ -280,7 +286,12 @@ export async function generateMetadata({
     // Re-throw Next.js navigation errors (notFound, redirect) — they use special
     // error types that must propagate to the framework, not be swallowed.
     if (err && typeof err === 'object' && 'digest' in err) throw err
-    /* other errors: fall through to notFound below */
+    logger.error(
+      '[trader/generateMetadata] error for handle:',
+      decoded,
+      err instanceof Error ? err.message : err,
+      err instanceof Error ? err.stack?.slice(0, 300) : ''
+    )
   }
 
   // Trader not found — trigger 404 before streaming starts.
