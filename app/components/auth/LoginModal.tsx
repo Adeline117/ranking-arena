@@ -313,7 +313,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 width: '100%', padding: '12px 14px', borderRadius: tokens.radius.lg,
                 background: 'var(--glass-bg-light)',
                 border: '1px solid var(--glass-border-medium)',
-                color: 'var(--color-text-primary)', fontSize: 14,
+                color: 'var(--color-text-primary)', fontSize: 16,
                 outline: 'none', boxSizing: 'border-box', marginBottom: 12,
               }}
             />
