@@ -116,6 +116,13 @@ export default function QuestionStep({ question, questionNumber, totalQuestions,
                     e.currentTarget.style.background = 'var(--color-bg-tertiary)'
                   }
                 }}
+                onFocus={(e) => {
+                  e.currentTarget.style.outline = '2px solid var(--focus-ring-color, rgba(139, 111, 168, 0.5))'
+                  e.currentTarget.style.outlineOffset = '2px'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.outline = 'none'
+                }}
               >
                 <span style={{ fontSize: 16, fontWeight: 700 }}>{cfg.icon}</span>
                 <span>{tr(option.labelKey)}</span>
@@ -176,6 +183,13 @@ export default function QuestionStep({ question, questionNumber, totalQuestions,
                     e.currentTarget.style.borderColor = 'var(--glass-border-light)'
                     e.currentTarget.style.background = 'var(--color-bg-tertiary)'
                   }
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.outline = '2px solid var(--focus-ring-color, rgba(139, 111, 168, 0.5))'
+                  e.currentTarget.style.outlineOffset = '2px'
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.outline = 'none'
                 }}
               >
                 <span
