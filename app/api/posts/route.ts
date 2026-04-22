@@ -36,7 +36,9 @@ import { get as cacheGet, set as cacheSet, del as cacheDel } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { sendNotifications } from '@/lib/data/notifications'
 import { extractAndSyncHashtags } from '@/lib/data/hashtags'
-import { sanitizeInput, sanitizeText } from '@/lib/utils/sanitize'
+// sanitizeInput / sanitizeText are dynamically imported inside POST only
+// to avoid pulling isomorphic-dompurify (~10MB) into the module graph at
+// cold-start — the GET handler doesn't need it and was crashing on Vercel.
 
 // Zod schema for POST /api/posts
 const CreatePostSchema = z.object({
@@ -354,6 +356,7 @@ export const POST = withAuth(
       })
     }
     // Sanitize user content — strip HTML/scripts before DB storage (defense-in-depth)
+    const { sanitizeInput, sanitizeText } = await import('@/lib/utils/sanitize')
     const title = sanitizeInput(parsed.data.title, { maxLength: 200 })
     const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 10000 })
     const content_warning = parsed.data.content_warning
