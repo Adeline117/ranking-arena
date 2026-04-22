@@ -68,6 +68,19 @@ jobs:
           fi
           echo "No unsafe secret comparisons found ✅"
 
+      - name: Style — consistent error responses
+        run: |
+          # Count API routes using ad-hoc error patterns vs standard apiError/error()
+          ADHOC=$(grep -rn "NextResponse.json.*error.*status:" app/api/ --include="*.ts" \
+            | grep -v node_modules | grep -v __tests__ | grep -v 'apiError\|error(' | wc -l)
+          STANDARD=$(grep -rn "apiError\|error(" app/api/ --include="*.ts" \
+            | grep -v node_modules | grep -v __tests__ | wc -l)
+          echo "Ad-hoc error responses: $ADHOC"
+          echo "Standard error responses: $STANDARD"
+          if [ "$ADHOC" -gt 100 ]; then
+            echo "::warning::$ADHOC API routes still use ad-hoc error responses. Migrate to apiError() from lib/api/response.ts"
+          fi
+
   # ─────────────────────────────────────────────
   # Stage 2: Lint + Type Check
   # ─────────────────────────────────────────────
