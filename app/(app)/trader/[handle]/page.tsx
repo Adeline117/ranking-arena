@@ -199,8 +199,13 @@ export async function generateStaticParams() {
   return data
     .filter((t: { handle: string | null }) => {
       if (!t.handle || !t.handle.trim()) return false
+      const trimmed = t.handle.trim()
+      // Skip non-ASCII handles (Chinese, Korean, etc.) — their percent-encoded
+      // paths cause 500s on Vercel's ISR filesystem. They still work fine via
+      // dynamic rendering (dynamicParams = true).
+      if (/[^\x20-\x7E]/.test(trimmed)) return false
       // Filter handles whose URL-encoded form would exceed filesystem limits
-      const encoded = encodeURIComponent(t.handle.trim())
+      const encoded = encodeURIComponent(trimmed)
       return encoded.length <= 200
     })
     .map((t: { handle: string | null }) => ({ handle: encodeURIComponent(t.handle!.trim()) }))
