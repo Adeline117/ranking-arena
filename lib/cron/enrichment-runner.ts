@@ -393,14 +393,22 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   gains: {
     platform: 'gains',
-    // 2026-04-22: Switched to Copin-first (same pattern as dYdX migration).
-    // Native Gains API dead, Etherscan rate-limited. Copin GNS protocol
-    // provides positions, stats, equity curves reliably with 8s hard timeout.
-    fetchEquityCurve: fetchGainsEquityCurve,
+    // 2026-04-22: Copin GNS position endpoints return [] (no data).
+    // Reverted to on-chain primary. Copin only usable for leaderboard stats fallback.
+    // Etherscan is slow but partially works (~3% coverage).
+    fetchEquityCurve: async (traderId: string, days: number) => {
+      const onchain = await fetchGainsOnchainEquityCurve(traderId, days)
+      if (onchain.length > 0) return onchain
+      return fetchGainsEquityCurve(traderId, days)
+    },
     fetchStatsDetail: fetchGainsStatsDetail,
-    fetchPositionHistory: fetchGainsPositionHistory,
-    concurrency: 5,
-    delayMs: 500, // Copin API handles higher concurrency than Etherscan
+    fetchPositionHistory: async (traderId: string) => {
+      const onchain = await fetchGainsOnchainPositionHistory(traderId)
+      if (onchain.length > 0) return onchain
+      return fetchGainsPositionHistory(traderId)
+    },
+    concurrency: 2,
+    delayMs: 1500, // Etherscan rate limits
   },
   kwenta: {
     platform: 'kwenta',
