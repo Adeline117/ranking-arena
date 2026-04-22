@@ -3,7 +3,7 @@
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 import { Box, Text } from '../base'
 
 interface PlatformStat {
@@ -63,11 +63,13 @@ export default function RankPercentileBadge({ rank, platform }: RankPercentileBa
   const { t } = useLanguage()
 
   // Fetch platform stats to get total trader count
-  const { data: statsData } = useSWR<PlatformStatsResponse>(
-    '/api/rankings/platform-stats',
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 300_000, errorRetryCount: 1 }
-  )
+  const { data: statsData } = useQuery<PlatformStatsResponse>({
+    queryKey: ['rankings-platform-stats'],
+    queryFn: () => fetcher('/api/rankings/platform-stats'),
+    refetchOnWindowFocus: false,
+    staleTime: 300_000,
+    retry: 1,
+  })
 
   if (!rank || rank <= 0 || !platform) return null
 
