@@ -1,37 +1,21 @@
 'use client'
 
 /**
- * SWR 数据获取 Hooks
- * 提供自动缓存、重新验证和错误处理
+ * Data fetching hooks — migrated from SWR to React Query.
  *
- * Pure fetcher functions have been extracted to ./fetchers.ts and are
- * re-exported here for backward compatibility during the SWR → React Query migration.
+ * Pure fetcher functions live in ./fetchers.ts and are
+ * re-exported here for backward compatibility.
+ *
+ * Cache utility functions (refreshCache, clearCache, etc.) now use
+ * the React Query queryClient from Providers.
  */
 
-import useSWR, { SWRConfiguration, mutate as globalMutate, SWRResponse } from 'swr'
-import useSWRInfinite, { SWRInfiniteConfiguration } from 'swr/infinite'
+import { useQuery, useInfiniteQuery, type UseQueryResult } from '@tanstack/react-query'
+import { queryClient } from '@/app/components/Providers'
 
-// Re-export pure fetchers from the shared module (used by both SWR and React Query)
+// Re-export pure fetchers from the shared module
 export { fetcher, fetcherWithAuth, fetchWithTimeout } from './fetchers'
 import { fetcher, fetcherWithAuth } from './fetchers'
-
-// ============================================
-// 默认配置
-// ============================================
-
-const defaultConfig: SWRConfiguration = {
-  revalidateOnFocus: false,
-  revalidateOnReconnect: true,
-  dedupingInterval: 5000, // 增加到 5 秒，减少重复请求
-  errorRetryCount: 2, // 减少重试次数，避免长时间等待
-  errorRetryInterval: 3000, // 减少重试间隔
-  shouldRetryOnError: (error) => {
-    // Retry network errors + 5xx + 429 rate limit. Don't retry other 4xx.
-    if (error?.status === 429) return true // rate limit — retry after backoff
-    if (error?.status >= 400 && error?.status < 500) return false
-    return true
-  },
-}
 
 // ============================================
 // 交易员相关 Hooks
@@ -68,15 +52,13 @@ export function useTraderList(options: UseTraderListOptions = {}) {
 
   const url = `/api/traders?${params.toString()}`
 
-  return useSWR<TradersResponse>(
-    enabled ? url : null,
-    fetcher,
-    {
-      ...defaultConfig,
-      revalidateOnFocus: false,
-      refreshInterval: 30 * 60 * 1000, // 30 分钟自动刷新（数据每 30 分钟由 cron 更新）
-    }
-  )
+  return useQuery<TradersResponse>({
+    queryKey: ['trader-list', timeRange, exchange, limit],
+    queryFn: () => fetcher(url),
+    enabled,
+    refetchOnWindowFocus: false,
+    refetchInterval: 30 * 60 * 1000,
+  })
 }
 
 interface TraderDetailResponse {
@@ -103,17 +85,15 @@ interface TraderDetailResponse {
  * 获取交易员详情
  */
 export function useTraderDetail(handle: string | undefined) {
-  const url = handle ? `/api/traders/${encodeURIComponent(handle)}` : null
+  const url = handle ? `/api/traders/${encodeURIComponent(handle)}` : ''
 
-  return useSWR<TraderDetailResponse>(
-    url,
-    fetcher,
-    {
-      ...defaultConfig,
-      revalidateOnFocus: false,
-      refreshInterval: 5 * 60 * 1000, // 5 分钟刷新（enrichment 每 6 小时更新）
-    }
-  )
+  return useQuery<TraderDetailResponse>({
+    queryKey: ['trader-detail', handle],
+    queryFn: () => fetcher(url),
+    enabled: !!handle,
+    refetchOnWindowFocus: false,
+    refetchInterval: 5 * 60 * 1000,
+  })
 }
 
 interface EquityResponse {
@@ -126,17 +106,15 @@ interface EquityResponse {
  * 获取交易员资金曲线
  */
 export function useTraderEquity(handle: string | undefined) {
-  const url = handle ? `/api/traders/${encodeURIComponent(handle)}/equity` : null
+  const url = handle ? `/api/traders/${encodeURIComponent(handle)}/equity` : ''
 
-  return useSWR<EquityResponse>(
-    url,
-    fetcher,
-    {
-      ...defaultConfig,
-      revalidateOnFocus: false,
-      refreshInterval: 60 * 60 * 1000, // 60 分钟刷新资金曲线（enrichment 每 4-6 小时更新）
-    }
-  )
+  return useQuery<EquityResponse>({
+    queryKey: ['trader-equity', handle],
+    queryFn: () => fetcher(url),
+    enabled: !!handle,
+    refetchOnWindowFocus: false,
+    refetchInterval: 60 * 60 * 1000,
+  })
 }
 
 interface PositionsResponse {
@@ -156,16 +134,14 @@ interface PositionsResponse {
  * 获取交易员持仓
  */
 export function useTraderPositions(handle: string | undefined) {
-  const url = handle ? `/api/traders/${encodeURIComponent(handle)}/positions` : null
+  const url = handle ? `/api/traders/${encodeURIComponent(handle)}/positions` : ''
 
-  return useSWR<PositionsResponse>(
-    url,
-    fetcher,
-    {
-      ...defaultConfig,
-      refreshInterval: 5 * 60 * 1000, // 5 分钟刷新持仓（位置数据不需要亚分钟级刷新）
-    }
-  )
+  return useQuery<PositionsResponse>({
+    queryKey: ['trader-positions', handle],
+    queryFn: () => fetcher(url),
+    enabled: !!handle,
+    refetchInterval: 5 * 60 * 1000,
+  })
 }
 
 // ============================================
@@ -213,15 +189,13 @@ export function usePosts(options: UsePostsOptions = {}) {
 
   const url = `/api/posts?${params.toString()}`
 
-  return useSWR<PostsResponse>(
-    enabled ? url : null,
-    fetcher,
-    {
-      ...defaultConfig,
-      revalidateOnFocus: true,
-      refreshInterval: 5 * 60 * 1000, // 5 min — use Realtime for instant updates, polling as fallback
-    }
-  )
+  return useQuery<PostsResponse>({
+    queryKey: ['posts', groupId, sortBy, limit],
+    queryFn: () => fetcher(url),
+    enabled,
+    refetchOnWindowFocus: true,
+    refetchInterval: 5 * 60 * 1000,
+  })
 }
 
 /**
@@ -230,27 +204,25 @@ export function usePosts(options: UsePostsOptions = {}) {
 export function usePostsInfinite(options: UsePostsOptions = {}) {
   const { groupId, sortBy = 'created_at', limit = 20, enabled = true } = options
 
-  const getKey = (pageIndex: number, previousPageData: PostsResponse | null) => {
-    if (!enabled) return null
-    if (previousPageData && !previousPageData.hasMore) return null
-
-    const params = new URLSearchParams()
-    if (groupId) params.set('group_id', groupId)
-    if (sortBy) params.set('sort_by', sortBy)
-    params.set('limit', String(limit))
-    params.set('offset', String(pageIndex * limit))
-
-    return `/api/posts?${params.toString()}`
-  }
-
-  const config: SWRInfiniteConfiguration<PostsResponse> = {
-    revalidateOnFocus: false,
-    revalidateFirstPage: false,
-    initialSize: 1,
-    errorRetryCount: 2,
-  }
-
-  return useSWRInfinite<PostsResponse>(getKey, fetcher, config)
+  return useInfiniteQuery<PostsResponse>({
+    queryKey: ['posts-infinite', groupId, sortBy, limit],
+    queryFn: ({ pageParam = 0 }) => {
+      const params = new URLSearchParams()
+      if (groupId) params.set('group_id', groupId)
+      if (sortBy) params.set('sort_by', sortBy)
+      params.set('limit', String(limit))
+      params.set('offset', String((pageParam as number) * limit))
+      return fetcher(`/api/posts?${params.toString()}`)
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, _allPages, lastPageParam) => {
+      if (!lastPage.hasMore) return undefined
+      return (lastPageParam as number) + 1
+    },
+    enabled,
+    refetchOnWindowFocus: false,
+    retry: 2,
+  })
 }
 
 interface PostDetailResponse {
@@ -275,16 +247,14 @@ interface PostDetailResponse {
  * 获取帖子详情
  */
 export function usePostDetail(postId: string | undefined) {
-  const url = postId ? `/api/posts/${postId}` : null
+  const url = postId ? `/api/posts/${postId}` : ''
 
-  return useSWR<PostDetailResponse>(
-    url,
-    fetcher,
-    {
-      ...defaultConfig,
-      revalidateOnFocus: false,
-    }
-  )
+  return useQuery<PostDetailResponse>({
+    queryKey: ['post-detail', postId],
+    queryFn: () => fetcher(url),
+    enabled: !!postId,
+    refetchOnWindowFocus: false,
+  })
 }
 
 // ============================================
@@ -305,15 +275,12 @@ interface MarketData {
  * 获取市场数据
  */
 export function useMarketData() {
-  return useSWR<MarketData>(
-    '/api/market',
-    fetcher,
-    {
-      ...defaultConfig,
-      refreshInterval: 30 * 1000, // 优化为 30 秒刷新，减少请求频率
-      revalidateOnFocus: false, // Already refreshing every 30s; focus refetch adds flicker
-    }
-  )
+  return useQuery<MarketData>({
+    queryKey: ['market-data'],
+    queryFn: () => fetcher('/api/market'),
+    refetchInterval: 30 * 1000,
+    refetchOnWindowFocus: false,
+  })
 }
 
 // ============================================
@@ -333,16 +300,14 @@ interface UserProfile {
  * 获取用户资料
  */
 export function useUserProfile(handle: string | undefined, token?: string) {
-  const url = handle ? `/api/users/${encodeURIComponent(handle)}` : null
+  const url = handle ? `/api/users/${encodeURIComponent(handle)}` : ''
 
-  return useSWR<UserProfile>(
-    url,
-    () => (url ? fetcherWithAuth(url, token) : Promise.reject('No URL')),
-    {
-      ...defaultConfig,
-      revalidateOnFocus: false,
-    }
-  )
+  return useQuery<UserProfile>({
+    queryKey: ['user-profile', handle],
+    queryFn: () => fetcherWithAuth(url, token),
+    enabled: !!handle,
+    refetchOnWindowFocus: false,
+  })
 }
 
 // ============================================
@@ -367,17 +332,15 @@ interface NotificationsResponse {
  * 获取通知列表
  */
 export function useNotifications(userId: string | undefined, token?: string) {
-  const url = userId ? '/api/notifications' : null
+  const url = userId ? '/api/notifications' : ''
 
-  return useSWR<NotificationsResponse>(
-    url,
-    () => (url ? fetcherWithAuth(url, token) : Promise.reject('No URL')),
-    {
-      ...defaultConfig,
-      refreshInterval: 2 * 60 * 1000, // 2 min — Realtime handles instant push, polling as fallback
-      revalidateOnFocus: true, // Refresh on tab focus for freshness
-    }
-  )
+  return useQuery<NotificationsResponse>({
+    queryKey: ['notifications', userId],
+    queryFn: () => fetcherWithAuth(url, token),
+    enabled: !!userId,
+    refetchInterval: 2 * 60 * 1000,
+    refetchOnWindowFocus: true,
+  })
 }
 
 // ============================================
@@ -388,33 +351,44 @@ export function useNotifications(userId: string | undefined, token?: string) {
  * 手动刷新指定 key 的缓存
  */
 export function refreshCache(key: string) {
-  return globalMutate(key)
+  return queryClient.invalidateQueries({ queryKey: [key] })
 }
 
 /**
  * 刷新所有匹配模式的缓存
  */
 export function refreshCacheByPattern(pattern: RegExp) {
-  return globalMutate(
-    (key: string) => typeof key === 'string' && pattern.test(key),
-    undefined,
-    { revalidate: true }
-  )
+  return queryClient.invalidateQueries({
+    predicate: (query) => {
+      const key = JSON.stringify(query.queryKey)
+      return pattern.test(key)
+    },
+  })
 }
 
 /**
  * 清除指定 key 的缓存
  */
 export function clearCache(key: string) {
-  return globalMutate(key, undefined, { revalidate: false })
+  return queryClient.removeQueries({ queryKey: [key] })
 }
 
 /**
  * 预填充缓存数据
  */
 export function prefillCache<T>(key: string, data: T) {
-  return globalMutate(key, data, { revalidate: false })
+  return queryClient.setQueryData([key], data)
 }
+
+// ============================================
+// Backward-compat: SWRResponse shape adapter
+// ============================================
+
+/**
+ * @deprecated — provided for backward compat during migration.
+ * React Query's UseQueryResult has the same data/error/isLoading shape.
+ */
+type SWRResponse<T = unknown> = UseQueryResult<T>
 
 // ============================================
 // 类型导出
