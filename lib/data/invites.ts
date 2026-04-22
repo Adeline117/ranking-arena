@@ -66,12 +66,7 @@ export async function createInviteCode(
   creatorId: string,
   options: CreateInviteOptions = {}
 ): Promise<InviteCode> {
-  const {
-    maxUses = 10,
-    trialDays = 7,
-    trialTier = 'pro',
-    expiresInDays = 30,
-  } = options
+  const { maxUses = 10, trialDays = 7, trialTier = 'pro', expiresInDays = 30 } = options
 
   const code = generateInviteCode()
   const expiresAt = expiresInDays
@@ -109,7 +104,9 @@ export async function validateInviteCode(
 ): Promise<{ valid: boolean; invite?: InviteCode; error?: string }> {
   const { data: invite, error } = await supabase
     .from('invite_codes')
-    .select('id, code, creator_id, max_uses, current_uses, trial_days, trial_tier, expires_at, created_at, is_active')
+    .select(
+      'id, code, creator_id, max_uses, current_uses, trial_days, trial_tier, expires_at, created_at, is_active'
+    )
     .eq('code', code.toUpperCase())
     .single()
 
@@ -133,83 +130,32 @@ export async function validateInviteCode(
 }
 
 /**
- * 兑换邀请码
+ * 兑换邀请码 — 通过 PostgreSQL RPC 保证原子性
+ *
+ * All validation + 3 writes (redemption, counter increment, subscription)
+ * happen in a single database transaction with SELECT ... FOR UPDATE
+ * to prevent race conditions on current_uses.
  */
 export async function redeemInviteCode(
   supabase: SupabaseClient,
   code: string,
   userId: string
 ): Promise<{ success: boolean; trialExpiresAt?: string; error?: string }> {
-  // 1. 验证邀请码
-  const validation = await validateInviteCode(supabase, code)
-  if (!validation.valid || !validation.invite) {
-    return { success: false, error: validation.error }
-  }
+  const { data, error } = await supabase.rpc('redeem_invite_code', {
+    p_code: code,
+    p_user_id: userId,
+  })
 
-  const invite = validation.invite
-
-  // 2. 检查用户是否已使用过此邀请码
-  const { data: existingRedemption } = await supabase
-    .from('invite_redemptions')
-    .select('id')
-    .eq('code_id', invite.id)
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (existingRedemption) {
-    return { success: false, error: '你已经使用过此邀请码' }
-  }
-
-  // 3. 检查用户是否已使用过任何邀请码
-  const { data: anyRedemption } = await supabase
-    .from('invite_redemptions')
-    .select('id')
-    .eq('user_id', userId)
-    .maybeSingle()
-
-  if (anyRedemption) {
-    return { success: false, error: '你已经使用过其他邀请码' }
-  }
-
-  // 4. 计算试用到期时间
-  const trialExpiresAt = new Date(
-    Date.now() + invite.trial_days * 24 * 60 * 60 * 1000
-  ).toISOString()
-
-  // 5. 使用事务：记录兑换 + 更新使用次数 + 更新用户订阅
-  const { error: redemptionError } = await supabase
-    .from('invite_redemptions')
-    .insert({
-      code_id: invite.id,
-      user_id: userId,
-      trial_expires_at: trialExpiresAt,
-    })
-
-  if (redemptionError) {
+  if (error) {
     return { success: false, error: '兑换失败，请稍后重试' }
   }
 
-  // 6. 更新邀请码使用次数
-  await supabase
-    .from('invite_codes')
-    .update({ current_uses: invite.current_uses + 1 })
-    .eq('id', invite.id)
+  const result = data as { success: boolean; trial_expires_at?: string; error?: string }
+  if (!result.success) {
+    return { success: false, error: result.error }
+  }
 
-  // 7. 给用户添加试用订阅
-  await supabase
-    .from('user_subscriptions')
-    .upsert({
-      user_id: userId,
-      tier: invite.trial_tier,
-      status: 'trial',
-      trial_ends_at: trialExpiresAt,
-      source: 'invite_code',
-      invite_code_id: invite.id,
-    }, {
-      onConflict: 'user_id',
-    })
-
-  return { success: true, trialExpiresAt }
+  return { success: true, trialExpiresAt: result.trial_expires_at }
 }
 
 /**
@@ -221,9 +167,12 @@ export async function getUserInviteCodes(
 ): Promise<InviteCode[]> {
   const { data, error } = await supabase
     .from('invite_codes')
-    .select('id, code, creator_id, max_uses, current_uses, trial_days, trial_tier, expires_at, created_at, is_active')
+    .select(
+      'id, code, creator_id, max_uses, current_uses, trial_days, trial_tier, expires_at, created_at, is_active'
+    )
     .eq('creator_id', userId)
     .order('created_at', { ascending: false })
+    .limit(100)
 
   if (error) {
     throw error
@@ -244,6 +193,7 @@ export async function getInviteRedemptions(
     .select('id, code_id, user_id, redeemed_at, trial_expires_at')
     .eq('code_id', codeId)
     .order('redeemed_at', { ascending: false })
+    .limit(500)
 
   if (error) {
     throw error
@@ -302,9 +252,7 @@ export async function checkUserTrialStatus(
     return { isTrial: false }
   }
 
-  const daysRemaining = Math.ceil(
-    (expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000)
-  )
+  const daysRemaining = Math.ceil((expiresAt.getTime() - Date.now()) / (24 * 60 * 60 * 1000))
 
   return {
     isTrial: true,
