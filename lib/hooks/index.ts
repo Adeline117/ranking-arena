@@ -1,7 +1,7 @@
 /**
  * 自定义 Hooks 统一导出
  *
- * 数据获取统一使用 SWR 实现（useSWR.ts）
+ * 数据获取统一使用 React Query 实现（useSWR.ts — now backed by @tanstack/react-query）
  */
 
 // Auth (Single Source of Truth)
@@ -51,7 +51,7 @@ export {
 } from './useTraderPositionsRealtime'
 
 // ============================================
-// SWR 数据获取 - 推荐使用
+// React Query 数据获取 - 推荐使用
 // ============================================
 
 // 交易员相关
