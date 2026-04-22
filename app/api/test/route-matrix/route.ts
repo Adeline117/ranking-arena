@@ -9,20 +9,20 @@
  */
 
 import { NextResponse } from 'next/server'
-import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { PLATFORM_ROUTES } from '@/lib/connectors/route-config'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
 export async function GET(req: Request) {
-  const auth = req.headers.get('Authorization')
-  if (auth !== `Bearer ${env.CRON_SECRET}`) {
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
   return NextResponse.json({
-    message: 'Use scripts/test-route-matrix.ts for full testing. This endpoint returns current route config.',
+    message:
+      'Use scripts/test-route-matrix.ts for full testing. This endpoint returns current route config.',
     route_config: PLATFORM_ROUTES,
     env: {
       vps_sg: process.env.VPS_PROXY_SG ? 'configured' : 'missing',

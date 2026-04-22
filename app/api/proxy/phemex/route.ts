@@ -10,13 +10,14 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { env } from '@/lib/env'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('api:phemex-proxy')
 
 const ALLOWED_RESPONSE_TYPES = new Set([
   'application/json',
-  'text/plain',  // phemex sometimes returns text/plain for JSON
+  'text/plain', // phemex sometimes returns text/plain for JSON
 ])
 function safeContentType(upstream: string | null): string {
   if (!upstream) return 'application/json'
@@ -28,14 +29,8 @@ export const runtime = 'edge'
 export const preferredRegion = ['iad1'] // US East — different from default hnd1
 
 export async function GET(req: NextRequest) {
-  // SECURITY: Reject if CRON_SECRET not configured in production
-  if (!env.CRON_SECRET && process.env.NODE_ENV === 'production') {
-    log.error('CRON_SECRET not configured')
-    return NextResponse.json({ error: 'Server misconfigured' }, { status: 503 })
-  }
-
-  const auth = req.headers.get('Authorization')
-  if (!env.CRON_SECRET || auth !== `Bearer ${env.CRON_SECRET}`) {
+  // SECURITY: timing-safe auth via shared utility
+  if (!verifyCronSecret(req)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
@@ -50,8 +45,9 @@ export async function GET(req: NextRequest) {
 
     const resp = await fetch(targetUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'application/json',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+        Accept: 'application/json',
       },
     })
 
