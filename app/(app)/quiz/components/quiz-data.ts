@@ -470,8 +470,8 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
     format: 'yesno',
     titleKey: 'quizQ16',
     options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { analyst: 1.0, paperhands: 0.5, strategist: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { degen: 1.0, scalper: 0.25 } },
+      { id: 'yes', labelKey: 'quizYes', scores: { analyst: 1.0, strategist: 0.5, sniper: 0.25 } },
+      { id: 'no', labelKey: 'quizNo', scores: { degen: 1.0, tourist: 0.5 } },
       { id: 'unsure', labelKey: 'quizUnsure', scores: { copycat: 0.5, narrator: 0.25 } },
     ],
   },
@@ -503,9 +503,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
     format: 'yesno',
     titleKey: 'quizQ19',
     options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { tourist: 1.0, paperhands: 0.5, scalper: 0.25 } },
+      { id: 'yes', labelKey: 'quizYes', scores: { scalper: 1.0, analyst: 0.5, strategist: 0.25 } },
       { id: 'no', labelKey: 'quizNo', scores: { narrator: 1.0, hodler: 0.5 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { analyst: 0.25, strategist: 0.25 } },
+      { id: 'unsure', labelKey: 'quizUnsure', scores: { tourist: 0.5, copycat: 0.25 } },
     ],
   },
   // Q20 — Bot trading preference (Yes/No)
@@ -514,9 +514,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
     format: 'yesno',
     titleKey: 'quizQ20',
     options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { paperhands: 1.0, tourist: 0.5, strategist: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { whale: 1.0, narrator: 0.5, sniper: 0.25 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { analyst: 0.5, copycat: 0.25 } },
+      { id: 'yes', labelKey: 'quizYes', scores: { strategist: 1.0, analyst: 0.5, sniper: 0.25 } },
+      { id: 'no', labelKey: 'quizNo', scores: { whale: 1.0, degen: 0.5, tourist: 0.25 } },
+      { id: 'unsure', labelKey: 'quizUnsure', scores: { copycat: 0.5, hodler: 0.25 } },
     ],
   },
   // Q21 — New narrative forming
@@ -613,9 +613,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
     format: 'yesno',
     titleKey: 'quizQ29',
     options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { paperhands: 1.0, analyst: 0.5, strategist: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { whale: 1.0, degen: 0.25, contrarian: 0.5 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { copycat: 0.5, narrator: 0.25 } },
+      { id: 'yes', labelKey: 'quizYes', scores: { analyst: 1.0, strategist: 0.5, sniper: 0.25 } },
+      { id: 'no', labelKey: 'quizNo', scores: { degen: 1.0, whale: 0.5, contrarian: 0.25 } },
+      { id: 'unsure', labelKey: 'quizUnsure', scores: { copycat: 0.5, tourist: 0.25 } },
     ],
   },
   // Q30 — What does success in trading mean?

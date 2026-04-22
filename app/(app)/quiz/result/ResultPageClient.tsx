@@ -127,13 +127,24 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         />
 
         {/* Type Breakdown */}
-        {quizResult?.allTypePercents && (
-          <TypeBreakdown
-            allTypePercents={quizResult.allTypePercents}
-            primaryTypeId={typeId}
-            tr={t}
-          />
-        )}
+        {(() => {
+          const allTypePercents = quizResult?.allTypePercents ?? (() => {
+            // Fallback: primary type gets matchPercent, others get distributed
+            const fallback: Record<string, number> = {}
+            const otherPercent = Math.floor((100 - matchPercent) / 11)
+            PERSONALITY_TYPES.forEach(pt => {
+              fallback[pt.id] = pt.id === typeId ? matchPercent : otherPercent
+            })
+            return fallback
+          })()
+          return (
+            <TypeBreakdown
+              allTypePercents={allTypePercents}
+              primaryTypeId={typeId}
+              tr={t}
+            />
+          )
+        })()}
 
         {/* Master Biography */}
         <MasterSection type={pType} tr={t} />

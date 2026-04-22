@@ -41,8 +41,8 @@ export default function QuizClient() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const answeredCount = useMemo(
-    () => Object.keys(answers).length,
-    [answers]
+    () => mounted ? Object.keys(answers).length : 0,
+    [answers, mounted]
   )
 
   const handleStart = useCallback(() => {
