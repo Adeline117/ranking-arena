@@ -1,7 +1,7 @@
 /**
  * Trading Personality Quiz — Scoring algorithm
  *
- * Tallies weighted scores from all 15 answers, normalizes per-type,
+ * Tallies weighted scores from all 30 answers, normalizes per-type,
  * applies softmax with temperature 1.5 for smooth probability distribution,
  * then produces primary + secondary type, match percentage (55-99%),
  * and allTypePercents (summing to 100).
