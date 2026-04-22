@@ -1,6 +1,5 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
 import type { PersonalityType } from '../../components/types'
 
 interface StyleAnalysisProps {
@@ -16,36 +15,11 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
   }
 
   return (
-    <div
-      style={{
-        borderRadius: 14,
-        background: 'var(--color-bg-secondary)',
-        border: '1px solid var(--glass-border-light)',
-        padding: 'clamp(18px, 3.5vw, 28px)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 0, /* Controlled spacing */
-      }}
-    >
+    <div className="quiz-section-card">
       {/* Section header */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-        <div
-          style={{
-            width: 3,
-            height: 22,
-            borderRadius: 2,
-            background: type.gradient,
-          }}
-        />
-        <h3
-          style={{
-            fontSize: tokens.typography.fontSize.lg,
-            fontWeight: 700,
-            color: 'var(--color-text-primary)',
-            margin: 0,
-            letterSpacing: '-0.01em',
-          }}
-        >
+      <div className="quiz-section-header">
+        <div className="quiz-section-accent" style={{ background: type.gradient }} />
+        <h3 className="quiz-section-title">
           {tr('quizStyleTitle')}
         </h3>
       </div>
@@ -58,7 +32,6 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
           background: `${type.color}10`,
           border: `1px solid ${type.color}20`,
           alignSelf: 'flex-start',
-          marginBottom: 16,
         }}
       >
         <span
@@ -72,8 +45,8 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
         </span>
       </div>
 
-      {/* Meta: Risk + Time — tighter internal spacing */}
-      <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap', marginBottom: 20 }}>
+      {/* Meta: Risk gauge + Time horizon */}
+      <div style={{ display: 'flex', gap: 28, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span
             style={{
@@ -86,20 +59,18 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
           >
             {tr('quizRiskLevel')}
           </span>
-          {/* Segmented risk gauge instead of uniform dots */}
-          <div style={{ display: 'flex', gap: 3 }} role="img" aria-label={`Risk level ${type.riskLevel} out of 5`}>
+          {/* Segmented filled gauge */}
+          <div className="quiz-risk-gauge" role="img" aria-label={`Risk level ${type.riskLevel} out of 5`}>
             {[1, 2, 3, 4, 5].map((level) => (
               <div
                 key={level}
                 aria-hidden="true"
+                className="quiz-risk-segment"
+                data-active={level <= type.riskLevel ? 'true' : 'false'}
                 style={{
-                  width: 22,
-                  height: 8,
-                  borderRadius: 2,
-                  background: level <= type.riskLevel ? type.color : 'var(--color-bg-tertiary)',
-                  boxShadow: level <= type.riskLevel ? `0 0 4px ${type.color}40` : 'none',
-                  transition: 'background 0.3s, box-shadow 0.3s',
-                }}
+                  background: level <= type.riskLevel ? type.color : undefined,
+                  '--quiz-type-color-25': `${type.color}40`,
+                } as React.CSSProperties}
               />
             ))}
           </div>
@@ -128,9 +99,9 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
         </div>
       </div>
 
-      {/* Strengths & Weaknesses — different visual treatment */}
+      {/* Strengths & Weaknesses — different visual weight */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-        {/* Strengths — subtle green-tinted cards */}
+        {/* Strengths — tinted cards, more visual prominence */}
         <div style={{ flex: 1, minWidth: 170, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span
             style={{
@@ -145,34 +116,16 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             {tr('quizStrengths')}
           </span>
           {type.strengthKeys.map((key) => (
-            <div
-              key={key}
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'flex-start',
-                padding: '6px 10px',
-                borderRadius: 8,
-                background: 'color-mix(in srgb, var(--color-accent-success) 6%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--color-accent-success) 10%, transparent)',
-              }}
-            >
+            <div key={key} className="quiz-strength-item">
               <span style={{ color: 'var(--color-accent-success)', flexShrink: 0, marginTop: 1, fontSize: 12, fontWeight: 700 }}>+</span>
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 400,
-                  color: 'var(--color-text-secondary)',
-                  lineHeight: 1.5,
-                }}
-              >
+              <span style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
                 {tr(key)}
               </span>
             </div>
           ))}
         </div>
 
-        {/* Weaknesses — plain bordered, less emphasis */}
+        {/* Weaknesses — plain bordered, recessive */}
         <div style={{ flex: 1, minWidth: 170, display: 'flex', flexDirection: 'column', gap: 6 }}>
           <span
             style={{
@@ -187,26 +140,9 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
             {tr('quizWeaknesses')}
           </span>
           {type.weaknessKeys.map((key) => (
-            <div
-              key={key}
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'flex-start',
-                padding: '6px 10px',
-                borderRadius: 8,
-                border: '1px solid var(--glass-border-light)',
-              }}
-            >
+            <div key={key} className="quiz-weakness-item">
               <span style={{ color: 'var(--color-accent-error)', flexShrink: 0, marginTop: 1, fontSize: 12, fontWeight: 700 }}>-</span>
-              <span
-                style={{
-                  fontSize: 13,
-                  fontWeight: 400,
-                  color: 'var(--color-text-secondary)',
-                  lineHeight: 1.5,
-                }}
-              >
+              <span style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
                 {tr(key)}
               </span>
             </div>
