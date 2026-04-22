@@ -381,22 +381,21 @@ async function saveTraders(traders) {
     console.warn(`  [VALIDATION] Rejected ${rejectedCount}/${traders.length} traders`)
   }
 
+  // Write to individual columns (not metrics JSONB) — the app reads roi_pct, win_rate, etc.
+  // Root cause fix: was writing to metrics JSONB column which the app never reads.
   const snapshotsV2 = validTraders.map((t) => ({
     platform: t.source,
     market_type: 'futures',
     trader_key: t.source_trader_id,
     window: t.season_id,
     as_of_ts: t.captured_at,
-    metrics: {
-      roi: t.roi ?? 0,
-      pnl: t.pnl ?? 0,
-      win_rate: t.win_rate ?? null,
-      max_drawdown: t.max_drawdown ?? null,
-      sharpe_ratio: t.sharpe_ratio ?? null,
-      followers: t.followers ?? null,
-      arena_score: t.arena_score ?? null,
-      aum: t.aum ?? null,
-    },
+    roi_pct: t.roi ?? null,
+    pnl_usd: t.pnl ?? null,
+    win_rate: t.win_rate ?? null,
+    max_drawdown: t.max_drawdown ?? null,
+    sharpe_ratio: t.sharpe_ratio ?? null,
+    followers: t.followers ?? null,
+    arena_score: t.arena_score ?? null,
     quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.8 },
     updated_at: new Date().toISOString(),
   }))
