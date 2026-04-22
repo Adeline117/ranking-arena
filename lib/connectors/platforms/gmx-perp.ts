@@ -12,19 +12,26 @@
  * - Win rate = wins / (wins + losses)
  */
 
+import { getAddress } from 'viem'
 import { BaseConnector } from '../base'
 import { safeNumber } from '../utils'
 import { warnValidate } from '../schemas'
-import {
-  GmxSubgraphResponseSchema,
-} from './schemas'
+import { GmxSubgraphResponseSchema } from './schemas'
 import type {
-  DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
-  TraderSource, TraderProfile, SnapshotMetrics, QualityFlags, TraderTimeseries,
-  PlatformCapabilities, Window,
+  DiscoverResult,
+  ProfileResult,
+  SnapshotResult,
+  TimeseriesResult,
+  TraderSource,
+  TraderProfile,
+  SnapshotMetrics,
+  QualityFlags,
+  TraderTimeseries,
+  PlatformCapabilities,
+  Window,
 } from '../../types/leaderboard'
 
-const GMX_DECIMALS = 30  // GMX v2 uses 30 decimals for USD values
+const GMX_DECIMALS = 30 // GMX v2 uses 30 decimals for USD values
 
 export class GmxPerpConnector extends BaseConnector {
   readonly platform = 'gmx' as const
@@ -38,7 +45,12 @@ export class GmxPerpConnector extends BaseConnector {
     has_profiles: false,
     scraping_difficulty: 1,
     rate_limit: { rpm: 30, concurrency: 3 },
-    notes: ['On-chain data via Subgraph', 'ROI computed from PnL/maxCapital', 'No profiles', 'trader_key = 0x address'],
+    notes: [
+      'On-chain data via Subgraph',
+      'ROI computed from PnL/maxCapital',
+      'No profiles',
+      'trader_key = 0x address',
+    ],
   }
 
   private getSubgraphUrl(): string {
@@ -71,44 +83,67 @@ export class GmxPerpConnector extends BaseConnector {
       }
     }`
 
-    const _rawLb = await this.request<Record<string, unknown>>(
-      this.getSubgraphUrl(),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      }
-    )
+    const _rawLb = await this.request<Record<string, unknown>>(this.getSubgraphUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
 
     const data = warnValidate(GmxSubgraphResponseSchema, _rawLb, 'gmx-perp/leaderboard')
     // Subsquid returns data.accountStats instead of data.periodAccountStats
-    const rankings = (data?.data?.accountStats || data?.data?.periodAccountStats || []) as Record<string, unknown>[]
+    const rankings = (data?.data?.accountStats || data?.data?.periodAccountStats || []) as Record<
+      string,
+      unknown
+    >[]
 
-    const traders: TraderSource[] = (Array.isArray(rankings) ? rankings : []).slice(0, limit).map((item: Record<string, unknown>) => {
-      const address = String(item.account || item.id || '').toLowerCase()
-      return {
-        platform: 'gmx' as const, market_type: 'perp' as const,
-        trader_key: address,
-        display_name: null,
-        profile_url: `https://app.gmx.io/#/leaderboard?account=${address}`,
-        discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-        is_active: true, raw: item as Record<string, unknown>,
-      }
-    })
+    const traders: TraderSource[] = (Array.isArray(rankings) ? rankings : [])
+      .slice(0, limit)
+      .map((item: Record<string, unknown>) => {
+        const address = String(item.account || item.id || '').toLowerCase()
+        return {
+          platform: 'gmx' as const,
+          market_type: 'perp' as const,
+          trader_key: address,
+          display_name: null,
+          profile_url: `https://app.gmx.io/#/leaderboard?account=${address}`,
+          discovered_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          is_active: true,
+          raw: item as Record<string, unknown>,
+        }
+      })
 
-    return { traders, total_available: rankings.length, window, fetched_at: new Date().toISOString() }
+    return {
+      traders,
+      total_available: rankings.length,
+      window,
+      fetched_at: new Date().toISOString(),
+    }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     // GMX has no user profiles
     const profile: TraderProfile = {
-      platform: 'gmx', market_type: 'perp', trader_key: traderKey.toLowerCase(),
-      display_name: null, avatar_url: null,
-      bio: null, tags: ['on-chain', 'perp-dex', 'arbitrum'],
+      platform: 'gmx',
+      market_type: 'perp',
+      trader_key: traderKey.toLowerCase(),
+      display_name: null,
+      avatar_url: null,
+      bio: null,
+      tags: ['on-chain', 'perp-dex', 'arbitrum'],
       profile_url: `https://app.gmx.io/#/leaderboard?account=${traderKey}`,
-      followers: null, copiers: null, aum: null,
-      updated_at: new Date().toISOString(), last_enriched_at: null,
-      provenance: { source_platform: 'gmx', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
+      followers: null,
+      copiers: null,
+      aum: null,
+      updated_at: new Date().toISOString(),
+      last_enriched_at: null,
+      provenance: {
+        source_platform: 'gmx',
+        acquisition_method: 'api',
+        fetched_at: new Date().toISOString(),
+        source_url: null,
+        scraper_version: '1.0.0',
+      },
     }
     return { profile, fetched_at: new Date().toISOString() }
   }
@@ -118,27 +153,47 @@ export class GmxPerpConnector extends BaseConnector {
     const query = `{
       accountStats(
         limit: 1
-        where: { id_containsInsensitive: "${traderKey.toLowerCase()}" }
+        where: { id_eq: "${getAddress(traderKey)}" }
       ) {
         id realizedPnl maxCapital wins losses closedCount
       }
     }`
-    const _rawSnap = await this.request<Record<string, unknown>>(
-      this.getSubgraphUrl(),
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query }),
-      }
-    )
+    const _rawSnap = await this.request<Record<string, unknown>>(this.getSubgraphUrl(), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ query }),
+    })
     const data = warnValidate(GmxSubgraphResponseSchema, _rawSnap, 'gmx-perp/snapshot')
     const rankings = data?.data?.accountStats || data?.data?.periodAccountStats || []
-    const entry = Array.isArray(rankings) ? rankings[0] as Record<string, unknown> | undefined : undefined
+    const entry = Array.isArray(rankings)
+      ? (rankings[0] as Record<string, unknown> | undefined)
+      : undefined
 
     if (!entry) {
       return {
-        metrics: { roi: null, pnl: null, win_rate: null, max_drawdown: null, sharpe_ratio: null, sortino_ratio: null, trades_count: null, followers: null, copiers: null, aum: null, platform_rank: null, arena_score: null, return_score: null, drawdown_score: null, stability_score: null },
-        quality_flags: { missing_fields: ['roi', 'pnl'], non_standard_fields: {}, window_native: true, notes: ['Trader not found in GMX leaderboard for this window'] },
+        metrics: {
+          roi: null,
+          pnl: null,
+          win_rate: null,
+          max_drawdown: null,
+          sharpe_ratio: null,
+          sortino_ratio: null,
+          trades_count: null,
+          followers: null,
+          copiers: null,
+          aum: null,
+          platform_rank: null,
+          arena_score: null,
+          return_score: null,
+          drawdown_score: null,
+          stability_score: null,
+        },
+        quality_flags: {
+          missing_fields: ['roi', 'pnl'],
+          non_standard_fields: {},
+          window_native: true,
+          notes: ['Trader not found in GMX leaderboard for this window'],
+        },
         fetched_at: new Date().toISOString(),
       }
     }
@@ -149,20 +204,28 @@ export class GmxPerpConnector extends BaseConnector {
     const losses = Number(entry.losses) || 0
     const totalTrades = wins + losses
 
-    const roi = (maxCapital != null && maxCapital > 0 && realizedPnl != null) ? (realizedPnl / maxCapital) * 100 : null
+    const roi =
+      maxCapital != null && maxCapital > 0 && realizedPnl != null
+        ? (realizedPnl / maxCapital) * 100
+        : null
     const winRate = totalTrades > 0 ? (wins / totalTrades) * 100 : null
 
     const metrics: SnapshotMetrics = {
       roi,
       pnl: realizedPnl,
       win_rate: winRate,
-      max_drawdown: null,  // Requires historical equity reconstruction
-      sharpe_ratio: null, sortino_ratio: null,
+      max_drawdown: null, // Requires historical equity reconstruction
+      sharpe_ratio: null,
+      sortino_ratio: null,
       trades_count: totalTrades || null,
-      followers: null, copiers: null,
+      followers: null,
+      copiers: null,
       aum: maxCapital || null,
       platform_rank: null,
-      arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
+      arena_score: null,
+      return_score: null,
+      drawdown_score: null,
+      stability_score: null,
     }
 
     const quality_flags: QualityFlags = {
@@ -192,7 +255,7 @@ export class GmxPerpConnector extends BaseConnector {
       const query = `{
         periodAccountStats(
           limit: 90
-          where: { account_containsInsensitive: "${traderKey.toLowerCase()}", period_startsWith: "1d:" }
+          where: { account_eq: "${getAddress(traderKey)}", period_startsWith: "1d:" }
           orderBy: period_ASC
         ) {
           period
@@ -201,21 +264,21 @@ export class GmxPerpConnector extends BaseConnector {
         }
       }`
 
-      const _rawSubgraph = await this.request<Record<string, unknown>>(
-        this.getSubgraphUrl(),
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query }),
-        }
-      )
+      const _rawSubgraph = await this.request<Record<string, unknown>>(this.getSubgraphUrl(), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query }),
+      })
       const data = warnValidate(GmxSubgraphResponseSchema, _rawSubgraph, 'gmx-perp/timeseries')
       const dailyStats = data?.data?.periodAccountStats || []
 
       if (Array.isArray(dailyStats) && dailyStats.length > 0) {
         series.push({
-          platform: 'gmx', market_type: 'perp', trader_key: traderKey.toLowerCase(),
-          series_type: 'daily_pnl', as_of_ts: new Date().toISOString(),
+          platform: 'gmx',
+          market_type: 'perp',
+          trader_key: traderKey.toLowerCase(),
+          series_type: 'daily_pnl',
+          as_of_ts: new Date().toISOString(),
           data: dailyStats.map((item: Record<string, unknown>) => {
             // Period format: "1d:TIMESTAMP"
             const ts = String(item.period || '').split(':')[1]
@@ -228,7 +291,10 @@ export class GmxPerpConnector extends BaseConnector {
         })
       }
     } catch (err) {
-      this.logger.debug('GMX subgraph timeseries fallback:', err instanceof Error ? err.message : String(err))
+      this.logger.debug(
+        'GMX subgraph timeseries fallback:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
 
     return { series, fetched_at: new Date().toISOString() }
@@ -273,7 +339,7 @@ export class GmxPerpConnector extends BaseConnector {
       trades_count: tradesCount,
       followers: null,
       copiers: null,
-      aum: (maxCapital != null && maxCapital > 0) ? maxCapital : null,
+      aum: maxCapital != null && maxCapital > 0 ? maxCapital : null,
       sharpe_ratio: null,
       platform_rank: null,
     }
