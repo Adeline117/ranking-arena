@@ -307,7 +307,15 @@ async function fetchWithBrowser(periods) {
       if (!results[period]) results[period] = { total: 0, saved: 0, error: err.message }
     }
   } finally {
-    await browser.close()
+    try {
+      await Promise.race([
+        browser.close(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('close timeout')), 10000)),
+      ])
+    } catch {
+      const proc = browser.process()
+      if (proc) { proc.kill('SIGKILL'); console.warn('  [cleanup] Force-killed Chrome process') }
+    }
   }
   return results
 }
