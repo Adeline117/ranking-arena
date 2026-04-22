@@ -1,4 +1,4 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 // withSentryConfig REMOVED — it injects ~194KB Sentry SDK into every page's
 // initial bundle, blocking LCP. Sentry is now loaded entirely via
 // instrumentation-client.ts (requestIdleCallback + dynamic import).
@@ -6,19 +6,20 @@ import type { NextConfig } from "next";
 
 // Bundle Analyzer 条件导入
 /* eslint-disable @typescript-eslint/no-require-imports */
-const withBundleAnalyzer = process.env.ANALYZE === 'true'
-  ? require('@next/bundle-analyzer')({ enabled: true })
-  : (config: NextConfig) => config;
+const withBundleAnalyzer =
+  process.env.ANALYZE === 'true'
+    ? require('@next/bundle-analyzer')({ enabled: true })
+    : (config: NextConfig) => config
 /* eslint-enable @typescript-eslint/no-require-imports */
 
 const nextConfig = {
   /* config options here */
-  
+
   // ESLint — CI runs lint separately; skip in build to avoid double-linting
   eslint: {
     ignoreDuringBuilds: true,
   },
-  
+
   // Turbopack 配置 (Next.js 16 默认) - 处理服务端专用模块在客户端的导入
   turbopack: {
     resolveAlias: {
@@ -31,7 +32,7 @@ const nextConfig = {
       // Ignore optional wagmi/web3 peer dependencies we don't use
       '@react-native-async-storage/async-storage': './lib/stubs/empty.js',
       '@gemini-wallet/core': './lib/stubs/empty.js',
-      'porto': './lib/stubs/empty.js',
+      porto: './lib/stubs/empty.js',
       'porto/internal': './lib/stubs/empty.js',
       // ClickHouse client is optional — only used when env vars are set
       '@clickhouse/client': './lib/stubs/empty.js',
@@ -136,12 +137,13 @@ const nextConfig = {
     config.plugins.push(
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       new (require('webpack').IgnorePlugin)({
-        resourceRegExp: /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
+        resourceRegExp:
+          /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
     )
     return config
   },
-  
+
   // TypeScript — CI runs tsc separately; enable build-time checks as safety net
   typescript: {
     ignoreBuildErrors: false,
@@ -149,7 +151,7 @@ const nextConfig = {
 
   // 性能优化
   compress: true,
-  
+
   // 图片优化 - CDN 优化配置
   images: {
     // 优先使用 AVIF（更小），回退到 WebP
@@ -414,19 +416,19 @@ const nextConfig = {
         hostname: '**.static-global.com',
       },
     ],
-    
+
     // 图片尺寸配置 - 对齐 Tailwind 响应式断点
     deviceSizes: [375, 640, 768, 1024, 1280, 1536, 1920],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    
+
     // 最小缓存时间（秒）- 图片缓存 24 小时（头像/logo 变更不频繁）
     minimumCacheTTL: 86400,
-    
+
     dangerouslyAllowSVG: false, // Disabled: avatar proxy already filters out SVG via ALLOWED_IMAGE_TYPES
     contentDispositionType: 'attachment',
     contentSecurityPolicy: "default-src 'self'; script-src 'none'; sandbox;",
   },
-  
+
   // 服务端专用包（不打包到客户端）
   // 注意：@upstash/redis 使用 REST API，不需要在此配置
   // @aws-sdk/* 虽然只在 scripts 里 import，但保险起见也列出来，防止
@@ -447,7 +449,7 @@ const nextConfig = {
     'nodemailer',
     '@sentry/profiling-node',
   ],
-  
+
   // 实验性功能
   experimental: {
     // Tree-shaking optimization for large packages
@@ -461,7 +463,6 @@ const nextConfig = {
       '@sentry/nextjs',
       'zod',
       'zustand',
-      'swr',
       'isomorphic-dompurify',
       'react-easy-crop',
       'otpauth',
@@ -495,14 +496,14 @@ const nextConfig = {
     // Client-side router cache — keep prefetched pages fresh longer
     // Reduces redundant server requests on back/forward navigation
     staleTimes: {
-      dynamic: 120,  // Cache dynamic pages for 2min on client (SWR handles freshness)
-      static: 600,   // Cache static pages for 10min on client
+      dynamic: 120, // Cache dynamic pages for 2min on client (SWR handles freshness)
+      static: 600, // Cache static pages for 10min on client
     },
   },
-  
+
   // 生产环境不生成 source maps（减少构建大小）
   productionBrowserSourceMaps: false,
-  
+
   // API 版本控制 - 将 /api/v1/* 重写到 /api/*
   // 这样可以保持向后兼容，同时支持版本化的 API 端点
   async rewrites() {
@@ -511,9 +512,9 @@ const nextConfig = {
         source: '/api/v1/:path*',
         destination: '/api/:path*',
       },
-    ];
+    ]
   },
-  
+
   // 响应头配置 - 缓存优化 + 安全头
   async headers() {
     // Content Security Policy - 允许必要的第三方服务
@@ -538,8 +539,8 @@ const nextConfig = {
       "form-action 'self'",
       "base-uri 'self'",
       "object-src 'none'",
-      "upgrade-insecure-requests",
-    ].join('; ');
+      'upgrade-insecure-requests',
+    ].join('; ')
 
     // Permissions Policy - 限制浏览器功能访问
     const permissionsPolicy = [
@@ -550,7 +551,7 @@ const nextConfig = {
       'payment=(self)',
       'usb=()',
       'bluetooth=()',
-    ].join(', ');
+    ].join(', ')
 
     return [
       {
@@ -645,9 +646,9 @@ const nextConfig = {
           },
         ],
       },
-    ];
+    ]
   },
-  
+
   // Next.js 16 默认启用 SWC 压缩，无需配置
 
   async redirects() {
@@ -684,10 +685,10 @@ const nextConfig = {
         destination: '/?exchange=:exchange',
         permanent: true,
       },
-    ];
+    ]
   },
-};
+}
 
 // Export config — Sentry wrapper removed to eliminate 194KB from initial bundle.
 // Sentry SDK loads lazily via instrumentation-client.ts (requestIdleCallback).
-export default withBundleAnalyzer(nextConfig as NextConfig);
+export default withBundleAnalyzer(nextConfig as NextConfig)
