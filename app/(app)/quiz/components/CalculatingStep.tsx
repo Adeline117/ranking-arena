@@ -29,7 +29,19 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
   const isZh = tr('quizCalculating').length > 0 && /[\u4e00-\u9fff]/.test(tr('quizCalculating'))
   const messages = isZh ? MESSAGES_ZH : MESSAGES_EN
 
+  const prefersReducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
   useEffect(() => {
+    if (prefersReducedMotion) {
+      // Skip animation: show final message and complete immediately
+      setMessageIdx(messages.length - 1)
+      setProgress(100)
+      // Small delay so the user sees the final state before navigating
+      const t = setTimeout(() => onDoneRef.current(), 200)
+      return () => clearTimeout(t)
+    }
+
     // Rotate messages every 500ms
     const msgInterval = setInterval(() => {
       setMessageIdx((prev) => {
@@ -38,9 +50,11 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
       })
     }, 500)
     return () => clearInterval(msgInterval)
-  }, [messages.length])
+  }, [messages.length, prefersReducedMotion])
 
   useEffect(() => {
+    if (prefersReducedMotion) return // handled above
+
     // Animate progress from 0 to 100 over 1.5s
     const start = Date.now()
     const duration = 1500
@@ -55,7 +69,7 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
       }
     }
     requestAnimationFrame(tick)
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [prefersReducedMotion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div
@@ -66,7 +80,7 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
         justifyContent: 'center',
         gap: 20,
         minHeight: 260,
-        animation: 'fadeIn 0.3s ease-out',
+        animation: prefersReducedMotion ? 'none' : 'fadeIn 0.3s ease-out',
       }}
     >
       {/* Spinner */}
@@ -79,7 +93,7 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
           borderRadius: '50%',
           border: '3px solid var(--color-bg-tertiary)',
           borderTopColor: 'var(--color-brand)',
-          animation: 'spin 1s linear infinite',
+          animation: prefersReducedMotion ? 'none' : 'spin 1s linear infinite',
         }}
       />
 
@@ -91,7 +105,7 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
           fontWeight: 600,
           color: 'var(--color-text-primary)',
           margin: 0,
-          transition: 'opacity 0.25s ease',
+          transition: prefersReducedMotion ? 'none' : 'opacity 0.25s ease',
           minHeight: 22,
         }}
         key={messageIdx}
@@ -116,7 +130,7 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
             height: '100%',
             borderRadius: 2,
             background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-deep))',
-            transition: 'width 0.05s linear',
+            transition: prefersReducedMotion ? 'none' : 'width 0.05s linear',
           }}
         />
       </div>
