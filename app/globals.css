@@ -591,8 +591,10 @@ html {
   }
 }
 
-/* Eliminate 300ms tap delay on mobile without disabling pinch-to-zoom */
-a, button, input, select, textarea, [role="button"], [tabindex] {
+/* Eliminate 300ms tap delay on mobile without disabling pinch-to-zoom.
+   Exclude tabindex="-1" (non-interactive focus targets like <main>) to avoid
+   blocking scroll gestures on scroll containers. */
+a, button, input, select, textarea, [role="button"], [tabindex]:not([tabindex="-1"]) {
   touch-action: manipulation;
 }
 
