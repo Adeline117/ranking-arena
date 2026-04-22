@@ -89,35 +89,58 @@ export async function GET(req: NextRequest) {
     // Load previous baseline
     const baseline = await PipelineState.get<CoverageBaseline>('coverage:baseline')
 
-    // Query each platform's fill rates (recent data only, <3 days)
-    for (const platform of MONITORED_PLATFORMS) {
-      try {
-        const { data: rows } = await supabase
-          .from('trader_snapshots_v2')
-          .select('win_rate, sharpe_ratio, roi_pct, max_drawdown')
-          .eq('platform', platform)
-          .eq('window', '90D')
-          .gt('updated_at', new Date(Date.now() - 3 * 86400000).toISOString())
-          .limit(10000)
+    // Query fill rates via HEAD count queries (zero row transfer, DB-level counting).
+    // 5 counts per platform (total + 4 metrics), batched 3 platforms at a time.
+    const cutoff = new Date(Date.now() - 3 * 86400000).toISOString()
 
-        if (!rows || rows.length === 0) continue
+    const countNonNull = async (platform: string, column: string) => {
+      const { count } = await supabase
+        .from('trader_snapshots_v2')
+        .select('*', { count: 'exact', head: true })
+        .eq('platform', platform)
+        .eq('window', '90D')
+        .gt('updated_at', cutoff)
+        .not(column, 'is', null)
+      return count ?? 0
+    }
 
-        const total = rows.length
-        results.push({
-          platform,
-          total,
-          win_rate_pct:
-            Math.round((rows.filter((r) => r.win_rate != null).length / total) * 1000) / 10,
-          sharpe_pct:
-            Math.round((rows.filter((r) => r.sharpe_ratio != null).length / total) * 1000) / 10,
-          roi_pct: Math.round((rows.filter((r) => r.roi_pct != null).length / total) * 1000) / 10,
-          mdd_pct:
-            Math.round((rows.filter((r) => r.max_drawdown != null).length / total) * 1000) / 10,
+    const BATCH_SIZE = 3
+    for (let i = 0; i < MONITORED_PLATFORMS.length; i += BATCH_SIZE) {
+      const batch = MONITORED_PLATFORMS.slice(i, i + BATCH_SIZE)
+      const batchResults = await Promise.allSettled(
+        batch.map(async (platform) => {
+          // 5 parallel HEAD counts per platform (total + 4 metrics)
+          const [totalRes, wr, sr, roi, mdd] = await Promise.all([
+            supabase
+              .from('trader_snapshots_v2')
+              .select('*', { count: 'exact', head: true })
+              .eq('platform', platform)
+              .eq('window', '90D')
+              .gt('updated_at', cutoff)
+              .then((r) => r.count ?? 0),
+            countNonNull(platform, 'win_rate'),
+            countNonNull(platform, 'sharpe_ratio'),
+            countNonNull(platform, 'roi_pct'),
+            countNonNull(platform, 'max_drawdown'),
+          ])
+
+          const total = totalRes
+          if (total === 0) return null
+          return {
+            platform,
+            total,
+            win_rate_pct: Math.round((wr / total) * 1000) / 10,
+            sharpe_pct: Math.round((sr / total) * 1000) / 10,
+            roi_pct: Math.round((roi / total) * 1000) / 10,
+            mdd_pct: Math.round((mdd / total) * 1000) / 10,
+          } as PlatformCoverage
         })
-      } catch (err) {
-        logger.warn(
-          `[coverage-monitor] ${platform} query failed: ${err instanceof Error ? err.message : String(err)}`
-        )
+      )
+
+      for (const result of batchResults) {
+        if (result.status === 'fulfilled' && result.value) {
+          results.push(result.value)
+        }
       }
     }
 
