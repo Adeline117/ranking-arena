@@ -70,25 +70,26 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   const match = params.match || '85'
   const lang = params.lang || 'en'
 
-  const pType = PERSONALITY_TYPE_MAP[typeId] || PERSONALITY_TYPES[0]
+  const validType = PERSONALITY_TYPE_MAP[typeId] ? typeId : 'sniper'
+  const pType = PERSONALITY_TYPE_MAP[validType] || PERSONALITY_TYPES[0]
   const typeName = pType.nameKey // Will be resolved to actual name via i18n on client
 
-  const title = `I'm ${typeId.charAt(0).toUpperCase() + typeId.slice(1)} - Trading Personality | Arena`
+  const title = `I'm ${validType.charAt(0).toUpperCase() + validType.slice(1)} - Trading Personality | Arena`
   const description = `${match}% match. Discover your trading personality and the legendary trader who matches your style.`
 
   return {
     title,
     description,
-    alternates: { canonical: `${BASE_URL}/quiz/result?type=${typeId}` },
+    alternates: { canonical: `${BASE_URL}/quiz/result?type=${validType}` },
     openGraph: {
       title,
       description,
-      url: `${BASE_URL}/quiz/result?type=${typeId}&match=${match}`,
+      url: `${BASE_URL}/quiz/result?type=${validType}&match=${match}`,
       siteName: 'Arena',
       type: 'website',
       images: [
         {
-          url: `${BASE_URL}/api/og/quiz?type=${typeId}&match=${match}&lang=${lang}`,
+          url: `${BASE_URL}/api/og/quiz?type=${validType}&match=${match}&lang=${lang}`,
           width: 1200,
           height: 630,
           alt: `Trading Personality: ${typeName}`,
@@ -100,7 +101,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
       title,
       description,
       creator: '@arenafi',
-      images: [`${BASE_URL}/api/og/quiz?type=${typeId}&match=${match}&lang=${lang}`],
+      images: [`${BASE_URL}/api/og/quiz?type=${validType}&match=${match}&lang=${lang}`],
     },
   }
 }
