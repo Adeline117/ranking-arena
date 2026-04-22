@@ -1,5 +1,6 @@
 'use client'
 
+import { tokens } from '@/lib/design-tokens'
 import { PERSONALITY_TYPES } from '../../components/quiz-data'
 
 interface TypeBreakdownProps {
@@ -19,7 +20,7 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
       {/* Section header with accent bar */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
         <div style={{ width: 3, height: 20, borderRadius: 2, background: 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))' }} />
-        <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>
+        <h3 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: tokens.typography.fontWeight.bold, color: 'var(--color-text-primary)', margin: 0 }}>
           {tr('quizBreakdownTitle')}
         </h3>
       </div>

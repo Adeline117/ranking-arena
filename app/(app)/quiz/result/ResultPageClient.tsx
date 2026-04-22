@@ -143,7 +143,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
         >
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 3, height: 20, borderRadius: 2, background: pType.gradient }} />
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: 'var(--color-text-primary)', margin: 0 }}>
+            <h3 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: tokens.typography.fontWeight.bold, color: 'var(--color-text-primary)', margin: 0 }}>
               {t('quizCompatTitle')}
             </h3>
           </div>
