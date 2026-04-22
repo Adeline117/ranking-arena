@@ -75,7 +75,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span
             style={{
-              fontSize: 11,
+              fontSize: tokens.typography.fontSize.xs,
               fontWeight: 600,
               color: 'var(--color-text-tertiary)',
               letterSpacing: '0.5px',
@@ -103,7 +103,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
           <span
             style={{
-              fontSize: 11,
+              fontSize: tokens.typography.fontSize.xs,
               fontWeight: 600,
               color: 'var(--color-text-tertiary)',
               letterSpacing: '0.5px',
