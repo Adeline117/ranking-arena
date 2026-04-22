@@ -211,12 +211,14 @@ const nextConfig = {
         hostname: 'gavatar.staticimgs.com',
       },
       {
+        // Google profile photos — only lh3 subdomain is used
         protocol: 'https',
-        hostname: '**.googleusercontent.com',
+        hostname: 'lh3.googleusercontent.com',
       },
       {
+        // Supabase Storage — narrowed to our project instance
         protocol: 'https',
-        hostname: '**.supabase.co',
+        hostname: 'iknktzifjdyujdccyhsv.supabase.co',
       },
       {
         protocol: 'https',
@@ -312,8 +314,13 @@ const nextConfig = {
         hostname: '**.hbfile.net',
       },
       {
+        // CloudFront — narrowed to known exchange avatar CDN subdomains
         protocol: 'https',
-        hostname: '**.cloudfront.net',
+        hostname: 'd2uuskl05wy6ml.cloudfront.net',
+      },
+      {
+        protocol: 'https',
+        hostname: 'd1nhio0ox7pgb.cloudfront.net',
       },
       // BingX 头像 CDN
       {
