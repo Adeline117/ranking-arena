@@ -256,45 +256,52 @@ export default function QuizClient() {
           ))}
         </div>
 
-        {/* Submit button — appears when all answered */}
-        {answeredCount === TOTAL_QUESTIONS && (
-          <div
+        {/* Submit button — always visible, disabled until all answered */}
+        <div
+          style={{
+            position: 'sticky',
+            bottom: 64,
+            zIndex: 10,
+            background: 'var(--color-bg-primary)',
+            padding: '16px 0',
+            marginTop: 16,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleSubmit}
+            disabled={answeredCount < TOTAL_QUESTIONS}
             style={{
-              position: 'sticky',
-              bottom: 64,
-              zIndex: 10,
-              background: 'var(--color-bg-primary)',
-              padding: '16px 0',
-              marginTop: 16,
+              width: '100%',
+              padding: '14px 32px',
+              borderRadius: 10,
+              background: answeredCount === TOTAL_QUESTIONS
+                ? 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))'
+                : 'var(--color-bg-tertiary)',
+              border: answeredCount === TOTAL_QUESTIONS
+                ? 'none'
+                : '1px solid var(--glass-border-light)',
+              color: answeredCount === TOTAL_QUESTIONS ? '#fff' : 'var(--color-text-tertiary)',
+              fontSize: 16,
+              fontWeight: 600,
+              cursor: answeredCount === TOTAL_QUESTIONS ? 'pointer' : 'default',
+              transition: 'all 0.3s ease',
+              boxShadow: answeredCount === TOTAL_QUESTIONS
+                ? '0 4px 16px color-mix(in srgb, var(--color-brand) 30%, transparent)'
+                : 'none',
+            }}
+            onMouseEnter={(e) => {
+              if (answeredCount === TOTAL_QUESTIONS) e.currentTarget.style.transform = 'translateY(-1px)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
             }}
           >
-            <button
-              type="button"
-              onClick={handleSubmit}
-              style={{
-                width: '100%',
-                padding: '14px 32px',
-                borderRadius: 10,
-                background: 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))',
-                border: 'none',
-                color: '#fff',
-                fontSize: 16,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'transform 0.2s, box-shadow 0.2s',
-                boxShadow: '0 4px 16px color-mix(in srgb, var(--color-brand) 30%, transparent)',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.transform = 'translateY(-1px)'
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.transform = 'translateY(0)'
-              }}
-            >
-              {t('quizSeeResults')}
-            </button>
-          </div>
-        )}
+            {answeredCount === TOTAL_QUESTIONS
+              ? t('quizSeeResults')
+              : `${answeredCount} / ${TOTAL_QUESTIONS}`}
+          </button>
+        </div>
       </div>
     </Box>
   )
