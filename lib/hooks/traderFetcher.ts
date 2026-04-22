@@ -1,4 +1,4 @@
-import { fetcher as rawFetcher } from '@/lib/hooks/useSWR'
+import { fetcher as rawFetcher } from '@/lib/hooks/fetchers'
 
 /**
  * Shared SWR fetcher for trader detail API.
