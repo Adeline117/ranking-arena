@@ -1,15 +1,18 @@
 # Arena - Claude Code Context
 
 ## Session Start Checklist
+
 **Quick fix** (small bug, one file): Just read this file (CLAUDE.md)
 **Feature work**: Also read `PROGRESS.md` + `TASKS.md`
 **Architecture change**: Also read `DECISIONS.md`
 
 ## Project Overview
+
 Crypto trader ranking platform. 34,000+ traders across 32+ CEX/DEX exchanges.
 Live site: https://www.arenafi.org
 
 ## Tech Stack
+
 - **Framework**: Next.js 16 (App Router, Turbopack)
 - **Database**: Supabase (PostgreSQL + Auth + Realtime + RLS)
 - **Cache**: Upstash Redis
@@ -22,6 +25,7 @@ Live site: https://www.arenafi.org
 - **Exchange Data**: CCXT + custom connectors
 
 ## Directory Structure
+
 ```
 app/                    # Next.js App Router pages
   api/                  # 100+ API route groups
@@ -52,6 +56,7 @@ cloudflare-worker/      # CF Worker for geo-blocked APIs
 ```
 
 ## Key Commands
+
 ```bash
 npm run dev             # Start dev server (Turbopack)
 npm run build           # Production build
@@ -67,6 +72,7 @@ npm run backfill:24h    # Backfill 24h window metrics
 ```
 
 ## Database Schema (Core Tables)
+
 ```sql
 -- Traders
 trader_sources          # Unique trader identities (source + source_trader_id)
@@ -86,7 +92,9 @@ stripe_customers        # Stripe integration
 ```
 
 ## Data Pipeline
+
 62 Vercel cron jobs refresh trader data continuously:
+
 - `batch-fetch-traders` (groups a-f): Fetch rankings from exchanges
 - `batch-enrich`: Enrich trader details (7D, 30D periods)
 - `compute-leaderboard`: Compute Arena Scores
@@ -94,59 +102,118 @@ stripe_customers        # Stripe integration
 - `aggregate-daily-snapshots`: Daily rollups
 
 ## Exchange Connectors (`lib/connectors/`)
+
 CEX: binance-futures, binance-spot, bybit, okx, bitget, mexc, kucoin, htx, coinex
 DEX: hyperliquid, gmx, dydx, vertex, drift, aevo, gains, kwenta
 
 Each connector implements:
+
 - `fetchLeaderboard(period)` - Get ranked traders
 - `fetchTraderDetails(traderId)` - Get trader profile
 - Rate limiting + circuit breaker built-in
 
 ## Arena Score Formula
+
 ```
 ReturnScore = 60 * tanh(coeff * ROI)^exponent   (0-60 points)
 PnlScore    = 40 * tanh(coeff * ln(1 + PnL/base)) (0-40 points)
 Arena Score = (ReturnScore + PnlScore) * confidenceMultiplier * trustWeight
 ```
+
 - Coefficients vary by period (7D/30D/90D), see `lib/utils/arena-score.ts`
 - Overall composite: 90D × 0.70 + 30D × 0.25 + 7D × 0.05
 - Higher score = better risk-adjusted performance
 
 ## Product Priority (Bug Triage & Feature Priority)
+
 **Core Path** (highest priority — fix/ship first):
+
 1. Homepage → Rankings → Trader Detail → Period Switch → Search
 2. Login/Auth → Pro Subscription flow
 
-**Secondary Path**:
-3. Market Overview, Market Events
-4. Social (Groups, Posts, Comments)
-5. Library (educational resources)
+**Secondary Path**: 3. Market Overview, Market Events 4. Social (Groups, Posts, Comments) 5. Library (educational resources)
 
 **Rule**: Always fix core path bugs before secondary. When prioritizing features, core path UX > secondary features.
 
 ## Conventions
 
 ### API Routes
+
 - Cron routes require `Authorization: Bearer CRON_SECRET` header
 - Use `lib/api/errors.ts` for consistent error responses
 - Cache headers configured in `vercel.json`
 
+### Payment Safety (Stripe) — MANDATORY
+
+Every Stripe API call that creates a billable resource MUST pass `idempotencyKey`:
+
+```typescript
+stripe.checkout.sessions.create(params, {
+  idempotencyKey: `checkout_${customerId}_${priceId}_${Math.floor(Date.now() / 60_000)}`,
+})
+```
+
+- Key = user + resource + minute-window (deduplicates within 24h)
+- Never rely on client-side disabled buttons — HTTP is stateless
+- Scarcity checks (lifetime spots) MUST use `pg_advisory_xact_lock` or equivalent DB lock
+
+### Optimistic UI Updates — MANDATORY PATTERN
+
+All optimistic updates MUST use delta-based rollback, NEVER snapshot capture:
+
+```typescript
+// ✅ CORRECT — delta reversal from current state
+const likeDelta = wasLiked ? -1 : 1
+setPosts((prev) =>
+  prev.map((p) => (p.id === id ? { ...p, like_count: p.like_count + likeDelta } : p))
+)
+// On error: setPosts(prev => prev.map(p => p.id === id ? { ...p, like_count: p.like_count - likeDelta } : p))
+
+// ❌ WRONG — captured snapshot goes stale if parent re-renders during fetch
+const prevPost = posts.find((p) => p.id === id) // stale after re-render!
+// On error: setPosts(prev => prev.map(p => p.id === id ? { ...p, like_count: prevPost.like_count } : p))
+```
+
 ### Database
+
 - Always use RLS policies (enabled on all tables)
 - Migrations named: `YYYYMMDDHHMMSS_description.sql` — always generate via `scripts/new-migration.sh <description>` (collision-proof)
 - Use `source` + `source_trader_id` as composite key for traders
 
+### Database Concurrency Safety — MANDATORY
+
+- **Counters**: NEVER use trigger-based `SET count = count + 1`. Use atomic RPC functions (`increment_*_count` / `decrement_*_count` from migration 00021) called explicitly in API handlers.
+- **One-per-user resources**: ALWAYS add a UNIQUE constraint or partial unique index. Handle `23505` (unique violation) gracefully by re-querying instead of erroring.
+- **Check-then-act**: If checking a count/status then acting on it, use `pg_advisory_xact_lock` or `SELECT ... FOR UPDATE` to prevent TOCTOU races.
+- **CASCADE deletes**: Parent table FK constraints MUST specify `ON DELETE CASCADE`. Never manually delete children before parent.
+
+### Supabase Realtime — MANDATORY PATTERN
+
+All realtime subscriptions MUST use a `mountedRef` guard:
+
+```typescript
+const mountedRef = useRef(true)
+// In connect(): mountedRef.current = true
+// In subscribe callback: if (!mountedRef.current) return
+// In disconnect(): mountedRef.current = false
+```
+
+This prevents WebSocket leaks when components unmount during async subscribe.
+
 ### Components
+
 - Use `lib/i18n.ts` for all user-facing strings (zh/en)
 - Prefer server components, use `'use client'` only when needed
 - Design tokens in `lib/design-tokens.ts`
 
 ### Data Fetching
+
 - Server: `lib/data/*.ts` functions
 - Client: `lib/hooks/use*.ts` with React Query
 - Redis cache: `lib/cache/redis.ts`
 
 ## Environment Variables (Key)
+
 ```
 NEXT_PUBLIC_SUPABASE_URL
 NEXT_PUBLIC_SUPABASE_ANON_KEY
@@ -158,6 +225,7 @@ STRIPE_SECRET_KEY
 ```
 
 ## Known Issues / Caveats
+
 1. **Geo-blocking**: Binance/OKX APIs blocked in some regions. Use cloudflare-worker proxy or VPS.
 2. **Memory**: Dev server needs `--max-old-space-size=3584` (configured in npm scripts)
 3. **Build time**: Full build takes significant time; use Turbopack in dev
@@ -165,7 +233,7 @@ STRIPE_SECRET_KEY
    jobs simultaneously, all pushing to main with the same git identity. The
    pre-push hook (`.git/hooks/pre-push`) auto-serializes via `flock` on
    `/tmp/arena-git-push.lock` + auto-rebase on divergence. Raw `git push origin
-   main` is safe. For scripted pushes, `scripts/git-push-safe.sh` provides the
+main` is safe. For scripted pushes, `scripts/git-push-safe.sh` provides the
    same behavior as a standalone wrapper.
 5. **Stale staged files leaking into commits**: when a commit fails (pre-commit
    hook OR `git reset --soft HEAD^`) the previously-staged files REMAIN in the
@@ -174,6 +242,7 @@ STRIPE_SECRET_KEY
    clean staging — it always `git reset HEAD` first, then stages only the
    explicitly-listed files, then restores any pre-existing staged state after
    the commit completes. Pattern:
+
    ```bash
    scripts/git-commit-safe.sh "$(cat <<'EOF'
    commit subject
@@ -184,42 +253,51 @@ STRIPE_SECRET_KEY
    ```
 
 ## Claude Code Resources
+
 See `.claude/ARENA_SKILL_SYSTEM.md` for full list of agents, skills, and slash commands.
 
 ### Virtual Engineering Team (gstack-inspired)
-| Role | Command | Description |
-|------|---------|-------------|
-| CEO | `/plan-ceo-review` | Challenge premises, 10-star vision, scope decision |
-| Eng Manager | `/plan-eng-review` | Architecture, code quality, tests, performance (gates `/ship`) |
-| Designer (audit) | `/design-audit` | 80-item visual audit, 10 categories, A-F grades |
-| Designer (system) | `/design-system` | Full design system proposal + DESIGN.md |
-| Release Manager | `/ship` | Merge base → test → version bump → CHANGELOG → PR |
-| QA Lead (fix) | `/qa` | Test + auto-fix + atomic commits + health score |
-| QA Lead (report) | `/qa-report` | Same testing, report only, no code changes |
-| Design QA (fix) | `/qa-design` | Fix visual inconsistencies + AI slop |
-| Retro Facilitator | `/retro` | Weekly retro with trend tracking |
-| Doc Engineer | `/doc-release` | Post-ship docs sync |
+
+| Role              | Command            | Description                                                    |
+| ----------------- | ------------------ | -------------------------------------------------------------- |
+| CEO               | `/plan-ceo-review` | Challenge premises, 10-star vision, scope decision             |
+| Eng Manager       | `/plan-eng-review` | Architecture, code quality, tests, performance (gates `/ship`) |
+| Designer (audit)  | `/design-audit`    | 80-item visual audit, 10 categories, A-F grades                |
+| Designer (system) | `/design-system`   | Full design system proposal + DESIGN.md                        |
+| Release Manager   | `/ship`            | Merge base → test → version bump → CHANGELOG → PR              |
+| QA Lead (fix)     | `/qa`              | Test + auto-fix + atomic commits + health score                |
+| QA Lead (report)  | `/qa-report`       | Same testing, report only, no code changes                     |
+| Design QA (fix)   | `/qa-design`       | Fix visual inconsistencies + AI slop                           |
+| Retro Facilitator | `/retro`           | Weekly retro with trend tracking                               |
+| Doc Engineer      | `/doc-release`     | Post-ship docs sync                                            |
 
 ### Orchestration Workflows (conductor.json)
+
 See `.claude/conductor.json` for multi-agent parallel orchestration:
+
 - **Full Review**: 5 reviews in parallel → fix phase → ship → doc-release
 - **Quick Ship**: eng-review → qa-fix → ship → doc-release
 - **Audit Only**: All reviews in parallel, reports only
 
 ### Shared Patterns
+
 All virtual team skills share `.claude/skills/arena-shared-preamble.md`:
+
 - **Boil the Lake**: Always recommend complete implementation (AI makes marginal cost ~0)
 - **Unified AskUserQuestion**: Re-ground context → simplify → recommend with score → lettered options with dual effort estimates
 - **Effort Compression**: Show human time vs CC time (100x boilerplate, 50x tests, 30x features)
 - **Review Readiness Dashboard**: Track review completion, Eng Review gates `/ship`
 
 ### Pipeline & Operations
+
 Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spec`, `/weekly-self-check`
 
 ## Agent Work Rules (MUST FOLLOW)
 
 ### Git Commit Rule (MANDATORY — 铁律)
+
 **每修一个问题立即 git commit + git push origin main。绝不攒多个修改一起提交。**
+
 - No asking "should I commit?" - just do it
 - After ANY file edit: `git add → git commit → git push origin main` immediately
 - One fix = one commit. Never batch multiple fixes into one commit.
@@ -228,18 +306,21 @@ Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spe
 - **记住所有终端输出** — 每个命令的结果都要记住，不要丢失上下文
 
 ### Checkpoint Protocol
+
 1. **No one-shot features** - Break into subtasks, commit after each
 2. **E2E verification required** - After each feature, verify it works end-to-end
 3. **Sprint scope only** - Focus on current sprint tasks (see TASKS.md)
 4. **Test before done** - Run `npm run type-check && npm run test` before claiming complete
 
 ### Failure Prevention
+
 - If context getting full, summarize progress to PROGRESS.md, then `/clear`
 - Each feature on separate git branch: `git checkout -b feature/xxx`
 - If stuck > 3 attempts, ask user for clarification
 - Update PROGRESS.md after completing any significant work
 
 ### Verification Loop
+
 ```
 Write code → Run tests → Tests pass?
   → No: Fix and retry
@@ -251,6 +332,7 @@ Write code → Run tests → Tests pass?
 ## Automation & Health Checks
 
 ### Pipeline 健康检查
+
 ```bash
 # 完整健康检查（推荐每日运行）
 node scripts/pipeline-health-check.mjs
@@ -263,11 +345,14 @@ node scripts/pipeline-health-check.mjs --fix
 ```
 
 ### 自动验证 Hooks
+
 `.claude/settings.json` 配置了自动验证：
+
 - **PreToolUse**: 写入 `supabase/migrations/` 时自动拦截，需确认
 - **Pre-push** (git hook): lint 变更文件 + `tsc --noEmit`（推送前兜底）
 
 ### Spec-Driven Development
+
 ```bash
 # 1. Write a spec file
 cp specs/_template.md specs/my-feature.md
@@ -279,6 +364,7 @@ cp specs/_template.md specs/my-feature.md
 ```
 
 ### OpenClaw Autonomous Operations (Mac Mini)
+
 - **Health Monitor**: Every 30 min, checks `/api/health/pipeline`, alerts via Telegram
 - **Daily Report**: 8 AM, pipeline success rates + anomaly summary
 - **Auto-Fix**: On pipeline failure, opens Claude Code session to diagnose and fix
@@ -286,7 +372,9 @@ cp specs/_template.md specs/my-feature.md
 - Scripts: `scripts/openclaw/`
 
 ### Pipeline Logging
+
 Cron jobs use `PipelineLogger` to record execution:
+
 ```typescript
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 const log = await PipelineLogger.start('my-job-name')
@@ -299,45 +387,49 @@ try {
 ```
 
 ### Fetcher 修复流程
+
 1. 运行 `node scripts/pipeline-health-check.mjs` 识别问题
 2. 参考 `/.claude/skills/arena-fetcher-error-handling.md` 获取标准模板
 3. 修复后运行 `/fix-pipeline` 验证
 
 ### 关键诊断脚本
-| 脚本 | 用途 |
-|-----|------|
-| `scripts/pipeline-health-check.mjs` | 全面健康检查 |
-| `scripts/diagnose-enrichment.mjs` | Enrichment API 诊断 |
-| `scripts/check-data-distribution.mjs` | 数据分布检查 |
-| `scripts/backfill-sharpe-ratio.mjs` | Sharpe ratio 回填 |
+
+| 脚本                                  | 用途                |
+| ------------------------------------- | ------------------- |
+| `scripts/pipeline-health-check.mjs`   | 全面健康检查        |
+| `scripts/diagnose-enrichment.mjs`     | Enrichment API 诊断 |
+| `scripts/check-data-distribution.mjs` | 数据分布检查        |
+| `scripts/backfill-sharpe-ratio.mjs`   | Sharpe ratio 回填   |
 
 ## Quick Reference
-| Action | Command/Location |
-|--------|------------------|
-| Add migration | `scripts/new-migration.sh <description>` |
-| Add API route | `app/api/{name}/route.ts` |
-| Add connector | `lib/connectors/{exchange}.ts` |
-| Add cron job | `vercel.json` crons array |
-| Check logs | `vercel logs` or Sentry dashboard |
-| Fix pipeline | `/fix-pipeline` |
-| Deploy preview | `/deploy-staging` |
-| Implement feature | `/implement-spec specs/xxx.md` |
-| Weekly self-check | `/weekly-self-check` |
-| Health dashboard | `/admin/monitoring` |
-| **CEO product review** | `/plan-ceo-review` |
-| **Eng manager review** | `/plan-eng-review` (gates `/ship`) |
-| **Design audit** | `/design-audit` (report-only, 80 checks) |
-| **Design system** | `/design-system` (creates DESIGN.md) |
-| **Ship release** | `/ship` (test → version bump → CHANGELOG → PR) |
-| **QA test + fix** | `/qa` (quick/standard/exhaustive) |
-| **QA report only** | `/qa-report` (no code changes) |
-| **Design QA + fix** | `/qa-design` (fix visual issues) |
-| **Retrospective** | `/retro` (weekly engineering retro) |
-| **Post-ship docs** | `/doc-release` (sync all docs after ship) |
-| **Headless browser** | `/browse` (screenshots, interactions, responsive) |
-| **Auth for browser** | `/setup-browser-cookies` (import real cookies) |
+
+| Action                 | Command/Location                                  |
+| ---------------------- | ------------------------------------------------- |
+| Add migration          | `scripts/new-migration.sh <description>`          |
+| Add API route          | `app/api/{name}/route.ts`                         |
+| Add connector          | `lib/connectors/{exchange}.ts`                    |
+| Add cron job           | `vercel.json` crons array                         |
+| Check logs             | `vercel logs` or Sentry dashboard                 |
+| Fix pipeline           | `/fix-pipeline`                                   |
+| Deploy preview         | `/deploy-staging`                                 |
+| Implement feature      | `/implement-spec specs/xxx.md`                    |
+| Weekly self-check      | `/weekly-self-check`                              |
+| Health dashboard       | `/admin/monitoring`                               |
+| **CEO product review** | `/plan-ceo-review`                                |
+| **Eng manager review** | `/plan-eng-review` (gates `/ship`)                |
+| **Design audit**       | `/design-audit` (report-only, 80 checks)          |
+| **Design system**      | `/design-system` (creates DESIGN.md)              |
+| **Ship release**       | `/ship` (test → version bump → CHANGELOG → PR)    |
+| **QA test + fix**      | `/qa` (quick/standard/exhaustive)                 |
+| **QA report only**     | `/qa-report` (no code changes)                    |
+| **Design QA + fix**    | `/qa-design` (fix visual issues)                  |
+| **Retrospective**      | `/retro` (weekly engineering retro)               |
+| **Post-ship docs**     | `/doc-release` (sync all docs after ship)         |
+| **Headless browser**   | `/browse` (screenshots, interactions, responsive) |
+| **Auth for browser**   | `/setup-browser-cookies` (import real cookies)    |
 
 ## Emergency Rollback
+
 1. **Vercel Dashboard** → Deployments → find last good deploy → "Promote to Production"
 2. **Database**: Migrations are forward-only. If a schema change breaks prod, write a compensating migration via `scripts/new-migration.sh rollback-<description>`.
 3. **Feature flags**: Toggle in Redis via `/admin/monitoring` or `lib/features.ts`
