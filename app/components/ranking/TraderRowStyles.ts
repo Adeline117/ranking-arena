@@ -51,11 +51,11 @@ export const MOBILE_BADGE_TEXT_STYLE: React.CSSProperties = { fontSize: tokens.t
 
 // Verified badge style
 export const VERIFIED_BADGE_STYLE: React.CSSProperties = {
-  padding: '1px 6px',
+  padding: `1px ${tokens.spacing[1.5]}`,
   borderRadius: tokens.radius.md,
-  fontSize: 12,
+  fontSize: tokens.typography.fontSize.xs,
   fontWeight: 600,
-  color: '#22d3ee',
+  color: 'var(--color-verified-onchain)',
   background: 'rgba(34, 211, 238, 0.12)',
   border: '1px solid rgba(34, 211, 238, 0.25)',
   lineHeight: 1.4,
@@ -66,9 +66,9 @@ export const VERIFIED_BADGE_STYLE: React.CSSProperties = {
 
 // Bot badge style
 export const BOT_BADGE_STYLE: React.CSSProperties = {
-  padding: '1px 6px',
+  padding: `1px ${tokens.spacing[1.5]}`,
   borderRadius: tokens.radius.md,
-  fontSize: 12,
+  fontSize: tokens.typography.fontSize.xs,
   fontWeight: 600,
   color: tokens.colors.accent.primary,
   background: 'var(--color-accent-primary-12)',
@@ -82,9 +82,9 @@ export const BOT_EMOJI_STYLE: React.CSSProperties = { fontSize: 10 }
 
 // Trading style chip base (colors merged at render time)
 export const TRADING_STYLE_BASE_STYLE: React.CSSProperties = {
-  padding: '1px 6px',
+  padding: `1px ${tokens.spacing[1.5]}`,
   borderRadius: tokens.radius.md,
-  fontSize: 12,
+  fontSize: tokens.typography.fontSize.xs,
   fontWeight: 600,
   lineHeight: 1.4,
 }
@@ -99,7 +99,7 @@ export const STAT_TEXT_TERTIARY_STYLE: React.CSSProperties = { color: TRADER_TEX
 export const MDD_TEXT_BASE_STYLE: React.CSSProperties = { color: TRADER_ACCENT_ERROR, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }
 
 // AnimatedROI base style (color merged at render time)
-export const ROI_TEXT_BASE_STYLE: React.CSSProperties = { lineHeight: 1.2, fontSize: '16px', maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }
+export const ROI_TEXT_BASE_STYLE: React.CSSProperties = { lineHeight: 1.2, fontSize: tokens.typography.fontSize.md, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis', fontVariantNumeric: 'tabular-nums', fontFeatureSettings: '"tnum" 1' }
 
 // Expand button style
 // 36x36 touch target: meets WCAG 2.2 AA (24×24) comfortably while staying

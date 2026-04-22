@@ -65,7 +65,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
       />
       <Box style={NAME_COLUMN_STYLE}>
         <Box style={NAME_ROW_STYLE}>
-          <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: rank <= 3 ? '15px' : '14px', letterSpacing: rank <= 3 ? '-0.01em' : undefined }}>
+          <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: rank <= 3 ? tokens.typography.fontSize.base : tokens.typography.fontSize.sm, letterSpacing: rank <= 3 ? '-0.01em' : undefined }}>
             <HighlightedName text={displayName} query={searchQuery} />
           </Text>
           {isAddress && <CopyButton text={traderHandle} />}

@@ -325,7 +325,7 @@ export default function TraderHeader({
               {subtitleParts.length > 0 && (
                 <Text size="xs" style={{
                   color: hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary,
-                  fontSize: 12, lineHeight: 1.3,
+                  fontSize: tokens.typography.fontSize.xs, lineHeight: 1.3,
                   // #34: Brief scale animation when follower count changes
                   transition: 'transform 0.3s ease',
                   transform: followerAnimating ? 'scale(1.08)' : 'scale(1)',
@@ -336,10 +336,10 @@ export default function TraderHeader({
               {lastUpdated && (
                 <Text
                   size="xs"
-                  style={{ color: tokens.colors.text.tertiary, fontSize: 11, opacity: 0.6 }}
+                  style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, opacity: 0.6 }}
                   title={new Date(lastUpdated).toLocaleString()}
                 >
-                  {subtitleParts.length > 0 ? ' · ' : ''}{t('updated') || 'Updated'} {getRelativeTime(lastUpdated)}
+                  {subtitleParts.length > 0 ? ' · ' : ''}{t('updated')} {getRelativeTime(lastUpdated)}
                 </Text>
               )}
             </Box>
