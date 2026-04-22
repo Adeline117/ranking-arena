@@ -7,6 +7,21 @@
 
 // --- Mocks (must be before imports) ---
 
+// Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time.
+// verifyCronSecret (used by withCron) reads env.CRON_SECRET which is captured at
+// module-load time — the Proxy ensures it picks up the value set in beforeEach.
+jest.mock('@/lib/env', () => ({
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
+}))
+
 jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
@@ -17,7 +32,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = new Map()
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -31,7 +48,9 @@ jest.mock('next/server', () => {
     constructor(url: string, init?: { method?: string; headers?: Record<string, string> }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this._headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(init?.headers || {}) }))
+      this._headers = new Map(
+        Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(init?.headers || {}) })
+      )
     }
 
     get headers() {

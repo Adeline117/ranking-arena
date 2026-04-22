@@ -31,7 +31,7 @@ function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
     ok: status >= 200 && status < 300,
     status,
-    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+    headers: { get: (key: string) => (key === 'content-type' ? 'application/json' : null) },
     json: async () => body,
   })
 }
@@ -157,7 +157,10 @@ describe('GmxPerpConnector', () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 429,
-        headers: { get: (key: string) => key === 'retry-after' ? '60' : key === 'content-type' ? 'application/json' : null },
+        headers: {
+          get: (key: string) =>
+            key === 'retry-after' ? '60' : key === 'content-type' ? 'application/json' : null,
+        },
         json: async () => ({}),
       })
 
@@ -194,13 +197,23 @@ describe('GmxPerpConnector', () => {
   // ============================================
 
   describe('fetchTraderSnapshot', () => {
+    // Valid 20-byte Ethereum addresses for viem's getAddress()
+    const ADDR_TARGET = '0x1111111111111111111111111111111111111111'
+    const ADDR_BIGNUM = '0x2222222222222222222222222222222222222222'
+    const ADDR_STRINGS = '0x3333333333333333333333333333333333333333'
+    const ADDR_NOTFOUND = '0x4444444444444444444444444444444444444444'
+    const ADDR_CASE = '0xabcdef0123456789abcdef0123456789abcdef01'
+    const ADDR_ZEROCAP = '0x5555555555555555555555555555555555555555'
+    const ADDR_NOTRADES = '0x6666666666666666666666666666666666666666'
+    const ADDR_FLAGS = '0x7777777777777777777777777777777777777777'
+
     test('returns snapshot with computed ROI and win rate', async () => {
       const connector = createConnector()
       mockFetchResponse({
         data: {
           accountStats: [
             {
-              id: '0xtarget',
+              id: ADDR_TARGET,
               realizedPnl: 5000,
               maxCapital: 10000,
               wins: 45,
@@ -211,7 +224,7 @@ describe('GmxPerpConnector', () => {
         },
       })
 
-      const result = await connector.fetchTraderSnapshot('0xTARGET', '7d')
+      const result = await connector.fetchTraderSnapshot(ADDR_TARGET, '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.roi).toBe(50)
@@ -230,7 +243,7 @@ describe('GmxPerpConnector', () => {
         data: {
           accountStats: [
             {
-              id: '0xbignum',
+              id: ADDR_BIGNUM,
               realizedPnl: largePnl,
               maxCapital: largeCap,
               wins: 10,
@@ -240,7 +253,7 @@ describe('GmxPerpConnector', () => {
         },
       })
 
-      const result = await connector.fetchTraderSnapshot('0xBIGNUM', '30d')
+      const result = await connector.fetchTraderSnapshot(ADDR_BIGNUM, '30d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.roi).toBe(50)
@@ -254,7 +267,7 @@ describe('GmxPerpConnector', () => {
         data: {
           accountStats: [
             {
-              id: '0xstrings',
+              id: ADDR_STRINGS,
               realizedPnl: '3000',
               maxCapital: '6000',
               wins: 20,
@@ -264,7 +277,7 @@ describe('GmxPerpConnector', () => {
         },
       })
 
-      const result = await connector.fetchTraderSnapshot('0xSTRINGS', '7d')
+      const result = await connector.fetchTraderSnapshot(ADDR_STRINGS, '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.pnl).toBe(3000)
@@ -275,7 +288,7 @@ describe('GmxPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse({ data: { accountStats: [] } })
 
-      const result = await connector.fetchTraderSnapshot('0xNOTFOUND', '7d')
+      const result = await connector.fetchTraderSnapshot(ADDR_NOTFOUND, '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.roi).toBeNull()
@@ -291,7 +304,7 @@ describe('GmxPerpConnector', () => {
         data: {
           accountStats: [
             {
-              id: '0xabcdef',
+              id: ADDR_CASE.toLowerCase(),
               realizedPnl: 1000,
               maxCapital: 2000,
               wins: 5,
@@ -301,7 +314,7 @@ describe('GmxPerpConnector', () => {
         },
       })
 
-      const result = await connector.fetchTraderSnapshot('0xABCDEF', '7d')
+      const result = await connector.fetchTraderSnapshot(ADDR_CASE, '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.pnl).toBe(1000)
@@ -313,7 +326,7 @@ describe('GmxPerpConnector', () => {
         data: {
           accountStats: [
             {
-              id: '0xzerocap',
+              id: ADDR_ZEROCAP,
               realizedPnl: 1000,
               maxCapital: 0,
               wins: 5,
@@ -323,7 +336,7 @@ describe('GmxPerpConnector', () => {
         },
       })
 
-      const result = await connector.fetchTraderSnapshot('0xZEROCAP', '7d')
+      const result = await connector.fetchTraderSnapshot(ADDR_ZEROCAP, '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.roi).toBeNull()
@@ -335,7 +348,7 @@ describe('GmxPerpConnector', () => {
         data: {
           accountStats: [
             {
-              id: '0xnotrades',
+              id: ADDR_NOTRADES,
               realizedPnl: 0,
               maxCapital: 1000,
               wins: 0,
@@ -345,7 +358,7 @@ describe('GmxPerpConnector', () => {
         },
       })
 
-      const result = await connector.fetchTraderSnapshot('0xNOTRADES', '7d')
+      const result = await connector.fetchTraderSnapshot(ADDR_NOTRADES, '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.win_rate).toBeNull()
@@ -358,7 +371,7 @@ describe('GmxPerpConnector', () => {
         data: {
           accountStats: [
             {
-              id: '0xflags',
+              id: ADDR_FLAGS,
               realizedPnl: 1000,
               maxCapital: 5000,
               wins: 10,
@@ -368,7 +381,7 @@ describe('GmxPerpConnector', () => {
         },
       })
 
-      const result = await connector.fetchTraderSnapshot('0xFLAGS', '7d')
+      const result = await connector.fetchTraderSnapshot(ADDR_FLAGS, '7d')
 
       expect(result).not.toBeNull()
       expect(result!.quality_flags.missing_fields).toContain('max_drawdown')
@@ -383,8 +396,16 @@ describe('GmxPerpConnector', () => {
   // ============================================
 
   describe('fetchTimeseries', () => {
+    // Valid 20-byte Ethereum addresses for viem's getAddress()
+    // Use all-lowercase to pass EIP-55 checksum validation
+    const ADDR_TS = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+    const ADDR_EMPTY = '0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+    const ADDR_FAIL = '0xcccccccccccccccccccccccccccccccccccccccc'
+    const ADDR_QUERY = '0xabcdef0123456789abcdef0123456789abcdef01'
+
     test('returns daily PnL from subgraph data', async () => {
       const connector = createConnector()
+      // Values <= 1e20 are treated as USD directly by fromGmxDecimals
       mockFetchResponse({
         data: {
           periodAccountStats: [
@@ -394,7 +415,7 @@ describe('GmxPerpConnector', () => {
         },
       })
 
-      const result = await connector.fetchTimeseries('0xabc123')
+      const result = await connector.fetchTimeseries(ADDR_TS)
 
       expect(result.series).toHaveLength(1)
       expect(result.series[0].series_type).toBe('daily_pnl')
@@ -407,7 +428,7 @@ describe('GmxPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse({ data: { periodAccountStats: [] } })
 
-      const result = await connector.fetchTimeseries('0xempty')
+      const result = await connector.fetchTimeseries(ADDR_EMPTY)
 
       expect(result.series).toHaveLength(0)
     })
@@ -416,7 +437,7 @@ describe('GmxPerpConnector', () => {
       const connector = createConnector()
       mockFetchNetworkError('Subgraph unavailable')
 
-      const result = await connector.fetchTimeseries('0xfail')
+      const result = await connector.fetchTimeseries(ADDR_FAIL)
 
       expect(result.series).toHaveLength(0)
     })
@@ -425,11 +446,12 @@ describe('GmxPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse({ data: { periodAccountStats: [] } })
 
-      await connector.fetchTimeseries('0xAbC123')
+      await connector.fetchTimeseries(ADDR_QUERY)
 
       const body = JSON.parse(mockFetch.mock.calls[0][1].body)
       expect(body.query).toContain('periodAccountStats')
-      expect(body.query).toContain('0xabc123')
+      // getAddress() checksums the address to EIP-55 format
+      expect(body.query).toContain('0xabCDeF0123456789AbcdEf0123456789aBCDEF01')
     })
   })
 
@@ -518,10 +540,19 @@ describe('GmxPerpConnector', () => {
       const normalized = connector.normalize(raw)
 
       const expectedKeys = [
-        'trader_key', 'display_name', 'avatar_url',
-        'roi', 'pnl', 'win_rate', 'max_drawdown',
-        'trades_count', 'followers', 'copiers',
-        'aum', 'sharpe_ratio', 'platform_rank',
+        'trader_key',
+        'display_name',
+        'avatar_url',
+        'roi',
+        'pnl',
+        'win_rate',
+        'max_drawdown',
+        'trades_count',
+        'followers',
+        'copiers',
+        'aum',
+        'sharpe_ratio',
+        'platform_rank',
       ]
       for (const key of expectedKeys) {
         expect(normalized).toHaveProperty(key)
@@ -627,7 +658,7 @@ describe('GmxPerpConnector', () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 500,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        headers: { get: (key: string) => (key === 'content-type' ? 'application/json' : null) },
         json: async () => ({}),
       })
 
@@ -639,7 +670,7 @@ describe('GmxPerpConnector', () => {
       mockFetch.mockResolvedValueOnce({
         ok: false,
         status: 403,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        headers: { get: (key: string) => (key === 'content-type' ? 'application/json' : null) },
         json: async () => ({ error: 'Forbidden' }),
       })
 

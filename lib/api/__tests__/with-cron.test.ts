@@ -16,6 +16,21 @@
 const CRON_SECRET = 'super-secret-xyz'
 process.env.CRON_SECRET = CRON_SECRET
 
+// -------- env mock (must be before imports) ----------
+// verifyCronSecret reads env.CRON_SECRET (from lib/env.ts) which is captured at
+// module-load time. Mock it with a Proxy so it reads process.env at call time.
+jest.mock('@/lib/env', () => ({
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
+}))
+
 // -------- next/server mock ----------
 jest.mock('next/server', () => {
   class MockNextRequest {
@@ -45,7 +60,10 @@ jest.mock('next/server', () => {
     status: number
     headers: Map<string, string>
 
-    constructor(body?: string | null, init?: { status?: number; headers?: Record<string, string> }) {
+    constructor(
+      body?: string | null,
+      init?: { status?: number; headers?: Record<string, string> }
+    ) {
       this.body = body || ''
       this.status = init?.status || 200
       this.headers = new Map(Object.entries(init?.headers || {}))
@@ -111,18 +129,22 @@ import { NextRequest } from 'next/server'
 import { withCron } from '../with-cron'
 
 // Pull out captured mock fns from the factory (see jest.mock calls above)
-const plogMocks = (jest.requireMock('@/lib/services/pipeline-logger') as {
-  __mocks: {
-    start: jest.Mock
-    success: jest.Mock
-    error: jest.Mock
-    partialSuccess: jest.Mock
-    timeout: jest.Mock
+const plogMocks = (
+  jest.requireMock('@/lib/services/pipeline-logger') as {
+    __mocks: {
+      start: jest.Mock
+      success: jest.Mock
+      error: jest.Mock
+      partialSuccess: jest.Mock
+      timeout: jest.Mock
+    }
   }
-}).__mocks
-const redisMocks = (jest.requireMock('@/lib/cache/redis-client') as {
-  __mocks: { set: jest.Mock; del: jest.Mock; getSharedRedis: jest.Mock }
-}).__mocks
+).__mocks
+const redisMocks = (
+  jest.requireMock('@/lib/cache/redis-client') as {
+    __mocks: { set: jest.Mock; del: jest.Mock; getSharedRedis: jest.Mock }
+  }
+).__mocks
 
 const mockedPipelineStart = plogMocks.start
 const mockPlogSuccess = plogMocks.success
