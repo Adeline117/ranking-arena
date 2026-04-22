@@ -68,6 +68,21 @@ jobs:
           fi
           echo "No unsafe secret comparisons found ✅"
 
+      - name: Style — no hardcoded thresholds
+        run: |
+          # Detect hardcoded threshold constants that should be in lib/constants/
+          # Focus on patterns like: const MIN_TRADES = 5, const MAX_DRAWDOWN = 0.5
+          HARDCODED=$(grep -rn 'const MIN_\|const MAX_\|const THRESHOLD\|const LIMIT_' \
+            app/api/cron/ --include="*.ts" \
+            | grep -v 'import\|from.*constants\|from.*thresholds' \
+            | grep -v __tests__ || true)
+          if [ -n "$HARDCODED" ]; then
+            echo "::warning::Found hardcoded threshold constants in cron routes (should be in lib/constants/):"
+            echo "$HARDCODED"
+          else
+            echo "No hardcoded thresholds in cron routes ✅"
+          fi
+
       - name: Style — consistent error responses
         run: |
           # Count API routes using ad-hoc error patterns vs standard apiError/error()
