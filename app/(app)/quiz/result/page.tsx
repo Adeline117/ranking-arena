@@ -72,9 +72,10 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 
   const validType = PERSONALITY_TYPE_MAP[typeId] ? typeId : 'sniper'
   const pType = PERSONALITY_TYPE_MAP[validType] || PERSONALITY_TYPES[0]
-  const typeName = pType.nameKey // Will be resolved to actual name via i18n on client
+  // Use capitalized type ID for server-side metadata (i18n is client-only)
+  const typeLabel = validType.charAt(0).toUpperCase() + validType.slice(1)
 
-  const title = `I'm ${validType.charAt(0).toUpperCase() + validType.slice(1)} - Trading Personality`
+  const title = `I'm ${typeLabel} - Trading Personality`
   const description = `${match}% match. Discover your trading personality and the legendary trader who matches your style.`
 
   return {
@@ -92,7 +93,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
           url: `${BASE_URL}/api/og/quiz?type=${validType}&match=${match}&lang=${lang}`,
           width: 1200,
           height: 630,
-          alt: `Trading Personality: ${typeName}`,
+          alt: `Trading Personality: ${typeLabel}`,
         },
       ],
     },

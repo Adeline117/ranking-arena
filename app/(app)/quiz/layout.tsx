@@ -2,7 +2,10 @@ import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
-  title: 'Trading Personality Test',
+  title: {
+    default: 'Trading Personality Test',
+    template: '%s | Arena',
+  },
   description:
     'Discover your trading personality in 30 questions. Are you a Sniper, Whale, or Degen? 12 personalities to uncover. Find your trading style and the legendary trader who matches you.',
   alternates: { canonical: `${BASE_URL}/quiz` },
