@@ -5,7 +5,7 @@
 
 'use client'
 
-import useSWR from 'swr'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import type {
   TraderDetailResponse,
@@ -32,7 +32,7 @@ const fetcher = async (url: string): Promise<TraderDetailResponse> => {
 export interface UseTraderDetailV2Options {
   platform: Platform
   traderKey: string
-  /** SWR refresh interval in ms (default: 0 = no auto-refresh) */
+  /** Refresh interval in ms (default: 0 = no auto-refresh) */
   refreshInterval?: number
 }
 
@@ -50,7 +50,7 @@ export interface UseTraderDetailV2Result {
   isRefreshing: boolean
   /** Refresh error message */
   refreshError: string | null
-  /** Mutate SWR cache */
+  /** Invalidate query cache */
   mutate: () => void
 }
 
@@ -63,19 +63,19 @@ export function useTraderDetailV2({
   const [refreshError, setRefreshError] = useState<string | null>(null)
   const abortControllerRef = useRef<AbortController | null>(null)
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const queryClient = useQueryClient()
 
-  const url = traderKey ? `/api/trader/${platform}/${traderKey}` : null
+  const queryKey = ['trader-detail-v2', platform, traderKey]
 
-  const { data, error, isLoading, isValidating, mutate } = useSWR<TraderDetailResponse>(
-    url,
-    fetcher,
-    {
-      refreshInterval,
-      revalidateOnFocus: false,
-      dedupingInterval: 10000,
-      errorRetryCount: 2,
-    }
-  )
+  const { data, error, isLoading, isFetching: isValidating } = useQuery<TraderDetailResponse>({
+    queryKey,
+    queryFn: () => fetcher(`/api/trader/${platform}/${traderKey}`),
+    enabled: !!traderKey,
+    refetchInterval: refreshInterval || false,
+    refetchOnWindowFocus: false,
+    staleTime: 10000,
+    retry: 2,
+  })
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -90,6 +90,10 @@ export function useTraderDetailV2({
       }
     }
   }, [])
+
+  const invalidate = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey })
+  }, [queryClient, queryKey])
 
   const triggerRefresh = useCallback(async (): Promise<RefreshResponse | null> => {
     if (!traderKey || isRefreshing) return null
@@ -124,7 +128,7 @@ export function useTraderDetailV2({
 
         const controller = new AbortController()
         abortControllerRef.current = controller
-        pollForCompletion(platform, traderKey, mutate, controller.signal, pollTimeoutRef)
+        pollForCompletion(platform, traderKey, invalidate, controller.signal, pollTimeoutRef)
       }
 
       return result
@@ -135,18 +139,18 @@ export function useTraderDetailV2({
     } finally {
       setIsRefreshing(false)
     }
-  }, [platform, traderKey, isRefreshing, mutate])
+  }, [platform, traderKey, isRefreshing, invalidate])
 
   return {
     data,
-    error,
+    error: error as Error | undefined,
     isLoading,
     isValidating,
     isStale: data?.is_stale ?? false,
     triggerRefresh,
     isRefreshing,
     refreshError,
-    mutate: () => mutate(),
+    mutate: invalidate,
   }
 }
 
@@ -157,7 +161,7 @@ export function useTraderDetailV2({
 function pollForCompletion(
   platform: string,
   traderKey: string,
-  mutate: () => void,
+  invalidate: () => void,
   signal: AbortSignal,
   timeoutRef: React.MutableRefObject<ReturnType<typeof setTimeout> | null>,
   maxAttempts = 12,
@@ -177,7 +181,7 @@ function pollForCompletion(
         if (res.ok) {
           const data: TraderDetailResponse = await res.json()
           if (!data.refresh_job || data.refresh_job.status === 'success') {
-            mutate()
+            invalidate()
             return
           }
         }
