@@ -35,6 +35,8 @@ export default function QuizClient() {
     const unsub = onTranslationsReady(() => setTxnReady(true))
     // Check if already loaded
     if (t('quizTitle') !== 'quizTitle') setTxnReady(true)
+    // Ensure body scroll is not locked by a previous modal
+    document.body.style.overflow = ''
     return () => {
       unsub()
     }
@@ -213,7 +215,7 @@ export default function QuizClient() {
 
   // Questions — scrollable flow
   return (
-    <Box style={{ minHeight: '80vh', padding: 20, paddingBottom: 80 }}>
+    <Box style={{ minHeight: '80vh', padding: 20, paddingBottom: 80, touchAction: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
       <div style={{ maxWidth: 520, width: '100%', margin: '0 auto' }}>
         {/* Sticky progress bar at top */}
         <div
