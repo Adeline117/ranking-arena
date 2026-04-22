@@ -12,7 +12,11 @@ import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/uni
 import { isDead } from '@/lib/connectors/route-config'
 import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
-import { generateTraderProfilePageSchema, generateBreadcrumbSchema, type TraderSchemaInput } from '@/lib/seo/structured-data'
+import {
+  generateTraderProfilePageSchema,
+  generateBreadcrumbSchema,
+  type TraderSchemaInput,
+} from '@/lib/seo/structured-data'
 import { SSR_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { logger } from '@/lib/logger'
 
@@ -55,29 +59,25 @@ const cachedResolveTraderISR = unstable_cache(
 //
 // AbortSignal.timeout actually cancels the underlying HTTP request to
 // PostgREST, freeing the connection. Promise.race just abandons it.
-const cachedResolveTrader = cache(
-  async (handle: string, platform?: string) => {
-    try {
-      return await Promise.race([
-        cachedResolveTraderISR(handle, platform),
-        new Promise<null>((resolve) =>
-          setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)
-        ),
-      ])
-    } catch (err) {
-      // TRADER_RESOLVE_NULL = trader not found (thrown to prevent unstable_cache
-      // from caching null). Convert to null so callers can check normally.
-      if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') {
-        return null
-      }
-      // Real DB failures — log but return null to let page show 404 instead of
-      // crashing with an error page. The client-side TraderProfileClient will
-      // retry the fetch anyway.
-      logger.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
+const cachedResolveTrader = cache(async (handle: string, platform?: string) => {
+  try {
+    return await Promise.race([
+      cachedResolveTraderISR(handle, platform),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)),
+    ])
+  } catch (err) {
+    // TRADER_RESOLVE_NULL = trader not found (thrown to prevent unstable_cache
+    // from caching null). Convert to null so callers can check normally.
+    if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') {
       return null
     }
+    // Real DB failures — log but return null to let page show 404 instead of
+    // crashing with an error page. The client-side TraderProfileClient will
+    // retry the fetch anyway.
+    logger.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
+    return null
   }
-)
+})
 
 // Heavy query (~11 parallel DB queries). Caching this eliminates the dominant
 // TTFB contribution on repeat requests (expected: 973ms -> <200ms on cache hit).
@@ -109,9 +109,7 @@ const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
   try {
     return await Promise.race([
       cachedGetTraderDetailISR(platform, traderKey),
-      new Promise<null>((resolve) =>
-        setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)
-      ),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
     ])
   } catch (err) {
     // TRADER_DETAIL_NULL is expected (thrown by cachedGetTraderDetailISR to avoid
@@ -156,7 +154,10 @@ const cachedFindUserHandleByTrader = unstable_cache(
 
       if (!trader) return null
 
-      const auths = trader.trader_authorizations as unknown as Array<{ user_id: string; user_profiles: { handle: string | null } | null }>
+      const auths = trader.trader_authorizations as unknown as Array<{
+        user_id: string
+        user_profiles: { handle: string | null } | null
+      }>
       return auths?.[0]?.user_profiles?.handle || null
     } catch {
       // Fallback: query via trader_authorizations table
@@ -205,7 +206,11 @@ export async function generateStaticParams() {
     .map((t: { handle: string | null }) => ({ handle: encodeURIComponent(t.handle!.trim()) }))
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ handle: string }>
+}): Promise<Metadata> {
   const { handle } = await params
   // Reject absurdly long handles early to prevent cache key bloat and DB abuse
   if (handle.length > 300) return notFound()
@@ -236,7 +241,8 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
       const rawDescription = parts.length
         ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track performance history, analytics, and rankings on Arena.`
         : `${name} is a ${exchange} crypto trader. View performance analytics, trading history, risk metrics, and rankings on Arena.`
-      const description = rawDescription.length > 160 ? rawDescription.substring(0, 157) + '...' : rawDescription
+      const description =
+        rawDescription.length > 160 ? rawDescription.substring(0, 157) + '...' : rawDescription
 
       const ogParams = new URLSearchParams({ handle: decoded })
       if (roi != null) ogParams.set('roi', roi.toFixed(2))
@@ -254,12 +260,15 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
           siteName: 'Arena',
           type: 'profile',
-          images: [{ url: ogImageUrl, width: 1200, height: 630, alt: `${name} trading performance card` }],
+          images: [
+            { url: ogImageUrl, width: 1200, height: 630, alt: `${name} trading performance card` },
+          ],
         },
         twitter: {
           card: 'summary_large_image',
           title,
-          description: description.length > 160 ? description.substring(0, 157) + '...' : description,
+          description:
+            description.length > 160 ? description.substring(0, 157) + '...' : description,
           images: [ogImageUrl],
           creator: '@arenafi',
           site: '@arenafi',
@@ -287,17 +296,16 @@ export const dynamicParams = true
 // Sidebar widgets are client components using SWR (no server-side Redis dependency)
 export const revalidate = 300
 
-export default async function TraderPage({ params, searchParams }: { params: Promise<{ handle: string }>; searchParams: Promise<Record<string, string | undefined>> }) {
+export default async function TraderPage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params
   if (handle.length > 300) notFound()
-  const allSearchParams = await searchParams
-  const rawPlatform = allSearchParams.platform
 
-  // Validate platform param: reject if it's not a known exchange (avoids wasted DB query)
-  // Only lowercase alphanumeric + underscore allowed; must exist in EXCHANGE_CONFIG
-  const platform = rawPlatform && /^[a-z0-9_]{1,40}$/.test(rawPlatform) && rawPlatform in EXCHANGE_CONFIG
-    ? rawPlatform
-    : undefined
+  // NOTE: searchParams removed from server component to fix DYNAMIC_SERVER_USAGE error.
+  // Accessing searchParams in a page with generateStaticParams + revalidate causes
+  // Next.js 16 to throw at runtime because it conflicts with ISR static generation.
+  // The ?platform= param for exchange disambiguation is handled client-side by
+  // TraderProfileClient via useSearchParams(). resolveTrader without a platform hint
+  // picks the highest-scored exchange automatically.
 
   let decodedHandle = handle
   try {
@@ -310,7 +318,7 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   // cachedResolveTrader deduplicates the DB query shared with generateMetadata.
   const [userHandle, resolved] = await Promise.all([
     cachedFindUserHandleByTrader(decodedHandle),
-    cachedResolveTrader(decodedHandle, platform),
+    cachedResolveTrader(decodedHandle),
   ])
 
   // If not found, 404
@@ -320,18 +328,14 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
 
   // Redirect claimed traders to canonical /u/ URL (avoids SEO duplicate content)
   if (userHandle) {
-    const redirectUrl = `/u/${encodeURIComponent(userHandle)}${platform ? `?platform=${encodeURIComponent(resolved.platform)}` : ''}`
-    redirect(redirectUrl)
+    redirect(`/u/${encodeURIComponent(userHandle)}`)
   }
 
   // Redirect raw address URLs to human-readable handle URLs (better SEO)
   if (resolved.handle && resolved.handle !== decodedHandle) {
-    const redirectParams = new URLSearchParams({ platform: resolved.platform })
-    // Preserve any additional query params (e.g. UTM tracking)
-    for (const [key, val] of Object.entries(allSearchParams)) {
-      if (key !== 'platform' && val) redirectParams.set(key, val)
-    }
-    redirect(`/trader/${encodeURIComponent(resolved.handle)}?${redirectParams.toString()}`)
+    redirect(
+      `/trader/${encodeURIComponent(resolved.handle)}?platform=${encodeURIComponent(resolved.platform)}`
+    )
   }
 
   // Phase 2: Fetch trader detail.
@@ -340,13 +344,18 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
   // claimedUserProfile is always null — no need to fetch user_profiles.
   const claimedUserProfile = null
 
-  const detailResult = await cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch((err) => {
-    // Log real fetch failures so they aren't silently masked as "no data".
-    // cachedGetTraderDetail already handles TRADER_DETAIL_NULL internally;
-    // errors reaching here are unexpected (e.g. network/timeout).
-    logger.error('[trader/page] cachedGetTraderDetail unexpected error:', err instanceof Error ? err.message : err)
-    return null
-  })
+  const detailResult = await cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch(
+    (err) => {
+      // Log real fetch failures so they aren't silently masked as "no data".
+      // cachedGetTraderDetail already handles TRADER_DETAIL_NULL internally;
+      // errors reaching here are unexpected (e.g. network/timeout).
+      logger.error(
+        '[trader/page] cachedGetTraderDetail unexpected error:',
+        err instanceof Error ? err.message : err
+      )
+      return null
+    }
+  )
 
   const serverTraderData = detailResult ? toTraderPageData(detailResult) : null
 
@@ -359,20 +368,37 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
     source_trader_id: resolved.traderKey,
     is_platform_dead: platformDead || undefined,
     // Pull basic scores from serverTraderData if available
-    ...(serverTraderData?.performance ? {
-      arena_score: (serverTraderData.performance as Record<string, unknown>).arena_score as number | null,
-      roi: (serverTraderData.performance as Record<string, unknown>).roi_90d as number | null,
-      pnl: (serverTraderData.performance as Record<string, unknown>).pnl as number | null,
-      win_rate: (serverTraderData.performance as Record<string, unknown>).win_rate as number | null,
-      max_drawdown: (serverTraderData.performance as Record<string, unknown>).max_drawdown as number | null,
-      rank: (serverTraderData.performance as Record<string, unknown>).rank as number | null,
-      profitability_score: (serverTraderData.performance as Record<string, unknown>).profitability_score as number | null,
-      risk_control_score: (serverTraderData.performance as Record<string, unknown>).risk_control_score as number | null,
-      execution_score: (serverTraderData.performance as Record<string, unknown>).execution_score as number | null,
-      sortino_ratio: (serverTraderData.performance as Record<string, unknown>).sortinoRatio as number | null,
-      calmar_ratio: (serverTraderData.performance as Record<string, unknown>).calmarRatio as number | null,
-      profit_factor: (serverTraderData.performance as Record<string, unknown>).profitFactor as number | null,
-    } : {}),
+    ...(serverTraderData?.performance
+      ? {
+          arena_score: (serverTraderData.performance as Record<string, unknown>).arena_score as
+            | number
+            | null,
+          roi: (serverTraderData.performance as Record<string, unknown>).roi_90d as number | null,
+          pnl: (serverTraderData.performance as Record<string, unknown>).pnl as number | null,
+          win_rate: (serverTraderData.performance as Record<string, unknown>).win_rate as
+            | number
+            | null,
+          max_drawdown: (serverTraderData.performance as Record<string, unknown>).max_drawdown as
+            | number
+            | null,
+          rank: (serverTraderData.performance as Record<string, unknown>).rank as number | null,
+          profitability_score: (serverTraderData.performance as Record<string, unknown>)
+            .profitability_score as number | null,
+          risk_control_score: (serverTraderData.performance as Record<string, unknown>)
+            .risk_control_score as number | null,
+          execution_score: (serverTraderData.performance as Record<string, unknown>)
+            .execution_score as number | null,
+          sortino_ratio: (serverTraderData.performance as Record<string, unknown>).sortinoRatio as
+            | number
+            | null,
+          calmar_ratio: (serverTraderData.performance as Record<string, unknown>).calmarRatio as
+            | number
+            | null,
+          profit_factor: (serverTraderData.performance as Record<string, unknown>).profitFactor as
+            | number
+            | null,
+        }
+      : {}),
   }
 
   // JSON-LD structured data — use centralized schema generator
@@ -398,7 +424,15 @@ export default async function TraderPage({ params, searchParams }: { params: Pro
       <JsonLd data={jsonLd} />
       <JsonLd data={breadcrumbJsonLd} />
       <ErrorBoundary pageType="trader-profile">
-        <TraderProfileClient data={traderData} serverTraderData={serverTraderData as import('@/app/(app)/u/[handle]/components/types').TraderPageData | null} claimedUser={claimedUserProfile} />
+        <TraderProfileClient
+          data={traderData}
+          serverTraderData={
+            serverTraderData as
+              | import('@/app/(app)/u/[handle]/components/types').TraderPageData
+              | null
+          }
+          claimedUser={claimedUserProfile}
+        />
       </ErrorBoundary>
     </>
   )
