@@ -124,7 +124,7 @@ export function VisibilitySelector({ value, onChange, isGroupPost }: VisibilityS
           top: '100%',
           left: 0,
           marginTop: 4,
-          minWidth: 220,
+          minWidth: 'min(220px, calc(100vw - 32px))',
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
           borderRadius: tokens.radius.lg,
