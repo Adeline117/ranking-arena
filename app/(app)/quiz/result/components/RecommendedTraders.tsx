@@ -161,7 +161,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                     style={{
                       fontSize: 13,
                       fontWeight: 700,
-                      color: '#D4AF37',
+                      color: 'var(--color-rank-gold)',
                     }}
                   >
                     {Math.round(trader.arena_score)}
@@ -169,7 +169,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   <div
                     style={{
                       fontSize: 12,
-                      color: '#D4AF37',
+                      color: 'var(--color-rank-gold)',
                     }}
                   >
                     Score
