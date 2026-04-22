@@ -31,6 +31,7 @@ import { config as dotenvConfig } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
 import { launchBrowser, closeBrowser, createPage } from './browser-utils.mjs'
 import { validateRow } from './validate-snapshot.mjs'
+import { writeSnapshots } from './write-snapshot.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
@@ -381,56 +382,10 @@ async function saveTraders(traders) {
     console.warn(`  [VALIDATION] Rejected ${rejectedCount}/${traders.length} traders`)
   }
 
-  // Write to individual columns (not metrics JSONB) — the app reads roi_pct, win_rate, etc.
-  // Root cause fix: was writing to metrics JSONB column which the app never reads.
-  const snapshotsV2 = validTraders.map((t) => ({
-    platform: t.source,
-    market_type: 'futures',
-    trader_key: t.source_trader_id,
-    window: t.season_id,
-    as_of_ts: t.captured_at,
-    roi_pct: t.roi ?? null,
-    pnl_usd: t.pnl ?? null,
-    win_rate: t.win_rate ?? null,
-    max_drawdown: t.max_drawdown ?? null,
-    sharpe_ratio: t.sharpe_ratio ?? null,
-    followers: t.followers ?? null,
-    arena_score: t.arena_score ?? null,
-    quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 0.8 },
-    updated_at: new Date().toISOString(),
-  }))
-  const validatedV2 = snapshotsV2.filter((s) => {
-    const roi = s.metrics.roi
-    const pnl = s.metrics.pnl
-    const wr = s.metrics.win_rate
-    const mdd = s.metrics.max_drawdown
-    if (roi != null && Math.abs(roi) > 10000) {
-      console.warn(`[validate] rejected roi=${roi} for ${s.trader_key}`)
-      return false
-    }
-    if (pnl != null && Math.abs(pnl) > 100_000_000) {
-      console.warn(`[validate] rejected pnl=${pnl} for ${s.trader_key}`)
-      return false
-    }
-    if (wr != null && (wr < 0 || wr > 100)) {
-      console.warn(`[validate] rejected wr=${wr} for ${s.trader_key}`)
-      return false
-    }
-    if (mdd != null && (mdd < 0 || mdd > 100)) {
-      console.warn(`[validate] rejected mdd=${mdd} for ${s.trader_key}`)
-      return false
-    }
-    return true
-  })
-  if (validatedV2.length > 0) {
-    const { error: v2Err } = await supabase
-      .from('trader_snapshots_v2')
-      .upsert(validatedV2, { onConflict: 'platform,market_type,trader_key,window,as_of_ts' })
-    if (v2Err && !v2Err.message.includes('duplicate') && !v2Err.message.includes('unique'))
-      console.error('v2 error:', v2Err.message)
-  }
+  // Use shared write-snapshot module (single source of truth for column mapping)
+  const v2Result = await writeSnapshots(supabase, validTraders, { platform: SOURCE })
 
-  return { total: traders.length, saved: validTraders.length, rejected: rejectedCount }
+  return { total: traders.length, saved: v2Result.saved, rejected: rejectedCount }
 }
 
 async function sendTelegram(text) {
