@@ -102,28 +102,20 @@ export function QuizIcon({ name, color, size = 24 }: QuizIconProps) {
           <path d="M16 3.13a4 4 0 0 1 0 7.75" />
         </svg>
       )
-    case 'scales':
+    case 'compass':
       return (
         <svg {...props}>
-          <line x1="12" y1="3" x2="12" y2="21" />
-          <path d="M5 8L2 14h6L5 8z" fill={`${color}30`} />
-          <path d="M19 8l-3 6h6l-3-6z" fill={`${color}30`} />
-          <line x1="5" y1="8" x2="19" y2="8" />
-          <line x1="10" y1="21" x2="14" y2="21" />
+          <circle cx="12" cy="12" r="10" />
+          <polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76" fill={`${color}30`} />
         </svg>
       )
-    case 'grid':
+    case 'hand':
       return (
         <svg {...props}>
-          <rect x="3" y="3" width="5" height="5" rx="1" />
-          <rect x="10" y="3" width="5" height="5" rx="1" />
-          <rect x="17" y="3" width="5" height="5" rx="1" />
-          <rect x="3" y="10" width="5" height="5" rx="1" />
-          <rect x="10" y="10" width="5" height="5" rx="1" />
-          <rect x="17" y="10" width="5" height="5" rx="1" />
-          <rect x="3" y="17" width="5" height="5" rx="1" />
-          <rect x="10" y="17" width="5" height="5" rx="1" />
-          <rect x="17" y="17" width="5" height="5" rx="1" />
+          <path d="M18 11V6a2 2 0 0 0-4 0v1" />
+          <path d="M14 10V4a2 2 0 0 0-4 0v2" />
+          <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
+          <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8H12a8 8 0 0 1-8-8V8" opacity="0.5" />
         </svg>
       )
     case 'megaphone':
