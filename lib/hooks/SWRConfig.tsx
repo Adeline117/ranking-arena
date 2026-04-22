@@ -2,7 +2,7 @@
 
 import { SWRConfig } from 'swr'
 import { ReactNode } from 'react'
-import { fetcher } from './useSWR'
+import { fetcher } from './fetchers'
 import { logger } from '@/lib/logger'
 
 /**
