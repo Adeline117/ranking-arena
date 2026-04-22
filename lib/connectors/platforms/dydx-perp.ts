@@ -18,12 +18,24 @@ import {
   DydxHistoricalPnlResponseSchema,
 } from './schemas'
 import type {
-  DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
-  TraderSource, TraderProfile, SnapshotMetrics, QualityFlags, TraderTimeseries,
-  PlatformCapabilities, Window,
+  DiscoverResult,
+  ProfileResult,
+  SnapshotResult,
+  TimeseriesResult,
+  TraderSource,
+  TraderProfile,
+  SnapshotMetrics,
+  QualityFlags,
+  TraderTimeseries,
+  PlatformCapabilities,
+  Window,
 } from '../../types/leaderboard'
 
-const WINDOW_MAP: Record<Window, string> = { '7d': 'PERIOD_7D', '30d': 'PERIOD_30D', '90d': 'PERIOD_90D' }
+const WINDOW_MAP: Record<Window, string> = {
+  '7d': 'PERIOD_7D',
+  '30d': 'PERIOD_30D',
+  '90d': 'PERIOD_90D',
+}
 
 /**
  * Resolve dYdX API base URL.
@@ -31,9 +43,10 @@ const WINDOW_MAP: Record<Window, string> = { '7d': 'PERIOD_7D', '30d': 'PERIOD_3
  * Falls back to direct indexer if proxy is not configured.
  */
 function getDydxBaseUrl(): string {
-  const proxyUrl = typeof process !== 'undefined'
-    ? (process.env?.DYDX_PROXY_URL || process.env?.CF_WORKER_PROXY_URL)
-    : undefined
+  const proxyUrl =
+    typeof process !== 'undefined'
+      ? process.env?.DYDX_PROXY_URL || process.env?.CF_WORKER_PROXY_URL
+      : undefined
   return proxyUrl || 'https://indexer.dydx.trade'
 }
 
@@ -58,30 +71,48 @@ export class DydxPerpConnector extends BaseConnector {
   // populates the cache; the next 999 are O(1) Map lookups. Cache is
   // intentionally per-instance (not module-global) so concurrent cron
   // invocations don't share state in unsafe ways.
-  private _copinLbCache = new Map<string, { entries: Map<string, Record<string, unknown>>; expiresAt: number }>()
+  // Copin stopped indexing dYdX on ~2026-03-25. The last snapshot is at
+  // ~2026-04-01 (rankingAt). queryDate must be ≥22 days ago to find data.
+  // We probe progressively older dates so this self-heals as the gap grows.
+  private static readonly COPIN_PROBE_DAYS = [25, 35, 50, 75] as const
+
+  private _copinLbCache = new Map<
+    string,
+    { entries: Map<string, Record<string, unknown>>; expiresAt: number }
+  >()
   private async getCopinLeaderboard(window: Window): Promise<Map<string, Record<string, unknown>>> {
     const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
-    const queryDate = Date.now() - 14 * 24 * 60 * 60 * 1000
     // Bucket cache key by 5-min window so each cron cycle gets a fresh fetch
-    const bucket = Math.floor(queryDate / (5 * 60 * 1000))
+    const bucket = Math.floor(Date.now() / (5 * 60 * 1000))
     const cacheKey = `${window}:${bucket}`
     const cached = this._copinLbCache.get(cacheKey)
     if (cached && cached.expiresAt > Date.now()) return cached.entries
 
-    const url = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
-    const data = await this.request<Record<string, unknown>>(url, { method: 'GET' })
-    const list = (data?.data || []) as Record<string, unknown>[]
-    const map = new Map<string, Record<string, unknown>>()
-    for (const item of list) map.set(String(item.account || ''), item)
-    this._copinLbCache.set(cacheKey, { entries: map, expiresAt: Date.now() + 5 * 60 * 1000 })
-    return map
+    // Probe progressively older dates until we find data
+    for (const days of DydxPerpConnector.COPIN_PROBE_DAYS) {
+      const queryDate = Date.now() - days * 24 * 60 * 60 * 1000
+      const url = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=1000&offset=0&sort_by=ranking&sort_type=asc`
+      try {
+        const data = await this.request<Record<string, unknown>>(url, { method: 'GET' })
+        const list = (data?.data || []) as Record<string, unknown>[]
+        if (list.length > 0) {
+          const map = new Map<string, Record<string, unknown>>()
+          for (const item of list) map.set(String(item.account || ''), item)
+          this._copinLbCache.set(cacheKey, { entries: map, expiresAt: Date.now() + 5 * 60 * 1000 })
+          return map
+        }
+      } catch {
+        /* try next probe */
+      }
+    }
+    return new Map()
   }
 
   readonly capabilities: PlatformCapabilities = {
     platform: 'dydx',
     market_types: ['perp'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['pnl'],  // ROI computed client-side
+    available_fields: ['pnl'], // ROI computed client-side
     has_timeseries: true,
     has_profiles: false,
     scraping_difficulty: 1,
@@ -129,87 +160,123 @@ export class DydxPerpConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 2000, _offset = 0): Promise<DiscoverResult> {
-    // dYdX indexer /v4/leaderboard/pnl returns 404 globally since ~2026-03.
-    // Use Copin API as primary data source for trader discovery.
-    // Copin API max limit is 500 per page — paginate to reach desired limit.
-    // NOTE: Copin DYDX leaderboard processing delay keeps growing.
-    //   2026-03: 3 days
-    //   2026-04 (mid): 7 days
-    //   2026-04-09: 14 days (verified empty for queryDate < 14 days, 973+ traders at 14d).
-    // Use 14 days to stay ahead of the moving target. If this stops working,
-    // bump again — alternatives are spinning up our own indexer.
+    // dYdX indexer /v4/leaderboard/pnl returns 404 since ~2026-03.
+    // Copin stopped indexing new dYdX data ~2026-03-25. Last snapshot ~2026-04-01.
+    // We probe progressively older queryDates to auto-heal as the gap grows.
+    // If Copin dies entirely, fall back to our DB seed (trader_sources table).
     const statisticType = window === '7d' ? 'WEEK' : 'MONTH'
-    const queryDate = Date.now() - 14 * 24 * 60 * 60 * 1000
     const COPIN_PAGE_SIZE = 500
 
     let traders: TraderSource[] = []
 
-    try {
-      let offset = 0
-      while (traders.length < limit) {
-        const pageSize = Math.min(COPIN_PAGE_SIZE, limit - traders.length)
-        const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=${pageSize}&offset=${offset}&sort_by=ranking&sort_type=asc`
+    // Strategy 1: Copin API with auto-probing queryDate
+    for (const days of DydxPerpConnector.COPIN_PROBE_DAYS) {
+      if (traders.length > 0) break
+      const queryDate = Date.now() - days * 24 * 60 * 60 * 1000
 
-        const copinData = await this.request<Record<string, unknown>>(copinUrl, { method: 'GET' })
-        const copinList = (copinData?.data || []) as Record<string, unknown>[]
-        if (copinList.length === 0) break
-
-        for (const item of copinList) {
-          const address = String(item.account || '')
-          traders.push({
-            platform: 'dydx' as const, market_type: 'perp' as const,
-            trader_key: address,
-            display_name: null,
-            profile_url: `https://trade.dydx.exchange/portfolio/${address}`,
-            discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-            is_active: true, raw: item as Record<string, unknown>,
-          })
-        }
-
-        // Check if there are more pages
-        const meta = copinData?.meta as Record<string, unknown> | undefined
-        const total = Number(meta?.total) || 0
-        offset += copinList.length
-        if (offset >= total || copinList.length < pageSize) break
-
-        // Rate limit between pages
-        await this.sleep(300)
-      }
-    } catch (copinErr) {
-      // Fallback: try original indexer API (in case it comes back)
       try {
-        const period = WINDOW_MAP[window]
-        const url = this.buildUrl('/v4/leaderboard/pnl', { period, limit: String(Math.min(limit, 1000)) })
-        const _rawLb = await this.request<Record<string, unknown>>(url, { method: 'GET' })
-        const data = warnValidate(DydxLeaderboardResponseSchema, _rawLb, 'dydx-perp/leaderboard')
-        const rankings = data?.pnlRanking || []
-        traders = (Array.isArray(rankings) ? rankings : []).map((item: Record<string, unknown>) => ({
-          platform: 'dydx' as const, market_type: 'perp' as const,
-          trader_key: String(item.address || ''),
-          display_name: null,
-          profile_url: `https://trade.dydx.exchange/portfolio/${item.address}`,
-          discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-          is_active: true, raw: item as Record<string, unknown>,
-        }))
-      } catch (err) {
-        this.logger.debug('dYdX indexer fallback also failed:', err instanceof Error ? err.message : String(err))
-        throw copinErr
+        let offset = 0
+        while (traders.length < limit) {
+          const pageSize = Math.min(COPIN_PAGE_SIZE, limit - traders.length)
+          const copinUrl = `https://api.copin.io/leaderboards/page?protocol=DYDX&statisticType=${statisticType}&queryDate=${queryDate}&limit=${pageSize}&offset=${offset}&sort_by=ranking&sort_type=asc`
+
+          const copinData = await this.request<Record<string, unknown>>(copinUrl, { method: 'GET' })
+          const copinList = (copinData?.data || []) as Record<string, unknown>[]
+          if (copinList.length === 0) break
+
+          for (const item of copinList) {
+            const address = String(item.account || '')
+            traders.push({
+              platform: 'dydx' as const,
+              market_type: 'perp' as const,
+              trader_key: address,
+              display_name: null,
+              profile_url: `https://trade.dydx.exchange/portfolio/${address}`,
+              discovered_at: new Date().toISOString(),
+              last_seen_at: new Date().toISOString(),
+              is_active: true,
+              raw: item as Record<string, unknown>,
+            })
+          }
+
+          const meta = copinData?.meta as Record<string, unknown> | undefined
+          const total = Number(meta?.total) || 0
+          offset += copinList.length
+          if (offset >= total || copinList.length < pageSize) break
+          await this.sleep(300)
+        }
+        if (traders.length > 0) {
+          this.logger.debug(`dYdX: Copin returned ${traders.length} traders at queryDate -${days}d`)
+        }
+      } catch {
+        this.logger.debug(`dYdX: Copin probe at -${days}d failed, trying next`)
       }
     }
 
-    return { traders, total_available: traders.length, window, fetched_at: new Date().toISOString() }
+    // Strategy 2: DB seed fallback — use previously discovered addresses
+    if (traders.length === 0) {
+      this.logger.debug('dYdX: Copin exhausted, falling back to DB seed')
+      try {
+        const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+        const supabase = getSupabaseAdmin()
+        const { data: seeds } = await supabase
+          .from('trader_sources')
+          .select('source_trader_id')
+          .eq('source', 'dydx')
+          .limit(limit)
+        if (seeds && seeds.length > 0) {
+          traders = seeds.map((s) => ({
+            platform: 'dydx' as const,
+            market_type: 'perp' as const,
+            trader_key: s.source_trader_id,
+            display_name: null,
+            profile_url: `https://trade.dydx.exchange/portfolio/${s.source_trader_id}`,
+            discovered_at: new Date().toISOString(),
+            last_seen_at: new Date().toISOString(),
+            is_active: true,
+            raw: {},
+          }))
+          this.logger.debug(`dYdX: DB seed returned ${traders.length} addresses`)
+        }
+      } catch (dbErr) {
+        this.logger.debug(
+          'dYdX: DB seed fallback failed:',
+          dbErr instanceof Error ? dbErr.message : String(dbErr)
+        )
+      }
+    }
+
+    return {
+      traders,
+      total_available: traders.length,
+      window,
+      fetched_at: new Date().toISOString(),
+    }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     // dYdX has no user profiles - only addresses
     const profile: TraderProfile = {
-      platform: 'dydx', market_type: 'perp', trader_key: traderKey,
-      display_name: null, avatar_url: null,
-      bio: null, tags: ['on-chain', 'perp-dex'],
+      platform: 'dydx',
+      market_type: 'perp',
+      trader_key: traderKey,
+      display_name: null,
+      avatar_url: null,
+      bio: null,
+      tags: ['on-chain', 'perp-dex'],
       profile_url: `https://trade.dydx.exchange/portfolio/${traderKey}`,
-      followers: null, copiers: null, aum: null,
-      updated_at: new Date().toISOString(), last_enriched_at: null,
-      provenance: { source_platform: 'dydx', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
+      followers: null,
+      copiers: null,
+      aum: null,
+      updated_at: new Date().toISOString(),
+      last_enriched_at: null,
+      provenance: {
+        source_platform: 'dydx',
+        acquisition_method: 'api',
+        fetched_at: new Date().toISOString(),
+        source_url: null,
+        scraper_version: '1.0.0',
+      },
     }
     return { profile, fetched_at: new Date().toISOString() }
   }
@@ -236,19 +303,23 @@ export class DydxPerpConnector extends BaseConnector {
         pnl = Number(entry.totalPnl ?? entry.totalRealisedPnl) || null
         const totalWin = Number(entry.totalWin) || 0
         const totalLose = Number(entry.totalLose) || 0
-        const totalTrade = Number(entry.totalTrade) || (totalWin + totalLose)
+        const totalTrade = Number(entry.totalTrade) || totalWin + totalLose
         winRate = totalTrade > 0 ? (totalWin / totalTrade) * 100 : null
         tradesCount = totalTrade > 0 ? totalTrade : null
         platformRank = entry.ranking != null ? Number(entry.ranking) : null
 
         // Estimate ROI from volume with assumed leverage
         const volume = Number(entry.totalVolume) || null
-        roi = pnl != null && volume != null && volume > 0
-          ? (pnl / (volume / 5)) * 100  // Assume ~5x average leverage
-          : null
+        roi =
+          pnl != null && volume != null && volume > 0
+            ? (pnl / (volume / 5)) * 100 // Assume ~5x average leverage
+            : null
       }
     } catch (err) {
-      this.logger.debug('dYdX Copin stats fallback:', err instanceof Error ? err.message : String(err))
+      this.logger.debug(
+        'dYdX Copin stats fallback:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
 
     // Try to get equity from indexer subaccount (may still work)
@@ -264,7 +335,10 @@ export class DydxPerpConnector extends BaseConnector {
         if (startEquity > 0) roi = (pnl / startEquity) * 100
       }
     } catch (err) {
-      this.logger.debug('dYdX subaccount fallback:', err instanceof Error ? err.message : String(err))
+      this.logger.debug(
+        'dYdX subaccount fallback:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
 
     const metrics: SnapshotMetrics = {
@@ -272,12 +346,17 @@ export class DydxPerpConnector extends BaseConnector {
       pnl,
       win_rate: winRate,
       max_drawdown: null,
-      sharpe_ratio: null, sortino_ratio: null,
+      sharpe_ratio: null,
+      sortino_ratio: null,
       trades_count: tradesCount,
-      followers: null, copiers: null,
+      followers: null,
+      copiers: null,
       aum: equity,
       platform_rank: platformRank,
-      arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
+      arena_score: null,
+      return_score: null,
+      drawdown_score: null,
+      stability_score: null,
     }
 
     const missingFields = ['max_drawdown', 'followers', 'copiers', 'sharpe_ratio', 'sortino_ratio']
@@ -292,7 +371,8 @@ export class DydxPerpConnector extends BaseConnector {
       window_native: true,
       notes: [
         'dYdX is a DEX - no copy trading',
-        'Data sourced from Copin.io indexer (dYdX native leaderboard API is dead)',
+        'Discovery: Copin snapshot (auto-probing stale dates) + DB seed fallback',
+        'Enrichment: dYdX indexer /v4/historical-pnl via CF Worker proxy',
         'ROI is derived, not platform-provided',
       ],
     }
@@ -300,7 +380,11 @@ export class DydxPerpConnector extends BaseConnector {
   }
 
   async fetchTimeseries(traderKey: string): Promise<TimeseriesResult> {
-    const tsUrl = this.buildUrl('/v4/historical-pnl', { address: traderKey, subaccountNumber: '0', limit: '90' })
+    const tsUrl = this.buildUrl('/v4/historical-pnl', {
+      address: traderKey,
+      subaccountNumber: '0',
+      limit: '90',
+    })
     const _rawTs = await this.request<Record<string, unknown>>(tsUrl, { method: 'GET' })
     const data = warnValidate(DydxHistoricalPnlResponseSchema, _rawTs, 'dydx-perp/timeseries')
     const historicalPnl = data?.historicalPnl || []
@@ -309,20 +393,28 @@ export class DydxPerpConnector extends BaseConnector {
 
     if (Array.isArray(historicalPnl) && historicalPnl.length > 0) {
       series.push({
-        platform: 'dydx', market_type: 'perp', trader_key: traderKey,
-        series_type: 'daily_pnl', as_of_ts: new Date().toISOString(),
-        data: historicalPnl.map((item: Record<string, unknown>) => ({
-          ts: String(item.createdAt || new Date().toISOString()),
-          value: Number(item.totalPnl) || 0,
-        })).reverse(),  // API returns newest first
+        platform: 'dydx',
+        market_type: 'perp',
+        trader_key: traderKey,
+        series_type: 'daily_pnl',
+        as_of_ts: new Date().toISOString(),
+        data: historicalPnl
+          .map((item: Record<string, unknown>) => ({
+            ts: String(item.createdAt || new Date().toISOString()),
+            value: Number(item.totalPnl) || 0,
+          }))
+          .reverse(), // API returns newest first
         updated_at: new Date().toISOString(),
       })
 
       // Compute equity curve from cumulative PnL
       let cumPnl = 0
       series.push({
-        platform: 'dydx', market_type: 'perp', trader_key: traderKey,
-        series_type: 'equity_curve', as_of_ts: new Date().toISOString(),
+        platform: 'dydx',
+        market_type: 'perp',
+        trader_key: traderKey,
+        series_type: 'equity_curve',
+        as_of_ts: new Date().toISOString(),
         data: historicalPnl.reverse().map((item: Record<string, unknown>) => {
           cumPnl += Number(item.totalPnl) || 0
           return { ts: String(item.createdAt || new Date().toISOString()), value: cumPnl }
@@ -338,15 +430,16 @@ export class DydxPerpConnector extends BaseConnector {
     // Supports both indexer format (address, pnl) and Copin format (account, totalPnl, totalWin, etc.)
     const totalWin = Number(raw.totalWin) || 0
     const totalLose = Number(raw.totalLose) || 0
-    const totalTrade = Number(raw.totalTrade) || (totalWin + totalLose)
+    const totalTrade = Number(raw.totalTrade) || totalWin + totalLose
     const winRate = totalTrade > 0 ? (totalWin / totalTrade) * 100 : null
 
     const pnl = Number(raw.totalPnl ?? raw.totalRealisedPnl ?? raw.pnl) || null
     const volume = Number(raw.totalVolume) || null
     // Estimate ROI from PnL/Volume with assumed leverage
-    const roi = pnl != null && volume != null && volume > 0
-      ? (pnl / (volume / 5)) * 100  // Assume ~5x average leverage
-      : null
+    const roi =
+      pnl != null && volume != null && volume > 0
+        ? (pnl / (volume / 5)) * 100 // Assume ~5x average leverage
+        : null
 
     return {
       trader_key: String(raw.account || raw.address || ''),
@@ -361,7 +454,8 @@ export class DydxPerpConnector extends BaseConnector {
       copiers: null,
       aum: null,
       sharpe_ratio: null,
-      platform_rank: raw.ranking != null ? Number(raw.ranking) : (raw.rank != null ? Number(raw.rank) : null),
+      platform_rank:
+        raw.ranking != null ? Number(raw.ranking) : raw.rank != null ? Number(raw.rank) : null,
     }
   }
 }
