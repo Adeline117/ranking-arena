@@ -34,10 +34,8 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
 
   useEffect(() => {
     if (prefersReducedMotion) {
-      // Skip animation: show final message and complete immediately
       setMessageIdx(messages.length - 1)
       setProgress(100)
-      // Small delay so the user sees the final state before navigating
       const t = setTimeout(() => onDoneRef.current(), 200)
       return () => clearTimeout(t)
     }
@@ -53,9 +51,8 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
   }, [messages.length, prefersReducedMotion])
 
   useEffect(() => {
-    if (prefersReducedMotion) return // handled above
+    if (prefersReducedMotion) return
 
-    // Animate progress from 0 to 100 over 1.5s
     const start = Date.now()
     const duration = 1500
     const tick = () => {
@@ -72,66 +69,28 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
   }, [prefersReducedMotion]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 20,
-        minHeight: 260,
-        animation: prefersReducedMotion ? 'none' : 'fadeIn 0.3s ease-out',
-      }}
-    >
-      {/* Spinner */}
+    <div className="quiz-calculating">
+      {/* Spinner with glow */}
       <div
         role="status"
         aria-label="Calculating results"
-        style={{
-          width: 48,
-          height: 48,
-          borderRadius: '50%',
-          border: '3px solid var(--color-bg-tertiary)',
-          borderTopColor: 'var(--color-brand)',
-          animation: prefersReducedMotion ? 'none' : 'spin 1s linear infinite',
-        }}
+        className="quiz-calc-spinner"
       />
 
-      {/* Text — rotating messages */}
+      {/* Rotating messages */}
       <p
         aria-live="polite"
-        style={{
-          fontSize: 15,
-          fontWeight: 600,
-          color: 'var(--color-text-primary)',
-          margin: 0,
-          transition: prefersReducedMotion ? 'none' : 'opacity 0.25s ease',
-          minHeight: 22,
-        }}
+        className="quiz-calc-message"
         key={messageIdx}
       >
         {messages[messageIdx]}
       </p>
 
       {/* Progress bar */}
-      <div
-        style={{
-          width: '100%',
-          maxWidth: 240,
-          height: 3,
-          borderRadius: 2,
-          background: 'var(--color-bg-tertiary)',
-          overflow: 'hidden',
-        }}
-      >
+      <div className="quiz-calc-bar-track">
         <div
-          style={{
-            width: `${progress}%`,
-            height: '100%',
-            borderRadius: 2,
-            background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-deep))',
-            transition: prefersReducedMotion ? 'none' : 'width 0.05s linear',
-          }}
+          className="quiz-calc-bar-fill"
+          style={{ width: `${progress}%` }}
         />
       </div>
     </div>

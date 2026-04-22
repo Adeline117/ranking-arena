@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { setLanguage, onTranslationsReady } from '@/lib/i18n'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -28,9 +27,6 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
   const { language, t } = useLanguage()
   const [mounted, setMounted] = useState(false)
   const [txnReady, setTxnReady] = useState(false)
-
-  const prefersReducedMotion =
-    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   useEffect(() => {
     setMounted(true)
@@ -83,26 +79,14 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
 
   return (
     <div
+      className="quiz-result-page"
       style={{
-        padding: 'clamp(16px, 4vw, 24px)',
-        paddingBottom: 80,
-        display: 'flex',
-        justifyContent: 'center',
-      }}
+        '--quiz-type-color-15': `${pType.color}26`,
+      } as React.CSSProperties}
     >
-      <div
-        style={{
-          maxWidth: 'clamp(520px, 90vw, 640px)',
-          width: '100%',
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 0, /* Intentional: each section controls its own marginTop for rhythm */
-          animation: prefersReducedMotion ? 'none' : 'fadeIn 0.5s ease-out',
-          position: 'relative',
-        }}
-      >
-        {/* Language toggle — fixed top-right of container */}
-        <div style={{ position: 'absolute', top: 0, right: 0, zIndex: 2 }}>
+      <div className="quiz-result-container">
+        {/* Language toggle */}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
           <button
             type="button"
             onClick={handleToggleLanguage}
@@ -122,7 +106,39 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           </button>
         </div>
 
-        {/* Personality Card — hero, generous spacing after */}
+        {/* Top navigation — retake button for quick access */}
+        <div style={{ marginBottom: 8 }}>
+          <Link
+            href="/quiz"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '6px 12px',
+              borderRadius: 6,
+              border: '1px solid var(--glass-border-light)',
+              background: 'transparent',
+              color: 'var(--color-text-secondary)',
+              fontSize: 13,
+              fontWeight: 500,
+              textDecoration: 'none',
+              transition: 'border-color 0.2s, color 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-text-tertiary)'
+              e.currentTarget.style.color = 'var(--color-text-primary)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--glass-border-light)'
+              e.currentTarget.style.color = 'var(--color-text-secondary)'
+            }}
+          >
+            <span aria-hidden="true">&larr;</span>
+            {t('quizRetake') !== 'quizRetake' ? t('quizRetake') : 'Retake Quiz'}
+          </Link>
+        </div>
+
+        {/* Hero Personality Card */}
         <PersonalityCard
           type={pType}
           matchPercent={matchPercent}
@@ -130,17 +146,17 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           tr={t}
         />
 
-        {/* Master Biography — closely related to personality, moderate gap */}
+        {/* Master Biography */}
         <div style={{ marginTop: 20 }}>
           <MasterSection type={pType} tr={t} />
         </div>
 
-        {/* Style Analysis �� new conceptual section, wider gap */}
+        {/* Style Analysis */}
         <div style={{ marginTop: 24 }}>
           <StyleAnalysis type={pType} tr={t} />
         </div>
 
-        {/* Type Breakdown — show score distribution across all types (only if data available) */}
+        {/* Type Breakdown (only if data available from quiz completion) */}
         {allTypePercents && (
           <div style={{ marginTop: 16 }}>
             <TypeBreakdown
@@ -151,22 +167,11 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           </div>
         )}
 
-        {/* Type Compatibility — companion to style, tighter */}
-        <div
-          style={{
-            marginTop: 14,
-            borderRadius: 14,
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--glass-border-light)',
-            padding: 'clamp(16px, 3vw, 24px)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 3, height: 20, borderRadius: 2, background: pType.gradient }} />
-            <h3 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: tokens.typography.fontWeight.bold, color: 'var(--color-text-primary)', margin: 0 }}>
+        {/* Type Compatibility */}
+        <div className="quiz-section-card" style={{ marginTop: 14 }}>
+          <div className="quiz-section-header">
+            <div className="quiz-section-accent" style={{ background: pType.gradient }} />
+            <h3 className="quiz-section-title">
               {t('quizCompatTitle')}
             </h3>
           </div>
@@ -177,7 +182,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
             {pType.compatibleTypes.map(id => {
               const ct = PERSONALITY_TYPE_MAP[id]
               return ct ? (
-                <span key={id} style={{ padding: '4px 10px', borderRadius: 6, background: ct.color + '15', border: '1px solid ' + ct.color + '25', fontSize: 13, color: ct.color, fontWeight: 600 }}>
+                <span key={id} style={{ padding: '5px 12px', borderRadius: 20, background: ct.color + '15', border: '1px solid ' + ct.color + '25', fontSize: 13, color: ct.color, fontWeight: 600 }}>
                   {t(ct.nameKey)}
                 </span>
               ) : null
@@ -190,7 +195,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
             {pType.incompatibleTypes.map(id => {
               const ct = PERSONALITY_TYPE_MAP[id]
               return ct ? (
-                <span key={id} style={{ padding: '4px 10px', borderRadius: 6, background: 'var(--color-accent-error-10)', border: '1px solid var(--color-accent-error-20)', fontSize: 13, color: 'var(--color-accent-error)', fontWeight: 600 }}>
+                <span key={id} style={{ padding: '5px 12px', borderRadius: 20, background: 'var(--color-accent-error-10)', border: '1px solid var(--color-accent-error-20)', fontSize: 13, color: 'var(--color-accent-error)', fontWeight: 600 }}>
                   {t(ct.nameKey)}
                 </span>
               ) : null
@@ -198,97 +203,28 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           </div>
         </div>
 
-        {/* Recommended Arena Traders — action-oriented, generous gap */}
+        {/* Recommended Arena Traders */}
         <div style={{ marginTop: 24 }}>
           <RecommendedTraders type={pType} traders={recommendedTraders} tr={t} />
         </div>
 
-        {/* Share Actions — final section, moderate gap */}
-        <div
-          style={{
-            marginTop: 18,
-            borderRadius: 14,
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--glass-border-light)',
-            padding: 'clamp(16px, 3vw, 24px)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{ width: 3, height: 20, borderRadius: 2, background: pType.gradient }} />
-            <h3
-              style={{
-                fontSize: tokens.typography.fontSize.lg,
-                fontWeight: tokens.typography.fontWeight.bold,
-                color: 'var(--color-text-primary)',
-                margin: 0,
-              }}
-            >
+        {/* Share Actions */}
+        <div className="quiz-section-card" style={{ marginTop: 18 }}>
+          <div className="quiz-section-header">
+            <div className="quiz-section-accent" style={{ background: pType.gradient }} />
+            <h3 className="quiz-section-title">
               {t('quizShareTitle')}
             </h3>
           </div>
           <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
         </div>
 
-        {/* CTAs — final call-to-action, generous top gap */}
+        {/* CTAs */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 28 }}>
-          <Link
-            href="/quiz"
-            style={{
-              flex: 1,
-              minWidth: 140,
-              padding: '13px 20px',
-              borderRadius: 10,
-              border: '1px solid var(--glass-border-light)',
-              background: 'transparent',
-              color: 'var(--color-text-primary)',
-              fontSize: 14,
-              fontWeight: 500,
-              textAlign: 'center',
-              textDecoration: 'none',
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-text-tertiary)'
-              e.currentTarget.style.transform = 'translateY(-2px)'
-              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.08)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--glass-border-light)'
-              e.currentTarget.style.transform = 'translateY(0)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          >
+          <Link href="/quiz" className="quiz-cta-secondary">
             {t('quizRetake')}
           </Link>
-          <Link
-            href="/rankings"
-            style={{
-              flex: 1,
-              minWidth: 140,
-              padding: '13px 20px',
-              borderRadius: 10,
-              border: 'none',
-              background: 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
-              textAlign: 'center',
-              textDecoration: 'none',
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-              boxShadow: '0 2px 8px color-mix(in srgb, var(--color-brand) 25%, transparent)',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'translateY(-2px) scale(1.01)'
-              e.currentTarget.style.boxShadow = '0 6px 20px color-mix(in srgb, var(--color-brand) 35%, transparent)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0) scale(1)'
-              e.currentTarget.style.boxShadow = '0 2px 8px color-mix(in srgb, var(--color-brand) 25%, transparent)'
-            }}
-          >
+          <Link href="/rankings" className="quiz-cta-primary">
             {t('quizFindTraders')}
           </Link>
         </div>
