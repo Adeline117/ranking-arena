@@ -2,7 +2,7 @@
 
 import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
@@ -79,15 +79,14 @@ function SearchContent() {
     ? `/api/search?q=${encodeURIComponent(debouncedQuery)}&limit=${SECTION_LIMIT}${debouncedPlatform ? `&platform=${encodeURIComponent(debouncedPlatform)}` : ''}`
     : null
 
-  const { data: rawSearchData, error: searchFetchError, isLoading: swrLoading } = useSWR<UnifiedSearchResponse>(
-    searchKey,
-    searchFetcher,
-    {
-      revalidateOnFocus: false,
-      dedupingInterval: 30000, // Cache results for 30s across navigations
-      keepPreviousData: true,
-    }
-  )
+  const { data: rawSearchData, error: searchFetchError, isLoading: swrLoading } = useQuery<UnifiedSearchResponse>({
+    queryKey: ['search', debouncedQuery, debouncedPlatform],
+    queryFn: () => searchFetcher(searchKey!),
+    enabled: !!searchKey,
+    refetchOnWindowFocus: false,
+    staleTime: 30000,
+    placeholderData: (prev) => prev,
+  })
 
   // Map raw API data to UI-friendly shape
   const mapped = useMemo<MappedSearchResults>(() => {
