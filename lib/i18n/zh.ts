@@ -4008,6 +4008,7 @@ footerHelp: '帮助中心',
 footerStatus: '系统状态',
 footerSlogan: '加密万物排行榜',
 footerDisclaimerText: '本站数据仅供参考，不构成任何投资建议。加密货币交易存在高风险，请谨慎决策。',
+footerLegalEntity: 'Arena Team · 联系邮箱: support@arenafi.org',
 
 // Score breakdown
 scoreNoDetails: '暂无评分详情',
