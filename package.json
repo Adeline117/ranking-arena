@@ -88,7 +88,9 @@
     "candlestick-convert": "^7.0.0",
     "ccxt": "^4.5.43",
     "cockatiel": "^3.2.1",
+    "critters": "^0.0.23",
     "currency.js": "^2.0.4",
+    "ethers": "^6.16.0",
     "isomorphic-dompurify": "^3.6.0",
     "lightweight-charts": "^5.1.0",
     "lucide-react": "^0.577.0",
@@ -112,6 +114,7 @@
   },
   "overrides": {
     "zod": "$zod",
+    "wagmi": "$wagmi",
     "@walletconnect/core": "2.23.6",
     "@walletconnect/sign-client": "2.23.6",
     "@walletconnect/types": "2.23.6",
@@ -121,6 +124,7 @@
   "pnpm": {
     "overrides": {
       "zod": "$zod",
+      "wagmi": "$wagmi",
       "@walletconnect/core": "2.23.6",
       "@walletconnect/sign-client": "2.23.6",
       "@walletconnect/types": "2.23.6",
