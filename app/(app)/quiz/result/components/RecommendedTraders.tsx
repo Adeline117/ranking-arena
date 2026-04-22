@@ -19,8 +19,6 @@ function formatTraderName(name: string): string {
 }
 
 export default function RecommendedTraders({ type, traders, tr }: RecommendedTradersProps) {
-  if (!traders.length) return null
-
   return (
     <div
       style={{
@@ -55,7 +53,51 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
         </h3>
       </div>
 
+      {/* Empty state */}
+      {traders.length === 0 && (
+        <div
+          style={{
+            textAlign: 'center',
+            padding: '20px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 12,
+          }}
+        >
+          <p
+            style={{
+              fontSize: 14,
+              color: 'var(--color-text-secondary)',
+              margin: 0,
+              lineHeight: 1.6,
+            }}
+          >
+            {tr('quizNoTradersFound') !== 'quizNoTradersFound'
+              ? tr('quizNoTradersFound')
+              : 'No matching traders found yet. Check out our rankings to discover traders.'}
+          </p>
+          <Link
+            href="/rankings"
+            style={{
+              padding: '8px 20px',
+              borderRadius: 8,
+              background: `${type.color}15`,
+              border: `1px solid ${type.color}25`,
+              color: type.color,
+              fontSize: 13,
+              fontWeight: 600,
+              textDecoration: 'none',
+              transition: 'opacity 0.2s',
+            }}
+          >
+            {tr('quizFindTraders') !== 'quizFindTraders' ? tr('quizFindTraders') : 'Explore Rankings'}
+          </Link>
+        </div>
+      )}
+
       {/* Trader cards */}
+      {traders.length > 0 && (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {traders.map((trader) => (
           <Link
@@ -205,6 +247,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
           </Link>
         ))}
       </div>
+      )}
     </div>
   )
 }
