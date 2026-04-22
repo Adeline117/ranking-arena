@@ -35,10 +35,15 @@ export default function QuizClient() {
     const unsub = onTranslationsReady(() => setTxnReady(true))
     // Check if already loaded
     if (t('quizTitle') !== 'quizTitle') setTxnReady(true)
-    // Ensure body scroll is not locked by a previous modal
+    // Fix Safari scroll: <main> has overflow-x:hidden from global CSS which
+    // creates a scroll container that traps wheel/trackpad events in Safari.
+    // Override to visible so scroll bubbles to html element.
     document.body.style.overflow = ''
+    const main = document.getElementById('main-content')
+    if (main) main.style.overflow = 'visible'
     return () => {
       unsub()
+      if (main) main.style.overflow = ''
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
