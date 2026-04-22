@@ -36,6 +36,7 @@ import {
 } from '@/lib/cron/fetchers/enrichment'
 import { createLogger } from '@/lib/utils/logger'
 import { sleep } from '@/lib/cron/fetchers/shared'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 const logger = createLogger('FetchDetails')
 
@@ -170,95 +171,119 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
-    const supabase = getSupabaseAdmin()
-
-    // Parse params
+    // Parse source early so we can use it in the lock key
     const requestUrl = new URL(req.url)
     const source = requestUrl.searchParams.get('source') || ''
-    const limitParam = requestUrl.searchParams.get('limit') || '200'
-    const concurrencyParam = requestUrl.searchParams.get('concurrency') || '10'
-    const skipRecent = safeParseInt(requestUrl.searchParams.get('skipRecent'), 6)
-    const force = requestUrl.searchParams.get('force') === 'true'
-    const tierParam = requestUrl.searchParams.get('tier') as ActivityTier | null
 
-    let limit = safeParseInt(limitParam, 200)
-    let concurrency = safeParseInt(concurrencyParam, 10)
-    let smartSchedulerUsed = false
+    // Dedup lock: prevent overlapping executions (keyed by source or 'all')
+    const lockJobName = `fetch-details-${source || 'all'}`
+    const releaseLock = await acquireCronLock(lockJobName, { ttlSeconds: 300 })
+    if (!releaseLock) {
+      return NextResponse.json({
+        skipped: true,
+        reason: 'already-running',
+        source: source || 'all',
+      })
+    }
 
-    // Smart Scheduler integration
-    if (isSmartSchedulerEnabled() && !force) {
-      try {
-        const scheduleManager = createScheduleManager()
-        const tradersToRefresh = await scheduleManager.getTradersToRefresh({
-          platform: source || undefined,
-          limit: limit * 2,
-          priorityOrder: true,
-          includeOverdue: true,
-          tiers: tierParam ? [tierParam] : undefined,
-        })
+    try {
+      const supabase = getSupabaseAdmin()
+      const limitParam = requestUrl.searchParams.get('limit') || '200'
+      const concurrencyParam = requestUrl.searchParams.get('concurrency') || '10'
+      const skipRecent = safeParseInt(requestUrl.searchParams.get('skipRecent'), 6)
+      const force = requestUrl.searchParams.get('force') === 'true'
+      const tierParam = requestUrl.searchParams.get('tier') as ActivityTier | null
 
-        if (tradersToRefresh.length > 0) {
-          smartSchedulerUsed = true
-          limit = Math.min(limit, tradersToRefresh.length)
-          const avgPriority =
-            tradersToRefresh.reduce((sum, t) => sum + (t.refresh_priority || 30), 0) /
-            tradersToRefresh.length
+      let limit = safeParseInt(limitParam, 200)
+      let concurrency = safeParseInt(concurrencyParam, 10)
+      let smartSchedulerUsed = false
 
-          if (avgPriority <= 15) concurrency = 20
-          else if (avgPriority <= 25) concurrency = 15
-          else if (avgPriority <= 35) concurrency = 10
-          else concurrency = 5
-
-          logger.info('Smart scheduler: adjusted parameters', {
-            tradersToRefresh: tradersToRefresh.length,
-            adjustedLimit: limit,
-            adjustedConcurrency: concurrency,
-            avgPriority,
+      // Smart Scheduler integration
+      if (isSmartSchedulerEnabled() && !force) {
+        try {
+          const scheduleManager = createScheduleManager()
+          const tradersToRefresh = await scheduleManager.getTradersToRefresh({
+            platform: source || undefined,
+            limit: limit * 2,
+            priorityOrder: true,
+            includeOverdue: true,
+            tiers: tierParam ? [tierParam] : undefined,
           })
+
+          if (tradersToRefresh.length > 0) {
+            smartSchedulerUsed = true
+            limit = Math.min(limit, tradersToRefresh.length)
+            const avgPriority =
+              tradersToRefresh.reduce((sum, t) => sum + (t.refresh_priority || 30), 0) /
+              tradersToRefresh.length
+
+            if (avgPriority <= 15) concurrency = 20
+            else if (avgPriority <= 25) concurrency = 15
+            else if (avgPriority <= 35) concurrency = 10
+            else concurrency = 5
+
+            logger.info('Smart scheduler: adjusted parameters', {
+              tradersToRefresh: tradersToRefresh.length,
+              adjustedLimit: limit,
+              adjustedConcurrency: concurrency,
+              avgPriority,
+            })
+          }
+        } catch (error: unknown) {
+          logger.error('Smart scheduler failed, falling back to default', { error })
         }
-      } catch (error: unknown) {
-        logger.error('Smart scheduler failed, falling back to default', { error })
       }
+
+      // Query traders that need detail refresh
+      const platforms = source ? [source] : ENRICHABLE_PLATFORMS
+
+      const cutoffTime = new Date(Date.now() - skipRecent * 60 * 60 * 1000).toISOString()
+
+      // traders table uses platform/trader_key columns (not source/source_trader_id)
+      // Order by updated_at ascending so least-recently-updated get enriched first
+      // Removed ORDER BY updated_at — causes statement timeout on large traders table.
+      // The LIMIT + random platform shuffle gives adequate coverage without expensive sort.
+      let baseQuery = supabase
+        .from('traders')
+        .select('platform, trader_key')
+        .in('platform', platforms)
+        .eq('is_active', true)
+        .limit(limit)
+
+      if (!force) {
+        baseQuery = baseQuery.or(`last_seen_at.is.null,last_seen_at.lt.${cutoffTime}`)
+      }
+
+      const { data: rawTraders, error: fetchError } = await baseQuery
+
+      if (fetchError) {
+        // Provide a useful error message instead of "[object Object]"
+        const errMsg = fetchError.message || JSON.stringify(fetchError)
+        logger.error('Failed to query traders table', { error: errMsg, code: fetchError.code })
+        throw new Error(`DB query failed: ${errMsg}`)
+      }
+
+      // Normalize to TraderToEnrich shape expected by enrichTrader()
+      const traders: TraderToEnrich[] = (rawTraders || []).map((r: TraderRow) => ({
+        source: r.platform,
+        source_trader_id: r.trader_key,
+      }))
+
+      return await processTraders(
+        supabase,
+        traders,
+        concurrency,
+        startTime,
+        source,
+        limit,
+        skipRecent,
+        force,
+        smartSchedulerUsed,
+        tierParam
+      )
+    } finally {
+      await releaseLock()
     }
-
-    // Query traders that need detail refresh
-    const platforms = source
-      ? [source]
-      : ENRICHABLE_PLATFORMS
-
-    const cutoffTime = new Date(Date.now() - skipRecent * 60 * 60 * 1000).toISOString()
-
-    // traders table uses platform/trader_key columns (not source/source_trader_id)
-    // Order by updated_at ascending so least-recently-updated get enriched first
-    // Removed ORDER BY updated_at — causes statement timeout on large traders table.
-    // The LIMIT + random platform shuffle gives adequate coverage without expensive sort.
-    let baseQuery = supabase
-      .from('traders')
-      .select('platform, trader_key')
-      .in('platform', platforms)
-      .eq('is_active', true)
-      .limit(limit)
-
-    if (!force) {
-      baseQuery = baseQuery.or(`last_seen_at.is.null,last_seen_at.lt.${cutoffTime}`)
-    }
-
-    const { data: rawTraders, error: fetchError } = await baseQuery
-
-    if (fetchError) {
-      // Provide a useful error message instead of "[object Object]"
-      const errMsg = fetchError.message || JSON.stringify(fetchError)
-      logger.error('Failed to query traders table', { error: errMsg, code: fetchError.code })
-      throw new Error(`DB query failed: ${errMsg}`)
-    }
-
-    // Normalize to TraderToEnrich shape expected by enrichTrader()
-    const traders: TraderToEnrich[] = (rawTraders || []).map((r: TraderRow) => ({
-      source: r.platform,
-      source_trader_id: r.trader_key,
-    }))
-
-    return await processTraders(supabase, traders, concurrency, startTime, source, limit, skipRecent, force, smartSchedulerUsed, tierParam)
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error)
     logger.error('执行失败', { error: errorMessage })
@@ -284,9 +309,7 @@ async function processTraders(
   // Process in batches
   for (let i = 0; i < traders.length; i += concurrency) {
     const batch = traders.slice(i, i + concurrency)
-    const results = await Promise.allSettled(
-      batch.map(trader => enrichTrader(supabase, trader))
-    )
+    const results = await Promise.allSettled(batch.map((trader) => enrichTrader(supabase, trader)))
 
     for (const result of results) {
       if (result.status === 'fulfilled' && result.value.success) {
@@ -294,7 +317,9 @@ async function processTraders(
       } else {
         failed++
         if (result.status === 'rejected') {
-          logger.warn(`[fetch-details] enrichTrader rejected: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`)
+          logger.warn(
+            `[fetch-details] enrichTrader rejected: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`
+          )
         }
       }
     }
