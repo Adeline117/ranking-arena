@@ -207,13 +207,11 @@ export function usePostActions({
             user_reaction: result.reaction,
           }
           setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...serverUpdate } : p)))
-          usePostStore
-            .getState()
-            .updatePostReaction(postId, {
-              like_count: result.like_count,
-              dislike_count: result.dislike_count,
-              reaction: result.reaction,
-            })
+          usePostStore.getState().updatePostReaction(postId, {
+            like_count: result.like_count,
+            dislike_count: result.dislike_count,
+            reaction: result.reaction,
+          })
           if (openPost?.id === postId) setOpenPost({ ...openPost, ...serverUpdate } as Post)
         } else {
           // Rollback — reverse the delta from CURRENT state (not a stale snapshot)
@@ -268,7 +266,6 @@ export function usePostActions({
       } finally {
         lockRef.current.delete(key)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t/setPosts/setOpenPost are stable refs; only re-create when auth or active post changes
     },
     [accessToken, openPost?.id, showToast]
   )
@@ -327,7 +324,6 @@ export function usePostActions({
       } finally {
         lockRef.current.delete(key)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t/setPosts/setOpenPost are stable refs; only re-create when auth or active post changes
     },
     [accessToken, openPost?.id, showToast]
   )
@@ -403,7 +399,6 @@ export function usePostActions({
       } finally {
         setVotingCustomPoll(false)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t/showToast/setters are stable refs; only re-create when auth or selected options change
     },
     [accessToken, selectedPollOptions]
   )
@@ -476,7 +471,6 @@ export function usePostActions({
       }
       setBookmarkingPostId(postId)
       setShowBookmarkModal(true)
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
     },
     [accessToken, showToast]
   )
@@ -510,7 +504,6 @@ export function usePostActions({
         setShowBookmarkModal(false)
         setBookmarkingPostId(null)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
     },
     [accessToken, bookmarkingPostId, showToast]
   )
@@ -553,7 +546,6 @@ export function usePostActions({
       } finally {
         setRepostLoading((prev) => ({ ...prev, [postId]: false }))
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
     },
     [accessToken, posts, openPost, currentUserId, showToast]
   )
@@ -562,7 +554,6 @@ export function usePostActions({
   const loadUserBookmarksAndReposts = useCallback(
     async (postIds: string[]) => {
       if (!accessToken || postIds.length === 0) return
-      const controller = new AbortController()
       try {
         const res = await fetch('/api/posts/bookmarks/status', {
           method: 'POST',
@@ -572,14 +563,11 @@ export function usePostActions({
             ...getCsrfHeaders(),
           },
           body: JSON.stringify({ postIds }),
-          signal: controller.signal,
         })
-        if (controller.signal.aborted) return
         const data = await res.json()
-        if (!controller.signal.aborted)
-          setUserBookmarks((prev) => ({ ...prev, ...(data.bookmarks || {}) }))
-      } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return
+        setUserBookmarks((prev) => ({ ...prev, ...(data.bookmarks || {}) }))
+      } catch {
+        // Bookmark status fetch is non-critical — silently ignore
       }
     },
     [accessToken]
