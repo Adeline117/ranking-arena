@@ -207,6 +207,10 @@
       "schedule": "15 */6 * * *"
     },
     {
+      "path": "/api/cron/smoke-test-enrichment",
+      "schedule": "30 5 * * *"
+    },
+    {
       "path": "/api/cron/backfill-data?type=snapshots&limit=50",
       "schedule": "49 3 * * *"
     },
