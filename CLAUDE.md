@@ -336,3 +336,8 @@ try {
 | **Post-ship docs** | `/doc-release` (sync all docs after ship) |
 | **Headless browser** | `/browse` (screenshots, interactions, responsive) |
 | **Auth for browser** | `/setup-browser-cookies` (import real cookies) |
+
+## Emergency Rollback
+1. **Vercel Dashboard** → Deployments → find last good deploy → "Promote to Production"
+2. **Database**: Migrations are forward-only. If a schema change breaks prod, write a compensating migration via `scripts/new-migration.sh rollback-<description>`.
+3. **Feature flags**: Toggle in Redis via `/admin/monitoring` or `lib/features.ts`
