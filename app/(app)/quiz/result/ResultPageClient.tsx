@@ -222,7 +222,15 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               fontWeight: 500,
               textAlign: 'center',
               textDecoration: 'none',
-              transition: 'border-color 0.2s',
+              transition: 'border-color 0.2s, transform 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.borderColor = 'var(--color-text-tertiary)'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.borderColor = 'var(--glass-border-light)'
+              e.currentTarget.style.transform = 'translateY(0)'
             }}
           >
             {t('quizRetake')}
@@ -241,6 +249,13 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               fontWeight: 600,
               textAlign: 'center',
               textDecoration: 'none',
+              transition: 'transform 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'translateY(-1px)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'translateY(0)'
             }}
           >
             {t('quizFindTraders')}
