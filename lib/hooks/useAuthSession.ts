@@ -129,8 +129,8 @@ function initializeAuth() {
       setGlobalAuthState({ loading: false, authChecked: true })
     })
 
-    // Listen for cross-tab logout broadcasts via BroadcastChannel.
-    // Supabase's storage-event listener can miss logout when tabs are inactive.
+    // Listen for cross-tab auth broadcasts via BroadcastChannel.
+    // Supabase's storage-event listener can miss events when tabs are inactive.
     if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
       try {
         const authChannel = new BroadcastChannel('ranking-arena:auth-state')
@@ -144,6 +144,17 @@ function initializeAuth() {
               isLoggedIn: false,
               authChecked: true,
               loading: false,
+            })
+          } else if (event.data?.type === 'TOKEN_REFRESHED') {
+            // Another tab refreshed the token — re-read session from shared cookie store
+            // so this tab picks up the fresh token without an independent refresh request.
+            sb.auth.getSession().then(({ data }) => {
+              if (data.session) {
+                updateFromSession(data.session)
+                setGlobalAuthState({ loading: false, authChecked: true })
+              }
+            }).catch(() => {
+              logger.warn('[useAuthSession] Failed to re-read session after cross-tab token refresh')
             })
           }
         }
@@ -165,6 +176,15 @@ function initializeAuth() {
       } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
         updateFromSession(session)
         setGlobalAuthState({ loading: false, authChecked: true })
+
+        // Broadcast token refresh to other tabs so they pick up the fresh session
+        if (event === 'TOKEN_REFRESHED' && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+          try {
+            const ch = new BroadcastChannel('ranking-arena:auth-state')
+            ch.postMessage({ type: 'TOKEN_REFRESHED', timestamp: Date.now() })
+            ch.close()
+          } catch { /* BroadcastChannel not supported */ }
+        }
       }
     })
   }).catch((err) => {
