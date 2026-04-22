@@ -186,30 +186,12 @@ const cachedFindUserHandleByTrader = unstable_cache(
  * Pre-render top 500 trader pages at build time for faster TTFB and better SEO.
  * Non-pre-rendered handles still work at runtime (dynamicParams = true).
  */
-export async function generateStaticParams() {
-  const supabase = getReadReplica()
-  const { data } = await supabase
-    .from('leaderboard_ranks')
-    .select('handle')
-    .not('handle', 'is', null)
-    .order('arena_score', { ascending: false })
-    .limit(500)
-
-  if (!data) return []
-  return data
-    .filter((t: { handle: string | null }) => {
-      if (!t.handle || !t.handle.trim()) return false
-      const trimmed = t.handle.trim()
-      // Skip non-ASCII handles (Chinese, Korean, etc.) — their percent-encoded
-      // paths cause 500s on Vercel's ISR filesystem. They still work fine via
-      // dynamic rendering (dynamicParams = true).
-      if (/[^\x20-\x7E]/.test(trimmed)) return false
-      // Filter handles whose URL-encoded form would exceed filesystem limits
-      const encoded = encodeURIComponent(trimmed)
-      return encoded.length <= 200
-    })
-    .map((t: { handle: string | null }) => ({ handle: encodeURIComponent(t.handle!.trim()) }))
-}
+// generateStaticParams REMOVED — its presence causes Vercel to treat
+// /trader/[handle] as an ISR route with special routing that rejects
+// non-ASCII percent-encoded paths (returns x-matched-path: /500).
+// Without it, the route is fully dynamic and Chinese handles work.
+// Performance impact is minimal: ISR cache (revalidate=300) still works
+// for the first visitor of each handle; only build-time pre-rendering is lost.
 
 export async function generateMetadata({
   params,
@@ -305,11 +287,7 @@ export async function generateMetadata({
   notFound()
 }
 
-// Allow non-pre-rendered trader pages to be dynamically generated at runtime
-export const dynamicParams = true
-
 // ISR: regenerate trader pages every 5 minutes
-// Sidebar widgets are client components using SWR (no server-side Redis dependency)
 export const revalidate = 300
 
 export default async function TraderPage({ params }: { params: Promise<{ handle: string }> }) {
@@ -351,9 +329,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   // Skip redirect for non-ASCII handles (Chinese, Korean, etc.) — Vercel's
   // routing layer returns 500 for percent-encoded multi-byte UTF-8 paths.
   const isAsciiHandle = resolved.handle && /^[\x20-\x7E]+$/.test(resolved.handle)
-  if (isAsciiHandle && resolved.handle !== decodedHandle) {
+  if (isAsciiHandle && resolved.handle! !== decodedHandle) {
     redirect(
-      `/trader/${encodeURIComponent(resolved.handle)}?platform=${encodeURIComponent(resolved.platform)}`
+      `/trader/${encodeURIComponent(resolved.handle!)}?platform=${encodeURIComponent(resolved.platform)}`
     )
   }
 
