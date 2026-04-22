@@ -11,10 +11,10 @@ interface QuestionStepProps {
   onSelect: (optionId: string) => void
 }
 
-/* Yes/No/Unsure button config */
+/* Yes/No/Unsure button config — all use brand color, no red/green distinction */
 const YESNO_CONFIG: Record<string, { icon: string; selectedBorder: string; selectedBg: string }> = {
-  yes:    { icon: '\u2713', selectedBorder: '#10B981', selectedBg: 'rgba(16, 185, 129, 0.10)' },
-  no:     { icon: '\u2717', selectedBorder: '#EF4444', selectedBg: 'rgba(239, 68, 68, 0.10)' },
+  yes:    { icon: '\u2713', selectedBorder: 'var(--color-brand)', selectedBg: 'var(--color-accent-primary-08)' },
+  no:     { icon: '\u2717', selectedBorder: 'var(--color-brand)', selectedBg: 'var(--color-accent-primary-08)' },
   unsure: { icon: '?',      selectedBorder: 'var(--color-brand)', selectedBg: 'var(--color-accent-primary-08)' },
 }
 
