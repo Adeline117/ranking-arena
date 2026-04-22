@@ -159,7 +159,7 @@ const styles: Record<string, React.CSSProperties> = {
   },
   modal: {
     width: '100%',
-    maxWidth: '440px',
+    maxWidth: 'min(440px, calc(100vw - 32px))',
     backgroundColor: 'var(--color-bg-secondary)',
     borderRadius: tokens.radius.xl,
     border: '1px solid var(--color-border-primary)',

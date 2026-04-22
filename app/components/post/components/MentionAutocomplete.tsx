@@ -124,8 +124,8 @@ export function MentionAutocomplete({
         boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
         overflow: 'hidden',
         zIndex: tokens.zIndex.popover,
-        minWidth: 200,
-        maxWidth: 300,
+        minWidth: 'min(200px, calc(100vw - 32px))',
+        maxWidth: 'min(300px, calc(100vw - 32px))',
         ...style,
       }}
     >

@@ -84,8 +84,8 @@ export default function CookieConsent() {
             onClick={handleReject}
             className="interactive-scale"
             style={{
-              padding: '6px 14px',
-              minHeight: 36,
+              padding: '8px 14px',
+              minHeight: 44,
               borderRadius: tokens.radius.md,
               border: tokens.glass.border.medium,
               background: 'transparent',
@@ -106,8 +106,8 @@ export default function CookieConsent() {
             onClick={handleAccept}
             className="interactive-scale"
             style={{
-              padding: '6px 18px',
-              minHeight: 36,
+              padding: '8px 18px',
+              minHeight: 44,
               borderRadius: tokens.radius.md,
               border: 'none',
               background: tokens.gradient.primary,
