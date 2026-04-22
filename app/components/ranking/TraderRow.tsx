@@ -112,11 +112,15 @@ export const TraderRow = memo(function TraderRow({
     hoverTimerRef.current = setTimeout(async () => {
       try {
         const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
-        const [{ mutate: swrMutate }, { fetcher: swrFetcher }] = await Promise.all([
-          import('swr'),
-          import('@/lib/hooks/useSWR'),
+        const [{ queryClient }, { fetcher: sharedFetcher }] = await Promise.all([
+          import('@/app/components/Providers'),
+          import('@/lib/hooks/fetchers'),
         ])
-        swrMutate(detailUrl, swrFetcher<{ success: boolean; data: unknown }>(detailUrl).then(r => r && typeof r === 'object' && 'data' in r ? r.data : r), { revalidate: false })
+        queryClient.prefetchQuery({
+          queryKey: ['trader-profile', detailUrl],
+          queryFn: () => sharedFetcher(detailUrl),
+          staleTime: 30_000,
+        })
       } catch { /* prefetch is best-effort */ }
     }, 100)
   }, [traderHandle])
