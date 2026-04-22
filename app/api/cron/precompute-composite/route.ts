@@ -20,6 +20,7 @@ import type { GranularPlatform } from '@/lib/types/leaderboard'
 import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
@@ -27,7 +28,7 @@ export const maxDuration = 120
 const logger = createLogger('precompute-composite')
 
 // Unified with OVERALL_WEIGHTS in lib/utils/arena-score.ts — 90D-heavy
-const COMPOSITE_WEIGHTS = { '7D': 0.05, '30D': 0.25, '90D': 0.70 } as const
+const COMPOSITE_WEIGHTS = { '7D': 0.05, '30D': 0.25, '90D': 0.7 } as const
 const ROI_ANOMALY_THRESHOLD = 5000
 const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
 const _FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
@@ -53,6 +54,11 @@ interface SnapshotRow {
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const releaseLock = await acquireCronLock('precompute-composite', { ttlSeconds: 180 })
+  if (!releaseLock) {
+    return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
 
   const startTime = Date.now()
@@ -100,7 +106,7 @@ export async function GET(request: NextRequest) {
         // Apply roi_pct anomaly filter in app code — avoids defeating index usage
         // in Postgres (the index covers window + arena_score, not roi_pct).
         // Fetch 2500 from DB to have headroom after filtering.
-        const filtered = (result.rows || []).filter(r => {
+        const filtered = (result.rows || []).filter((r) => {
           if (r.roi_pct == null) return true
           const roi = typeof r.roi_pct === 'string' ? parseFloat(r.roi_pct) : r.roi_pct
           return roi >= -ROI_ANOMALY_THRESHOLD && roi <= ROI_ANOMALY_THRESHOLD
@@ -108,7 +114,9 @@ export async function GET(request: NextRequest) {
         return filtered.slice(0, 2000)
       } catch (err) {
         await client.query('ROLLBACK').catch(() => {})
-        throw new Error(`Fetch ${seasonId} failed: ${err instanceof Error ? err.message : String(err)}`)
+        throw new Error(
+          `Fetch ${seasonId} failed: ${err instanceof Error ? err.message : String(err)}`
+        )
       } finally {
         client.release()
       }
@@ -170,9 +178,18 @@ export async function GET(request: NextRequest) {
 
       let totalWeight = 0
       let weightedSum = 0
-      if (s7 != null) { weightedSum += s7 * COMPOSITE_WEIGHTS['7D']; totalWeight += COMPOSITE_WEIGHTS['7D'] }
-      if (s30 != null) { weightedSum += s30 * COMPOSITE_WEIGHTS['30D']; totalWeight += COMPOSITE_WEIGHTS['30D'] }
-      if (s90 != null) { weightedSum += s90 * COMPOSITE_WEIGHTS['90D']; totalWeight += COMPOSITE_WEIGHTS['90D'] }
+      if (s7 != null) {
+        weightedSum += s7 * COMPOSITE_WEIGHTS['7D']
+        totalWeight += COMPOSITE_WEIGHTS['7D']
+      }
+      if (s30 != null) {
+        weightedSum += s30 * COMPOSITE_WEIGHTS['30D']
+        totalWeight += COMPOSITE_WEIGHTS['30D']
+      }
+      if (s90 != null) {
+        weightedSum += s90 * COMPOSITE_WEIGHTS['90D']
+        totalWeight += COMPOSITE_WEIGHTS['90D']
+      }
 
       const compositeScore = totalWeight > 0 ? Math.min(weightedSum / totalWeight, 100) : 0
       const primaryRow = r90 || r30 || r7!
@@ -186,9 +203,12 @@ export async function GET(request: NextRequest) {
     entries.sort((a, b) => b.compositeScore - a.compositeScore)
 
     // Batch fetch display names
-    const traderIds = [...new Set(entries.slice(0, 1000).map(e => e.trader_key))]
-    const platforms = [...new Set(entries.slice(0, 1000).map(e => e.platform))]
-    const displayNameMap = new Map<string, { display_name: string | null; avatar_url: string | null }>()
+    const traderIds = [...new Set(entries.slice(0, 1000).map((e) => e.trader_key))]
+    const platforms = [...new Set(entries.slice(0, 1000).map((e) => e.platform))]
+    const displayNameMap = new Map<
+      string,
+      { display_name: string | null; avatar_url: string | null }
+    >()
 
     if (traderIds.length > 0) {
       // Fetch in chunks of 500
@@ -201,7 +221,10 @@ export async function GET(request: NextRequest) {
           .in('source_trader_id', chunk)
         if (srcData) {
           for (const s of srcData) {
-            displayNameMap.set(`${s.source}:${s.source_trader_id}`, { display_name: s.handle, avatar_url: s.avatar_url })
+            displayNameMap.set(`${s.source}:${s.source_trader_id}`, {
+              display_name: s.handle,
+              avatar_url: s.avatar_url,
+            })
           }
         }
       }
@@ -271,7 +294,7 @@ export async function GET(request: NextRequest) {
     // Also store per-category composites for faster filtered queries
     const categories = ['futures', 'spot', 'onchain'] as const
     for (const cat of categories) {
-      const catTraders = traders.filter(t => t.category === cat)
+      const catTraders = traders.filter((t) => t.category === cat)
       if (catTraders.length > 0) {
         const catData = {
           ...compositeData,
@@ -284,7 +307,9 @@ export async function GET(request: NextRequest) {
     }
 
     const elapsed = Date.now() - startTime
-    logger.info(`Composite precomputed: ${entries.length} total, ${traders.length} cached, ${elapsed}ms`)
+    logger.info(
+      `Composite precomputed: ${entries.length} total, ${traders.length} cached, ${elapsed}ms`
+    )
 
     await plog.success(traders.length, { total_entries: entries.length })
 
@@ -298,9 +323,8 @@ export async function GET(request: NextRequest) {
   } catch (error) {
     logger.error('Precompute composite failed:', error)
     await plog.error(error)
-    return NextResponse.json(
-      { error: 'Precompute failed', detail: String(error) },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Precompute failed', detail: String(error) }, { status: 500 })
+  } finally {
+    await releaseLock()
   }
 }

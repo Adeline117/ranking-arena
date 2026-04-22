@@ -26,6 +26,7 @@ import {
 import type { Period } from '@/lib/utils/arena-score'
 import { logger } from '@/lib/logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes
@@ -36,6 +37,11 @@ export async function POST(request: NextRequest) {
   // Verify cron secret
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
+  const releaseLock = await acquireCronLock('calculate-advanced-metrics', { ttlSeconds: 300 })
+  if (!releaseLock) {
+    return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -104,14 +110,19 @@ export async function POST(request: NextRequest) {
 
     // Batch-fetch equity curve data for every trader (much denser than daily_snapshots)
     // equity_curve has 812K rows vs daily_snapshots 400K, and covers 25 platforms
-    const allTraderKeys = [...new Set((traders || []).map(t => t.trader_key))]
-    const allPlatforms = [...new Set((traders || []).map(t => t.platform))]
-    const dailySnapshotMap = new Map<string, Array<{ date: string; daily_return_pct: string | null }>>()
+    const allTraderKeys = [...new Set((traders || []).map((t) => t.trader_key))]
+    const allPlatforms = [...new Set((traders || []).map((t) => t.platform))]
+    const dailySnapshotMap = new Map<
+      string,
+      Array<{ date: string; daily_return_pct: string | null }>
+    >()
     try {
       // Fetch equity curve data — daily ROI points that can be diffed for daily returns
       for (let i = 0; i < allPlatforms.length; i++) {
         const platform = allPlatforms[i]
-        const platformTraders = (traders || []).filter(t => t.platform === platform).map(t => t.trader_key)
+        const platformTraders = (traders || [])
+          .filter((t) => t.platform === platform)
+          .map((t) => t.trader_key)
         if (platformTraders.length === 0) continue
 
         const { data: eqRows } = await readDb
@@ -148,7 +159,7 @@ export async function POST(request: NextRequest) {
 
       // Fallback: also check trader_daily_snapshots for any traders not in equity_curve
       // DATA_QUALITY_BOUNDARY imported from lib/pipeline/types.ts
-      const missingTraders = allTraderKeys.filter(k => !dailySnapshotMap.has(k))
+      const missingTraders = allTraderKeys.filter((k) => !dailySnapshotMap.has(k))
       if (missingTraders.length > 0) {
         const earliestStart = new Date()
         earliestStart.setDate(earliestStart.getDate() - 90)
@@ -157,14 +168,19 @@ export async function POST(request: NextRequest) {
           .from('trader_daily_snapshots')
           .select('trader_key, date, daily_return_pct')
           .in('trader_key', missingTraders)
-          .gte('date', earliestDateStr > DATA_QUALITY_BOUNDARY ? earliestDateStr : DATA_QUALITY_BOUNDARY)
+          .gte(
+            'date',
+            earliestDateStr > DATA_QUALITY_BOUNDARY ? earliestDateStr : DATA_QUALITY_BOUNDARY
+          )
           .order('date', { ascending: true })
 
         for (const row of allDailySnaps ?? []) {
           if (!dailySnapshotMap.has(row.trader_key)) {
             dailySnapshotMap.set(row.trader_key, [])
           }
-          dailySnapshotMap.get(row.trader_key)!.push({ date: row.date, daily_return_pct: row.daily_return_pct })
+          dailySnapshotMap
+            .get(row.trader_key)!
+            .push({ date: row.date, daily_return_pct: row.daily_return_pct })
         }
       }
     } catch (err) {
@@ -202,9 +218,9 @@ export async function POST(request: NextRequest) {
 
           const traderDailyRows = dailySnapshotMap.get(snapshot.trader_key) ?? []
           const dailyReturns = traderDailyRows
-            .filter(s => s.date >= startDateStr)
-            .map(s => parseFloat(s.daily_return_pct || '0'))
-            .filter(r => !isNaN(r))
+            .filter((s) => s.date >= startDateStr)
+            .map((s) => parseFloat(s.daily_return_pct || '0'))
+            .filter((r) => !isNaN(r))
 
           // Determine metrics quality based on data availability
           let metricsQuality: 'high' | 'medium' | 'low' | 'insufficient'
@@ -254,7 +270,10 @@ export async function POST(request: NextRequest) {
             .eq('id', snapshot.id)
 
           // If columns don't exist, try minimal update
-          if (updateError && (updateError.code === '42703' || updateError.message?.includes('column'))) {
+          if (
+            updateError &&
+            (updateError.code === '42703' || updateError.message?.includes('column'))
+          ) {
             const minimalPayload: Record<string, unknown> = {}
             // Try only columns that are likely to exist
             if (sortinoRatio !== null) minimalPayload.sortino_ratio = sortinoRatio
@@ -278,7 +297,11 @@ export async function POST(request: NextRequest) {
 
         processed++
       } catch (err) {
-        logger.error('Error processing trader in advanced metrics', {}, err instanceof Error ? err : new Error(String(err)))
+        logger.error(
+          'Error processing trader in advanced metrics',
+          {},
+          err instanceof Error ? err : new Error(String(err))
+        )
         errors++
       }
     }
@@ -301,11 +324,15 @@ export async function POST(request: NextRequest) {
     })
   } catch (err) {
     logger.apiError('/api/cron/calculate-advanced-metrics', err, {})
-    await plog.error(err instanceof Error ? err : new Error(typeof err === 'string' ? err : JSON.stringify(err)))
+    await plog.error(
+      err instanceof Error ? err : new Error(typeof err === 'string' ? err : JSON.stringify(err))
+    )
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
       { status: 500 }
     )
+  } finally {
+    await releaseLock()
   }
 }
 

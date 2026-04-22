@@ -29,6 +29,7 @@ import {
 } from '@/lib/cron/inline-jobs'
 import { createLogger } from '@/lib/utils/logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // 5 minutes — longest of the three
@@ -40,20 +41,24 @@ const logger = createLogger('batch-5min')
 function withTimeout(
   fn: () => Promise<InlineJobResult>,
   jobName: string,
-  timeoutMs: number = 120_000, // 2 min per sub-job
+  timeoutMs: number = 120_000 // 2 min per sub-job
 ): Promise<InlineJobResult> {
   const jobStart = Date.now()
   return Promise.race([
     fn().then((result) => {
       const elapsed = Date.now() - jobStart
       if (elapsed > 60_000) {
-        logger.warn(`[${jobName}] completed but took ${Math.round(elapsed / 1000)}s (>60s threshold)`)
+        logger.warn(
+          `[${jobName}] completed but took ${Math.round(elapsed / 1000)}s (>60s threshold)`
+        )
       }
       return result
     }),
     new Promise<InlineJobResult>((resolve) =>
       setTimeout(() => {
-        logger.error(`[${jobName}] TIMED OUT after ${Math.round(timeoutMs / 1000)}s — this sub-job is hanging`)
+        logger.error(
+          `[${jobName}] TIMED OUT after ${Math.round(timeoutMs / 1000)}s — this sub-job is hanging`
+        )
         resolve({
           name: jobName,
           status: 'error',
@@ -71,6 +76,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
+  const releaseLock = await acquireCronLock('batch-5min', { ttlSeconds: 300 })
+  if (!releaseLock) {
+    return NextResponse.json({ status: 'skipped', reason: 'already running' })
+  }
+
   const startTime = Date.now()
   const plog = await PipelineLogger.start('batch-5min')
 
@@ -85,58 +95,99 @@ export async function GET(request: NextRequest) {
   let results: InlineJobResult[]
   let timedOut = false
   try {
-    results = await Promise.race([
-      Promise.all([
-        withTimeout(runWorkerInline, 'run-worker', PER_JOB_TIMEOUT_MS),
-        withTimeout(refreshHotScoresInline, 'refresh-hot-scores', PER_JOB_TIMEOUT_MS),
-        withTimeout(syncTradersInline, 'trader-sync', PER_JOB_TIMEOUT_MS),
-      ]),
-      new Promise<InlineJobResult[]>((resolve) =>
-        setTimeout(() => {
-          logger.error(`batch-5min global timeout after ${GLOBAL_TIMEOUT_MS / 1000}s — returning partial results`)
-          timedOut = true
-          // Return timeout results for all jobs so we still log something useful
-          resolve([
-            { name: 'run-worker', status: 'error', durationMs: GLOBAL_TIMEOUT_MS, error: 'global timeout' },
-            { name: 'refresh-hot-scores', status: 'error', durationMs: GLOBAL_TIMEOUT_MS, error: 'global timeout' },
-            { name: 'trader-sync', status: 'error', durationMs: GLOBAL_TIMEOUT_MS, error: 'global timeout' },
-          ])
-        }, GLOBAL_TIMEOUT_MS)
-      ),
-    ])
-  } catch (err) {
+    try {
+      results = await Promise.race([
+        Promise.all([
+          withTimeout(runWorkerInline, 'run-worker', PER_JOB_TIMEOUT_MS),
+          withTimeout(refreshHotScoresInline, 'refresh-hot-scores', PER_JOB_TIMEOUT_MS),
+          withTimeout(syncTradersInline, 'trader-sync', PER_JOB_TIMEOUT_MS),
+        ]),
+        new Promise<InlineJobResult[]>((resolve) =>
+          setTimeout(() => {
+            logger.error(
+              `batch-5min global timeout after ${GLOBAL_TIMEOUT_MS / 1000}s — returning partial results`
+            )
+            timedOut = true
+            // Return timeout results for all jobs so we still log something useful
+            resolve([
+              {
+                name: 'run-worker',
+                status: 'error',
+                durationMs: GLOBAL_TIMEOUT_MS,
+                error: 'global timeout',
+              },
+              {
+                name: 'refresh-hot-scores',
+                status: 'error',
+                durationMs: GLOBAL_TIMEOUT_MS,
+                error: 'global timeout',
+              },
+              {
+                name: 'trader-sync',
+                status: 'error',
+                durationMs: GLOBAL_TIMEOUT_MS,
+                error: 'global timeout',
+              },
+            ])
+          }, GLOBAL_TIMEOUT_MS)
+        ),
+      ])
+    } catch (err) {
+      const totalDuration = Date.now() - startTime
+      logger.error(
+        `batch-5min unexpected error after ${Math.round(totalDuration / 1000)}s: ${String(err)}`
+      )
+      await plog.error(err instanceof Error ? err : new Error(String(err)))
+      return NextResponse.json(
+        {
+          batch: 'batch-5min',
+          status: 'error',
+          error: String(err),
+          totalDurationMs: totalDuration,
+        },
+        { status: 500 }
+      )
+    }
+
     const totalDuration = Date.now() - startTime
-    logger.error(`batch-5min unexpected error after ${Math.round(totalDuration / 1000)}s: ${String(err)}`)
-    await plog.error(err instanceof Error ? err : new Error(String(err)))
-    return NextResponse.json({ batch: 'batch-5min', status: 'error', error: String(err), totalDurationMs: totalDuration }, { status: 500 })
+    const failedJobs = results.filter((r) => r.status === 'error')
+    const succeeded = results.filter((r) => r.status === 'success').length
+
+    // Log timing for each sub-job for diagnosis
+    for (const r of results) {
+      logger.info(
+        `[${r.name}] status=${r.status} duration=${Math.round(r.durationMs / 1000)}s${r.error ? ` error=${r.error}` : ''}`
+      )
+    }
+
+    // Only log as error if a critical sub-job (not run-worker) fails.
+    // run-worker timeout is expected when processing a backlog — it'll catch up next run.
+    const criticalFailures = failedJobs.filter((r) => r.name !== 'run-worker')
+    if (timedOut) {
+      await plog.error(
+        new Error(`batch-5min global timeout after ${Math.round(totalDuration / 1000)}s`),
+        { results, totalDurationMs: totalDuration }
+      )
+    } else if (criticalFailures.length > 0) {
+      await plog.error(new Error(`${failedJobs.length}/${results.length} sub-jobs failed`), {
+        results,
+      })
+    } else {
+      await plog.success(succeeded, { results })
+    }
+
+    return NextResponse.json(
+      {
+        batch: 'batch-5min',
+        status: timedOut ? 'timeout' : failedJobs.length > 0 ? 'partial' : 'success',
+        totalDurationMs: totalDuration,
+        results,
+      },
+      {
+        status: timedOut ? 504 : failedJobs.length > 0 ? 207 : 200,
+      }
+    )
+  } finally {
+    await releaseLock()
   }
-
-  const totalDuration = Date.now() - startTime
-  const failedJobs = results.filter(r => r.status === 'error')
-  const succeeded = results.filter(r => r.status === 'success').length
-
-  // Log timing for each sub-job for diagnosis
-  for (const r of results) {
-    logger.info(`[${r.name}] status=${r.status} duration=${Math.round(r.durationMs / 1000)}s${r.error ? ` error=${r.error}` : ''}`)
-  }
-
-  // Only log as error if a critical sub-job (not run-worker) fails.
-  // run-worker timeout is expected when processing a backlog — it'll catch up next run.
-  const criticalFailures = failedJobs.filter(r => r.name !== 'run-worker')
-  if (timedOut) {
-    await plog.error(new Error(`batch-5min global timeout after ${Math.round(totalDuration / 1000)}s`), { results, totalDurationMs: totalDuration })
-  } else if (criticalFailures.length > 0) {
-    await plog.error(new Error(`${failedJobs.length}/${results.length} sub-jobs failed`), { results })
-  } else {
-    await plog.success(succeeded, { results })
-  }
-
-  return NextResponse.json({
-    batch: 'batch-5min',
-    status: timedOut ? 'timeout' : (failedJobs.length > 0 ? 'partial' : 'success'),
-    totalDurationMs: totalDuration,
-    results,
-  }, {
-    status: timedOut ? 504 : (failedJobs.length > 0 ? 207 : 200),
-  })
 }
