@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import Link from 'next/link'
 import type { PersonalityType, RecommendedTrader } from '../../components/types'
 
@@ -117,10 +118,13 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                 }}
               >
                 {trader.avatar_url ? (
-                  <img
+                  <Image
                     src={trader.avatar_url}
-                    alt={trader.name}
-                    style={{ width: 36, height: 36, objectFit: 'cover' }}
+                    alt={`${trader.name} avatar`}
+                    width={36}
+                    height={36}
+                    style={{ objectFit: 'cover' }}
+                    unoptimized
                   />
                 ) : (
                   <span
