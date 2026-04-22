@@ -24,42 +24,64 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
         </h3>
       </div>
 
-      {/* Sorted bars */}
-      {sortedTypes.map(({ type, percent }) => {
-        const isPrimary = type.id === primaryTypeId
-        return (
-          <div key={type.id} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{
-              width: 80,
-              fontSize: 13,
-              fontWeight: isPrimary ? 700 : 500,
-              color: isPrimary ? type.color : 'var(--color-text-secondary)',
-              flexShrink: 0,
-            }}>
-              {tr(type.nameKey)}
-            </span>
-            <div style={{ flex: 1, height: 8, borderRadius: 4, background: 'var(--color-bg-tertiary)', overflow: 'hidden' }}>
+      {/* Sorted bars — primary type gets visual emphasis */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {sortedTypes.map(({ type, percent }, idx) => {
+          const isPrimary = type.id === primaryTypeId
+          return (
+            <div
+              key={type.id}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: isPrimary ? '8px 10px' : '4px 0',
+                borderRadius: isPrimary ? 8 : 0,
+                background: isPrimary ? `${type.color}08` : 'transparent',
+                transition: 'background 0.3s',
+              }}
+            >
+              <span style={{
+                width: 80,
+                fontSize: isPrimary ? 13 : 12,
+                fontWeight: isPrimary ? 700 : 400,
+                color: isPrimary ? type.color : 'var(--color-text-tertiary)',
+                flexShrink: 0,
+              }}>
+                {tr(type.nameKey)}
+              </span>
               <div style={{
-                width: `${percent}%`,
-                height: '100%',
-                borderRadius: 4,
-                background: isPrimary ? type.gradient : `${type.color}40`,
-                transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)',
-              }} />
+                flex: 1,
+                height: isPrimary ? 10 : 6,
+                borderRadius: isPrimary ? 5 : 3,
+                background: 'var(--color-bg-tertiary)',
+                overflow: 'hidden',
+                transition: 'height 0.3s',
+              }}>
+                <div style={{
+                  width: `${percent}%`,
+                  height: '100%',
+                  borderRadius: 'inherit',
+                  background: isPrimary ? type.gradient : `${type.color}30`,
+                  transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)',
+                  boxShadow: isPrimary ? `0 0 6px ${type.color}30` : 'none',
+                }} />
+              </div>
+              <span style={{
+                width: 36,
+                fontSize: isPrimary ? 13 : 11,
+                fontWeight: isPrimary ? 700 : 500,
+                color: isPrimary ? type.color : 'var(--color-text-tertiary)',
+                textAlign: 'right',
+                flexShrink: 0,
+                fontVariantNumeric: 'tabular-nums',
+              }}>
+                {percent}%
+              </span>
             </div>
-            <span style={{
-              width: 36,
-              fontSize: 12,
-              fontWeight: 600,
-              color: isPrimary ? type.color : 'var(--color-text-tertiary)',
-              textAlign: 'right',
-              flexShrink: 0,
-            }}>
-              {percent}%
-            </span>
-          </div>
-        )
-      })}
+          )
+        })}
+      </div>
     </div>
   )
 }
