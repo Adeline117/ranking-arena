@@ -31,8 +31,20 @@ const SIZE_CONFIG = {
 }
 
 // 星星图标
-const StarIcon = ({ size = 12, color = 'var(--color-on-accent)' }: { size?: number; color?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} xmlns="http://www.w3.org/2000/svg">
+const StarIcon = ({
+  size = 12,
+  color = 'var(--color-on-accent)',
+}: {
+  size?: number
+  color?: string
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill={color}
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
   </svg>
 )
@@ -73,8 +85,7 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
         padding: sizeConfig.padding,
         borderRadius: tokens.radius.full,
         background: config.gradient,
-        boxShadow: `0 2px 8px ${config.glow}, 0 0 12px var(--color-pro-gold-glow)`,
-        animation: 'proBadgeGlow 3s ease-in-out infinite',
+        boxShadow: `0 1px 6px ${config.glow}`,
         ...style,
       }}
     >
@@ -96,13 +107,13 @@ export default function ProBadge({ size = 'md', showLabel = true, style }: ProBa
 }
 
 // 头像角标徽章
-export function ProBadgeOverlay({ 
-  position = 'bottom-right' 
-}: { 
+export function ProBadgeOverlay({
+  position = 'bottom-right',
+}: {
   position?: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left'
 }) {
   const config = PRO_CONFIG
-  
+
   const positionStyles: Record<string, React.CSSProperties> = {
     'top-right': { top: -2, right: -2 },
     'bottom-right': { bottom: 0, right: 0 },
@@ -122,8 +133,7 @@ export function ProBadgeOverlay({
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        boxShadow: `0 2px 6px ${config.glow}, 0 0 10px var(--color-pro-gold-glow), 0 0 0 2px var(--color-bg-primary)`,
-        animation: 'proBadgeGlow 3s ease-in-out infinite',
+        boxShadow: `0 1px 6px ${config.glow}, 0 0 0 2px var(--color-bg-primary)`,
         zIndex: tokens.zIndex.dropdown,
       }}
     >
