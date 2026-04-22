@@ -16,7 +16,7 @@ export default function GoProButton() {
     <Link
       href="/pricing"
       onClick={() => trackEvent('click_go_pro_nav')}
-      className="btn-press touch-target hide-mobile"
+      className="btn-press touch-target"
       style={{
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         borderRadius: tokens.radius.full,

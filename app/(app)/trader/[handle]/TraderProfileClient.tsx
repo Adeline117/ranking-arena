@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
@@ -46,7 +47,9 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
 })
 
 const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
-const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
+const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), {
+  ssr: false,
+})
 // ExchangeLinksBar — static import (no client-only deps). Previously dynamic
 // with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
 // trader page load. Static import eliminates the flash + reduces chunk count.
@@ -105,7 +108,11 @@ interface TraderProfileClientProps {
   claimedUser?: ClaimedUserProfile | null
 }
 
-export default function TraderProfileClient({ data, serverTraderData, claimedUser }: TraderProfileClientProps) {
+export default function TraderProfileClient({
+  data,
+  serverTraderData,
+  claimedUser,
+}: TraderProfileClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
   const pathname = usePathname()
@@ -118,7 +125,10 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
   // Track trader profile page view (funnel: browse → trader detail)
   useEffect(() => {
-    trackEvent('view_trader', { platform: data.source, handle: data.handle || data.source_trader_id })
+    trackEvent('view_trader', {
+      platform: data.source,
+      handle: data.handle || data.source_trader_id,
+    })
   }, [data.source, data.handle, data.source_trader_id])
 
   const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
@@ -138,10 +148,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   useEffect(() => {
     const el = headerRef.current
     if (!el) return
-    const obs = new IntersectionObserver(
-      ([entry]) => setShowMiniHeader(!entry.isIntersecting),
-      { threshold: 0 }
-    )
+    const obs = new IntersectionObserver(([entry]) => setShowMiniHeader(!entry.isIntersecting), {
+      threshold: 0,
+    })
     obs.observe(el)
     return () => obs.disconnect()
   }, [])
@@ -165,7 +174,8 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
   // SWR for full trader data — switches URL when account tab changes
   // P7: When fetching primary account, bundle claim/aggregate/rank_history via include param (4→1 API call)
-  const effectivePlatform = activeAccountRaw?.platform || searchParams?.get('platform') || data.source || ''
+  const effectivePlatform =
+    activeAccountRaw?.platform || searchParams?.get('platform') || data.source || ''
   const effectiveHandle = activeAccountRaw?.traderKey || data.handle || data.source_trader_id
   const isPrimaryAccount = !activeAccountRaw
   const traderApiUrl = useMemo(() => {
@@ -180,11 +190,19 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     return base
   }, [effectivePlatform, effectiveHandle, isPrimaryAccount])
   type TraderDataWithExtras = TraderPageData & {
-    claim_status?: { is_verified: boolean; owner_id?: string | null; profile?: Record<string, unknown> }
+    claim_status?: {
+      is_verified: boolean
+      owner_id?: string | null
+      profile?: Record<string, unknown>
+    }
     aggregate?: { aggregated: unknown; accounts: unknown[]; totalAccounts: number }
     rank_history?: { history: { date: string; rank: number; arena_score: number }[] }
   }
-  const { data: traderData, error: traderError, isLoading: traderLoading } = useQuery<TraderDataWithExtras>({
+  const {
+    data: traderData,
+    error: traderError,
+    isLoading: traderLoading,
+  } = useQuery<TraderDataWithExtras>({
     queryKey: ['trader-profile', traderApiUrl],
     queryFn: () => traderFetcher<TraderDataWithExtras>(traderApiUrl),
     refetchOnWindowFocus: false,
@@ -196,7 +214,9 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     refetchIntervalInBackground: false,
     staleTime: 5000,
     retry: 2,
-    initialData: isPrimaryAccount ? (serverTraderData as TraderDataWithExtras ?? undefined) : undefined,
+    initialData: isPrimaryAccount
+      ? ((serverTraderData as TraderDataWithExtras) ?? undefined)
+      : undefined,
     placeholderData: (prev) => prev,
     // #30: Skip refetch on mount when serverTraderData is provided (ISR freshness)
     refetchOnMount: isPrimaryAccount && serverTraderData ? false : true,
@@ -214,15 +234,19 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
   const { linkedAccounts, aggregatedData, hasMultipleAccounts } = useLinkedAccounts(
     data.source,
     data.source_trader_id,
-    traderData?.aggregate,
+    traderData?.aggregate
   )
 
   // Check if this trader is verified (claimed) and if current user is the owner.
   // P7: Skip separate fetch when bundled claim data is available from merged endpoint
-  const claimUrl = (!bundledClaimData && data.source_trader_id && data.source)
-    ? `/api/traders/claim/status?trader_id=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}`
-    : null
-  const { data: claimData } = useQuery<{ success: boolean; data: { is_verified: boolean; owner_id: string | null } }>({
+  const claimUrl =
+    !bundledClaimData && data.source_trader_id && data.source
+      ? `/api/traders/claim/status?trader_id=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}`
+      : null
+  const { data: claimData } = useQuery<{
+    success: boolean
+    data: { is_verified: boolean; owner_id: string | null }
+  }>({
     queryKey: ['trader-claim-status', data.source_trader_id, data.source],
     queryFn: () => fetcher(claimUrl!),
     enabled: !!claimUrl,
@@ -241,10 +265,13 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
   // Rank history for sparkline (7-day trajectory)
   // P7: Skip separate fetch when bundled data is available from the merged endpoint
-  const rankHistoryUrl = (!bundledRankHistory && effectivePlatform && effectiveHandle)
-    ? `/api/trader/rank-history?platform=${encodeURIComponent(effectivePlatform)}&trader_key=${encodeURIComponent(data.source_trader_id)}&period=90D&days=7`
-    : null
-  const { data: rankHistoryData } = useQuery<{ history: { date: string; rank: number; arena_score: number }[] }>({
+  const rankHistoryUrl =
+    !bundledRankHistory && effectivePlatform && effectiveHandle
+      ? `/api/trader/rank-history?platform=${encodeURIComponent(effectivePlatform)}&trader_key=${encodeURIComponent(data.source_trader_id)}&period=90D&days=7`
+      : null
+  const { data: rankHistoryData } = useQuery<{
+    history: { date: string; rank: number; arena_score: number }[]
+  }>({
     queryKey: ['trader-rank-history', effectivePlatform, data.source_trader_id],
     queryFn: () => traderFetcher(rankHistoryUrl!),
     enabled: !!rankHistoryUrl,
@@ -252,46 +279,78 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
     staleTime: 60000,
     retry: 1,
   })
-  const rankSparklineData = (bundledRankHistory?.history ?? rankHistoryData?.history)?.map(h => ({ rank: h.rank })) ?? []
+  const rankSparklineData =
+    (bundledRankHistory?.history ?? rankHistoryData?.history)?.map((h) => ({ rank: h.rank })) ?? []
 
   // Stable references for derived SWR data — memoize so child components
   // wrapped in React.memo can bail out of re-render when traderData
   // identity changes but the underlying field hasn't.
   const traderProfile = useMemo(() => traderData?.profile ?? null, [traderData?.profile])
-  const traderPerformance = useMemo(() => traderData?.performance ?? null, [traderData?.performance])
+  const traderPerformance = useMemo(
+    () => traderData?.performance ?? null,
+    [traderData?.performance]
+  )
   const traderStats = useMemo(() => traderData?.stats ?? null, [traderData?.stats])
   const traderPortfolio = useMemo(() => traderData?.portfolio ?? [], [traderData?.portfolio])
-  const traderPositionHistory = useMemo(() => traderData?.positionHistory ?? [], [traderData?.positionHistory])
+  const traderPositionHistory = useMemo(
+    () => traderData?.positionHistory ?? [],
+    [traderData?.positionHistory]
+  )
   const traderEquityCurve = useMemo(() => traderData?.equityCurve, [traderData?.equityCurve])
-  const traderAssetBreakdown = useMemo(() => traderData?.assetBreakdown, [traderData?.assetBreakdown])
-  const traderSimilar = useMemo(() => traderData?.similarTraders ?? [], [traderData?.similarTraders])
+  const traderAssetBreakdown = useMemo(
+    () => traderData?.assetBreakdown,
+    [traderData?.assetBreakdown]
+  )
+  const traderSimilar = useMemo(
+    () => traderData?.similarTraders ?? [],
+    [traderData?.similarTraders]
+  )
 
   // Structured data for SEO — memoized so combineSchemas doesn't re-run on every
   // unrelated render (was being recomputed on every tab click, period switch, etc.)
   // Must be called before any early-return to satisfy rules-of-hooks.
-  const structuredData = useMemo(() => combineSchemas(
-    generateTraderProfilePageSchema({
-      handle: data.handle,
-      id: data.source_trader_id,
-      source: data.source,
-      roi90d: data.roi ?? undefined,
-      winRate: data.win_rate ?? undefined,
-      maxDrawdown: data.max_drawdown ?? undefined,
-      arenaScore: data.arena_score ?? undefined,
-      avatarUrl: data.avatar_url ?? undefined,
-    }),
-    generateBreadcrumbSchema([
-      { name: 'Home', url: BASE_URL },
-      { name: 'Ranking', url: `${BASE_URL}/rankings` },
-      { name: data.handle },
-    ])
-  ), [data.handle, data.source_trader_id, data.source, data.roi, data.win_rate, data.max_drawdown, data.arena_score, data.avatar_url])
+  const structuredData = useMemo(
+    () =>
+      combineSchemas(
+        generateTraderProfilePageSchema({
+          handle: data.handle,
+          id: data.source_trader_id,
+          source: data.source,
+          roi90d: data.roi ?? undefined,
+          winRate: data.win_rate ?? undefined,
+          maxDrawdown: data.max_drawdown ?? undefined,
+          arenaScore: data.arena_score ?? undefined,
+          avatarUrl: data.avatar_url ?? undefined,
+        }),
+        generateBreadcrumbSchema([
+          { name: 'Home', url: BASE_URL },
+          { name: 'Ranking', url: `${BASE_URL}/rankings` },
+          { name: data.handle },
+        ])
+      ),
+    [
+      data.handle,
+      data.source_trader_id,
+      data.source,
+      data.roi,
+      data.win_rate,
+      data.max_drawdown,
+      data.arena_score,
+      data.avatar_url,
+    ]
+  )
 
   // Loading state: only when SWR is loading AND no server fallback
   const isInitialLoading = traderLoading && !serverTraderData
   if (isInitialLoading) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <RankingSkeleton />
         </Box>
@@ -321,27 +380,53 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
       <JsonLd data={structuredData} />
       {/* TopNav is rendered by the parent layout.tsx (server component) */}
 
-      <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-        <Breadcrumb items={[
-          { label: t('leaderboardBreadcrumb'), href: '/rankings' },
-          { label: displayName },
-        ]} />
+      <Box
+        className="page-container"
+        style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}
+      >
+        <Breadcrumb
+          items={[{ label: t('leaderboardBreadcrumb'), href: '/rankings' }, { label: displayName }]}
+        />
 
         <TraderStaleBanner show={showStaleBanner} t={t} />
         <TraderPlatformDeadBanner show={!!data.is_platform_dead} source={data.source} t={t} />
 
         {/* Sticky mini header for mobile */}
         <div className={`trader-sticky-mini-header${showMiniHeader ? ' visible' : ''}`}>
-          <div className="mini-avatar" style={{ background: data.avatar_url ? 'var(--color-bg-tertiary)' : getAvatarGradient(data.source_trader_id), display: 'grid', placeItems: 'center', fontSize: 12, fontWeight: 700, color: '#fff' }}>
+          <div
+            className="mini-avatar"
+            style={{
+              background: data.avatar_url
+                ? 'var(--color-bg-tertiary)'
+                : getAvatarGradient(data.source_trader_id),
+              display: 'grid',
+              placeItems: 'center',
+              fontSize: 12,
+              fontWeight: 700,
+              color: '#fff',
+            }}
+          >
             {data.avatar_url ? (
-              <Image src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`} alt={displayName} width={28} height={28} style={{ width: '100%', height: '100%', objectFit: 'cover' }} unoptimized />
+              <Image
+                src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`}
+                alt={displayName}
+                width={28}
+                height={28}
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                unoptimized
+              />
             ) : (
               displayName.charAt(0).toUpperCase()
             )}
           </div>
           <span className="mini-name">{displayName}</span>
           {data.roi != null && (
-            <span className="mini-roi" style={{ color: data.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+            <span
+              className="mini-roi"
+              style={{
+                color: data.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+              }}
+            >
               {formatROI(data.roi)}
             </span>
           )}
@@ -349,49 +434,69 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
 
         {/* Trader Header */}
         <div ref={headerRef}>
-        <TraderHeader
-          handle={traderProfile?.handle || data.handle}
-          displayName={displayName}
-          traderId={traderProfile?.id || data.source_trader_id}
-          avatarUrl={traderProfile?.avatar_url || data.avatar_url || undefined}
-          isRegistered={!!claimedUser}
-          isOwnProfile={isOwner}
-          followers={traderProfile?.followers ?? undefined}
-          profileUrl={traderProfile?.profile_url || data.profile_url || undefined}
-          source={traderProfile?.source || data.source}
-          isPro={isPro}
-          roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
-          maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
-          winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
-          arenaScore={hasMultipleAccounts && activeAccount === 'all' && aggregatedData
-            ? aggregatedData.weightedScore
-            : (traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? data.arena_score ?? null}
-          scoreConfidence={(traderPerformance as ExtendedPerformance | null)?.score_confidence as string ?? null}
-          tradesCount={(traderPerformance as ExtendedPerformance | null)?.trades_count as number ?? null}
-          rank={data.rank ?? null}
-          currentUserId={currentUserId}
-          isVerifiedTrader={isVerifiedTrader}
-          isBot={data.source === 'web3_bot'}
-          lastUpdated={traderData?.lastUpdated ?? traderData?.trackedSince}
-          claimedBio={claimedUser?.bio || (traderProfile as Record<string, unknown> | null)?.bio as string | undefined}
-          claimedAvatarUrl={claimedUser?.avatar_url}
-          linkedAccountCount={hasMultipleAccounts ? linkedAccounts.length : undefined}
-          linkedPlatforms={hasMultipleAccounts ? linkedAccounts.map(a => a.platform) : undefined}
-          platform={effectivePlatform}
-          traderKey={data.source_trader_id}
-          tradingStyle={(traderPerformance as Record<string, unknown> | null)?.tradingStyle as string ?? (traderPerformance as ExtendedPerformance | null)?.trading_style ?? null}
-        />
+          <TraderHeader
+            handle={traderProfile?.handle || data.handle}
+            displayName={displayName}
+            traderId={traderProfile?.id || data.source_trader_id}
+            avatarUrl={traderProfile?.avatar_url || data.avatar_url || undefined}
+            isRegistered={!!claimedUser}
+            isOwnProfile={isOwner}
+            followers={traderProfile?.followers ?? undefined}
+            profileUrl={traderProfile?.profile_url || data.profile_url || undefined}
+            source={traderProfile?.source || data.source}
+            isPro={isPro}
+            roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
+            maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
+            winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
+            arenaScore={
+              hasMultipleAccounts && activeAccount === 'all' && aggregatedData
+                ? aggregatedData.weightedScore
+                : ((traderPerformance as ExtendedPerformance | null)?.arena_score_90d ??
+                  data.arena_score ??
+                  null)
+            }
+            scoreConfidence={
+              ((traderPerformance as ExtendedPerformance | null)?.score_confidence as string) ??
+              null
+            }
+            tradesCount={
+              ((traderPerformance as ExtendedPerformance | null)?.trades_count as number) ?? null
+            }
+            rank={data.rank ?? null}
+            currentUserId={currentUserId}
+            isVerifiedTrader={isVerifiedTrader}
+            isBot={data.source === 'web3_bot'}
+            lastUpdated={traderData?.lastUpdated ?? traderData?.trackedSince}
+            claimedBio={
+              claimedUser?.bio ||
+              ((traderProfile as Record<string, unknown> | null)?.bio as string | undefined)
+            }
+            claimedAvatarUrl={claimedUser?.avatar_url}
+            linkedAccountCount={hasMultipleAccounts ? linkedAccounts.length : undefined}
+            linkedPlatforms={
+              hasMultipleAccounts ? linkedAccounts.map((a) => a.platform) : undefined
+            }
+            platform={effectivePlatform}
+            traderKey={data.source_trader_id}
+            tradingStyle={
+              ((traderPerformance as Record<string, unknown> | null)?.tradingStyle as string) ??
+              (traderPerformance as ExtendedPerformance | null)?.trading_style ??
+              null
+            }
+          />
         </div>
 
         {/* Rank sparkline — 7-day rank trajectory */}
         {rankSparklineData.length >= 2 && (
-          <Box style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[2],
-            marginTop: tokens.spacing[2],
-            marginBottom: tokens.spacing[1],
-          }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              marginTop: tokens.spacing[2],
+              marginBottom: tokens.spacing[1],
+            }}
+          >
             <Text size="xs" color="tertiary">
               {t('rankTrend') || 'Rank trend (7d)'}
             </Text>
@@ -411,9 +516,14 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
         {/* Exchange links — copy-trade / DEX view per exchange, below header */}
         <ExchangeLinksBar
           primary={{ platform: data.source, traderKey: data.source_trader_id, handle: data.handle }}
-          linkedAccounts={hasMultipleAccounts
-            ? linkedAccounts.map(a => ({ platform: a.platform, traderKey: a.traderKey, handle: a.handle }))
-            : undefined
+          linkedAccounts={
+            hasMultipleAccounts
+              ? linkedAccounts.map((a) => ({
+                  platform: a.platform,
+                  traderKey: a.traderKey,
+                  handle: a.handle,
+                }))
+              : undefined
           }
           activeAccount={activeAccount}
           isOwnProfile={isOwner}
@@ -432,83 +542,134 @@ export default function TraderProfileClient({ data, serverTraderData, claimedUse
           hideTabs={undefined}
         />
 
+        {/* Pro upsell — compact banner for free users */}
+        {!isPro && (
+          <Link
+            href="/pricing"
+            onClick={() => trackEvent('click_go_pro_trader_detail')}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: tokens.spacing[2],
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              background:
+                'linear-gradient(135deg, var(--color-accent-primary-10), var(--color-accent-secondary-10, var(--color-accent-primary-10)))',
+              borderRadius: tokens.radius.md,
+              margin: `${tokens.spacing[2]} 0`,
+              textDecoration: 'none',
+              cursor: 'pointer',
+            }}
+          >
+            <Text
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: 'var(--color-accent-primary)',
+                fontWeight: tokens.typography.fontWeight.bold,
+              }}
+            >
+              {t('upgradeProStatsDesc')}
+            </Text>
+          </Link>
+        )}
+
         {/* Tab Content — dims while loading account switch */}
-        <div style={{
-          opacity: (traderLoading && !isPrimaryAccount) ? 0.5 : 1,
-          transition: 'opacity 0.2s ease',
-          pointerEvents: (traderLoading && !isPrimaryAccount) ? 'none' : 'auto',
-        }}>
-        <SwipeableView
-          activeIndex={tabKeys.indexOf(activeTab)}
-          onIndexChange={(i) => handleTabChange(tabKeys[i])}
+        <div
+          style={{
+            opacity: traderLoading && !isPrimaryAccount ? 0.5 : 1,
+            transition: 'opacity 0.2s ease',
+            pointerEvents: traderLoading && !isPrimaryAccount ? 'none' : 'auto',
+          }}
         >
-          {/* Overview Tab */}
-          <Box style={{ minHeight: 200 }} className="tab-pane-enter">
-            {(activeTab === 'overview') && (
-              <OverviewTab
-                data={data}
-                traderProfile={traderProfile}
-                traderPerformance={traderPerformance}
-                traderEquityCurve={traderEquityCurve as import('@/app/(app)/u/[handle]/components/types').EquityCurveData | undefined}
-                traderSimilar={traderSimilar}
-                positionSummary={traderData?.positionSummary as { avgLeverage: number | null; longPositions: number | null; shortPositions: number | null } | null | undefined}
-                selectedPeriod={selectedPeriod}
-                hasMultipleAccounts={hasMultipleAccounts}
-                activeAccount={activeAccount}
-                aggregatedData={aggregatedData}
-                linkedAccounts={linkedAccounts}
-                currentUserId={currentUserId}
-                isOwner={isOwner}
-                isVerifiedTrader={isVerifiedTrader}
-                claimedUser={claimedUser}
-              />
-            )}
-          </Box>
-
-          {/* Stats Tab — lazy: only mount after first visit */}
-          <Box style={{ minHeight: 200 }} className="tab-pane-enter">
-            <StatsTab
-              visited={visitedTabs.has('stats')}
-              stats={traderStats}
-              traderHandle={traderProfile?.handle || data.handle}
-              assetBreakdown={traderAssetBreakdown}
-              equityCurve={traderEquityCurve}
-              positionHistory={traderPositionHistory}
-              isPro={isPro}
-              onUnlock={handlePricingRedirect}
-            />
-          </Box>
-
-          {/* Portfolio Tab — lazy: only mount after first visit */}
-          <Box style={{ minHeight: 200 }} className="tab-pane-enter">
-            <PortfolioTab
-              visited={visitedTabs.has('portfolio')}
-              portfolio={traderPortfolio}
-              positionHistory={traderPositionHistory}
-              source={data.source}
-              isPro={isPro}
-              onUnlock={handlePricingRedirect}
-            />
-          </Box>
-
-          {/* Posts Tab (only for claimed traders) */}
-          {claimedUser && (
+          <SwipeableView
+            activeIndex={tabKeys.indexOf(activeTab)}
+            onIndexChange={(i) => handleTabChange(tabKeys[i])}
+          >
+            {/* Overview Tab */}
             <Box style={{ minHeight: 200 }} className="tab-pane-enter">
-              {activeTab === 'posts' && (
-                <Box bg="secondary" p={4} radius="lg" border="primary" style={{ maxWidth: 900 }}>
-                  <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
-                    <Text size="lg" weight="black">{t('posts')}</Text>
-                  </Box>
-                  <PostFeed
-                    authorHandle={claimedUser.handle}
-                    variant="compact"
-                    showSortButtons
-                  />
-                </Box>
+              {activeTab === 'overview' && (
+                <OverviewTab
+                  data={data}
+                  traderProfile={traderProfile}
+                  traderPerformance={traderPerformance}
+                  traderEquityCurve={
+                    traderEquityCurve as
+                      | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
+                      | undefined
+                  }
+                  traderSimilar={traderSimilar}
+                  positionSummary={
+                    traderData?.positionSummary as
+                      | {
+                          avgLeverage: number | null
+                          longPositions: number | null
+                          shortPositions: number | null
+                        }
+                      | null
+                      | undefined
+                  }
+                  selectedPeriod={selectedPeriod}
+                  hasMultipleAccounts={hasMultipleAccounts}
+                  activeAccount={activeAccount}
+                  aggregatedData={aggregatedData}
+                  linkedAccounts={linkedAccounts}
+                  currentUserId={currentUserId}
+                  isOwner={isOwner}
+                  isVerifiedTrader={isVerifiedTrader}
+                  claimedUser={claimedUser}
+                />
               )}
             </Box>
-          )}
-        </SwipeableView>
+
+            {/* Stats Tab — lazy: only mount after first visit */}
+            <Box style={{ minHeight: 200 }} className="tab-pane-enter">
+              <StatsTab
+                visited={visitedTabs.has('stats')}
+                stats={traderStats}
+                traderHandle={traderProfile?.handle || data.handle}
+                assetBreakdown={traderAssetBreakdown}
+                equityCurve={traderEquityCurve}
+                positionHistory={traderPositionHistory}
+                isPro={isPro}
+                onUnlock={handlePricingRedirect}
+              />
+            </Box>
+
+            {/* Portfolio Tab — lazy: only mount after first visit */}
+            <Box style={{ minHeight: 200 }} className="tab-pane-enter">
+              <PortfolioTab
+                visited={visitedTabs.has('portfolio')}
+                portfolio={traderPortfolio}
+                positionHistory={traderPositionHistory}
+                source={data.source}
+                isPro={isPro}
+                onUnlock={handlePricingRedirect}
+              />
+            </Box>
+
+            {/* Posts Tab (only for claimed traders) */}
+            {claimedUser && (
+              <Box style={{ minHeight: 200 }} className="tab-pane-enter">
+                {activeTab === 'posts' && (
+                  <Box bg="secondary" p={4} radius="lg" border="primary" style={{ maxWidth: 900 }}>
+                    <Box
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        marginBottom: tokens.spacing[4],
+                      }}
+                    >
+                      <Text size="lg" weight="black">
+                        {t('posts')}
+                      </Text>
+                    </Box>
+                    <PostFeed authorHandle={claimedUser.handle} variant="compact" showSortButtons />
+                  </Box>
+                )}
+              </Box>
+            )}
+          </SwipeableView>
         </div>
 
         <style>{`
