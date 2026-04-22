@@ -84,11 +84,13 @@ const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
 const fullMode = process.argv.includes('--full')
 
 async function run() {
-  console.log(`[backup] Starting ${fullMode ? 'FULL' : 'trader tables'} backup — ${now.toISOString()}`)
+  console.log(
+    `[backup] Starting ${fullMode ? 'FULL' : 'trader tables'} backup — ${now.toISOString()}`
+  )
 
   const tableArgs = fullMode
     ? '' // dump everything
-    : TRADER_TABLES.map(t => `-t public.${t}`).join(' ')
+    : TRADER_TABLES.map((t) => `-t public.${t}`).join(' ')
 
   const filename = `arena-backup-${dateStr}${fullMode ? '-full' : ''}.sql.gz`
   const localPath = `/tmp/${filename}`
@@ -96,10 +98,14 @@ async function run() {
   try {
     // pg_dump → gzip (使用 PostgreSQL 17 版本以匹配 Supabase 服务器)
     const pgDumpPath = '/opt/homebrew/opt/postgresql@17/bin/pg_dump'
-    console.log(`[backup] Dumping${fullMode ? ' full database' : ` ${TRADER_TABLES.length} tables`}...`)
+    console.log(
+      `[backup] Dumping${fullMode ? ' full database' : ` ${TRADER_TABLES.length} tables`}...`
+    )
+    // 30 tables over network to Supabase can take 15-20min depending on
+    // trader_snapshots_v2 size. 30min budget prevents false ETIMEDOUT.
     execSync(
       `${pgDumpPath} "${DATABASE_URL}" ${tableArgs} --no-owner --no-privileges | gzip > ${localPath}`,
-      { stdio: ['pipe', 'pipe', 'pipe'], timeout: 600_000 }
+      { stdio: ['pipe', 'pipe', 'pipe'], timeout: 1_800_000 }
     )
 
     const size = statSync(localPath).size
@@ -110,18 +116,20 @@ async function run() {
     const r2Key = `db-backups/${now.getFullYear()}/${String(now.getMonth() + 1).padStart(2, '0')}/${filename}`
     console.log(`[backup] Uploading to R2: ${R2_BUCKET}/${r2Key}`)
 
-    await s3.send(new PutObjectCommand({
-      Bucket: R2_BUCKET,
-      Key: r2Key,
-      Body: createReadStream(localPath),
-      ContentType: 'application/gzip',
-      ContentLength: size,
-      Metadata: {
-        'backup-date': now.toISOString(),
-        'backup-type': fullMode ? 'full' : 'trader-tables',
-        'tables': fullMode ? 'all' : TRADER_TABLES.join(','),
-      },
-    }))
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: R2_BUCKET,
+        Key: r2Key,
+        Body: createReadStream(localPath),
+        ContentType: 'application/gzip',
+        ContentLength: size,
+        Metadata: {
+          'backup-date': now.toISOString(),
+          'backup-type': fullMode ? 'full' : 'trader-tables',
+          tables: fullMode ? 'all' : TRADER_TABLES.join(','),
+        },
+      })
+    )
 
     console.log(`[backup] ✓ Uploaded successfully: ${r2Key} (${sizeMB} MB)`)
 
@@ -129,7 +137,9 @@ async function run() {
     unlinkSync(localPath)
   } catch (err) {
     console.error(`[backup] ✗ Failed:`, err.message)
-    try { unlinkSync(localPath) } catch {}
+    try {
+      unlinkSync(localPath)
+    } catch {}
     process.exit(1)
   }
 }
