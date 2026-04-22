@@ -4,9 +4,16 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { delByPattern } from '@/lib/cache'
+import { CachePattern } from '@/lib/cache/keys'
 // Dynamic import: sanitize.ts pulls in isomorphic-dompurify + jsdom (~10MB)
 // which crashes Vercel serverless cold starts. Only needed for write operations.
-const loadSanitize = () => import('@/lib/utils/sanitize').then(m => m.sanitizeText)
+const loadSanitize = () => import('@/lib/utils/sanitize').then((m) => m.sanitizeText)
+
+/** Best-effort invalidation of all post list caches */
+async function invalidatePostListCache(): Promise<void> {
+  await delByPattern(CachePattern.allPosts()).catch(() => {})
+}
 
 /**
  * Simple language detection heuristic.
@@ -314,24 +321,38 @@ export async function getPosts(
   if (error) throw error
   if (!data || data.length === 0) return []
 
-  const authorIds = [...new Set(data.map(p => p.author_id).filter(Boolean))]
-  const originalPostIds = [...new Set(data.map(p => p.original_post_id).filter((id): id is string => !!id))]
+  const authorIds = [...new Set(data.map((p) => p.author_id).filter(Boolean))]
+  const originalPostIds = [
+    ...new Set(data.map((p) => p.original_post_id).filter((id): id is string => !!id)),
+  ]
 
   const [profilesResult, originalPostsResult] = await Promise.all([
     authorIds.length > 0
-      ? supabase.from('user_profiles').select('id, handle, avatar_url, subscription_tier, show_pro_badge').in('id', authorIds)
+      ? supabase
+          .from('user_profiles')
+          .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
+          .in('id', authorIds)
       : Promise.resolve({ data: null }),
     originalPostIds.length > 0
-      ? supabase.from('posts').select('id, title, content, author_id, author_handle, images, created_at').in('id', originalPostIds)
+      ? supabase
+          .from('posts')
+          .select('id, title, content, author_id, author_handle, images, created_at')
+          .in('id', originalPostIds)
       : Promise.resolve({ data: null }),
   ])
 
-  const authorProfileMap = profilesResult.data ? buildAuthorProfileMap(profilesResult.data) : new Map()
+  const authorProfileMap = profilesResult.data
+    ? buildAuthorProfileMap(profilesResult.data)
+    : new Map()
 
   const originalPostMap = new Map<string, OriginalPost>()
   if (originalPostsResult.data && originalPostsResult.data.length > 0) {
-    const originalAuthorIds = [...new Set(originalPostsResult.data.map((p: { author_id: string }) => p.author_id).filter(Boolean))]
-    const missingIds = originalAuthorIds.filter(id => !authorProfileMap.has(id))
+    const originalAuthorIds = [
+      ...new Set(
+        originalPostsResult.data.map((p: { author_id: string }) => p.author_id).filter(Boolean)
+      ),
+    ]
+    const missingIds = originalAuthorIds.filter((id) => !authorProfileMap.has(id))
 
     if (missingIds.length > 0) {
       const { data: originalProfiles } = await supabase
@@ -369,11 +390,9 @@ export async function getPosts(
 
   // Post-fetch visibility filtering for "followers" posts
   if (!group_id && viewer_id) {
-    const followersPostAuthors = [...new Set(
-      filteredData
-        .filter(p => p.visibility === 'followers')
-        .map(p => p.author_id)
-    )]
+    const followersPostAuthors = [
+      ...new Set(filteredData.filter((p) => p.visibility === 'followers').map((p) => p.author_id)),
+    ]
 
     let followedSet = new Set<string>()
     if (followersPostAuthors.length > 0) {
@@ -388,7 +407,7 @@ export async function getPosts(
       }
     }
 
-    filteredData = filteredData.filter(post => {
+    filteredData = filteredData.filter((post) => {
       if (post.visibility === 'public') return true
       if (post.visibility === 'followers') {
         return post.author_id === viewer_id || followedSet.has(post.author_id)
@@ -435,18 +454,22 @@ export async function searchPosts(
   if (error) throw error
   if (!data || data.length === 0) return { posts: [], total: 0 }
 
-  const authorIds = [...new Set(data.map(p => p.author_id).filter(Boolean))]
-  const { data: profiles } = authorIds.length > 0
-    ? await supabase.from('user_profiles').select('id, handle, avatar_url, subscription_tier, show_pro_badge').in('id', authorIds)
-    : { data: null }
+  const authorIds = [...new Set(data.map((p) => p.author_id).filter(Boolean))]
+  const { data: profiles } =
+    authorIds.length > 0
+      ? await supabase
+          .from('user_profiles')
+          .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
+          .in('id', authorIds)
+      : { data: null }
 
   const profileMap = profiles ? buildAuthorProfileMap(profiles) : new Map()
 
   let filteredData = data as PostRow[]
   if (viewer_id) {
-    const followersAuthors = [...new Set(
-      filteredData.filter(p => p.visibility === 'followers').map(p => p.author_id)
-    )]
+    const followersAuthors = [
+      ...new Set(filteredData.filter((p) => p.visibility === 'followers').map((p) => p.author_id)),
+    ]
     let followedSet = new Set<string>()
     if (followersAuthors.length > 0) {
       const { data: follows } = await supabase
@@ -458,7 +481,7 @@ export async function searchPosts(
         followedSet = new Set(follows.map((f: { following_id: string }) => f.following_id))
       }
     }
-    filteredData = filteredData.filter(post => {
+    filteredData = filteredData.filter((post) => {
       if (post.visibility === 'public') return true
       if (post.visibility === 'followers') {
         return post.author_id === viewer_id || followedSet.has(post.author_id)
@@ -495,14 +518,23 @@ export async function getPostById(
 
   const [profileResult, originalPostResult] = await Promise.all([
     authorIds.length > 0
-      ? supabase.from('user_profiles').select('id, handle, avatar_url, subscription_tier, show_pro_badge').in('id', authorIds)
+      ? supabase
+          .from('user_profiles')
+          .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
+          .in('id', authorIds)
       : Promise.resolve({ data: null }),
     originalPostId
-      ? supabase.from('posts').select('id, title, content, author_id, author_handle, images, created_at').eq('id', originalPostId).maybeSingle()
+      ? supabase
+          .from('posts')
+          .select('id, title, content, author_id, author_handle, images, created_at')
+          .eq('id', originalPostId)
+          .maybeSingle()
       : Promise.resolve({ data: null }),
   ])
 
-  const authorProfileMap = profileResult.data ? buildAuthorProfileMap(profileResult.data) : new Map()
+  const authorProfileMap = profileResult.data
+    ? buildAuthorProfileMap(profileResult.data)
+    : new Map()
 
   let originalPost: OriginalPost | null = null
   if (originalPostResult.data) {
@@ -562,11 +594,15 @@ export async function createPost(
       authorScore = result?.data?.reputation_score ?? 0
       authorVerified = result?.data?.is_verified_trader ?? false
     } catch (err) {
-      logger.warn('[posts] reputation score lookup failed, using default 0:', err instanceof Error ? err.message : String(err))
+      logger.warn(
+        '[posts] reputation score lookup failed, using default 0:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
   }
 
-  const detectedLanguage = input.language || detectPostLanguage((input.title ? input.title + ' ' : '') + input.content)
+  const detectedLanguage =
+    input.language || detectPostLanguage((input.title ? input.title + ' ' : '') + input.content)
 
   const { data, error } = await supabase
     .from('posts')
@@ -588,6 +624,10 @@ export async function createPost(
     .single()
 
   if (error) throw error
+
+  // M-6: Invalidate post list caches after creation
+  await invalidatePostListCache()
+
   return data
 }
 
@@ -598,7 +638,14 @@ export async function updatePost(
   supabase: SupabaseClient,
   postId: string,
   userId: string,
-  updates: { title?: string; content?: string; poll_enabled?: boolean; visibility?: PostVisibility; is_sensitive?: boolean; content_warning?: string | null }
+  updates: {
+    title?: string
+    content?: string
+    poll_enabled?: boolean
+    visibility?: PostVisibility
+    is_sensitive?: boolean
+    content_warning?: string | null
+  }
 ): Promise<Post> {
   const sanitizedUpdates = { ...updates, updated_at: new Date().toISOString() }
   const sanitize = await loadSanitize()
@@ -613,6 +660,10 @@ export async function updatePost(
     .single()
 
   if (error) throw error
+
+  // M-6: Invalidate post list caches after update
+  await invalidatePostListCache()
+
   return data
 }
 
@@ -624,22 +675,18 @@ export async function deletePost(
   postId: string,
   userId: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from('posts')
-    .delete()
-    .eq('id', postId)
-    .eq('author_id', userId)
+  const { error } = await supabase.from('posts').delete().eq('id', postId).eq('author_id', userId)
 
   if (error) throw error
+
+  // M-6: Invalidate post list caches after deletion
+  await invalidatePostListCache()
 }
 
 /**
  * 增加浏览次数
  */
-export async function incrementViewCount(
-  supabase: SupabaseClient,
-  postId: string
-): Promise<void> {
+export async function incrementViewCount(supabase: SupabaseClient, postId: string): Promise<void> {
   const { error } = await supabase.rpc('increment_post_view', { post_id: postId })
   if (error) {
     // RPC 不存在时的降级处理（view_count 在数据库层自增更安全）
@@ -708,16 +755,14 @@ export async function togglePostReaction(
     }
   } else {
     // 新增点赞/踩 - use upsert to handle race where two requests both see no existing row
-    const { error } = await supabase
-      .from('post_likes')
-      .upsert(
-        {
-          post_id: postId,
-          user_id: userId,
-          reaction_type: reactionType,
-        },
-        { onConflict: 'post_id,user_id' }
-      )
+    const { error } = await supabase.from('post_likes').upsert(
+      {
+        post_id: postId,
+        user_id: userId,
+        reaction_type: reactionType,
+      },
+      { onConflict: 'post_id,user_id' }
+    )
     if (error) {
       throw error
     }
@@ -764,11 +809,7 @@ export async function togglePostVote(
   if (existing) {
     if (existing.choice === choice) {
       // 取消投票 - use compound match for race safety
-      await supabase
-        .from('post_votes')
-        .delete()
-        .eq('post_id', postId)
-        .eq('user_id', userId)
+      await supabase.from('post_votes').delete().eq('post_id', postId).eq('user_id', userId)
       return { action: 'removed', vote: null }
     } else {
       // 改变投票
@@ -781,16 +822,14 @@ export async function togglePostVote(
     }
   } else {
     // 新增投票 - use upsert to handle concurrent inserts
-    const { error } = await supabase
-      .from('post_votes')
-      .upsert(
-        {
-          post_id: postId,
-          user_id: userId,
-          choice,
-        },
-        { onConflict: 'post_id,user_id' }
-      )
+    const { error } = await supabase.from('post_votes').upsert(
+      {
+        post_id: postId,
+        user_id: userId,
+        choice,
+      },
+      { onConflict: 'post_id,user_id' }
+    )
     if (error) {
       throw error
     }
@@ -843,4 +882,3 @@ export async function getUserPostVotes(
   }
   return map
 }
-
