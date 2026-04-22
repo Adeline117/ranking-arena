@@ -52,6 +52,7 @@ export default function ProgressBar({ answered, total, questionIds, answeredIds 
               onClick={() => handleDotClick(qId)}
               aria-label={`Question ${idx + 1}${isDone ? ' (answered)' : ' (unanswered)'}`}
               style={{
+                position: 'relative',
                 width: 14,
                 height: 6,
                 borderRadius: 3,
@@ -70,7 +71,19 @@ export default function ProgressBar({ answered, total, questionIds, answeredIds 
               onMouseLeave={(e) => {
                 if (!isDone) e.currentTarget.style.background = 'var(--color-bg-tertiary)'
               }}
-            />
+            >
+              {/* Invisible touch target expander — 30px tall hit area */}
+              <span
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  top: -12,
+                  bottom: -12,
+                  left: -2,
+                  right: -2,
+                }}
+              />
+            </button>
           )
         })}
       </div>
