@@ -18,6 +18,22 @@ interface Props {
   searchParams: Promise<{ type?: string; match?: string; lang?: string; secondary?: string; percents?: string }>
 }
 
+// English names for server-side metadata (i18n is client-only)
+const TYPE_ENGLISH_NAMES: Record<PersonalityTypeId, string> = {
+  sniper: 'The Sniper',
+  scalper: 'The Scalper',
+  whale: 'The Whale',
+  analyst: 'The Analyst',
+  contrarian: 'The Contrarian',
+  hodler: 'The HODLer',
+  degen: 'The Degen',
+  strategist: 'The Strategist',
+  copycat: 'The Copy Trader',
+  tourist: 'The Tourist',
+  paperhands: 'The Paper Hands',
+  narrator: 'The Narrative Trader',
+}
+
 // Type-specific trader query criteria
 const TRADER_QUERIES: Record<PersonalityTypeId, { orderBy: string; ascending: boolean; filter?: string }> = {
   sniper: { orderBy: 'win_rate', ascending: false },
@@ -72,8 +88,8 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
 
   const validType = PERSONALITY_TYPE_MAP[typeId] ? typeId : 'sniper'
   const pType = PERSONALITY_TYPE_MAP[validType] || PERSONALITY_TYPES[0]
-  // Use capitalized type ID for server-side metadata (i18n is client-only)
-  const typeLabel = validType.charAt(0).toUpperCase() + validType.slice(1)
+  // Use proper English name for OG metadata (i18n is client-only)
+  const typeLabel = TYPE_ENGLISH_NAMES[validType as PersonalityTypeId] || validType.charAt(0).toUpperCase() + validType.slice(1)
 
   const title = `I'm ${typeLabel} - Trading Personality`
   const description = `${match}% match. Discover your trading personality and the legendary trader who matches your style.`
