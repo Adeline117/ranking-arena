@@ -122,214 +122,245 @@ export async function GET(
 ) {
   const { handle: rawHandle } = await params
 
-  const handler = withPublic(async ({ supabase, request: req }) => {
-    const startTime = Date.now()
+  const handler = withPublic(
+    async ({ supabase, request: req }) => {
+      const startTime = Date.now()
 
-    const parsed = handleSchema.safeParse(rawHandle)
-    if (!parsed.success) {
-      throw ApiError.validation('Invalid handle parameter')
-    }
-    const handle = parsed.data
+      const parsed = handleSchema.safeParse(rawHandle)
+      if (!parsed.success) {
+        throw ApiError.validation('Invalid handle parameter')
+      }
+      const handle = parsed.data
 
-    const decodedHandle = decodeURIComponent(handle)
+      const decodedHandle = decodeURIComponent(handle)
 
-    // E2E test fixture short-circuit (only when explicitly requested via
-    // query param). Returns deterministic mock data so Playwright tests
-    // don't depend on prod data shape.
-    const fixtureName = req.nextUrl.searchParams.get('e2e_fixture')
-    if (fixtureName && E2E_FIXTURES[fixtureName]) {
-      return apiSuccess(E2E_FIXTURES[fixtureName]())
-    }
-
-    // Accept optional ?source= param to disambiguate traders with same handle across exchanges
-    const sourceParam = req.nextUrl.searchParams.get('source') || ''
-    const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
-
-    // ── Unified data layer: resolveTrader → getTraderDetail (cached in Redis, 5 min) ──
-    const data = await tieredGetOrSet(
-      cacheKey,
-      async () => {
-        // 10s timeout for the entire resolve+detail chain.
-        // Non-existent traders were taking 31s as resolveTrader searches multiple sources.
-        const result = await Promise.race([
-          (async () => {
-            const resolved = await resolveTrader(supabase, {
-              handle: decodedHandle,
-              platform: sourceParam || undefined,
-            })
-
-            if (!resolved) {
-              throw ApiError.notFound(`Trader not found: ${decodedHandle}`)
-            }
-
-            const detail = await getTraderDetail(supabase, {
-              platform: resolved.platform,
-              traderKey: resolved.traderKey,
-            })
-
-            if (!detail) {
-              throw ApiError.notFound(`No data for trader: ${decodedHandle}`)
-            }
-
-            return { pageData: toTraderPageData(detail), resolved: { platform: resolved.platform, traderKey: resolved.traderKey } }
-          })(),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(ApiError.notFound(`Trader lookup timed out: ${decodedHandle}`)), 10_000)
-          ),
-        ])
-        return result
-      },
-      'warm', // warm tier: 2 min memory, 15 min Redis
-      ['trader']
-    )
-
-    const { pageData, resolved } = data
-
-    // ── include: bundle additional data into the response ──
-    const includeParam = req.nextUrl.searchParams.get('include') || ''
-    const includes = includeParam ? includeParam.split(',').map(s => s.trim().toLowerCase()) : []
-    const extras: Record<string, unknown> = {}
-
-    if (includes.length > 0) {
-      const promises: Promise<void>[] = []
-
-      // claim status
-      if (includes.includes('claim')) {
-        promises.push(
-          (async () => {
-            try {
-              const traderId = resolved.traderKey
-              const source = resolved.platform
-              const { data: verified } = await supabase
-                .from('verified_traders')
-                .select('id, user_id, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url')
-                .eq('trader_id', traderId)
-                .eq('source', source)
-                .maybeSingle()
-
-              if (!verified) {
-                extras.claim_status = { is_verified: false }
-              } else {
-                extras.claim_status = {
-                  is_verified: true,
-                  owner_id: verified.user_id,
-                  profile: {
-                    display_name: verified.display_name,
-                    bio: verified.bio,
-                    avatar_url: verified.avatar_url,
-                    twitter_url: verified.twitter_url,
-                    telegram_url: verified.telegram_url,
-                    discord_url: verified.discord_url,
-                    website_url: verified.website_url,
-                  },
-                }
-              }
-            } catch (e) {
-              logger.warn('include=claim failed', { error: e instanceof Error ? e.message : String(e) })
-              extras.claim_status = { is_verified: false, _error: 'fetch_failed' }
-            }
-          })()
-        )
+      // E2E test fixture short-circuit (only when explicitly requested via
+      // query param). Returns deterministic mock data so Playwright tests
+      // don't depend on prod data shape.
+      const fixtureName = req.nextUrl.searchParams.get('e2e_fixture')
+      if (fixtureName && E2E_FIXTURES[fixtureName]) {
+        return apiSuccess(E2E_FIXTURES[fixtureName]())
       }
 
-      // aggregate (multi-account)
-      if (includes.includes('aggregate')) {
-        promises.push(
-          (async () => {
-            try {
-              const userId = await findUserByTrader(supabase, resolved.platform, resolved.traderKey)
-              if (!userId) {
-                extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0 }
-              } else {
-                const stats = await getAggregatedStats(supabase, userId)
-                if (!stats) {
-                  extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0 }
+      // Accept optional ?source= param to disambiguate traders with same handle across exchanges
+      const sourceParam = req.nextUrl.searchParams.get('source') || ''
+      const cacheKey = `${CACHE_PREFIX}${decodedHandle.toLowerCase()}${sourceParam ? `:${sourceParam}` : ''}`
+
+      // ── Unified data layer: resolveTrader → getTraderDetail (cached in Redis, 5 min) ──
+      const data = await tieredGetOrSet(
+        cacheKey,
+        async () => {
+          // 3s timeout for the entire resolve+detail chain.
+          // Non-existent traders were taking 31s as resolveTrader searches multiple sources.
+          const result = await Promise.race([
+            (async () => {
+              const resolved = await resolveTrader(supabase, {
+                handle: decodedHandle,
+                platform: sourceParam || undefined,
+              })
+
+              if (!resolved) {
+                throw ApiError.notFound('Trader not found')
+              }
+
+              const detail = await getTraderDetail(supabase, {
+                platform: resolved.platform,
+                traderKey: resolved.traderKey,
+              })
+
+              if (!detail) {
+                throw ApiError.notFound('No data for trader')
+              }
+
+              return {
+                pageData: toTraderPageData(detail),
+                resolved: { platform: resolved.platform, traderKey: resolved.traderKey },
+              }
+            })(),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(ApiError.notFound('Trader lookup timed out')), 3_000)
+            ),
+          ])
+          return result
+        },
+        'warm', // warm tier: 2 min memory, 15 min Redis
+        ['trader']
+      )
+
+      const { pageData, resolved } = data
+
+      // ── include: bundle additional data into the response ──
+      const includeParam = req.nextUrl.searchParams.get('include') || ''
+      const includes = includeParam
+        ? includeParam.split(',').map((s) => s.trim().toLowerCase())
+        : []
+      const extras: Record<string, unknown> = {}
+
+      if (includes.length > 0) {
+        const promises: Promise<void>[] = []
+
+        // claim status
+        if (includes.includes('claim')) {
+          promises.push(
+            (async () => {
+              try {
+                const traderId = resolved.traderKey
+                const source = resolved.platform
+                const { data: verified } = await supabase
+                  .from('verified_traders')
+                  .select(
+                    'id, user_id, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url'
+                  )
+                  .eq('trader_id', traderId)
+                  .eq('source', source)
+                  .maybeSingle()
+
+                if (!verified) {
+                  extras.claim_status = { is_verified: false }
                 } else {
-                  extras.aggregate = {
-                    aggregated: {
-                      combinedPnl: stats.combinedPnl,
-                      bestRoi: stats.bestRoi,
-                      weightedScore: stats.weightedScore,
+                  extras.claim_status = {
+                    is_verified: true,
+                    owner_id: verified.user_id,
+                    profile: {
+                      display_name: verified.display_name,
+                      bio: verified.bio,
+                      avatar_url: verified.avatar_url,
+                      twitter_url: verified.twitter_url,
+                      telegram_url: verified.telegram_url,
+                      discord_url: verified.discord_url,
+                      website_url: verified.website_url,
                     },
-                    accounts: stats.accounts.map((a) => ({
-                      id: a.id,
-                      platform: a.platform,
-                      traderKey: a.traderKey,
-                      handle: a.handle,
-                      label: a.label,
-                      isPrimary: a.isPrimary,
-                      roi: a.roi,
-                      pnl: a.pnl,
-                      arenaScore: a.arenaScore,
-                      winRate: a.winRate,
-                      maxDrawdown: a.maxDrawdown,
-                      rank: a.rank,
-                    })),
-                    totalAccounts: stats.totalAccounts,
                   }
                 }
+              } catch (e) {
+                logger.warn('include=claim failed', {
+                  error: e instanceof Error ? e.message : String(e),
+                })
+                extras.claim_status = { is_verified: false, _error: 'fetch_failed' }
               }
-            } catch (e) {
-              logger.warn('include=aggregate failed', { error: e instanceof Error ? e.message : String(e) })
-              extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0, _error: 'fetch_failed' }
-            }
-          })()
-        )
-      }
+            })()
+          )
+        }
 
-      // rank history (sparkline)
-      if (includes.includes('rank_history')) {
-        promises.push(
-          (async () => {
-            try {
-              const period = req.nextUrl.searchParams.get('rh_period') || '90D'
-              const days = Math.min(Number(req.nextUrl.searchParams.get('rh_days') || '7'), 30)
-              const cutoffDate = new Date()
-              cutoffDate.setDate(cutoffDate.getDate() - days)
-              const cutoffISO = cutoffDate.toISOString().split('T')[0]
-
-              const { data: rhData, error: rhError } = await supabase
-                .from('rank_history')
-                .select('snapshot_date, rank, arena_score')
-                .eq('platform', resolved.platform)
-                .eq('trader_key', resolved.traderKey)
-                .eq('period', period)
-                .gte('snapshot_date', cutoffISO)
-                .order('snapshot_date', { ascending: true })
-                .limit(days)
-
-              if (rhError) {
-                logger.warn('include=rank_history query error', { error: rhError.message })
-                extras.rank_history = { history: [], platform: resolved.platform, trader_key: resolved.traderKey, period, _error: 'query_failed' }
-              } else {
-                extras.rank_history = {
-                  history: (rhData || []).map(row => ({
-                    date: row.snapshot_date,
-                    rank: row.rank,
-                    arena_score: row.arena_score,
-                  })),
-                  platform: resolved.platform,
-                  trader_key: resolved.traderKey,
-                  period,
+        // aggregate (multi-account)
+        if (includes.includes('aggregate')) {
+          promises.push(
+            (async () => {
+              try {
+                const userId = await findUserByTrader(
+                  supabase,
+                  resolved.platform,
+                  resolved.traderKey
+                )
+                if (!userId) {
+                  extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0 }
+                } else {
+                  const stats = await getAggregatedStats(supabase, userId)
+                  if (!stats) {
+                    extras.aggregate = { aggregated: null, accounts: [], totalAccounts: 0 }
+                  } else {
+                    extras.aggregate = {
+                      aggregated: {
+                        combinedPnl: stats.combinedPnl,
+                        bestRoi: stats.bestRoi,
+                        weightedScore: stats.weightedScore,
+                      },
+                      accounts: stats.accounts.map((a) => ({
+                        id: a.id,
+                        platform: a.platform,
+                        traderKey: a.traderKey,
+                        handle: a.handle,
+                        label: a.label,
+                        isPrimary: a.isPrimary,
+                        roi: a.roi,
+                        pnl: a.pnl,
+                        arenaScore: a.arenaScore,
+                        winRate: a.winRate,
+                        maxDrawdown: a.maxDrawdown,
+                        rank: a.rank,
+                      })),
+                      totalAccounts: stats.totalAccounts,
+                    }
+                  }
+                }
+              } catch (e) {
+                logger.warn('include=aggregate failed', {
+                  error: e instanceof Error ? e.message : String(e),
+                })
+                extras.aggregate = {
+                  aggregated: null,
+                  accounts: [],
+                  totalAccounts: 0,
+                  _error: 'fetch_failed',
                 }
               }
-            } catch (e) {
-              logger.warn('include=rank_history failed', { error: e instanceof Error ? e.message : String(e) })
-              extras.rank_history = { history: [], _error: 'fetch_failed' }
-            }
-          })()
-        )
+            })()
+          )
+        }
+
+        // rank history (sparkline)
+        if (includes.includes('rank_history')) {
+          promises.push(
+            (async () => {
+              try {
+                const period = req.nextUrl.searchParams.get('rh_period') || '90D'
+                const days = Math.min(Number(req.nextUrl.searchParams.get('rh_days') || '7'), 30)
+                const cutoffDate = new Date()
+                cutoffDate.setDate(cutoffDate.getDate() - days)
+                const cutoffISO = cutoffDate.toISOString().split('T')[0]
+
+                const { data: rhData, error: rhError } = await supabase
+                  .from('rank_history')
+                  .select('snapshot_date, rank, arena_score')
+                  .eq('platform', resolved.platform)
+                  .eq('trader_key', resolved.traderKey)
+                  .eq('period', period)
+                  .gte('snapshot_date', cutoffISO)
+                  .order('snapshot_date', { ascending: true })
+                  .limit(days)
+
+                if (rhError) {
+                  logger.warn('include=rank_history query error', { error: rhError.message })
+                  extras.rank_history = {
+                    history: [],
+                    platform: resolved.platform,
+                    trader_key: resolved.traderKey,
+                    period,
+                    _error: 'query_failed',
+                  }
+                } else {
+                  extras.rank_history = {
+                    history: (rhData || []).map((row) => ({
+                      date: row.snapshot_date,
+                      rank: row.rank,
+                      arena_score: row.arena_score,
+                    })),
+                    platform: resolved.platform,
+                    trader_key: resolved.traderKey,
+                    period,
+                  }
+                }
+              } catch (e) {
+                logger.warn('include=rank_history failed', {
+                  error: e instanceof Error ? e.message : String(e),
+                })
+                extras.rank_history = { history: [], _error: 'fetch_failed' }
+              }
+            })()
+          )
+        }
+
+        await Promise.all(promises)
       }
 
-      await Promise.all(promises)
-    }
+      const responseData = { ...(pageData as Record<string, unknown>), ...extras }
 
-    const responseData = { ...pageData as Record<string, unknown>, ...extras }
-
-    const duration = Date.now() - startTime
-    const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })
-    return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
-  }, { name: 'trader-detail', rateLimit: 'public' })
+      const duration = Date.now() - startTime
+      const response = apiSuccess({ ...responseData, cached: false, fetchTime: duration })
+      return withCache(response, { maxAge: 300, staleWhileRevalidate: 600 })
+    },
+    { name: 'trader-detail', rateLimit: 'public' }
+  )
 
   return handler(request)
 }
