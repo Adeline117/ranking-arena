@@ -3,6 +3,8 @@
  * 提供风险调整后的排名计算
  */
 
+import { MIN_TRADES, IDEAL_TRADES } from '@/lib/constants/trader-thresholds'
+
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderRankingData {
   id: string
@@ -30,28 +32,28 @@ export interface RankedTrader extends TraderRankingData {
 export const RankingConfig = {
   // PnL 最低门槛（低于此值不计入排行）
   MIN_PNL: 1000,
-  
+
   // ROI 异常值阈值（超过此值标记为可疑）
   SUSPICIOUS_ROI_THRESHOLD: 500,
-  
+
   // 最大回撤最小值（用于避免除零）
   MIN_DRAWDOWN: 10,
-  
+
   // 权重配置
   WEIGHTS: {
-    ROI: 0.4,           // ROI 权重
+    ROI: 0.4, // ROI 权重
     RISK_ADJUSTED: 0.3, // 风险调整收益权重
-    STABILITY: 0.2,     // 稳定性权重
-    VOLUME: 0.1,        // 交易量/次数权重
+    STABILITY: 0.2, // 稳定性权重
+    VOLUME: 0.1, // 交易量/次数权重
   },
-  
+
   // 稳定性计算配置
   STABILITY: {
-    WIN_RATE_WEIGHT: 0.5,     // 胜率在稳定性中的权重
-    DRAWDOWN_WEIGHT: 0.3,     // 回撤在稳定性中的权重
-    TRADES_WEIGHT: 0.2,       // 交易次数在稳定性中的权重
-    MIN_TRADES: 10,           // 最低交易次数
-    IDEAL_TRADES: 100,        // 理想交易次数
+    WIN_RATE_WEIGHT: 0.5, // 胜率在稳定性中的权重
+    DRAWDOWN_WEIGHT: 0.3, // 回撤在稳定性中的权重
+    TRADES_WEIGHT: 0.2, // 交易次数在稳定性中的权重
+    MIN_TRADES, // 最低交易次数 (from trader-thresholds.ts)
+    IDEAL_TRADES, // 理想交易次数 (from trader-thresholds.ts)
   },
 } as const
 
@@ -77,28 +79,26 @@ export function calculateStabilityScore(
   maxDrawdown: number | null,
   tradesCount: number | null
 ): number {
-  const { WIN_RATE_WEIGHT, DRAWDOWN_WEIGHT, TRADES_WEIGHT, MIN_TRADES, IDEAL_TRADES } = RankingConfig.STABILITY
-  
+  const { WIN_RATE_WEIGHT, DRAWDOWN_WEIGHT, TRADES_WEIGHT, MIN_TRADES, IDEAL_TRADES } =
+    RankingConfig.STABILITY
+
   // 胜率得分 (0-100)
   const winRateScore = winRate != null ? Math.min(winRate, 100) : 50
 
   // 回撤得分 (0-100)，回撤越小得分越高
-  const drawdownScore = maxDrawdown != null 
-    ? Math.max(0, 100 - Math.abs(maxDrawdown)) 
-    : 50
+  const drawdownScore = maxDrawdown != null ? Math.max(0, 100 - Math.abs(maxDrawdown)) : 50
 
   // 交易次数得分 (0-100)
   const trades = tradesCount || 0
-  const tradesScore = trades >= IDEAL_TRADES 
-    ? 100 
-    : trades < MIN_TRADES 
-      ? (trades / MIN_TRADES) * 50 
-      : 50 + ((trades - MIN_TRADES) / (IDEAL_TRADES - MIN_TRADES)) * 50
+  const tradesScore =
+    trades >= IDEAL_TRADES
+      ? 100
+      : trades < MIN_TRADES
+        ? (trades / MIN_TRADES) * 50
+        : 50 + ((trades - MIN_TRADES) / (IDEAL_TRADES - MIN_TRADES)) * 50
 
   return (
-    winRateScore * WIN_RATE_WEIGHT +
-    drawdownScore * DRAWDOWN_WEIGHT +
-    tradesScore * TRADES_WEIGHT
+    winRateScore * WIN_RATE_WEIGHT + drawdownScore * DRAWDOWN_WEIGHT + tradesScore * TRADES_WEIGHT
   )
 }
 
@@ -151,24 +151,22 @@ export function calculateRankingScore(trader: TraderRankingData): number {
   const riskAdjustedScore = Math.max(0, riskAdjusted) / 10 // 归一化
 
   // 3. 稳定性得分
-  const stabilityScore = calculateStabilityScore(
-    trader.win_rate,
-    trader.max_drawdown,
-    trader.trades_count
-  ) / 100 // 归一化到 0-1
+  const stabilityScore =
+    calculateStabilityScore(trader.win_rate, trader.max_drawdown, trader.trades_count) / 100 // 归一化到 0-1
 
   // 4. 交易量得分（使用交易次数作为代理）
-  const volumeScore = trader.trades_count 
+  const volumeScore = trader.trades_count
     ? Math.min(trader.trades_count / RankingConfig.STABILITY.IDEAL_TRADES, 1)
     : 0.5
 
   // 综合得分
   return (
-    roiScore * WEIGHTS.ROI +
-    riskAdjustedScore * WEIGHTS.RISK_ADJUSTED +
-    stabilityScore * WEIGHTS.STABILITY +
-    volumeScore * WEIGHTS.VOLUME
-  ) * 100
+    (roiScore * WEIGHTS.ROI +
+      riskAdjustedScore * WEIGHTS.RISK_ADJUSTED +
+      stabilityScore * WEIGHTS.STABILITY +
+      volumeScore * WEIGHTS.VOLUME) *
+    100
+  )
 }
 
 // ============================================
@@ -177,7 +175,7 @@ export function calculateRankingScore(trader: TraderRankingData): number {
 
 /**
  * 对交易员列表进行排名
- * 
+ *
  * 排名规则（优先级从高到低）：
  * 1. 过滤 PnL 低于门槛的交易员
  * 2. 标记可疑数据（但不排除）
@@ -187,12 +185,10 @@ export function calculateRankingScore(trader: TraderRankingData): number {
  */
 export function rankTraders(traders: TraderRankingData[]): RankedTrader[] {
   // 过滤低 PnL 交易员（Bybit 的 PnL 是跟单者盈亏，不适用）
-  const validTraders = traders.filter(t => 
-    t.source === 'bybit' || t.pnl >= RankingConfig.MIN_PNL
-  )
+  const validTraders = traders.filter((t) => t.source === 'bybit' || t.pnl >= RankingConfig.MIN_PNL)
 
   // 计算每个交易员的排名数据
-  const tradersWithScores = validTraders.map(trader => {
+  const tradersWithScores = validTraders.map((trader) => {
     const riskAdjustedScore = calculateRiskAdjustedReturn(trader.roi, trader.max_drawdown)
     const stabilityScore = calculateStabilityScore(
       trader.win_rate,
@@ -216,7 +212,7 @@ export function rankTraders(traders: TraderRankingData[]): RankedTrader[] {
     // 主排序：综合得分（可疑数据降权）
     const aScore = a._composite_score * (a.is_suspicious ? 0.5 : 1)
     const bScore = b._composite_score * (b.is_suspicious ? 0.5 : 1)
-    
+
     if (bScore !== aScore) return bScore - aScore
 
     // 次排序：回撤小的优先
@@ -253,20 +249,18 @@ export function rankTraders(traders: TraderRankingData[]): RankedTrader[] {
  */
 export function simpleRankTraders(traders: TraderRankingData[]): TraderRankingData[] {
   // 过滤低 PnL
-  const validTraders = traders.filter(t => 
-    t.source === 'bybit' || t.pnl >= RankingConfig.MIN_PNL
-  )
+  const validTraders = traders.filter((t) => t.source === 'bybit' || t.pnl >= RankingConfig.MIN_PNL)
 
   // 按 ROI 降序，回撤升序，交易次数降序
   return [...validTraders].sort((a, b) => {
     // 1. ROI 降序
     if (b.roi !== a.roi) return b.roi - a.roi
-    
+
     // 2. 回撤小的靠前
     const mddA = Math.abs(a.max_drawdown ?? Infinity)
     const mddB = Math.abs(b.max_drawdown ?? Infinity)
     if (mddA !== mddB) return mddA - mddB
-    
+
     // 3. 交易次数多的靠前
     const tradesA = a.trades_count ?? 0
     const tradesB = b.trades_count ?? 0
