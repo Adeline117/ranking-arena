@@ -52,10 +52,7 @@ export async function POST(request: NextRequest) {
     const { user, error: authError } = await extractUserFromRequest(request)
 
     if (authError || !user) {
-      return NextResponse.json(
-        { error: 'Unauthorized' },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
     // Alias for backward compat
@@ -70,10 +67,7 @@ export async function POST(request: NextRequest) {
 
     if (!profile?.stripe_customer_id) {
       // Fallback: redirect to pricing page when no customer exists
-      return NextResponse.json(
-        { redirect: '/pricing' },
-        { status: 200 }
-      )
+      return NextResponse.json({ redirect: '/pricing' }, { status: 200 })
     }
 
     // 创建客户门户会话
@@ -82,10 +76,14 @@ export async function POST(request: NextRequest) {
       returnUrl || `${env.NEXT_PUBLIC_APP_URL}/settings`
     )
 
+    logger.info('Stripe portal session created', {
+      userId: session.user.id,
+      customerId: profile.stripe_customer_id,
+    })
+
     return NextResponse.json({
       url: portalSession.url,
     })
-
   } catch (error: unknown) {
     logger.error('Portal session error:', error)
     const message = error instanceof Error ? error.message : ''
@@ -95,9 +93,6 @@ export async function POST(request: NextRequest) {
         { status: 503 }
       )
     }
-    return NextResponse.json(
-      { error: 'Failed to create portal session' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to create portal session' }, { status: 500 })
   }
 }

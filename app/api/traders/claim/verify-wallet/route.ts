@@ -21,10 +21,16 @@ import {
 } from '@/lib/api'
 import { ApiError } from '@/lib/api/errors'
 import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('verify-wallet')
 
 export async function POST(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
   if (rateLimitResponse) return rateLimitResponse
+
+  let reqPlatform: string | undefined
+  let reqTraderKey: string | undefined
 
   try {
     const user = await requireAuth(request)
@@ -32,6 +38,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json()
     const { wallet_address, signature, message, platform, trader_key } = body
+    reqPlatform = platform
+    reqTraderKey = trader_key
 
     const result = await verifyWalletOwnership(supabase, user.id, {
       wallet_address,
@@ -41,8 +49,19 @@ export async function POST(request: NextRequest) {
       trader_key,
     })
 
+    logger.info('Wallet ownership verified', {
+      userId: user.id,
+      platform,
+      traderKey: trader_key,
+    })
+
     return success(result)
   } catch (error: unknown) {
+    logger.error('Wallet verification failed', {
+      error,
+      platform: reqPlatform,
+      traderKey: reqTraderKey,
+    })
     // Convert plain Error from verifyWalletOwnership to ApiError.validation
     if (error instanceof Error && !(error instanceof ApiError)) {
       return handleError(ApiError.validation(error.message), 'verify-wallet')

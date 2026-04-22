@@ -17,6 +17,9 @@ import {
 } from '@/lib/api'
 import { ApiError } from '@/lib/api/errors'
 import { getUserVerifiedTrader, updateVerifiedTrader } from '@/lib/data/trader-claims'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('claim-profile')
 
 export async function PUT(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
@@ -59,7 +62,13 @@ export async function PUT(request: NextRequest) {
         const parsed = new URL(url)
         if (parsed.protocol !== 'https:') return false
         const host = parsed.hostname.toLowerCase()
-        if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0' || host.endsWith('.local')) return false
+        if (
+          host === 'localhost' ||
+          host === '127.0.0.1' ||
+          host === '0.0.0.0' ||
+          host.endsWith('.local')
+        )
+          return false
         return true
       } catch {
         return false
@@ -99,11 +108,17 @@ export async function PUT(request: NextRequest) {
 
     const updated = await updateVerifiedTrader(supabase, user.id, updates)
 
+    logger.info('Verified trader profile updated', {
+      userId: user.id,
+      fields: Object.keys(updates),
+    })
+
     return success({
       verified_trader: updated,
       message: 'Profile updated successfully',
     })
   } catch (error: unknown) {
+    logger.error('Claim profile update failed', { error })
     return handleError(error, 'claim profile PUT')
   }
 }
