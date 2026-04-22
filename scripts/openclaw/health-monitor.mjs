@@ -43,14 +43,18 @@ function loadAlertState() {
     if (fs.existsSync(ALERT_STATE_FILE)) {
       return JSON.parse(fs.readFileSync(ALERT_STATE_FILE, 'utf-8'))
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return {}
 }
 
 function saveAlertState(state) {
   try {
     fs.writeFileSync(ALERT_STATE_FILE, JSON.stringify(state))
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
 }
 
 /**
@@ -75,17 +79,25 @@ function shouldSendAlert(issueFingerprint) {
 // Dead/blocked platforms - skip in alerts & auto-fix
 // Synced 2026-04-03 — skip dead platforms in alerts & auto-fix
 const DEAD_PLATFORMS = new Set([
-  'perpetual_protocol', 'whitebit', 'bitmart', 'btse',
-  'kwenta', 'mux', 'synthetix', 'paradex',
-  'kucoin',      // copy trading discontinued 2026-03
-  'phemex',      // API 404 since 2026-04
-  'bingx',       // empty leaderboard data
-  'bingx_spot',  // no leaderboard API
+  'perpetual_protocol',
+  'whitebit',
+  'bitmart',
+  'btse',
+  'kwenta',
+  'mux',
+  'synthetix',
+  'paradex',
+  'kucoin', // copy trading discontinued 2026-03
+  'phemex', // API 404 since 2026-04
+  'bingx', // empty leaderboard data
+  'bingx_spot', // no leaderboard API
   'bitget_spot', // permanently disabled (no leaderboard API)
-  'lbank',       // API 404 since 2026-04 (copy-trading endpoint removed)
-  'weex',        // 75% timeout rate
+  'lbank', // API 404 since 2026-04 (copy-trading endpoint removed)
+  'weex', // 75% timeout rate
   // 'bybit', 'bybit_spot' — RECOVERED 2026-04-08 via DB seed fallback in connector
-  'vertex', 'apex_pro', 'rabbitx', // DNS dead / no API
+  'vertex',
+  'apex_pro',
+  'rabbitx', // DNS dead / no API
 ])
 
 if (!CRON_SECRET) {
@@ -169,7 +181,9 @@ async function runHealthCheck() {
   try {
     basicHealth = await checkBasicHealth()
     if (basicHealth.status === 'unhealthy') {
-      issues.push(`🚨 System UNHEALTHY: DB=${basicHealth.checks?.database?.status}, Redis=${basicHealth.checks?.redis?.status}`)
+      issues.push(
+        `🚨 System UNHEALTHY: DB=${basicHealth.checks?.database?.status}, Redis=${basicHealth.checks?.redis?.status}`
+      )
       categories.add('system:unhealthy')
     } else if (basicHealth.status === 'degraded') {
       // Summarize which sub-check failed instead of dumping full JSON blob —
@@ -195,15 +209,18 @@ async function runHealthCheck() {
 
     if (pipelineHealth.status === 'critical') {
       const { failedJobs, stuckJobs, staleJobs } = pipelineHealth.summary || {}
-      issues.push(`🚨 Pipeline CRITICAL: ${failedJobs} failed, ${stuckJobs} stuck, ${staleJobs} stale`)
+      issues.push(
+        `🚨 Pipeline CRITICAL: ${failedJobs} failed, ${stuckJobs} stuck, ${staleJobs} stale`
+      )
       categories.add('pipeline:critical')
 
       // List specific failures — filter dead platforms client-side as defense-in-depth
       // (server-side already filters via DEAD_BLOCKED_PLATFORMS in /api/health/pipeline,
       // but this catches any drift between the two lists)
       if (pipelineHealth.recentFailures?.length) {
-        const liveFailures = pipelineHealth.recentFailures
-          .filter(f => !isDeadPlatformJob(f.job_name))
+        const liveFailures = pipelineHealth.recentFailures.filter(
+          (f) => !isDeadPlatformJob(f.job_name)
+        )
         for (const f of liveFailures.slice(0, 5)) {
           issues.push(`  ❌ ${f.job_name}: ${f.error_message?.slice(0, 100) || 'unknown'}`)
         }
@@ -225,7 +242,9 @@ async function runHealthCheck() {
     if (pipelineHealth.backgroundFailures?.length) {
       const top = pipelineHealth.backgroundFailures.slice(0, 3)
       for (const bf of top) {
-        issues.push(`  ⚠️ Background: ${bf.label} (${bf.count}x): ${(bf.lastError || '').slice(0, 80)}`)
+        issues.push(
+          `  ⚠️ Background: ${bf.label} (${bf.count}x): ${(bf.lastError || '').slice(0, 80)}`
+        )
       }
       categories.add(`pipeline:background-failures:${pipelineHealth.backgroundFailures.length}`)
     }
@@ -234,7 +253,73 @@ async function runHealthCheck() {
     categories.add('pipeline:check-failed')
   }
 
-  // 3. Send alert if issues found (with dedup)
+  // 3. Infrastructure input validation (root-root-root cause prevention)
+  // These catch problems BEFORE they cascade into pipeline failures.
+
+  // 3a. VPS connectivity — detect port drift before fetchers fail
+  for (const [name, url] of [
+    ['VPS Proxy (3456)', process.env.VPS_PROXY_SG],
+    ['VPS Scraper (3457)', process.env.VPS_SCRAPER_SG || process.env.VPS_SCRAPER_HOST],
+  ]) {
+    if (!url) continue
+    try {
+      const cleanUrl = url.replace(/\\n$/, '').trim()
+      const res = await fetch(`${cleanUrl}/health`, { signal: AbortSignal.timeout(8000) })
+      if (!res.ok) {
+        issues.push(`⚠️ ${name}: HTTP ${res.status}`)
+        categories.add('infra:vps-degraded')
+      }
+    } catch {
+      issues.push(`🚨 ${name} UNREACHABLE: ${url}`)
+      categories.add('infra:vps-dead')
+    }
+  }
+
+  // 3b. Crontab validation — detect dead script references
+  try {
+    const { execSync } = await import('child_process')
+    const crontab = execSync('crontab -l 2>/dev/null', { encoding: 'utf8', timeout: 5000 })
+    const deadScripts = []
+    for (const line of crontab.split('\n')) {
+      const match = line.match(/scripts\/openclaw\/([^\s>]+\.mjs)/)
+      if (match) {
+        const scriptPath = path.resolve(__dirname, match[1])
+        try {
+          await import('fs').then((fs) => fs.accessSync(scriptPath))
+        } catch {
+          deadScripts.push(match[1])
+        }
+      }
+    }
+    if (deadScripts.length > 0) {
+      issues.push(`🚨 Crontab dead scripts: ${deadScripts.join(', ')}`)
+      categories.add('infra:crontab-dead')
+    }
+  } catch {
+    /* crontab check non-critical */
+  }
+
+  // 3c. Zero-trader detection — catch silent data source death
+  // Only alert if a platform has 0 traders AND is stale (>12h since last data).
+  // This avoids false alerts during normal fetch cycle gaps (2-8h between runs).
+  const platforms = pipelineHealth?.platformHealth || pipelineHealth?.platforms || []
+  if (Array.isArray(platforms) && platforms.length > 0) {
+    const zeroTraderPlatforms = []
+    for (const p of platforms) {
+      const name = p.platform || p.name
+      if (!name || DEAD_PLATFORMS.has(name) || p.status === 'dead') continue
+      const age = p.ageHours ?? Infinity
+      if (p.currentCount === 0 && p.avgCount > 10 && age > 12) {
+        zeroTraderPlatforms.push(`${name}(avg:${p.avgCount},${age.toFixed(0)}h stale)`)
+      }
+    }
+    if (zeroTraderPlatforms.length > 0) {
+      issues.push(`🚨 Zero traders: ${zeroTraderPlatforms.join(', ')}`)
+      categories.add('data:zero-traders')
+    }
+  }
+
+  // 4. Send alert if issues found (with dedup)
   if (issues.length > 0) {
     // Fingerprint is category-based only — ignore counts, job lists, and specific
     // error text. This means any "Pipeline CRITICAL" condition dedupes to a single
@@ -265,27 +350,37 @@ async function triggerAutoFix(pipelineHealth) {
   const { spawn } = await import('child_process')
   const autoFixScript = path.join(__dirname, 'auto-fix.mjs')
   const failingJobs = (pipelineHealth.recentFailures || [])
-    .filter(f => f.job_name?.includes('fetch-traders'))
-    .map(f => ({
+    .filter((f) => f.job_name?.includes('fetch-traders'))
+    .map((f) => ({
       platform: f.job_name.replace(/^batch-fetch-traders-/, ''),
       reason: classifyErrorMsg(f.error_message),
     }))
-    .filter(f => !DEAD_PLATFORMS.has(f.platform))
-  if (failingJobs.length === 0) { console.log('[auto-fix] No fetcher failures'); return }
+    .filter((f) => !DEAD_PLATFORMS.has(f.platform))
+  if (failingJobs.length === 0) {
+    console.log('[auto-fix] No fetcher failures')
+    return
+  }
   const seen = new Set()
   for (const { platform, reason } of failingJobs) {
     if (seen.has(platform)) continue
     seen.add(platform)
     const lastAttempt = fixAttempts.get(platform) || 0
-    if (Date.now() - lastAttempt < AUTO_FIX_COOLDOWN_MS) { console.log('[auto-fix] Cooldown: ' + platform); continue }
+    if (Date.now() - lastAttempt < AUTO_FIX_COOLDOWN_MS) {
+      console.log('[auto-fix] Cooldown: ' + platform)
+      continue
+    }
     fixAttempts.set(platform, Date.now())
     console.log('[auto-fix] Fixing ' + platform + ' (' + reason + ')')
     try {
       const proc = spawn('node', [autoFixScript, platform, '--reason', reason], {
-        cwd: path.dirname(__dirname), stdio: 'inherit', timeout: 300000,
+        cwd: path.dirname(__dirname),
+        stdio: 'inherit',
+        timeout: 300000,
       })
       proc.on('close', (code) => console.log('[auto-fix] ' + platform + ' exit: ' + code))
-    } catch (err) { console.error('[auto-fix] Launch failed for ' + platform, err.message) }
+    } catch (err) {
+      console.error('[auto-fix] Launch failed for ' + platform, err.message)
+    }
   }
 }
 
@@ -293,7 +388,8 @@ function classifyErrorMsg(msg) {
   if (!msg) return 'unknown'
   const m = msg.toLowerCase()
   if (m.includes('geo') || m.includes('451')) return 'geo_blocked'
-  if (m.includes('waf') || m.includes('cloudflare') || m.includes('access denied')) return 'waf_blocked'
+  if (m.includes('waf') || m.includes('cloudflare') || m.includes('access denied'))
+    return 'waf_blocked'
   if (m.includes('404') || m.includes('not found')) return 'endpoint_gone'
   if (m.includes('429') || m.includes('rate limit')) return 'rate_limited'
   if (m.includes('timeout') || m.includes('abort')) return 'timeout'
@@ -332,17 +428,19 @@ async function runDailyReport() {
   let activity
 
   try {
-    ;[pipelineHealth, activity] = await Promise.all([
-      checkPipelineHealth(),
-      fetchActivityStats(),
-    ])
+    ;[pipelineHealth, activity] = await Promise.all([checkPipelineHealth(), fetchActivityStats()])
   } catch (err) {
     await sendTelegram(`<b>📊 Arena 每日报告</b>\n\n获取数据失败: ${err.message}`)
     return
   }
 
   const { summary, stats } = pipelineHealth
-  const today = new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric', timeZone: 'Asia/Shanghai' })
+  const today = new Date().toLocaleDateString('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    timeZone: 'Asia/Shanghai',
+  })
 
   const totalRuns = stats?.reduce((s, j) => s + (j.total_runs || 0), 0) || 0
   const totalSuccess = stats?.reduce((s, j) => s + (j.success_count || 0), 0) || 0
@@ -351,7 +449,7 @@ async function runDailyReport() {
   const overallSuccessRate = totalRuns > 0 ? ((totalSuccess / totalRuns) * 100).toFixed(1) : 'N/A'
 
   const worstJobs = (stats || [])
-    .filter(j => j.success_rate < 100)
+    .filter((j) => j.success_rate < 100)
     .sort((a, b) => (a.success_rate || 0) - (b.success_rate || 0))
     .slice(0, 3)
 
@@ -370,7 +468,7 @@ async function runDailyReport() {
   report += `- 错误数：${totalErrors}\n`
 
   if (worstJobs.length > 0) {
-    report += `- 错误 Top ${worstJobs.length}：${worstJobs.map(j => `${j.job_name}(${j.success_rate}%)`).join('、')}\n`
+    report += `- 错误 Top ${worstJobs.length}：${worstJobs.map((j) => `${j.job_name}(${j.success_rate}%)`).join('、')}\n`
   }
 
   if (summary?.staleJobs > 0 || summary?.stuckJobs > 0) {
@@ -416,12 +514,12 @@ async function runDailyReport() {
 const mode = process.argv[2] || 'check'
 
 if (mode === 'daily') {
-  runDailyReport().catch(err => {
+  runDailyReport().catch((err) => {
     console.error('Daily report failed:', err)
     process.exit(1)
   })
 } else {
-  runHealthCheck().catch(err => {
+  runHealthCheck().catch((err) => {
     console.error('Health check failed:', err)
     process.exit(1)
   })
