@@ -3,6 +3,7 @@
 > Priority-ordered task list. Update as tasks complete or priorities change.
 
 ## Priority Legend
+
 - 🔴 P0: Critical/Blocking
 - 🟠 P1: High priority this sprint
 - 🟡 P2: Should do soon
@@ -14,6 +15,7 @@
 ## 🔴 P0 - Critical
 
 ### 2026-05-09 Commercial Go/No-Go (30 days from paywall live)
+
 - [ ] **Decision point: paying subs ≥ 20 by 2026-05-09?**
       Current: 2 (per `/admin/pro-metrics` + weekly-metrics Telegram push).
       If YES → accelerate product on core path (live signals, copy flow).
@@ -26,16 +28,23 @@
 ## 🟠 P1 - High Priority
 
 ### Data Quality (ongoing, monitor over next few runs)
-- [ ] Verify sharpe coverage lifts from 62% → 70%+ after enrichment-metrics
-      threshold lowered from 5→4 curve points (shipped 2026-04-09)
+
+- [x] Root cause fix: GMX 0.9% Sharpe → basePnlUsd filter dropped 70%+ trades (064989ff4)
+- [x] Root cause fix: MEXC 0.1% Sharpe → hardcoded null, now computed from profitList (064989ff4)
+- [x] Root cause fix: DEX trade-level Sharpe fallback for <3 day traders (064989ff4)
+- [x] Root cause fix: position-based equity curve + stats fallback for HL/dYdX (ee81aa2f4)
+- [ ] Verify overall Sharpe lifts from 29% → 45%+ after next enrichment cycle
 - [ ] Verify okx_futures staleness (occasionally 10h, should be ≤6h)
+- [ ] Gains enrichment: native API dead, Etherscan rate-limited — needs alternative data source
 
 ### Infrastructure (external dependencies)
+
 - [ ] BloFin Sharpe: now Mac Mini only (geo-blocked from VPS + CF). Watch
       `scripts/openclaw/fetch-blofin.mjs` success rate
 - [ ] eToro CopySim: retry after 24h IP cooldown
 
 ### Follow-ups from 5-agent review 2026-04-09
+
 - [x] TraderHeader complete decomp: badge row → b11eeeea1; avatar +
       actions blocks → b2ff1ff59 (581→370 lines). 40-prop interface
       still big — defer trim until data-flow refactor.
@@ -56,15 +65,16 @@
       now call it (no more 30s timeouts).
 
 ### Open follow-ups
+
 - [~] computeSeason main loop split: 1775 → 972 lines in route.ts (-45%)
-      via 9 extractions in 2026-04-09 session. New files:
-      trader-row.ts (TraderRow + sanitize/merge), scoring-helpers.ts
-      (calmar/style/outliers/arena-followers), freshness-check.ts,
-      fetch-handles.ts, enrich-stats-detail.ts, enrich-equity-curve.ts
-      (Phase 4 + 4b), enrich-daily-snapshots.ts (Phase 4b2), fetch-phase1.ts.
-      Remaining in route.ts: scoring loop, degradation check, upsert,
-      zero-out, re-rank, stale cleanup — all higher-risk and explicitly
-      deferred. Next session can target ~972 → ~600.
+  via 9 extractions in 2026-04-09 session. New files:
+  trader-row.ts (TraderRow + sanitize/merge), scoring-helpers.ts
+  (calmar/style/outliers/arena-followers), freshness-check.ts,
+  fetch-handles.ts, enrich-stats-detail.ts, enrich-equity-curve.ts
+  (Phase 4 + 4b), enrich-daily-snapshots.ts (Phase 4b2), fetch-phase1.ts.
+  Remaining in route.ts: scoring loop, degradation check, upsert,
+  zero-out, re-rank, stale cleanup — all higher-risk and explicitly
+  deferred. Next session can target ~972 → ~600.
 - [ ] TraderHeader 40-prop interface trim (requires data-flow changes)
 - [x] paywall_blocked tracking shipped in 8f1da3fbf — wired into
       home filter, trader-detail tab gate, and claimed-profile tab gate
@@ -92,6 +102,7 @@ _None currently — see Retired below_
 ---
 
 ## Completed (April 2026)
+
 - [x] Lower sharpe/sortino/calmar threshold 5→4 curve points (enrichment-metrics.ts)
 - [x] Fix 5 stale test suites → 135/135 green (check-trader-alerts,
       bybit-futures, gains-perp, feed/personalized, batch-enrich)
@@ -108,6 +119,7 @@ _None currently — see Retired below_
 - [x] Monitor inline enrichment architecture (stable, no regressions)
 
 ## Retired (no longer actionable)
+
 - ~~Vertex/Apex/RabbitX DEX connectors~~ — all 3 confirmed dead 2026-04:
   vertex (no public API), apex_pro (geo-blocked + no API), rabbitx (DNS dead).
   See `lib/connectors/registry.ts:253`.
@@ -119,11 +131,13 @@ _None currently — see Retired below_
   Re-add only when there's a UX decision to actually ship the feature.
 
 ## Completed (March 2026)
+
 _See PROGRESS.md archive section for full list_
 
 ---
 
 ## Notes
+
 - Don't start P2/P3 until P1 is clear
 - Each task should be doable in one session
 - Large tasks should be broken into subtasks
