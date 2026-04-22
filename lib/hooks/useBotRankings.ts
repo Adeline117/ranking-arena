@@ -1,6 +1,6 @@
 'use client'
 
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 
 export interface BotMetrics {
   total_volume: number | null
@@ -66,20 +66,26 @@ export function useBotRankings(opts: UseBotRankingsOptions = {}) {
   const params = new URLSearchParams({ window, sort_by: sortBy, sort_dir: sortDir })
   if (category) params.set('category', category)
 
-  const { data, error, isLoading, isValidating } = useSWR<BotRankingsResponse>(
-    `/api/bots?${params.toString()}`,
-    fetcher,
-    { revalidateOnFocus: false, keepPreviousData: true, refreshInterval: 15 * 60 * 1000, fallbackData }
-  )
+  const url = `/api/bots?${params.toString()}`
+
+  const { data, error, isLoading, isFetching: isValidating } = useQuery<BotRankingsResponse>({
+    queryKey: ['bot-rankings', window, category, sortBy, sortDir],
+    queryFn: () => fetcher(url),
+    refetchOnWindowFocus: false,
+    placeholderData: (prev) => prev,
+    refetchInterval: 15 * 60 * 1000,
+    initialData: fallbackData,
+  })
 
   return { data, error, isLoading, isValidating }
 }
 
 export function useBotDetail(id: string | null) {
-  const { data, error, isLoading } = useSWR(
-    id ? `/api/bots/${id}` : null,
-    fetcher,
-    { revalidateOnFocus: false }
-  )
+  const { data, error, isLoading } = useQuery({
+    queryKey: ['bot-detail', id],
+    queryFn: () => fetcher(`/api/bots/${id}`),
+    enabled: !!id,
+    refetchOnWindowFocus: false,
+  })
   return { data, error, isLoading }
 }
