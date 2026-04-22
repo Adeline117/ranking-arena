@@ -28,7 +28,9 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   }
 
   if (session.payment_status !== 'paid') {
-    logger.warn(`Payment not completed for session ${session.id}`, { status: session.payment_status })
+    logger.warn(`Payment not completed for session ${session.id}`, {
+      status: session.payment_status,
+    })
     return
   }
 
@@ -58,8 +60,10 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     .in('status', ['active', 'trialing'])
     .maybeSingle()
 
-  if (existingSub?.stripe_subscription_id &&
-      existingSub.stripe_subscription_id !== subscriptionId) {
+  if (
+    existingSub?.stripe_subscription_id &&
+    existingSub.stripe_subscription_id !== subscriptionId
+  ) {
     // Cancel the NEW subscription to keep the existing one
     await stripe.subscriptions.cancel(subscriptionId)
     logger.warn('Duplicate subscription detected and cancelled', {
@@ -110,21 +114,22 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
           status: subscription.status,
         },
       }),
-      'stripe-new-subscriber-alert',
+      'stripe-new-subscriber-alert'
     )
   } catch (err: unknown) {
     logger.error('Failed to process checkout completion', { error: err })
     await withRetry(async () => {
-      const { error: profileError } = await getSupabase()
-        .from('user_profiles')
-        .upsert({
+      const { error: profileError } = await getSupabase().from('user_profiles').upsert(
+        {
           id: userId,
           subscription_tier: 'pro',
           stripe_customer_id: customerId,
           updated_at: new Date().toISOString(),
-        }, {
+        },
+        {
           onConflict: 'id',
-        })
+        }
+      )
 
       if (profileError) {
         throw new Error(`Failed to update user_profiles: ${profileError.message}`)
@@ -148,7 +153,12 @@ export async function handleTipPaymentCompleted(session: Stripe.Checkout.Session
   }
 
   logger.info('Tip payment completed', {
-    tipId, postId, fromUserId, toUserId, amountCents, sessionId: session.id,
+    tipId,
+    postId,
+    fromUserId,
+    toUserId,
+    amountCents,
+    sessionId: session.id,
   })
 
   const { error: updateError } = await getSupabase()
@@ -190,6 +200,51 @@ export async function handleTipPaymentCompleted(session: Stripe.Checkout.Session
   logger.info('Tip recorded successfully', { tipId, amountCents })
 }
 
+export async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
+  const userId = session.metadata?.userId || session.metadata?.supabase_user_id
+  const plan = session.metadata?.plan
+
+  logger.warn('Checkout session expired (abandoned)', {
+    userId,
+    plan,
+    sessionId: session.id,
+    customerEmail: session.customer_details?.email,
+    amountTotal: session.amount_total,
+  })
+
+  // Record abandonment for funnel analysis
+  if (userId) {
+    const supabase = getSupabase()
+    await supabase
+      .from('payment_history')
+      .insert({
+        user_id: userId,
+        status: 'abandoned',
+        amount: session.amount_total ?? 0,
+        currency: session.currency ?? 'usd',
+      })
+      .then(({ error }) => {
+        if (error) logger.warn('Failed to record checkout abandonment', { error: error.message })
+      })
+  }
+
+  // Alert team about abandoned checkout
+  fireAndForget(
+    sendAlert({
+      title: '⚠️ Checkout abandoned',
+      message: `Plan: ${plan || 'unknown'} · User: ${userId || 'anonymous'} · Amount: $${((session.amount_total ?? 0) / 100).toFixed(2)}`,
+      level: 'warning',
+      details: {
+        userId,
+        plan: plan || 'unknown',
+        sessionId: session.id,
+        email: session.customer_details?.email,
+      },
+    }),
+    'stripe-checkout-abandoned-alert'
+  )
+}
+
 async function handleLifetimePayment(userId: string, customerId: string) {
   logger.info('Processing lifetime payment', { userId, customerId })
 
@@ -197,20 +252,23 @@ async function handleLifetimePayment(userId: string, customerId: string) {
     // Update subscriptions table
     const { error: subError } = await getSupabase()
       .from('subscriptions')
-      .upsert({
-        user_id: userId,
-        stripe_customer_id: customerId,
-        stripe_subscription_id: `lifetime_${userId}`,
-        status: 'active',
-        tier: 'pro',
-        plan: 'lifetime',
-        current_period_start: new Date().toISOString(),
-        current_period_end: null,
-        cancel_at_period_end: false,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id',
-      })
+      .upsert(
+        {
+          user_id: userId,
+          stripe_customer_id: customerId,
+          stripe_subscription_id: `lifetime_${userId}`,
+          status: 'active',
+          tier: 'pro',
+          plan: 'lifetime',
+          current_period_start: new Date().toISOString(),
+          current_period_end: null,
+          cancel_at_period_end: false,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'user_id',
+        }
+      )
 
     if (subError) {
       throw new Error(`Failed to upsert subscription: ${subError.message}`)
@@ -254,6 +312,6 @@ async function handleLifetimePayment(userId: string, customerId: string) {
       level: 'info',
       details: { userId, customerId, plan: 'lifetime' },
     }),
-    'stripe-new-lifetime-alert',
+    'stripe-new-lifetime-alert'
   )
 }
