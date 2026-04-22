@@ -52,7 +52,12 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--color-brand), var(--color-brand-deep), var(--color-brand));
+  background: linear-gradient(
+    90deg,
+    var(--color-brand),
+    var(--color-brand-deep),
+    var(--color-brand)
+  );
   background-size: 200% 100%;
   animation: quizShimmerLine 3s ease-in-out infinite;
 }
@@ -131,7 +136,9 @@
   font-weight: 600;
   color: var(--color-brand);
   letter-spacing: 0.01em;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .quiz-badge:hover {
@@ -154,7 +161,9 @@
   max-width: 320px;
   position: relative;
   overflow: hidden;
-  transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275), box-shadow 0.25s ease;
+  transition:
+    transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275),
+    box-shadow 0.25s ease;
   box-shadow:
     0 4px 16px color-mix(in srgb, var(--color-brand) 30%, transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.15);
@@ -187,7 +196,6 @@
   transform: translateY(0) scale(0.98);
 }
 
-
 /* ─── Question Cards ──────────────────────────────────────────── */
 
 .quiz-question-card {
@@ -202,7 +210,9 @@
   border-radius: 14px;
   position: relative;
   overflow: hidden;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  transition:
+    border-color 0.3s ease,
+    box-shadow 0.3s ease;
 }
 
 .quiz-question-card:hover {
@@ -210,13 +220,13 @@
 }
 
 /* Answered card gets a subtle accent */
-.quiz-question-card[data-answered="true"] {
+.quiz-question-card[data-answered='true'] {
   border-color: var(--color-accent-primary-20);
   box-shadow: 0 0 0 1px var(--color-accent-primary-08);
 }
 
 /* Alternating subtle tint for visual rhythm */
-.quiz-question-card[data-even="true"] {
+.quiz-question-card[data-even='true'] {
   background: var(--glass-bg-secondary);
 }
 
@@ -279,7 +289,7 @@
   transform: scale(0.97);
 }
 
-.quiz-option-btn[aria-pressed="true"] {
+.quiz-option-btn[aria-pressed='true'] {
   border-color: var(--color-brand);
   background: var(--color-accent-primary-08);
   font-weight: 600;
@@ -287,7 +297,7 @@
   animation: quizOptionSelect 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.quiz-option-btn[aria-pressed="true"]::after {
+.quiz-option-btn[aria-pressed='true']::after {
   content: '';
   position: absolute;
   right: 12px;
@@ -315,7 +325,7 @@
   transition: all 0.2s ease;
 }
 
-.quiz-option-btn[aria-pressed="true"] .quiz-option-letter {
+.quiz-option-btn[aria-pressed='true'] .quiz-option-letter {
   background: linear-gradient(135deg, var(--color-brand), var(--color-brand-deep));
   color: #fff;
   box-shadow: 0 2px 8px color-mix(in srgb, var(--color-brand) 30%, transparent);
@@ -350,7 +360,7 @@
   transform: scale(0.95);
 }
 
-.quiz-yesno-btn[aria-pressed="true"] {
+.quiz-yesno-btn[aria-pressed='true'] {
   border-color: var(--color-brand);
   background: var(--color-accent-primary-08);
   color: var(--color-brand);
@@ -358,7 +368,6 @@
   box-shadow: 0 0 0 1px var(--color-accent-primary-15);
   animation: quizOptionSelect 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
-
 
 /* ─── Progress Bar ────────────────────────────────────────────── */
 
@@ -414,7 +423,9 @@
   width: 12px;
   border-radius: 50%;
   background: var(--color-brand);
-  box-shadow: 0 0 8px var(--color-brand), 0 0 16px color-mix(in srgb, var(--color-brand) 50%, transparent);
+  box-shadow:
+    0 0 8px var(--color-brand),
+    0 0 16px color-mix(in srgb, var(--color-brand) 50%, transparent);
   animation: quizProgressPulse 2s ease-in-out infinite;
 }
 
@@ -424,6 +435,10 @@
   gap: 3px;
   flex-wrap: wrap;
   margin-top: 4px;
+  /* Clip touch targets so they don't leak into question area below */
+  overflow: clip;
+  padding: 12px 0;
+  margin-top: -8px;
 }
 
 .quiz-progress-dot {
@@ -432,31 +447,27 @@
   height: 6px;
   border-radius: 3px;
   border: none;
-  padding: 0;
+  /* Use padding for touch target instead of absolute overlay — prevents
+     pointer-event interception on elements below the sticky progress bar */
+  padding: 12px 2px;
+  background-clip: content-box;
   cursor: pointer;
-  background: var(--color-bg-tertiary);
-  transition: background 0.3s, transform 0.2s, box-shadow 0.3s;
+  background-color: var(--color-bg-tertiary);
+  transition:
+    background-color 0.3s,
+    transform 0.2s,
+    box-shadow 0.3s;
   flex: none;
 }
 
-.quiz-progress-dot[data-done="true"] {
-  background: var(--color-brand);
+.quiz-progress-dot[data-done='true'] {
+  background-color: var(--color-brand);
   box-shadow: 0 0 6px color-mix(in srgb, var(--color-brand) 30%, transparent);
 }
 
 .quiz-progress-dot:hover {
   transform: scaleY(1.5);
 }
-
-/* Invisible touch target expander */
-.quiz-progress-dot .quiz-dot-touch {
-  position: absolute;
-  top: -12px;
-  bottom: -12px;
-  left: -2px;
-  right: -2px;
-}
-
 
 /* ─── Submit Button ───────────────────────────────────────────── */
 
@@ -473,7 +484,7 @@
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.quiz-submit-btn[data-ready="true"] {
+.quiz-submit-btn[data-ready='true'] {
   background: linear-gradient(135deg, var(--color-brand), var(--color-brand-deep));
   border: none;
   color: #fff;
@@ -482,15 +493,14 @@
   animation: quizSubmitReady 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-.quiz-submit-btn[data-ready="true"]:hover {
+.quiz-submit-btn[data-ready='true']:hover {
   transform: translateY(-2px);
   box-shadow: 0 8px 28px color-mix(in srgb, var(--color-brand) 45%, transparent);
 }
 
-.quiz-submit-btn[data-ready="true"]:active {
+.quiz-submit-btn[data-ready='true']:active {
   transform: translateY(0);
 }
-
 
 /* ─── Calculating Step ────────────────────────────────────────── */
 
@@ -539,7 +549,6 @@
   transition: width 0.05s linear;
 }
 
-
 /* ─── Result Page — Hero Personality Card ─────────────────────── */
 
 .quiz-result-page {
@@ -559,7 +568,11 @@
   left: 0;
   right: 0;
   height: 60vh;
-  background: radial-gradient(ellipse 80% 50% at 50% 0%, var(--quiz-type-color-15, transparent) 0%, transparent 70%);
+  background: radial-gradient(
+    ellipse 80% 50% at 50% 0%,
+    var(--quiz-type-color-15, transparent) 0%,
+    transparent 70%
+  );
   pointer-events: none;
   z-index: 0;
 }
@@ -634,7 +647,7 @@
   align-items: center;
   justify-content: center;
   animation: quizIconSpringIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.2s both;
-  box-shadow: 0 8px 24px var(--quiz-type-color-25, rgba(0,0,0,0.15));
+  box-shadow: 0 8px 24px var(--quiz-type-color-25, rgba(0, 0, 0, 0.15));
 }
 
 .quiz-hero-type-name {
@@ -700,7 +713,6 @@
   animation: quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.6s both;
 }
 
-
 /* ─── Result Section Cards ────────────────────────────────────── */
 
 .quiz-section-card {
@@ -736,7 +748,6 @@
   letter-spacing: -0.01em;
 }
 
-
 /* ─── Style Analysis — Risk Gauge ─────────────────────────────── */
 
 .quiz-risk-gauge {
@@ -750,10 +761,12 @@
   height: 8px;
   border-radius: 2px;
   background: var(--color-bg-tertiary);
-  transition: background 0.4s ease, box-shadow 0.4s ease;
+  transition:
+    background 0.4s ease,
+    box-shadow 0.4s ease;
 }
 
-.quiz-risk-segment[data-active="true"] {
+.quiz-risk-segment[data-active='true'] {
   box-shadow: 0 0 4px var(--quiz-type-color-25, transparent);
 }
 
@@ -778,7 +791,6 @@
   border: 1px solid var(--glass-border-light);
 }
 
-
 /* ─── Share Section ───────────────────────────────────────────── */
 
 .quiz-share-x-btn {
@@ -795,7 +807,9 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .quiz-share-x-btn:hover {
@@ -823,7 +837,6 @@
   object-fit: cover;
 }
 
-
 /* ─── CTA Buttons ─────────────────────────────────────────────── */
 
 .quiz-cta-secondary {
@@ -838,7 +851,9 @@
   font-weight: 500;
   text-align: center;
   text-decoration: none;
-  transition: border-color 0.2s, transform 0.2s;
+  transition:
+    border-color 0.2s,
+    transform 0.2s;
 }
 
 .quiz-cta-secondary:hover {
@@ -858,7 +873,9 @@
   font-weight: 600;
   text-align: center;
   text-decoration: none;
-  transition: transform 0.2s, box-shadow 0.2s;
+  transition:
+    transform 0.2s,
+    box-shadow 0.2s;
   box-shadow: 0 4px 16px color-mix(in srgb, var(--color-brand) 25%, transparent);
 }
 
@@ -866,7 +883,6 @@
   transform: translateY(-2px);
   box-shadow: 0 8px 24px color-mix(in srgb, var(--color-brand) 35%, transparent);
 }
-
 
 /* ─── Keyframe Animations ─────────────────────────────────────── */
 
@@ -882,30 +898,56 @@
 }
 
 @keyframes quizIconFloat {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-6px); }
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
 }
 
 @keyframes quizShimmerLine {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
 }
 
 @keyframes quizOptionSelect {
-  0% { transform: scale(0.96); }
-  50% { transform: scale(1.02); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0.96);
+  }
+  50% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes quizProgressPulse {
-  0%, 100% { opacity: 0.7; }
-  50% { opacity: 1; }
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
 }
 
 @keyframes quizSubmitReady {
-  0% { transform: scale(0.95); }
-  50% { transform: scale(1.03); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(0.95);
+  }
+  50% {
+    transform: scale(1.03);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 @keyframes quizHeroEnter {
@@ -942,34 +984,76 @@
 }
 
 @keyframes quizCountUp {
-  from { opacity: 0; transform: scale(0.8); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 /* Confetti particles — pure CSS */
 @keyframes quizConfetti1 {
-  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate(-80px, -120px) rotate(360deg); opacity: 0; }
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-80px, -120px) rotate(360deg);
+    opacity: 0;
+  }
 }
 @keyframes quizConfetti2 {
-  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate(90px, -100px) rotate(-270deg); opacity: 0; }
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(90px, -100px) rotate(-270deg);
+    opacity: 0;
+  }
 }
 @keyframes quizConfetti3 {
-  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate(-40px, -140px) rotate(200deg); opacity: 0; }
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-40px, -140px) rotate(200deg);
+    opacity: 0;
+  }
 }
 @keyframes quizConfetti4 {
-  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate(60px, -130px) rotate(-300deg); opacity: 0; }
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(60px, -130px) rotate(-300deg);
+    opacity: 0;
+  }
 }
 @keyframes quizConfetti5 {
-  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate(20px, -150px) rotate(180deg); opacity: 0; }
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(20px, -150px) rotate(180deg);
+    opacity: 0;
+  }
 }
 @keyframes quizConfetti6 {
-  0% { transform: translate(0, 0) rotate(0deg); opacity: 1; }
-  100% { transform: translate(-60px, -110px) rotate(-220deg); opacity: 0; }
+  0% {
+    transform: translate(0, 0) rotate(0deg);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-60px, -110px) rotate(-220deg);
+    opacity: 0;
+  }
 }
 
 .quiz-confetti {
@@ -990,13 +1074,30 @@
   animation-fill-mode: forwards;
 }
 
-.quiz-confetti span:nth-child(1) { animation-name: quizConfetti1; animation-delay: 0s; }
-.quiz-confetti span:nth-child(2) { animation-name: quizConfetti2; animation-delay: 0.05s; }
-.quiz-confetti span:nth-child(3) { animation-name: quizConfetti3; animation-delay: 0.1s; }
-.quiz-confetti span:nth-child(4) { animation-name: quizConfetti4; animation-delay: 0.15s; }
-.quiz-confetti span:nth-child(5) { animation-name: quizConfetti5; animation-delay: 0.1s; }
-.quiz-confetti span:nth-child(6) { animation-name: quizConfetti6; animation-delay: 0.05s; }
-
+.quiz-confetti span:nth-child(1) {
+  animation-name: quizConfetti1;
+  animation-delay: 0s;
+}
+.quiz-confetti span:nth-child(2) {
+  animation-name: quizConfetti2;
+  animation-delay: 0.05s;
+}
+.quiz-confetti span:nth-child(3) {
+  animation-name: quizConfetti3;
+  animation-delay: 0.1s;
+}
+.quiz-confetti span:nth-child(4) {
+  animation-name: quizConfetti4;
+  animation-delay: 0.15s;
+}
+.quiz-confetti span:nth-child(5) {
+  animation-name: quizConfetti5;
+  animation-delay: 0.1s;
+}
+.quiz-confetti span:nth-child(6) {
+  animation-name: quizConfetti6;
+  animation-delay: 0.05s;
+}
 
 /* ─── Responsive ──────────────────────────────────────────────── */
 

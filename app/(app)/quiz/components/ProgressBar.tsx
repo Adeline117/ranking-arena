@@ -9,7 +9,12 @@ interface ProgressBarProps {
   answeredIds: Set<number>
 }
 
-export default function ProgressBar({ answered, total, questionIds, answeredIds }: ProgressBarProps) {
+export default function ProgressBar({
+  answered,
+  total,
+  questionIds,
+  answeredIds,
+}: ProgressBarProps) {
   const percent = total > 0 ? Math.round((answered / total) * 100) : 0
 
   const handleDotClick = (qId: number) => {
@@ -24,9 +29,7 @@ export default function ProgressBar({ answered, total, questionIds, answeredIds 
         <span className="quiz-progress-count">
           {answered} / {total}
         </span>
-        <span className="quiz-progress-percent">
-          {percent}%
-        </span>
+        <span className="quiz-progress-percent">{percent}%</span>
       </div>
 
       {/* Continuous progress track with glowing leading edge */}
@@ -38,10 +41,7 @@ export default function ProgressBar({ answered, total, questionIds, answeredIds 
         aria-valuemax={total}
         aria-label={`${answered} of ${total} answered`}
       >
-        <div
-          className="quiz-progress-fill"
-          style={{ width: `${percent}%` }}
-        />
+        <div className="quiz-progress-fill" style={{ width: `${percent}%` }} />
       </div>
 
       {/* Clickable dots overlay */}
@@ -56,9 +56,7 @@ export default function ProgressBar({ answered, total, questionIds, answeredIds 
               aria-label={`Question ${idx + 1}${isDone ? ' (answered)' : ' (unanswered)'}`}
               className="quiz-progress-dot"
               data-done={isDone ? 'true' : 'false'}
-            >
-              <span aria-hidden="true" className="quiz-dot-touch" />
-            </button>
+            />
           )
         })}
       </div>
