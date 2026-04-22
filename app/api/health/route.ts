@@ -1,6 +1,6 @@
 /**
  * 健康检查 API (轻量版)
- * 
+ *
  * GET /api/health - 返回应用健康状态
  * 只检查：数据库连通性 + Redis 连通性
  * 详细信息（平台新鲜度、cron状态等）请用 /api/health/detailed
@@ -19,7 +19,9 @@ export const runtime = 'edge'
 const startTime = Date.now()
 const version = process.env.npm_package_version || '0.1.0'
 // Deploy timestamp from env (set at build time), fallback to module load time
-const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME ? safeParseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, startTime) : startTime
+const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME
+  ? safeParseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, startTime)
+  : startTime
 
 /**
  * Race any check against a timeout to prevent health endpoint from hanging.
@@ -30,46 +32,73 @@ const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME ? safeParseInt(process.en
  * healthy/unhealthy responses from the monitor depending on instance warmth.
  * 8s gives enough headroom for cold start without masking real DB issues.
  */
-function withTimeout<T>(promise: Promise<T> | PromiseLike<T>, fallback: T, label: string, ms: number = 8000): Promise<T> {
+// 15s timeout: 8s was too tight under cron load — connection pool exhaustion
+// caused false DB=fail alerts. 15s matches pg connectionTimeoutMillis in production.
+function withTimeout<T>(
+  promise: Promise<T> | PromiseLike<T>,
+  fallback: T,
+  label: string,
+  ms: number = 15000
+): Promise<T> {
   return Promise.race([
     promise,
-    new Promise<T>((resolve) => setTimeout(() => {
-      logger.warn(`[health] ${label} timed out after ${ms}ms`)
-      resolve(fallback)
-    }, ms)),
+    new Promise<T>((resolve) =>
+      setTimeout(() => {
+        logger.warn(`[health] ${label} timed out after ${ms}ms`)
+        resolve(fallback)
+      }, ms)
+    ),
   ])
 }
 
-async function checkDatabase(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }> {
+async function checkDatabase(): Promise<{
+  status: 'pass' | 'fail' | 'skip'
+  latency?: number
+  message?: string
+}> {
   const t0 = Date.now()
   try {
     const result = await withTimeout(
-      getSupabaseAdmin().from('library_items').select('id').limit(1).then(r => ({ ok: !r.error, msg: r.error?.message })),
-      { ok: false, msg: 'DB check timed out (8s)' },
+      getSupabaseAdmin()
+        .from('library_items')
+        .select('id')
+        .limit(1)
+        .then((r) => ({ ok: !r.error, msg: r.error?.message })),
+      { ok: false, msg: 'DB check timed out (15s)' },
       'checkDatabase'
     )
     const latency = Date.now() - t0
     if (!result.ok) return { status: 'fail', message: result.msg, latency }
     return { status: 'pass', latency }
   } catch (e: unknown) {
-    return { status: 'fail', message: e instanceof Error ? e.message : 'Unknown', latency: Date.now() - t0 }
+    return {
+      status: 'fail',
+      message: e instanceof Error ? e.message : 'Unknown',
+      latency: Date.now() - t0,
+    }
   }
 }
 
-async function checkRedis(): Promise<{ status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }> {
+async function checkRedis(): Promise<{
+  status: 'pass' | 'fail' | 'skip'
+  latency?: number
+  message?: string
+}> {
   const t0 = Date.now()
   try {
     const redis = await getSharedRedis()
     if (!redis) return { status: 'skip', message: 'Not configured' }
-    const pong = await withTimeout(
-      redis.ping(),
-      'TIMEOUT' as string,
-      'checkRedis'
-    )
+    const pong = await withTimeout(redis.ping(), 'TIMEOUT' as string, 'checkRedis')
     const latency = Date.now() - t0
-    return pong === 'PONG' ? { status: 'pass', latency } : { status: 'fail', message: `Got: ${pong}`, latency }
+    return pong === 'PONG'
+      ? { status: 'pass', latency }
+      : { status: 'fail', message: `Got: ${pong}`, latency }
   } catch (e: unknown) {
-    return { status: 'fail', message: e instanceof Error ? e.message : 'Unknown', latency: Date.now() - t0 }
+    return {
+      status: 'fail',
+      message: e instanceof Error ? e.message : 'Unknown',
+      latency: Date.now() - t0,
+    }
   }
 }
 
@@ -77,10 +106,7 @@ export async function GET() {
   const t0 = Date.now()
 
   // DB + Redis + API connectivity - run in parallel
-  const [database, redis] = await Promise.all([
-    checkDatabase(),
-    checkRedis(),
-  ])
+  const [database, redis] = await Promise.all([checkDatabase(), checkRedis()])
 
   // API check (self-check: if we got here, the API layer is working)
   const api: { status: 'pass' | 'fail'; latency?: number; message?: string } = {
@@ -118,9 +144,12 @@ export async function GET() {
         .order('started_at', { ascending: false })
         .limit(1)
         .maybeSingle()
-        .then(r => r),
+        .then((r) => r),
       new Promise<{ data: null; error: { message: string } }>((resolve) =>
-        setTimeout(() => resolve({ data: null, error: { message: 'Freshness query timed out (8s)' } }), 8000)
+        setTimeout(
+          () => resolve({ data: null, error: { message: 'Freshness query timed out (8s)' } }),
+          8000
+        )
       ),
     ])
     const latency = Date.now() - t1
@@ -133,9 +162,18 @@ export async function GET() {
       const ageHours = ageMs / (1000 * 60 * 60)
       // 4h threshold: most fetchers run every 15-30min. 4h = ~8-16 missed runs,
       // which is a real problem worth alerting on.
-      freshness = ageHours <= 4
-        ? { status: 'pass', latency, message: `${ageHours.toFixed(1)}h old (${result.data.job_name})` }
-        : { status: 'fail', latency, message: `Data is ${ageHours.toFixed(1)}h old (threshold: 4h)` }
+      freshness =
+        ageHours <= 4
+          ? {
+              status: 'pass',
+              latency,
+              message: `${ageHours.toFixed(1)}h old (${result.data.job_name})`,
+            }
+          : {
+              status: 'fail',
+              latency,
+              message: `Data is ${ageHours.toFixed(1)}h old (threshold: 4h)`,
+            }
     }
   } catch (e: unknown) {
     freshness = { status: 'skip', message: e instanceof Error ? e.message : 'Unknown' }
@@ -176,13 +214,19 @@ export async function GET() {
           .from('pipeline_logs')
           .select('job_name, started_at')
           .eq('status', 'success')
-          .or('job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b2%,job_name.like.batch-fetch-traders-a1%')
+          .or(
+            'job_name.like.enrich-bitget%,job_name.like.enrich-binance_futures%,job_name.like.batch-fetch-traders-b2%,job_name.like.batch-fetch-traders-a1%'
+          )
           .gte('started_at', new Date(Date.now() - 30 * 60000).toISOString())
           .limit(1)
           .maybeSingle()
 
         if (recentVpsJob) {
-          vps = { status: 'pass', latency: lat, message: `VPS SG OK (via pipeline heartbeat, direct ${res?.status || 'blocked'})` }
+          vps = {
+            status: 'pass',
+            latency: lat,
+            message: `VPS SG OK (via pipeline heartbeat, direct ${res?.status || 'blocked'})`,
+          }
         } else {
           // ROOT CAUSE FIX (2026-04-09): Vultr intermittently blocks Vercel's
           // Tokyo IPs which made this check flap to 'fail' even while the VPS
@@ -191,13 +235,22 @@ export async function GET() {
           // but 'fail' still appeared in monitor's System degraded alerts.
           // Demote to 'skip' to silence the noise — if the VPS is genuinely
           // dead the cron failures will surface via /api/health/pipeline.
-          vps = { status: 'skip', latency: lat, message: `VPS SG direct ${res?.status || 'unreachable'}, no recent heartbeat (supplementary, not flagged)` }
+          vps = {
+            status: 'skip',
+            latency: lat,
+            message: `VPS SG direct ${res?.status || 'unreachable'}, no recent heartbeat (supplementary, not flagged)`,
+          }
         }
       }
     } catch (e: unknown) {
       // Same reasoning as above — network errors reaching Vultr from Vercel are
       // not a valid signal of VPS health; skip rather than fail.
-      vps = { status: 'skip', latency: Date.now() - t2, message: e instanceof Error ? `direct unreachable: ${e.message}` : 'Unreachable (supplementary)' }
+      vps = {
+        status: 'skip',
+        latency: Date.now() - t2,
+        message:
+          e instanceof Error ? `direct unreachable: ${e.message}` : 'Unreachable (supplementary)',
+      }
     }
   } else {
     vps = { status: 'skip', message: 'VPS not configured' }
@@ -222,18 +275,21 @@ export async function GET() {
   // Use deploy time for more stable uptime calculation
   const uptimeSeconds = Math.max(1, Math.round((Date.now() - deployTime) / 1000))
 
-  return NextResponse.json({
-    status,
-    timestamp: new Date().toISOString(),
-    version,
-    uptime: uptimeSeconds,
-    responseTimeMs: Date.now() - t0,
-    checks,
-    _detail: '/api/health/detailed',
-  }, {
-    status: httpStatus,
-    headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
-  })
+  return NextResponse.json(
+    {
+      status,
+      timestamp: new Date().toISOString(),
+      version,
+      uptime: uptimeSeconds,
+      responseTimeMs: Date.now() - t0,
+      checks,
+      _detail: '/api/health/detailed',
+    },
+    {
+      status: httpStatus,
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate' },
+    }
+  )
 }
 
 export async function HEAD() {
