@@ -141,7 +141,7 @@ export default async function LearnArticlePage({
       <article
         dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMarkdown(article.content), {
           allowedTags: ['p', 'br', 'strong', 'em', 'b', 'i', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'a', 'code', 'pre', 'span'],
-          allowedAttr: ['href', 'target', 'rel', 'class', 'style'],
+          allowedAttr: ['href', 'target', 'rel', 'class'],
         }) }}
       />
     </div>

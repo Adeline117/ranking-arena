@@ -171,7 +171,9 @@ async function fetchWithBodyCap(url: string, originalHost?: string): Promise<{ o
     if (value) {
       total += value.length
       if (total > MAX_BODY_BYTES) {
-        try { await reader.cancel() } catch { /* ignore */ }
+        try { await reader.cancel() } catch (err) {
+          logger.debug('Non-critical error cancelling reader:', err instanceof Error ? err.message : String(err))
+        }
         return { ok: false, status: 413, body: '' }
       }
       chunks.push(value)

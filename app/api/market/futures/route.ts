@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getOrSetWithLock } from '@/lib/cache'
+import logger from '@/lib/logger'
 
 export const dynamic = 'force-dynamic'
 
@@ -23,7 +24,8 @@ export async function GET(request: NextRequest) {
     const response = NextResponse.json(result)
     response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
     return response
-  } catch (_e: unknown) {
+  } catch (err: unknown) {
+    logger.debug('Non-critical error in futures route:', err instanceof Error ? (err as Error).message : String(err))
     return NextResponse.json({ error: 'Failed to fetch futures data' }, { status: 500 })
   }
 }
@@ -106,7 +108,9 @@ async function computeFuturesData() {
         }
       }
     }
-  } catch { /* ignore */ }
+  } catch (err) {
+    logger.debug('Non-critical error fetching CoinGecko prices:', err instanceof Error ? err.message : String(err))
+  }
 
   const result = Object.values(symbolMap).map((item) => {
     const pg = priceMap[item.symbol] || {} as Partial<typeof priceMap[string]>
