@@ -6,16 +6,10 @@
  */
 
 import { withAuth } from '@/lib/api/middleware'
-import {
-  success,
-  successWithPagination,
-  badRequest,
-  handleError,
-} from '@/lib/api/response'
+import { success, successWithPagination, badRequest, handleError } from '@/lib/api/response'
 import { validateString, validateNumber } from '@/lib/api/validation'
 import {
-  getUserNotifications,
-  getUnreadNotificationCount,
+  getUserNotificationsWithCount,
   markNotificationAsRead,
   markAllNotificationsAsRead,
   deleteNotification,
@@ -23,7 +17,15 @@ import {
 import { features } from '@/lib/features'
 import { getOrSet, delByPattern } from '@/lib/cache'
 
-const SOCIAL_NOTIFICATION_TYPES = ['post_reply', 'new_follower', 'group_update', 'like', 'comment', 'follow', 'mention']
+const SOCIAL_NOTIFICATION_TYPES = [
+  'post_reply',
+  'new_follower',
+  'group_update',
+  'like',
+  'comment',
+  'follow',
+  'mention',
+]
 
 export const GET = withAuth(
   async ({ user, supabase, request }) => {
@@ -37,13 +39,7 @@ export const GET = withAuth(
       const cacheKey = `notifications:${user.id}:${limit}:${offset}:${unread_only}`
       const { notifications: initialNotifications, unreadCount } = await getOrSet(
         cacheKey,
-        async () => {
-          const [notifs, count] = await Promise.all([
-            getUserNotifications(supabase, user.id, { limit, offset, unread_only }),
-            getUnreadNotificationCount(supabase, user.id),
-          ])
-          return { notifications: notifs, unreadCount: count }
-        },
+        () => getUserNotificationsWithCount(supabase, user.id, { limit, offset, unread_only }),
         { ttl: 30 }
       )
       let notifications = initialNotifications
@@ -100,7 +96,9 @@ export const PUT = withAuth(
         await delByPattern(`notifications:${user.id}:*`)
         return success({ message: 'Marked as read' })
       } else {
-        return badRequest('Please provide notification_id, notification_ids, or set mark_all to true')
+        return badRequest(
+          'Please provide notification_id, notification_ids, or set mark_all to true'
+        )
       }
     } catch (error: unknown) {
       return handleError(error, 'notifications PUT')

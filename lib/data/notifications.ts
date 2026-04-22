@@ -57,54 +57,54 @@ interface NotificationRow {
 }
 
 /**
- * 获取用户通知列表
+ * 获取用户通知列表 + 未读数（单次 RPC 调用，含 actor JOIN）
  */
-export async function getUserNotifications(
+export async function getUserNotificationsWithCount(
   supabase: SupabaseClient,
   userId: string,
   options: NotificationListOptions = {}
-): Promise<Notification[]> {
+): Promise<{ notifications: Notification[]; unreadCount: number }> {
   const { limit = 50, offset = 0, unread_only = false } = options
 
-  let query = supabase
-    .from('notifications')
-    .select('id, user_id, type, title, message, link, read, actor_id, reference_id, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .range(offset, offset + limit - 1)
-
-  if (unread_only) {
-    query = query.eq('read', false)
-  }
-
-  const { data, error } = await query
+  const { data, error } = await supabase.rpc('get_user_notifications', {
+    p_user_id: userId,
+    p_limit: limit,
+    p_offset: offset,
+    p_unread_only: unread_only,
+  })
 
   if (error) {
     throw error
   }
 
-  if (!data || data.length === 0) return []
-
-  // 获取触发者信息
-  const actorIds = [...new Set(data.map(n => n.actor_id).filter(Boolean))]
-  const actorMap = new Map<string, { handle: string; avatar_url: string | null }>()
-
-  if (actorIds.length > 0) {
-    const { data: profiles } = await supabase
-      .from('user_profiles')
-      .select('id, handle, avatar_url')
-      .in('id', actorIds)
-
-    if (profiles) {
-      profiles.forEach((p: { id: string; handle: string; avatar_url: string | null }) => {
-        actorMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
-      })
-    }
+  if (!data || data.length === 0) {
+    // Still need unread count even when no notifications on this page
+    const { count } = await supabase
+      .from('notifications')
+      .select('id', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .eq('read', false)
+    return { notifications: [], unreadCount: count || 0 }
   }
 
-  return data.map((n: NotificationRow) => {
-    const actor = n.actor_id ? actorMap.get(n.actor_id) : undefined
-    return {
+  // unread_count is the same on every row (CROSS JOIN)
+  const unreadCount = Number(data[0].unread_count) || 0
+
+  const notifications: Notification[] = data.map(
+    (n: {
+      id: string
+      user_id: string
+      type: NotificationType
+      title: string
+      message: string
+      link?: string
+      read: boolean
+      actor_id?: string
+      reference_id?: string
+      created_at: string
+      actor_handle?: string
+      actor_avatar_url?: string
+    }) => ({
       id: n.id,
       user_id: n.user_id,
       type: n.type,
@@ -115,10 +115,24 @@ export async function getUserNotifications(
       actor_id: n.actor_id,
       reference_id: n.reference_id,
       created_at: n.created_at,
-      actor_handle: actor?.handle,
-      actor_avatar_url: actor?.avatar_url || undefined,
-    }
-  })
+      actor_handle: n.actor_handle || undefined,
+      actor_avatar_url: n.actor_avatar_url || undefined,
+    })
+  )
+
+  return { notifications, unreadCount }
+}
+
+/**
+ * 获取用户通知列表（兼容旧调用方，内部使用 RPC）
+ */
+export async function getUserNotifications(
+  supabase: SupabaseClient,
+  userId: string,
+  options: NotificationListOptions = {}
+): Promise<Notification[]> {
+  const { notifications } = await getUserNotificationsWithCount(supabase, userId, options)
+  return notifications
 }
 
 /**
@@ -243,9 +257,7 @@ export async function createNotificationDeduped(
     }
   }
 
-  const { error } = await supabase
-    .from('notifications')
-    .insert(notification)
+  const { error } = await supabase.from('notifications').insert(notification)
 
   if (error) {
     logger.warn('[notifications] Deduped insert failed:', error.message)
@@ -289,5 +301,3 @@ export async function clearReadNotifications(
     throw error
   }
 }
-
-
