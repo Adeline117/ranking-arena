@@ -99,7 +99,12 @@ export default function PullToRefresh({
     const container = containerRef.current
     if (!container) return
 
-    // Attach to container (not document) to avoid intercepting all page touches
+    // Attach to container (not document) to avoid intercepting all page touches.
+    // touchmove MUST be non-passive because we call preventDefault() to block
+    // native scroll when the user pulls down at scrollY=0. The browser requires
+    // knowing this before the event fires — there is no way to dynamically
+    // toggle passive on an existing listener, so { passive: false } is optimal
+    // for this container-scoped approach.
     container.addEventListener('touchstart', handleTouchStart, { passive: true })
     container.addEventListener('touchmove', handleTouchMove, { passive: false })
     container.addEventListener('touchend', handleTouchEnd, { passive: true })
