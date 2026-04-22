@@ -20,7 +20,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import { config as dotenvConfig } from 'dotenv'
 import { createClient } from '@supabase/supabase-js'
-import puppeteer from 'puppeteer'
+import { launchBrowser, closeBrowser, createPage } from './browser-utils.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
@@ -44,18 +44,18 @@ const PERIODS = { '7D': 7, '30D': 30, '90D': 90 }
 
 // Arena Score (synced with lib/utils/arena-score.ts)
 const ARENA_PARAMS = {
-  '7D':  { tanhCoeff: 0.08, roiExponent: 1.8 },
+  '7D': { tanhCoeff: 0.08, roiExponent: 1.8 },
   '30D': { tanhCoeff: 0.15, roiExponent: 1.6 },
   '90D': { tanhCoeff: 0.18, roiExponent: 1.6 },
 }
 const PNL_PARAMS = {
-  '7D':  { base: 300,  coeff: 0.42 },
-  '30D': { base: 600,  coeff: 0.30 },
-  '90D': { base: 650,  coeff: 0.27 },
+  '7D': { base: 300, coeff: 0.42 },
+  '30D': { base: 600, coeff: 0.3 },
+  '90D': { base: 650, coeff: 0.27 },
 }
 const clip = (v, min, max) => Math.max(min, Math.min(max, v))
-const safeLog1p = x => x <= -1 ? 0 : Math.log(1 + x)
-const getPeriodDays = p => p === '7D' ? 7 : p === '30D' ? 30 : 90
+const safeLog1p = (x) => (x <= -1 ? 0 : Math.log(1 + x))
+const getPeriodDays = (p) => (p === '7D' ? 7 : p === '30D' ? 30 : 90)
 
 function calculateArenaScore(roi, pnl, period) {
   const params = ARENA_PARAMS[period] || ARENA_PARAMS['90D']
@@ -116,82 +116,15 @@ function parseLeader(item, period) {
   }
 }
 
-// ── Chrome lifecycle helpers ──
-
-import { execSync } from 'child_process'
-
-/** Kill orphan Chrome processes from previous cron runs (not user Chrome) */
-function killOrphanChromeProcesses() {
-  try {
-    // Only kill headless Chrome launched by node/puppeteer — skip user Chrome
-    const out = execSync(
-      `pgrep -f 'Google Chrome.*--headless' 2>/dev/null || true`,
-      { encoding: 'utf8', timeout: 5000 }
-    ).trim()
-    if (out) {
-      const pids = out.split('\n').filter(Boolean)
-      for (const pid of pids) {
-        try { process.kill(Number(pid), 'SIGKILL') } catch {}
-      }
-      console.log(`  [cleanup] Killed ${pids.length} orphan headless Chrome process(es)`)
-    }
-  } catch {}
-}
-
-async function launchBrowserWithRetry(maxRetries = 3) {
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      const browser = await puppeteer.launch({
-        headless: 'new',
-        executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-        args: [
-          '--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage',
-          '--disable-gpu', '--window-size=1440,900',
-          '--disable-blink-features=AutomationControlled',
-        ],
-        timeout: 30000,
-      })
-      // Validate the connection is alive
-      await browser.version()
-      return browser
-    } catch (err) {
-      console.warn(`  [launch] Attempt ${attempt}/${maxRetries} failed: ${err.message}`)
-      if (attempt < maxRetries) {
-        killOrphanChromeProcesses()
-        await new Promise(r => setTimeout(r, 3000 * attempt))
-      } else {
-        throw err
-      }
-    }
-  }
-}
-
-async function closeBrowserSafely(browser) {
-  try {
-    await Promise.race([
-      browser.close(),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('close timeout')), 10000)),
-    ])
-  } catch {
-    const proc = browser.process()
-    if (proc) { proc.kill('SIGKILL'); console.warn('  [cleanup] Force-killed Chrome process') }
-  }
-}
-
 // ── Browser session ──
 
 async function fetchWithBrowser(periods) {
-  killOrphanChromeProcesses()
-  const browser = await launchBrowserWithRetry()
+  const browser = await launchBrowser()
 
   const results = {}
 
   try {
-    const page = await browser.newPage()
-    await page.setViewport({ width: 1440, height: 900 })
-    await page.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
-    )
+    const page = await createPage(browser)
 
     // Collect all intercepted API responses
     const allCaptured = []
@@ -221,9 +154,9 @@ async function fetchWithBrowser(periods) {
           else if (Array.isArray(json)) list = json
 
           // Filter: only keep objects with userId or traderUid
-          list = list.filter(item =>
-            item && typeof item === 'object' &&
-            (item.userId || item.traderUid || item.uid)
+          list = list.filter(
+            (item) =>
+              item && typeof item === 'object' && (item.userId || item.traderUid || item.uid)
           )
 
           if (list.length > 0) {
@@ -231,7 +164,9 @@ async function fetchWithBrowser(periods) {
             allCaptured.push(...list)
             allUrls.push(url)
           }
-        } catch { /* not JSON */ }
+        } catch {
+          /* not JSON */
+        }
       }
     })
 
@@ -241,7 +176,7 @@ async function fetchWithBrowser(periods) {
       waitUntil: 'networkidle0',
       timeout: 45000,
     })
-    await new Promise(r => setTimeout(r, 3000))
+    await new Promise((r) => setTimeout(r, 3000))
     console.log(`  After initial load: ${allCaptured.length} traders captured`)
 
     // Step 2: Trigger more data by scrolling (the page uses infinite scroll or pagination)
@@ -253,7 +188,7 @@ async function fetchWithBrowser(periods) {
       await page.evaluate(() => {
         window.scrollTo(0, document.body.scrollHeight)
       })
-      await new Promise(r => setTimeout(r, 1200))
+      await new Promise((r) => setTimeout(r, 1200))
 
       if (allCaptured.length > prevCount + round * 5) {
         console.log(`    Scroll ${round + 1}: ${allCaptured.length} traders`)
@@ -272,7 +207,10 @@ async function fetchWithBrowser(periods) {
         ]
         for (const sel of selectors) {
           const el = document.querySelector(sel)
-          if (el) { el.click(); return sel }
+          if (el) {
+            el.click()
+            return sel
+          }
         }
         return null
       })
@@ -280,7 +218,7 @@ async function fetchWithBrowser(periods) {
       if (!clickResult) break
 
       // Wait for API response to arrive
-      await new Promise(r => setTimeout(r, 2500))
+      await new Promise((r) => setTimeout(r, 2500))
 
       if (allCaptured.length > countBefore) {
         noNewDataStreak = 0
@@ -292,38 +230,48 @@ async function fetchWithBrowser(periods) {
     // Step 3: Try using XMLHttpRequest (sometimes passes where fetch doesn't)
     if (allCaptured.length <= 10) {
       console.log('  Trying XHR from browser context...')
-      const leaderUrl = allUrls.find(u => u.includes('phemex-lb/public/data/user/leaders'))
+      const leaderUrl = allUrls.find((u) => u.includes('phemex-lb/public/data/user/leaders'))
       if (leaderUrl) {
         const baseUrl = new URL(leaderUrl)
         const sortBy = baseUrl.searchParams.get('sortBy') || 'Pnl30d'
 
         for (let pageNum = 2; pageNum <= 20; pageNum++) {
-          const xhrResult = await page.evaluate(async (params) => {
-            return new Promise((resolve) => {
-              const xhr = new XMLHttpRequest()
-              xhr.open('GET', `${params.origin}/phemex-lb/public/data/user/leaders?pageNum=${params.pageNum}&pageSize=10&sortBy=${params.sortBy}`)
-              xhr.withCredentials = true
-              xhr.onload = () => {
-                try {
-                  resolve(JSON.parse(xhr.responseText))
-                } catch { resolve(null) }
-              }
-              xhr.onerror = () => resolve(null)
-              xhr.send()
-            })
-          }, { origin: baseUrl.origin, pageNum, sortBy })
+          const xhrResult = await page.evaluate(
+            async (params) => {
+              return new Promise((resolve) => {
+                const xhr = new XMLHttpRequest()
+                xhr.open(
+                  'GET',
+                  `${params.origin}/phemex-lb/public/data/user/leaders?pageNum=${params.pageNum}&pageSize=10&sortBy=${params.sortBy}`
+                )
+                xhr.withCredentials = true
+                xhr.onload = () => {
+                  try {
+                    resolve(JSON.parse(xhr.responseText))
+                  } catch {
+                    resolve(null)
+                  }
+                }
+                xhr.onerror = () => resolve(null)
+                xhr.send()
+              })
+            },
+            { origin: baseUrl.origin, pageNum, sortBy }
+          )
 
           if (!xhrResult?.data || !Array.isArray(xhrResult.data) || xhrResult.data.length === 0) {
             console.log(`    XHR page ${pageNum}: empty`)
             break
           }
 
-          const newTraders = xhrResult.data.filter(item => item?.userId)
+          const newTraders = xhrResult.data.filter((item) => item?.userId)
           allCaptured.push(...newTraders)
-          console.log(`    XHR page ${pageNum}: +${newTraders.length} (total: ${allCaptured.length})`)
+          console.log(
+            `    XHR page ${pageNum}: +${newTraders.length} (total: ${allCaptured.length})`
+          )
 
           if (newTraders.length < 10) break
-          await new Promise(r => setTimeout(r, 500))
+          await new Promise((r) => setTimeout(r, 500))
         }
       }
     }
@@ -350,7 +298,9 @@ async function fetchWithBrowser(periods) {
 
         traders.sort((a, b) => (b.roi ?? 0) - (a.roi ?? 0))
         const top = traders.slice(0, TARGET)
-        top.forEach((t, i) => { t.rank = i + 1 })
+        top.forEach((t, i) => {
+          t.rank = i + 1
+        })
 
         if (top.length > 0) {
           results[period] = await saveTraders(top)
@@ -365,7 +315,7 @@ async function fetchWithBrowser(periods) {
       if (!results[period]) results[period] = { total: 0, saved: 0, error: err.message }
     }
   } finally {
-    await closeBrowserSafely(browser)
+    await closeBrowser(browser)
   }
 
   return results
@@ -375,7 +325,7 @@ async function saveTraders(traders) {
   if (traders.length === 0) return { total: 0, saved: 0, error: 'Empty' }
 
   // 1. trader_sources (v1 compatibility)
-  const sources = traders.map(t => ({
+  const sources = traders.map((t) => ({
     source: t.source,
     source_trader_id: t.source_trader_id,
     handle: t.handle,
@@ -388,7 +338,7 @@ async function saveTraders(traders) {
   if (srcErr) console.error('trader_sources error:', srcErr.message)
 
   // 2. trader_profiles_v2 (new schema)
-  const profiles = traders.map(t => ({
+  const profiles = traders.map((t) => ({
     platform: t.source,
     market_type: 'futures',
     trader_key: t.source_trader_id,
@@ -413,7 +363,7 @@ async function saveTraders(traders) {
   if (profileErr) console.error('trader_profiles_v2 error:', profileErr.message)
 
   // 3. trader_snapshots_v2
-  const snapshotsV2 = traders.map(t => ({
+  const snapshotsV2 = traders.map((t) => ({
     platform: t.source,
     market_type: 'futures',
     trader_key: t.source_trader_id,
@@ -486,7 +436,7 @@ async function main() {
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal:', err)
   process.exit(1)
 })
