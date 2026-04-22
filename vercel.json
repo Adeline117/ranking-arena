@@ -1,8 +1,6 @@
 {
   "buildCommand": "next build",
-  "regions": [
-    "hnd1"
-  ],
+  "regions": ["hnd1"],
   "crons": [
     {
       "path": "/api/cron/weekly-metrics",
@@ -35,18 +33,6 @@
     {
       "path": "/api/cron/link-entities",
       "schedule": "15 1 * * *"
-    },
-    {
-      "path": "/api/cron/flash-news-fetch",
-      "schedule": "18,48 * * * *"
-    },
-    {
-      "path": "/api/cron/check-data-freshness",
-      "schedule": "13 */3 * * *"
-    },
-    {
-      "path": "/api/cron/verify-fetchers",
-      "schedule": "43 */3 * * *"
     },
     {
       "path": "/api/cron/meta-monitor",
@@ -115,10 +101,6 @@
     {
       "path": "/api/cron/snapshot-ranks",
       "schedule": "15 0 * * *"
-    },
-    {
-      "path": "/api/cron/generate-activities",
-      "schedule": "44 */6 * * *"
     },
     {
       "path": "/api/cron/fetch-funding-rates",
@@ -235,22 +217,6 @@
     {
       "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,etoro,web3_bot,gains&limit=400",
       "schedule": "35 2 * * *"
-    },
-    {
-      "path": "/api/cron/generate-profiles?limit=500",
-      "schedule": "55 */6 * * *"
-    },
-    {
-      "path": "/api/cron/auto-post-market-summary",
-      "schedule": "5 10 * * *"
-    },
-    {
-      "path": "/api/cron/auto-post-insights",
-      "schedule": "3 8 * * *"
-    },
-    {
-      "path": "/api/cron/auto-post-twitter",
-      "schedule": "6 8 * * *"
     },
     {
       "path": "/api/cron/snapshot-positions",
