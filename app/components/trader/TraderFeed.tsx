@@ -234,13 +234,24 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
           }}
         >
           <Text size="base" color="tertiary">
-            {t('noData')}
+            {t('noActivity')}
           </Text>
           {showPostButton && onPostClick && (
             <Text size="sm" color="tertiary">
               {t('postFirstUpdate')}
             </Text>
           )}
+        </Box>
+      ) : sortedItems.length === 0 ? (
+        <Box
+          style={{
+            padding: 16,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
+          {t('noActivity')}
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column' }}>

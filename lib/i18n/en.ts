@@ -177,6 +177,7 @@ const en = {
     labelAvgWinRate: 'Avg Win Rate',
     // Trader profile
     similarTraders: 'Similar Traders',
+    noSimilarTraders: 'No similar traders found',
     traderNotRegistered: 'Trader Not Registered',
     traderNotRegisteredDesc: 'This trader has not claimed this account',
     unclaimedBadge: 'Unclaimed',

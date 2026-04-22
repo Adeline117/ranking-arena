@@ -177,6 +177,7 @@ const zh = {
     labelAvgWinRate: '平均胜率',
     // 交易员主页
     similarTraders: '相似交易员',
+    noSimilarTraders: '暂无相似交易员',
     traderNotRegistered: '交易员未入驻',
     traderNotRegisteredDesc: '该交易员尚未认领此账号',
     unclaimedBadge: '未认领',

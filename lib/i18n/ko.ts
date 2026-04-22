@@ -177,6 +177,7 @@ const ko = {
     labelAvgWinRate: '평균 승률',
     // Trader profile
     similarTraders: '비슷한 트레이더',
+    noSimilarTraders: '비슷한 트레이더를 찾을 수 없습니다',
     traderNotRegistered: '미등록 트레이더',
     traderNotRegisteredDesc: '이 트레이더는 아직 이 계정을 인증하지 않았습니다',
     unclaimedBadge: '미인증',
