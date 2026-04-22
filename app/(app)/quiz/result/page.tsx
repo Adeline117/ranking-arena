@@ -110,7 +110,7 @@ export default async function QuizResultPage({ searchParams }: Props) {
   const params = await searchParams
   const typeId = (params.type || 'sniper') as PersonalityTypeId
   const match = parseInt(params.match || '85', 10)
-  const matchClamped = isNaN(match) ? 85 : Math.min(99, Math.max(60, match))
+  const matchClamped = isNaN(match) ? 85 : Math.min(99, Math.max(55, match))
 
   const pType = PERSONALITY_TYPE_MAP[typeId]
   if (!pType) {
