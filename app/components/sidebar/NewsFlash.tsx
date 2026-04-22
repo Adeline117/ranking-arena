@@ -123,7 +123,7 @@ export default function NewsFlash() {
                   {impConfig && (
                     <span style={{
                       fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.white,
-                      background: impConfig.color, padding: '1px 6px',
+                      background: impConfig.color, padding: `1px ${tokens.spacing[1.5]}`,
                       borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
                       {t(`newsFlash_imp_${item.importance}`)}
@@ -132,7 +132,7 @@ export default function NewsFlash() {
                   {catConfig && (
                     <span style={{
                       fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.semibold, color: catConfig.color,
-                      background: `${catConfig.color}15`, padding: '1px 6px',
+                      background: `${catConfig.color}15`, padding: `1px ${tokens.spacing[1.5]}`,
                       borderRadius: tokens.radius.sm, lineHeight: '16px',
                     }}>
                       {t(`newsFlash_cat_${item.category}`)}
@@ -147,7 +147,7 @@ export default function NewsFlash() {
                     return (
                       <span style={{
                         fontSize: 10, fontWeight: tokens.typography.fontWeight.bold, color: tokens.colors.text.tertiary,
-                        background: 'var(--glass-bg-medium)', padding: '1px 4px',
+                        background: 'var(--glass-bg-medium)', padding: `1px ${tokens.spacing[1]}`,
                         borderRadius: tokens.radius.sm, marginLeft: 4, verticalAlign: 'middle',
                         lineHeight: '14px', display: 'inline-block',
                       }}>

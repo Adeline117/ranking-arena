@@ -297,7 +297,7 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         title={t('followFeatureComingSoon')}
         style={{
           width: 'auto',
-          padding: '12px 16px',
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
           borderRadius: tokens.radius.lg,
           border: tokens.glass.border.light,
           background: tokens.glass.bg.light,

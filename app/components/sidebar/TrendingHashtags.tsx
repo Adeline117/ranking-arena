@@ -74,7 +74,7 @@ export default memo(function TrendingHashtags() {
               fontSize: 11,
               color: tokens.colors.text.tertiary,
               background: tokens.colors.bg.tertiary,
-              padding: '1px 6px',
+              padding: `1px ${tokens.spacing[1.5]}`,
               borderRadius: tokens.radius.full,
             }}>
               {h.post_count}
