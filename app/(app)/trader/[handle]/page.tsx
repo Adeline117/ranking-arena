@@ -65,11 +65,16 @@ const cachedResolveTrader = cache(
         ),
       ])
     } catch (err) {
-      // Timeout resolves to null (not thrown) — errors here are real DB failures.
-      // Log and re-throw so Next.js error boundary catches them instead of
-      // silently converting DB outages into 404 pages.
+      // TRADER_RESOLVE_NULL = trader not found (thrown to prevent unstable_cache
+      // from caching null). Convert to null so callers can check normally.
+      if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') {
+        return null
+      }
+      // Real DB failures — log but return null to let page show 404 instead of
+      // crashing with an error page. The client-side TraderProfileClient will
+      // retry the fetch anyway.
       logger.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
-      throw err
+      return null
     }
   }
 )
