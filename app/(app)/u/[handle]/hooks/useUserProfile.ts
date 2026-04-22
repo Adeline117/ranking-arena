@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback } from 'react'
-import useSWR from 'swr'
+import { useQuery } from '@tanstack/react-query'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -40,19 +40,19 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
 
   useEffect(() => { setMounted(true) }, [])
 
-  // Trader data - SWR with server fallback
+  // Trader data - React Query with server fallback
   const isTrader = !!serverProfile?.traderHandle
-  const { data: traderData, error: traderError, isLoading: traderLoading } = useSWR<TraderPageData>(
-    isTrader ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}` : null,
-    traderFetcher,
-    {
-      revalidateOnFocus: false,
-      refreshInterval: 0,
-      dedupingInterval: 5000,
-      errorRetryCount: 2,
-      fallbackData: serverTraderData ?? undefined,
-    }
-  )
+  const traderUrl = isTrader ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}` : ''
+  const { data: traderData, error: traderError, isLoading: traderLoading } = useQuery<TraderPageData>({
+    queryKey: ['user-trader-data', serverProfile?.traderHandle],
+    queryFn: () => traderFetcher(traderUrl),
+    enabled: isTrader,
+    refetchOnWindowFocus: false,
+    refetchInterval: 0,
+    staleTime: 5000,
+    retry: 2,
+    initialData: serverTraderData ?? undefined,
+  })
 
   // Tabs
   const urlTab = searchParams.get('tab')
