@@ -37,7 +37,7 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
       style={{
         padding: `${tokens.spacing[6]} ${tokens.spacing[6]} ${tokens.spacing[5]}`,
         marginBottom: tokens.spacing[3],
-        background: 'linear-gradient(135deg, var(--color-accent-primary-08) 0%, transparent 60%, var(--color-accent-primary-05, rgba(139,111,168,0.05)) 100%)',
+        background: 'var(--color-bg-secondary)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary)',
         position: 'relative',
@@ -46,21 +46,6 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
         contain: 'layout style',
       }}
     >
-      {/* Subtle decorative gradient orb */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          top: -60,
-          right: -40,
-          width: 200,
-          height: 200,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(139,111,168,0.12) 0%, transparent 70%)',
-          pointerEvents: 'none',
-        }}
-      />
-
       <div style={{
         display: 'flex',
         alignItems: 'center',

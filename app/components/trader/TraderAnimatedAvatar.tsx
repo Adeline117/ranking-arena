@@ -46,22 +46,21 @@ export function TraderAnimatedAvatar({
           : tokens.shadow.lg,
         transition: `all ${tokens.transition.smooth}`,
         position: 'relative',
-        transform: isHovered ? 'scale(1.08) rotate(2deg)' : 'scale(1) rotate(0deg)',
+        transform: isHovered ? 'scale(1.08)' : 'scale(1)',
         cursor: 'pointer',
       }}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={() => setIsHovered(false)}
     >
-      {/* Glow ring */}
+      {/* Subtle static glow ring */}
       <Box
         style={{
           position: 'absolute',
           inset: -4,
           borderRadius: tokens.radius.full,
           background: `conic-gradient(from 0deg, ${tokens.colors.accent.primary}00, ${tokens.colors.accent.primary}40, ${tokens.colors.accent.primary}00)`,
-          opacity: isHovered ? 1 : 0,
+          opacity: isHovered ? 0.6 : 0,
           transition: 'opacity 0.4s ease',
-          animation: isHovered ? 'spin 3s linear infinite' : 'none',
         }}
       />
       {/* Avatar image */}

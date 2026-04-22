@@ -24,7 +24,7 @@ export default function ProUpgradeCTA({
         display: 'flex',
         alignItems: 'center',
         gap: tokens.spacing[5],
-        background: 'linear-gradient(135deg, var(--color-bg-secondary) 0%, var(--color-pro-glow, rgba(167,139,250,0.15)) 100%)',
+        background: 'var(--color-bg-secondary)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-pro-border, rgba(167,139,250,0.3))',
       }}

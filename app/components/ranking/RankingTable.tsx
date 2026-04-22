@@ -737,7 +737,7 @@ function RankingTableInner(props: {
               <Box style={{
                 margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-                background: `linear-gradient(135deg, ${tokens.colors.accent.primary}18, ${tokens.colors.accent.brand}12)`,
+                background: `${tokens.colors.accent.brand}15`,
                 border: `1px solid ${tokens.colors.accent.primary}40`,
                 borderRadius: tokens.radius.lg,
                 textAlign: 'center',
