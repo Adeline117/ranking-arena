@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
@@ -27,6 +27,21 @@ export default function QuizClient() {
   const [mounted, setMounted] = useState(false)
   const [txnReady, setTxnReady] = useState(false)
   const [step, setStep] = useState<Step>('start')
+  const [stepAnnouncement, setStepAnnouncement] = useState('')
+  const questionsTopRef = useRef<HTMLDivElement>(null)
+
+  // Focus management: when transitioning to 'questions', focus the progress bar area
+  useEffect(() => {
+    if (step === 'questions' && questionsTopRef.current) {
+      // Small delay to allow DOM to render
+      requestAnimationFrame(() => {
+        questionsTopRef.current?.focus()
+      })
+      setStepAnnouncement(t('quizTitle') !== 'quizTitle' ? t('quizTitle') : 'Quiz questions')
+    } else if (step === 'calculating') {
+      setStepAnnouncement(t('quizCalculating') !== 'quizCalculating' ? t('quizCalculating') : 'Calculating your results')
+    }
+  }, [step, t])
 
   useEffect(() => {
     setMounted(true)
@@ -202,9 +217,15 @@ export default function QuizClient() {
   // Questions — scrollable flow
   return (
     <Box style={{ minHeight: '80vh', padding: 20, paddingBottom: 80, touchAction: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+      {/* Screen reader announcement for step transitions */}
+      <div aria-live="polite" aria-atomic="true" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap' }}>
+        {stepAnnouncement}
+      </div>
       <div style={{ maxWidth: 'clamp(520px, 90vw, 640px)', width: '100%', margin: '0 auto' }}>
         {/* Sticky progress bar at top with language toggle */}
         <div
+          ref={questionsTopRef}
+          tabIndex={-1}
           style={{
             position: 'sticky',
             top: 0,
@@ -215,6 +236,7 @@ export default function QuizClient() {
             display: 'flex',
             alignItems: 'center',
             gap: 8,
+            outline: 'none',
           }}
         >
           <div style={{ flex: 1 }}>
