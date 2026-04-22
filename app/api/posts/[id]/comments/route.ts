@@ -21,7 +21,8 @@ import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 import logger, { fireAndForget } from '@/lib/logger'
-import { sanitizeText } from '@/lib/utils/sanitize'
+// sanitizeText is dynamically imported inside POST/PUT only to avoid pulling
+// isomorphic-dompurify (~10MB) into the module graph at cold-start.
 
 // Zod schema for POST (create comment)
 const CreateCommentSchema = z.object({
@@ -119,6 +120,7 @@ export const POST = withAuth(
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
     // Sanitize comment content — strip HTML/scripts before DB storage
+    const { sanitizeText } = await import('@/lib/utils/sanitize')
     const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 2000 })
     const parent_id = parsed.data.parent_id ?? undefined
 
@@ -230,6 +232,7 @@ export const PUT = withAuth(
     }
     const comment_id = parsed.data.comment_id
     // Sanitize edited content — strip HTML/scripts before DB storage
+    const { sanitizeText } = await import('@/lib/utils/sanitize')
     const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 2000 })
 
     // Verify ownership
