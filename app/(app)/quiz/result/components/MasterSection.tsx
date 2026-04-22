@@ -20,7 +20,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         padding: 'clamp(16px, 3vw, 24px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 14,
+        gap: 16,
       }}
     >
       {/* Section header */}
