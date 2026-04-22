@@ -62,10 +62,11 @@ const leaderboardCache = new Map<string, CacheEntry>()
 const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
 
 const HEADERS: Record<string, string> = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-  'Accept': 'application/json',
-  'Origin': 'https://www.xt.com',
-  'Referer': 'https://www.xt.com/en/copy-trading/futures',
+  'User-Agent':
+    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  Accept: 'application/json',
+  Origin: 'https://www.xt.com',
+  Referer: 'https://www.xt.com/en/copy-trading/futures',
 }
 
 /**
@@ -119,7 +120,9 @@ async function ensureLeaderboardCached(days: number): Promise<Map<string, XtList
       // If no new traders found on this page, stop
       if (newTraders === 0) break
     } catch (err) {
-      logger.warn(`[xt] List API page ${page} failed: ${err instanceof Error ? err.message : String(err)}`)
+      logger.warn(
+        `[xt] List API page ${page} failed: ${err instanceof Error ? err.message : String(err)}`
+      )
       break
     }
   }
@@ -141,9 +144,7 @@ function daysToPeriod(days: number): number {
 /**
  * Fetch stats detail from XT leaderboard list API (cached batch lookup).
  */
-export async function fetchXtStatsDetail(
-  traderId: string
-): Promise<StatsDetail | null> {
+export async function fetchXtStatsDetail(traderId: string): Promise<StatsDetail | null> {
   try {
     // Try 30D period first, fall back to 7D then 90D
     for (const days of [30, 7, 90]) {
@@ -161,13 +162,14 @@ export async function fetchXtStatsDetail(
 
       return {
         totalTrades: null,
-        profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
+        profitableTradesPct:
+          profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
         avgHoldingTimeHours: null,
         avgProfit: null,
         avgLoss: null,
         largestWin: null,
         largestLoss: null,
-        sharpeRatio: null,
+        sharpeRatio: null, // Cannot compute: XT copy-trade API provides no return-series data; derived from equity curve in enrichment-runner
         maxDrawdown,
         currentDrawdown: null,
         volatility: null,
@@ -181,7 +183,9 @@ export async function fetchXtStatsDetail(
 
     return null
   } catch (err) {
-    logger.warn(`[xt] Stats detail failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[xt] Stats detail failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return null
   }
 }
@@ -217,7 +221,9 @@ export async function fetchXtEquityCurve(
         }
       })
   } catch (err) {
-    logger.warn(`[xt] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[xt] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }

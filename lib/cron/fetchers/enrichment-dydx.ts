@@ -22,7 +22,7 @@ const COPIN_BASE = 'https://api.copin.io'
 
 const DEFAULT_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-  'Accept': 'application/json',
+  Accept: 'application/json',
 }
 
 /**
@@ -194,7 +194,9 @@ export async function fetchDydxEquityCurve(
 
     return points
   } catch (err) {
-    logger.warn(`[dydx] Equity curve failed for ${address}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[dydx] Equity curve failed for ${address}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }
@@ -202,7 +204,10 @@ export async function fetchDydxEquityCurve(
 /**
  * Fallback: build a minimal equity curve from Copin stats (2-point: start and current).
  */
-async function fetchEquityCurveFromStats(address: string, days: number): Promise<EquityCurvePoint[]> {
+async function fetchEquityCurveFromStats(
+  address: string,
+  days: number
+): Promise<EquityCurvePoint[]> {
   try {
     const statisticType = days <= 7 ? 'WEEK' : 'MONTH'
     const stats = await fetchDydxStatsByType(address, statisticType)
@@ -221,7 +226,10 @@ async function fetchEquityCurveFromStats(address: string, days: number): Promise
       { date: today, roi: 0, pnl: totalPnl },
     ]
   } catch (err) {
-    logger.warn('[enrichment-dydx] equity curve fetch failed:', err instanceof Error ? err.message : String(err))
+    logger.warn(
+      '[enrichment-dydx] equity curve fetch failed:',
+      err instanceof Error ? err.message : String(err)
+    )
     return []
   }
 }
@@ -230,33 +238,32 @@ async function fetchEquityCurveFromStats(address: string, days: number): Promise
  * Fetch stats for a dYdX trader from Copin API.
  * No indexer calls — Copin provides all needed stats.
  */
-export async function fetchDydxStatsDetail(
-  address: string
-): Promise<StatsDetail | null> {
+export async function fetchDydxStatsDetail(address: string): Promise<StatsDetail | null> {
   try {
     const copinStats = await fetchDydxStatsByType(address, 'MONTH')
     if (!copinStats) return null
 
     const totalTrades = copinStats.totalTrade ?? null
     const totalWin = copinStats.totalWin ?? null
-    const profitableTradesPct = totalTrades && totalTrades > 0 && totalWin != null
-      ? (totalWin / totalTrades) * 100
-      : null
+    const profitableTradesPct =
+      totalTrades && totalTrades > 0 && totalWin != null ? (totalWin / totalTrades) * 100 : null
 
     // Estimate AUM from totalVolume / assumed leverage
-    const aum = copinStats.totalVolume && copinStats.totalVolume > 0
-      ? Math.round(copinStats.totalVolume / 5) // ~5x avg leverage estimate
-      : null
+    const aum =
+      copinStats.totalVolume && copinStats.totalVolume > 0
+        ? Math.round(copinStats.totalVolume / 5) // ~5x avg leverage estimate
+        : null
 
     return {
       totalTrades,
-      profitableTradesPct: profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
+      profitableTradesPct:
+        profitableTradesPct != null ? Math.round(profitableTradesPct * 10) / 10 : null,
       avgHoldingTimeHours: null,
       avgProfit: null,
       avgLoss: null,
       largestWin: null,
       largestLoss: null,
-      sharpeRatio: null, // Computed from equity curve
+      sharpeRatio: null, // Cannot compute: dYdX subaccount API lacks return-series data; derived from equity curve in enrichment-runner
       maxDrawdown: copinStats.maxDrawdown != null ? Math.abs(copinStats.maxDrawdown) : null,
       currentDrawdown: null,
       volatility: null,
@@ -267,7 +274,9 @@ export async function fetchDydxStatsDetail(
       totalPositions: totalTrades,
     }
   } catch (err) {
-    logger.warn(`[dydx] Stats detail failed for ${address}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[dydx] Stats detail failed for ${address}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return null
   }
 }
@@ -280,9 +289,7 @@ export async function fetchDydxStatsDetail(
  * Fetch position history from Copin API.
  * Replaces dYdX indexer fills API which TCP-hangs.
  */
-export async function fetchDydxV4PositionHistory(
-  address: string
-): Promise<PositionHistoryItem[]> {
+export async function fetchDydxV4PositionHistory(address: string): Promise<PositionHistoryItem[]> {
   try {
     const url = `${COPIN_BASE}/DYDX/position/filter?accounts=${address}&limit=100&sort_by=closeBlockTime&sort_type=desc`
     const positions = await fetchDydxPositionsByUrl(url)
@@ -291,7 +298,7 @@ export async function fetchDydxV4PositionHistory(
 
     return positions.map((pos) => ({
       symbol: pos.pair || 'UNKNOWN',
-      direction: pos.isLong ? 'long' as const : 'short' as const,
+      direction: pos.isLong ? ('long' as const) : ('short' as const),
       positionType: 'perpetual',
       marginMode: 'cross',
       openTime: pos.openBlockTime || null,
@@ -302,10 +309,12 @@ export async function fetchDydxV4PositionHistory(
       closedSize: pos.size ?? null,
       pnlUsd: pos.pnl ?? null,
       pnlPct: pos.roi != null ? pos.roi * 100 : null,
-      status: pos.status === 'CLOSE' ? 'closed' : (pos.status?.toLowerCase() || 'filled'),
+      status: pos.status === 'CLOSE' ? 'closed' : pos.status?.toLowerCase() || 'filled',
     }))
   } catch (err) {
-    logger.warn(`[dydx] Position history failed for ${address}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[dydx] Position history failed for ${address}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }

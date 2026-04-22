@@ -16,7 +16,12 @@
  * - Prediction market — positions are event outcomes, not trading pairs
  */
 
-import type { EquityCurvePoint, StatsDetail, PortfolioPosition, PositionHistoryItem } from './enrichment-types'
+import type {
+  EquityCurvePoint,
+  StatsDetail,
+  PortfolioPosition,
+  PositionHistoryItem,
+} from './enrichment-types'
 import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 
@@ -38,7 +43,8 @@ export async function fetchPolymarketEquityCurve(
     let offset = 0
     const pageSize = 500
 
-    while (offset < 5000) { // Safety cap
+    while (offset < 5000) {
+      // Safety cap
       const data = await fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/activity?user=${traderId}&limit=${pageSize}&offset=${offset}&start=${startTs}`,
         { timeoutMs: 15000 }
@@ -92,7 +98,9 @@ export async function fetchPolymarketEquityCurve(
 
     return points
   } catch (err) {
-    logger.warn(`[polymarket] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[polymarket] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }
@@ -101,28 +109,50 @@ export async function fetchPolymarketEquityCurve(
  * Fetch stats detail for a Polymarket trader.
  * Combines leaderboard data (PnL, volume) with position counts.
  */
-export async function fetchPolymarketStatsDetail(
-  traderId: string
-): Promise<StatsDetail | null> {
+export async function fetchPolymarketStatsDetail(traderId: string): Promise<StatsDetail | null> {
   try {
     // Fetch ALL-time leaderboard entry for this user
     const [lbAll, lbMonth, positions, closedPositions] = await Promise.all([
       fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/v1/leaderboard?timePeriod=ALL&user=${traderId}&limit=1`,
         { timeoutMs: 10000 }
-      ).catch((err) => { logger.warn(`[polymarket] leaderboard ALL fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null }),
+      ).catch((err) => {
+        logger.warn(
+          `[polymarket] leaderboard ALL fetch failed for ${traderId}:`,
+          err instanceof Error ? err.message : String(err)
+        )
+        return null
+      }),
       fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/v1/leaderboard?timePeriod=MONTH&user=${traderId}&limit=1`,
         { timeoutMs: 10000 }
-      ).catch((err) => { logger.warn(`[polymarket] leaderboard MONTH fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null }),
+      ).catch((err) => {
+        logger.warn(
+          `[polymarket] leaderboard MONTH fetch failed for ${traderId}:`,
+          err instanceof Error ? err.message : String(err)
+        )
+        return null
+      }),
       fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/positions?user=${traderId}&limit=500`,
         { timeoutMs: 10000 }
-      ).catch((err) => { logger.warn(`[polymarket] positions fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null }),
+      ).catch((err) => {
+        logger.warn(
+          `[polymarket] positions fetch failed for ${traderId}:`,
+          err instanceof Error ? err.message : String(err)
+        )
+        return null
+      }),
       fetchJson<Array<Record<string, unknown>>>(
         `${DATA_API}/closed-positions?user=${traderId}&limit=500`,
         { timeoutMs: 10000 }
-      ).catch((err) => { logger.warn(`[polymarket] closed-positions fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null }),
+      ).catch((err) => {
+        logger.warn(
+          `[polymarket] closed-positions fetch failed for ${traderId}:`,
+          err instanceof Error ? err.message : String(err)
+        )
+        return null
+      }),
     ])
 
     const entry = Array.isArray(lbAll) && lbAll.length > 0 ? lbAll[0] : null
@@ -144,9 +174,8 @@ export async function fetchPolymarketStatsDetail(
         if (realizedPnl > 0) wins++
       }
     }
-    const profitableTradesPct = totalClosed > 0
-      ? Math.round((wins / totalClosed) * 1000) / 10
-      : null
+    const profitableTradesPct =
+      totalClosed > 0 ? Math.round((wins / totalClosed) * 1000) / 10 : null
 
     // Compute ROI from PnL / volume
     let roi: number | null = null
@@ -174,7 +203,13 @@ export async function fetchPolymarketStatsDetail(
         const actData = await fetchJson<Array<Record<string, unknown>>>(
           `${DATA_API}/activity?user=${traderId}&limit=500&offset=${actOffset}&start=${startTs90d}`,
           { timeoutMs: 15000 }
-        ).catch((err) => { logger.warn(`[polymarket] activity fetch failed for ${traderId}:`, err instanceof Error ? err.message : String(err)); return null })
+        ).catch((err) => {
+          logger.warn(
+            `[polymarket] activity fetch failed for ${traderId}:`,
+            err instanceof Error ? err.message : String(err)
+          )
+          return null
+        })
         if (!Array.isArray(actData) || actData.length === 0) break
         allActivity.push(...actData)
         if (actData.length < 500) break
@@ -191,13 +226,16 @@ export async function fetchPolymarketStatsDetail(
           const type = String(act.type || '')
           let flow = 0
           if (type === 'TRADE') flow = side === 'SELL' ? usdcSize : -usdcSize
-          else if (type === 'REDEEM' || type === 'REWARD' || type === 'MAKER_REBATE') flow = usdcSize
+          else if (type === 'REDEEM' || type === 'REWARD' || type === 'MAKER_REBATE')
+            flow = usdcSize
           dailyPnlMap.set(date, (dailyPnlMap.get(date) || 0) + flow)
         }
         const dailyReturns = Array.from(dailyPnlMap.values())
         if (dailyReturns.length >= 2) {
           const mean = dailyReturns.reduce((a, b) => a + b, 0) / dailyReturns.length
-          const std = Math.sqrt(dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyReturns.length)
+          const std = Math.sqrt(
+            dailyReturns.reduce((a, r) => a + (r - mean) ** 2, 0) / dailyReturns.length
+          )
           if (std > 0) {
             const s = Math.round((mean / std) * Math.sqrt(365) * 100) / 100
             if (s > -10 && s < 10) sharpeRatio = s
@@ -205,7 +243,10 @@ export async function fetchPolymarketStatsDetail(
         }
       }
     } catch (err) {
-      logger.warn('[enrichment-polymarket] Sharpe ratio computation failed:', err instanceof Error ? err.message : String(err))
+      logger.warn(
+        '[enrichment-polymarket] Sharpe ratio computation failed:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
 
     return {
@@ -217,7 +258,7 @@ export async function fetchPolymarketStatsDetail(
       largestWin: null,
       largestLoss: null,
       sharpeRatio,
-      maxDrawdown: null,
+      maxDrawdown: null, // Cannot compute: Polymarket activity API provides no equity-curve or drawdown data
       currentDrawdown: null,
       volatility: null,
       roi,
@@ -229,7 +270,9 @@ export async function fetchPolymarketStatsDetail(
       totalPositions: totalPositions > 0 ? totalPositions : null,
     }
   } catch (err) {
-    logger.warn(`[polymarket] Stats detail failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[polymarket] Stats detail failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return null
   }
 }
@@ -250,15 +293,21 @@ export async function fetchPolymarketCurrentPositions(
 
     return data.map((pos) => ({
       symbol: String(pos.title || pos.slug || `Market#${pos.conditionId}`).slice(0, 60),
-      direction: String(pos.outcome || 'Yes').toLowerCase() === 'no' ? 'short' as const : 'long' as const,
-      investedPct: num(pos.initialValue) != null && num(pos.currentValue) != null
-        ? null // Can't derive percentage without total portfolio
-        : null,
+      direction:
+        String(pos.outcome || 'Yes').toLowerCase() === 'no'
+          ? ('short' as const)
+          : ('long' as const),
+      investedPct:
+        num(pos.initialValue) != null && num(pos.currentValue) != null
+          ? null // Can't derive percentage without total portfolio
+          : null,
       entryPrice: num(pos.avgPrice),
       pnl: num(pos.cashPnl),
     }))
   } catch (err) {
-    logger.warn(`[polymarket] Positions failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[polymarket] Positions failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }
@@ -279,7 +328,10 @@ export async function fetchPolymarketPositionHistory(
 
     return data.map((pos) => ({
       symbol: String(pos.title || pos.slug || `Market#${pos.conditionId}`).slice(0, 60),
-      direction: String(pos.outcome || 'Yes').toLowerCase() === 'no' ? 'short' as const : 'long' as const,
+      direction:
+        String(pos.outcome || 'Yes').toLowerCase() === 'no'
+          ? ('short' as const)
+          : ('long' as const),
       positionType: 'prediction',
       marginMode: 'isolated',
       openTime: null,
@@ -293,7 +345,9 @@ export async function fetchPolymarketPositionHistory(
       status: 'closed',
     }))
   } catch (err) {
-    logger.warn(`[polymarket] Position history failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[polymarket] Position history failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }
