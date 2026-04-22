@@ -98,7 +98,9 @@ async function fetchCopinTraderStats(
       const found = data.data.find((t) => t.account.toLowerCase() === accountLower)
       if (found) return found
     } catch (err) {
-      logger.warn(`[copin] Stats lookup failed for ${protocol}/${account} (${type}): ${err instanceof Error ? err.message : String(err)}`)
+      logger.warn(
+        `[copin] Stats lookup failed for ${protocol}/${account} (${type}): ${err instanceof Error ? err.message : String(err)}`
+      )
     }
   }
 
@@ -117,9 +119,8 @@ async function buildCopinStatsDetail(
 
   const totalTrades = copinStats.totalTrade || 0
   const totalWin = copinStats.totalWin || 0
-  const profitableTradesPct = totalTrades > 0
-    ? Math.round((totalWin / totalTrades) * 1000) / 10
-    : null
+  const profitableTradesPct =
+    totalTrades > 0 ? Math.round((totalWin / totalTrades) * 1000) / 10 : null
 
   // Copin may provide maxDrawdown (as negative percentage or absolute value)
   let maxDrawdown: number | null = null
@@ -165,7 +166,10 @@ async function buildCopinStatsDetail(
 // The enrichment runner handles this gracefully.
 
 // Kwenta
-export async function fetchKwentaEquityCurve(_addr: string, _days: number): Promise<EquityCurvePoint[]> {
+export async function fetchKwentaEquityCurve(
+  _addr: string,
+  _days: number
+): Promise<EquityCurvePoint[]> {
   // Kwenta doesn't have a public trade history API.
   // Equity curves come from our own daily snapshot diffs (aggregate-daily-snapshots cron).
   return []
@@ -177,10 +181,145 @@ export async function fetchKwentaPositionHistory(_addr: string): Promise<Positio
   return []
 }
 
-// Gains Network
-export async function fetchGainsEquityCurve(_addr: string, _days: number): Promise<EquityCurvePoint[]> {
-  // Gains leaderboard API only returns aggregate stats, no trade-level history.
-  return []
+// Gains Network — Copin-first enrichment (same pattern as dYdX)
+// 2026-04-22: Native API dead, Etherscan rate-limited. Copin GNS protocol
+// provides positions, stats, and equity curves reliably.
+
+const COPIN_GNS_BASE = 'https://api.copin.io'
+const GAINS_FETCH_TIMEOUT = 8_000
+
+const gainsPositionCache = createTraderResponseCache<CopinGainsPosition[]>({
+  name: 'gains-copin-positions',
+})
+const gainsStatsCache = createTraderResponseCache<CopinGainsStats | null>({
+  name: 'gains-copin-stats',
+})
+
+interface CopinGainsPosition {
+  account?: string
+  openBlockTime?: string
+  closeBlockTime?: string
+  pair?: string
+  isLong?: boolean
+  size?: number
+  collateral?: number
+  leverage?: number
+  pnl?: number
+  roi?: number
+  fee?: number
+  status?: string
+  averagePrice?: number
+  entryPrice?: number
+  closePrice?: number
+}
+
+interface CopinGainsStats {
+  totalTrade?: number
+  totalWin?: number
+  totalLose?: number
+  totalVolume?: number
+  totalPnl?: number
+  totalRealisedPnl?: number
+  maxDrawdown?: number
+}
+
+async function gainsHardFetch<T>(url: string): Promise<T> {
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0', Accept: 'application/json' },
+    signal: AbortSignal.timeout(GAINS_FETCH_TIMEOUT),
+  })
+  if (!res.ok) throw new Error(`HTTP ${res.status} from ${url.slice(0, 80)}`)
+  return (await res.json()) as T
+}
+
+async function fetchGainsPositionsByUrl(url: string): Promise<CopinGainsPosition[]> {
+  return gainsPositionCache.getOrFetch(url, async () => {
+    const data = await gainsHardFetch<{ data?: CopinGainsPosition[] }>(url)
+    return data?.data ?? []
+  })
+}
+
+async function fetchGainsStatsByType(
+  address: string,
+  statisticType: 'WEEK' | 'MONTH' | 'D60'
+): Promise<CopinGainsStats | null> {
+  const cacheKey = `${address}:${statisticType}`
+  return gainsStatsCache.getOrFetch(cacheKey, async () => {
+    try {
+      const url = `${COPIN_GNS_BASE}/GNS/position/statistic/filter?accounts=${address}&statisticType=${statisticType}`
+      const data = await gainsHardFetch<{ data?: CopinGainsStats[] }>(url)
+      if (data?.data && data.data.length > 0) return data.data[0]
+    } catch (_err) {
+      /* Copin not available */
+    }
+    return null
+  })
+}
+
+export async function fetchGainsEquityCurve(
+  addr: string,
+  days: number
+): Promise<EquityCurvePoint[]> {
+  try {
+    const url = `${COPIN_GNS_BASE}/GNS/position/filter?accounts=${addr}&status=CLOSE&limit=500&sort_by=closeBlockTime&sort_type=desc`
+    const positions = await fetchGainsPositionsByUrl(url)
+
+    if (positions.length === 0) {
+      // Fallback: 2-point curve from stats
+      const stats = await fetchGainsStatsByType(addr, days <= 7 ? 'WEEK' : 'MONTH')
+      if (!stats) return []
+      const totalPnl = stats.totalPnl ?? stats.totalRealisedPnl ?? 0
+      if (totalPnl === 0) return []
+      const today = new Date().toISOString().split('T')[0]
+      const start = new Date(Date.now() - days * 86400000).toISOString().split('T')[0]
+      return [
+        { date: start, roi: 0, pnl: 0 },
+        { date: today, roi: 0, pnl: totalPnl },
+      ]
+    }
+
+    const cutoff = new Date(Date.now() - days * 86400000).toISOString()
+    const dailyPnl = new Map<string, number>()
+    for (const pos of positions) {
+      if (!pos.closeBlockTime || pos.closeBlockTime < cutoff) continue
+      const date = pos.closeBlockTime.split('T')[0]
+      dailyPnl.set(date, (dailyPnl.get(date) ?? 0) + (pos.pnl ?? 0))
+    }
+    if (dailyPnl.size === 0) return []
+
+    const sortedDates = [...dailyPnl.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+    let cumPnl = 0
+    const sparse = new Map<string, number>()
+    for (const [date, pnl] of sortedDates) {
+      cumPnl += pnl
+      sparse.set(date, cumPnl)
+    }
+
+    const firstDate = new Date(sortedDates[0][0])
+    const lastDate = new Date(sortedDates[sortedDates.length - 1][0])
+    const points: EquityCurvePoint[] = []
+    let prev = 0
+    for (let d = new Date(firstDate); d <= lastDate; d.setDate(d.getDate() + 1)) {
+      const ds = d.toISOString().split('T')[0]
+      const val = sparse.get(ds)
+      if (val !== undefined) prev = val
+      points.push({ date: ds, roi: 0, pnl: prev })
+    }
+
+    const totalVol = positions.reduce((s, p) => s + Math.abs(p.size ?? p.collateral ?? 0), 0)
+    const estCapital = totalVol > 0 ? totalVol / 5 : Math.abs(cumPnl) * 5
+    if (estCapital > 0)
+      for (const p of points) {
+        p.roi = ((p.pnl ?? 0) / estCapital) * 100
+      }
+
+    return points
+  } catch (err) {
+    logger.warn(
+      `[gains] Copin equity curve failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`
+    )
+    return []
+  }
 }
 
 /**
@@ -194,7 +333,9 @@ export async function fetchGainsStatsDetail(addr: string): Promise<StatsDetail |
     const nativeStats = await fetchGainsNativeStats(addr)
     if (nativeStats) return nativeStats
   } catch (err) {
-    logger.warn(`[gains] Native stats failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[gains] Native stats failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`
+    )
   }
 
   // Fallback: Copin leaderboard stats (also computes ROI from totalPnl/totalVolume)
@@ -233,7 +374,8 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
       // winRate from API is a string percentage like "80.00000" or a number
       let profitableTradesPct: number | null = null
       if (data.winRate != null) {
-        const wr = typeof data.winRate === 'string' ? parseFloat(data.winRate) : Number(data.winRate)
+        const wr =
+          typeof data.winRate === 'string' ? parseFloat(data.winRate) : Number(data.winRate)
         if (!isNaN(wr)) {
           // If value is <= 1, it's a ratio; otherwise it's already a percentage
           profitableTradesPct = wr <= 1 ? Math.round(wr * 1000) / 10 : Math.round(wr * 10) / 10
@@ -241,9 +383,10 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
       }
 
       // Derive totalWin from winRate
-      const totalWin = profitableTradesPct != null
-        ? Math.round(totalTrades * profitableTradesPct / 100)
-        : (data.totalWin ?? data.wins ?? data.nbWins ?? null)
+      const totalWin =
+        profitableTradesPct != null
+          ? Math.round((totalTrades * profitableTradesPct) / 100)
+          : (data.totalWin ?? data.wins ?? data.nbWins ?? null)
 
       const totalPnl = data.totalPnl ?? data.pnl ?? data.totalPnlCollateral ?? null
       const totalVolume = data.totalVolume ?? data.volume ?? data.totalCollateral ?? null
@@ -284,7 +427,10 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
         totalPositions: totalTrades > 0 ? totalTrades : null,
       }
     } catch (err) {
-      logger.warn(`[enrichment-copin] Gains native stats fetch failed for ${addr} (${chain.name}):`, err instanceof Error ? err.message : String(err))
+      logger.warn(
+        `[enrichment-copin] Gains native stats fetch failed for ${addr} (${chain.name}):`,
+        err instanceof Error ? err.message : String(err)
+      )
       continue
     }
   }
@@ -294,11 +440,13 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
   for (const chain of chainNames) {
     try {
       const leaderboardUrl = `https://backend-${chain}.gains.trade/leaderboard`
-      const leaderboard = await fetchJson<GainsLeaderboardEntry[]>(leaderboardUrl, { timeoutMs: 10000 })
+      const leaderboard = await fetchJson<GainsLeaderboardEntry[]>(leaderboardUrl, {
+        timeoutMs: 10000,
+      })
       if (!Array.isArray(leaderboard)) continue
       const addrLower = addr.toLowerCase()
-      const found = leaderboard.find(e =>
-        String(e.address || e.trader || '').toLowerCase() === addrLower
+      const found = leaderboard.find(
+        (e) => String(e.address || e.trader || '').toLowerCase() === addrLower
       )
       if (!found) continue
 
@@ -306,9 +454,8 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
       const wins = Number(found.count_win) || 0
       const losses = Number(found.count_loss) || 0
       const pnl = found.total_pnl_usd ?? found.total_pnl ?? found.pnl ?? null
-      const profitableTradesPct = totalTrades > 0
-        ? Math.round((wins / totalTrades) * 1000) / 10
-        : null
+      const profitableTradesPct =
+        totalTrades > 0 ? Math.round((wins / totalTrades) * 1000) / 10 : null
 
       // MDD approximation from avg_loss/avg_win
       let maxDrawdown: number | null = null
@@ -344,7 +491,10 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
         totalPositions: totalTrades > 0 ? totalTrades : null,
       }
     } catch (err) {
-      logger.warn(`[enrichment-copin] Gains leaderboard fetch failed for ${addr} (${chain}):`, err instanceof Error ? err.message : String(err))
+      logger.warn(
+        `[enrichment-copin] Gains leaderboard fetch failed for ${addr} (${chain}):`,
+        err instanceof Error ? err.message : String(err)
+      )
       continue
     }
   }
@@ -360,7 +510,7 @@ interface GainsNativeStatsResponse {
   totalWin?: number
   wins?: number
   nbWins?: number
-  winRate?: string | number  // String percentage like "80.00000" or number
+  winRate?: string | number // String percentage like "80.00000" or number
   totalPnl?: number
   pnl?: number
   totalPnlCollateral?: number
@@ -393,8 +543,33 @@ interface GainsLeaderboardEntry {
   pnl?: number
 }
 
-export async function fetchGainsPositionHistory(_addr: string): Promise<PositionHistoryItem[]> {
-  return []
+export async function fetchGainsPositionHistory(addr: string): Promise<PositionHistoryItem[]> {
+  try {
+    const url = `${COPIN_GNS_BASE}/GNS/position/filter?accounts=${addr}&limit=100&sort_by=closeBlockTime&sort_type=desc`
+    const positions = await fetchGainsPositionsByUrl(url)
+    if (positions.length === 0) return []
+
+    return positions.map((pos) => ({
+      symbol: pos.pair || 'UNKNOWN',
+      direction: pos.isLong ? ('long' as const) : ('short' as const),
+      positionType: 'perpetual',
+      marginMode: 'cross',
+      openTime: pos.openBlockTime || null,
+      closeTime: pos.closeBlockTime || null,
+      entryPrice: pos.entryPrice ?? pos.averagePrice ?? null,
+      exitPrice: pos.closePrice ?? null,
+      maxPositionSize: pos.size ?? null,
+      closedSize: pos.size ?? null,
+      pnlUsd: pos.pnl ?? null,
+      pnlPct: pos.roi != null ? pos.roi * 100 : null,
+      status: pos.status === 'CLOSE' ? 'closed' : pos.status?.toLowerCase() || 'filled',
+    }))
+  } catch (err) {
+    logger.warn(
+      `[gains] Copin position history failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`
+    )
+    return []
+  }
 }
 
 // ============================================
@@ -420,7 +595,10 @@ async function fetchAevoCopinPositions(url: string): Promise<CopinPositionDetail
   })
 }
 
-export async function fetchAevoEquityCurve(addr: string, days: number): Promise<EquityCurvePoint[]> {
+export async function fetchAevoEquityCurve(
+  addr: string,
+  days: number
+): Promise<EquityCurvePoint[]> {
   // Try Copin position data to build equity curve (same approach as dYdX)
   try {
     const url = `${COPIN_BASE}/AEVO/position/filter?accounts=${addr}&status=CLOSE&limit=500&sort_by=closeBlockTime&sort_type=desc`
@@ -466,7 +644,10 @@ export async function fetchAevoEquityCurve(addr: string, days: number): Promise<
     }
 
     // Estimate ROI from total volume
-    const totalVolume = positions.reduce((sum, pos) => sum + Math.abs(pos.size ?? pos.collateral ?? 0), 0)
+    const totalVolume = positions.reduce(
+      (sum, pos) => sum + Math.abs(pos.size ?? pos.collateral ?? 0),
+      0
+    )
     const estimatedCapital = totalVolume > 0 ? totalVolume / 5 : Math.abs(cumPnl) * 5
     if (estimatedCapital > 0) {
       for (const p of points) {
@@ -476,7 +657,9 @@ export async function fetchAevoEquityCurve(addr: string, days: number): Promise<
 
     return points
   } catch (err) {
-    logger.warn(`[aevo] Copin equity curve failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[aevo] Copin equity curve failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }
@@ -496,8 +679,8 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
     if (nativeStats && (nativeStats.win_rate != null || nativeStats.max_drawdown != null)) {
       // Aevo API returns win_rate=0 for virtually all traders — don't trust 0.
       // Let the equity curve fallback compute it instead.
-      const trustableWR = nativeStats.win_rate != null && nativeStats.win_rate > 0
-        ? nativeStats.win_rate * 100 : null
+      const trustableWR =
+        nativeStats.win_rate != null && nativeStats.win_rate > 0 ? nativeStats.win_rate * 100 : null
       return {
         totalTrades: nativeStats.total_trades ?? null,
         profitableTradesPct: trustableWR,
@@ -507,7 +690,8 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
         largestWin: null,
         largestLoss: null,
         sharpeRatio: nativeStats.sharpe_ratio ?? null,
-        maxDrawdown: nativeStats.max_drawdown != null ? Math.abs(nativeStats.max_drawdown) * 100 : null,
+        maxDrawdown:
+          nativeStats.max_drawdown != null ? Math.abs(nativeStats.max_drawdown) * 100 : null,
         currentDrawdown: null,
         volatility: null,
         copiersCount: null,
@@ -518,7 +702,9 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
       }
     }
   } catch (err) {
-    logger.warn(`[aevo] Native stats failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[aevo] Native stats failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`
+    )
   }
 
   // Fallback: Copin leaderboard stats + compute Sharpe from position history
@@ -534,7 +720,10 @@ export async function fetchAevoStatsDetail(addr: string): Promise<StatsDetail | 
         }
       }
     } catch (err) {
-      logger.warn('[enrichment-copin] Aevo position history fetch for Sharpe failed:', err instanceof Error ? err.message : String(err))
+      logger.warn(
+        '[enrichment-copin] Aevo position history fetch for Sharpe failed:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
   }
   return copinStats
@@ -549,7 +738,7 @@ export async function fetchAevoPositionHistory(addr: string): Promise<PositionHi
 
     return positions.map((pos) => ({
       symbol: pos.pair || 'UNKNOWN',
-      direction: pos.isLong ? 'long' as const : 'short' as const,
+      direction: pos.isLong ? ('long' as const) : ('short' as const),
       positionType: 'perpetual',
       marginMode: 'cross',
       openTime: pos.openBlockTime || null,
@@ -560,10 +749,12 @@ export async function fetchAevoPositionHistory(addr: string): Promise<PositionHi
       closedSize: pos.size ?? null,
       pnlUsd: pos.pnl ?? null,
       pnlPct: pos.roi != null ? pos.roi * 100 : null,
-      status: pos.status === 'CLOSE' ? 'closed' : (pos.status?.toLowerCase() || 'filled'),
+      status: pos.status === 'CLOSE' ? 'closed' : pos.status?.toLowerCase() || 'filled',
     }))
   } catch (err) {
-    logger.warn(`[aevo] Copin position history failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[aevo] Copin position history failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return []
   }
 }
