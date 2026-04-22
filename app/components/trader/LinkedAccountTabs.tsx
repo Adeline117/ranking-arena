@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { preload } from 'swr'
+import { queryClient } from '@/app/components/Providers'
 import { tokens } from '@/lib/design-tokens'
 import { formatROI } from '@/lib/utils/format'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
@@ -66,7 +66,11 @@ export default function LinkedAccountTabs({
   const prefetchAccount = useCallback((account: LinkedAccount) => {
     const handle = account.handle || account.traderKey
     const url = `/api/traders/${encodeURIComponent(handle)}?source=${encodeURIComponent(account.platform)}`
-    preload(url, traderFetcher)
+    queryClient.prefetchQuery({
+      queryKey: ['trader-profile', url],
+      queryFn: () => traderFetcher(url),
+      staleTime: 30_000,
+    })
   }, [])
 
   // #32: Close dropdown on outside mousedown (faster than click)
