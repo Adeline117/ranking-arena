@@ -3,13 +3,21 @@
 interface ProgressBarProps {
   answered: number
   total: number
+  /** Question IDs in order */
+  questionIds: number[]
+  /** Set of answered question IDs */
+  answeredIds: Set<number>
 }
 
-export default function ProgressBar({ answered, total }: ProgressBarProps) {
-  const percent = (answered / total) * 100
+export default function ProgressBar({ answered, total, questionIds, answeredIds }: ProgressBarProps) {
+  const handleDotClick = (qId: number) => {
+    const el = document.getElementById(`quiz-q-${qId}`)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {/* Counter */}
       <span
         style={{
           fontSize: 12,
@@ -21,6 +29,8 @@ export default function ProgressBar({ answered, total }: ProgressBarProps) {
       >
         {answered} / {total}
       </span>
+
+      {/* Clickable dots — each dot = one question */}
       <div
         role="progressbar"
         aria-valuenow={answered}
@@ -28,22 +38,41 @@ export default function ProgressBar({ answered, total }: ProgressBarProps) {
         aria-valuemax={total}
         aria-label={`${answered} of ${total} answered`}
         style={{
-          width: '100%',
-          height: 5,
-          borderRadius: 2,
-          background: 'var(--color-bg-tertiary)',
-          overflow: 'hidden',
+          display: 'flex',
+          gap: 3,
+          flexWrap: 'wrap',
         }}
       >
-        <div
-          style={{
-            width: `${percent}%`,
-            height: '100%',
-            borderRadius: 2,
-            background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-deep))',
-            transition: 'width 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-          }}
-        />
+        {questionIds.map((qId, idx) => {
+          const isDone = answeredIds.has(qId)
+          return (
+            <button
+              key={qId}
+              type="button"
+              onClick={() => handleDotClick(qId)}
+              aria-label={`Question ${idx + 1}${isDone ? ' (answered)' : ' (unanswered)'}`}
+              style={{
+                width: 14,
+                height: 6,
+                borderRadius: 3,
+                border: 'none',
+                padding: 0,
+                cursor: 'pointer',
+                background: isDone
+                  ? 'var(--color-brand)'
+                  : 'var(--color-bg-tertiary)',
+                transition: 'background 0.3s, transform 0.2s',
+                flex: 'none',
+              }}
+              onMouseEnter={(e) => {
+                if (!isDone) e.currentTarget.style.background = 'var(--color-brand-accent)'
+              }}
+              onMouseLeave={(e) => {
+                if (!isDone) e.currentTarget.style.background = 'var(--color-bg-tertiary)'
+              }}
+            />
+          )
+        })}
       </div>
     </div>
   )
