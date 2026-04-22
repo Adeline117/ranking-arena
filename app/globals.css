@@ -1467,25 +1467,9 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
   border-radius: 4px;
 }
 /* Minimum touch target — consolidated below in Mobile section */
-/* Shimmer text effect for premium badges */
-@keyframes shiny-text {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
+/* Premium text — static gradient, no shimmer animation (was AI slop) */
 .shiny-text {
-  background: linear-gradient(
-    90deg,
-    currentColor 0%,
-    currentColor 40%,
-    var(--color-brand-accent, #c9b8db) 50%,
-    currentColor 60%,
-    currentColor 100%
-  );
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation: shiny-text 4s ease-in-out infinite;
+  color: var(--color-brand-accent, #c9b8db);
 }
 
 /* Hero top-3 card hover/focus — replaces JS onMouseEnter/onMouseLeave */
