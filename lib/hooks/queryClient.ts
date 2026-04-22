@@ -1,0 +1,74 @@
+import { QueryClient } from '@tanstack/react-query'
+import { logger } from '@/lib/logger'
+
+/**
+ * React Query client factory — mirrors SWRConfig defaults.
+ *
+ * Mapping from SWR → React Query:
+ *   revalidateOnFocus: false       → refetchOnWindowFocus: false
+ *   revalidateOnReconnect: true    → refetchOnReconnect: true
+ *   dedupingInterval: 5000         → staleTime: 5_000
+ *   errorRetryCount: 2             → retry: 2  (with smart filter)
+ *   errorRetryInterval: 3000       → retryDelay: exponential backoff (base 1s)
+ *   keepPreviousData: true         → placeholderData: keepPreviousData (per-query)
+ *   loadingTimeout: 3000           → (no direct equivalent — handled at fetcher level)
+ *   shouldRetryOnError: (fn)       → retry: (failureCount, error) => ...
+ */
+export function createQueryClient() {
+  return new QueryClient({
+    defaultOptions: {
+      queries: {
+        refetchOnWindowFocus: false,
+        refetchOnReconnect: true,
+        staleTime: 5_000,                // SWR dedupingInterval: 5000
+        gcTime: 5 * 60 * 1000,           // 5 min garbage collection
+        retry: (failureCount, error) => {
+          if (failureCount >= 2) return false               // SWR errorRetryCount: 2
+          const status = (error as { status?: number })?.status
+          if (status === 429) return true                   // rate limit — transient
+          if (status && status >= 400 && status < 500) return false  // 4xx — don't retry
+          return true                                       // network errors + 5xx
+        },
+        retryDelay: (attempt) =>
+          Math.min(1_000 * Math.pow(2, attempt), 30_000),   // SWR errorRetryInterval: 3000 → exponential
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  })
+}
+
+/**
+ * Global error handler for React Query — mirrors SWRConfig.onError.
+ * Call this once during app initialization to set up the global error handler.
+ */
+export function setupQueryErrorLogging(client: QueryClient) {
+  const cache = client.getQueryCache()
+  cache.config.onError = (error, query) => {
+    const status =
+      (error as { status?: number })?.status ??
+      (error as { response?: { status?: number } })?.response?.status
+    // Don't report 4xx client errors
+    if (status && status >= 400 && status < 500) return
+
+    if (process.env.NODE_ENV === 'production') {
+      logger.error('React Query Error:', {
+        key: query.queryKey,
+        error,
+      })
+
+      import('@sentry/nextjs')
+        .then((Sentry) => {
+          Sentry.captureException(error, {
+            tags: {
+              source: 'react-query',
+              query_key: JSON.stringify(query.queryKey),
+            },
+            level: 'warning',
+          })
+        })
+        .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+    }
+  }
+}
