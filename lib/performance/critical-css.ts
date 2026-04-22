@@ -16,7 +16,7 @@ export const criticalCss = `
 /* 基础重置和布局 */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%;tab-size:4;scroll-behavior:auto}
-body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:clip}
+body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;max-width:100vw;width:100%}
 
 /* 关键布局样式 */
 .top-nav{position:sticky;top:0;z-index:100;background:var(--bg-primary,#0B0A10);height:56px;border-bottom:1px solid var(--glass-border,rgba(255,255,255,0.08))}

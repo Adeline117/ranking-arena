@@ -603,7 +603,6 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   font-size: 14px;
   line-height: 1.6;
-  overflow-x: clip;
   overscroll-behavior-y: contain;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
@@ -1661,8 +1660,8 @@ a:focus-visible, button:focus-visible, [role="button"]:focus-visible, [tabindex=
 /* Mobile overflow safety */
 @media (max-width: 767px) {
   html, body {
-    overflow-x: clip;
     max-width: 100vw;
+    width: 100%;
   }
   .ranking-table-container {
     overflow-x: auto;
@@ -2585,17 +2584,16 @@ input[type="search"]::-webkit-search-cancel-button:hover {
    (thousands in the ranking table), severely degrading scroll/render perf. */
 html, body {
   max-width: 100vw;
-  overflow-x: clip;
+  width: 100%;
 }
-/* Do NOT set overflow-x:hidden on html/body/main — it creates a scroll
-   container in Safari that traps trackpad/wheel events, breaking page scroll.
-   Use overflow-x:clip instead — same visual clipping, no scroll container. */
+/* NEVER set overflow-x on html/body — any non-visible value (hidden, clip,
+   auto, scroll) causes Safari to auto-promote overflow-y:visible → auto,
+   creating a scroll container that traps trackpad wheel events. Prevent
+   horizontal overflow structurally via max-width + width instead. */
 
 @media (max-width: 767px) {
-  /* Hard block horizontal overflow on html/body — use clip, not hidden.
-     hidden creates a scroll container that traps trackpad events in Safari. */
+  /* Prevent horizontal overflow structurally — NEVER use overflow-x on html/body. */
   html, body {
-    overflow-x: clip !important;
     max-width: 100vw !important;
     width: 100% !important;
   }
