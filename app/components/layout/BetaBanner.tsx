@@ -11,7 +11,8 @@
  */
 
 export default function BetaBanner() {
-  if (process.env.NEXT_PUBLIC_SHOW_BETA_BANNER === 'false') return null
+  // Hidden unless explicitly enabled — production (env var unset) won't show the banner
+  if (process.env.NEXT_PUBLIC_SHOW_BETA_BANNER !== 'true') return null
 
   return (
     <>
