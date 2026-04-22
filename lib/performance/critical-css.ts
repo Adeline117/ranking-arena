@@ -16,7 +16,7 @@ export const criticalCss = `
 /* 基础重置和布局 */
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 html{-webkit-text-size-adjust:100%;tab-size:4;scroll-behavior:auto}
-body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:hidden}
+body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;overflow-x:clip}
 
 /* 关键布局样式 */
 .top-nav{position:sticky;top:0;z-index:100;background:var(--bg-primary,#0B0A10);height:56px;border-bottom:1px solid var(--glass-border,rgba(255,255,255,0.08))}
@@ -74,7 +74,7 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 @media(min-width:1024px){.three-col-layout{grid-template-columns:200px 1fr}}
 @media(min-width:1280px){.three-col-layout{grid-template-columns:240px 1fr 260px}}
 @media(max-width:1023px){.three-col-layout{display:block;padding:0 12px}.three-col-left,.three-col-right{display:none !important}}
-.three-col-center{min-height:calc(100vh - 60px);min-width:0;overflow-x:hidden}
+.three-col-center{min-height:calc(100vh - 60px);min-width:0;overflow-x:clip}
 
 /* Safe Area (iPhone 刘海屏) */
 .safe-area-inset-bottom{padding-bottom:env(safe-area-inset-bottom,0)}
