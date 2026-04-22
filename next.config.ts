@@ -39,6 +39,12 @@ const nextConfig = {
       // Farcaster SDK — optional Privy peer dep, removed from package.json to save 45MB
       '@farcaster/mini-app-solana': './lib/stubs/empty.js',
       '@farcaster/miniapp-sdk': './lib/stubs/empty.js',
+      // Solana programs — optional Privy peer deps for wallet funding.
+      // Version conflicts with @solana/kit make these unbuildable;
+      // stubbed out since PrivyClientProvider has lazy-load + error boundary.
+      '@solana-program/system': './lib/stubs/empty.js',
+      '@solana-program/memo': './lib/stubs/empty.js',
+      '@solana-program/token': './lib/stubs/empty.js',
     },
   },
 
