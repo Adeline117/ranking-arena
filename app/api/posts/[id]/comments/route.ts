@@ -19,7 +19,7 @@ import {
 import { createNotificationDeduped } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
-import logger from '@/lib/logger'
+import logger, { fireAndForget } from '@/lib/logger'
 import { sanitizeText } from '@/lib/utils/sanitize'
 
 // Zod schema for POST (create comment)
@@ -144,58 +144,59 @@ export const POST = withAuth(
     // Atomically increment comment count (trigger was non-atomic, now dropped)
     await supabase.rpc('increment_comment_count' as never, { p_post_id: id })
 
-    // Send comment notifications (fire-and-forget)
-    try {
-      const userHandle = await getUserHandle(user.id, user.email ?? undefined)
+    // Send comment notifications (truly fire-and-forget — don't block response)
+    fireAndForget(
+      (async () => {
+        const userHandle = await getUserHandle(user.id, user.email ?? undefined)
 
-      // Notify post author
-      const { data: postData } = await supabase
-        .from('posts')
-        .select('author_id, title')
-        .eq('id', id)
-        .single()
-
-      if (postData?.author_id && postData.author_id !== user.id) {
-        createNotificationDeduped(supabase, {
-          user_id: postData.author_id,
-          type: 'comment',
-          title: `${userHandle} commented on your post`,
-          message: content.slice(0, 100),
-          actor_id: user.id,
-          link: `/post/${id}`,
-          reference_id: id,
-          read: false,
-        }).catch((err) => logger.warn('[comments] Post author notification failed:', err))
-      }
-
-      // If this is a reply, also notify the parent comment author
-      if (parent_id) {
-        const { data: parentComment } = await supabase
-          .from('comments')
-          .select('user_id')
-          .eq('id', parent_id)
+        // Notify post author
+        const { data: postData } = await supabase
+          .from('posts')
+          .select('author_id, title')
+          .eq('id', id)
           .single()
 
-        if (
-          parentComment?.user_id &&
-          parentComment.user_id !== user.id &&
-          parentComment.user_id !== postData?.author_id
-        ) {
-          createNotificationDeduped(supabase, {
-            user_id: parentComment.user_id,
-            type: 'post_reply',
-            title: `${userHandle} replied to your comment`,
+        if (postData?.author_id && postData.author_id !== user.id) {
+          await createNotificationDeduped(supabase, {
+            user_id: postData.author_id,
+            type: 'comment',
+            title: `${userHandle} commented on your post`,
             message: content.slice(0, 100),
             actor_id: user.id,
             link: `/post/${id}`,
             reference_id: id,
             read: false,
-          }).catch((err) => logger.warn('[comments] Parent comment notification failed:', err))
+          })
         }
-      }
-    } catch (notifErr) {
-      logger.warn('[comments] Notification error:', notifErr)
-    }
+
+        // If this is a reply, also notify the parent comment author
+        if (parent_id) {
+          const { data: parentComment } = await supabase
+            .from('comments')
+            .select('user_id')
+            .eq('id', parent_id)
+            .single()
+
+          if (
+            parentComment?.user_id &&
+            parentComment.user_id !== user.id &&
+            parentComment.user_id !== postData?.author_id
+          ) {
+            await createNotificationDeduped(supabase, {
+              user_id: parentComment.user_id,
+              type: 'post_reply',
+              title: `${userHandle} replied to your comment`,
+              message: content.slice(0, 100),
+              actor_id: user.id,
+              link: `/post/${id}`,
+              reference_id: id,
+              read: false,
+            })
+          }
+        }
+      })(),
+      'Comment notifications'
+    )
 
     return success({ comment }, 201)
   },

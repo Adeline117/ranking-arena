@@ -10,7 +10,8 @@
 
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import logger from '@/lib/logger'
+import logger, { fireAndForget } from '@/lib/logger'
+import { createNotificationDeduped } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 
 // 转发帖子 - 创建新帖子
@@ -81,23 +82,21 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Repost failed' }, { status: 500 })
     }
 
-    // Notify original post author (fire-and-forget)
+    // Notify original post author (fire-and-forget, deduped)
     if (originalPost.author_id && originalPost.author_id !== user.id) {
-      supabase
-        .from('notifications')
-        .insert({
+      fireAndForget(
+        createNotificationDeduped(supabase, {
           user_id: originalPost.author_id,
-          type: 'like',
+          type: 'comment',
           title: `${userHandle} reposted your post`,
           message: (originalPost.title || '').slice(0, 100) || 'your post',
           actor_id: user.id,
           link: `/post/${newPost.id}`,
           reference_id: originalPost.id,
           read: false,
-        })
-        .then(({ error: notifError }) => {
-          if (notifError) logger.warn('[repost] Notification insert failed:', notifError)
-        })
+        }),
+        'Repost notification'
+      )
     }
 
     return NextResponse.json({
