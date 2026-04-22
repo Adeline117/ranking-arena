@@ -1,6 +1,6 @@
 'use client'
 
-import useSWR from 'swr'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useAchievements } from '@/lib/hooks/useAchievements'
@@ -12,26 +12,30 @@ interface WatchlistItem {
   created_at: string
 }
 
-const WATCHLIST_KEY = '/api/watchlist'
+const WATCHLIST_QUERY_KEY = ['watchlist']
+const WATCHLIST_API = '/api/watchlist'
 
 export function useWatchlist() {
   const { isLoggedIn, getAuthHeadersAsync } = useAuthSession()
   const { tryUnlock } = useAchievements()
+  const queryClient = useQueryClient()
 
-  const fetcher = useCallback(async (): Promise<WatchlistItem[]> => {
+  const fetchWatchlist = useCallback(async (): Promise<WatchlistItem[]> => {
     if (!isLoggedIn) return []
     const headers = await getAuthHeadersAsync()
-    const res = await fetch(WATCHLIST_KEY, { headers })
+    const res = await fetch(WATCHLIST_API, { headers })
     if (!res.ok) return []
     const data = await res.json()
     return data.watchlist || []
   }, [isLoggedIn, getAuthHeadersAsync])
 
-  const { data, error, mutate } = useSWR(
-    isLoggedIn ? WATCHLIST_KEY : null,
-    fetcher,
-    { revalidateOnFocus: false, dedupingInterval: 30000 }
-  )
+  const { data, error, isLoading: queryLoading } = useQuery<WatchlistItem[]>({
+    queryKey: WATCHLIST_QUERY_KEY,
+    queryFn: fetchWatchlist,
+    enabled: isLoggedIn,
+    refetchOnWindowFocus: false,
+    staleTime: 30000,
+  })
 
   const watchlist = useMemo(() => data || [], [data])
   const watchlistSet = useMemo(
@@ -50,46 +54,50 @@ export function useWatchlist() {
       if (!isLoggedIn) return
       const previousData = watchlist
       const newItem: WatchlistItem = { source, source_trader_id: sourceTraderID, handle: handle || null, created_at: new Date().toISOString() }
-      mutate([...watchlist, newItem], false)
+      // Optimistic update
+      queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, [...watchlist, newItem])
       try {
         const headers = await getAuthHeadersAsync()
-        const res = await fetch(WATCHLIST_KEY, {
+        const res = await fetch(WATCHLIST_API, {
           method: 'POST',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ source, source_trader_id: sourceTraderID, handle }),
         })
         if (!res.ok) throw new Error(`watchlist add: ${res.status}`)
-        mutate()
+        queryClient.invalidateQueries({ queryKey: WATCHLIST_QUERY_KEY })
         tryUnlock('first_watchlist')
       } catch {
-        mutate(previousData, false)
+        // Rollback on failure
+        queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, previousData)
       }
     },
-    [isLoggedIn, watchlist, mutate, getAuthHeadersAsync, tryUnlock]
+    [isLoggedIn, watchlist, queryClient, getAuthHeadersAsync, tryUnlock]
   )
 
   const removeFromWatchlist = useCallback(
     async (source: string, sourceTraderID: string) => {
       if (!isLoggedIn) return
       const previousData = watchlist
-      mutate(
-        watchlist.filter((w) => !(w.source === source && w.source_trader_id === sourceTraderID)),
-        false
+      // Optimistic update
+      queryClient.setQueryData<WatchlistItem[]>(
+        WATCHLIST_QUERY_KEY,
+        watchlist.filter((w) => !(w.source === source && w.source_trader_id === sourceTraderID))
       )
       try {
         const headers = await getAuthHeadersAsync()
-        const res = await fetch(WATCHLIST_KEY, {
+        const res = await fetch(WATCHLIST_API, {
           method: 'DELETE',
           headers: { ...headers, 'Content-Type': 'application/json' },
           body: JSON.stringify({ source, source_trader_id: sourceTraderID }),
         })
         if (!res.ok) throw new Error(`watchlist remove: ${res.status}`)
-        mutate()
+        queryClient.invalidateQueries({ queryKey: WATCHLIST_QUERY_KEY })
       } catch {
-        mutate(previousData, false)
+        // Rollback on failure
+        queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, previousData)
       }
     },
-    [isLoggedIn, watchlist, mutate, getAuthHeadersAsync]
+    [isLoggedIn, watchlist, queryClient, getAuthHeadersAsync]
   )
 
   return {
