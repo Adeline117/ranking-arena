@@ -86,6 +86,13 @@ cat > "$FULL_PATH" <<EOF
 -- Created: $(date -u +%Y-%m-%dT%H:%M:%SZ)
 -- Description: TODO — explain what this migration does and why
 
+-- Concurrency Safety Checklist (delete after reviewing):
+-- [ ] New tables with one-per-user rows: add UNIQUE or partial unique index
+-- [ ] Counter columns: use atomic RPC (lib 00021), NOT trigger-based count+1
+-- [ ] Check-then-act patterns: use pg_advisory_xact_lock or SELECT FOR UPDATE
+-- [ ] FK to parent: include ON DELETE CASCADE
+-- [ ] New functions: add SET search_path = public, SECURITY DEFINER if needed
+
 -- Up
 -- TODO — write the migration SQL here
 EOF
