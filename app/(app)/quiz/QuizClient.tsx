@@ -51,6 +51,12 @@ export default function QuizClient() {
     setStep('questions')
   }, [])
 
+  const prefersReducedMotion = useMemo(
+    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [mounted] // re-evaluate once mounted
+  )
+
   const handleSelectOption = useCallback(
     (questionId: number, optionId: string) => {
       setAnswer(questionId, optionId)
@@ -58,13 +64,14 @@ export default function QuizClient() {
       const currentIdx = QUIZ_QUESTIONS.findIndex(q => q.id === questionId)
       if (currentIdx < QUIZ_QUESTIONS.length - 1) {
         const nextId = QUIZ_QUESTIONS[currentIdx + 1].id
+        const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth'
         setTimeout(() => {
           const el = document.getElementById(`quiz-q-${nextId}`)
-          if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 300)
+          if (el) el.scrollIntoView({ behavior: scrollBehavior, block: 'start' })
+        }, prefersReducedMotion ? 0 : 300)
       }
     },
-    [setAnswer]
+    [setAnswer, prefersReducedMotion]
   )
 
   const handleCalculationDone = useCallback(() => {

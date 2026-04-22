@@ -14,6 +14,7 @@ import StyleAnalysis from './components/StyleAnalysis'
 import TypeBreakdown from './components/TypeBreakdown'
 import RecommendedTraders from './components/RecommendedTraders'
 import ShareActions from './components/ShareActions'
+import '../quiz.css'
 
 interface ResultPageClientProps {
   typeId: PersonalityTypeId
@@ -27,6 +28,9 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
   const { language, t } = useLanguage()
   const [mounted, setMounted] = useState(false)
   const [txnReady, setTxnReady] = useState(false)
+
+  const prefersReducedMotion =
+    typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
   useEffect(() => {
     setMounted(true)
@@ -93,7 +97,7 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           display: 'flex',
           flexDirection: 'column',
           gap: 0, /* Intentional: each section controls its own marginTop for rhythm */
-          animation: 'fadeIn 0.5s ease-out',
+          animation: prefersReducedMotion ? 'none' : 'fadeIn 0.5s ease-out',
           position: 'relative',
         }}
       >
