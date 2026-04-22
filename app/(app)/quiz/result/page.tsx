@@ -74,7 +74,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   const pType = PERSONALITY_TYPE_MAP[validType] || PERSONALITY_TYPES[0]
   const typeName = pType.nameKey // Will be resolved to actual name via i18n on client
 
-  const title = `I'm ${validType.charAt(0).toUpperCase() + validType.slice(1)} - Trading Personality | Arena`
+  const title = `I'm ${validType.charAt(0).toUpperCase() + validType.slice(1)} - Trading Personality`
   const description = `${match}% match. Discover your trading personality and the legendary trader who matches your style.`
 
   return {
