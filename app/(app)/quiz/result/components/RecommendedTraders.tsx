@@ -10,6 +10,14 @@ interface RecommendedTradersProps {
   tr: (key: string) => string
 }
 
+/** Smart truncation for hex addresses: 0x1234...abcd */
+function formatTraderName(name: string): string {
+  if (name.startsWith('0x') && name.length > 12) {
+    return `${name.slice(0, 6)}...${name.slice(-4)}`
+  }
+  return name
+}
+
 export default function RecommendedTraders({ type, traders, tr }: RecommendedTradersProps) {
   if (!traders.length) return null
 
@@ -117,8 +125,9 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
+              title={trader.name}
               >
-                {trader.name}
+                {formatTraderName(trader.name)}
               </div>
               <div
                 style={{
