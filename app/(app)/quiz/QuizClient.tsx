@@ -7,13 +7,14 @@ import { useQuizStore } from '@/lib/stores/quizStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { setLanguage } from '@/lib/i18n'
 import { onTranslationsReady } from '@/lib/i18n'
-import { QUIZ_QUESTIONS } from './components/quiz-data'
+import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from './components/quiz-data'
 import { calculateResult } from './components/scoring'
 import { getCsrfHeaders } from '@/lib/api/client'
 import StartStep from './components/StartStep'
 import QuestionStep from './components/QuestionStep'
 import ProgressBar from './components/ProgressBar'
 import CalculatingStep from './components/CalculatingStep'
+import './quiz.css'
 
 const TOTAL_QUESTIONS = QUIZ_QUESTIONS.length
 
@@ -96,8 +97,10 @@ export default function QuizClient() {
     } catch {
       // ignore
     }
-    // Navigate to result page
-    router.push(`/quiz/result?type=${result.primaryType}&match=${result.matchPercent}`)
+    // Navigate to result page — include secondary type and type breakdown percents
+    // Encode allTypePercents as compact comma-separated values (ordered by PERSONALITY_TYPES)
+    const percentsParam = PERSONALITY_TYPES.map(pt => result.allTypePercents[pt.id] ?? 0).join(',')
+    router.push(`/quiz/result?type=${result.primaryType}&match=${result.matchPercent}&secondary=${result.secondaryType}&percents=${percentsParam}`)
   }, [answers, setResult, router])
 
   const handleSubmit = useCallback(() => {
@@ -157,64 +160,31 @@ export default function QuizClient() {
     </button>
   )
 
+  const allAnswered = answeredCount === TOTAL_QUESTIONS
+
   // Start screen
   if (step === 'start') {
     return (
-      <Box
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '80vh',
-          padding: 20,
-        }}
-      >
-        <Box
-          style={{
-            maxWidth: 'clamp(520px, 90vw, 640px)',
-            width: '100%',
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--glass-border-light)',
-            borderRadius: 12,
-            padding: 'clamp(20px, 4vw, 32px)',
-            position: 'relative',
-          }}
-        >
+      <div className="quiz-start-wrapper">
+        <div className="quiz-start-card">
           {/* Language toggle */}
-          <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 1 }}>
+          <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 2 }}>
             {langToggleButton}
           </div>
           <StartStep tr={t} onStart={handleStart} />
-        </Box>
-      </Box>
+        </div>
+      </div>
     )
   }
 
   // Calculating screen
   if (step === 'calculating') {
     return (
-      <Box
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '80vh',
-          padding: 20,
-        }}
-      >
-        <Box
-          style={{
-            maxWidth: 'clamp(520px, 90vw, 640px)',
-            width: '100%',
-            background: 'var(--color-bg-secondary)',
-            border: '1px solid var(--glass-border-light)',
-            borderRadius: 12,
-            padding: 'clamp(20px, 4vw, 32px)',
-          }}
-        >
+      <div className="quiz-start-wrapper">
+        <div className="quiz-start-card">
           <CalculatingStep tr={t} onDone={handleCalculationDone} />
-        </Box>
-      </Box>
+        </div>
+      </div>
     )
   }
 
@@ -229,7 +199,7 @@ export default function QuizClient() {
             top: 0,
             zIndex: 10,
             background: 'var(--color-bg-primary)',
-            padding: '8px 0',
+            padding: '10px 0',
             borderBottom: '1px solid var(--glass-border-light)',
           }}
         >
@@ -242,12 +212,12 @@ export default function QuizClient() {
         </div>
 
         {/* Language toggle */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 8, marginTop: 4 }}>
           {langToggleButton}
         </div>
 
         {/* All questions rendered */}
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           {QUIZ_QUESTIONS.map((q, idx) => (
             <QuestionStep
               key={q.id}
@@ -261,7 +231,7 @@ export default function QuizClient() {
           ))}
         </div>
 
-        {/* Submit button — always visible, disabled until all answered */}
+        {/* Submit button */}
         <div
           style={{
             position: 'sticky',
@@ -275,34 +245,11 @@ export default function QuizClient() {
           <button
             type="button"
             onClick={handleSubmit}
-            disabled={answeredCount < TOTAL_QUESTIONS}
-            style={{
-              width: '100%',
-              padding: '14px 32px',
-              borderRadius: 8,
-              background: answeredCount === TOTAL_QUESTIONS
-                ? 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))'
-                : 'var(--color-bg-tertiary)',
-              border: answeredCount === TOTAL_QUESTIONS
-                ? 'none'
-                : '1px solid var(--glass-border-light)',
-              color: answeredCount === TOTAL_QUESTIONS ? '#fff' : 'var(--color-text-tertiary)',
-              fontSize: 16,
-              fontWeight: 600,
-              cursor: answeredCount === TOTAL_QUESTIONS ? 'pointer' : 'default',
-              transition: 'all 0.3s ease',
-              boxShadow: answeredCount === TOTAL_QUESTIONS
-                ? '0 4px 16px color-mix(in srgb, var(--color-brand) 30%, transparent)'
-                : 'none',
-            }}
-            onMouseEnter={(e) => {
-              if (answeredCount === TOTAL_QUESTIONS) e.currentTarget.style.transform = 'translateY(-1px)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'translateY(0)'
-            }}
+            disabled={!allAnswered}
+            className="quiz-submit-btn"
+            data-ready={allAnswered ? 'true' : 'false'}
           >
-            {answeredCount === TOTAL_QUESTIONS
+            {allAnswered
               ? t('quizSeeResults')
               : `${answeredCount} / ${TOTAL_QUESTIONS}`}
           </button>
