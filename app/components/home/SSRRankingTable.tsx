@@ -6,6 +6,7 @@
 
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { formatROI, formatPnL } from '@/lib/utils/format'
+import { getServerTranslation } from '@/lib/i18n/server'
 
 function getScoreColor(score: number): string {
   if (score >= 90) return 'ssr-score-s'
@@ -27,12 +28,14 @@ interface Props {
   startRank?: number
 }
 
-export default function SSRRankingTable({ traders, startRank = 0 }: Props) {
+export default async function SSRRankingTable({ traders, startRank = 0 }: Props) {
+  const { t } = await getServerTranslation()
+
   if (!traders.length) {
     return (
       <div style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--color-text-tertiary, #888)' }}>
-        <p style={{ fontSize: 16, marginBottom: 8 }}>Loading ranking data...</p>
-        <p style={{ fontSize: 13 }}>Data refreshes automatically. Try refreshing in a moment.</p>
+        <p style={{ fontSize: 16, marginBottom: 8 }}>{t('ssrLoadingRanking')}</p>
+        <p style={{ fontSize: 13 }}>{t('ssrDataRefreshHint')}</p>
       </div>
     )
   }

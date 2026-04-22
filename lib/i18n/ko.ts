@@ -4963,6 +4963,10 @@ compFieldMaxParticipants: '최대 참가자 수',
     rankingControlsShowingTop: '상위 {count}명의 트레이더를 표시 중. Pro로 34,000+명 전체를 확인하세요',
     rankingControlsUpgrade: '업그레이드 \u2192',
 
+    // SSR ranking table empty state
+    ssrLoadingRanking: '랭킹 데이터를 불러오는 중...',
+    ssrDataRefreshHint: '데이터가 자동으로 갱신됩니다. 잠시 후 새로고침해 주세요.',
+
 } as const
 
 export default ko
