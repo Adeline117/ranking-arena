@@ -1,17 +1,17 @@
 'use client'
 
 /**
- * useMarketSpotData — single SWR hook for /api/market/spot
+ * useMarketSpotData — single React Query hook for /api/market/spot
  *
  * All market-page components that need spot data should receive it as props
  * from the parent (MarketPageClient), which calls this hook once.
  * This eliminates 3-4 duplicate fetches that were hitting the same endpoint.
  *
- * PriceTicker keeps its own SWR because it is used outside the market page.
+ * PriceTicker keeps its own useQuery because it is used outside the market page.
  */
 
-import useSWR from 'swr'
-import { fetcher } from './useSWR'
+import { useQuery } from '@tanstack/react-query'
+import { fetcher } from './fetchers'
 
 export interface SpotCoin {
   id: string
@@ -30,13 +30,11 @@ export interface SpotCoin {
 }
 
 export function useMarketSpotData() {
-  return useSWR<SpotCoin[]>(
-    '/api/market/spot',
-    fetcher,
-    {
-      refreshInterval: 30_000,
-      revalidateOnFocus: false,
-      dedupingInterval: 10_000,
-    },
-  )
+  return useQuery<SpotCoin[]>({
+    queryKey: ['market-spot'],
+    queryFn: () => fetcher<SpotCoin[]>('/api/market/spot'),
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: false,
+    staleTime: 10_000,
+  })
 }
