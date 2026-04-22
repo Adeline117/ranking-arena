@@ -44,33 +44,16 @@ export default function QuestionStep({ question, questionNumber, totalQuestions,
           margin: 0,
         }}
       >
-        {isYesNo ? (
-          <>
-            <span
-              style={{
-                color: 'var(--color-brand)',
-                fontWeight: 700,
-                marginRight: 8,
-              }}
-            >
-              Q{questionNumber}
-            </span>
-            {tr(question.titleKey)}
-          </>
-        ) : (
-          <>
-            <span
-              style={{
-                color: 'var(--color-brand)',
-                fontWeight: 700,
-                marginRight: 8,
-              }}
-            >
-              Q{questionNumber}
-            </span>
-            {tr(question.titleKey)}
-          </>
-        )}
+        <span
+          style={{
+            color: 'var(--color-brand)',
+            fontWeight: 700,
+            marginRight: 8,
+          }}
+        >
+          Q{questionNumber}
+        </span>
+        {tr(question.titleKey)}
       </h2>
 
       {/* Options */}
