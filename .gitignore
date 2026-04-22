@@ -127,11 +127,18 @@ screenshots/
 .archived/
 .swc/
 
-# One-off scripts
+# One-off scripts and ad-hoc test runners
 check_gaps.mjs
 convert-img-to-image.sh
 install.sh
 financial_publications_summary.md
+arena-*-test.mjs
+test-*.mjs
+quiz-*-test.mjs
+
+# E2E test artifacts (screenshots, debug specs)
+e2e/*-screenshots/
+e2e/*debug*
 
 # Claude Code config
 .claude/
