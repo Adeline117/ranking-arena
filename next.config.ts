@@ -145,6 +145,13 @@ const nextConfig = {
           /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
     )
+    // wagmi@3.4.5 imports viem/tempo/zones which doesn't exist in viem@2.47.17.
+    // Stub it out so webpack doesn't fail on the missing module.
+    config.resolve = config.resolve || {}
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      'viem/tempo/zones': false,
+    }
     return config
   },
 
