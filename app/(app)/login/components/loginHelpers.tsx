@@ -1,7 +1,11 @@
 import { tokens } from '@/lib/design-tokens'
 
 // 密码强度计算函数
-export function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labelKey: string; color: string } {
+export function getPasswordStrength(password: string): {
+  level: 0 | 1 | 2 | 3 | 4
+  labelKey: string
+  color: string
+} {
   if (!password) return { level: 0, labelKey: '', color: '' }
 
   let score = 0
@@ -11,9 +15,12 @@ export function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 
   if (/\d/.test(password)) score++
   if (/[^a-zA-Z0-9]/.test(password)) score++
 
-  if (score <= 1) return { level: 1, labelKey: 'loginPasswordWeak', color: tokens.colors.accent.error }
-  if (score === 2) return { level: 2, labelKey: 'loginPasswordFair', color: tokens.colors.accent.warning }
-  if (score === 3) return { level: 3, labelKey: 'loginPasswordGood', color: tokens.colors.accent.warning }
+  if (score <= 1)
+    return { level: 1, labelKey: 'loginPasswordWeak', color: tokens.colors.accent.error }
+  if (score === 2)
+    return { level: 2, labelKey: 'loginPasswordFair', color: tokens.colors.accent.warning }
+  if (score === 3)
+    return { level: 3, labelKey: 'loginPasswordGood', color: tokens.colors.accent.warning }
   return { level: 4, labelKey: 'loginPasswordStrong', color: tokens.colors.accent.success }
 }
 
@@ -53,7 +60,7 @@ export function validateHandle(handle: string): { valid: boolean; messageKey: st
 export const injectStyles = () => {
   if (typeof window === 'undefined') return
   if (document.getElementById('login-page-styles')) return
-  
+
   const style = document.createElement('style')
   style.id = 'login-page-styles'
   style.textContent = `
@@ -115,6 +122,7 @@ export const injectStyles = () => {
       inset: 0;
       background: var(--color-bg-primary);
       z-index: 0;
+      pointer-events: none;
     }
     
     .login-page-bg::before {
@@ -217,7 +225,15 @@ export const injectStyles = () => {
 
 // Loading spinner component
 export const Spinner = () => (
-  <svg className="loader-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+  <svg
+    className="loader-spin"
+    width="18"
+    height="18"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+  >
     <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
     <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
   </svg>
