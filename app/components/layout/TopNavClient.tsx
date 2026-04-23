@@ -122,7 +122,9 @@ export default function TopNavClient({ email = null }: { email?: string | null }
         }}
       >
         <MobileSearchButton onOpen={() => setShowMobileSearch(true)} />
-        <GoProButton />
+        <div className="hide-mobile">
+          <GoProButton />
+        </div>
         <LanguageSwitcher />
         <ThemeToggle />
         {!isReady ? (
