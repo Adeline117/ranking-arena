@@ -53,10 +53,24 @@ export default function LoginForm({
 
   if (!loginWithCode) {
     return (
-      <>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          if (!loading && email && password) onLogin()
+        }}
+      >
         {/* Password login */}
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="login-password" style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: 'var(--color-text-secondary)' }}>
+          <label
+            htmlFor="login-password"
+            style={{
+              display: 'block',
+              marginBottom: 8,
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--color-text-secondary)',
+            }}
+          >
             {t('loginPassword')}
           </label>
           <div style={{ position: 'relative' }}>
@@ -81,13 +95,10 @@ export default function LoginForm({
               onChange={(e) => setPassword(e.target.value)}
               onBlur={() => markTouched('password')}
               enterKeyHint="go"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !loading && email && password) {
-                  onLogin()
-                }
-              }}
               autoComplete="current-password"
-              aria-invalid={touchedFields.password && password ? !passwordValidation.valid : undefined}
+              aria-invalid={
+                touchedFields.password && password ? !passwordValidation.valid : undefined
+              }
             />
             <button
               type="button"
@@ -113,19 +124,20 @@ export default function LoginForm({
             </button>
           </div>
         </div>
-        
+
         <button
-          onClick={onLogin}
+          type="submit"
           disabled={loading || !email || !password}
           className="login-button"
-          style={{ 
+          style={{
             width: '100%',
-            padding: '14px 16px', 
+            padding: '14px 16px',
             borderRadius: tokens.radius.lg,
             border: 'none',
-            background: loading || !email || !password 
-              ? 'var(--color-accent-primary-20)' 
-              : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+            background:
+              loading || !email || !password
+                ? 'var(--color-accent-primary-20)'
+                : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
             color: tokens.colors.white,
             fontWeight: 700,
             fontSize: 16,
@@ -140,7 +152,7 @@ export default function LoginForm({
           {loading && <Spinner />}
           {loading ? t('loginLoggingIn') : t('loginButton')}
         </button>
-        
+
         {/* Forgot password */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 12 }}>
           <a
@@ -155,9 +167,10 @@ export default function LoginForm({
             {t('loginForgotPassword')}
           </a>
         </div>
-        
+
         {/* Switch to code login */}
         <button
+          type="button"
           onClick={onSwitchToCode}
           className="link-hover"
           style={{
@@ -174,7 +187,7 @@ export default function LoginForm({
         >
           {t('loginWithCode')}
         </button>
-      </>
+      </form>
     )
   }
 
@@ -191,9 +204,10 @@ export default function LoginForm({
             padding: '14px 16px',
             borderRadius: tokens.radius.lg,
             border: 'none',
-            background: sendingCode || !email || countdown > 0
-              ? 'var(--color-accent-primary-20)'
-              : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+            background:
+              sendingCode || !email || countdown > 0
+                ? 'var(--color-accent-primary-20)'
+                : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
             color: tokens.colors.white,
             fontWeight: 700,
             fontSize: 16,
