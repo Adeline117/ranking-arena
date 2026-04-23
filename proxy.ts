@@ -26,21 +26,21 @@ const CSRF_EXEMPT_ROUTES = [
   '/api/cron',
   '/api/health',
   '/api/webhook',
-  '/api/stripe',           // Stripe API 通过 Authorization header 验证
-  '/api/translate',        // 翻译 API 使用 rate limiting 保护
-  '/api/posts',            // 帖子相关 API 需要认证
-  '/api/comments',         // 评论相关 API 需要认证
-  '/api/bookmark',         // 收藏相关 API 需要认证
+  '/api/stripe', // Stripe API 通过 Authorization header 验证
+  '/api/translate', // 翻译 API 使用 rate limiting 保护
+  '/api/posts', // 帖子相关 API 需要认证
+  '/api/comments', // 评论相关 API 需要认证
+  '/api/bookmark', // 收藏相关 API 需要认证
   '/api/bookmark-folders', // 收藏夹 API 需要认证
-  '/api/users/follow',     // 关注 API 需要认证
-  '/api/follow',           // 交易员关注 API 需要认证
-  '/api/messages',         // 消息 API 需要认证
-  '/api/chat',             // 聊天设置 API 需要认证 (settings, search, upload)
-  '/api/conversations',    // 会话列表 API 需要认证
-  '/api/channels',         // 群聊频道 API 需要认证
-  '/api/notifications',    // 通知 API 需要认证
+  '/api/users/follow', // 关注 API 需要认证
+  '/api/follow', // 交易员关注 API 需要认证
+  '/api/messages', // 消息 API 需要认证
+  '/api/chat', // 聊天设置 API 需要认证 (settings, search, upload)
+  '/api/conversations', // 会话列表 API 需要认证
+  '/api/channels', // 群聊频道 API 需要认证
+  '/api/notifications', // 通知 API 需要认证
   '/api/upload-profile-image', // 头像/背景图上传 API，通过 userId 验证
-  '/api/pipeline',             // VPS pipeline ingest — authenticated via X-Proxy-Key
+  '/api/pipeline', // VPS pipeline ingest — authenticated via X-Proxy-Key
 ]
 
 // 需要认证的路由前缀
@@ -68,12 +68,7 @@ const PUBLIC_ROUTES = [
 ]
 
 // 需要跳过的路由
-const SKIP_ROUTES = [
-  '/_next',
-  '/favicon.ico',
-  '/api/health',
-  '/api/cron',
-]
+const SKIP_ROUTES = ['/_next', '/favicon.ico', '/api/health', '/api/cron']
 
 // ============================================
 // Rate Limiting
@@ -82,13 +77,16 @@ const SKIP_ROUTES = [
 // Tiered rate limiting: different limits for different route categories
 type RateLimitTier = 'health' | 'admin' | 'auth' | 'upload' | 'read' | 'write'
 
-const TIER_CONFIG: Record<RateLimitTier, { requests: number; window: `${number} s`; prefix: string }> = {
+const TIER_CONFIG: Record<
+  RateLimitTier,
+  { requests: number; window: `${number} s`; prefix: string }
+> = {
   health: { requests: 200, window: '60 s', prefix: 'mw:rl:health' },
-  admin:  { requests: 60,  window: '60 s', prefix: 'mw:rl:admin' },
-  auth:   { requests: 10,  window: '60 s', prefix: 'mw:rl:auth' },
-  upload: { requests: 20,  window: '60 s', prefix: 'mw:rl:upload' },
-  read:   { requests: 120, window: '60 s', prefix: 'mw:rl:read' },
-  write:  { requests: 30,  window: '60 s', prefix: 'mw:rl:write' },
+  admin: { requests: 60, window: '60 s', prefix: 'mw:rl:admin' },
+  auth: { requests: 10, window: '60 s', prefix: 'mw:rl:auth' },
+  upload: { requests: 20, window: '60 s', prefix: 'mw:rl:upload' },
+  read: { requests: 120, window: '60 s', prefix: 'mw:rl:read' },
+  write: { requests: 30, window: '60 s', prefix: 'mw:rl:write' },
 }
 
 const tierLimiters = new Map<RateLimitTier, Ratelimit>()
@@ -116,7 +114,11 @@ function getTieredLimiter(tier: RateLimitTier): Ratelimit | null {
 
 function classifyRoute(pathname: string, method: string): RateLimitTier | null {
   // Skip internal routes
-  if (pathname.startsWith('/api/cron/') || pathname.startsWith('/api/webhook/') || pathname.startsWith('/api/stripe/')) {
+  if (
+    pathname.startsWith('/api/cron/') ||
+    pathname.startsWith('/api/webhook/') ||
+    pathname.startsWith('/api/stripe/')
+  ) {
     return null
   }
   if (pathname.startsWith('/api/health')) return 'health'
@@ -138,7 +140,7 @@ const ALLOWED_ORIGINS = [
  */
 function generateCsp(): string {
   const isProduction = process.env.NODE_ENV === 'production'
-  
+
   // CSP 指令
   const directives: Record<string, string[]> = {
     'default-src': ["'self'"],
@@ -156,13 +158,7 @@ function generateCsp(): string {
       "'self'",
       "'unsafe-inline'", // Tailwind CSS 需要
     ],
-    'img-src': [
-      "'self'",
-      'data:',
-      'blob:',
-      'https:',
-      'http:',
-    ],
+    'img-src': ["'self'", 'data:', 'blob:', 'https:', 'http:'],
     'font-src': ["'self'", 'data:'],
     'connect-src': [
       "'self'",
@@ -187,23 +183,20 @@ function generateCsp(): string {
       // WalletConnect pulse
       'https://pulse.walletconnect.org',
     ],
-    'frame-src': [
-      "'self'",
-      'https://vercel.live',
-      'https://auth.privy.io',
-    ],
+    'frame-src': ["'self'", 'https://vercel.live', 'https://auth.privy.io'],
+    'worker-src': ["'self'", 'blob:'],
     'object-src': ["'none'"],
     'base-uri': ["'self'"],
     'form-action': ["'self'"],
     'frame-ancestors': ["'none'"],
     'upgrade-insecure-requests': [],
   }
-  
+
   // 生产环境移除 unsafe-eval
   if (isProduction) {
-    directives['script-src'] = directives['script-src'].filter(d => d !== "'unsafe-eval'")
+    directives['script-src'] = directives['script-src'].filter((d) => d !== "'unsafe-eval'")
   }
-  
+
   // 构建 CSP 字符串
   return Object.entries(directives)
     .map(([key, values]) => {
@@ -219,27 +212,27 @@ function generateCsp(): string {
 function addSecurityHeaders(response: NextResponse, isHtmlPage = false): NextResponse {
   // 防止 MIME 类型嗅探
   response.headers.set('X-Content-Type-Options', 'nosniff')
-  
+
   // 防止点击劫持
   response.headers.set('X-Frame-Options', 'DENY')
-  
+
   // XSS 过滤器
   response.headers.set('X-XSS-Protection', '1; mode=block')
-  
+
   // 引用来源策略
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  
+
   // 权限策略
   response.headers.set(
     'Permissions-Policy',
     'camera=(), microphone=(), geolocation=(), interest-cohort=()'
   )
-  
+
   // Content Security Policy (仅 HTML 页面)
   if (isHtmlPage) {
     response.headers.set('Content-Security-Policy', generateCsp())
   }
-  
+
   // HSTS (仅生产环境)
   if (process.env.NODE_ENV === 'production') {
     response.headers.set(
@@ -247,7 +240,7 @@ function addSecurityHeaders(response: NextResponse, isHtmlPage = false): NextRes
       'max-age=31536000; includeSubDomains; preload'
     )
   }
-  
+
   return response
 }
 
@@ -256,23 +249,20 @@ function addSecurityHeaders(response: NextResponse, isHtmlPage = false): NextRes
  */
 function addCorsHeaders(request: NextRequest, response: NextResponse): NextResponse {
   const origin = request.headers.get('origin')
-  
+
   // 检查是否允许的源
   if (origin && ALLOWED_ORIGINS.includes(origin)) {
     response.headers.set('Access-Control-Allow-Origin', origin)
   }
-  
+
   response.headers.set('Access-Control-Allow-Credentials', 'true')
-  response.headers.set(
-    'Access-Control-Allow-Methods',
-    'GET, POST, PUT, DELETE, PATCH, OPTIONS'
-  )
+  response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, PATCH, OPTIONS')
   response.headers.set(
     'Access-Control-Allow-Headers',
     'Content-Type, Authorization, X-CSRF-Token, X-Requested-With'
   )
   response.headers.set('Access-Control-Max-Age', '86400')
-  
+
   return response
 }
 
@@ -281,18 +271,18 @@ function addCorsHeaders(request: NextRequest, response: NextResponse): NextRespo
  */
 function isProtectedRoute(pathname: string, method: string): boolean {
   // GET 请求到公开 API 不需要认证
-  if (method === 'GET' && PUBLIC_ROUTES.some(route => pathname.startsWith(route))) {
+  if (method === 'GET' && PUBLIC_ROUTES.some((route) => pathname.startsWith(route))) {
     return false
   }
-  
-  return PROTECTED_ROUTES.some(route => pathname.startsWith(route))
+
+  return PROTECTED_ROUTES.some((route) => pathname.startsWith(route))
 }
 
 /**
  * 检查是否应跳过代理
  */
 function shouldSkip(pathname: string): boolean {
-  return SKIP_ROUTES.some(route => pathname.startsWith(route))
+  return SKIP_ROUTES.some((route) => pathname.startsWith(route))
 }
 
 /**
@@ -303,17 +293,17 @@ function requiresCsrfProtection(pathname: string, method: string): boolean {
   if (!CSRF_PROTECTED_METHODS.includes(method)) {
     return false
   }
-  
+
   // 只有 API 路由需要 CSRF 保护
   if (!pathname.startsWith('/api/')) {
     return false
   }
-  
+
   // 豁免路由不需要 CSRF 保护
-  if (CSRF_EXEMPT_ROUTES.some(route => pathname.startsWith(route))) {
+  if (CSRF_EXEMPT_ROUTES.some((route) => pathname.startsWith(route))) {
     return false
   }
-  
+
   return true
 }
 
@@ -322,24 +312,24 @@ function requiresCsrfProtection(pathname: string, method: string): boolean {
  */
 function validateTimedCsrfToken(token: string): boolean {
   if (!token) return false
-  
+
   const parts = token.split('.')
   if (parts.length !== 2) return false
-  
+
   const [timestampStr, tokenPart] = parts
-  
+
   // 验证 token 部分长度（64 hex chars = 32 bytes）
   if (tokenPart.length !== 64) return false
-  
+
   try {
     const timestamp = parseInt(timestampStr, 36)
     const now = Date.now()
-    
+
     // Token 已过期
     if (now - timestamp > CSRF_TOKEN_EXPIRY) {
       return false
     }
-    
+
     return true
   } catch {
     return false
@@ -352,16 +342,16 @@ function validateTimedCsrfToken(token: string): boolean {
 function validateCsrf(request: NextRequest): boolean {
   const cookieToken = request.cookies.get(CSRF_COOKIE_NAME)?.value
   const headerToken = request.headers.get(CSRF_HEADER_NAME)
-  
+
   if (!cookieToken || !headerToken) {
     return false
   }
-  
+
   // 验证 token 格式和时间
   if (!validateTimedCsrfToken(cookieToken) || !validateTimedCsrfToken(headerToken)) {
     return false
   }
-  
+
   // 比较两个 token（简单比较，因为都来自客户端）
   return cookieToken === headerToken
 }
@@ -372,10 +362,10 @@ function validateCsrf(request: NextRequest): boolean {
 function hasValidAuthHeader(request: NextRequest): boolean {
   const authHeader = request.headers.get('authorization')
   if (!authHeader) return false
-  
+
   // 检查 Bearer token 格式
   if (!authHeader.startsWith('Bearer ')) return false
-  
+
   const token = authHeader.slice(7)
   // 基本验证：token 不为空且长度合理
   return token.length > 20
@@ -389,13 +379,19 @@ function hasSessionCookie(request: NextRequest): boolean {
   // Supabase v2 使用 sb-<project-ref>-auth-token 格式的 cookie
   // 检查所有可能的 cookie 名称
   const allCookies = cookies.getAll()
-  return allCookies.some(cookie => 
-    cookie.name.startsWith('sb-') && 
-    (cookie.name.includes('-auth-token') || cookie.name.includes('access-token') || cookie.name.includes('refresh-token'))
-  ) || !!(
-    cookies.get('sb-access-token') ||
-    cookies.get('sb-refresh-token') ||
-    cookies.get('supabase-auth-token')
+  return (
+    allCookies.some(
+      (cookie) =>
+        cookie.name.startsWith('sb-') &&
+        (cookie.name.includes('-auth-token') ||
+          cookie.name.includes('access-token') ||
+          cookie.name.includes('refresh-token'))
+    ) ||
+    !!(
+      cookies.get('sb-access-token') ||
+      cookies.get('sb-refresh-token') ||
+      cookies.get('supabase-auth-token')
+    )
   )
 }
 
@@ -405,7 +401,7 @@ function hasSessionCookie(request: NextRequest): boolean {
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const method = request.method
-  
+
   // 跳过不需要处理的路由
   if (shouldSkip(pathname)) {
     return NextResponse.next()
@@ -415,10 +411,10 @@ export async function proxy(request: NextRequest) {
   if (pathname.startsWith('/api/')) {
     const ua = request.headers.get('user-agent') || ''
     if (!ua) {
-      return new NextResponse(
-        JSON.stringify({ error: 'Forbidden' }),
-        { status: 403, headers: { 'Content-Type': 'application/json' } }
-      )
+      return new NextResponse(JSON.stringify({ error: 'Forbidden' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      })
     }
   }
 
@@ -431,8 +427,10 @@ export async function proxy(request: NextRequest) {
   //   - /tip/success is the Stripe success_url for tipping in groups
   //   - /channels/[id] is linked from inbox + create-group flow
   if (
-    pathname === '/frame' || pathname.startsWith('/frame/') ||
-    pathname === '/kol' || pathname.startsWith('/kol/')
+    pathname === '/frame' ||
+    pathname.startsWith('/frame/') ||
+    pathname === '/kol' ||
+    pathname.startsWith('/kol/')
   ) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
@@ -458,7 +456,7 @@ export async function proxy(request: NextRequest) {
     response.headers.set('X-Request-ID', requestId)
     return response
   }
-  
+
   // API 路由分层限流检查
   if (pathname.startsWith('/api/')) {
     const tier = classifyRoute(pathname, method)
@@ -467,7 +465,8 @@ export async function proxy(request: NextRequest) {
       if (limiter) {
         try {
           const forwarded = request.headers.get('x-forwarded-for')
-          const ip = forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'anonymous'
+          const ip =
+            forwarded?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || 'anonymous'
           const { success, limit, remaining, reset } = await limiter.limit(ip)
 
           if (!success) {
@@ -495,7 +494,7 @@ export async function proxy(request: NextRequest) {
   // 页面路由让客户端自己处理认证，避免 cookie 检查不准确导致的错误重定向
   if (isProtectedRoute(pathname, method) && pathname.startsWith('/api/')) {
     const hasAuth = hasValidAuthHeader(request) || hasSessionCookie(request)
-    
+
     if (!hasAuth) {
       // API 路由返回 401
       const response = NextResponse.json(
@@ -514,7 +513,7 @@ export async function proxy(request: NextRequest) {
       return response
     }
   }
-  
+
   // CSRF 保护检查
   if (requiresCsrfProtection(pathname, method)) {
     if (!validateCsrf(request)) {
@@ -534,29 +533,29 @@ export async function proxy(request: NextRequest) {
       return response
     }
   }
-  
+
   // Auth-protected page routes: handled client-side via useAuthSession hook.
   // Server-side redirect disabled because auth uses localStorage (not cookies),
   // so proxy cannot validate session. Each protected page does its own client redirect.
 
   // 继续处理请求
   const response = NextResponse.next()
-  
+
   // 添加请求 ID
   response.headers.set('X-Request-ID', requestId)
-  
+
   // 检测是否是 HTML 页面请求
   const acceptHeader = request.headers.get('accept') || ''
   const isHtmlPage = !pathname.startsWith('/api/') && acceptHeader.includes('text/html')
-  
+
   // 添加安全头
   addSecurityHeaders(response, isHtmlPage)
-  
+
   // API 路由添加 CORS 头
   if (pathname.startsWith('/api/')) {
     addCorsHeaders(request, response)
   }
-  
+
   return response
 }
 
