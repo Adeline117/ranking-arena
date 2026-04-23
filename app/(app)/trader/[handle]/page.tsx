@@ -210,81 +210,96 @@ export async function generateMetadata({
   }
   const BASE = BASE_URL
 
+  // ---------- resolve trader identity ----------
+  let resolved: Awaited<ReturnType<typeof cachedResolveTrader>> = null
   try {
-    // Use cached resolver — deduplicates with the page component's resolveTrader call
-    const resolved = await cachedResolveTrader(decoded)
-
-    if (resolved) {
-      // Use cached leaderboard fetch — avoids duplicate query with page render
-      const lr = await cachedLeaderboardMeta(resolved.platform, resolved.traderKey)
-
-      const name = resolved.handle || decoded
-      const exchange = EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto'
-      const roi = typeof lr?.roi === 'number' ? lr.roi : null
-      const score = typeof lr?.arena_score === 'number' ? lr.arena_score : null
-      const rank = lr?.rank
-
-      const parts = [
-        roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
-        score != null ? `Arena Score ${score.toFixed(0)}` : null,
-        rank != null ? `Ranked ${rank}` : null,
-      ].filter(Boolean)
-
-      const title = `${name} (${exchange}) | Crypto Trader Rankings`
-      const rawDescription = parts.length
-        ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track performance history, analytics, and rankings on Arena.`
-        : `${name} is a ${exchange} crypto trader. View performance analytics, trading history, risk metrics, and rankings on Arena.`
-      const description =
-        rawDescription.length > 160 ? rawDescription.substring(0, 157) + '...' : rawDescription
-
-      const ogParams = new URLSearchParams({ handle: decoded })
-      if (roi != null) ogParams.set('roi', roi.toFixed(2))
-      if (score != null) ogParams.set('score', score.toFixed(0))
-      if (rank != null) ogParams.set('rank', String(rank))
-      if (resolved.platform) ogParams.set('source', resolved.platform)
-      const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
-
-      return {
-        title,
-        description,
-        openGraph: {
-          title,
-          description,
-          url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
-          siteName: 'Arena',
-          type: 'profile',
-          images: [
-            { url: ogImageUrl, width: 1200, height: 630, alt: `${name} trading performance card` },
-          ],
-        },
-        twitter: {
-          card: 'summary_large_image',
-          title,
-          description:
-            description.length > 160 ? description.substring(0, 157) + '...' : description,
-          images: [ogImageUrl],
-          creator: '@arenafi',
-          site: '@arenafi',
-        },
-        alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
-      }
-    }
+    resolved = await cachedResolveTrader(decoded)
   } catch (err) {
-    // Re-throw Next.js navigation errors (notFound, redirect) — they use special
-    // error types that must propagate to the framework, not be swallowed.
     if (err && typeof err === 'object' && 'digest' in err) throw err
     logger.error(
-      '[trader/generateMetadata] error for handle:',
+      '[trader/generateMetadata] resolveTrader failed:',
       decoded,
-      err instanceof Error ? err.message : err,
-      err instanceof Error ? err.stack?.slice(0, 300) : ''
+      err instanceof Error ? err.message : err
     )
   }
 
-  // Trader not found — trigger 404 before streaming starts.
-  // This MUST happen in generateMetadata (not just in the page component)
-  // because Next.js sends the HTTP status code before the page body streams.
-  notFound()
+  // If the trader cannot be resolved at all (not in DB, or timeout), use the
+  // URL handle as a best-effort name so the page still gets a meaningful <title>
+  // instead of falling back to the generic root layout default.
+  // The page component handles the actual notFound() for the 404 HTTP status.
+  const name = resolved?.handle || decoded
+  const exchange = resolved
+    ? EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto'
+    : 'Crypto'
+
+  // ---------- fetch leaderboard stats (best-effort, never fails metadata) ----------
+  let lr: {
+    rank?: number | null
+    arena_score?: number | null
+    roi?: number | null
+    pnl?: number | null
+  } | null = null
+  if (resolved) {
+    try {
+      lr = await cachedLeaderboardMeta(resolved.platform, resolved.traderKey)
+    } catch (err) {
+      // Leaderboard fetch failure should NOT prevent title generation.
+      // The trader name is already known — produce metadata without stats.
+      logger.error(
+        '[trader/generateMetadata] leaderboardMeta failed:',
+        decoded,
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
+
+  const roi = typeof lr?.roi === 'number' ? lr.roi : null
+  const score = typeof lr?.arena_score === 'number' ? lr.arena_score : null
+  const rank = lr?.rank ?? null
+
+  const parts = [
+    roi != null ? `${roi >= 0 ? '+' : ''}${roi.toFixed(1)}% ROI` : null,
+    score != null ? `Arena Score ${score.toFixed(0)}` : null,
+    rank != null ? `Ranked ${rank}` : null,
+  ].filter(Boolean)
+
+  const title = `${name} (${exchange}) | Crypto Trader Rankings`
+  const rawDescription = parts.length
+    ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track performance history, analytics, and rankings on Arena.`
+    : `${name} is a ${exchange} crypto trader. View performance analytics, trading history, risk metrics, and rankings on Arena.`
+  const description =
+    rawDescription.length > 160 ? rawDescription.substring(0, 157) + '...' : rawDescription
+
+  const ogParams = new URLSearchParams({ handle: decoded })
+  if (roi != null) ogParams.set('roi', roi.toFixed(2))
+  if (score != null) ogParams.set('score', score.toFixed(0))
+  if (rank != null) ogParams.set('rank', String(rank))
+  if (resolved?.platform) ogParams.set('source', resolved.platform)
+  const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
+
+  return {
+    title,
+    description,
+    openGraph: {
+      title,
+      description,
+      url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
+      siteName: 'Arena',
+      type: 'profile',
+      images: [
+        { url: ogImageUrl, width: 1200, height: 630, alt: `${name} trading performance card` },
+      ],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title,
+      description: description.length > 160 ? description.substring(0, 157) + '...' : description,
+      images: [ogImageUrl],
+      creator: '@arenafi',
+      site: '@arenafi',
+    },
+    alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
+  }
 }
 
 // ISR: regenerate trader pages every 5 minutes
