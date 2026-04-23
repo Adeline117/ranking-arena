@@ -20,7 +20,9 @@ export default function NotificationsList() {
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(true)
-  const [typeFilter, setTypeFilter] = useState<'all' | 'follow' | 'like' | 'comment' | 'mention'>('all')
+  const [typeFilter, setTypeFilter] = useState<'all' | 'follow' | 'like' | 'comment' | 'mention'>(
+    'all'
+  )
   const [collapsed, setCollapsed] = useState(false)
   const PAGE_SIZE = 20
   const { accessToken } = useAuthSession()
@@ -32,54 +34,61 @@ export default function NotificationsList() {
   const pendingMarkAllRef = useRef(false)
   const pendingMarkRef = useRef<Set<string>>(new Set())
 
-  const loadNotifications = useCallback(async (abortSignal?: AbortSignal) => {
-    if (!accessToken) return
-    try {
-      setLoading(true)
-      const response = await fetch('/api/notifications', {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-        signal: abortSignal
-      })
+  const loadNotifications = useCallback(
+    async (abortSignal?: AbortSignal) => {
+      if (!accessToken) return
+      try {
+        setLoading(true)
+        const response = await fetch('/api/notifications', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: abortSignal,
+        })
 
-      if (abortSignal?.aborted) return
+        if (abortSignal?.aborted) return
 
-      if (!response.ok) {
-        const errorMessage = response.status === 401 ? t('authenticationFailed') : t('failedToLoadNotifications')
-        showToast(errorMessage, 'error')
-        return
+        if (!response.ok) {
+          const errorMessage =
+            response.status === 401 ? t('authenticationFailed') : t('failedToLoadNotifications')
+          showToast(errorMessage, 'error')
+          return
+        }
+
+        const result = await response.json()
+        const data = result.data || result
+        const notifs = data.notifications || []
+        setNotifications(notifs)
+        setUnreadNotifications(data.unread_count || 0)
+        setHasMore(notifs.length >= PAGE_SIZE)
+      } catch (err) {
+        if (abortSignal?.aborted) return
+
+        logger.error('Failed to load notifications:', err)
+        showToast(t('unexpectedError'), 'error')
+      } finally {
+        if (!abortSignal?.aborted) {
+          setLoading(false)
+        }
       }
-
-      const result = await response.json()
-      const data = result.data || result
-      const notifs = data.notifications || []
-      setNotifications(notifs)
-      setUnreadNotifications(data.unread_count || 0)
-      setHasMore(notifs.length >= PAGE_SIZE)
-    } catch (err) {
-      if (abortSignal?.aborted) return
-
-      logger.error('Failed to load notifications:', err)
-      showToast(t('unexpectedError'), 'error')
-    } finally {
-      if (!abortSignal?.aborted) {
-        setLoading(false)
-      }
-    }
-  }, [accessToken, setUnreadNotifications, showToast, t])
+    },
+    [accessToken, setUnreadNotifications, showToast, t]
+  )
 
   const loadMoreNotifications = useCallback(async () => {
     if (!accessToken || loadingMore || !hasMore) return
     setLoadingMore(true)
     try {
-      const response = await fetch(`/api/notifications?offset=${notifications.length}&limit=${PAGE_SIZE}`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-        signal: AbortSignal.timeout(15000),
-      })
+      const response = await fetch(
+        `/api/notifications?offset=${notifications.length}&limit=${PAGE_SIZE}`,
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: AbortSignal.timeout(15000),
+        }
+      )
       if (!response.ok) return
       const result = await response.json()
       const data = result.data || result
       const moreNotifs = data.notifications || []
-      setNotifications(prev => [...prev, ...moreNotifs])
+      setNotifications((prev) => [...prev, ...moreNotifs])
       setHasMore(moreNotifs.length >= PAGE_SIZE)
     } catch (err) {
       logger.error('Failed to load more notifications:', err)
@@ -121,7 +130,7 @@ export default function NotificationsList() {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ mark_all: true }),
@@ -141,45 +150,48 @@ export default function NotificationsList() {
     }
   }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast, t])
 
-  const markAsRead = useCallback(async (id: string) => {
-    if (!accessToken || pendingMarkRef.current.has(id)) return
-    pendingMarkRef.current.add(id)
+  const markAsRead = useCallback(
+    async (id: string) => {
+      if (!accessToken || pendingMarkRef.current.has(id)) return
+      pendingMarkRef.current.add(id)
 
-    // 找到当前通知的状态
-    const currentNotification = notifications.find(n => n.id === id)
-    if (!currentNotification || currentNotification.read) {
-      pendingMarkRef.current.delete(id)
-      return
-    }
-
-    // 乐观更新
-    setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: true } : n))
-    setUnreadNotifications(Math.max(0, unreadNotifications - 1))
-
-    try {
-      const response = await fetch('/api/notifications', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({ notification_id: id }),
-        signal: AbortSignal.timeout(15000),
-      })
-      if (!response.ok) {
-        throw new Error('Failed to mark as read')
+      // 找到当前通知的状态
+      const currentNotification = notifications.find((n) => n.id === id)
+      if (!currentNotification || currentNotification.read) {
+        pendingMarkRef.current.delete(id)
+        return
       }
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return
-      // 回滚
-      setNotifications((prev) => prev.map((n) => n.id === id ? { ...n, read: false } : n))
-      setUnreadNotifications(unreadNotifications)
-      showToast(t('operationFailed'), 'error')
-    } finally {
-      pendingMarkRef.current.delete(id)
-    }
-  }, [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast, t])
+
+      // 乐观更新
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
+      setUnreadNotifications(Math.max(0, unreadNotifications - 1))
+
+      try {
+        const response = await fetch('/api/notifications', {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ notification_id: id }),
+          signal: AbortSignal.timeout(15000),
+        })
+        if (!response.ok) {
+          throw new Error('Failed to mark as read')
+        }
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') return
+        // 回滚
+        setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: false } : n)))
+        setUnreadNotifications(unreadNotifications)
+        showToast(t('operationFailed'), 'error')
+      } finally {
+        pendingMarkRef.current.delete(id)
+      }
+    },
+    [accessToken, notifications, unreadNotifications, setUnreadNotifications, showToast, t]
+  )
 
   function getIcon(type: string): string {
     switch (type) {
@@ -226,7 +238,13 @@ export default function NotificationsList() {
           >
             <polyline points="6 9 12 15 18 9" />
           </svg>
-          <span style={{ fontWeight: 700, fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.primary }}>
+          <span
+            style={{
+              fontWeight: 700,
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.primary,
+            }}
+          >
             {t('notifications')}
           </span>
           {unreadNotifications > 0 && (
@@ -267,19 +285,31 @@ export default function NotificationsList() {
 
       {/* Filter tabs */}
       {!collapsed && (
-        <div style={{
-          display: 'flex', gap: 4,
-          padding: `0 ${tokens.spacing[4]} ${tokens.spacing[2]}`,
-          overflowX: 'auto',
-        }}>
-          {(['all', 'follow', 'like', 'comment', 'mention'] as const).map(f => (
-            <button key={f} onClick={() => setTypeFilter(f)} style={{
-              padding: '3px 10px', borderRadius: tokens.radius.lg, border: 'none',
-              background: typeFilter === f ? tokens.colors.accent.brand : 'transparent',
-              color: typeFilter === f ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
-              fontSize: 11, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
-              minHeight: 24,
-            }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 4,
+            padding: `0 ${tokens.spacing[4]} ${tokens.spacing[2]}`,
+            overflowX: 'auto',
+          }}
+        >
+          {(['all', 'follow', 'like', 'comment', 'mention'] as const).map((f) => (
+            <button
+              key={f}
+              onClick={() => setTypeFilter(f)}
+              style={{
+                padding: '3px 10px',
+                borderRadius: tokens.radius.lg,
+                border: 'none',
+                background: typeFilter === f ? tokens.colors.accent.brand : 'transparent',
+                color: typeFilter === f ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                minHeight: 24,
+              }}
+            >
               {f === 'all' ? t('all') : t(`notifType_${f}`) || f}
             </button>
           ))}
@@ -290,38 +320,22 @@ export default function NotificationsList() {
       {!collapsed && (
         <div style={{ maxHeight: 'min(400px, 60vh)', overflowY: 'auto' }}>
           {loading ? (
-            <div style={{ padding: tokens.spacing[3], display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-              {[1, 2, 3].map(i => (
-                <div key={i} style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[3], padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: tokens.colors.bg.tertiary, flexShrink: 0, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
-                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    <div style={{ width: '70%', height: 14, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
-                    <div style={{ width: '50%', height: 12, borderRadius: 4, background: tokens.colors.bg.tertiary, animation: 'shimmer 1.5s ease-in-out infinite', backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`, backgroundSize: '200% 100%' }} />
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : notifications.length === 0 ? (
-            <div style={{ padding: '24px 12px', textAlign: 'center' }}>
-              <Image src="/stickers/gn.webp" alt="No notifications" width={48} height={48} unoptimized style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }} />
-              <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-                {t('noNotifications')}
-              </p>
-            </div>
-          ) : (
-            notifications.filter(n => typeFilter === 'all' || n.type === typeFilter).map((notif) => {
-              const content = (
+            <div
+              style={{
+                padding: tokens.spacing[3],
+                display: 'flex',
+                flexDirection: 'column',
+                gap: tokens.spacing[2],
+              }}
+            >
+              {[1, 2, 3].map((i) => (
                 <div
-                  key={notif.id}
-                  onClick={() => { if (!notif.read) markAsRead(notif.id) }}
+                  key={i}
                   style={{
                     display: 'flex',
                     alignItems: 'flex-start',
                     gap: tokens.spacing[3],
                     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                    background: notif.read ? 'transparent' : 'var(--color-notification-unread)',
-                    transition: 'background 0.15s',
-                    cursor: notif.link ? 'pointer' : 'default',
                   }}
                 >
                   <div
@@ -329,49 +343,169 @@ export default function NotificationsList() {
                       width: 32,
                       height: 32,
                       borderRadius: '50%',
-                      background: tokens.colors.bg.secondary,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: 14,
+                      background: tokens.colors.bg.tertiary,
                       flexShrink: 0,
-                      overflow: 'hidden',
+                      animation: 'shimmer 1.5s ease-in-out infinite',
+                      backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
+                      backgroundSize: '200% 100%',
+                    }}
+                  />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div
+                      style={{
+                        width: '70%',
+                        height: 14,
+                        borderRadius: 4,
+                        background: tokens.colors.bg.tertiary,
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                        backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
+                        backgroundSize: '200% 100%',
+                      }}
+                    />
+                    <div
+                      style={{
+                        width: '50%',
+                        height: 12,
+                        borderRadius: 4,
+                        background: tokens.colors.bg.tertiary,
+                        animation: 'shimmer 1.5s ease-in-out infinite',
+                        backgroundImage: `linear-gradient(90deg, ${tokens.colors.bg.tertiary} 0%, var(--glass-bg-light) 50%, ${tokens.colors.bg.tertiary} 100%)`,
+                        backgroundSize: '200% 100%',
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : notifications.length === 0 ? (
+            <div style={{ padding: '24px 12px', textAlign: 'center' }}>
+              <Image
+                src="/stickers/gn.webp"
+                alt="No notifications"
+                width={48}
+                height={48}
+                unoptimized
+                style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }}
+              />
+              <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
+                {t('noNotifications')}
+              </p>
+            </div>
+          ) : (
+            notifications
+              .filter((n) => typeFilter === 'all' || n.type === typeFilter)
+              .map((notif) => {
+                const content = (
+                  <div
+                    key={notif.id}
+                    onClick={() => {
+                      if (!notif.read) markAsRead(notif.id)
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: tokens.spacing[3],
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      background: notif.read ? 'transparent' : 'var(--color-notification-unread)',
+                      transition: 'background 0.15s',
+                      cursor: notif.link ? 'pointer' : 'default',
                     }}
                   >
-                    {notif.actor_avatar_url ? (
-                      <Image src={`/api/avatar?url=${encodeURIComponent(notif.actor_avatar_url)}`} alt={`${notif.actor_handle || 'User'} avatar`} width={32} height={32} sizes="32px" loading="lazy" unoptimized style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
-                    ) : (
-                      getIcon(notif.type)
+                    <div
+                      style={{
+                        width: 32,
+                        height: 32,
+                        borderRadius: '50%',
+                        background: tokens.colors.bg.secondary,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 14,
+                        flexShrink: 0,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {notif.actor_avatar_url ? (
+                        <Image
+                          src={
+                            notif.actor_avatar_url.startsWith('data:')
+                              ? notif.actor_avatar_url
+                              : `/api/avatar?url=${encodeURIComponent(notif.actor_avatar_url)}`
+                          }
+                          alt={`${notif.actor_handle || 'User'} avatar`}
+                          width={32}
+                          height={32}
+                          sizes="32px"
+                          loading="lazy"
+                          unoptimized
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          onError={(e) => {
+                            ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+                          }}
+                        />
+                      ) : (
+                        getIcon(notif.type)
+                      )}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div
+                        style={{
+                          fontSize: 13,
+                          fontWeight: 700,
+                          color: tokens.colors.text.primary,
+                          marginBottom: 2,
+                        }}
+                      >
+                        {notif.title}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 12,
+                          color: tokens.colors.text.secondary,
+                          marginBottom: 2,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {notif.message}
+                      </div>
+                      <div style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                        {formatTimeAgo(notif.created_at, language)}
+                      </div>
+                    </div>
+                    {!notif.read && (
+                      <div
+                        style={{
+                          width: 8,
+                          height: 8,
+                          borderRadius: '50%',
+                          background: tokens.colors.accent.primary,
+                          flexShrink: 0,
+                          marginTop: 6,
+                        }}
+                      />
                     )}
                   </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, marginBottom: 2 }}>
-                      {notif.title}
-                    </div>
-                    <div style={{ fontSize: 12, color: tokens.colors.text.secondary, marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                      {notif.message}
-                    </div>
-                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                      {formatTimeAgo(notif.created_at, language)}
-                    </div>
-                  </div>
-                  {!notif.read && (
-                    <div style={{ width: 8, height: 8, borderRadius: '50%', background: tokens.colors.accent.primary, flexShrink: 0, marginTop: 6 }} />
-                  )}
-                </div>
-              )
+                )
 
-              return notif.link ? (
-                <Link key={notif.id} href={notif.link} style={{ textDecoration: 'none', color: 'inherit' }}>
-                  {content}
-                </Link>
-              ) : (
-                <div key={notif.id}>{content}</div>
-              )
-            })
+                return notif.link ? (
+                  <Link
+                    key={notif.id}
+                    href={notif.link}
+                    style={{ textDecoration: 'none', color: 'inherit' }}
+                  >
+                    {content}
+                  </Link>
+                ) : (
+                  <div key={notif.id}>{content}</div>
+                )
+              })
           )}
           {!loading && hasMore && notifications.length > 0 && (
-            <div style={{ textAlign: 'center', padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}>
+            <div
+              style={{ textAlign: 'center', padding: `${tokens.spacing[3]} ${tokens.spacing[4]}` }}
+            >
               <button
                 onClick={loadMoreNotifications}
                 disabled={loadingMore}

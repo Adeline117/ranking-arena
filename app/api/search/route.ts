@@ -27,6 +27,7 @@ import { features } from '@/lib/features'
 import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { searchTradersMeili, isMeilisearchAvailable } from '@/lib/search/meilisearch'
+import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
 
 // Removed force-dynamic: search results are cacheable via Redis + HTTP cache headers
 // Previous force-dynamic blocked Vercel CDN caching entirely
@@ -150,6 +151,8 @@ async function handleTrendingSearch(supabase: Parameters<Parameters<typeof withP
         if (!query || query.length < 2) return
         const normalizedQuery = query.toLowerCase().trim()
         if (normalizedQuery.length < 2) return
+        // Skip malicious/SQL-injection search terms so they never appear as pills
+        if (isMaliciousSearchQuery(normalizedQuery)) return
         const current = queryStats.get(normalizedQuery) || { count: 0, totalResults: 0 }
         current.count += 1
         current.totalResults += result_count || 0
@@ -256,6 +259,8 @@ async function handleHotSearch(supabase: Parameters<Parameters<typeof withPublic
         if (!post.title) continue
         const keyword = extractKeyword(post.title)
         if (!keyword || seenKeywords.has(keyword.toLowerCase())) continue
+        // Skip malicious keywords extracted from post titles
+        if (isMaliciousSearchQuery(keyword)) continue
         seenKeywords.add(keyword.toLowerCase())
         const score = post.hot_score ||
           (post.view_count || 0) * 0.1 +
@@ -654,15 +659,17 @@ export const GET = withPublic(
       // Intentionally swallowed: cache write failure is non-critical
     }
 
-    // Search analytics (async)
-    fireAndForget(
-      supabase.from('search_analytics').insert({
-        query: query.slice(0, 200),
-        result_count: totalResults,
-        source: 'unified',
-      }).then(),
-      'Record search analytics'
-    )
+    // Search analytics (async) — skip malicious queries to keep analytics clean
+    if (!isMaliciousSearchQuery(query)) {
+      fireAndForget(
+        supabase.from('search_analytics').insert({
+          query: query.slice(0, 200),
+          result_count: totalResults,
+          source: 'unified',
+        }).then(),
+        'Record search analytics'
+      )
+    }
 
     return success(result, 200, {
       'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',

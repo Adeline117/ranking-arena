@@ -76,7 +76,10 @@ export default function GroupHeader({
         }}
       />
 
-      <Box className="group-header-layout" style={{ display: 'flex', gap: tokens.spacing[5], alignItems: 'flex-start' }}>
+      <Box
+        className="group-header-layout"
+        style={{ display: 'flex', gap: tokens.spacing[5], alignItems: 'flex-start' }}
+      >
         {/* Avatar */}
         <Box
           style={{
@@ -99,21 +102,42 @@ export default function GroupHeader({
           </Text>
           {group.avatar_url && (
             <img
-              src={`/api/avatar?url=${encodeURIComponent(group.avatar_url)}`}
+              src={
+                group.avatar_url.startsWith('data:')
+                  ? group.avatar_url
+                  : `/api/avatar?url=${encodeURIComponent(group.avatar_url)}`
+              }
               alt={group.name}
               width={72}
               height={72}
               loading="lazy"
-              style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                position: 'absolute',
+                inset: 0,
+              }}
               referrerPolicy="no-referrer"
-              onError={(e) => { e.currentTarget.style.display = 'none' }}
+              onError={(e) => {
+                e.currentTarget.style.display = 'none'
+              }}
             />
           )}
         </Box>
 
         {/* Info */}
         <Box className="group-header-info" style={{ flex: 1, minWidth: 0 }}>
-          <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2], flexWrap: 'wrap', gap: tokens.spacing[2] }}>
+          <Box
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              marginBottom: tokens.spacing[2],
+              flexWrap: 'wrap',
+              gap: tokens.spacing[2],
+            }}
+          >
             <Box>
               <Text
                 size="2xl"
@@ -127,35 +151,52 @@ export default function GroupHeader({
               >
                 {language === 'en' && group.name_en ? group.name_en : group.name}
                 {group.is_premium_only && (
-                  <span style={{
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: tokens.colors.white,
-                    background: 'var(--color-pro-badge-bg)',
-                    padding: '2px 6px',
-                    borderRadius: tokens.radius.full,
-                    marginLeft: tokens.spacing[2],
-                    verticalAlign: 'middle',
-                  }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: tokens.colors.white,
+                      background: 'var(--color-pro-badge-bg)',
+                      padding: '2px 6px',
+                      borderRadius: tokens.radius.full,
+                      marginLeft: tokens.spacing[2],
+                      verticalAlign: 'middle',
+                    }}
+                  >
                     Pro
                   </span>
                 )}
-                <span style={{
-                  fontSize: 11,
-                  color: tokens.colors.text.tertiary,
-                  marginLeft: tokens.spacing[2],
-                  verticalAlign: 'middle',
-                }}>
+                <span
+                  style={{
+                    fontSize: 11,
+                    color: tokens.colors.text.tertiary,
+                    marginLeft: tokens.spacing[2],
+                    verticalAlign: 'middle',
+                  }}
+                >
                   ▼
                 </span>
               </Text>
 
               {/* Meta row: members + owner + created */}
-              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap', marginTop: tokens.spacing[2] }}>
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[3],
+                  flexWrap: 'wrap',
+                  marginTop: tokens.spacing[2],
+                }}
+              >
                 {group.member_count !== null && group.member_count !== undefined && (
                   <span
                     className="member-badge"
-                    style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    style={{
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                    }}
                     onClick={onShowMembers}
                   >
                     {memberPreviews.length > 0 ? (
@@ -183,13 +224,19 @@ export default function GroupHeader({
                           >
                             {m.avatar_url ? (
                               <img
-                                src={`/api/avatar?url=${encodeURIComponent(m.avatar_url)}`}
+                                src={
+                                  m.avatar_url.startsWith('data:')
+                                    ? m.avatar_url
+                                    : `/api/avatar?url=${encodeURIComponent(m.avatar_url)}`
+                                }
                                 alt={m.handle || 'Member'}
                                 width={20}
                                 height={20}
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                 loading="lazy"
-                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                onError={(e) => {
+                                  ;(e.target as HTMLImageElement).style.display = 'none'
+                                }}
                               />
                             ) : (
                               (m.handle?.[0] || '?').toUpperCase()
@@ -198,8 +245,19 @@ export default function GroupHeader({
                         ))}
                       </span>
                     ) : (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.7 }}>
-                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" />
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        style={{ opacity: 0.7 }}
+                      >
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                        <circle cx="9" cy="7" r="4" />
                       </svg>
                     )}
                     {group.member_count} {t('groupMembers')}
@@ -207,7 +265,11 @@ export default function GroupHeader({
                 )}
 
                 {group.owner_handle && (
-                  <Text size="xs" color="tertiary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Text
+                    size="xs"
+                    color="tertiary"
+                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                  >
                     {t('groupOwner')}:
                     <Link
                       href={`/u/${encodeURIComponent(group.owner_handle)}`}
@@ -223,11 +285,31 @@ export default function GroupHeader({
                 )}
 
                 {group.created_at && (
-                  <Text size="xs" color="tertiary" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                    <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
-                      <circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" />
+                  <Text
+                    size="xs"
+                    color="tertiary"
+                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                  >
+                    <svg
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      style={{ opacity: 0.5 }}
+                    >
+                      <circle cx="12" cy="12" r="10" />
+                      <polyline points="12 6 12 12 16 14" />
                     </svg>
-                    {new Date(group.created_at).toLocaleDateString(({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] || 'en-US', { year: 'numeric', month: 'short' })}
+                    {new Date(group.created_at).toLocaleDateString(
+                      ({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[
+                        language
+                      ] || 'en-US',
+                      { year: 'numeric', month: 'short' }
+                    )}
                   </Text>
                 )}
               </Box>
@@ -262,16 +344,29 @@ export default function GroupHeader({
 
           {/* Description */}
           {(() => {
-            const desc = (language === 'en' && group.description_en) ? group.description_en : group.description
+            const desc =
+              language === 'en' && group.description_en ? group.description_en : group.description
             return desc ? (
-              <Text size="sm" color="secondary" style={{ marginTop: tokens.spacing[2], lineHeight: 1.65, maxWidth: 600 }}>
+              <Text
+                size="sm"
+                color="secondary"
+                style={{ marginTop: tokens.spacing[2], lineHeight: 1.65, maxWidth: 600 }}
+              >
                 {desc}
               </Text>
             ) : null
           })()}
 
           {/* Join/Leave Button */}
-          <Box className="group-header-actions" style={{ marginTop: tokens.spacing[4], display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+          <Box
+            className="group-header-actions"
+            style={{
+              marginTop: tokens.spacing[4],
+              display: 'flex',
+              gap: tokens.spacing[2],
+              flexWrap: 'wrap',
+            }}
+          >
             {userId ? (
               isMember ? (
                 <>
@@ -279,8 +374,18 @@ export default function GroupHeader({
                     <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
                       <Button variant="primary" size="sm">
                         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                            <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M12 20h9" />
+                            <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
                           </svg>
                           {t('groupPost')}
                         </span>
@@ -295,32 +400,22 @@ export default function GroupHeader({
                     </Link>
                   )}
                   {userRole !== 'owner' && (
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={onLeave}
-                      disabled={joining}
-                    >
-                      {joining
-                        ? t('groupLeaving')
-                        : t('groupLeaveBtn')}
+                    <Button variant="secondary" size="sm" onClick={onLeave} disabled={joining}>
+                      {joining ? t('groupLeaving') : t('groupLeaveBtn')}
                     </Button>
                   )}
                 </>
               ) : !isDissolved ? (
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={onJoin}
-                  disabled={joining}
-                >
-                  {joining
-                    ? t('groupJoining')
-                    : t('groupJoinBtn')}
+                <Button variant="primary" size="sm" onClick={onJoin} disabled={joining}>
+                  {joining ? t('groupJoining') : t('groupJoinBtn')}
                 </Button>
               ) : null
             ) : !isDissolved ? (
-              <Button variant="primary" size="sm" onClick={() => useLoginModal.getState().openLoginModal()}>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => useLoginModal.getState().openLoginModal()}
+              >
                 {t('groupLoginToJoin')}
               </Button>
             ) : null}
