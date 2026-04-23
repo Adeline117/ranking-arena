@@ -12,12 +12,12 @@ export function getAvatarColor(userId: string): string {
   for (let i = 0; i < userId.length; i++) {
     hash = userId.charCodeAt(i) + ((hash << 5) - hash)
   }
-  
+
   // 生成HSL颜色（饱和度70-90%，亮度40-60%，确保颜色鲜艳但不太亮）
   const hue = Math.abs(hash) % 360
   const saturation = 70 + (Math.abs(hash) % 20) // 70-90%
   const lightness = 40 + (Math.abs(hash) % 20) // 40-60%
-  
+
   return `hsl(${hue}, ${saturation}%, ${lightness}%)`
 }
 
@@ -26,14 +26,17 @@ export function getAvatarColor(userId: string): string {
  */
 export function getAvatarGradient(userId: string): string {
   const hash1 = userId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  const hash2 = userId.split('').reverse().reduce((acc, char) => acc + char.charCodeAt(0), 0)
-  
+  const hash2 = userId
+    .split('')
+    .reverse()
+    .reduce((acc, char) => acc + char.charCodeAt(0), 0)
+
   const hue1 = Math.abs(hash1) % 360
   const hue2 = Math.abs(hash2) % 360
   const saturation = 70 + (Math.abs(hash1) % 20)
   const lightness1 = 40 + (Math.abs(hash1) % 20)
   const lightness2 = 50 + (Math.abs(hash2) % 20)
-  
+
   return `linear-gradient(135deg, hsl(${hue1}, ${saturation}%, ${lightness1}%), hsl(${hue2}, ${saturation}%, ${lightness2}%))`
 }
 
@@ -44,29 +47,28 @@ export function getAvatarInitial(name: string | null | undefined): string {
   if (!name || name.trim() === '') {
     return '?'
   }
-  
+
   // 如果是邮箱，取@前的部分
   const displayName = name.includes('@') ? name.split('@')[0] : name
-  
+
   // 取第一个字符，如果是中文取第一个字符，如果是英文取第一个字母
   const trimmed = displayName.trim()
   if (!trimmed) return '?'
   const firstChar = trimmed[0]
-  
+
   // 如果是中文字符，直接返回
   if (/[\u4e00-\u9fa5]/.test(firstChar)) {
     return firstChar
   }
-  
+
   // 如果是英文字母，返回大写
   if (/[a-zA-Z]/.test(firstChar)) {
     return firstChar.toUpperCase()
   }
-  
+
   // 如果是数字或其他字符，返回原字符
   return firstChar
 }
-
 
 /**
  * Check if a trader ID looks like a wallet address (EVM 0x... or Solana base58)
@@ -196,7 +198,7 @@ export function getUserAvatarUrl(
   if (avatarUrl && avatarUrl.trim() !== '') {
     return avatarUrl
   }
-  
+
   // 没有头像返回null，前端Avatar组件会显示首字母+渐变背景
   return null
 }
@@ -299,8 +301,8 @@ export function needsProxy(url: string | null | undefined): boolean {
   try {
     const hostname = new URL(url).hostname.toLowerCase()
     // Never proxy direct-load domains
-    if (DIRECT_LOAD_DOMAINS.some(domain => hostname.includes(domain))) return false
-    return PROXY_REQUIRED_DOMAINS.some(domain => hostname.includes(domain))
+    if (DIRECT_LOAD_DOMAINS.some((domain) => hostname.includes(domain))) return false
+    return PROXY_REQUIRED_DOMAINS.some((domain) => hostname.includes(domain))
   } catch (_err) {
     /* invalid URL format */
     return false
@@ -330,13 +332,8 @@ function isLikelyImageUrl(url: string): boolean {
     }
 
     // 3a. 已知的非图片域名（交易平台前端、区块浏览器等）
-    const nonImageDomains = [
-      'hyperliquid.xyz',
-      'dydx.exchange',
-      'kwenta.eth.limo',
-      'gains.trade',
-    ]
-    if (nonImageDomains.some(domain => parsed.hostname.includes(domain))) {
+    const nonImageDomains = ['hyperliquid.xyz', 'dydx.exchange', 'kwenta.eth.limo', 'gains.trade']
+    if (nonImageDomains.some((domain) => parsed.hostname.includes(domain))) {
       return false
     }
 
@@ -359,32 +356,62 @@ function isLikelyImageUrl(url: string): boolean {
       '/leaderboard/',
       '/explorer/',
     ]
-    if (pagePatterns.some(pattern => pathname.includes(pattern))) {
+    if (pagePatterns.some((pattern) => pathname.includes(pattern))) {
       return false
     }
 
     // 4. 如果URL以常见图片扩展名结尾，认为是图片
     const imageExtensions = ['.jpg', '.jpeg', '.png', '.gif', '.webp', '.svg', '.ico', '.avif']
-    if (imageExtensions.some(ext => pathname.endsWith(ext))) {
+    if (imageExtensions.some((ext) => pathname.endsWith(ext))) {
       return true
     }
 
     // 5. 如果路径包含图片相关的关键词，可能是图片
-    const imageKeywords = ['image', 'avatar', 'photo', 'img', 'picture', 'static', 'assets', 'media', 'upload']
-    if (imageKeywords.some(keyword => pathname.includes(keyword))) {
+    const imageKeywords = [
+      'image',
+      'avatar',
+      'photo',
+      'img',
+      'picture',
+      'static',
+      'assets',
+      'media',
+      'upload',
+    ]
+    if (imageKeywords.some((keyword) => pathname.includes(keyword))) {
       return true
     }
 
     // 6. 如果是已知的图片CDN域名，认为是图片
     const imageCdnDomains = [
-      'bgstatic.com', 'bnbstatic.com', 'bycsi.com', 'staticimg.com', 'mocortech.com', 'wexx.one',
-      'tylhh.net', 'nftstatic.com', 'bscdnweb.com', 'myqcloud.com',
-      'bybit.com', 'okx.com', 'okcoin.com', 'kucoin.com',
-      'gateimg.com', 'htx.com', 'huobi.com', 'bingx.com',
-      'coinex.com', 'lbkrs.com', 'phemex.com', 'bitmart.com',
-      'xt.com', 'pionex.com', 'blofin.com', 'weex.com',
+      'bgstatic.com',
+      'bnbstatic.com',
+      'bycsi.com',
+      'staticimg.com',
+      'mocortech.com',
+      'wexx.one',
+      'tylhh.net',
+      'nftstatic.com',
+      'bscdnweb.com',
+      'myqcloud.com',
+      'bybit.com',
+      'okx.com',
+      'okcoin.com',
+      'kucoin.com',
+      'gateimg.com',
+      'htx.com',
+      'huobi.com',
+      'bingx.com',
+      'coinex.com',
+      'lbkrs.com',
+      'phemex.com',
+      'bitmart.com',
+      'xt.com',
+      'pionex.com',
+      'blofin.com',
+      'weex.com',
     ]
-    if (imageCdnDomains.some(domain => parsed.hostname.includes(domain))) {
+    if (imageCdnDomains.some((domain) => parsed.hostname.includes(domain))) {
       return true
     }
 
@@ -412,7 +439,8 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
   // data: URIs (e.g. inline SVG identicons/blockies) — return as-is, never proxy.
   // These are tiny inline images; proxying them creates absurdly long URLs that
   // cause 400 errors from Next.js Image Optimization (_next/image).
-  if (avatarUrl.startsWith('data:')) return null
+  // Callers must use <img> (not next/image) for data: URIs, or set unoptimized.
+  if (avatarUrl.startsWith('data:')) return avatarUrl
 
   // 过滤掉明显无效的URL（但保留交易所默认头像如 default-avatar.png）
   if (
@@ -439,7 +467,7 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
   // Direct-load domains (dicebear, supabase, github, etc.) — serve without proxy
   try {
     const hostname = new URL(avatarUrl).hostname.toLowerCase()
-    if (DIRECT_LOAD_DOMAINS.some(domain => hostname.includes(domain))) {
+    if (DIRECT_LOAD_DOMAINS.some((domain) => hostname.includes(domain))) {
       return avatarUrl
     }
   } catch (_err) {
@@ -449,4 +477,3 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
   // Unknown domains with valid image URLs — proxy for safety (CORS/Referrer)
   return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
 }
-
