@@ -13,6 +13,7 @@ import { fireAndForget } from '@/lib/utils/logger'
 import { searchTraders } from '@/lib/data/unified'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { parseLimit } from '@/lib/utils/safe-parse'
+import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,7 +31,7 @@ interface SearchSuggestion {
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const searchParams = request.nextUrl.searchParams
-    const query = searchParams.get('q')?.trim()
+    const query = searchParams.get('q')?.trim()?.slice(0, 200)
     const limit = parseLimit(searchParams.get('limit'), 10, 20)
 
     if (!query || query.length < 1) {
@@ -55,16 +56,18 @@ export const GET = withPublic(
       const unifiedTraders = await searchTraders(supabase, { query, limit })
 
       for (const t of unifiedTraders) {
-        const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
+        const exchangeName =
+          EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
         const roi = t.roi
 
         suggestions.push({
           type: 'trader',
           value: t.handle || t.traderKey,
           label: `@${t.handle || t.traderKey}`,
-          subLabel: roi != null
-            ? `${exchangeName} · ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
-            : exchangeName,
+          subLabel:
+            roi != null
+              ? `${exchangeName} · ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(1)}%`
+              : exchangeName,
           source: t.platform,
           roi: roi ?? undefined,
           arenaScore: t.arenaScore ?? undefined,
@@ -76,11 +79,11 @@ export const GET = withPublic(
 
     // 添加交易对建议（常见的）
     const commonSymbols = ['BTC', 'ETH', 'SOL', 'DOGE', 'PEPE', 'WIF', 'ARB', 'OP', 'AVAX', 'MATIC']
-    const matchedSymbols = commonSymbols.filter(s =>
+    const matchedSymbols = commonSymbols.filter((s) =>
       s.toLowerCase().includes(query.toLowerCase())
     )
 
-    matchedSymbols.slice(0, 3).forEach(symbol => {
+    matchedSymbols.slice(0, 3).forEach((symbol) => {
       suggestions.push({
         type: 'symbol',
         value: symbol,
@@ -117,18 +120,20 @@ export const GET = withPublic(
       // Cache write failure is non-critical
     }
 
-    // Log search analytics asynchronously (fire-and-forget)
-    fireAndForget(
-      supabase
-        .from('search_analytics')
-        .insert({
-          query: query.slice(0, 200),
-          result_count: suggestions.length,
-          source: 'dropdown',
-        })
-        .then(),
-      'Record search analytics'
-    )
+    // Log search analytics asynchronously (fire-and-forget) — skip malicious queries
+    if (!isMaliciousSearchQuery(query)) {
+      fireAndForget(
+        supabase
+          .from('search_analytics')
+          .insert({
+            query: query.slice(0, 200),
+            result_count: suggestions.length,
+            source: 'dropdown',
+          })
+          .then(),
+        'Record search analytics'
+      )
+    }
 
     return success(result, 200, {
       'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
