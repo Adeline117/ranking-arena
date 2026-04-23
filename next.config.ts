@@ -145,12 +145,16 @@ const nextConfig = {
           /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
     )
-    // wagmi@3.4.5 imports viem/tempo/zones which doesn't exist in viem@2.47.17.
-    // Stub it out so webpack doesn't fail on the missing module.
+    // wagmi@3.4.5 imports viem/tempo features that don't exist in viem@2.47.17
+    // (Actions.zone, viem/tempo/zones). Tempo = on-chain sessions, unused by Arena.
+    // Shim viem/tempo to empty exports so webpack resolves without error.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const path = require('path')
     config.resolve = config.resolve || {}
     config.resolve.alias = {
       ...(config.resolve.alias || {}),
       'viem/tempo/zones': false,
+      'viem/tempo': path.resolve(__dirname, 'lib/shims/viem-tempo.js'),
     }
     return config
   },
