@@ -137,6 +137,7 @@ jest.mock('@/lib/cache', () => ({
 
 jest.mock('@/lib/alerts/send-alert', () => ({
   sendAlert: jest.fn().mockResolvedValue(undefined),
+  sendRateLimitedAlert: jest.fn().mockResolvedValue(undefined),
 }))
 
 jest.mock('@/lib/config/platforms', () => ({
@@ -216,7 +217,7 @@ describe('GET /api/cron/batch-fetch-traders', () => {
 
     expect(res.status).toBe(200)
     expect(body.group).toBe('a1')
-    expect(body.platforms).toBe(2) // Group a1: binance_futures, binance_spot
+    expect(Array.isArray(body.platforms) ? body.platforms.length : body.platforms).toBe(2) // Group a1: binance_futures, binance_spot
     // Both platforms have connectors and succeed
     expect(body.succeeded).toBe(2)
     expect(body.failed).toBe(0)
