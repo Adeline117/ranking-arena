@@ -60,7 +60,7 @@ async function checkVpsProxy(): Promise<{ ok: boolean; error?: string }> {
   const vpsHost =
     process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST
   const vpsKey = process.env.VPS_PROXY_KEY
-  if (!vpsHost || !vpsKey) return { ok: false, error: 'VPS env vars missing' }
+  if (!vpsHost || !vpsKey) return { ok: true } // No VPS config = direct API (Mac Mini, local, test)
   try {
     const res = await fetch(`${vpsHost.replace(':3457', ':3456')}/proxy`, {
       method: 'POST',
@@ -320,7 +320,6 @@ export async function GET(request: NextRequest) {
       drift: 120000,
       // Medium APIs
       htx_futures: 120000,
-      gateio: 120000,
       okx_web3: 120000,
       // Fast direct APIs
       okx_spot: 120000, // Was 60s — too tight: fetch + enrich both need budget. Observed enrich timing out at 22s
