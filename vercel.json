@@ -1,5 +1,5 @@
 {
-  "buildCommand": "next build --webpack",
+  "buildCommand": "next build",
   "regions": ["hnd1"],
   "crons": [
     {
