@@ -329,8 +329,11 @@ export async function GET(request: NextRequest) {
       dydx: 240000, // Copin API: 500/page × 2 pages × 3 windows + DB writes (upsert 3000 rows). Needs generous timeout.
       // Platforms that timed out at 90s default (pipeline health 2026-04-13):
       gains: 120000, // /open-trades endpoint can be slow; 4 enrichment timeouts in 48h
-      etoro: 120000, // sapi rankings can be slow; 4 enrichment timeouts in 48h
+      etoro: 180000, // VPS scraper needs 60s+/window × 3 windows (was 120s → 28s/win too short)
       weex: 150000, // VPS scraper, described as "slow" in group comments
+      xt: 180000, // VPS Playwright 30-40s/window (was default 90s → 21s/win, always timed out)
+      toobit: 150000, // VPS scraper 20-30s/window (was default 90s → 21s/win, marginal)
+      gateio: 180000, // VPS proxy 30-40s/window (was 120s → 28s/win, timed out)
       // Others: default 90s (PLATFORM_TIMEOUT_MS)
     }
 
