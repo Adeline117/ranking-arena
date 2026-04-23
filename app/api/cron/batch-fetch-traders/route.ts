@@ -48,6 +48,36 @@ const DEAD_COUNTER_PREFIX = 'dead:consecutive:'
 const DEAD_THRESHOLD = 6
 const DEAD_COUNTER_MAX_AGE_MS = 6 * 60 * 60 * 1000 // 6h — retry after quarter day
 
+// Groups that need VPS proxy (Binance geo-blocked from Vercel hnd1)
+const VPS_DEPENDENT_GROUPS = new Set(['a1', 'a'])
+
+/** Pre-flight VPS proxy auth check. Catches key mismatch immediately
+ *  instead of silently tripping circuit breakers for hours. */
+async function checkVpsProxy(): Promise<{ ok: boolean; error?: string }> {
+  const vpsHost =
+    process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_SCRAPER_HOST
+  const vpsKey = process.env.VPS_PROXY_KEY
+  if (!vpsHost || !vpsKey) return { ok: false, error: 'VPS env vars missing' }
+  try {
+    const host = vpsHost.replace(':3457', ':3456') // proxy on 3456, scraper on 3457
+    const res = await fetch(`${host}/proxy`, {
+      method: 'POST',
+      headers: { 'X-Proxy-Key': vpsKey.trim(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: 'https://httpbin.org/status/200', method: 'GET' }),
+      signal: AbortSignal.timeout(8000),
+    })
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, error: `VPS proxy auth failed (${res.status}) — key mismatch` }
+    }
+    return { ok: true }
+  } catch (err) {
+    return {
+      ok: false,
+      error: `VPS unreachable: ${err instanceof Error ? err.message : String(err)}`,
+    }
+  }
+}
+
 export const runtime = 'nodejs' // Required: edge runtime has 30s timeout, nodejs supports maxDuration
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // Vercel Pro: 300s max for serverless functions
@@ -190,6 +220,26 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
+    // Pre-flight: verify VPS proxy for groups that need it (Binance geo-blocked)
+    if (VPS_DEPENDENT_GROUPS.has(group)) {
+      const vpsCheck = await checkVpsProxy()
+      if (!vpsCheck.ok) {
+        logger.error(
+          `[batch-fetch-traders-${group}] VPS proxy pre-flight FAILED: ${vpsCheck.error}`
+        )
+        await sendRateLimitedAlert(
+          {
+            title: `🔴 VPS proxy down — batch-fetch-${group} blocked`,
+            message: vpsCheck.error || 'unknown',
+            level: 'critical',
+          },
+          `vps-proxy-down:${group}`,
+          1800000
+        )
+        return NextResponse.json({ ok: false, group, error: `VPS pre-flight: ${vpsCheck.error}` })
+      }
+    }
+
     // Randomize execution order to prevent timing pattern detection (DeFiLlama pattern)
     const platforms = [...groupPlatforms].sort(() => Math.random() - 0.5)
 
