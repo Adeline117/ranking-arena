@@ -26,13 +26,8 @@ import { type ExtendedPerformance } from '@/app/components/trader/OverviewPerfor
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import { getAvatarGradient } from '@/lib/utils/avatar'
-import { JsonLd } from '@/app/components/Providers/JsonLd'
-import {
-  generateTraderProfilePageSchema,
-  generateBreadcrumbSchema,
-  combineSchemas,
-} from '@/lib/seo'
-import { BASE_URL } from '@/lib/constants/urls'
+// JSON-LD structured data is emitted by the server component (page.tsx).
+// Do NOT emit it here — that causes duplicate ProfilePage + BreadcrumbList.
 import { RankSparkline } from '@/app/components/ranking/RankSparkline'
 
 // Memoized tab components — each wraps its own subtree so SWR revalidations
@@ -306,40 +301,6 @@ export default function TraderProfileClient({
     [traderData?.similarTraders]
   )
 
-  // Structured data for SEO — memoized so combineSchemas doesn't re-run on every
-  // unrelated render (was being recomputed on every tab click, period switch, etc.)
-  // Must be called before any early-return to satisfy rules-of-hooks.
-  const structuredData = useMemo(
-    () =>
-      combineSchemas(
-        generateTraderProfilePageSchema({
-          handle: data.handle,
-          id: data.source_trader_id,
-          source: data.source,
-          roi90d: data.roi ?? undefined,
-          winRate: data.win_rate ?? undefined,
-          maxDrawdown: data.max_drawdown ?? undefined,
-          arenaScore: data.arena_score ?? undefined,
-          avatarUrl: data.avatar_url ?? undefined,
-        }),
-        generateBreadcrumbSchema([
-          { name: 'Home', url: BASE_URL },
-          { name: 'Ranking', url: `${BASE_URL}/rankings` },
-          { name: data.handle },
-        ])
-      ),
-    [
-      data.handle,
-      data.source_trader_id,
-      data.source,
-      data.roi,
-      data.win_rate,
-      data.max_drawdown,
-      data.arena_score,
-      data.avatar_url,
-    ]
-  )
-
   // Loading state: only when SWR is loading AND no server fallback
   const isInitialLoading = traderLoading && !serverTraderData
   if (isInitialLoading) {
@@ -366,8 +327,6 @@ export default function TraderProfileClient({
   // #24: Stale data banner — show when SWR errored but cached/stale data is still available
   const showStaleBanner = !!traderError && !!traderData
 
-  // (structuredData memoized earlier, before the early-return for loading state)
-
   return (
     <Box
       className="trader-page-container"
@@ -377,7 +336,6 @@ export default function TraderProfileClient({
         color: tokens.colors.text.primary,
       }}
     >
-      <JsonLd data={structuredData} />
       {/* TopNav is rendered by the parent layout.tsx (server component) */}
 
       <Box
