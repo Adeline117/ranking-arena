@@ -34,7 +34,10 @@ export async function POST(request: NextRequest) {
 
     for (const pref of prefs) {
       userThresholds.set(pref.user_id, pref.ranking_change_threshold ?? 10)
-      const traders = pref.watched_traders as Array<{ source: string; source_trader_id: string }> | null
+      const traders = pref.watched_traders as Array<{
+        source: string
+        source_trader_id: string
+      }> | null
       if (!traders || !Array.isArray(traders)) continue
       for (const t of traders) {
         const key = `${t.source}:${t.source_trader_id}`
@@ -73,7 +76,10 @@ export async function POST(request: NextRequest) {
     const currentRankMap = new Map<string, { rank: number; arena_score: number | null }>()
     if (currentRanks) {
       for (const row of currentRanks) {
-        currentRankMap.set(`${row.source}:${row.source_trader_id}`, { rank: row.rank, arena_score: row.arena_score })
+        currentRankMap.set(`${row.source}:${row.source_trader_id}`, {
+          rank: row.rank,
+          arena_score: row.arena_score,
+        })
       }
     }
 
@@ -142,9 +148,10 @@ export async function POST(request: NextRequest) {
         if (absChange < threshold) continue
 
         const direction = rankChange > 0 ? 'up' : 'down'
-        const title = direction === 'up'
-          ? `${handle} rose ${absChange} ranks`
-          : `${handle} dropped ${absChange} ranks`
+        const title =
+          direction === 'up'
+            ? `${handle} rose ${absChange} ranks`
+            : `${handle} dropped ${absChange} ranks`
         const message = `Now ranked #${current.rank} (was #${prevRank})`
 
         notificationRows.push({
@@ -152,12 +159,20 @@ export async function POST(request: NextRequest) {
           type: 'ranking_change',
           title,
           message,
-          data: { source, source_trader_id: sourceId, handle, old_rank: prevRank, new_rank: current.rank, change: rankChange },
+          data: {
+            source,
+            source_trader_id: sourceId,
+            handle,
+            old_rank: prevRank,
+            new_rank: current.rank,
+            change: rankChange,
+          },
         })
       }
     }
 
     // BATCH INSERT all notifications in one query (chunks of 500 to avoid payload limits)
+    // service-layer-exempt: batch — this is a cron-style pipeline job, not a user-facing API
     const BATCH_SIZE = 500
     for (let i = 0; i < notificationRows.length; i += BATCH_SIZE) {
       const batch = notificationRows.slice(i, i + BATCH_SIZE)
