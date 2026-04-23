@@ -214,6 +214,12 @@ function createCronRequest(secret?: string, group?: string): NextRequest {
 // Tests
 // ---------------------------------------------------------------------------
 
+// Use group 'c' (gmx, bitunix) — NOT in VPS_DEPENDENT_GROUPS, so VPS
+// pre-flight check is skipped. Group 'a1' triggers checkVpsProxy() which
+// makes a real HTTP request that fails in test.
+const TEST_GROUP = 'c'
+const TEST_GROUP_SIZE = 2 // gmx + bitunix
+
 describe('GET /api/cron/batch-fetch-traders', () => {
   const CRON_SECRET = 'test-secret'
 
@@ -255,13 +261,15 @@ describe('GET /api/cron/batch-fetch-traders', () => {
   // ---- Successful execution ------------------------------------------------
 
   it('dispatches all platforms in group and returns stats', async () => {
-    const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
+    const res = await GET(createCronRequest(CRON_SECRET, TEST_GROUP))
     const body = await res.json()
-    // eslint-disable-next-line no-console
-    console.log('SUCCESS BODY:', JSON.stringify(body, null, 2))
 
     expect(res.status).toBe(200)
-    expect(body.group).toBe('a1')
+    expect(body.group).toBe(TEST_GROUP)
+    expect(body.ok).toBe(true)
+    expect(body.succeeded).toBe(TEST_GROUP_SIZE)
+    expect(body.failed).toBe(0)
+    expect(mockRunConnectorBatch).toHaveBeenCalledTimes(TEST_GROUP_SIZE)
   })
 
   // ---- Partial failure -----------------------------------------------------
@@ -274,12 +282,13 @@ describe('GET /api/cron/batch-fetch-traders', () => {
       duration: 100,
     })
 
-    const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
+    const res = await GET(createCronRequest(CRON_SECRET, TEST_GROUP))
     const body = await res.json()
-    // eslint-disable-next-line no-console
-    console.log('PARTIAL FAILURE BODY:', JSON.stringify(body, null, 2))
 
     expect(res.status).toBe(200)
+    expect(body.ok).toBe(false)
+    expect(body.failed).toBe(TEST_GROUP_SIZE)
+    expect(body.results.find((r: { status: string }) => r.status === 'error')).toBeDefined()
   })
 
   // ---- Fetcher error -------------------------------------------------------
@@ -287,12 +296,14 @@ describe('GET /api/cron/batch-fetch-traders', () => {
   it('handles fetcher errors gracefully', async () => {
     mockRunConnectorBatch.mockRejectedValue(new Error('Network error'))
 
-    const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
+    const res = await GET(createCronRequest(CRON_SECRET, TEST_GROUP))
     const body = await res.json()
-    // eslint-disable-next-line no-console
-    console.log('FETCHER ERROR BODY:', JSON.stringify(body, null, 2))
 
-    // Route should handle errors without crashing (200 with error details, not 500)
     expect(res.status).toBe(200)
+    expect(body.ok).toBe(false)
+    expect(body.failed).toBe(TEST_GROUP_SIZE)
+    expect(body.results.some((r: { error?: string }) => r.error?.includes('Network error'))).toBe(
+      true
+    )
   })
 })
