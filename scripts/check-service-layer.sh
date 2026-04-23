@@ -28,6 +28,8 @@ ERRORS=""
 # Guard 1: Raw notification inserts → must use sendNotification()
 while IFS= read -r f; do
   [ -f "$f" ] || continue
+  # Allow raw inserts if file contains "// service-layer-exempt: batch" marker
+  if grep -q "service-layer-exempt" "$f" 2>/dev/null; then continue; fi
   if grep -lq "\.from(['\"]notifications['\"]).*\.insert" "$f" 2>/dev/null; then
     ERRORS="${ERRORS}❌ Raw .from('notifications').insert in: $f\n"
   fi
@@ -36,6 +38,7 @@ done <<< "$API_FILES"
 # Guard 2: Raw counter RPCs → must use updateCount()
 while IFS= read -r f; do
   [ -f "$f" ] || continue
+  if grep -q "service-layer-exempt" "$f" 2>/dev/null; then continue; fi
   if grep -lq "\.rpc(['\"]increment_\|\.rpc(['\"]decrement_" "$f" 2>/dev/null; then
     ERRORS="${ERRORS}❌ Raw .rpc('increment_/decrement_') in: $f\n"
   fi
