@@ -66,7 +66,11 @@ export function TraderAnimatedAvatar({
       {/* Avatar image */}
       {avatarUrl && !imageError && (
         <Image
-          src={avatarUrl.startsWith("/") ? avatarUrl : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
+          src={
+            avatarUrl.startsWith('/') || avatarUrl.startsWith('data:')
+              ? avatarUrl
+              : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
+          }
           alt={handle}
           fill
           sizes="64px"

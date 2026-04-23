@@ -334,6 +334,7 @@ export default function TraderProfileClient({
         minHeight: '100vh',
         background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
         color: tokens.colors.text.primary,
+        overflowX: 'hidden',
       }}
     >
       {/* TopNav is rendered by the parent layout.tsx (server component) */}
@@ -366,7 +367,11 @@ export default function TraderProfileClient({
           >
             {data.avatar_url ? (
               <Image
-                src={`/api/avatar?url=${encodeURIComponent(data.avatar_url)}`}
+                src={
+                  data.avatar_url.startsWith('data:')
+                    ? data.avatar_url
+                    : `/api/avatar?url=${encodeURIComponent(data.avatar_url)}`
+                }
                 alt={displayName}
                 width={28}
                 height={28}

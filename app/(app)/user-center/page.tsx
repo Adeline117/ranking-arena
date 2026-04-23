@@ -39,30 +39,75 @@ function UserCenterSkeleton() {
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
       <TopNav email={null} />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
-        <Box style={{
-          borderRadius: tokens.radius['2xl'],
-          background: tokens.glass.bg.secondary,
-          backdropFilter: tokens.glass.blur.md,
-          WebkitBackdropFilter: tokens.glass.blur.md,
-          border: tokens.glass.border.light,
-          padding: tokens.spacing[6],
-          marginBottom: tokens.spacing[5],
-        }}>
+        <Box
+          style={{
+            borderRadius: tokens.radius['2xl'],
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.md,
+            WebkitBackdropFilter: tokens.glass.blur.md,
+            border: tokens.glass.border.light,
+            padding: tokens.spacing[6],
+            marginBottom: tokens.spacing[5],
+          }}
+        >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
-            <Box style={{ width: 56, height: 56, borderRadius: tokens.radius.full, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+            <Box
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: tokens.radius.full,
+                background: tokens.colors.bg.tertiary,
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}
+            />
             <Box style={{ flex: 1 }}>
-              <Box style={{ width: 120, height: 20, borderRadius: tokens.radius.md, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite', marginBottom: tokens.spacing[3] }} />
-              <Box style={{ width: '100%', height: 8, borderRadius: tokens.radius.full, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+              <Box
+                style={{
+                  width: 120,
+                  height: 20,
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.bg.tertiary,
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                  marginBottom: tokens.spacing[3],
+                }}
+              />
+              <Box
+                style={{
+                  width: '100%',
+                  height: 8,
+                  borderRadius: tokens.radius.full,
+                  background: tokens.colors.bg.tertiary,
+                  animation: 'pulse 1.5s ease-in-out infinite',
+                }}
+              />
             </Box>
           </Box>
         </Box>
         <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
-          {[1, 2].map(i => (
-            <Box key={i} style={{ width: 100, height: 44, borderRadius: tokens.radius.lg, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite' }} />
+          {[1, 2].map((i) => (
+            <Box
+              key={i}
+              style={{
+                width: 100,
+                height: 44,
+                borderRadius: tokens.radius.lg,
+                background: tokens.colors.bg.tertiary,
+                animation: 'pulse 1.5s ease-in-out infinite',
+              }}
+            />
           ))}
         </Box>
-        {[1, 2, 3].map(i => (
-          <Box key={i} style={{ height: 80, borderRadius: tokens.radius.xl, background: tokens.colors.bg.tertiary, animation: 'pulse 1.5s ease-in-out infinite', marginBottom: tokens.spacing[4] }} />
+        {[1, 2, 3].map((i) => (
+          <Box
+            key={i}
+            style={{
+              height: 80,
+              borderRadius: tokens.radius.xl,
+              background: tokens.colors.bg.tertiary,
+              animation: 'pulse 1.5s ease-in-out infinite',
+              marginBottom: tokens.spacing[4],
+            }}
+          />
         ))}
         <style>{`@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }`}</style>
       </Box>
@@ -102,7 +147,9 @@ function UserCenterPage() {
   useEffect(() => {
     async function init() {
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
         if (!user) {
           setLoading(false)
           return
@@ -147,27 +194,53 @@ function UserCenterPage() {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <TopNav email={null} />
-        <Box style={{
-          maxWidth: 400, margin: '0 auto', padding: tokens.spacing[8],
-          textAlign: 'center', display: 'flex', flexDirection: 'column',
-          alignItems: 'center', gap: tokens.spacing[4],
-        }}>
-          <Box style={{
-            width: 64, height: 64, borderRadius: tokens.radius.full,
-            background: `${tokens.colors.accent.primary}15`,
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            marginBottom: tokens.spacing[2],
-          }}>
-            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
+        <Box
+          style={{
+            maxWidth: 400,
+            margin: '0 auto',
+            padding: tokens.spacing[8],
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: tokens.spacing[4],
+          }}
+        >
+          <Box
+            style={{
+              width: 64,
+              height: 64,
+              borderRadius: tokens.radius.full,
+              background: `${tokens.colors.accent.primary}15`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              marginBottom: tokens.spacing[2],
+            }}
+          >
+            <svg
+              width="32"
+              height="32"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={tokens.colors.accent.primary}
+              strokeWidth="2"
+            >
               <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
               <circle cx="12" cy="7" r="4" />
             </svg>
           </Box>
-          <Text size="xl" weight="bold">{t('userCenterLoginRequired')}</Text>
+          <Text size="xl" weight="bold">
+            {t('userCenterLoginRequired')}
+          </Text>
           <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
             {t('userCenterLoginDescription')}
           </Text>
-          <Button variant="primary" onClick={() => router.push('/login?redirect=/user-center')} style={{ marginTop: tokens.spacing[2] }}>
+          <Button
+            variant="primary"
+            onClick={() => router.push('/login?redirect=/user-center')}
+            style={{ marginTop: tokens.spacing[2] }}
+          >
             {t('userCenterSignIn')}
           </Button>
         </Box>
@@ -182,46 +255,105 @@ function UserCenterPage() {
   const info = levelData || getLevelInfo(0)
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <TopNav email={email} />
 
-      <Box style={{ maxWidth: 800, margin: '0 auto', paddingLeft: tokens.spacing[6], paddingRight: tokens.spacing[6] }}>
+      <Box
+        style={{
+          maxWidth: 800,
+          margin: '0 auto',
+          paddingLeft: tokens.spacing[6],
+          paddingRight: tokens.spacing[6],
+        }}
+      >
         <Breadcrumb items={[{ label: t('userCenter') || 'User Center' }]} />
       </Box>
 
-      <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6], paddingTop: 0, paddingBottom: 100 }}>
+      <Box
+        style={{
+          maxWidth: 800,
+          margin: '0 auto',
+          padding: tokens.spacing[6],
+          paddingTop: 0,
+          paddingBottom: 100,
+        }}
+      >
         {/* Header Card */}
-        <Box style={{
-          borderRadius: tokens.radius['2xl'], padding: tokens.spacing[6], marginBottom: tokens.spacing[5],
-          background: tokens.glass.bg.secondary, backdropFilter: tokens.glass.blur.md,
-          WebkitBackdropFilter: tokens.glass.blur.md, border: tokens.glass.border.light, boxShadow: tokens.shadow.md,
-        }}>
+        <Box
+          style={{
+            borderRadius: tokens.radius['2xl'],
+            padding: tokens.spacing[6],
+            marginBottom: tokens.spacing[5],
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.md,
+            WebkitBackdropFilter: tokens.glass.blur.md,
+            border: tokens.glass.border.light,
+            boxShadow: tokens.shadow.md,
+          }}
+        >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4] }}>
-            <Box style={{
-              width: 56, height: 56, borderRadius: tokens.radius.full,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: tokens.typography.fontSize['2xl'], fontWeight: tokens.typography.fontWeight.black,
-              background: tokens.glass.bg.light, backdropFilter: tokens.glass.blur.xs,
-              WebkitBackdropFilter: tokens.glass.blur.xs, border: tokens.glass.border.light,
-              color: tokens.colors.text.tertiary, flexShrink: 0,
-              overflow: 'hidden', position: 'relative',
-            }}>
+            <Box
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: tokens.radius.full,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: tokens.typography.fontSize['2xl'],
+                fontWeight: tokens.typography.fontWeight.black,
+                background: tokens.glass.bg.light,
+                backdropFilter: tokens.glass.blur.xs,
+                WebkitBackdropFilter: tokens.glass.blur.xs,
+                border: tokens.glass.border.light,
+                color: tokens.colors.text.tertiary,
+                flexShrink: 0,
+                overflow: 'hidden',
+                position: 'relative',
+              }}
+            >
               {(userHandle || 'U').charAt(0).toUpperCase()}
               {userAvatarUrl && (
                 <Image
-                  src={`/api/avatar?url=${encodeURIComponent(userAvatarUrl)}`}
+                  src={
+                    userAvatarUrl.startsWith('data:')
+                      ? userAvatarUrl
+                      : `/api/avatar?url=${encodeURIComponent(userAvatarUrl)}`
+                  }
                   alt={userHandle || 'User'}
                   width={56}
                   height={56}
                   unoptimized
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    position: 'absolute',
+                    inset: 0,
+                  }}
+                  onError={(e) => {
+                    ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+                  }}
                 />
               )}
             </Box>
 
             <Box style={{ flex: 1, minWidth: 0 }}>
-              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3], flexWrap: 'wrap' }}>
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
+                  marginBottom: tokens.spacing[3],
+                  flexWrap: 'wrap',
+                }}
+              >
                 <Text size="lg" weight="black" style={{ letterSpacing: '-0.2px' }}>
                   {userHandle || t('userCenterDefaultUser')}
                 </Text>
@@ -229,18 +361,40 @@ function UserCenterPage() {
               </Box>
 
               <Box style={{ width: '100%' }}>
-                <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
-                  <Text size="xs" color="tertiary">EXP {info.currentExp.toLocaleString('en-US')}</Text>
+                <Box
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    marginBottom: tokens.spacing[1],
+                  }}
+                >
                   <Text size="xs" color="tertiary">
-                    {info.nextExp ? `${t('userCenterNextLevel')} ${info.nextExp.toLocaleString('en-US')}` : t('userCenterMaxLevel')}
+                    EXP {info.currentExp.toLocaleString('en-US')}
+                  </Text>
+                  <Text size="xs" color="tertiary">
+                    {info.nextExp
+                      ? `${t('userCenterNextLevel')} ${info.nextExp.toLocaleString('en-US')}`
+                      : t('userCenterMaxLevel')}
                   </Text>
                 </Box>
-                <Box style={{ height: 6, borderRadius: tokens.radius.full, background: tokens.colors.bg.tertiary, overflow: 'hidden' }}>
-                  <Box style={{
-                    height: '100%', borderRadius: tokens.radius.full, width: `${info.progress}%`,
-                    background: 'linear-gradient(90deg, var(--color-chart-violet), var(--color-brand), var(--color-accent-primary))',
-                    transition: 'width 0.5s ease',
-                  }} />
+                <Box
+                  style={{
+                    height: 6,
+                    borderRadius: tokens.radius.full,
+                    background: tokens.colors.bg.tertiary,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <Box
+                    style={{
+                      height: '100%',
+                      borderRadius: tokens.radius.full,
+                      width: `${info.progress}%`,
+                      background:
+                        'linear-gradient(90deg, var(--color-chart-violet), var(--color-brand), var(--color-accent-primary))',
+                      transition: 'width 0.5s ease',
+                    }}
+                  />
                 </Box>
               </Box>
             </Box>
@@ -256,13 +410,28 @@ function UserCenterPage() {
               style={{
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.xl,
-                border: activeTab === tab.key ? `1px solid ${tokens.colors.accent.primary}60` : tokens.glass.border.light,
-                background: activeTab === tab.key ? `${tokens.colors.accent.primary}15` : tokens.glass.bg.secondary,
-                backdropFilter: tokens.glass.blur.xs, WebkitBackdropFilter: tokens.glass.blur.xs,
-                color: activeTab === tab.key ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                border:
+                  activeTab === tab.key
+                    ? `1px solid ${tokens.colors.accent.primary}60`
+                    : tokens.glass.border.light,
+                background:
+                  activeTab === tab.key
+                    ? `${tokens.colors.accent.primary}15`
+                    : tokens.glass.bg.secondary,
+                backdropFilter: tokens.glass.blur.xs,
+                WebkitBackdropFilter: tokens.glass.blur.xs,
+                color:
+                  activeTab === tab.key
+                    ? tokens.colors.accent.primary
+                    : tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.sm,
-                fontWeight: activeTab === tab.key ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
-                cursor: 'pointer', transition: `all ${tokens.transition.base}`, minHeight: 44,
+                fontWeight:
+                  activeTab === tab.key
+                    ? tokens.typography.fontWeight.bold
+                    : tokens.typography.fontWeight.medium,
+                cursor: 'pointer',
+                transition: `all ${tokens.transition.base}`,
+                minHeight: 44,
               }}
             >
               {tab.label}
@@ -271,13 +440,23 @@ function UserCenterPage() {
         </Box>
 
         {/* Content */}
-        <Box style={{
-          borderRadius: tokens.radius['2xl'], padding: tokens.spacing[6],
-          background: tokens.glass.bg.secondary, backdropFilter: tokens.glass.blur.md,
-          WebkitBackdropFilter: tokens.glass.blur.md, border: tokens.glass.border.light, boxShadow: tokens.shadow.md,
-        }}>
+        <Box
+          style={{
+            borderRadius: tokens.radius['2xl'],
+            padding: tokens.spacing[6],
+            background: tokens.glass.bg.secondary,
+            backdropFilter: tokens.glass.blur.md,
+            WebkitBackdropFilter: tokens.glass.blur.md,
+            border: tokens.glass.border.light,
+            boxShadow: tokens.shadow.md,
+          }}
+        >
           {activeTab === 'level' && (
-            <LevelTab info={info} dailyEarned={levelData?.dailyExpEarned ?? 0} expActions={EXP_ACTIONS} />
+            <LevelTab
+              info={info}
+              dailyEarned={levelData?.dailyExpEarned ?? 0}
+              expActions={EXP_ACTIONS}
+            />
           )}
           {activeTab === 'membership' && <MembershipContent />}
         </Box>

@@ -11,7 +11,9 @@ import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 
 export default function FollowersList({ profileId }: { profileId: string }) {
   const { t } = useLanguage()
-  const [followers, setFollowers] = useState<Array<{ id: string; handle: string; avatar_url: string | null }>>([])
+  const [followers, setFollowers] = useState<
+    Array<{ id: string; handle: string; avatar_url: string | null }>
+  >([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -29,7 +31,9 @@ export default function FollowersList({ profileId }: { profileId: string }) {
             .from('user_profiles')
             .select('id, handle, avatar_url')
             .in('id', ids)
-          setFollowers((profiles || []) as Array<{ id: string; handle: string; avatar_url: string | null }>)
+          setFollowers(
+            (profiles || []) as Array<{ id: string; handle: string; avatar_url: string | null }>
+          )
         } else {
           setFollowers([])
         }
@@ -45,7 +49,9 @@ export default function FollowersList({ profileId }: { profileId: string }) {
   if (loading) {
     return (
       <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-        <Text size="sm" color="tertiary">{t('loading') || '...'}</Text>
+        <Text size="sm" color="tertiary">
+          {t('loading') || '...'}
+        </Text>
       </Box>
     )
   }
@@ -53,7 +59,9 @@ export default function FollowersList({ profileId }: { profileId: string }) {
   if (followers.length === 0) {
     return (
       <Box bg="secondary" p={6} radius="lg" border="primary" style={{ textAlign: 'center' }}>
-        <Text size="sm" color="tertiary">{t('noFollowers') || 'No followers yet'}</Text>
+        <Text size="sm" color="tertiary">
+          {t('noFollowers') || 'No followers yet'}
+        </Text>
       </Box>
     )
   }
@@ -64,28 +72,70 @@ export default function FollowersList({ profileId }: { profileId: string }) {
         {t('followers') || 'Followers'} ({followers.length})
       </Text>
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-        {followers.map(f => (
-          <Link key={f.id} href={`/u/${encodeURIComponent(f.handle)}`} style={{ textDecoration: 'none' }}>
-            <Box style={{
-              display: 'flex', alignItems: 'center', gap: tokens.spacing[3],
-              padding: tokens.spacing[3], borderRadius: tokens.radius.md,
-              transition: 'background 0.15s',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-              onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+        {followers.map((f) => (
+          <Link
+            key={f.id}
+            href={`/u/${encodeURIComponent(f.handle)}`}
+            style={{ textDecoration: 'none' }}
+          >
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+                padding: tokens.spacing[3],
+                borderRadius: tokens.radius.md,
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = tokens.colors.bg.tertiary
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
             >
-              <Box style={{
-                width: 40, height: 40, borderRadius: tokens.radius.full,
-                background: f.avatar_url ? tokens.colors.bg.tertiary : getAvatarGradient(f.id),
-                overflow: 'hidden', display: 'grid', placeItems: 'center', flexShrink: 0,
-              }}>
+              <Box
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: tokens.radius.full,
+                  background: f.avatar_url ? tokens.colors.bg.tertiary : getAvatarGradient(f.id),
+                  overflow: 'hidden',
+                  display: 'grid',
+                  placeItems: 'center',
+                  flexShrink: 0,
+                }}
+              >
                 {f.avatar_url ? (
-                  <Image src={`/api/avatar?url=${encodeURIComponent(f.avatar_url)}`} alt={f.handle} width={40} height={40} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <Image
+                    src={
+                      f.avatar_url.startsWith('data:')
+                        ? f.avatar_url
+                        : `/api/avatar?url=${encodeURIComponent(f.avatar_url)}`
+                    }
+                    alt={f.handle}
+                    width={40}
+                    height={40}
+                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                  />
                 ) : (
-                  <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>{getAvatarInitial(f.handle)}</Text>
+                  <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>
+                    {getAvatarInitial(f.handle)}
+                  </Text>
                 )}
               </Box>
-              <Text size="sm" weight="semibold" style={{ color: tokens.colors.text.primary, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0, maxWidth: 180 }}>
+              <Text
+                size="sm"
+                weight="semibold"
+                style={{
+                  color: tokens.colors.text.primary,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  minWidth: 0,
+                  maxWidth: 180,
+                }}
+              >
                 @{f.handle}
               </Text>
             </Box>

@@ -4,7 +4,12 @@ import { useState } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
+import {
+  getAvatarGradient,
+  getAvatarInitial,
+  isWalletAddress,
+  generateBlockieSvg,
+} from '@/lib/utils/avatar'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 
 interface TraderHeaderAvatarProps {
@@ -95,7 +100,11 @@ export function TraderHeaderAvatar({
         )}
         {effectiveAvatarUrl && !errored ? (
           <Image
-            src={`/api/avatar?url=${encodeURIComponent(effectiveAvatarUrl)}`}
+            src={
+              effectiveAvatarUrl.startsWith('data:')
+                ? effectiveAvatarUrl
+                : `/api/avatar?url=${encodeURIComponent(effectiveAvatarUrl)}`
+            }
             alt={handle}
             width={48}
             height={48}
@@ -113,16 +122,23 @@ export function TraderHeaderAvatar({
             onError={() => setErrored(true)}
           />
         ) : isWalletAddress(traderId) ? (
-          // eslint-disable-next-line @next/next/no-img-element -- blockie is a data URI
           <img
             src={generateBlockieSvg(traderId, 96)}
             alt={handle}
             width={48}
             height={48}
-            style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated' }}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              imageRendering: 'pixelated',
+            }}
           />
         ) : (
-          <Text weight="black" style={{ color: tokens.colors.white, fontSize: '20px', lineHeight: '1' }}>
+          <Text
+            weight="black"
+            style={{ color: tokens.colors.white, fontSize: '20px', lineHeight: '1' }}
+          >
             {getAvatarInitial(handle)}
           </Text>
         )}

@@ -56,7 +56,10 @@ interface ActivityFeedItemProps {
   showShareHint?: boolean
 }
 
-export default function ActivityFeedItem({ activity, showShareHint = true }: ActivityFeedItemProps) {
+export default function ActivityFeedItem({
+  activity,
+  showShareHint = true,
+}: ActivityFeedItemProps) {
   const [hovered, setHovered] = useState(false)
   const meta = ACTIVITY_META[activity.activity_type as ActivityType]
   const color = meta.colorVar
@@ -64,9 +67,7 @@ export default function ActivityFeedItem({ activity, showShareHint = true }: Act
   const sourceLabel = formatSourceLabel(activity.source)
 
   // Trader handle link
-  const traderHref = activity.handle
-    ? `/trader/${encodeURIComponent(activity.handle)}`
-    : null
+  const traderHref = activity.handle ? `/trader/${encodeURIComponent(activity.handle)}` : null
 
   // Share link
   const shareHref = `/feed/${activity.id}`
@@ -115,7 +116,11 @@ export default function ActivityFeedItem({ activity, showShareHint = true }: Act
       <div style={{ flexShrink: 0 }}>
         {activity.avatar_url ? (
           <Image
-            src={`/api/avatar?url=${encodeURIComponent(activity.avatar_url)}`}
+            src={
+              activity.avatar_url.startsWith('data:')
+                ? activity.avatar_url
+                : `/api/avatar?url=${encodeURIComponent(activity.avatar_url)}`
+            }
             alt={activity.handle ?? 'Trader'}
             width={32}
             height={32}
@@ -178,13 +183,15 @@ export default function ActivityFeedItem({ activity, showShareHint = true }: Act
               {activity.handle}
             </Link>
           ) : (
-            <span style={{ color, fontWeight: 700 }}>{activity.handle ?? activity.source_trader_id}</span>
+            <span style={{ color, fontWeight: 700 }}>
+              {activity.handle ?? activity.source_trader_id}
+            </span>
           )}{' '}
           <span style={{ color: tokens.colors.text.secondary }}>
             {/* Strip the handle from the text since we render it separately with a link */}
             {activity.activity_text.replace(
               new RegExp(`^${escapeRegExp(activity.handle ?? activity.source_trader_id)}\\s*`),
-              '',
+              ''
             )}
           </span>
         </p>

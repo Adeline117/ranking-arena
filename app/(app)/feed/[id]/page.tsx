@@ -26,20 +26,27 @@ export const revalidate = 300 // ISR: 5 minutes
 // Server data fetch
 // ---------------------------------------------------------------------------
 
-const fetchActivity = cache(async function fetchActivity(id: string): Promise<TraderActivity | null> {
+const fetchActivity = cache(async function fetchActivity(
+  id: string
+): Promise<TraderActivity | null> {
   try {
     const supabase = getSupabaseAdmin()
 
     const { data, error } = await supabase
       .from('trader_activities')
-      .select('id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at')
+      .select(
+        'id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at'
+      )
       .eq('id', id)
       .single()
 
     if (error || !data) return null
     return data as TraderActivity
   } catch (error) {
-    logger.warn('[feed/id] fetchActivity failed:', error instanceof Error ? error.message : String(error))
+    logger.warn(
+      '[feed/id] fetchActivity failed:',
+      error instanceof Error ? error.message : String(error)
+    )
     return null
   }
 })
@@ -105,9 +112,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
     minute: '2-digit',
   })
 
-  const traderHref = activity.handle
-    ? `/trader/${encodeURIComponent(activity.handle)}`
-    : null
+  const traderHref = activity.handle ? `/trader/${encodeURIComponent(activity.handle)}` : null
 
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
@@ -184,7 +189,11 @@ export default async function ActivitySharePage({ params }: PageProps) {
           >
             {activity.avatar_url ? (
               <Image
-                src={`/api/avatar?url=${encodeURIComponent(activity.avatar_url)}`}
+                src={
+                  activity.avatar_url.startsWith('data:')
+                    ? activity.avatar_url
+                    : `/api/avatar?url=${encodeURIComponent(activity.avatar_url)}`
+                }
                 alt={activity.handle ?? 'Trader'}
                 width={48}
                 height={48}

@@ -28,15 +28,28 @@ const _PLATFORM_LABELS: Record<string, string> = {
   bybit: 'Bybit',
 }
 
- 
-function TraderAvatar({ name, avatarUrl, traderId, size = 36 }: { name: string; avatarUrl: string | null; traderId?: string; size?: number }) {
+function TraderAvatar({
+  name,
+  avatarUrl,
+  traderId,
+  size = 36,
+}: {
+  name: string
+  avatarUrl: string | null
+  traderId?: string
+  size?: number
+}) {
   const [imgError, setImgError] = useState(false)
   const initial = (name || '?').charAt(0).toUpperCase()
 
   if (avatarUrl && !imgError) {
     return (
       <img
-        src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
+        src={
+          avatarUrl.startsWith('data:')
+            ? avatarUrl
+            : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
+        }
         alt={name}
         width={size}
         height={size}
@@ -80,7 +93,8 @@ function TraderAvatar({ name, avatarUrl, traderId, size = 36 }: { name: string; 
         height: size,
         minWidth: size,
         borderRadius: tokens.radius.full,
-        background: 'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
+        background:
+          'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -127,22 +141,49 @@ export default function TopTraders() {
     <SidebarCard title={t('sidebarTopTraders')}>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {[1, 2, 3, 4, 5].map(i => (
-            <div key={i} className="skeleton" style={{ height: tokens.spacing[12], borderRadius: tokens.radius.md }} />
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div
+              key={i}
+              className="skeleton"
+              style={{ height: tokens.spacing[12], borderRadius: tokens.radius.md }}
+            />
           ))}
         </div>
       ) : error ? (
-        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
+        <div
+          style={{
+            padding: `${tokens.spacing[3]} 0`,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
           <div>{t('sidebarLoadFailed')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: tokens.spacing[1.5], padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{
+              marginTop: tokens.spacing[1.5],
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.sm,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              cursor: 'pointer',
+            }}
           >
             {t('retry') || 'Retry'}
           </button>
         </div>
       ) : traders.length === 0 ? (
-        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
+        <div
+          style={{
+            padding: `${tokens.spacing[3]} 0`,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
           {t('noData')}
         </div>
       ) : (
@@ -151,17 +192,18 @@ export default function TopTraders() {
             const isAddress = (s: string) => /^0x[0-9a-fA-F]{10,}$/.test(s)
             const isLongNumeric = (s: string) => /^\d{7,}$/.test(s)
             const formatAddr = (s: string) => `${s.slice(0, 6)}...${s.slice(-4)}`
-            const formatId = (s: string) => isAddress(s) ? formatAddr(s) : isLongNumeric(s) ? `Trader ${s.slice(-6)}` : s
-            const displayName = trader.handle && !isAddress(trader.handle) && !isLongNumeric(trader.handle)
-              ? trader.handle
-              : trader.handle
-                ? formatId(trader.handle)
-                : formatId(trader.source_trader_id)
-            const roiStr = trader.roi != null
-              ? formatROI(trader.roi)
-              : null
+            const formatId = (s: string) =>
+              isAddress(s) ? formatAddr(s) : isLongNumeric(s) ? `Trader ${s.slice(-6)}` : s
+            const displayName =
+              trader.handle && !isAddress(trader.handle) && !isLongNumeric(trader.handle)
+                ? trader.handle
+                : trader.handle
+                  ? formatId(trader.handle)
+                  : formatId(trader.source_trader_id)
+            const roiStr = trader.roi != null ? formatROI(trader.roi) : null
             return (
-              <Link prefetch={true}
+              <Link
+                prefetch={true}
                 key={`${trader.source}-${trader.source_trader_id}`}
                 href={`/trader/${encodeURIComponent(trader.source_trader_id)}?platform=${trader.source}`}
                 style={{
@@ -191,7 +233,12 @@ export default function TopTraders() {
                 </span>
 
                 {/* Avatar */}
-                <TraderAvatar name={displayName} avatarUrl={trader.avatar_url} traderId={trader.source_trader_id} size={32} />
+                <TraderAvatar
+                  name={displayName}
+                  avatarUrl={trader.avatar_url}
+                  traderId={trader.source_trader_id}
+                  size={32}
+                />
 
                 {/* Name only (no platform) */}
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -212,16 +259,20 @@ export default function TopTraders() {
 
                 {/* Arena Score only — clean and readable */}
                 {trader.arena_score != null && (
-                  <span style={{
-                    fontSize: tokens.typography.fontSize.sm,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    color: getScoreColor(trader.arena_score!),
-                    lineHeight: tokens.typography.lineHeight.tight,
-                    flexShrink: 0,
-                    minWidth: 28,
-                    textAlign: 'right',
-                    ...(trader.arena_score >= 90 ? { textShadow: '0 0 8px var(--color-accent-primary-60)' } : {}),
-                  }}>
+                  <span
+                    style={{
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      color: getScoreColor(trader.arena_score!),
+                      lineHeight: tokens.typography.lineHeight.tight,
+                      flexShrink: 0,
+                      minWidth: 28,
+                      textAlign: 'right',
+                      ...(trader.arena_score >= 90
+                        ? { textShadow: '0 0 8px var(--color-accent-primary-60)' }
+                        : {}),
+                    }}
+                  >
                     {trader.arena_score.toFixed(0)}
                   </span>
                 )}

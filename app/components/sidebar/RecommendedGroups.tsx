@@ -22,13 +22,25 @@ type Group = {
   recommendation_reason?: string | null
 }
 
-function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: string | null; size?: number }) {
+function GroupAvatar({
+  name,
+  avatarUrl,
+  size = 36,
+}: {
+  name: string
+  avatarUrl: string | null
+  size?: number
+}) {
   const [imgError, setImgError] = useState(false)
   const initial = (name || '?').charAt(0).toUpperCase()
   if (avatarUrl && !imgError) {
     return (
       <Image
-        src={`/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
+        src={
+          avatarUrl.startsWith('data:')
+            ? avatarUrl
+            : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
+        }
         alt={name}
         width={size}
         height={size}
@@ -49,7 +61,8 @@ function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: 
         height: size,
         minWidth: size,
         borderRadius: tokens.radius.full,
-        background: 'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
+        background:
+          'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -63,7 +76,9 @@ function GroupAvatar({ name, avatarUrl, size = 36 }: { name: string; avatarUrl: 
   )
 }
 
-async function fetchRecommendedGroups(accessToken: string | null): Promise<{ groups: Group[]; personalized: boolean }> {
+async function fetchRecommendedGroups(
+  accessToken: string | null
+): Promise<{ groups: Group[]; personalized: boolean }> {
   if (accessToken) {
     try {
       const res = await fetch('/api/recommendations/groups?limit=8', {
@@ -72,10 +87,15 @@ async function fetchRecommendedGroups(accessToken: string | null): Promise<{ gro
       if (res.ok) {
         const json = await res.json()
         if (json.success && json.data?.groups?.length > 0) {
-          return { groups: json.data.groups as Group[], personalized: json.data.personalized === true }
+          return {
+            groups: json.data.groups as Group[],
+            personalized: json.data.personalized === true,
+          }
         }
       }
-    } catch { /* fall through to default */ }
+    } catch {
+      /* fall through to default */
+    }
   }
 
   const { data } = await supabase
@@ -90,7 +110,12 @@ export default function RecommendedGroups() {
   const { language, t } = useLanguage()
   const auth = useUnifiedAuth()
 
-  const { data, error, isLoading: loading, refetch } = useQuery({
+  const {
+    data,
+    error,
+    isLoading: loading,
+    refetch,
+  } = useQuery({
     queryKey: ['recommended-groups', auth.accessToken],
     queryFn: () => fetchRecommendedGroups(auth.accessToken),
     refetchOnWindowFocus: false,
@@ -108,34 +133,63 @@ export default function RecommendedGroups() {
     <SidebarCard title={t('sidebarRecommendedGroups')}>
       {loading ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {[1, 2, 3].map(i => (
-            <div key={i} className="skeleton" style={{ height: 52, borderRadius: tokens.radius.md }} />
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="skeleton"
+              style={{ height: 52, borderRadius: tokens.radius.md }}
+            />
           ))}
         </div>
       ) : error ? (
-        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
+        <div
+          style={{
+            padding: `${tokens.spacing[3]} 0`,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
           <div>{t('sidebarLoadFailedShort')}</div>
           <button
             onClick={() => mutate()}
-            style={{ marginTop: tokens.spacing[1.5], padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{
+              marginTop: tokens.spacing[1.5],
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.sm,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              cursor: 'pointer',
+            }}
           >
             {t('retry') || 'Retry'}
           </button>
         </div>
       ) : groups.length === 0 ? (
         <div style={{ padding: `${tokens.spacing[6]} ${tokens.spacing[3]}`, textAlign: 'center' }}>
-          <Image src="/stickers/confused.webp" alt="No groups found" width={48} height={48} style={{ margin: `0 auto ${tokens.spacing[2]}`, display: 'block', opacity: 0.7 }} />
-          <p style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
+          <Image
+            src="/stickers/confused.webp"
+            alt="No groups found"
+            width={48}
+            height={48}
+            style={{ margin: `0 auto ${tokens.spacing[2]}`, display: 'block', opacity: 0.7 }}
+          />
+          <p
+            style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}
+          >
             {t('sidebarNoGroups')}
           </p>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
-          {groups.map(g => {
+          {groups.map((g) => {
             const displayName = localizedLabel(g.name, g.name_en, language)
             const desc = localizedLabel(g.description || '', g.description_en, language)
             return (
-              <Link prefetch={false}
+              <Link
+                prefetch={false}
                 key={g.id}
                 href={`/groups/${g.id}`}
                 style={{
@@ -147,8 +201,8 @@ export default function RecommendedGroups() {
                   borderRadius: tokens.radius.md,
                   transition: `background ${tokens.transition.fast}`,
                 }}
-                onMouseEnter={e => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
-                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                onMouseEnter={(e) => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
                 <GroupAvatar name={displayName} avatarUrl={g.avatar_url} size={36} />
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -176,12 +230,23 @@ export default function RecommendedGroups() {
                   >
                     {(g.member_count || 0).toLocaleString('en-US')} {t('members')}
                     {!g.recommendation_reason && desc && (
-                      <span style={{ marginLeft: tokens.spacing[1.5], color: tokens.colors.text.secondary }}>
+                      <span
+                        style={{
+                          marginLeft: tokens.spacing[1.5],
+                          color: tokens.colors.text.secondary,
+                        }}
+                      >
                         {desc.length > 20 ? desc.slice(0, 20) + '...' : desc}
                       </span>
                     )}
                     {isPersonalized && g.recommendation_reason && (
-                      <span style={{ marginLeft: tokens.spacing[1.5], color: tokens.colors.accent.primary, fontStyle: 'italic' }}>
+                      <span
+                        style={{
+                          marginLeft: tokens.spacing[1.5],
+                          color: tokens.colors.accent.primary,
+                          fontStyle: 'italic',
+                        }}
+                      >
                         {g.recommendation_reason}
                       </span>
                     )}

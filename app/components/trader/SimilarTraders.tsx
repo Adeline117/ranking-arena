@@ -5,7 +5,12 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
+import {
+  getAvatarGradient,
+  getAvatarInitial,
+  isWalletAddress,
+  generateBlockieSvg,
+} from '@/lib/utils/avatar'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import type { TraderProfile } from '@/lib/data/trader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -27,7 +32,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
   avatarUrl,
   handle,
   traderId,
-  size = 40
+  size = 40,
 }: {
   avatarUrl?: string
   handle: string
@@ -65,7 +70,11 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
     >
       {avatarUrl && !imageError && (
         <Image
-          src={avatarUrl.startsWith("/") ? avatarUrl : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`}
+          src={
+            avatarUrl.startsWith('/') || avatarUrl.startsWith('data:')
+              ? avatarUrl
+              : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
+          }
           alt={handle}
           fill
           sizes="40px"
@@ -87,7 +96,15 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
           alt={handle}
           width={size}
           height={size}
-          style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0, zIndex: 1, imageRendering: 'pixelated' }}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            position: 'absolute',
+            inset: 0,
+            zIndex: 1,
+            imageRendering: 'pixelated',
+          }}
         />
       ) : showFallback ? (
         <Text
@@ -118,7 +135,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
   const uniqueTraders = useMemo(() => {
     const seenIds = new Set<string>()
     const seenHandles = new Set<string>()
-    return traders.filter(t => {
+    return traders.filter((t) => {
       const idKey = `${(t.id || t.handle).toLowerCase()}:${(t.source || '').toLowerCase()}`
       const handleKey = t.handle ? t.handle.toLowerCase() : ''
       if (seenIds.has(idKey)) return false
@@ -145,7 +162,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
   }
 
   return (
-    <Box 
+    <Box
       className="similar-traders glass-card"
       style={{
         background: `linear-gradient(165deg, ${tokens.colors.bg.secondary}F0 0%, ${tokens.colors.bg.primary}E8 100%)`,
@@ -159,14 +176,16 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
         opacity: 0,
       }}
     >
-      <Box style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: tokens.spacing[2],
-        marginBottom: tokens.spacing[4],
-        paddingBottom: tokens.spacing[3],
-        borderBottom: `1px solid ${tokens.colors.border.primary}40`,
-      }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          marginBottom: tokens.spacing[4],
+          paddingBottom: tokens.spacing[3],
+          borderBottom: `1px solid ${tokens.colors.border.primary}40`,
+        }}
+      >
         <Text
           size="base"
           weight="black"
@@ -189,10 +208,17 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
           </Text>
         </Box>
       </Box>
-      
-      <Box className="similar-traders-grid" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+
+      <Box
+        className="similar-traders-grid"
+        style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}
+      >
         {uniqueTraders.slice(0, 6).map((trader, index) => (
-          <Link key={trader.handle} href={`/trader/${encodeURIComponent(trader.id || trader.handle)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`} style={{ textDecoration: 'none' }}>
+          <Link
+            key={trader.handle}
+            href={`/trader/${encodeURIComponent(trader.id || trader.handle)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`}
+            style={{ textDecoration: 'none' }}
+          >
             <Box
               className="similar-trader-item"
               style={{
@@ -201,9 +227,10 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                 gap: tokens.spacing[3],
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
-                background: hoveredIndex === index 
-                  ? `linear-gradient(135deg, ${tokens.colors.accent.primary}10, ${tokens.colors.bg.tertiary})`
-                  : tokens.colors.bg.primary,
+                background:
+                  hoveredIndex === index
+                    ? `linear-gradient(135deg, ${tokens.colors.accent.primary}10, ${tokens.colors.bg.tertiary})`
+                    : tokens.colors.bg.primary,
                 border: `1px solid ${hoveredIndex === index ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}30`,
                 cursor: 'pointer',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
@@ -212,7 +239,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
             >
-              <AnimatedAvatar 
+              <AnimatedAvatar
                 avatarUrl={trader.avatar_url}
                 handle={trader.handle}
                 traderId={trader.id}
@@ -239,7 +266,10 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                       size="xs"
                       weight="bold"
                       style={{
-                        color: trader.roi_90d >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                        color:
+                          trader.roi_90d >= 0
+                            ? tokens.colors.accent.success
+                            : tokens.colors.accent.error,
                         fontSize: 11,
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                         letterSpacing: '-0.02em',
@@ -263,11 +293,14 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                   )}
                 </Box>
               </Box>
-              
-              <Text 
-                size="xs" 
-                style={{ 
-                  color: hoveredIndex === index ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+
+              <Text
+                size="xs"
+                style={{
+                  color:
+                    hoveredIndex === index
+                      ? tokens.colors.accent.primary
+                      : tokens.colors.text.tertiary,
                   transition: 'color 0.2s ease',
                   fontSize: 14,
                 }}
