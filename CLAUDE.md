@@ -329,6 +329,23 @@ Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spe
 3. **Sprint scope only** - Focus on current sprint tasks (see TASKS.md)
 4. **Test before done** - Run `npm run type-check && npm run test` before claiming complete
 
+### Post-Push Verification (MANDATORY — 铁律)
+
+**每次 git push 后必须运行 `scripts/post-deploy-check.sh`。**
+等 Vercel 部署完成后（通常 5-8 分钟），验证线上 5 个核心 URL 全部非 500。
+如果任何一个返回 500，立即回滚（Vercel Dashboard → 上一个绿色部署 → Promote）。
+
+**为什么**：2026-04-22 事件——629 个 commit 无人验证，累积 3 个 BLOCKER + 8 个 HIGH。
+所有交易员详情页 500 崩溃持续数天无人发现。根因：改了代码没人看线上。
+
+```bash
+# 部署后验证（等 Vercel 部署完成后运行）
+scripts/post-deploy-check.sh
+
+# 如果失败，立即回滚
+# Vercel Dashboard → Deployments → 上一个 ✅ → ⋯ → Promote to Production
+```
+
 ### Failure Prevention
 
 - If context getting full, summarize progress to PROGRESS.md, then `/clear`

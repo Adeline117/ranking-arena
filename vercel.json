@@ -3,6 +3,10 @@
   "regions": ["hnd1"],
   "crons": [
     {
+      "path": "/api/cron/smoke-test",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/weekly-metrics",
       "schedule": "0 9 * * 5"
     },
