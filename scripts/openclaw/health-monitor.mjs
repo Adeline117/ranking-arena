@@ -256,7 +256,7 @@ async function runHealthCheck() {
   // 3. Infrastructure input validation (root-root-root cause prevention)
   // These catch problems BEFORE they cascade into pipeline failures.
 
-  // 3a. VPS connectivity — detect port drift before fetchers fail
+  // 3a. VPS connectivity — detect port drift AND auth mismatch before fetchers fail
   for (const [name, url] of [
     ['VPS Proxy (3456)', process.env.VPS_PROXY_SG],
     ['VPS Scraper (3457)', process.env.VPS_SCRAPER_SG || process.env.VPS_SCRAPER_HOST],
@@ -272,6 +272,31 @@ async function runHealthCheck() {
     } catch {
       issues.push(`🚨 ${name} UNREACHABLE: ${url}`)
       categories.add('infra:vps-dead')
+    }
+  }
+
+  // 3a2. VPS proxy AUTH check — catches key mismatch (root cause of 7h Binance outage 2026-04-22)
+  // /health returns 200 even when proxy key is wrong. Must test actual /proxy auth.
+  const vpsProxyUrl = process.env.VPS_PROXY_SG
+  const vpsProxyKey = process.env.VPS_PROXY_KEY
+  if (vpsProxyUrl && vpsProxyKey) {
+    try {
+      const cleanUrl = vpsProxyUrl.replace(/\\n$/, '').trim()
+      const res = await fetch(`${cleanUrl}/proxy`, {
+        method: 'POST',
+        headers: { 'X-Proxy-Key': vpsProxyKey.trim(), 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: 'https://httpbin.org/status/200', method: 'GET' }),
+        signal: AbortSignal.timeout(10000),
+      })
+      if (res.status === 401 || res.status === 403) {
+        issues.push(
+          `🔴 VPS PROXY AUTH FAILED (${res.status}) — key mismatch between app and VPS! Binance/Bitget will fail.`
+        )
+        categories.add('infra:vps-auth-mismatch')
+      }
+    } catch (err) {
+      issues.push(`⚠️ VPS proxy auth check failed: ${err.message}`)
+      categories.add('infra:vps-auth-check-error')
     }
   }
 
