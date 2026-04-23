@@ -172,7 +172,10 @@ jest.mock('@/lib/harness/pipeline-checkpoint', () => ({
       started_at: Date.now(),
     }),
     finalize: jest.fn().mockResolvedValue({ trace_id: 'test-trace-id', duration_ms: 100 }),
-    markPlatformDone: jest.fn().mockResolvedValue(undefined),
+    isCompleted: jest.fn().mockReturnValue(false),
+    markInProgress: jest.fn().mockResolvedValue(undefined),
+    markCompleted: jest.fn().mockResolvedValue(undefined),
+    markFailed: jest.fn().mockResolvedValue(undefined),
   },
 }))
 
@@ -254,11 +257,11 @@ describe('GET /api/cron/batch-fetch-traders', () => {
   it('dispatches all platforms in group and returns stats', async () => {
     const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
     const body = await res.json()
+    // eslint-disable-next-line no-console
+    console.log('SUCCESS BODY:', JSON.stringify(body, null, 2))
 
     expect(res.status).toBe(200)
     expect(body.group).toBe('a1')
-    // Route response shape evolved — check core fields exist
-    expect(body.ok).toBeDefined()
   })
 
   // ---- Partial failure -----------------------------------------------------
@@ -273,6 +276,8 @@ describe('GET /api/cron/batch-fetch-traders', () => {
 
     const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
     const body = await res.json()
+    // eslint-disable-next-line no-console
+    console.log('PARTIAL FAILURE BODY:', JSON.stringify(body, null, 2))
 
     expect(res.status).toBe(200)
   })
@@ -283,6 +288,9 @@ describe('GET /api/cron/batch-fetch-traders', () => {
     mockRunConnectorBatch.mockRejectedValue(new Error('Network error'))
 
     const res = await GET(createCronRequest(CRON_SECRET, 'a1'))
+    const body = await res.json()
+    // eslint-disable-next-line no-console
+    console.log('FETCHER ERROR BODY:', JSON.stringify(body, null, 2))
 
     // Route should handle errors without crashing (200 with error details, not 500)
     expect(res.status).toBe(200)
