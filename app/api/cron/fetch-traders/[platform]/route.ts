@@ -39,7 +39,49 @@ export async function GET(request: Request, { params }: Params) {
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
 
-    // 2) Verify env
+    // 2) Reject platforms migrated to batch-fetch-traders (ghost cron prevention)
+    // Vercel may cache old cron schedules that fire these per-platform routes
+    // even after the vercel.json entry was removed. Return early to avoid zombie jobs.
+    const BATCH_MIGRATED = new Set([
+      'hyperliquid',
+      'gmx',
+      'gains',
+      'htx_futures',
+      'binance_futures',
+      'binance_spot',
+      'okx_futures',
+      'okx_spot',
+      'bybit',
+      'bybit_spot',
+      'bitget_futures',
+      'dydx',
+      'aevo',
+      'toobit',
+      'xt',
+      'etoro',
+      'jupiter_perps',
+      'mexc',
+      'woox',
+      'polymarket',
+      'copin',
+      'weex',
+      'bitunix',
+      'coinex',
+      'gateio',
+      'btcc',
+      'binance_web3',
+      'okx_web3',
+      'bitfinex',
+      'drift',
+    ])
+    if (BATCH_MIGRATED.has(platform)) {
+      return NextResponse.json(
+        { status: 'skipped', reason: `${platform} migrated to batch-fetch-traders` },
+        { status: 200 }
+      )
+    }
+
+    // 3) Verify env
     const { url, serviceKey } = getSupabaseEnv()
     if (!url || !serviceKey) {
       return NextResponse.json({ error: 'Supabase environment variables missing' }, { status: 500 })
