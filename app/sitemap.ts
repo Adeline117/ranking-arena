@@ -221,6 +221,9 @@ export default async function sitemap({
   // redirect URLs in a sitemap is treated as low-quality by Google.
   // Similarly /rankings (→ /), /rankings/traders (→ /), and /library (→ /learn)
   // are all 301 redirects and must NOT appear here.
+  // eslint-disable-next-line no-console
+  console.log(`[sitemap] id=${id} (type=${typeof id}, raw=${rawId}, rawType=${typeof rawId})`)
+
   if (id === STATIC_SITEMAP_ID) {
     const staticPages: MetadataRoute.Sitemap = [
       { url: `${BASE_URL}/`, lastModified: now, changeFrequency: 'hourly', priority: 1 },
