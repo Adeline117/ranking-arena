@@ -341,7 +341,15 @@ export default function TraderProfileClient({
 
       <Box
         className="page-container"
-        style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}
+        style={{
+          maxWidth: 1200,
+          width: '100%',
+          margin: '0 auto',
+          padding: tokens.spacing[6],
+          paddingBottom: 100,
+          overflowX: 'hidden',
+          boxSizing: 'border-box',
+        }}
       >
         <Breadcrumb
           items={[{ label: t('leaderboardBreadcrumb'), href: '/rankings' }, { label: displayName }]}
@@ -650,6 +658,11 @@ export default function TraderProfileClient({
             .page-container {
               padding: ${tokens.spacing[3]} !important;
               padding-bottom: 100px !important;
+            }
+            .profile-header {
+              overflow: hidden !important;
+              padding-left: ${tokens.spacing[3]} !important;
+              padding-right: ${tokens.spacing[3]} !important;
             }
           }
         `}</style>
