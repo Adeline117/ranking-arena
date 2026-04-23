@@ -182,7 +182,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               ),
             },
             {
-              value: '27+',
+              value: '32+',
               label: resolved(
                 t('pricingStatExchangesTracked'),
                 'pricingStatExchangesTracked',

@@ -2,12 +2,11 @@ import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ARTICLES, getArticleBySlug } from '../articles'
-import { sanitizeHtml } from '@/lib/utils/sanitize'
 
 export const revalidate = 3600
 
 export function generateStaticParams() {
-  return ARTICLES.map(a => ({ slug: a.slug }))
+  return ARTICLES.map((a) => ({ slug: a.slug }))
 }
 
 export async function generateMetadata({
@@ -39,11 +38,16 @@ function renderMarkdown(md: string): string {
     // Code blocks
     if (line.startsWith('```')) {
       if (inCodeBlock) {
-        html.push(`<pre style="background:var(--color-bg-tertiary,#111);padding:16px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.6;margin:16px 0"><code>${codeContent.join('\n')}</code></pre>`)
+        html.push(
+          `<pre style="background:var(--color-bg-tertiary,#111);padding:16px;border-radius:8px;overflow-x:auto;font-size:13px;line-height:1.6;margin:16px 0"><code>${codeContent.join('\n')}</code></pre>`
+        )
         codeContent = []
         inCodeBlock = false
       } else {
-        if (inList) { html.push('</ul>'); inList = false }
+        if (inList) {
+          html.push('</ul>')
+          inList = false
+        }
         inCodeBlock = true
       }
       continue
@@ -57,32 +61,54 @@ function renderMarkdown(md: string): string {
 
     // Empty line
     if (!trimmed) {
-      if (inList) { html.push('</ul>'); inList = false }
+      if (inList) {
+        html.push('</ul>')
+        inList = false
+      }
       continue
     }
 
     // Headings
     const headingMatch = trimmed.match(/^(#{1,3})\s+(.+)/)
     if (headingMatch) {
-      if (inList) { html.push('</ul>'); inList = false }
+      if (inList) {
+        html.push('</ul>')
+        inList = false
+      }
       const level = headingMatch[1].length
       const text = headingMatch[2]
       const sizes: Record<number, string> = { 1: '24px', 2: '20px', 3: '16px' }
-      const margins: Record<number, string> = { 1: '32px 0 16px', 2: '28px 0 12px', 3: '20px 0 8px' }
-      html.push(`<h${level} style="font-size:${sizes[level]};font-weight:700;color:var(--color-text-primary,#fff);margin:${margins[level]}">${inlineFormat(text)}</h${level}>`)
+      const margins: Record<number, string> = {
+        1: '32px 0 16px',
+        2: '28px 0 12px',
+        3: '20px 0 8px',
+      }
+      html.push(
+        `<h${level} style="font-size:${sizes[level]};font-weight:700;color:var(--color-text-primary,#fff);margin:${margins[level]}">${inlineFormat(text)}</h${level}>`
+      )
       continue
     }
 
     // List items
     if (trimmed.startsWith('- ') || trimmed.startsWith('* ')) {
-      if (!inList) { html.push('<ul style="padding-left:24px;margin:8px 0">'); inList = true }
-      html.push(`<li style="color:var(--color-text-secondary,#aaa);font-size:15px;line-height:1.7;margin:4px 0">${inlineFormat(trimmed.slice(2))}</li>`)
+      if (!inList) {
+        html.push('<ul style="padding-left:24px;margin:8px 0">')
+        inList = true
+      }
+      html.push(
+        `<li style="color:var(--color-text-secondary,#aaa);font-size:15px;line-height:1.7;margin:4px 0">${inlineFormat(trimmed.slice(2))}</li>`
+      )
       continue
     }
 
     // Paragraph
-    if (inList) { html.push('</ul>'); inList = false }
-    html.push(`<p style="color:var(--color-text-secondary,#aaa);font-size:15px;line-height:1.7;margin:12px 0">${inlineFormat(trimmed)}</p>`)
+    if (inList) {
+      html.push('</ul>')
+      inList = false
+    }
+    html.push(
+      `<p style="color:var(--color-text-secondary,#aaa);font-size:15px;line-height:1.7;margin:12px 0">${inlineFormat(trimmed)}</p>`
+    )
   }
 
   if (inList) html.push('</ul>')
@@ -90,7 +116,11 @@ function renderMarkdown(md: string): string {
 }
 
 function escapeHtml(str: string): string {
-  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
 }
 
 function inlineFormat(text: string): string {
@@ -102,18 +132,24 @@ function inlineFormat(text: string): string {
     '<code style="background:var(--color-bg-tertiary,#111);padding:2px 6px;border-radius:4px;font-size:13px">$1</code>'
   )
   // Bold
-  result = result.replace(/\*\*([^*]+)\*\*/g, '<strong style="color:var(--color-text-primary,#fff);font-weight:600">$1</strong>')
+  result = result.replace(
+    /\*\*([^*]+)\*\*/g,
+    '<strong style="color:var(--color-text-primary,#fff);font-weight:600">$1</strong>'
+  )
   return result
 }
 
-export default async function LearnArticlePage({
-  params,
-}: {
-  params: Promise<{ slug: string }>
-}) {
+export default async function LearnArticlePage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params
   const article = getArticleBySlug(slug)
-  if (!article) notFound()
+  if (!article) {
+    notFound()
+  }
+
+  // Dynamic import: avoid top-level isomorphic-dompurify initialization that
+  // can crash the module in serverless environments (JSDOM side-effects),
+  // which would turn the notFound() above into a 500.
+  const { sanitizeHtml } = await import('@/lib/utils/sanitize')
 
   return (
     <div
@@ -139,10 +175,29 @@ export default async function LearnArticlePage({
       {/* Defense-in-depth: content is static markdown from lib/data/learn-articles.ts,
          but we sanitize anyway to guard against future content source changes. */}
       <article
-        dangerouslySetInnerHTML={{ __html: sanitizeHtml(renderMarkdown(article.content), {
-          allowedTags: ['p', 'br', 'strong', 'em', 'b', 'i', 'h1', 'h2', 'h3', 'ul', 'ol', 'li', 'a', 'code', 'pre', 'span'],
-          allowedAttr: ['href', 'target', 'rel', 'class'],
-        }) }}
+        dangerouslySetInnerHTML={{
+          __html: sanitizeHtml(renderMarkdown(article.content), {
+            allowedTags: [
+              'p',
+              'br',
+              'strong',
+              'em',
+              'b',
+              'i',
+              'h1',
+              'h2',
+              'h3',
+              'ul',
+              'ol',
+              'li',
+              'a',
+              'code',
+              'pre',
+              'span',
+            ],
+            allowedAttr: ['href', 'target', 'rel', 'class'],
+          }),
+        }}
       />
     </div>
   )
