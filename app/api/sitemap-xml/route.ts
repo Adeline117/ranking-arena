@@ -51,7 +51,7 @@ export async function GET(request: NextRequest) {
     const shards = [0, ...Array.from({ length: shardCount }, (_, i) => i + 1), 999]
     const xml = `<?xml version="1.0" encoding="UTF-8"?>
 <sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap?shard=${id}</loc></sitemap>`).join('\n')}
+${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</loc></sitemap>`).join('\n')}
 </sitemapindex>`
     return xmlResponse(xml)
   }
