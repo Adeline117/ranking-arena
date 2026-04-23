@@ -4,7 +4,16 @@
  * 会员系统 React Hooks
  */
 
-import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, ReactNode } from 'react'
+import {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+  useRef,
+  createContext,
+  useContext,
+  ReactNode,
+} from 'react'
 import {
   premiumService,
   type UserSubscription,
@@ -19,8 +28,8 @@ import { logger } from '@/lib/logger'
 // Feature Limits Export (for UI display)
 // ============================================
 
-const freePlan = SUBSCRIPTION_PLANS.find(p => p.id === 'free')!
-const proPlan = SUBSCRIPTION_PLANS.find(p => p.id === 'pro')!
+const freePlan = SUBSCRIPTION_PLANS.find((p) => p.id === 'free')!
+const proPlan = SUBSCRIPTION_PLANS.find((p) => p.id === 'pro')!
 
 export const FEATURE_LIMITS = {
   free: {
@@ -50,7 +59,11 @@ export const FEATURE_LIMITS = {
 export const BETA_PRO_FEATURES_FREE = false
 
 // Runtime safeguard: prevent accidental enabling via env var in production
-if (typeof process !== 'undefined' && process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_BETA_PRO_FREE === 'true') {
+if (
+  typeof process !== 'undefined' &&
+  process.env.NODE_ENV === 'production' &&
+  process.env.NEXT_PUBLIC_BETA_PRO_FREE === 'true'
+) {
   console.error('CRITICAL: NEXT_PUBLIC_BETA_PRO_FREE=true is not allowed in production. Ignoring.')
 }
 
@@ -91,14 +104,18 @@ interface PremiumProviderProps {
 }
 
 export function PremiumProvider({ children, initialSubscription }: PremiumProviderProps) {
-  const [subscription, setSubscription] = useState<UserSubscription | null>(initialSubscription || null)
+  const [subscription, setSubscription] = useState<UserSubscription | null>(
+    initialSubscription || null
+  )
   const [isLoading, setIsLoading] = useState(!initialSubscription)
   const [hasNFT, setHasNFT] = useState(false)
   const [_source, setSource] = useState<'stripe' | 'nft' | 'admin' | 'free'>('free')
   // Track subscription in a ref so checkNFTMembership can read it without being
   // recreated on every subscription state change (which was causing useEffect churn)
   const subscriptionRef = useRef(subscription)
-  useEffect(() => { subscriptionRef.current = subscription }, [subscription])
+  useEffect(() => {
+    subscriptionRef.current = subscription
+  }, [subscription])
 
   // 加载订阅状态
   const loadSubscription = useCallback(async () => {
@@ -107,7 +124,9 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
 
       // 动态导入 supabase 避免服务端问题
       const { supabase } = await import('@/lib/supabase/client')
-      let { data: { session } } = await supabase.auth.getSession()
+      let {
+        data: { session },
+      } = await supabase.auth.getSession()
 
       // 检查 token 是否过期或即将过期，尝试刷新
       if (session?.expires_at) {
@@ -128,14 +147,14 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
         setSubscription(defaultSub)
         return
       }
-      
+
       // 尝试从 API 获取订阅状态（携带认证信息）
       try {
         const response = await fetch('/api/subscription', {
           method: 'GET',
           credentials: 'include',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
         })
 
@@ -152,7 +171,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       } catch (fetchError) {
         logger.error('[PremiumProvider] Failed to fetch subscription:', fetchError)
       }
-      
+
       // API 未实现或失败时，尝试直接从数据库查询（降级方案）
       try {
         const { data: subscription } = await supabase
@@ -217,7 +236,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       } catch (dbError) {
         logger.error('[PremiumProvider] Failed to query database:', dbError)
       }
-      
+
       // 所有方法都失败时使用默认值
       const defaultSub = premiumService.getSubscription()
       setSubscription(defaultSub)
@@ -237,11 +256,13 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   const checkNFTMembership = useCallback(async () => {
     try {
       const { supabase } = await import('@/lib/supabase/client')
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session?.access_token) return
 
       const res = await fetch('/api/membership/nft', {
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${session.access_token}` },
       })
       if (res.ok) {
         const { hasNFT: nft } = await res.json()
@@ -317,19 +338,16 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       isLoading,
       isPremium: effectiveIsPremium,
       isFeaturesUnlocked: effectiveIsPremium,
-      tier: (subscription?.tier || 'free') === 'free' && hasNFT ? 'pro' : (subscription?.tier || 'free'),
-      source: hasNFT ? 'nft' : (subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free'),
+      tier:
+        (subscription?.tier || 'free') === 'free' && hasNFT ? 'pro' : subscription?.tier || 'free',
+      source: hasNFT ? 'nft' : subscription?.paymentMethod === 'stripe' ? 'stripe' : 'free',
       hasNFT,
       checkFeature,
       refresh,
     }
   }, [subscription, isLoading, hasNFT, checkFeature, refresh])
 
-  return (
-    <PremiumContext.Provider value={value}>
-      {children}
-    </PremiumContext.Provider>
-  )
+  return <PremiumContext.Provider value={value}>{children}</PremiumContext.Provider>
 }
 
 // ============================================
@@ -337,20 +355,38 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
 // ============================================
 
 /**
+ * Safe default for when usePremium is called outside PremiumProvider.
+ * This happens when components (e.g. GoProButton in TopNav) mount before
+ * Providers are loaded during SSR or Phase 1 rendering.
+ */
+const PREMIUM_DEFAULT: PremiumContextValue = {
+  subscription: null,
+  isLoading: true,
+  isPremium: false,
+  isFeaturesUnlocked: false,
+  tier: 'free' as SubscriptionTier,
+  source: 'free',
+  hasNFT: false,
+  checkFeature: () => ({ hasAccess: false, isLimitReached: false, remaining: 0 }),
+  refresh: async () => {},
+}
+
+/**
  * 获取会员上下文
  */
 export function usePremium(): PremiumContextValue {
   const context = useContext(PremiumContext)
-  if (!context) {
-    throw new Error('usePremium must be used within a PremiumProvider')
-  }
-  return context
+  // Return safe default instead of throwing — components may render before
+  // PremiumProvider loads (e.g. TopNav SSR, mobile GoProButton)
+  return context ?? PREMIUM_DEFAULT
 }
 
 /**
  * 检查功能访问权限
  */
-export function useFeatureAccess(featureId: PremiumFeatureId): FeatureCheckResult & { isLoading: boolean } {
+export function useFeatureAccess(
+  featureId: PremiumFeatureId
+): FeatureCheckResult & { isLoading: boolean } {
   const { checkFeature, isLoading } = usePremium()
   const result = checkFeature(featureId)
   return { ...result, isLoading }
@@ -376,7 +412,9 @@ export function useFollowLimit(): FeatureCheckResult & { isLoading: boolean } {
 /**
  * 历史数据访问检查
  */
-export function useHistoricalDataAccess(requestedDays: number): FeatureCheckResult & { isLoading: boolean } {
+export function useHistoricalDataAccess(
+  requestedDays: number
+): FeatureCheckResult & { isLoading: boolean } {
   const { isLoading } = usePremium()
   const result = premiumService.checkHistoricalDataAccess(requestedDays)
   return { ...result, isLoading }
@@ -405,7 +443,7 @@ export function useFeatureQuota(featureId: PremiumFeatureId): {
   isLoading: boolean
 } {
   const { subscription, isLoading } = usePremium()
-  
+
   if (!subscription) {
     return { used: 0, limit: 0, remaining: 0, percentage: 0, isLoading }
   }
@@ -472,7 +510,7 @@ export function PremiumGate({ feature, tier, children, fallback = null }: Premiu
     const tierOrder: SubscriptionTier[] = ['free', 'pro']
     const currentIndex = tierOrder.indexOf(currentTier)
     const requiredIndex = tierOrder.indexOf(tier)
-    
+
     if (currentIndex < requiredIndex) {
       return <>{fallback}</>
     }
@@ -492,7 +530,13 @@ export function PremiumGate({ feature, tier, children, fallback = null }: Premiu
 /**
  * 仅付费用户可见
  */
-export function PremiumOnly({ children, fallback = null }: { children: ReactNode; fallback?: ReactNode }) {
+export function PremiumOnly({
+  children,
+  fallback = null,
+}: {
+  children: ReactNode
+  fallback?: ReactNode
+}) {
   const { isPremium, isLoading } = usePremium()
 
   if (isLoading) return null
