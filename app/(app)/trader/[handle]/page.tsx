@@ -223,10 +223,16 @@ export async function generateMetadata({
     )
   }
 
-  // If the trader cannot be resolved at all (not in DB, or timeout), use the
-  // URL handle as a best-effort name so the page still gets a meaningful <title>
-  // instead of falling back to the generic root layout default.
-  // The page component handles the actual notFound() for the 404 HTTP status.
+  // ROOT CAUSE FIX (2026-04-23): calling notFound() in the page component
+  // (inside Suspense) caused Next.js to inject <meta name="robots" content="noindex"/>
+  // alongside the page's own "index, follow" meta tag. Google picks the most
+  // restrictive directive, so ALL 34k trader pages were effectively de-indexed.
+  // Fix: call notFound() HERE in generateMetadata() so it executes BEFORE
+  // Suspense streaming starts, producing a clean 404 without conflicting meta tags.
+  if (!resolved) {
+    notFound()
+  }
+
   const name = resolved?.handle || decoded
   const exchange = resolved
     ? EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto'

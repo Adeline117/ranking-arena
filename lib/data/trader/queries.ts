@@ -982,13 +982,16 @@ export async function resolveTrader(
   // where the URL uses the handle but the DB key is a numeric ID (e.g., eToro).
   {
     // leaderboard_ranks uses v1 naming: source → platform, source_trader_id → traderKey
+    // ROOT CAUSE FIX (2026-04-23): was .eq('90D') causing 4,447 traders with only
+    // 7D/30D entries to 404. Check all seasons, prefer 90D > 30D > 7D.
     let lbQuery = supabase
       .from('leaderboard_ranks')
       .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}`)
       .or(
         `${LR.source_trader_id}.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')},${LR.handle}.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`
       )
-      .eq(LR.season_id, '90D')
+      .in(LR.season_id, ['90D', '30D', '7D'])
+      .order(LR.season_id, { ascending: false })
 
     let profileQuery = supabase
       .from('trader_profiles_v2')
