@@ -14,11 +14,11 @@ import type { MetadataRoute } from 'next'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { BASE_URL } from '@/lib/constants/urls'
 
-// Force-dynamic ensures sitemap() runs at request time (not build time).
-// At build time, Supabase env vars are placeholders so all queries fail.
-// Combined with revalidate=3600, the first request generates the sitemap,
-// then it's served from cache for 1 hour before being re-generated.
-export const dynamic = 'force-dynamic'
+// ISR: regenerate sitemaps every hour. The first request after revalidation
+// triggers a fresh DB query; subsequent requests serve from cache.
+// NOTE: force-dynamic was removed because it doesn't reliably work with
+// generateSitemaps() on Vercel Turbopack builds — sitemaps were empty.
+export const revalidate = 3600
 
 export const maxDuration = 60
 
