@@ -285,10 +285,13 @@ async function runHealthCheck() {
       const res = await fetch(`${cleanUrl}/proxy`, {
         method: 'POST',
         headers: { 'X-Proxy-Key': vpsProxyKey.trim(), 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url: 'https://httpbin.org/status/200', method: 'GET' }),
+        body: JSON.stringify({
+          url: `https://api.copin.io/leaderboards/page?protocol=DYDX&limit=1&offset=0&statisticType=MONTH&queryDate=${Date.now()}`,
+          method: 'GET',
+        }),
         signal: AbortSignal.timeout(10000),
       })
-      if (res.status === 401 || res.status === 403) {
+      if (res.status === 401) {
         issues.push(
           `🔴 VPS PROXY AUTH FAILED (${res.status}) — key mismatch between app and VPS! Binance/Bitget will fail.`
         )
