@@ -15,10 +15,8 @@ const withBundleAnalyzer =
 const nextConfig = {
   /* config options here */
 
-  // ESLint — CI runs lint separately; skip in build to avoid double-linting
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
+  // ESLint config removed — deprecated in Next.js 16 (invalid config warning).
+  // CI runs lint separately via pre-push hook.
 
   // Turbopack 配置 (Next.js 16 默认) - 处理服务端专用模块在客户端的导入
   turbopack: {
