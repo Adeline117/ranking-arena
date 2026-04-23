@@ -29,7 +29,7 @@
   .mobile-bottom-nav {
     display: none !important;
   }
-  
+
   .mobile-bottom-nav-spacer {
     display: none !important;
   }
@@ -244,7 +244,9 @@
   align-items: center;
   justify-content: center;
   z-index: 40;
-  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .fab:active {
@@ -408,7 +410,7 @@
   }
 
   /* Hide secondary badges on mobile to reduce header bloat */
-  .trader-name-badges-row > *:nth-child(n+5) {
+  .trader-name-badges-row > *:nth-child(n + 5) {
     display: none;
   }
 
@@ -664,20 +666,20 @@
   .top-nav {
     height: 56px !important;
   }
-  
+
   .top-nav-container {
     padding-left: 12px !important;
     padding-right: 12px !important;
   }
-  
+
   .top-nav-search {
     display: none !important;
   }
-  
+
   .top-nav-logo [data-logo-box] {
     gap: 6px !important;
   }
-  
+
   .top-nav-logo svg {
     width: 24px !important;
     height: 12px !important;
@@ -737,7 +739,7 @@
   .time-range-selector {
     margin-bottom: 16px !important;
   }
-  
+
   .time-range-selector button {
     font-size: 14px !important;
     padding: 12px 16px !important;
@@ -756,7 +758,7 @@
     border-left: none !important;
     border-right: none !important;
   }
-  
+
   .category-tabs button {
     padding: 10px 16px !important;
     font-size: 13px !important;
@@ -790,21 +792,27 @@
   .interactive-row:active {
     background: var(--glass-bg-medium) !important;
     transform: scale(0.99);
-    transition: transform 0.1s ease, background 0.1s ease;
+    transition:
+      transform 0.1s ease,
+      background 0.1s ease;
   }
 
   .touch-target:active,
   .touch-target-sm:active {
     transform: scale(0.95);
     opacity: 0.8;
-    transition: transform 0.1s ease, opacity 0.1s ease;
+    transition:
+      transform 0.1s ease,
+      opacity 0.1s ease;
   }
 
   /* Button touch feedback */
   .btn-base:active:not(:disabled) {
     transform: scale(0.97);
     filter: brightness(0.95);
-    transition: transform 0.1s ease, filter 0.1s ease;
+    transition:
+      transform 0.1s ease,
+      filter 0.1s ease;
   }
 
   /* Card touch feedback */
@@ -814,7 +822,7 @@
   }
 
   /* Dropdown item touch feedback */
-  [role="option"]:active {
+  [role='option']:active {
     background: var(--glass-bg-medium) !important;
   }
 
@@ -865,7 +873,7 @@
   .glass-card {
     border-radius: 16px !important;
   }
-  
+
   /* 移动端完全禁用 backdrop-filter 以提升性能 */
   .glass {
     backdrop-filter: none !important;
@@ -915,7 +923,6 @@
 .no-scrollbar::-webkit-scrollbar {
   display: none;
 }
-
 
 /* ============================================
    Feed Content Responsive Padding
@@ -1068,8 +1075,8 @@
   }
 
   /* Hide columns 4-7 (PnL, Win%, MDD, Score) */
-  .overflow-x-auto > div > .grid > *:nth-child(n+4),
-  .overflow-x-auto > div > a.grid > *:nth-child(n+4) {
+  .overflow-x-auto > div > .grid > *:nth-child(n + 4),
+  .overflow-x-auto > div > a.grid > *:nth-child(n + 4) {
     display: none !important;
   }
 
@@ -1208,9 +1215,15 @@
 
 /* Sort column highlight pulse */
 @keyframes sortPulse {
-  0% { background: transparent; }
-  50% { background: rgba(139, 111, 168, 0.1); }
-  100% { background: transparent; }
+  0% {
+    background: transparent;
+  }
+  50% {
+    background: rgba(139, 111, 168, 0.1);
+  }
+  100% {
+    background: transparent;
+  }
 }
 
 .ranking-table-header [data-sortable].just-sorted {
@@ -1247,12 +1260,12 @@
 
 @media (max-width: 767px) {
   textarea,
-  input[type="text"],
-  input[type="email"],
-  input[type="password"],
-  input[type="search"],
-  input[type="url"],
-  input[type="number"],
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='search'],
+  input[type='url'],
+  input[type='number'],
   select {
     font-size: 16px !important;
   }
@@ -1277,7 +1290,8 @@
 
 @media (max-width: 767px) {
   /* NEVER set overflow-x on html/body — Safari auto-promotes overflow-y → auto */
-  html, body {
+  html,
+  body {
     max-width: 100vw !important;
     width: 100% !important;
   }
@@ -1285,10 +1299,26 @@
   /* All containers respect viewport (NOT main — breaks trackpad scroll) */
   .three-col-center,
   .page-container,
-  .feed-main-content {
+  .feed-main-content,
+  .trader-page-container {
     max-width: 100vw !important;
     overflow-x: clip !important;
     box-sizing: border-box !important;
+  }
+
+  /* Trader detail cards: prevent 28px overflow at 375px viewport */
+  .trader-page-container .performance-card,
+  .trader-page-container .glass-card,
+  .trader-page-container .similar-traders,
+  .trader-page-container .stats-card {
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    overflow: hidden !important;
+  }
+
+  /* Flex/grid children in trader profile must shrink to fit */
+  .profile-grid > * {
+    min-width: 0 !important;
   }
 
   /* Compare table: horizontal scroll within container */
@@ -1335,7 +1365,7 @@
 
   /* All buttons: minimum 44px touch target */
   button:not(.badge-count):not(.notification-dot):not(.rank-indicator),
-  [role="button"]:not(.badge-count):not(.notification-dot),
+  [role='button']:not(.badge-count):not(.notification-dot),
   a[href]:not(.badge-count) {
     min-height: 44px;
   }
@@ -1343,13 +1373,15 @@
   /* Filter chip buttons can be smaller */
   .filter-chip,
   .category-tab,
-  [style*="padding: 2px"] button,
+  [style*='padding: 2px'] button,
   .view-toggle-btn {
     min-height: 36px !important;
   }
 
   /* Ensure all images don't overflow */
-  img, video, canvas {
+  img,
+  video,
+  canvas {
     max-width: 100% !important;
     height: auto;
   }
@@ -1379,6 +1411,12 @@
   .page-container {
     padding-left: 8px !important;
     padding-right: 8px !important;
+  }
+
+  /* Trader detail: tighter padding on glass cards to prevent overflow */
+  .trader-page-container .glass-card,
+  .trader-page-container .performance-card {
+    padding: 12px !important;
   }
 
   .three-col-layout {
@@ -1566,8 +1604,8 @@
   /* 6. Login page footer links: ensure minimum touch target */
   .auth-footer a,
   .login-footer a,
-  a[href*="terms"],
-  a[href*="privacy"] {
+  a[href*='terms'],
+  a[href*='privacy'] {
     min-height: 36px !important;
     display: inline-flex;
     align-items: center;
