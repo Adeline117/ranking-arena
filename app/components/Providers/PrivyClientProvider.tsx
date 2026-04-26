@@ -20,8 +20,8 @@
  * appeared to do nothing because the state toggled then immediately reset.
  *
  * Fix: (1) Always render a stable tree structure (PrivyErrorBoundary > PrivySlot)
- * from mount, so children are never remounted on click. (2) Use requestIdleCallback
- * to load the SDK during idle time instead of on user click, so the tree is stable
+ * from mount, so children are never remounted. (2) Use requestIdleCallback to
+ * load the SDK during idle time instead of on user click, so the tree is stable
  * well before any interaction.
  */
 
