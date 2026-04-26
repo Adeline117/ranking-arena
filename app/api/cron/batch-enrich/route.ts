@@ -124,7 +124,7 @@ const TIER_SLOW = [
 // ROOT CAUSE FIX (2026-04-23): slow was 2 → 5 slow platforms ÷ 2 = 3 batches × 100s = 300s
 // which exactly hit the Vercel maxDuration limit, causing 13 days of zombie jobs.
 // With concurrency 3: 5 ÷ 3 = 2 batches × 55s = 110s (safe margin).
-const TIER_CONCURRENCY = { fast: 5, medium: 5, slow: 3 } as const
+const TIER_CONCURRENCY = { fast: 8, medium: 8, slow: 3 } as const
 
 interface BatchResult {
   platform: string
@@ -254,9 +254,9 @@ export async function GET(request: NextRequest) {
     // the Promise.race here fires first, allowing us to mark the platform as
     // timed out and continue to the next one without the watchdog firing.
     function getRoutePlatformTimeout(platform: string): number {
-      if (tierFastSet.has(platform)) return 15_000 // batch-cached: should be <5s
+      if (tierFastSet.has(platform)) return 8_000 // batch-cached: <5s typical, 8s safety margin
       if (tierSlowSet.has(platform)) return 45_000 // VPS/rate-limited: 45s (was 90s — 3 batches × 90s = 270s blew 300s limit)
-      return 50_000 // medium tier: cap at 50s (was 60-120s)
+      return 25_000 // medium tier: 25s (was 50s — 4 batches × 50s = 200s blew budget)
     }
 
     // Budget per period: divide 240s (leaving 60s buffer from 300s total) by number of periods
