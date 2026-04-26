@@ -35,23 +35,23 @@ export const maxDuration = 300 // Vercel Pro max (800 was invalid — silently c
 // With offset rotation, full coverage is achieved over multiple runs (every 4h).
 const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7: number }> = {
   // Batch-cached (no per-trader API calls, instant) — can be higher
-  bitunix: { limit90: 300, limit30: 300, limit7: 300 },
-  xt: { limit90: 100, limit30: 100, limit7: 100 },
+  bitunix: { limit90: 100, limit30: 80, limit7: 50 },
+  xt: { limit90: 40, limit30: 30, limit7: 20 },
   // blofin: REMOVED 2026-04-09 — openapi.blofin.com returns 401 without auth,
   //         VPS SG is geo-blocked, CF Worker fallback chain ~70% failure rate.
   //         Data now comes exclusively from Mac Mini (scripts/openclaw/fetch-blofin.mjs)
   //         via headless:'new' Chrome + residential IP. Same pattern as phemex/lbank.
   //         Already in PLATFORM_ROUTES as mac_mini-only (lib/connectors/route-config.ts).
-  bitfinex: { limit90: 120, limit30: 120, limit7: 120 },
-  toobit: { limit90: 100, limit30: 100, limit7: 100 },
-  coinex: { limit90: 200, limit30: 200, limit7: 200 },
+  bitfinex: { limit90: 50, limit30: 40, limit7: 30 },
+  toobit: { limit90: 40, limit30: 30, limit7: 20 },
+  coinex: { limit90: 80, limit30: 60, limit7: 40 },
   // Large CEX — API per trader (~0.5s/trader → max ~150 in 90s)
-  binance_futures: { limit90: 150, limit30: 100, limit7: 100 },
-  okx_futures: { limit90: 150, limit30: 100, limit7: 100 },
-  htx_futures: { limit90: 100, limit30: 80, limit7: 80 },
+  binance_futures: { limit90: 60, limit30: 40, limit7: 30 },
+  okx_futures: { limit90: 60, limit30: 40, limit7: 30 },
+  htx_futures: { limit90: 40, limit30: 30, limit7: 20 },
   etoro: { limit90: 30, limit30: 25, limit7: 25 }, // was 100/80/80, concurrency 2 × 20s/trader = needs <9 at a time for 90s budget
-  gateio: { limit90: 100, limit30: 80, limit7: 80 },
-  mexc: { limit90: 100, limit30: 80, limit7: 80 },
+  gateio: { limit90: 40, limit30: 30, limit7: 20 },
+  mexc: { limit90: 40, limit30: 30, limit7: 20 },
   // DEX on-chain (~0.3s/trader → max ~300 in 120s, but leave margin)
   hyperliquid: { limit90: 200, limit30: 150, limit7: 150 },
   drift: { limit90: 200, limit30: 150, limit7: 150 },
