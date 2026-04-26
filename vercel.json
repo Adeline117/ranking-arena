@@ -187,16 +187,28 @@
       "schedule": "8 */8 * * *"
     },
     {
-      "path": "/api/cron/batch-enrich?period=90D",
+      "path": "/api/cron/batch-enrich?period=90D&tier=fast",
       "schedule": "10 */4 * * *"
     },
     {
-      "path": "/api/cron/batch-enrich?period=30D",
+      "path": "/api/cron/batch-enrich?period=90D&tier=slow",
+      "schedule": "12 */4 * * *"
+    },
+    {
+      "path": "/api/cron/batch-enrich?period=30D&tier=fast",
       "schedule": "30 */4 * * *"
     },
     {
-      "path": "/api/cron/batch-enrich?period=7D",
+      "path": "/api/cron/batch-enrich?period=30D&tier=slow",
+      "schedule": "32 */4 * * *"
+    },
+    {
+      "path": "/api/cron/batch-enrich?period=7D&tier=fast",
       "schedule": "15 */6 * * *"
+    },
+    {
+      "path": "/api/cron/batch-enrich?period=7D&tier=slow",
+      "schedule": "17 */6 * * *"
     },
     {
       "path": "/api/cron/check-trader-alerts",

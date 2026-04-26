@@ -142,9 +142,12 @@ export async function GET(request: NextRequest) {
   }
 
   const periodParam = request.nextUrl.searchParams.get('period') || '90D'
+  const tierParam = request.nextUrl.searchParams.get('tier')
 
   // Dedup lock: prevent overlapping executions of the same period
-  const releaseLock = await acquireCronLock(`batch-enrich-${periodParam}`, { ttlSeconds: 300 })
+  const releaseLock = await acquireCronLock(`batch-enrich-${periodParam}-${tierParam || 'all'}`, {
+    ttlSeconds: 300,
+  })
   if (!releaseLock) {
     return NextResponse.json({ skipped: true, reason: 'already-running', period: periodParam })
   }
@@ -164,10 +167,18 @@ export async function GET(request: NextRequest) {
     const periodsToRun: Period[] =
       periodParam === 'all' ? ['90D', '30D', '7D'] : [periodParam as Period]
 
+    // ROOT CAUSE FIX (2026-04-26): 41 platforms x DB overhead = 350s+, exceeds 300s Vercel limit.
+    // Split via &tier= param: fast (18 platforms ~24s) or slow (17 medium + 5 slow ~165s)
+    const tierParam = request.nextUrl.searchParams.get('tier')
     // Determine which platforms to enrich — organized by tier for budget-aware execution
     // 2026-04-20: Tiered execution prevents slow platforms from consuming the entire time budget
     // All tiers run by default (enrichAll flag reserved for future use)
-    const platforms = [...TIER_FAST, ...TIER_MEDIUM, ...TIER_SLOW]
+    const platforms =
+      tierParam === 'fast'
+        ? [...TIER_FAST]
+        : tierParam === 'slow'
+          ? [...TIER_MEDIUM, ...TIER_SLOW]
+          : [...TIER_FAST, ...TIER_MEDIUM, ...TIER_SLOW]
 
     // Build tier membership set for efficient lookup during batch execution
     const tierFastSet = new Set(TIER_FAST)
@@ -175,11 +186,14 @@ export async function GET(request: NextRequest) {
 
     const results: BatchResult[] = []
     const startedAt = Date.now()
-    const plog = await PipelineLogger.start(`batch-enrich-${periodParam}`, {
-      period: periodParam,
-      enrichAll,
-      platforms,
-    })
+    const plog = await PipelineLogger.start(
+      `batch-enrich-${periodParam}${tierParam ? '-' + tierParam : ''}`,
+      {
+        period: periodParam,
+        enrichAll,
+        platforms,
+      }
+    )
 
     // Checkpoint: resume from last crash point (skip already-enriched platforms)
     const checkpoint = await PipelineCheckpoint.startOrResume('enrich', periodParam)
