@@ -643,14 +643,33 @@
 
 /* Hero icon with spring entrance */
 .quiz-hero-icon {
-  width: 140px;
-  height: 140px;
-  border-radius: 24px;
+  width: 148px;
+  height: 148px;
+  border-radius: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   animation: quizIconSpringIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.2s both;
-  box-shadow: 0 8px 24px var(--quiz-type-color-25, rgba(0, 0, 0, 0.15));
+  box-shadow:
+    0 8px 32px var(--quiz-type-color-25, rgba(0, 0, 0, 0.2)),
+    0 0 0 1px var(--quiz-type-color-15, transparent);
+  position: relative;
+}
+
+/* Dark overlay behind character art so luminosity blend reads correctly on dark bg */
+.quiz-hero-icon::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: rgba(10, 10, 20, 0.55);
+  z-index: 0;
+  pointer-events: none;
+}
+
+.quiz-hero-icon img {
+  position: relative;
+  z-index: 1;
 }
 
 .quiz-hero-type-name {
@@ -676,23 +695,41 @@
 
 .quiz-match-bar-track {
   width: 100%;
-  height: 8px;
-  border-radius: 4px;
+  height: 16px;
+  border-radius: 8px;
   background: var(--color-bg-tertiary);
   overflow: hidden;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
 }
 
 .quiz-match-bar-fill {
   height: 100%;
-  border-radius: 4px;
+  border-radius: 8px;
   transition: width 1.2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  box-shadow:
+    0 0 12px var(--quiz-type-color-25, rgba(0, 0, 0, 0.2)),
+    0 0 24px var(--quiz-type-color-15, transparent);
+}
+
+/* Glowing trailing edge on match bar */
+.quiz-match-bar-fill::after {
+  content: '';
+  position: absolute;
+  right: -1px;
+  top: 1px;
+  bottom: 1px;
+  width: 20px;
+  border-radius: 0 8px 8px 0;
+  background: rgba(255, 255, 255, 0.35);
+  filter: blur(4px);
 }
 
 .quiz-match-label {
-  font-size: 18px;
+  font-size: 22px;
   font-weight: 800;
   font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 .quiz-hero-description {
@@ -1002,61 +1039,131 @@
 /* Confetti particles — pure CSS */
 @keyframes quizConfetti1 {
   0% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
     opacity: 1;
   }
   100% {
-    transform: translate(-80px, -120px) rotate(360deg);
+    transform: translate(-110px, -180px) rotate(420deg) scale(0.5);
     opacity: 0;
   }
 }
 @keyframes quizConfetti2 {
   0% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
     opacity: 1;
   }
   100% {
-    transform: translate(90px, -100px) rotate(-270deg);
+    transform: translate(130px, -160px) rotate(-320deg) scale(0.4);
     opacity: 0;
   }
 }
 @keyframes quizConfetti3 {
   0% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
     opacity: 1;
   }
   100% {
-    transform: translate(-40px, -140px) rotate(200deg);
+    transform: translate(-55px, -200px) rotate(240deg) scale(0.6);
     opacity: 0;
   }
 }
 @keyframes quizConfetti4 {
   0% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
     opacity: 1;
   }
   100% {
-    transform: translate(60px, -130px) rotate(-300deg);
+    transform: translate(80px, -190px) rotate(-360deg) scale(0.5);
     opacity: 0;
   }
 }
 @keyframes quizConfetti5 {
   0% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
     opacity: 1;
   }
   100% {
-    transform: translate(20px, -150px) rotate(180deg);
+    transform: translate(30px, -210px) rotate(200deg) scale(0.45);
     opacity: 0;
   }
 }
 @keyframes quizConfetti6 {
   0% {
-    transform: translate(0, 0) rotate(0deg);
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
     opacity: 1;
   }
   100% {
-    transform: translate(-60px, -110px) rotate(-220deg);
+    transform: translate(-90px, -170px) rotate(-260deg) scale(0.55);
+    opacity: 0;
+  }
+}
+@keyframes quizConfetti7 {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(160px, -120px) rotate(300deg) scale(0.4);
+    opacity: 0;
+  }
+}
+@keyframes quizConfetti8 {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-140px, -140px) rotate(-400deg) scale(0.5);
+    opacity: 0;
+  }
+}
+@keyframes quizConfetti9 {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(50px, -230px) rotate(160deg) scale(0.35);
+    opacity: 0;
+  }
+}
+@keyframes quizConfetti10 {
+  0% {
+    transform: translate(0, 0) rotate(0deg) scale(1);
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-170px, -100px) rotate(-180deg) scale(0.45);
     opacity: 0;
   }
 }
@@ -1065,18 +1172,28 @@
   position: absolute;
   pointer-events: none;
   z-index: 10;
-  top: 50%;
+  top: 40%;
   left: 50%;
 }
 
 .quiz-confetti span {
   position: absolute;
-  width: 8px;
-  height: 8px;
-  border-radius: 2px;
-  animation-duration: 1.2s;
-  animation-timing-function: cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  animation-timing-function: cubic-bezier(0.2, 0.8, 0.4, 1);
   animation-fill-mode: forwards;
+}
+
+/* Alternating shapes: square pieces and thin ribbons */
+.quiz-confetti span:nth-child(odd) {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  animation-duration: 1.4s;
+}
+.quiz-confetti span:nth-child(even) {
+  width: 6px;
+  height: 14px;
+  border-radius: 1px;
+  animation-duration: 1.6s;
 }
 
 .quiz-confetti span:nth-child(1) {
@@ -1085,23 +1202,39 @@
 }
 .quiz-confetti span:nth-child(2) {
   animation-name: quizConfetti2;
-  animation-delay: 0.05s;
+  animation-delay: 0.04s;
 }
 .quiz-confetti span:nth-child(3) {
   animation-name: quizConfetti3;
-  animation-delay: 0.1s;
+  animation-delay: 0.08s;
 }
 .quiz-confetti span:nth-child(4) {
   animation-name: quizConfetti4;
-  animation-delay: 0.15s;
+  animation-delay: 0.12s;
 }
 .quiz-confetti span:nth-child(5) {
   animation-name: quizConfetti5;
-  animation-delay: 0.1s;
+  animation-delay: 0.06s;
 }
 .quiz-confetti span:nth-child(6) {
   animation-name: quizConfetti6;
-  animation-delay: 0.05s;
+  animation-delay: 0.1s;
+}
+.quiz-confetti span:nth-child(7) {
+  animation-name: quizConfetti7;
+  animation-delay: 0.02s;
+}
+.quiz-confetti span:nth-child(8) {
+  animation-name: quizConfetti8;
+  animation-delay: 0.14s;
+}
+.quiz-confetti span:nth-child(9) {
+  animation-name: quizConfetti9;
+  animation-delay: 0.07s;
+}
+.quiz-confetti span:nth-child(10) {
+  animation-name: quizConfetti10;
+  animation-delay: 0.11s;
 }
 
 /* ─── Responsive ──────────────────────────────────────────────── */
@@ -1114,9 +1247,9 @@
   }
 
   .quiz-hero-icon {
-    width: 120px;
-    height: 120px;
-    border-radius: 20px;
+    width: 128px;
+    height: 128px;
+    border-radius: 22px;
   }
 
   .quiz-risk-segment {
