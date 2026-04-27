@@ -4,6 +4,22 @@ import { useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import type { PersonalityType } from '../../components/types'
 import { TYPE_TEXT_COLOR } from '../../components/quiz-data'
+import { QuizIcon } from './QuizIcon'
+
+// Types that have dedicated character illustrations
+const TYPES_WITH_ART = new Set([
+  'sniper',
+  'analyst',
+  'strategist',
+  'hodler',
+  'narrator',
+  'whale',
+  'scalper',
+  'copycat',
+  'contrarian',
+  'degen',
+  'paperhands',
+])
 
 // Approximate rarity distribution per type (updated periodically)
 const TYPE_RARITY: Record<string, number> = {
@@ -111,27 +127,31 @@ export default function PersonalityCard({
         </div>
       )}
 
-      {/* Hero character illustration */}
+      {/* Hero character illustration (or SVG fallback for types without art) */}
       <div
         className="quiz-hero-icon"
         style={{
           background: `${type.color}10`,
           border: `1px solid ${type.color}20`,
-          width: 140,
-          height: 140,
-          borderRadius: 24,
+          width: TYPES_WITH_ART.has(type.id) ? 140 : 72,
+          height: TYPES_WITH_ART.has(type.id) ? 140 : 72,
+          borderRadius: TYPES_WITH_ART.has(type.id) ? 24 : 18,
           overflow: 'hidden',
         }}
       >
-        <Image
-          src={`/images/quiz/${type.id}.jpg`}
-          alt={tr(type.nameKey)}
-          width={140}
-          height={140}
-          style={{ objectFit: 'contain', objectPosition: 'center bottom' }}
-          priority
-          unoptimized
-        />
+        {TYPES_WITH_ART.has(type.id) ? (
+          <Image
+            src={`/images/quiz/${type.id}.jpg`}
+            alt={tr(type.nameKey)}
+            width={140}
+            height={140}
+            style={{ objectFit: 'contain', objectPosition: 'center bottom' }}
+            priority
+            unoptimized
+          />
+        ) : (
+          <QuizIcon name={type.icon} color={type.color} size={34} />
+        )}
       </div>
 
       {/* Type name — large hero weight */}
