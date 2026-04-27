@@ -16,6 +16,7 @@ const TYPES_WITH_ART = new Set([
   'whale',
   'scalper',
   'copycat',
+  'tourist',
   'contrarian',
   'degen',
   'paperhands',
@@ -209,8 +210,8 @@ export default function PersonalityCard({
             gap: 6,
           }}
         >
-          <span style={{ fontSize: 15 }}>
-            {TYPE_RARITY[type.id] <= 5 ? '💎' : TYPE_RARITY[type.id] <= 9 ? '⭐' : '📊'}
+          <span style={{ fontSize: 13, fontWeight: 800 }}>
+            {TYPE_RARITY[type.id] <= 5 ? '◆' : TYPE_RARITY[type.id] <= 9 ? '★' : '▣'}
           </span>
           {TYPE_RARITY[type.id] <= 5
             ? `Top ${TYPE_RARITY[type.id]}% — Ultra Rare`
