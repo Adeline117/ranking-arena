@@ -78,7 +78,7 @@ const TYPES: Record<
     risk: 4,
     horizon: 'Medium',
     horizonZh: '中线',
-    icon: '🐋',
+    icon: '〰',
   },
   analyst: {
     name: 'THE ANALYST',
@@ -94,7 +94,7 @@ const TYPES: Record<
     risk: 2,
     horizon: 'Medium',
     horizonZh: '中线',
-    icon: '📊',
+    icon: '▥',
   },
   contrarian: {
     name: 'THE CONTRARIAN',
@@ -142,7 +142,7 @@ const TYPES: Record<
     risk: 5,
     horizon: 'Short',
     horizonZh: '短线',
-    icon: '🔥',
+    icon: '△',
   },
   strategist: {
     name: 'THE STRATEGIST',
@@ -174,7 +174,7 @@ const TYPES: Record<
     risk: 3,
     horizon: 'Medium',
     horizonZh: '中线',
-    icon: '👥',
+    icon: '⊞',
   },
   tourist: {
     name: 'THE TOURIST',
@@ -190,7 +190,7 @@ const TYPES: Record<
     risk: 3,
     horizon: 'Short',
     horizonZh: '短线',
-    icon: '🧭',
+    icon: '◈',
   },
   paperhands: {
     name: 'THE PAPER HANDS',
@@ -206,7 +206,7 @@ const TYPES: Record<
     risk: 1,
     horizon: 'Short',
     horizonZh: '短线',
-    icon: '🧻',
+    icon: '☐',
   },
   narrator: {
     name: 'THE NARRATOR',
@@ -222,7 +222,7 @@ const TYPES: Record<
     risk: 4,
     horizon: 'Long',
     horizonZh: '长线',
-    icon: '📖',
+    icon: '▷',
   },
 }
 
