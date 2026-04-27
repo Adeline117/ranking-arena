@@ -34,195 +34,195 @@ const TYPES: Record<
 > = {
   sniper: {
     name: 'THE SNIPER',
-    nameZh: '精准狙击手',
+    nameZh: '\u7CBE\u51C6\u72D9\u51FB\u624B',
     color: '#8B5CF6',
     colorLight: '#C4B5FD',
     master: 'Jesse Livermore',
     masterZh: 'Jesse Livermore',
     tagline: 'Patient precision, perfect timing',
-    taglineZh: '耐心等待，精准出击',
+    taglineZh: '\u8010\u5FC3\u7B49\u5F85\uFF0C\u7CBE\u51C6\u51FA\u51FB',
     style: 'Swing Trading',
-    styleZh: '波段交易',
+    styleZh: '\u6CE2\u6BB5\u4EA4\u6613',
     risk: 2,
     horizon: 'Medium',
-    horizonZh: '中线',
-    icon: '◎',
+    horizonZh: '\u4E2D\u7EBF',
+    icon: '\u25CE',
   },
   scalper: {
     name: 'THE SCALPER',
-    nameZh: '闪电侠',
+    nameZh: '\u95EA\u7535\u4FA0',
     color: '#3B82F6',
     colorLight: '#93C5FD',
     master: 'Paul Rotter',
     masterZh: 'Paul Rotter',
     tagline: 'Speed is the ultimate edge',
-    taglineZh: '速度就是最大的优势',
+    taglineZh: '\u901F\u5EA6\u5C31\u662F\u6700\u5927\u7684\u4F18\u52BF',
     style: 'Scalping',
-    styleZh: '超短线',
+    styleZh: '\u8D85\u77ED\u7EBF',
     risk: 3,
     horizon: 'Short',
-    horizonZh: '短线',
-    icon: '⚡',
+    horizonZh: '\u77ED\u7EBF',
+    icon: '\u26A1',
   },
   whale: {
     name: 'THE WHALE',
-    nameZh: '巨鲸',
+    nameZh: '\u5DE8\u9CB8',
     color: '#16A34A',
     colorLight: '#86EFAC',
     master: 'George Soros',
     masterZh: 'George Soros',
     tagline: 'Big conviction, big positions',
-    taglineZh: '强信念，大仓位',
+    taglineZh: '\u5F3A\u4FE1\u5FF5\uFF0C\u5927\u4ED3\u4F4D',
     style: 'Macro Trading',
-    styleZh: '宏观交易',
+    styleZh: '\u5B8F\u89C2\u4EA4\u6613',
     risk: 4,
     horizon: 'Medium',
-    horizonZh: '中线',
-    icon: '〰',
+    horizonZh: '\u4E2D\u7EBF',
+    icon: '\u3030',
   },
   analyst: {
     name: 'THE ANALYST',
-    nameZh: '数据科学家',
+    nameZh: '\u6570\u636E\u79D1\u5B66\u5BB6',
     color: '#7C3AED',
     colorLight: '#C4B5FD',
     master: 'Jim Simons',
     masterZh: 'Jim Simons',
     tagline: 'Data reveals what intuition hides',
-    taglineZh: '数据揭示直觉隐藏的真相',
+    taglineZh: '\u6570\u636E\u63ED\u793A\u76F4\u89C9\u9690\u85CF\u7684\u771F\u76F8',
     style: 'Quantitative',
-    styleZh: '量化交易',
+    styleZh: '\u91CF\u5316\u4EA4\u6613',
     risk: 2,
     horizon: 'Medium',
-    horizonZh: '中线',
-    icon: '▥',
+    horizonZh: '\u4E2D\u7EBF',
+    icon: '\u25A5',
   },
   contrarian: {
     name: 'THE CONTRARIAN',
-    nameZh: '逆行者',
+    nameZh: '\u9006\u884C\u8005',
     color: '#EF4444',
     colorLight: '#FCA5A5',
     master: 'Michael Burry',
     masterZh: 'Michael Burry',
     tagline: 'Be fearful when others are greedy',
-    taglineZh: '别人贪婪时恐惧',
+    taglineZh: '\u522B\u4EBA\u8D2A\u5A6A\u65F6\u6050\u60E7',
     style: 'Mean Reversion',
-    styleZh: '均值回归',
+    styleZh: '\u5747\u503C\u56DE\u5F52',
     risk: 4,
     horizon: 'Medium',
-    horizonZh: '中线',
-    icon: '↺',
+    horizonZh: '\u4E2D\u7EBF',
+    icon: '\u21BA',
   },
   hodler: {
     name: 'THE HODLER',
-    nameZh: '钻石手',
+    nameZh: '\u94BB\u77F3\u624B',
     color: '#10B981',
     colorLight: '#6EE7B7',
     master: 'Warren Buffett',
     masterZh: 'Warren Buffett',
     tagline: 'Time in the market beats timing',
-    taglineZh: '持有时间胜过择时',
+    taglineZh: '\u6301\u6709\u65F6\u95F4\u80DC\u8FC7\u62E9\u65F6',
     style: 'Buy & Hold',
-    styleZh: '买入持有',
+    styleZh: '\u4E70\u5165\u6301\u6709',
     risk: 1,
     horizon: 'Long',
-    horizonZh: '长线',
-    icon: '◇',
+    horizonZh: '\u957F\u7EBF',
+    icon: '\u25C7',
   },
   degen: {
     name: 'THE DEGEN',
-    nameZh: '赌神',
+    nameZh: '\u8D4C\u795E',
     color: '#DC2626',
     colorLight: '#FCA5A5',
     master: 'Richard Dennis',
     masterZh: 'Richard Dennis',
     tagline: 'Fortune favors the bold',
-    taglineZh: '财富青睐勇敢者',
+    taglineZh: '\u8D22\u5BCC\u9752\u7750\u52C7\u6562\u8005',
     style: 'High Leverage',
-    styleZh: '高杠杆',
+    styleZh: '\u9AD8\u6760\u6746',
     risk: 5,
     horizon: 'Short',
-    horizonZh: '短线',
-    icon: '△',
+    horizonZh: '\u77ED\u7EBF',
+    icon: '\u25B3',
   },
   strategist: {
     name: 'THE STRATEGIST',
-    nameZh: '棋手',
+    nameZh: '\u68CB\u624B',
     color: '#6D28D9',
     colorLight: '#A78BFA',
     master: 'Ray Dalio',
     masterZh: 'Ray Dalio',
     tagline: 'Diversify, balance, endure',
-    taglineZh: '分散、平衡、持久',
+    taglineZh: '\u5206\u6563\u3001\u5E73\u8861\u3001\u6301\u4E45',
     style: 'Risk Parity',
-    styleZh: '风险平价',
+    styleZh: '\u98CE\u9669\u5E73\u4EF7',
     risk: 2,
     horizon: 'Long',
-    horizonZh: '长线',
-    icon: '♟',
+    horizonZh: '\u957F\u7EBF',
+    icon: '\u265F',
   },
   copycat: {
     name: 'THE COPYCAT',
-    nameZh: '跟单达人',
+    nameZh: '\u8DDF\u5355\u8FBE\u4EBA',
     color: '#2563EB',
     colorLight: '#93C5FD',
     master: 'Mark Minervini',
     masterZh: 'Mark Minervini',
     tagline: 'Learn from the best, profit with the rest',
-    taglineZh: '跟随高手，复制成功',
+    taglineZh: '\u8DDF\u968F\u9AD8\u624B\uFF0C\u590D\u5236\u6210\u529F',
     style: 'Copy Trading',
-    styleZh: '跟单交易',
+    styleZh: '\u8DDF\u5355\u4EA4\u6613',
     risk: 3,
     horizon: 'Medium',
-    horizonZh: '中线',
-    icon: '⊞',
+    horizonZh: '\u4E2D\u7EBF',
+    icon: '\u229E',
   },
   tourist: {
     name: 'THE TOURIST',
-    nameZh: '币圈游客',
+    nameZh: '\u5E01\u5708\u6E38\u5BA2',
     color: '#60A5FA',
     colorLight: '#BFDBFE',
     master: 'Your Coworker',
-    masterZh: '你的同事',
+    masterZh: '\u4F60\u7684\u540C\u4E8B',
     tagline: 'Trust me bro, to the moon',
-    taglineZh: '相信我，这个要上月球',
+    taglineZh: '\u76F8\u4FE1\u6211\uFF0C\u8FD9\u4E2A\u8981\u4E0A\u6708\u7403',
     style: 'Vibes-Based',
-    styleZh: '凭感觉投资',
+    styleZh: '\u51ED\u611F\u89C9\u6295\u8D44',
     risk: 3,
     horizon: 'Short',
-    horizonZh: '短线',
-    icon: '◈',
+    horizonZh: '\u77ED\u7EBF',
+    icon: '\u25C8',
   },
   paperhands: {
     name: 'THE PAPER HANDS',
-    nameZh: '纸手',
+    nameZh: '\u7EB8\u624B',
     color: '#F87171',
     colorLight: '#FCA5A5',
     master: 'Everyone Who Sold BTC Under $1,000',
-    masterZh: '所有在$1,000以下卖出BTC的人',
+    masterZh: '\u6240\u6709\u5728$1,000\u4EE5\u4E0B\u5356\u51FABTC\u7684\u4EBA',
     tagline: "I'll buy back when it dips",
-    taglineZh: '等它回调我就买回来',
+    taglineZh: '\u7B49\u5B83\u56DE\u8C03\u6211\u5C31\u4E70\u56DE\u6765',
     style: 'Panic Exit',
-    styleZh: '恐慌退出',
+    styleZh: '\u6050\u614C\u9000\u51FA',
     risk: 1,
     horizon: 'Short',
-    horizonZh: '短线',
-    icon: '☐',
+    horizonZh: '\u77ED\u7EBF',
+    icon: '\u2610',
   },
   narrator: {
     name: 'THE NARRATOR',
-    nameZh: '叙事者',
+    nameZh: '\u53D9\u4E8B\u8005',
     color: '#22C55E',
     colorLight: '#86EFAC',
     master: 'Cathie Wood',
     masterZh: 'Cathie Wood',
     tagline: 'The story drives the trade',
-    taglineZh: '故事驱动交易',
+    taglineZh: '\u6545\u4E8B\u9A71\u52A8\u4EA4\u6613',
     style: 'Narrative Trading',
-    styleZh: '叙事交易',
+    styleZh: '\u53D9\u4E8B\u4EA4\u6613',
     risk: 4,
     horizon: 'Long',
-    horizonZh: '长线',
-    icon: '▷',
+    horizonZh: '\u957F\u7EBF',
+    icon: '\u25B7',
   },
 }
 
@@ -255,28 +255,52 @@ export async function GET(request: NextRequest) {
         fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
       }}
     >
-      {/* Cinematic gradient background — type-colored */}
+      {/* Cinematic radial glow — primary from left-center */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
           display: 'flex',
-          background: `radial-gradient(ellipse 70% 60% at 30% 40%, ${t.color}18 0%, transparent 60%), radial-gradient(ellipse 50% 50% at 80% 70%, ${t.color}0C 0%, transparent 60%)`,
+          background: `radial-gradient(ellipse 80% 70% at 25% 45%, ${t.color}2E 0%, transparent 65%)`,
         }}
       />
 
-      {/* Subtle noise texture overlay */}
+      {/* Secondary subtle glow from bottom-right */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          background: `radial-gradient(ellipse 50% 50% at 85% 80%, ${t.color}14 0%, transparent 55%)`,
+        }}
+      />
+
+      {/* Bottom vignette — fades to black */}
       <div
         style={{
           position: 'absolute',
           inset: 0,
           display: 'flex',
           background:
-            'linear-gradient(180deg, rgba(255,255,255,0.02) 0%, transparent 50%, rgba(0,0,0,0.3) 100%)',
+            'linear-gradient(180deg, transparent 0%, transparent 55%, rgba(0,0,0,0.15) 75%, rgba(0,0,0,0.4) 100%)',
         }}
       />
 
-      {/* Top accent line */}
+      {/* Top edge highlight */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          display: 'flex',
+          background:
+            'linear-gradient(90deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 100%)',
+        }}
+      />
+
+      {/* Top accent line — type-colored gradient */}
       <div
         style={{
           position: 'absolute',
@@ -285,7 +309,21 @@ export async function GET(request: NextRequest) {
           right: 0,
           height: 3,
           display: 'flex',
-          background: `linear-gradient(90deg, transparent 0%, ${t.color} 30%, ${t.colorLight} 50%, ${t.color} 70%, transparent 100%)`,
+          background: `linear-gradient(90deg, transparent 5%, ${t.color} 25%, ${t.colorLight} 50%, ${t.color} 75%, transparent 95%)`,
+        }}
+      />
+
+      {/* Vertical divider line between columns */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 60,
+          bottom: 60,
+          left: '60%',
+          width: 1,
+          display: 'flex',
+          background:
+            'linear-gradient(180deg, transparent 0%, rgba(255,255,255,0.06) 30%, rgba(255,255,255,0.06) 70%, transparent 100%)',
         }}
       />
 
@@ -296,76 +334,111 @@ export async function GET(request: NextRequest) {
           display: 'flex',
           width: '100%',
           height: '100%',
-          padding: '48px 56px',
+          padding: '44px 56px',
           zIndex: 1,
         }}
       >
-        {/* Left column — type identity */}
+        {/* LEFT COLUMN (60%) — personality identity */}
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
-            flex: 1.4,
+            width: '58%',
             justifyContent: 'space-between',
+            paddingRight: 40,
           }}
         >
           {/* Top: Arena branding */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div
-              style={{
-                width: 6,
-                height: 6,
-                borderRadius: 999,
-                background: t.color,
-                display: 'flex',
-              }}
-            />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 999,
+                  background: t.color,
+                  display: 'flex',
+                  boxShadow: `0 0 8px ${t.color}80`,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 13,
+                  fontWeight: 800,
+                  color: 'rgba(255,255,255,0.5)',
+                  letterSpacing: '3px',
+                }}
+              >
+                ARENA
+              </span>
+            </div>
             <span
               style={{
                 fontSize: 13,
-                fontWeight: 800,
-                color: 'rgba(255,255,255,0.5)',
-                letterSpacing: '2px',
+                color: 'rgba(255,255,255,0.25)',
+                letterSpacing: '0.5px',
+                marginLeft: 14,
               }}
             >
-              ARENA
-            </span>
-            <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.25)', marginLeft: 4 }}>
-              Trading Personality
+              {isZh ? '\u4EA4\u6613\u4EBA\u683C\u6D4B\u8BD5' : 'Trading Personality'}
             </span>
           </div>
 
-          {/* Center: Type name — the hero */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          {/* Center: Type icon + name — the hero */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {/* Type icon */}
             <span
               style={{
-                fontSize: 64,
+                fontSize: 36,
+                color: t.color,
+                lineHeight: 1,
+                display: 'flex',
+                opacity: 0.7,
+              }}
+            >
+              {t.icon}
+            </span>
+
+            {/* Type name — massive */}
+            <span
+              style={{
+                fontSize: 72,
                 fontWeight: 900,
                 color: t.colorLight,
-                letterSpacing: '-2px',
+                letterSpacing: '-3px',
                 lineHeight: 1,
                 display: 'flex',
               }}
             >
               {typeName}
             </span>
+
+            {/* Tagline quote */}
             <span
               style={{
                 fontSize: 18,
-                color: 'rgba(255,255,255,0.45)',
+                color: 'rgba(255,255,255,0.4)',
                 fontStyle: 'italic',
                 lineHeight: 1.4,
                 display: 'flex',
-                maxWidth: 500,
+                maxWidth: 480,
+                marginTop: 2,
               }}
             >
               &ldquo;{tagline}&rdquo;
             </span>
           </div>
 
-          {/* Bottom: Style + Risk row */}
-          <div style={{ display: 'flex', gap: 24, alignItems: 'flex-end' }}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {/* Bottom: STYLE | RISK gauge | HORIZON data strip */}
+          <div
+            style={{
+              display: 'flex',
+              gap: 32,
+              alignItems: 'flex-end',
+            }}
+          >
+            {/* STYLE */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span
                 style={{
                   fontSize: 10,
@@ -376,11 +449,29 @@ export async function GET(request: NextRequest) {
               >
                 STYLE
               </span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: 'rgba(255,255,255,0.8)',
+                }}
+              >
                 {styleName}
               </span>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+
+            {/* Separator */}
+            <div
+              style={{
+                width: 1,
+                height: 28,
+                background: 'rgba(255,255,255,0.1)',
+                display: 'flex',
+              }}
+            />
+
+            {/* RISK gauge */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span
                 style={{
                   fontSize: 10,
@@ -396,17 +487,29 @@ export async function GET(request: NextRequest) {
                   <div
                     key={i}
                     style={{
-                      width: 16,
-                      height: 5,
+                      width: 18,
+                      height: 6,
                       borderRadius: 3,
                       display: 'flex',
-                      background: i < t.risk ? t.color : 'rgba(255,255,255,0.1)',
+                      background: i < t.risk ? t.color : 'rgba(255,255,255,0.08)',
                     }}
                   />
                 ))}
               </div>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+
+            {/* Separator */}
+            <div
+              style={{
+                width: 1,
+                height: 28,
+                background: 'rgba(255,255,255,0.1)',
+                display: 'flex',
+              }}
+            />
+
+            {/* HORIZON */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               <span
                 style={{
                   fontSize: 10,
@@ -417,32 +520,46 @@ export async function GET(request: NextRequest) {
               >
                 HORIZON
               </span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: 'rgba(255,255,255,0.8)' }}>
+              <span
+                style={{
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: 'rgba(255,255,255,0.8)',
+                }}
+              >
                 {isZh ? t.horizonZh : t.horizon}
               </span>
             </div>
           </div>
         </div>
 
-        {/* Right column — match score + master */}
+        {/* RIGHT COLUMN (40%) — match score + master + CTA */}
         <div
           style={{
             display: 'flex',
             flexDirection: 'column',
-            flex: 0.8,
+            width: '42%',
             alignItems: 'flex-end',
             justifyContent: 'space-between',
+            paddingLeft: 32,
           }}
         >
-          {/* Match percentage — oversized accent number */}
-          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 0 }}>
+          {/* Match percentage — prominent but balanced */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'flex-end',
+              gap: 0,
+            }}
+          >
             <span
               style={{
-                fontSize: 120,
+                fontSize: 80,
                 fontWeight: 900,
-                color: t.color,
-                letterSpacing: '-6px',
-                lineHeight: 0.85,
+                color: t.colorLight,
+                letterSpacing: '-4px',
+                lineHeight: 0.9,
                 display: 'flex',
               }}
             >
@@ -450,11 +567,11 @@ export async function GET(request: NextRequest) {
             </span>
             <span
               style={{
-                fontSize: 20,
+                fontSize: 16,
                 fontWeight: 700,
-                color: t.colorLight,
-                letterSpacing: '3px',
-                marginTop: -4,
+                color: t.color,
+                letterSpacing: '4px',
+                marginTop: 2,
                 display: 'flex',
               }}
             >
@@ -462,17 +579,18 @@ export async function GET(request: NextRequest) {
             </span>
           </div>
 
-          {/* Master card */}
+          {/* Master card — glass card */}
           <div
             style={{
               display: 'flex',
               flexDirection: 'column',
-              gap: 6,
-              padding: '16px 20px',
-              borderRadius: 12,
+              gap: 10,
+              padding: '20px 24px',
+              borderRadius: 14,
               background: 'rgba(255,255,255,0.04)',
               border: '1px solid rgba(255,255,255,0.08)',
-              maxWidth: 280,
+              width: '100%',
+              maxWidth: 340,
               alignItems: 'flex-end',
               textAlign: 'right',
             }}
@@ -481,32 +599,73 @@ export async function GET(request: NextRequest) {
               style={{
                 fontSize: 10,
                 fontWeight: 700,
-                color: 'rgba(255,255,255,0.3)',
-                letterSpacing: '1.5px',
+                color: t.color,
+                letterSpacing: '2px',
                 display: 'flex',
+                opacity: 0.8,
               }}
             >
-              {isZh ? '传奇匹配' : 'LEGENDARY MATCH'}
+              {isZh ? '\u2666 \u4F20\u5947\u5339\u914D' : '\u2666 LEGENDARY MATCH'}
             </span>
             <span
               style={{
-                fontSize: 22,
+                fontSize: 24,
                 fontWeight: 900,
                 color: 'rgba(255,255,255,0.9)',
-                lineHeight: 1.1,
+                lineHeight: 1.2,
                 display: 'flex',
               }}
             >
               {masterName}
             </span>
+            <span
+              style={{
+                fontSize: 12,
+                color: 'rgba(255,255,255,0.3)',
+                display: 'flex',
+              }}
+            >
+              {isZh
+                ? '\u4F60\u7684\u4EA4\u6613\u98CE\u683C\u5339\u914D'
+                : 'Your trading style match'}
+            </span>
           </div>
 
-          {/* CTA */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 13, color: 'rgba(255,255,255,0.35)' }}>
-              {isZh ? '测测你是什么类型 →' : 'Take the quiz →'}
+          {/* CTA — bottom-right */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <span
+              style={{
+                fontSize: 13,
+                color: 'rgba(255,255,255,0.3)',
+              }}
+            >
+              {isZh ? '\u6D4B\u6D4B\u4F60\u662F\u4EC0\u4E48\u7C7B\u578B' : 'Take the quiz'}
             </span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: t.color }}>arenafi.org/quiz</span>
+            <span
+              style={{
+                fontSize: 13,
+                color: t.color,
+                fontWeight: 700,
+              }}
+            >
+              \u25B8
+            </span>
+            <span
+              style={{
+                fontSize: 14,
+                fontWeight: 800,
+                color: t.colorLight,
+                letterSpacing: '0.5px',
+              }}
+            >
+              arenafi.org/quiz
+            </span>
           </div>
         </div>
       </div>
