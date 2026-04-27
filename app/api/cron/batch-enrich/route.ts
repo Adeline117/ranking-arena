@@ -270,7 +270,7 @@ export async function GET(request: NextRequest) {
     function getRoutePlatformTimeout(platform: string): number {
       if (tierFastSet.has(platform)) return 15_000 // was 8s — too tight, bitunix/bitfinex need 10-12s
       if (tierSlowSet.has(platform)) return 45_000 // VPS/rate-limited: 45s (was 90s — 3 batches × 90s = 270s blew 300s limit)
-      return 25_000 // medium tier: 25s (was 50s — 4 batches × 50s = 200s blew budget)
+      return 35_000 // medium tier: 35s (was 25s — binance/hyperliquid need 30s via VPS)
     }
 
     // Budget per period: divide 240s (leaving 60s buffer from 300s total) by number of periods
