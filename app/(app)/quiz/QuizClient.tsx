@@ -4,8 +4,7 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { setLanguage } from '@/lib/i18n'
+import { type Language, translations, loadTranslations } from '@/lib/i18n'
 import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from './components/quiz-data'
 import { calculateResult } from './components/scoring'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -21,7 +20,15 @@ type Step = 'start' | 'questions' | 'calculating'
 
 export default function QuizClient() {
   const router = useRouter()
-  const { language, t } = useLanguage()
+  // Quiz always starts in English, independent of global language
+  const [quizLang, setQuizLang] = useState<Language>('en')
+  const t = useCallback(
+    (key: string): string => {
+      const k = key as keyof typeof translations.en
+      return translations[quizLang][k] ?? translations.en[k] ?? key
+    },
+    [quizLang]
+  )
   const { answers, setAnswer, setResult, reset } = useQuizStore()
   const [mounted, setMounted] = useState(false)
   const hasExistingAnswers = Object.keys(useQuizStore.getState().answers).length > 0
@@ -121,7 +128,7 @@ export default function QuizClient() {
         }),
       }).catch(() => {
         /* non-critical analytics */
-      }) // eslint-disable-line no-restricted-syntax
+      })
     } catch {
       // ignore
     }
@@ -141,6 +148,15 @@ export default function QuizClient() {
   const handleSubmit = useCallback(() => {
     setStep('calculating')
   }, [])
+
+  const handleToggleLanguage = useCallback(() => {
+    const newLang = quizLang === 'en' ? 'zh' : 'en'
+    if (newLang !== 'en') {
+      loadTranslations(newLang).then(() => setQuizLang(newLang))
+    } else {
+      setQuizLang(newLang)
+    }
+  }, [quizLang])
 
   // Show loading only until mounted (translations can hydrate in place)
   if (!mounted) {
@@ -170,11 +186,6 @@ export default function QuizClient() {
     )
   }
 
-  const handleToggleLanguage = () => {
-    const newLang = language === 'en' ? 'zh' : 'en'
-    setLanguage(newLang)
-  }
-
   const langToggleButton = (
     <button
       type="button"
@@ -190,12 +201,12 @@ export default function QuizClient() {
         cursor: 'pointer',
       }}
       aria-label={
-        language === 'en'
+        quizLang === 'en'
           ? 'Switch to Chinese / \u5207\u6362\u5230\u4E2D\u6587'
           : 'Switch to English / \u5207\u6362\u5230\u82F1\u6587'
       }
     >
-      {language === 'en' ? '\u4E2D\u6587' : 'EN'}
+      {quizLang === 'en' ? '\u4E2D\u6587' : 'EN'}
     </button>
   )
 
