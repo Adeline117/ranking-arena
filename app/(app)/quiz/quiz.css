@@ -155,7 +155,6 @@
   align-items: center;
   justify-content: center;
   z-index: 1;
-  animation: quizIconFloat 5s ease-in-out infinite;
 }
 
 .quiz-start-logo-pulse {
