@@ -87,19 +87,50 @@
   gap: 24px;
 }
 
-/* Animated floating icon */
-.quiz-start-icon {
-  width: 80px;
-  height: 80px;
-  border-radius: 20px;
-  background: linear-gradient(135deg, var(--color-brand), var(--color-brand-deep));
+/* Arena logo with animated glow ring */
+.quiz-start-logo-wrap {
+  position: relative;
+  width: 96px;
+  height: 96px;
   display: flex;
   align-items: center;
   justify-content: center;
-  box-shadow:
-    0 8px 24px color-mix(in srgb, var(--color-brand) 30%, transparent),
-    0 0 0 1px color-mix(in srgb, var(--color-brand) 20%, transparent);
+}
+
+.quiz-start-logo-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 26px;
+  background: conic-gradient(
+    from 0deg,
+    var(--color-brand),
+    var(--color-brand-deep),
+    color-mix(in srgb, var(--color-brand) 60%, #ff6b9d),
+    var(--color-brand)
+  );
+  animation: quizRingSpin 4s linear infinite;
+  opacity: 0.7;
+  filter: blur(1px);
+}
+
+.quiz-start-logo {
+  width: 88px;
+  height: 88px;
+  border-radius: 22px;
+  background: var(--color-bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  z-index: 1;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
   animation: quizIconFloat 4s ease-in-out infinite;
+}
+
+.quiz-start-text {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .quiz-start-title {
@@ -949,6 +980,15 @@
   }
 }
 
+@keyframes quizRingSpin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 @keyframes quizShimmerLine {
   0% {
     background-position: -200% 0;
@@ -1240,10 +1280,24 @@
 /* ─── Responsive ──────────────────────────────────────────────── */
 
 @media (max-width: 480px) {
-  .quiz-start-icon {
-    width: 68px;
-    height: 68px;
-    border-radius: 16px;
+  .quiz-start-logo-wrap {
+    width: 80px;
+    height: 80px;
+  }
+
+  .quiz-start-logo {
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+  }
+
+  .quiz-start-logo-ring {
+    border-radius: 22px;
+  }
+
+  .quiz-start-logo img {
+    width: 42px !important;
+    height: 42px !important;
   }
 
   .quiz-hero-icon {
@@ -1268,7 +1322,8 @@
 
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
-  .quiz-start-icon,
+  .quiz-start-logo,
+  .quiz-start-logo-ring,
   .quiz-hero-icon,
   .quiz-personality-card,
   .quiz-start-card,
