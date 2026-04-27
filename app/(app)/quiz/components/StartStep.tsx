@@ -24,8 +24,8 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
           className="quiz-start-logo-img"
           src="/logo-symbol.png"
           alt="Arena"
-          width={80}
-          height={80}
+          width={96}
+          height={96}
           priority
         />
       </div>

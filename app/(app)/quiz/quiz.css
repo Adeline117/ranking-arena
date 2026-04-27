@@ -100,7 +100,7 @@
   flex-direction: column;
   align-items: center;
   text-align: center;
-  gap: 28px;
+  gap: 24px;
 }
 
 /* Floating ambient orbs behind content */
@@ -146,11 +146,11 @@
   animation: quizOrbFloat3 7s ease-in-out infinite;
 }
 
-/* Infinity symbol with breathing pulse glow */
+/* Logo with breathing pulse glow */
 .quiz-start-logo-wrap {
   position: relative;
-  width: 88px;
-  height: 88px;
+  width: 100px;
+  height: 100px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -160,57 +160,60 @@
 
 .quiz-start-logo-pulse {
   position: absolute;
-  inset: 0;
+  inset: -12px;
   border-radius: 50%;
   background: radial-gradient(
     circle,
-    color-mix(in srgb, var(--color-brand) 40%, transparent) 0%,
+    color-mix(in srgb, var(--color-brand) 30%, transparent) 0%,
     transparent 70%
   );
   opacity: 0;
   animation: quizLogoPulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-  filter: blur(16px);
+  filter: blur(20px);
 }
 
 .quiz-start-logo-img {
   position: relative;
   z-index: 1;
-  border-radius: 18px;
-  filter: drop-shadow(0 4px 20px color-mix(in srgb, var(--color-brand) 25%, transparent));
+  border-radius: 22px;
+  filter: drop-shadow(0 6px 24px color-mix(in srgb, var(--color-brand) 30%, transparent));
   transition: transform 0.3s ease;
 }
 
 .quiz-start-logo-wrap:hover .quiz-start-logo-img {
-  transform: scale(1.05);
+  transform: scale(1.06) rotate(1deg);
 }
 
+/* Divider line between logo and text */
 .quiz-start-text {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
   z-index: 1;
 }
 
+.quiz-start-text::before {
+  content: '';
+  width: 40px;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg, var(--color-brand), var(--color-brand-deep));
+  margin: 0 auto 2px;
+  opacity: 0.5;
+}
+
 .quiz-start-title {
-  font-size: clamp(26px, 6vw, 34px);
+  font-size: clamp(28px, 7vw, 38px);
   font-weight: 800;
-  background: linear-gradient(
-    135deg,
-    var(--color-text-primary) 0%,
-    var(--color-text-primary) 40%,
-    var(--color-brand) 100%
-  );
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  line-height: 1.2;
+  color: var(--color-text-primary);
+  line-height: 1.15;
   margin: 0;
   letter-spacing: -0.03em;
 }
 
 .quiz-start-subtitle {
   font-size: clamp(13px, 3vw, 15px);
-  color: var(--color-text-tertiary);
+  color: var(--color-text-secondary);
   line-height: 1.7;
   margin: 0;
   max-width: 380px;
@@ -219,21 +222,21 @@
 /* Feature badges with icons */
 .quiz-badge-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
   flex-wrap: wrap;
   justify-content: center;
   z-index: 1;
 }
 
 .quiz-badge {
-  padding: 7px 14px;
+  padding: 8px 16px;
   border-radius: 100px;
-  background: color-mix(in srgb, var(--color-brand) 6%, transparent);
-  border: 1px solid color-mix(in srgb, var(--color-brand) 12%, transparent);
-  font-size: 12px;
+  background: color-mix(in srgb, var(--color-brand) 7%, transparent);
+  border: 1px solid color-mix(in srgb, var(--color-brand) 15%, transparent);
+  font-size: 13px;
   font-weight: 600;
   color: var(--color-brand);
-  letter-spacing: 0.02em;
+  letter-spacing: 0.01em;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -250,23 +253,23 @@
 }
 
 .quiz-badge:hover {
-  transform: translateY(-1px);
-  background: color-mix(in srgb, var(--color-brand) 10%, transparent);
-  box-shadow: 0 4px 12px color-mix(in srgb, var(--color-brand) 12%, transparent);
+  transform: translateY(-2px);
+  background: color-mix(in srgb, var(--color-brand) 12%, transparent);
+  box-shadow: 0 4px 16px color-mix(in srgb, var(--color-brand) 15%, transparent);
 }
 
-/* Premium CTA button with arrow and sweep */
+/* Premium CTA button */
 .quiz-start-btn {
-  padding: 16px 36px;
-  border-radius: 14px;
+  padding: 18px 40px;
+  border-radius: 16px;
   background: linear-gradient(135deg, var(--color-brand), var(--color-brand-deep));
   border: none;
   color: #fff;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 700;
   cursor: pointer;
   width: 100%;
-  max-width: 300px;
+  max-width: 340px;
   position: relative;
   overflow: hidden;
   display: inline-flex;
@@ -278,9 +281,9 @@
     transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275),
     box-shadow 0.3s ease;
   box-shadow:
-    0 6px 24px color-mix(in srgb, var(--color-brand) 35%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.15);
-  letter-spacing: 0.01em;
+    0 8px 32px color-mix(in srgb, var(--color-brand) 40%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  letter-spacing: 0.02em;
 }
 
 /* Sweep light animation */
@@ -291,7 +294,7 @@
   left: -150%;
   width: 80%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.15), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
   animation: quizBtnSweep 3s ease-in-out infinite;
 }
 
@@ -303,12 +306,12 @@
 .quiz-start-btn:hover {
   transform: translateY(-3px) scale(1.02);
   box-shadow:
-    0 12px 36px color-mix(in srgb, var(--color-brand) 45%, transparent),
-    inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    0 14px 40px color-mix(in srgb, var(--color-brand) 50%, transparent),
+    inset 0 1px 0 rgba(255, 255, 255, 0.3);
 }
 
 .quiz-start-btn:hover svg {
-  transform: translateX(3px);
+  transform: translateX(4px);
 }
 
 .quiz-start-btn:active {
@@ -1418,13 +1421,14 @@
 
 @media (max-width: 480px) {
   .quiz-start-logo-wrap {
-    width: 72px;
-    height: 72px;
+    width: 84px;
+    height: 84px;
   }
 
   .quiz-start-logo-img {
-    width: 68px !important;
-    height: 68px !important;
+    width: 80px !important;
+    height: 80px !important;
+    border-radius: 18px !important;
   }
 
   .quiz-hero-icon {
