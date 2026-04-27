@@ -88,7 +88,7 @@ export default async function Page() {
   ])
 
   return (
-    <>
+    <main id="main-content">
       <JsonLd data={organizationJsonLd} />
 
       {/* SSR TopNav — hidden when Phase 2 mounts (HomePage renders its own) */}
@@ -142,6 +142,6 @@ export default async function Page() {
           initialCategoryCounts={categoryCounts}
         />
       </PageErrorBoundary>
-    </>
+    </main>
   )
 }

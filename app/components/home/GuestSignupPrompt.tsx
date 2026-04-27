@@ -93,66 +93,72 @@ export default function GuestSignupPrompt() {
   if (!show || session || loading) return null
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        bottom: 'var(--mobile-nav-height, 60px)',
-        left: 0,
-        right: 0,
-        zIndex: tokens.zIndex.sticky + 1,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: '12px 16px',
-        background: 'var(--color-bg-secondary, #14121C)',
-        borderTop: '1px solid var(--color-border-primary)',
-        gap: 12,
-        animation: 'modalSlideUp 0.3s ease',
-      }}
-    >
-      <span style={{
-        fontSize: 13,
-        color: tokens.colors.text.secondary,
-        flex: 1,
-      }}>
-        {t('guestSignupSubtitle')}
-      </span>
-      <button
-        onClick={() => useLoginModal.getState().openLoginModal()}
+    <>
+      <div
         style={{
-          padding: '8px 20px',
-          borderRadius: tokens.radius.md,
-          background: tokens.colors.accent.brand,
-          color: tokens.colors.white,
-          fontSize: 13,
-          fontWeight: 700,
-          border: 'none',
-          cursor: 'pointer',
-          whiteSpace: 'nowrap',
-          minHeight: 44,
-        }}
-      >
-        {t('guestSignupButton')}
-      </button>
-      <button
-        onClick={handleDismiss}
-        style={{
-          background: 'none',
-          border: 'none',
-          color: tokens.colors.text.tertiary,
-          fontSize: 18,
-          cursor: 'pointer',
-          width: 44,
-          height: 44,
+          position: 'fixed',
+          bottom: 'var(--mobile-nav-height, 60px)',
+          left: 0,
+          right: 0,
+          zIndex: tokens.zIndex.sticky + 1,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          lineHeight: 1,
+          padding: '12px 16px',
+          background: 'var(--color-bg-secondary, #14121C)',
+          borderTop: '1px solid var(--color-border-primary)',
+          gap: 12,
+          animation: 'modalSlideUp 0.3s ease',
         }}
-        aria-label="Close"
       >
-        ×
-      </button>
-    </div>
+        <span
+          style={{
+            fontSize: 13,
+            color: tokens.colors.text.secondary,
+            flex: 1,
+          }}
+        >
+          {t('guestSignupSubtitle')}
+        </span>
+        <button
+          onClick={() => useLoginModal.getState().openLoginModal()}
+          style={{
+            padding: '8px 20px',
+            borderRadius: tokens.radius.md,
+            background: tokens.colors.accent.brand,
+            color: tokens.colors.white,
+            fontSize: 13,
+            fontWeight: 700,
+            border: 'none',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            minHeight: 44,
+          }}
+        >
+          {t('guestSignupButton')}
+        </button>
+        <button
+          onClick={handleDismiss}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: tokens.colors.text.tertiary,
+            fontSize: 18,
+            cursor: 'pointer',
+            width: 44,
+            height: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            lineHeight: 1,
+          }}
+          aria-label="Close"
+        >
+          ×
+        </button>
+      </div>
+      {/* Spacer to prevent content from being hidden behind the fixed banner + bottom nav */}
+      <div style={{ height: 56 }} aria-hidden />
+    </>
   )
 }
