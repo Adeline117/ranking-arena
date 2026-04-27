@@ -136,7 +136,7 @@ export default function RootLayout({
         {/* Fix Next.js Suspense streaming injecting spurious noindex meta tags */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `new MutationObserver(function(m){m.forEach(function(r){r.addedNodes.forEach(function(n){if(n.nodeName==="META"&&n.getAttribute("name")==="robots"&&n.content==="noindex"){n.remove()}})})}).observe(document.head,{childList:true})`,
+            __html: `document.querySelectorAll("meta[name=robots][content=noindex]").forEach(function(m){m.remove()});new MutationObserver(function(m){m.forEach(function(r){r.addedNodes.forEach(function(n){if(n.nodeName==="META"&&n.getAttribute("name")==="robots"&&n.content==="noindex"){n.remove()}})})}).observe(document.head,{childList:true})`,
           }}
         />
         <script
