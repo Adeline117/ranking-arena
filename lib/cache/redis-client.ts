@@ -7,7 +7,7 @@
 
 import { dataLogger, fireAndForget } from '@/lib/utils/logger'
 
-type UpstashRedisType = InstanceType<typeof import('@upstash/redis')['Redis']>
+type UpstashRedisType = InstanceType<(typeof import('@upstash/redis'))['Redis']>
 
 let redisClient: UpstashRedisType | null = null
 let initialized = false
@@ -55,13 +55,22 @@ export async function getSharedRedis(): Promise<UpstashRedisType | null> {
     // breaking ISR on /rankings/[exchange], homepage, and all cached pages.
     // Solution: pass a custom fetch wrapper that replaces 'no-store' with revalidate.
     const isrSafeFetch: typeof fetch = (input, init) => {
-      if (init?.cache === 'no-store') {
-        const { cache: _, ...rest } = init
-        return fetch(input, { ...rest, next: { revalidate: 60 } })
+      // Strip cache: 'no-store' option (Upstash default)
+      const patchedInit = { ...init }
+      if (patchedInit.cache === 'no-store') {
+        delete patchedInit.cache
+        ;(patchedInit as Record<string, unknown>).next = { revalidate: 60 }
       }
-      return fetch(input, init)
+      // Strip Cache-Control: no-cache header (Upstash sets this on every request)
+      // This header makes Next.js mark the page as dynamic even with revalidate
+      if (patchedInit.headers) {
+        const h = new Headers(patchedInit.headers as HeadersInit)
+        h.delete('Cache-Control')
+        patchedInit.headers = h
+      }
+      return fetch(input, patchedInit)
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Upstash SDK types omit `fetch` but runtime accepts it for ISR-safe override
+
     redisClient = new Redis({ url, token, enableAutoPipelining: true, fetch: isrSafeFetch } as any)
     dataLogger.info('[Redis] connected')
     return redisClient
@@ -85,18 +94,20 @@ export function recordRedisError(_error: unknown): void {
     healthy = false
     lastHealthCheck = Date.now()
     // Alert on Redis transition to unhealthy (dynamic import to avoid circular deps)
-    const alertPromise = import('@/lib/alerts/send-alert').then(m =>
-      m.sendRateLimitedAlert(
-        {
-          title: 'Redis DOWN — memory fallback active',
-          message: `Redis failed ${consecutiveErrors} consecutive times. All cache operations using in-memory fallback. Rankings, rate limiting, and dedup affected.`,
-          level: 'critical',
-          details: { consecutiveErrors },
-        },
-        'redis-down',
-        30 * 60 * 1000
+    const alertPromise = import('@/lib/alerts/send-alert')
+      .then((m) =>
+        m.sendRateLimitedAlert(
+          {
+            title: 'Redis DOWN — memory fallback active',
+            message: `Redis failed ${consecutiveErrors} consecutive times. All cache operations using in-memory fallback. Rankings, rate limiting, and dedup affected.`,
+            level: 'critical',
+            details: { consecutiveErrors },
+          },
+          'redis-down',
+          30 * 60 * 1000
+        )
       )
-    ).catch(() => undefined)
+      .catch(() => undefined)
     fireAndForget(alertPromise, 'redis-down-alert')
   }
 }
