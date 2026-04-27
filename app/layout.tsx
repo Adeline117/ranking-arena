@@ -154,6 +154,14 @@ export default function RootLayout({
             __html: `if(!AbortSignal.timeout){AbortSignal.timeout=function(ms){var c=new AbortController();setTimeout(function(){c.abort(new DOMException('TimeoutError','TimeoutError'))},ms);return c.signal}}`,
           }}
         />
+        {/* SW recovery: register/update SW inline so it runs even if React fails to mount.
+            This breaks the deadlock where a broken old SW prevents JS chunks from loading,
+            which prevents React from mounting, which prevents the SW update component from running. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){})}`,
+          }}
+        />
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
         {getResourceHints().map((hint, index) => (
           <link
