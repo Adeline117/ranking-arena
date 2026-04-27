@@ -19,7 +19,6 @@
 
 import SentryInit from '../Providers/SentryInit'
 import NetworkStatusBanner from '../ui/NetworkStatusBanner'
-import { ServiceWorkerRegistration } from '../Providers/ServiceWorkerRegistration'
 import KeyboardShortcuts from '../Providers/KeyboardShortcuts'
 import CompareFloatingBar from '../trader/CompareFloatingBar'
 import ScrollToTop from '../ui/ScrollToTop'
@@ -28,12 +27,16 @@ import PlausibleAnalytics from '../PlausibleAnalytics'
 import ScrollRestoration from '../Providers/ScrollRestoration'
 import CookieConsent from '../ui/CookieConsent'
 
+// ServiceWorkerRegistration removed — SW is now registered via inline <script>
+// in app/layout.tsx <head> so it runs even if React fails to mount (breaks the
+// deadlock where a broken old SW prevents JS from loading which prevents React
+// from mounting which prevents SW update).
+
 export default function DeferredLayoutWidgets() {
   return (
     <>
       <SentryInit />
       <NetworkStatusBanner />
-      <ServiceWorkerRegistration />
       <KeyboardShortcuts />
       <CompareFloatingBar />
       <ScrollToTop />
