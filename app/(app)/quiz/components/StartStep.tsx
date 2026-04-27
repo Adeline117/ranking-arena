@@ -1,7 +1,5 @@
 'use client'
 
-import Image from 'next/image'
-
 interface StartStepProps {
   tr: (key: string) => string
   onStart: () => void
@@ -17,12 +15,32 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         <div className="quiz-orb quiz-orb-3" />
       </div>
 
-      {/* Arena logo with pulsing glow */}
+      {/* Arena infinity symbol — no background, just the symbol */}
       <div className="quiz-start-logo-wrap">
         <div className="quiz-start-logo-pulse" />
-        <div className="quiz-start-logo">
-          <Image src="/logo-symbol.png" alt="Arena" width={48} height={48} priority />
-        </div>
+        <svg
+          className="quiz-start-infinity"
+          width="72"
+          height="72"
+          viewBox="0 0 100 100"
+          fill="none"
+          aria-label="Arena"
+        >
+          <defs>
+            <linearGradient id="quiz-inf-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="var(--color-brand)" />
+              <stop offset="100%" stopColor="var(--color-brand-deep)" />
+            </linearGradient>
+          </defs>
+          <path
+            d="M32 50c0-8.5 6-16 14-16s14 7 18 16c4 9 10 16 18 16s14-7.5 14-16-6-16-14-16-14 7-18 16c-4 9-10 16-18 16s-14-7.5-14-16z"
+            stroke="url(#quiz-inf-grad)"
+            strokeWidth="7"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            fill="none"
+          />
+        </svg>
       </div>
 
       {/* Title block */}
