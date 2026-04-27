@@ -157,8 +157,6 @@ export default function PersonalityCard({
             style={{
               objectFit: 'cover',
               objectPosition: 'center',
-              mixBlendMode: 'luminosity',
-              filter: `saturate(1.3) contrast(1.05)`,
               display: 'block',
             }}
             priority
