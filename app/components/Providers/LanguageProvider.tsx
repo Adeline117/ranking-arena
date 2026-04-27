@@ -1,7 +1,23 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, useMemo, useCallback, ReactNode } from 'react'
-import { type Language, getLanguage, setLanguage as setLang, translations, loadTranslations, getTranslationVersion, onTranslationsReady } from '@/lib/i18n'
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useMemo,
+  useCallback,
+  ReactNode,
+} from 'react'
+import {
+  type Language,
+  getLanguage,
+  setLanguage as setLang,
+  translations,
+  loadTranslations,
+  getTranslationVersion,
+  onTranslationsReady,
+} from '@/lib/i18n'
 
 // Translation function type - accepts any string but returns the key if not found
 export type TranslationFunction = (key: string) => string
@@ -11,7 +27,6 @@ export type TranslationFunction = (key: string) => string
 if (typeof window !== 'undefined') {
   const saved = localStorage.getItem('language') as Language | null
   if (saved && saved !== 'en') {
-    // eslint-disable-next-line @typescript-eslint/no-floating-promises
     loadTranslations(saved)
   }
 }
@@ -33,7 +48,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     // Re-render once when English translations finish loading (async import on client)
-    const unsub = onTranslationsReady(() => setTxnVersion(v => v + 1))
+    const unsub = onTranslationsReady(() => setTxnVersion((v) => v + 1))
 
     const savedLanguage = getLanguage()
     if (savedLanguage !== 'en') {
@@ -43,9 +58,13 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     // Pre-cache all language files in the background
     const preloadLangs: Language[] = ['zh', 'ja', 'ko']
     if (requestIdleCallback) {
-      requestIdleCallback(() => { preloadLangs.forEach(lang => loadTranslations(lang)) })
+      requestIdleCallback(() => {
+        preloadLangs.forEach((lang) => loadTranslations(lang))
+      })
     } else {
-      setTimeout(() => { preloadLangs.forEach(lang => loadTranslations(lang)) }, 2000)
+      setTimeout(() => {
+        preloadLangs.forEach((lang) => loadTranslations(lang))
+      }, 2000)
     }
 
     const handleLanguageChange = (e: CustomEvent<Language>) => {
@@ -57,7 +76,10 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
 
     window.addEventListener('languageChange', handleLanguageChange as EventListener)
-    return () => { unsub(); window.removeEventListener('languageChange', handleLanguageChange as EventListener) }
+    return () => {
+      unsub()
+      window.removeEventListener('languageChange', handleLanguageChange as EventListener)
+    }
   }, [])
 
   const setLanguage = useCallback((lang: Language) => {
@@ -73,17 +95,20 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const t = useMemo((): TranslationFunction => {
     return (key: string): string => {
       const k = key as keyof typeof translations.en
-      return translations[language][k] ?? translations.en[k] ?? key
+      const value = translations[language][k] ?? translations.en[k]
+      if (value === undefined) {
+        if (process.env.NODE_ENV === 'development') {
+          console.warn(`[i18n] Missing translation key: "${key}" (lang=${language})`)
+        }
+        return key
+      }
+      return value
     }
   }, [language])
 
   const contextValue = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t])
 
-  return (
-    <LanguageContext.Provider value={contextValue}>
-      {children}
-    </LanguageContext.Provider>
-  )
+  return <LanguageContext.Provider value={contextValue}>{children}</LanguageContext.Provider>
 }
 
 export function useLanguage() {
@@ -96,7 +121,7 @@ export function useLanguage() {
       t: ((key: string): string => {
         const k = key as keyof typeof translations.en
         return translations[defaultLanguage][k] ?? translations.en[k] ?? key
-      }) as TranslationFunction
+      }) as TranslationFunction,
     }
   }
   return context
