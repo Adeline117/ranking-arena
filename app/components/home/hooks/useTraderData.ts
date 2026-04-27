@@ -5,6 +5,7 @@ import type { Trader } from '../../ranking/RankingTable'
 import { useTraderDataSync, type TraderDataPayload } from '@/lib/hooks/useBroadcastSync'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { CategoryCounts } from '@/lib/getInitialTraders'
+import { resolveExchangeSlug } from '@/lib/constants/exchanges'
 
 import { FIVE_MINUTES_MS } from '@/lib/constants/time'
 
@@ -236,7 +237,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       const category = opts?.category
       const sortBy = opts?.sortBy || 'arena_score'
       const sortDir = opts?.sortDir || 'desc'
-      const exchange = opts?.exchange
+      const exchange = opts?.exchange ? resolveExchangeSlug(opts.exchange) : undefined
 
       // Cancel existing request
       const cancelKey = `page-${timeRange}`
@@ -359,7 +360,13 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       return
     }
     isInitialMount.current = false
-    fetchPage(0, { timeRange: state.activeTimeRange })
+    // Preserve current exchange filter from URL (set by exchange page redirect)
+    const currentEx =
+      typeof window !== 'undefined'
+        ? new URLSearchParams(window.location.search).get('ex') ||
+          new URLSearchParams(window.location.search).get('exchange')
+        : null
+    fetchPage(0, { timeRange: state.activeTimeRange, exchange: currentEx || undefined })
   }, [state.activeTimeRange, hasInitialData, fetchPage])
 
   // Save time range preference
@@ -378,7 +385,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
     const silentRefresh = () => {
       lastFetchTime = Date.now()
-      fetchPage(0)
+      // Preserve current exchange filter from URL during auto-refresh
+      const currentEx =
+        new URLSearchParams(window.location.search).get('ex') ||
+        new URLSearchParams(window.location.search).get('exchange')
+      fetchPage(0, currentEx ? { exchange: currentEx } : undefined)
         .then(() => {
           refreshFailCountRef.current = 0
         })
