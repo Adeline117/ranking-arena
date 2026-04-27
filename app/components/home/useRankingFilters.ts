@@ -11,6 +11,7 @@ import { useSubscription } from './hooks/useSubscription'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { FilterConfig, SavedFilter } from '../premium/AdvancedFilter'
 import { getScoreGradeLetter } from '@/lib/utils/score-explain'
+import { resolveExchangeSlug } from '@/lib/constants/exchanges'
 import { type PresetId, PRESETS, isValidPresetId } from '../ranking/FilterPresets'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -35,7 +36,9 @@ function getStoredPreferences() {
     if (storedFilterConfig) {
       try {
         filterConfig = JSON.parse(storedFilterConfig)
-      } catch { /* invalid JSON */ }
+      } catch {
+        /* invalid JSON */
+      }
     }
     return {
       preset: localStorage.getItem(LS_KEY_PRESET) as PresetId | null,
@@ -49,18 +52,42 @@ function getStoredPreferences() {
 
 // Client-side advanced filter
 function applyAdvancedFilter(list: Trader[], config: FilterConfig): Trader[] {
-  return list.filter(trader => {
+  return list.filter((trader) => {
     if (config.exchange?.length) {
       const src = (trader.source || '').toLowerCase()
-      if (!config.exchange.some(ex => src === ex || src.startsWith(ex))) return false
+      if (
+        !config.exchange.some((ex) => {
+          const resolved = resolveExchangeSlug(ex)
+          return src === ex || src === resolved || src.startsWith(ex) || src.startsWith(resolved)
+        })
+      )
+        return false
     }
     if (config.roi_min != null && (trader.roi ?? 0) < config.roi_min) return false
     if (config.roi_max != null && (trader.roi ?? 0) > config.roi_max) return false
-    if (config.drawdown_min != null && trader.max_drawdown != null && Math.abs(trader.max_drawdown) < config.drawdown_min) return false
-    if (config.drawdown_max != null && trader.max_drawdown != null && Math.abs(trader.max_drawdown) > config.drawdown_max) return false
+    if (
+      config.drawdown_min != null &&
+      trader.max_drawdown != null &&
+      Math.abs(trader.max_drawdown) < config.drawdown_min
+    )
+      return false
+    if (
+      config.drawdown_max != null &&
+      trader.max_drawdown != null &&
+      Math.abs(trader.max_drawdown) > config.drawdown_max
+    )
+      return false
     if (config.min_pnl != null && (trader.pnl == null || trader.pnl < config.min_pnl)) return false
-    if (config.min_score != null && (trader.arena_score == null || trader.arena_score < config.min_score)) return false
-    if (config.min_win_rate != null && (trader.win_rate == null || trader.win_rate < config.min_win_rate)) return false
+    if (
+      config.min_score != null &&
+      (trader.arena_score == null || trader.arena_score < config.min_score)
+    )
+      return false
+    if (
+      config.min_win_rate != null &&
+      (trader.win_rate == null || trader.win_rate < config.min_win_rate)
+    )
+      return false
     if (config.grade && trader.arena_score != null) {
       if (getScoreGradeLetter(trader.arena_score) !== config.grade) return false
     }
@@ -73,10 +100,19 @@ interface UseRankingFiltersOptions {
   activeTimeRange: TimeRange
   totalCount?: number
   categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
-  fetchPage?: (page: number, opts?: { category?: string; sortBy?: string; sortDir?: string }) => Promise<void>
+  fetchPage?: (
+    page: number,
+    opts?: { category?: string; sortBy?: string; sortDir?: string }
+  ) => Promise<void>
 }
 
-export function useRankingFilters({ traders, activeTimeRange, totalCount, categoryCounts, fetchPage }: UseRankingFiltersOptions) {
+export function useRankingFilters({
+  traders,
+  activeTimeRange,
+  totalCount,
+  categoryCounts,
+  fetchPage,
+}: UseRankingFiltersOptions) {
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
@@ -91,7 +127,9 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
   const [filterConfig, setFilterConfig] = useState<FilterConfig>({})
   const [savedFilters, setSavedFilters] = useState<SavedFilter[]>([])
   const [activePreset, setActivePreset] = useState<PresetId | null>(null)
-  const [sortColumn, setSortColumn] = useState<'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'>('score')
+  const [sortColumn, setSortColumn] = useState<
+    'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha'
+  >('score')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [currentPage, setCurrentPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
@@ -108,14 +146,17 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
   }, [])
 
   // Server-side category change: fetch page 0 of the new category
-  const setCategory = useCallback((cat: CategoryType) => {
-    setCategoryRaw(cat)
-    setCurrentPage(1)
-    if (fetchPage) {
-      const apiCategory = cat === 'web3' ? 'onchain' : cat === 'all' ? undefined : cat
-      fetchPage(0, { category: apiCategory })
-    }
-  }, [fetchPage])
+  const setCategory = useCallback(
+    (cat: CategoryType) => {
+      setCategoryRaw(cat)
+      setCurrentPage(1)
+      if (fetchPage) {
+        const apiCategory = cat === 'web3' ? 'onchain' : cat === 'all' ? undefined : cat
+        fetchPage(0, { category: apiCategory })
+      }
+    },
+    [fetchPage]
+  )
 
   // Reset pagination when time range changes
   const prevTimeRange = useRef(activeTimeRange)
@@ -147,7 +188,7 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     if (minPnl) config.min_pnl = Number(minPnl)
     if (minScore) config.min_score = Number(minScore)
     if (minWr) config.min_win_rate = Number(minWr)
-    if (exchange) config.exchange = exchange.split(',')
+    if (exchange) config.exchange = exchange.split(',').map((ex) => resolveExchangeSlug(ex))
     if (fcat) config.category = fcat.split(',')
 
     const storedPrefs = getStoredPreferences()
@@ -163,7 +204,9 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     try {
       localStorage.removeItem(LS_KEY_SORT_COLUMN)
       localStorage.removeItem(LS_KEY_SORT_DIR)
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     const urlSort = searchParams.get('sort') as typeof sortColumn | null
     const urlOrder = searchParams.get('order') as 'asc' | 'desc' | null
@@ -172,7 +215,10 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     const urlPreset = searchParams.get('preset') as PresetId | null
     const urlEx = searchParams.get('ex')
 
-    if (urlSort && ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino', 'alpha'].includes(urlSort)) {
+    if (
+      urlSort &&
+      ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sortino', 'alpha'].includes(urlSort)
+    ) {
       setSortColumn(urlSort)
     }
     if (urlOrder && ['asc', 'desc'].includes(urlOrder)) {
@@ -206,135 +252,228 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
 
   // Use refs for URL sync to avoid recreating syncStateToUrl on every state change
   // This prevents cascading dependency changes that cause infinite re-render loops
-  const stateRef = useRef({ filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset, selectedExchange })
+  const stateRef = useRef({
+    filterConfig,
+    sortColumn,
+    sortDir,
+    currentPage,
+    searchQuery,
+    activePreset,
+    selectedExchange,
+  })
   useEffect(() => {
-    stateRef.current = { filterConfig, sortColumn, sortDir, currentPage, searchQuery, activePreset, selectedExchange }
+    stateRef.current = {
+      filterConfig,
+      sortColumn,
+      sortDir,
+      currentPage,
+      searchQuery,
+      activePreset,
+      selectedExchange,
+    }
   })
 
   // Sync state to URL (debounced) — stable reference, reads from stateRef
-  const syncStateToUrl = useCallback((overrides: {
-    config?: FilterConfig
-    sort?: string
-    order?: string
-    page?: number
-    q?: string
-    preset?: string | null
-    ex?: string | null
-  } = {}) => {
-    if (syncTimeoutRef.current) {
-      clearTimeout(syncTimeoutRef.current)
-    }
-    syncTimeoutRef.current = setTimeout(() => {
-      const s = stateRef.current
-      const params = new URLSearchParams(window.location.search)
-      const config = overrides.config ?? s.filterConfig
+  const syncStateToUrl = useCallback(
+    (
+      overrides: {
+        config?: FilterConfig
+        sort?: string
+        order?: string
+        page?: number
+        q?: string
+        preset?: string | null
+        ex?: string | null
+      } = {}
+    ) => {
+      if (syncTimeoutRef.current) {
+        clearTimeout(syncTimeoutRef.current)
+      }
+      syncTimeoutRef.current = setTimeout(() => {
+        const s = stateRef.current
+        const params = new URLSearchParams(window.location.search)
+        const config = overrides.config ?? s.filterConfig
 
-      ;['roi_min', 'roi_max', 'dd_min', 'dd_max', 'min_pnl', 'min_score', 'min_wr', 'exchange', 'fcat', 'sort', 'order', 'page', 'q', 'preset', 'ex'].forEach(k => params.delete(k))
+        ;[
+          'roi_min',
+          'roi_max',
+          'dd_min',
+          'dd_max',
+          'min_pnl',
+          'min_score',
+          'min_wr',
+          'exchange',
+          'fcat',
+          'sort',
+          'order',
+          'page',
+          'q',
+          'preset',
+          'ex',
+        ].forEach((k) => params.delete(k))
 
-      if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
-      if (config.roi_max != null) params.set('roi_max', String(config.roi_max))
-      if (config.drawdown_min != null) params.set('dd_min', String(config.drawdown_min))
-      if (config.drawdown_max != null) params.set('dd_max', String(config.drawdown_max))
-      if (config.min_pnl != null) params.set('min_pnl', String(config.min_pnl))
-      if (config.min_score != null) params.set('min_score', String(config.min_score))
-      if (config.min_win_rate != null) params.set('min_wr', String(config.min_win_rate))
-      if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
-      if (config.category?.length) params.set('fcat', config.category.join(','))
+        if (config.roi_min != null) params.set('roi_min', String(config.roi_min))
+        if (config.roi_max != null) params.set('roi_max', String(config.roi_max))
+        if (config.drawdown_min != null) params.set('dd_min', String(config.drawdown_min))
+        if (config.drawdown_max != null) params.set('dd_max', String(config.drawdown_max))
+        if (config.min_pnl != null) params.set('min_pnl', String(config.min_pnl))
+        if (config.min_score != null) params.set('min_score', String(config.min_score))
+        if (config.min_win_rate != null) params.set('min_wr', String(config.min_win_rate))
+        if (config.exchange?.length) params.set('exchange', config.exchange.join(','))
+        if (config.category?.length) params.set('fcat', config.category.join(','))
 
-      const sort = overrides.sort ?? s.sortColumn
-      const order = overrides.order ?? s.sortDir
-      const page = overrides.page ?? s.currentPage
-      const q = overrides.q ?? s.searchQuery
-      const preset = overrides.preset !== undefined ? overrides.preset : s.activePreset
+        const sort = overrides.sort ?? s.sortColumn
+        const order = overrides.order ?? s.sortDir
+        const page = overrides.page ?? s.currentPage
+        const q = overrides.q ?? s.searchQuery
+        const preset = overrides.preset !== undefined ? overrides.preset : s.activePreset
 
-      if (sort && sort !== 'score') params.set('sort', sort)
-      if (order && order !== 'desc') params.set('order', order)
-      if (page && page > 1) params.set('page', String(page))
-      if (q) params.set('q', q)
-      if (preset) params.set('preset', preset)
+        if (sort && sort !== 'score') params.set('sort', sort)
+        if (order && order !== 'desc') params.set('order', order)
+        if (page && page > 1) params.set('page', String(page))
+        if (q) params.set('q', q)
+        if (preset) params.set('preset', preset)
 
-      const ex = overrides.ex !== undefined ? overrides.ex : s.selectedExchange
-      if (ex) params.set('ex', ex)
+        const ex = overrides.ex !== undefined ? overrides.ex : s.selectedExchange
+        if (ex) params.set('ex', ex)
 
-      const qs = params.toString()
-      const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
-      window.history.replaceState(null, '', newUrl)
-    }, 300)
-  }, []) // Stable — never recreates, reads current state from stateRef
+        const qs = params.toString()
+        const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+        window.history.replaceState(null, '', newUrl)
+      }, 300)
+    },
+    []
+  ) // Stable — never recreates, reads current state from stateRef
 
-  const syncFilterToUrl = useCallback((config: FilterConfig) => {
-    syncStateToUrl({ config })
-  }, [syncStateToUrl])
+  const syncFilterToUrl = useCallback(
+    (config: FilterConfig) => {
+      syncStateToUrl({ config })
+    },
+    [syncStateToUrl]
+  )
 
   // Filter change handler
-  const handleFilterChange = useCallback((config: FilterConfig) => {
-    setFilterConfig(config)
-    syncFilterToUrl(config)
-    try {
-      if (Object.keys(config).length > 0) {
-        localStorage.setItem(LS_KEY_FILTER_CONFIG, JSON.stringify(config))
-      } else {
-        localStorage.removeItem(LS_KEY_FILTER_CONFIG)
+  const handleFilterChange = useCallback(
+    (config: FilterConfig) => {
+      setFilterConfig(config)
+      syncFilterToUrl(config)
+      try {
+        if (Object.keys(config).length > 0) {
+          localStorage.setItem(LS_KEY_FILTER_CONFIG, JSON.stringify(config))
+        } else {
+          localStorage.removeItem(LS_KEY_FILTER_CONFIG)
+        }
+      } catch {
+        /* ignore */
       }
-    } catch { /* ignore */ }
-  }, [syncFilterToUrl])
+    },
+    [syncFilterToUrl]
+  )
 
   // Sort/page/search handlers — trigger server-side fetch when fetchPage is available
-  const handleSortChange = useCallback((col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha', dir: 'asc' | 'desc') => {
-    setSortColumn(col)
-    setSortDir(dir)
-    setCurrentPage(1)
-    syncStateToUrl({ sort: col, order: dir, page: 1 })
-    if (fetchPage) {
-      const sortByMap: Record<string, string> = { score: 'arena_score', roi: 'roi', pnl: 'pnl', winrate: 'win_rate', mdd: 'max_drawdown', sortino: 'sortino_ratio', alpha: 'alpha' }
-      const apiCategory = category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
-      fetchPage(0, { category: apiCategory, sortBy: sortByMap[col] || 'arena_score', sortDir: dir })
-    }
-  }, [syncStateToUrl, fetchPage, category])
+  const handleSortChange = useCallback(
+    (
+      col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha',
+      dir: 'asc' | 'desc'
+    ) => {
+      setSortColumn(col)
+      setSortDir(dir)
+      setCurrentPage(1)
+      syncStateToUrl({ sort: col, order: dir, page: 1 })
+      if (fetchPage) {
+        const sortByMap: Record<string, string> = {
+          score: 'arena_score',
+          roi: 'roi',
+          pnl: 'pnl',
+          winrate: 'win_rate',
+          mdd: 'max_drawdown',
+          sortino: 'sortino_ratio',
+          alpha: 'alpha',
+        }
+        const apiCategory =
+          category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
+        fetchPage(0, {
+          category: apiCategory,
+          sortBy: sortByMap[col] || 'arena_score',
+          sortDir: dir,
+        })
+      }
+    },
+    [syncStateToUrl, fetchPage, category]
+  )
 
-  const handlePageChange = useCallback((page: number) => {
-    setCurrentPage(page)
-    syncStateToUrl({ page })
-    if (fetchPage) {
-      const sortByMap: Record<string, string> = { score: 'arena_score', roi: 'roi', pnl: 'pnl', winrate: 'win_rate', mdd: 'max_drawdown', sortino: 'sortino_ratio', alpha: 'alpha' }
-      const apiCategory = category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
-      fetchPage(page - 1, { category: apiCategory, sortBy: sortByMap[sortColumn] || 'arena_score', sortDir: sortDir })
-    }
-  }, [syncStateToUrl, fetchPage, category, sortColumn, sortDir])
+  const handlePageChange = useCallback(
+    (page: number) => {
+      setCurrentPage(page)
+      syncStateToUrl({ page })
+      if (fetchPage) {
+        const sortByMap: Record<string, string> = {
+          score: 'arena_score',
+          roi: 'roi',
+          pnl: 'pnl',
+          winrate: 'win_rate',
+          mdd: 'max_drawdown',
+          sortino: 'sortino_ratio',
+          alpha: 'alpha',
+        }
+        const apiCategory =
+          category === 'web3' ? 'onchain' : category === 'all' ? undefined : category
+        fetchPage(page - 1, {
+          category: apiCategory,
+          sortBy: sortByMap[sortColumn] || 'arena_score',
+          sortDir: sortDir,
+        })
+      }
+    },
+    [syncStateToUrl, fetchPage, category, sortColumn, sortDir]
+  )
 
-  const handleSearchChange = useCallback((q: string) => {
-    setSearchQuery(q)
-    setCurrentPage(1)
-    syncStateToUrl({ q, page: 1 })
-  }, [syncStateToUrl])
+  const handleSearchChange = useCallback(
+    (q: string) => {
+      setSearchQuery(q)
+      setCurrentPage(1)
+      syncStateToUrl({ q, page: 1 })
+    },
+    [syncStateToUrl]
+  )
 
   // Preset change handler
-  const _handlePresetChange = useCallback((preset: PresetId | null) => {
-    setActivePreset(preset)
-    setCurrentPage(1)
-    syncStateToUrl({ preset, page: 1 })
-    try {
-      if (preset) {
-        localStorage.setItem(LS_KEY_PRESET, preset)
-      } else {
-        localStorage.removeItem(LS_KEY_PRESET)
+  const _handlePresetChange = useCallback(
+    (preset: PresetId | null) => {
+      setActivePreset(preset)
+      setCurrentPage(1)
+      syncStateToUrl({ preset, page: 1 })
+      try {
+        if (preset) {
+          localStorage.setItem(LS_KEY_PRESET, preset)
+        } else {
+          localStorage.removeItem(LS_KEY_PRESET)
+        }
+      } catch {
+        /* ignore */
       }
-    } catch { /* ignore */ }
-  }, [syncStateToUrl])
+    },
+    [syncStateToUrl]
+  )
 
   // Exchange filter change handler
-  const _handleExchangeChange = useCallback((exchange: string | null) => {
-    setSelectedExchange(exchange)
-    setCurrentPage(1)
-    syncStateToUrl({ ex: exchange, page: 1 })
-    try {
-      if (exchange) {
-        localStorage.setItem(LS_KEY_EXCHANGE, exchange)
-      } else {
-        localStorage.removeItem(LS_KEY_EXCHANGE)
+  const _handleExchangeChange = useCallback(
+    (exchange: string | null) => {
+      setSelectedExchange(exchange)
+      setCurrentPage(1)
+      syncStateToUrl({ ex: exchange, page: 1 })
+      try {
+        if (exchange) {
+          localStorage.setItem(LS_KEY_EXCHANGE, exchange)
+        } else {
+          localStorage.removeItem(LS_KEY_EXCHANGE)
+        }
+      } catch {
+        /* ignore */
       }
-    } catch { /* ignore */ }
-  }, [syncStateToUrl])
+    },
+    [syncStateToUrl]
+  )
 
   // Saved filter handlers
   const handleSaveFilter = async (name: string, description?: string) => {
@@ -355,7 +494,7 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
       })
       if (res.ok) {
         const data = await res.json()
-        setSavedFilters(prev => [...prev, data.filter])
+        setSavedFilters((prev) => [...prev, data.filter])
         showToast(t('filterSaved'), 'success')
       } else {
         const errorData = await res.json().catch(() => ({}))
@@ -385,7 +524,7 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
         },
       })
       if (res.ok) {
-        setSavedFilters(prev => prev.filter(f => f.id !== filterId))
+        setSavedFilters((prev) => prev.filter((f) => f.id !== filterId))
         showToast(t('deleted'), 'success')
       } else {
         showToast(t('deleteFailed'), 'error')
@@ -396,50 +535,58 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
   }
 
   // Check for active filters (memoized to avoid recomputation on every render)
-  const hasActiveFilters = useMemo(() => Object.keys(filterConfig).some(key => {
-    const value = filterConfig[key as keyof FilterConfig]
-    if (Array.isArray(value)) return value.length > 0
-    return value != null
-  }), [filterConfig])
+  const hasActiveFilters = useMemo(
+    () =>
+      Object.keys(filterConfig).some((key) => {
+        const value = filterConfig[key as keyof FilterConfig]
+        if (Array.isArray(value)) return value.length > 0
+        return value != null
+      }),
+    [filterConfig]
+  )
 
-  const source = useMemo(() => traders.length > 0 ? traders[0].source : 'all', [traders])
+  const source = useMemo(() => (traders.length > 0 ? traders[0].source : 'all'), [traders])
 
   // Format last updated time
-  const formatLastUpdated = useCallback((dateStr: string | null | undefined) => {
-    if (!dateStr) return null
-    try {
-      const date = new Date(dateStr)
-      const now = new Date()
-      const diffMs = now.getTime() - date.getTime()
-      const diffMins = Math.floor(diffMs / 60000)
+  const formatLastUpdated = useCallback(
+    (dateStr: string | null | undefined) => {
+      if (!dateStr) return null
+      try {
+        const date = new Date(dateStr)
+        const now = new Date()
+        const diffMs = now.getTime() - date.getTime()
+        const diffMins = Math.floor(diffMs / 60000)
 
-      if (diffMins < 1) return t('justUpdated')
-      if (diffMins < 60) return t('minutesAgoShort').replace('{n}', String(diffMins))
-      const diffHours = Math.floor(diffMins / 60)
-      if (diffHours < 24) return t('hoursAgoShort').replace('{n}', String(diffHours))
-      return t('daysAgoShort').replace('{n}', String(Math.floor(diffHours / 24)))
-    } catch {
-      return null
-    }
-  }, [t])
+        if (diffMins < 1) return t('justUpdated')
+        if (diffMins < 60) return t('minutesAgoShort').replace('{n}', String(diffMins))
+        const diffHours = Math.floor(diffMins / 60)
+        if (diffHours < 24) return t('hoursAgoShort').replace('{n}', String(diffHours))
+        return t('daysAgoShort').replace('{n}', String(Math.floor(diffHours / 24)))
+      } catch {
+        return null
+      }
+    },
+    [t]
+  )
 
   // Filtering pipeline
   // With server-side pagination (fetchPage available), category is already filtered by the API.
   // Skip client-side category filter to avoid double-filtering.
   const categoryFiltered = useMemo(
-    () => fetchPage
-      ? traders
-      : (category === 'all'
+    () =>
+      fetchPage
         ? traders
-        : traders.filter(trader => trader.source && filterByCategory(trader.source, category))),
+        : category === 'all'
+          ? traders
+          : traders.filter((trader) => trader.source && filterByCategory(trader.source, category)),
     [traders, category, fetchPage]
   )
 
   const exchangeFiltered = useMemo(() => {
     const raw = selectedExchange
-      ? categoryFiltered.filter(trader => trader.source === selectedExchange)
+      ? categoryFiltered.filter((trader) => trader.source === selectedExchange)
       : categoryFiltered
-    return (selectedExchange && raw.length === 0 && categoryFiltered.length > 0)
+    return selectedExchange && raw.length === 0 && categoryFiltered.length > 0
       ? categoryFiltered
       : raw
   }, [categoryFiltered, selectedExchange])
@@ -449,39 +596,49 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
   // (calling syncStateToUrl changes its deps → recreates → re-triggers this effect)
   useEffect(() => {
     if (selectedExchange && categoryFiltered.length > 0) {
-      const hasMatch = categoryFiltered.some(trader => trader.source === selectedExchange)
+      const hasMatch = categoryFiltered.some((trader) => trader.source === selectedExchange)
       if (!hasMatch) {
         setSelectedExchange(null)
-        try { localStorage.removeItem(LS_KEY_EXCHANGE) } catch { /* ignore */ }
+        try {
+          localStorage.removeItem(LS_KEY_EXCHANGE)
+        } catch {
+          /* ignore */
+        }
       }
     }
   }, [selectedExchange, categoryFiltered])
 
   const presetFiltered = useMemo(() => {
     if (!activePreset || activePreset === 'all') return exchangeFiltered
-    const presetConfig = PRESETS.find(p => p.id === activePreset)
+    const presetConfig = PRESETS.find((p) => p.id === activePreset)
     if (!presetConfig) return exchangeFiltered
-    const raw = exchangeFiltered.filter(trader => presetConfig.filter({ source: trader.source }))
-    return (raw.length === 0 && exchangeFiltered.length > 0) ? exchangeFiltered : raw
+    const raw = exchangeFiltered.filter((trader) => presetConfig.filter({ source: trader.source }))
+    return raw.length === 0 && exchangeFiltered.length > 0 ? exchangeFiltered : raw
   }, [activePreset, exchangeFiltered])
 
   // Auto-clear preset filter when no traders match
   // NOTE: syncStateToUrl intentionally excluded from deps to prevent infinite loop
   useEffect(() => {
     if (activePreset && activePreset !== 'all' && exchangeFiltered.length > 0) {
-      const presetConfig = PRESETS.find(p => p.id === activePreset)
+      const presetConfig = PRESETS.find((p) => p.id === activePreset)
       if (presetConfig) {
-        const hasMatch = exchangeFiltered.some(trader => presetConfig.filter({ source: trader.source }))
+        const hasMatch = exchangeFiltered.some((trader) =>
+          presetConfig.filter({ source: trader.source })
+        )
         if (!hasMatch) {
           setActivePreset(null)
-          try { localStorage.removeItem(LS_KEY_PRESET) } catch { /* ignore */ }
+          try {
+            localStorage.removeItem(LS_KEY_PRESET)
+          } catch {
+            /* ignore */
+          }
         }
       }
     }
   }, [activePreset, exchangeFiltered])
 
   const advancedFiltered = useMemo(
-    () => hasActiveFilters ? applyAdvancedFilter(presetFiltered, filterConfig) : presetFiltered,
+    () => (hasActiveFilters ? applyAdvancedFilter(presetFiltered, filterConfig) : presetFiltered),
     [hasActiveFilters, presetFiltered, filterConfig]
   )
 
@@ -497,7 +654,7 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
       lastServerQueryRef.current = ''
       return
     }
-    const clientMatches = advancedFiltered.filter(t => {
+    const clientMatches = advancedFiltered.filter((t) => {
       const handle = (t.handle || t.id || '').toLowerCase()
       return handle.includes(q) || t.id.toLowerCase().includes(q)
     })
@@ -512,50 +669,63 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     const timer = setTimeout(() => {
       lastServerQueryRef.current = q
       fetch(`/api/search?q=${encodeURIComponent(q)}&limit=20`, { signal: controller.signal })
-        .then(r => r.ok ? r.json() : null)
-        .then(data => {
+        .then((r) => (r.ok ? r.json() : null))
+        .then((data) => {
           if (!data?.results?.traders?.length) {
             setServerSearchResults([])
             return
           }
-          const mapped: Trader[] = data.results.traders.map((sr: {
-            id: string; title: string; avatar?: string | null
-            meta?: { roi?: number; arena_score?: number; platform?: string; is_bot?: boolean }
-          }) => {
-            const [platform, ...keyParts] = sr.id.split(':')
-            const traderKey = keyParts.join(':')
-            return {
-              id: traderKey || sr.id,
-              handle: sr.title?.replace(/^@/, '') || traderKey || sr.id,
-              source: sr.meta?.platform || platform || '',
-              roi: sr.meta?.roi ?? 0,
-              followers: 0,
-              arena_score: sr.meta?.arena_score ?? undefined,
-              avatar_url: sr.avatar || null,
-              is_bot: sr.meta?.is_bot ?? false,
-            } satisfies Trader
-          })
+          const mapped: Trader[] = data.results.traders.map(
+            (sr: {
+              id: string
+              title: string
+              avatar?: string | null
+              meta?: { roi?: number; arena_score?: number; platform?: string; is_bot?: boolean }
+            }) => {
+              const [platform, ...keyParts] = sr.id.split(':')
+              const traderKey = keyParts.join(':')
+              return {
+                id: traderKey || sr.id,
+                handle: sr.title?.replace(/^@/, '') || traderKey || sr.id,
+                source: sr.meta?.platform || platform || '',
+                roi: sr.meta?.roi ?? 0,
+                followers: 0,
+                arena_score: sr.meta?.arena_score ?? undefined,
+                avatar_url: sr.avatar || null,
+                is_bot: sr.meta?.is_bot ?? false,
+              } satisfies Trader
+            }
+          )
           setServerSearchResults(mapped)
         })
-        .catch(() => { /* silent best-effort fallback */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+        .catch(() => {
+          /* silent best-effort fallback */
+        }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     }, 400)
-    return () => { clearTimeout(timer); controller.abort() }
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchQuery, advancedFiltered])
 
   const filteredTraders = useMemo(() => {
     // With server-side pagination, the API returns one page at a time — no need to slice
-    const base = fetchPage ? advancedFiltered : (isPro ? advancedFiltered : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT))
+    const base = fetchPage
+      ? advancedFiltered
+      : isPro
+        ? advancedFiltered
+        : advancedFiltered.slice(0, FREE_LEADERBOARD_LIMIT)
     if (serverSearchResults.length === 0) return base
     const q = searchQuery.trim().toLowerCase()
     if (q.length < 2) return base
-    const clientMatches = base.filter(t => {
+    const clientMatches = base.filter((t) => {
       const handle = (t.handle || t.id || '').toLowerCase()
       return handle.includes(q) || t.id.toLowerCase().includes(q)
     })
     if (clientMatches.length > 0) return base
-    const existingIds = new Set(base.map(t => t.id))
-    const newResults = serverSearchResults.filter(t => !existingIds.has(t.id))
+    const existingIds = new Set(base.map((t) => t.id))
+    const newResults = serverSearchResults.filter((t) => !existingIds.has(t.id))
     return [...base, ...newResults]
   }, [isPro, advancedFiltered, serverSearchResults, searchQuery])
 
@@ -565,16 +735,22 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     // Pairs with view_pricing → click_upgrade_cta → start_checkout → pro_subscribe
     // for a complete funnel from "blocked" to "paid".
     trackEvent('paywall_blocked', { source: 'home_ranking_filters' })
-    showToast(t('proFilterTooltip') || 'Upgrade to Pro to filter by Futures, Spot, and On-chain categories', 'info')
+    showToast(
+      t('proFilterTooltip') || 'Upgrade to Pro to filter by Futures, Spot, and On-chain categories',
+      'info'
+    )
   }, [showToast, t])
 
   const handleCopyLink = useCallback(() => {
     const url = window.location.href
-    navigator.clipboard.writeText(url).then(() => {
-      showToast(t('linkCopied') || 'Link copied!', 'success')
-    }).catch(() => {
-      showToast(t('copyFailed') || 'Copy failed', 'error')
-    })
+    navigator.clipboard
+      .writeText(url)
+      .then(() => {
+        showToast(t('linkCopied') || 'Link copied!', 'success')
+      })
+      .catch(() => {
+        showToast(t('copyFailed') || 'Copy failed', 'error')
+      })
   }, [showToast, t])
 
   const handleResetFilters = useCallback(() => {
@@ -591,7 +767,7 @@ export function useRankingFilters({ traders, activeTimeRange, totalCount, catego
     if (window.matchMedia('(max-width: 768px)').matches) {
       setShowMobileFilter(true)
     } else {
-      setShowAdvancedFilter(prev => !prev)
+      setShowAdvancedFilter((prev) => !prev)
     }
   }, [])
 
