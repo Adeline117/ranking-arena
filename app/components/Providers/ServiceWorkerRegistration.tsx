@@ -9,6 +9,9 @@ import { useEffect } from 'react'
  */
 export function ServiceWorkerRegistration() {
   useEffect(() => {
+    // Mark that React hydrated successfully — used by emergency SW recovery in layout.tsx
+    document.body.setAttribute('data-hydrated', '1')
+
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
     if (process.env.NODE_ENV !== 'production') return
 
@@ -30,20 +33,29 @@ export function ServiceWorkerRegistration() {
       if (!newWorker) return
       newWorker.addEventListener('statechange', onStateChange)
     }
-    const onStateChange = function(this: ServiceWorker) {
+    const onStateChange = function (this: ServiceWorker) {
       if (this.state === 'installed' && navigator.serviceWorker.controller) {
         this.postMessage({ type: 'SKIP_WAITING' })
       }
     }
 
     navigator.serviceWorker
-      .register('/sw.js')
+      .register('/sw.js', { updateViaCache: 'none' })
       .then((registration) => {
         registrationRef = registration
-        intervalId = setInterval(() => { registration.update() }, 60 * 60 * 1000)
+        // Check for update immediately, then every hour
+        registration.update()
+        intervalId = setInterval(
+          () => {
+            registration.update()
+          },
+          60 * 60 * 1000
+        )
         registration.addEventListener('updatefound', onUpdateFound)
       })
-      .catch(() => { /* Registration failed silently */ })
+      .catch(() => {
+        /* Registration failed silently */
+      })
 
     return () => {
       if (intervalId) clearInterval(intervalId)

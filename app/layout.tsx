@@ -159,7 +159,21 @@ export default function RootLayout({
             which prevents React from mounting, which prevents the SW update component from running. */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js').catch(function(){})}`,
+            __html: [
+              // Register SW with updateViaCache:'none' to always check server for updates
+              `if('serviceWorker' in navigator){navigator.serviceWorker.register('/sw.js',{updateViaCache:'none'}).catch(function(){})}`,
+              // Emergency recovery: if page is still blank after 8s, nuke SW + caches and reload.
+              // This saves users stuck with a broken old SW that prevents the page from loading.
+              `setTimeout(function(){`,
+              `  if(document.querySelectorAll('[data-hydrated]').length>0)return;`,
+              `  if(!('serviceWorker' in navigator))return;`,
+              `  navigator.serviceWorker.getRegistrations().then(function(regs){`,
+              `    regs.forEach(function(r){r.unregister()});`,
+              `    if(typeof caches!=='undefined'){caches.keys().then(function(k){k.forEach(function(n){caches.delete(n)})})}`,
+              `    if(regs.length>0)window.location.reload();`,
+              `  });`,
+              `},8000);`,
+            ].join(''),
           }}
         />
         <style dangerouslySetInnerHTML={{ __html: getCriticalCss() }} />
