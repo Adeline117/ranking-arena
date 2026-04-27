@@ -6,7 +6,6 @@ import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { setLanguage } from '@/lib/i18n'
-import { onTranslationsReady } from '@/lib/i18n'
 import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from './components/quiz-data'
 import { calculateResult } from './components/scoring'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -25,8 +24,8 @@ export default function QuizClient() {
   const { language, t } = useLanguage()
   const { answers, setAnswer, setResult, reset } = useQuizStore()
   const [mounted, setMounted] = useState(false)
-  const [txnReady, setTxnReady] = useState(false)
-  const [step, setStep] = useState<Step>('start')
+  const hasExistingAnswers = Object.keys(useQuizStore.getState().answers).length > 0
+  const [step, setStep] = useState<Step>(hasExistingAnswers ? 'questions' : 'start')
   const [stepAnnouncement, setStepAnnouncement] = useState('')
   const questionsTopRef = useRef<HTMLDivElement>(null)
 
@@ -39,26 +38,23 @@ export default function QuizClient() {
       })
       setStepAnnouncement(t('quizTitle') !== 'quizTitle' ? t('quizTitle') : 'Quiz questions')
     } else if (step === 'calculating') {
-      setStepAnnouncement(t('quizCalculating') !== 'quizCalculating' ? t('quizCalculating') : 'Calculating your results')
+      setStepAnnouncement(
+        t('quizCalculating') !== 'quizCalculating'
+          ? t('quizCalculating')
+          : 'Calculating your results'
+      )
     }
   }, [step, t])
 
   useEffect(() => {
     setMounted(true)
-    // Reset quiz state when mounting fresh
-    reset()
-    // Wait for translations to be loaded
-    const unsub = onTranslationsReady(() => setTxnReady(true))
-    // Check if already loaded
-    if (t('quizTitle') !== 'quizTitle') setTxnReady(true)
+    // Only reset if quiz was previously completed (has result); preserve in-progress answers
+    if (useQuizStore.getState().result) reset()
     document.body.style.overflow = ''
-    return () => {
-      unsub()
-    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const answeredCount = useMemo(
-    () => mounted ? Object.keys(answers).length : 0,
+    () => (mounted ? Object.keys(answers).length : 0),
     [answers, mounted]
   )
 
@@ -67,7 +63,9 @@ export default function QuizClient() {
   }, [])
 
   const prefersReducedMotion = useMemo(
-    () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    () =>
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches,
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [mounted] // re-evaluate once mounted
   )
@@ -76,24 +74,30 @@ export default function QuizClient() {
     (questionId: number, optionId: string) => {
       setAnswer(questionId, optionId)
       // Auto-scroll to next question after short delay
-      const currentIdx = QUIZ_QUESTIONS.findIndex(q => q.id === questionId)
+      const currentIdx = QUIZ_QUESTIONS.findIndex((q) => q.id === questionId)
       if (currentIdx < QUIZ_QUESTIONS.length - 1) {
         const nextId = QUIZ_QUESTIONS[currentIdx + 1].id
         const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth'
-        setTimeout(() => {
-          const el = document.getElementById(`quiz-q-${nextId}`)
-          if (el) el.scrollIntoView({ behavior: scrollBehavior, block: 'start' })
-        }, prefersReducedMotion ? 0 : 300)
+        setTimeout(
+          () => {
+            const el = document.getElementById(`quiz-q-${nextId}`)
+            if (el) el.scrollIntoView({ behavior: scrollBehavior, block: 'start' })
+          },
+          prefersReducedMotion ? 0 : 300
+        )
       }
     },
     [setAnswer, prefersReducedMotion]
   )
 
+  const [revealFlash, setRevealFlash] = useState(false)
+
   const handleCalculationDone = useCallback(() => {
     // Defense-in-depth: do not calculate if quiz is incomplete
     if (Object.keys(answers).length < TOTAL_QUESTIONS) {
-      // eslint-disable-next-line no-console
-      console.error(`[Quiz] Incomplete answers (${Object.keys(answers).length}/${TOTAL_QUESTIONS}), aborting calculation`)
+      console.error(
+        `[Quiz] Incomplete answers (${Object.keys(answers).length}/${TOTAL_QUESTIONS}), aborting calculation`
+      )
       return
     }
     const result = calculateResult(answers)
@@ -115,22 +119,31 @@ export default function QuizClient() {
           scores: result.scores,
           answers,
         }),
-      }).catch(() => { /* non-critical analytics */ }) // eslint-disable-line no-restricted-syntax
+      }).catch(() => {
+        /* non-critical analytics */
+      }) // eslint-disable-line no-restricted-syntax
     } catch {
       // ignore
     }
+    // Flash reveal effect then navigate
+    setRevealFlash(true)
     // Navigate to result page — include secondary type and type breakdown percents
-    // Encode allTypePercents as compact comma-separated values (ordered by PERSONALITY_TYPES)
-    const percentsParam = PERSONALITY_TYPES.map(pt => result.allTypePercents[pt.id] ?? 0).join(',')
-    router.push(`/quiz/result?type=${result.primaryType}&match=${result.matchPercent}&secondary=${result.secondaryType}&percents=${percentsParam}`)
+    const percentsParam = PERSONALITY_TYPES.map((pt) => result.allTypePercents[pt.id] ?? 0).join(
+      ','
+    )
+    setTimeout(() => {
+      router.push(
+        `/quiz/result?type=${result.primaryType}&match=${result.matchPercent}&secondary=${result.secondaryType}&percents=${percentsParam}`
+      )
+    }, 300)
   }, [answers, setResult, router])
 
   const handleSubmit = useCallback(() => {
     setStep('calculating')
   }, [])
 
-  // Show loading until both mounted AND translations ready
-  if (!mounted || !txnReady) {
+  // Show loading only until mounted (translations can hydrate in place)
+  if (!mounted) {
     return (
       <Box
         style={{
@@ -176,7 +189,11 @@ export default function QuizClient() {
         fontWeight: 600,
         cursor: 'pointer',
       }}
-      aria-label={language === 'en' ? 'Switch to Chinese / \u5207\u6362\u5230\u4E2D\u6587' : 'Switch to English / \u5207\u6362\u5230\u82F1\u6587'}
+      aria-label={
+        language === 'en'
+          ? 'Switch to Chinese / \u5207\u6362\u5230\u4E2D\u6587'
+          : 'Switch to English / \u5207\u6362\u5230\u82F1\u6587'
+      }
     >
       {language === 'en' ? '\u4E2D\u6587' : 'EN'}
     </button>
@@ -203,16 +220,50 @@ export default function QuizClient() {
   if (step === 'calculating') {
     return (
       <div className="quiz-start-wrapper">
+        {/* Reveal flash overlay */}
+        {revealFlash && (
+          <div
+            style={{
+              position: 'fixed',
+              inset: 0,
+              zIndex: 50,
+              pointerEvents: 'none',
+              background:
+                'radial-gradient(ellipse at center, var(--color-brand-15, rgba(99,102,241,0.15)) 0%, transparent 70%)',
+              animation: 'quizRevealFlash 0.4s ease-out forwards',
+            }}
+          />
+        )}
         <div className="quiz-start-card" style={{ position: 'relative' }}>
           {/* Language toggle */}
           <div style={{ position: 'absolute', top: 14, right: 14, zIndex: 2 }}>
             {langToggleButton}
           </div>
-          <Suspense fallback={
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 260 }}>
-              <div role="status" aria-label="Loading" style={{ width: 40, height: 40, border: '3px solid var(--color-bg-tertiary)', borderTopColor: 'var(--color-brand)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
-            </div>
-          }>
+          <Suspense
+            fallback={
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 260,
+                }}
+              >
+                <div
+                  role="status"
+                  aria-label="Loading"
+                  style={{
+                    width: 40,
+                    height: 40,
+                    border: '3px solid var(--color-bg-tertiary)',
+                    borderTopColor: 'var(--color-brand)',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                  }}
+                />
+              </div>
+            }
+          >
             <CalculatingStep tr={t} onDone={handleCalculationDone} />
           </Suspense>
         </div>
@@ -222,12 +273,33 @@ export default function QuizClient() {
 
   // Questions — scrollable flow
   return (
-    <Box style={{ minHeight: '80vh', padding: 20, paddingBottom: 80, touchAction: 'auto', WebkitOverflowScrolling: 'touch' } as React.CSSProperties}>
+    <Box
+      style={
+        {
+          minHeight: '80vh',
+          padding: 20,
+          paddingBottom: 80,
+          touchAction: 'auto',
+          WebkitOverflowScrolling: 'touch',
+        } as React.CSSProperties
+      }
+    >
       {/* Screen reader announcement for step transitions */}
-      <div aria-live="polite" aria-atomic="true" style={{ position: 'absolute', width: 1, height: 1, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap' }}>
+      <div
+        aria-live="polite"
+        aria-atomic="true"
+        style={{
+          position: 'absolute',
+          width: 1,
+          height: 1,
+          overflow: 'hidden',
+          clip: 'rect(0,0,0,0)',
+          whiteSpace: 'nowrap',
+        }}
+      >
         {stepAnnouncement}
       </div>
-      <div style={{ maxWidth: 'clamp(520px, 90vw, 640px)', width: '100%', margin: '0 auto' }}>
+      <div style={{ maxWidth: 'min(640px, 90vw)', width: '100%', margin: '0 auto' }}>
         {/* Sticky progress bar at top with language toggle */}
         <div
           ref={questionsTopRef}
@@ -249,7 +321,7 @@ export default function QuizClient() {
             <ProgressBar
               answered={answeredCount}
               total={TOTAL_QUESTIONS}
-              questionIds={QUIZ_QUESTIONS.map(q => q.id)}
+              questionIds={QUIZ_QUESTIONS.map((q) => q.id)}
               answeredIds={new Set(Object.keys(answers).map(Number))}
             />
           </div>
@@ -275,10 +347,11 @@ export default function QuizClient() {
         <div
           style={{
             position: 'sticky',
-            bottom: 64,
+            bottom: 0,
             zIndex: 10,
             background: 'var(--color-bg-primary)',
             padding: '16px 0',
+            paddingBottom: 'calc(16px + env(safe-area-inset-bottom, 0px))',
             marginTop: 16,
           }}
         >
@@ -291,7 +364,7 @@ export default function QuizClient() {
           >
             {allAnswered
               ? t('quizSeeResults')
-              : `${answeredCount} / ${TOTAL_QUESTIONS}`}
+              : `${TOTAL_QUESTIONS - answeredCount} ${t('quizLeft') !== 'quizLeft' ? t('quizLeft') : 'left'}`}
           </button>
         </div>
       </div>

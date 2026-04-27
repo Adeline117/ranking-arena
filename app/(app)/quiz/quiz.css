@@ -27,7 +27,7 @@
 }
 
 .quiz-start-card {
-  max-width: clamp(520px, 90vw, 640px);
+  max-width: min(640px, 90vw);
   width: 100%;
   background: var(--glass-bg-primary);
   backdrop-filter: blur(20px);
@@ -204,8 +204,7 @@
   gap: 16px;
   padding: clamp(18px, 3.5vw, 28px);
   background: var(--glass-bg-primary);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  scroll-margin-top: 80px;
   border: 1px solid var(--glass-border-light);
   border-radius: 14px;
   position: relative;
@@ -447,9 +446,8 @@
   height: 6px;
   border-radius: 3px;
   border: none;
-  /* Use padding for touch target instead of absolute overlay — prevents
-     pointer-event interception on elements below the sticky progress bar */
-  padding: 12px 2px;
+  /* Enlarged padding for 44px minimum touch target */
+  padding: 19px 6px;
   background-clip: content-box;
   cursor: pointer;
   background-color: var(--color-bg-tertiary);
@@ -467,6 +465,11 @@
 
 .quiz-progress-dot:hover {
   transform: scaleY(1.5);
+}
+
+.quiz-progress-dot:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 2px;
 }
 
 /* ─── Submit Button ───────────────────────────────────────────── */
@@ -578,7 +581,7 @@
 }
 
 .quiz-result-container {
-  max-width: clamp(520px, 90vw, 640px);
+  max-width: min(640px, 90vw);
   width: 100%;
   display: flex;
   flex-direction: column;
@@ -726,6 +729,8 @@
   flex-direction: column;
   gap: 16px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  animation: quizCardEnter 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: var(--section-delay, 0.2s);
 }
 
 .quiz-section-header {
@@ -1116,6 +1121,15 @@
 
   .quiz-risk-segment {
     width: 18px;
+  }
+}
+
+@keyframes quizRevealFlash {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
   }
 }
 

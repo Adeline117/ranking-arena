@@ -23,7 +23,13 @@ interface ResultPageClientProps {
   allTypePercents?: Record<PersonalityTypeId, number> | null
 }
 
-export default function ResultPageClient({ typeId, matchPercent, recommendedTraders, secondaryTypeId, allTypePercents }: ResultPageClientProps) {
+export default function ResultPageClient({
+  typeId,
+  matchPercent,
+  recommendedTraders,
+  secondaryTypeId,
+  allTypePercents,
+}: ResultPageClientProps) {
   const { language, t } = useLanguage()
   const [mounted, setMounted] = useState(false)
   const [txnReady, setTxnReady] = useState(false)
@@ -80,9 +86,11 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
   return (
     <div
       className="quiz-result-page"
-      style={{
-        '--quiz-type-color-15': `${pType.color}26`,
-      } as React.CSSProperties}
+      style={
+        {
+          '--quiz-type-color-15': `${pType.color}26`,
+        } as React.CSSProperties
+      }
     >
       <div className="quiz-result-container">
         {/* Language toggle */}
@@ -100,7 +108,11 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
               fontWeight: 600,
               cursor: 'pointer',
             }}
-            aria-label={language === 'en' ? 'Switch to Chinese / \u5207\u6362\u5230\u4E2D\u6587' : 'Switch to English / \u5207\u6362\u5230\u82F1\u6587'}
+            aria-label={
+              language === 'en'
+                ? 'Switch to Chinese / \u5207\u6362\u5230\u4E2D\u6587'
+                : 'Switch to English / \u5207\u6362\u5230\u82F1\u6587'
+            }
           >
             {language === 'en' ? '\u4E2D\u6587' : 'EN'}
           </button>
@@ -146,56 +158,154 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           tr={t}
         />
 
-        {/* Master Biography */}
-        <div style={{ marginTop: 20 }}>
-          <MasterSection type={pType} tr={t} />
+        {/* Mini share — capture impulse moment */}
+        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+          <button
+            type="button"
+            onClick={() => {
+              const text = `${t('quizShareChallenge') !== 'quizShareChallenge' ? t('quizShareChallenge') : `Just scored ${matchPercent}% ${t(pType.nameKey)} on Arena's trader personality test. Bet you can't beat my match`} ${resultUrl}`
+              window.open(
+                `https://x.com/intent/tweet?text=${encodeURIComponent(text)}`,
+                '_blank',
+                'noopener,noreferrer'
+              )
+            }}
+            className="quiz-share-x-btn"
+            style={{ flex: 1 }}
+            aria-label="Share on X"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            {t('quizShareOnX') !== 'quizShareOnX' ? t('quizShareOnX') : 'Share on X'}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              navigator.clipboard.writeText(resultUrl).catch(() => {})
+            }}
+            style={{
+              padding: '12px 16px',
+              borderRadius: 10,
+              border: '1px solid var(--glass-border-light)',
+              background: 'var(--color-bg-tertiary)',
+              color: 'var(--color-text-primary)',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+            aria-label="Copy link"
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+            </svg>
+          </button>
         </div>
 
-        {/* Style Analysis */}
-        <div style={{ marginTop: 24 }}>
+        {/* Style Analysis — personal feedback first */}
+        <div style={{ marginTop: 20, '--section-delay': '0.6s' } as React.CSSProperties}>
           <StyleAnalysis type={pType} tr={t} />
         </div>
 
         {/* Type Breakdown (only if data available from quiz completion) */}
         {allTypePercents && (
-          <div style={{ marginTop: 16 }}>
-            <TypeBreakdown
-              allTypePercents={allTypePercents}
-              primaryTypeId={typeId}
-              tr={t}
-            />
+          <div style={{ marginTop: 16, '--section-delay': '0.9s' } as React.CSSProperties}>
+            <TypeBreakdown allTypePercents={allTypePercents} primaryTypeId={typeId} tr={t} />
           </div>
         )}
 
+        {/* Master Biography */}
+        <div style={{ marginTop: 20, '--section-delay': '1.1s' } as React.CSSProperties}>
+          <MasterSection type={pType} tr={t} />
+        </div>
+
         {/* Type Compatibility */}
-        <div className="quiz-section-card" style={{ marginTop: 14 }}>
+        <div
+          className="quiz-section-card"
+          style={{ marginTop: 14, '--section-delay': '1.3s' } as React.CSSProperties}
+        >
           <div className="quiz-section-header">
             <div className="quiz-section-accent" style={{ background: pType.gradient }} />
-            <h3 className="quiz-section-title">
-              {t('quizCompatTitle')}
-            </h3>
+            <h3 className="quiz-section-title">{t('quizCompatTitle')}</h3>
           </div>
-          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              color: 'var(--color-accent-success)',
+              fontWeight: 600,
+            }}
+          >
+            <span>&#x2713;</span>
             {t('quizCompatWith')}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {pType.compatibleTypes.map(id => {
+            {pType.compatibleTypes.map((id) => {
               const ct = PERSONALITY_TYPE_MAP[id]
               return ct ? (
-                <span key={id} style={{ padding: '5px 12px', borderRadius: 20, background: ct.color + '15', border: '1px solid ' + ct.color + '25', fontSize: 13, color: ct.color, fontWeight: 600 }}>
+                <span
+                  key={id}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: 20,
+                    background: ct.color + '15',
+                    border: '1px solid ' + ct.color + '25',
+                    fontSize: 13,
+                    color: ct.color,
+                    fontWeight: 600,
+                  }}
+                >
                   {t(ct.nameKey)}
                 </span>
               ) : null
             })}
           </div>
-          <div style={{ fontSize: 13, color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              color: 'var(--color-accent-error)',
+              fontWeight: 600,
+              marginTop: 12,
+            }}
+          >
+            <span>&#x2717;</span>
             {t('quizIncompatWith')}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {pType.incompatibleTypes.map(id => {
+            {pType.incompatibleTypes.map((id) => {
               const ct = PERSONALITY_TYPE_MAP[id]
               return ct ? (
-                <span key={id} style={{ padding: '5px 12px', borderRadius: 20, background: 'var(--color-accent-error-10)', border: '1px solid var(--color-accent-error-20)', fontSize: 13, color: 'var(--color-accent-error)', fontWeight: 600 }}>
+                <span
+                  key={id}
+                  style={{
+                    padding: '5px 12px',
+                    borderRadius: 20,
+                    background: 'var(--color-accent-error-10)',
+                    border: '1px solid var(--color-accent-error-20)',
+                    fontSize: 13,
+                    color: 'var(--color-accent-error)',
+                    fontWeight: 600,
+                  }}
+                >
                   {t(ct.nameKey)}
                 </span>
               ) : null
@@ -208,18 +318,16 @@ export default function ResultPageClient({ typeId, matchPercent, recommendedTrad
           <RecommendedTraders type={pType} traders={recommendedTraders} tr={t} />
         </div>
 
-        {/* Share Actions */}
+        {/* Full Share Actions */}
         <div className="quiz-section-card" style={{ marginTop: 18 }}>
           <div className="quiz-section-header">
             <div className="quiz-section-accent" style={{ background: pType.gradient }} />
-            <h3 className="quiz-section-title">
-              {t('quizShareTitle')}
-            </h3>
+            <h3 className="quiz-section-title">{t('quizShareTitle')}</h3>
           </div>
           <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
         </div>
 
-        {/* CTAs */}
+        {/* CTAs — product conversion focus */}
         <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 28 }}>
           <Link href="/quiz" className="quiz-cta-secondary">
             {t('quizRetake')}

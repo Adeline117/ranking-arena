@@ -296,6 +296,18 @@ export const PERSONALITY_TYPE_MAP = Object.fromEntries(
   PERSONALITY_TYPES.map((t) => [t.id, t])
 ) as Record<string, PersonalityType>
 
+/**
+ * Contrast-safe text colors for dark backgrounds.
+ * Some type colors (amber, emerald, slate) fail WCAG 4.5:1 AA when used as foreground text
+ * on dark glass backgrounds. These lightened variants maintain brand identity with proper contrast.
+ */
+export const TYPE_TEXT_COLOR: Record<string, string> = {
+  scalper: '#FBBF24', // amber-400 (was #F59E0B amber-500)
+  hodler: '#34D399', // emerald-400 (was #10B981 emerald-500)
+  tourist: '#FBBF24', // amber-400 (was #F59E0B amber-500)
+  paperhands: '#CBD5E1', // slate-300 (was #94A3B8 slate-400)
+}
+
 // ─── 30 Quiz Questions ──────────────────────────────────────────────
 
 export const QUIZ_QUESTIONS: QuizQuestion[] = [
@@ -404,7 +416,11 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
     titleKey: 'quizQ10',
     options: [
       { id: 'a', labelKey: 'quizQ10A', scores: { whale: 1.0, contrarian: 0.5 } },
-      { id: 'b', labelKey: 'quizQ10B', scores: { analyst: 1.0, paperhands: 0.25, strategist: 0.25 } },
+      {
+        id: 'b',
+        labelKey: 'quizQ10B',
+        scores: { analyst: 1.0, paperhands: 0.25, strategist: 0.25 },
+      },
       { id: 'c', labelKey: 'quizQ10C', scores: { sniper: 1.0, scalper: 0.5 } },
       { id: 'd', labelKey: 'quizQ10D', scores: { degen: 0.5, hodler: 0.25, narrator: 0.5 } },
     ],
@@ -416,7 +432,11 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
     options: [
       { id: 'a', labelKey: 'quizQ11A', scores: { scalper: 1.0, sniper: 0.5 } },
       { id: 'b', labelKey: 'quizQ11B', scores: { hodler: 1.0, whale: 0.5, narrator: 0.25 } },
-      { id: 'c', labelKey: 'quizQ11C', scores: { paperhands: 1.0, analyst: 0.25, strategist: 0.25 } },
+      {
+        id: 'c',
+        labelKey: 'quizQ11C',
+        scores: { paperhands: 1.0, analyst: 0.25, strategist: 0.25 },
+      },
       { id: 'd', labelKey: 'quizQ11D', scores: { degen: 1.0, contrarian: 0.5 } },
     ],
   },
@@ -438,7 +458,11 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
     options: [
       { id: 'a', labelKey: 'quizQ13A', scores: { degen: 1.0, scalper: 0.5 } },
       { id: 'b', labelKey: 'quizQ13B', scores: { contrarian: 1.0, whale: 0.25 } },
-      { id: 'c', labelKey: 'quizQ13C', scores: { strategist: 1.0, analyst: 0.5, paperhands: 0.25 } },
+      {
+        id: 'c',
+        labelKey: 'quizQ13C',
+        scores: { strategist: 1.0, analyst: 0.5, paperhands: 0.25 },
+      },
       { id: 'd', labelKey: 'quizQ13D', scores: { tourist: 1.0, sniper: 0.25, hodler: 0.25 } },
     ],
   },

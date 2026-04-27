@@ -2,7 +2,24 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { PersonalityType } from '../../components/types'
+import { TYPE_TEXT_COLOR } from '../../components/quiz-data'
 import { QuizIcon } from './QuizIcon'
+
+// Approximate rarity distribution per type (updated periodically)
+const TYPE_RARITY: Record<string, number> = {
+  sniper: 8,
+  scalper: 11,
+  whale: 4,
+  analyst: 9,
+  contrarian: 5,
+  hodler: 14,
+  degen: 16,
+  strategist: 7,
+  copycat: 10,
+  tourist: 8,
+  paperhands: 5,
+  narrator: 3,
+}
 
 interface PersonalityCardProps {
   type: PersonalityType
@@ -39,39 +56,56 @@ function useAnimatedCounter(target: number, duration: number = 1200): number {
   return value
 }
 
-export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel, tr }: PersonalityCardProps) {
+export default function PersonalityCard({
+  type,
+  matchPercent,
+  secondaryTypeLabel,
+  tr,
+}: PersonalityCardProps) {
   const [animatedWidth, setAnimatedWidth] = useState(0)
   const animatedMatch = useAnimatedCounter(matchPercent, 1200)
-  const [showConfetti, setShowConfetti] = useState(true)
+  const [showConfetti, setShowConfetti] = useState(false)
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
       setAnimatedWidth(matchPercent)
     })
+    // Delay confetti 400ms so card entrance animation finishes first
+    const showTimer = setTimeout(() => setShowConfetti(true), 400)
     // Hide confetti after animation completes to clean up DOM
-    const timer = setTimeout(() => setShowConfetti(false), 2000)
+    const hideTimer = setTimeout(() => setShowConfetti(false), 2400)
     return () => {
       cancelAnimationFrame(raf)
-      clearTimeout(timer)
+      clearTimeout(showTimer)
+      clearTimeout(hideTimer)
     }
   }, [matchPercent])
 
   return (
     <div
       className="quiz-personality-card"
-      style={{
-        // CSS custom properties for type-specific theming
-        '--quiz-type-color': type.color,
-        '--quiz-type-color-08': `${type.color}14`,
-        '--quiz-type-color-15': `${type.color}26`,
-        '--quiz-type-color-25': `${type.color}40`,
-        '--quiz-type-gradient': type.gradient,
-      } as React.CSSProperties}
+      style={
+        {
+          // CSS custom properties for type-specific theming
+          '--quiz-type-color': type.color,
+          '--quiz-type-color-08': `${type.color}14`,
+          '--quiz-type-color-15': `${type.color}26`,
+          '--quiz-type-color-25': `${type.color}40`,
+          '--quiz-type-gradient': type.gradient,
+        } as React.CSSProperties
+      }
     >
       {/* Confetti burst on reveal */}
       {showConfetti && (
         <div className="quiz-confetti" aria-hidden="true">
-          {[type.color, 'var(--color-brand)', `${type.color}80`, '#FFD700', 'var(--color-brand-deep)', `${type.color}60`].map((c, i) => (
+          {[
+            type.color,
+            'var(--color-brand)',
+            `${type.color}80`,
+            '#FFD700',
+            'var(--color-brand-deep)',
+            `${type.color}60`,
+          ].map((c, i) => (
             <span key={i} style={{ background: c }} />
           ))}
         </div>
@@ -89,7 +123,7 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
       </div>
 
       {/* Type name — large hero weight */}
-      <h2 className="quiz-hero-type-name" style={{ color: type.color }}>
+      <h2 className="quiz-hero-type-name" style={{ color: TYPE_TEXT_COLOR[type.id] || type.color }}>
         {tr(type.nameKey)}
       </h2>
 
@@ -104,18 +138,35 @@ export default function PersonalityCard({ type, matchPercent, secondaryTypeLabel
             }}
           />
         </div>
-        <span
-          className="quiz-match-label"
-          style={{ color: type.color }}
-        >
+        <span className="quiz-match-label" style={{ color: type.color }}>
           {animatedMatch}% {tr('quizMatch')}
         </span>
       </div>
 
       {/* Description */}
-      <p className="quiz-hero-description">
-        {tr(type.descriptionKey)}
-      </p>
+      <p className="quiz-hero-description">{tr(type.descriptionKey)}</p>
+
+      {/* Rarity badge */}
+      {TYPE_RARITY[type.id] && (
+        <span
+          style={{
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'var(--color-text-tertiary)',
+            padding: '4px 12px',
+            borderRadius: 20,
+            background: TYPE_RARITY[type.id] <= 5 ? `${type.color}12` : 'var(--color-bg-tertiary)',
+            border:
+              TYPE_RARITY[type.id] <= 5
+                ? `1px solid ${type.color}25`
+                : '1px solid var(--glass-border-light)',
+          }}
+        >
+          {TYPE_RARITY[type.id] <= 5
+            ? `Top ${TYPE_RARITY[type.id]}% rarest`
+            : `${TYPE_RARITY[type.id]}% of traders`}
+        </span>
+      )}
 
       {/* Secondary type badge — pill-shaped */}
       <span className="quiz-shadow-badge">
