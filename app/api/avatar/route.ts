@@ -16,27 +16,32 @@ function isPrivateIP(ip: string): boolean {
   if (v4) {
     const a = Number(v4[1])
     const b = Number(v4[2])
-    if (a === 0) return true                                    // 0.0.0.0/8
-    if (a === 10) return true                                   // 10.0.0.0/8 private
-    if (a === 100 && b >= 64 && b <= 127) return true           // 100.64.0.0/10 CGNAT
-    if (a === 127) return true                                  // 127.0.0.0/8 loopback
-    if (a === 169 && b === 254) return true                     // 169.254.0.0/16 link-local + cloud metadata
-    if (a === 172 && b >= 16 && b <= 31) return true            // 172.16.0.0/12 private
-    if (a === 192 && b === 0) return true                       // 192.0.0.0/24 IETF
-    if (a === 192 && b === 168) return true                     // 192.168.0.0/16 private
-    if (a >= 224) return true                                   // 224.0.0.0/4 multicast + reserved
+    if (a === 0) return true // 0.0.0.0/8
+    if (a === 10) return true // 10.0.0.0/8 private
+    if (a === 100 && b >= 64 && b <= 127) return true // 100.64.0.0/10 CGNAT
+    if (a === 127) return true // 127.0.0.0/8 loopback
+    if (a === 169 && b === 254) return true // 169.254.0.0/16 link-local + cloud metadata
+    if (a === 172 && b >= 16 && b <= 31) return true // 172.16.0.0/12 private
+    if (a === 192 && b === 0) return true // 192.0.0.0/24 IETF
+    if (a === 192 && b === 168) return true // 192.168.0.0/16 private
+    if (a >= 224) return true // 224.0.0.0/4 multicast + reserved
     return false
   }
 
   // IPv6 (normalize to lowercase, strip brackets)
   const v6 = ip.toLowerCase().replace(/^\[|\]$/g, '')
   if (v6.includes(':')) {
-    if (v6 === '::' || v6 === '::1') return true               // unspecified, loopback
-    if (v6.startsWith('fe80:') || v6.startsWith('fe8') ||
-        v6.startsWith('fe9') || v6.startsWith('fea') ||
-        v6.startsWith('feb')) return true                       // fe80::/10 link-local
+    if (v6 === '::' || v6 === '::1') return true // unspecified, loopback
+    if (
+      v6.startsWith('fe80:') ||
+      v6.startsWith('fe8') ||
+      v6.startsWith('fe9') ||
+      v6.startsWith('fea') ||
+      v6.startsWith('feb')
+    )
+      return true // fe80::/10 link-local
     if (v6.startsWith('fc') || v6.startsWith('fd')) return true // fc00::/7 unique-local
-    if (v6.startsWith('ff')) return true                        // ff00::/8 multicast
+    if (v6.startsWith('ff')) return true // ff00::/8 multicast
     // IPv4-mapped IPv6: ::ffff:127.0.0.1, ::ffff:169.254.169.254
     const mapped = v6.match(/^::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/)
     if (mapped) return isPrivateIP(mapped[1])
@@ -67,7 +72,11 @@ const CACHE_MAX_AGE = 60 * 60 * 24 * 365
 // finds a content-injection on an exchange CDN) could ship a same-origin
 // XSS payload via this proxy.
 const ALLOWED_IMAGE_TYPES = new Set([
-  'image/jpeg', 'image/png', 'image/webp', 'image/gif', 'image/avif',
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+  'image/gif',
+  'image/avif',
 ])
 function safeImageContentType(upstream: string | null): string {
   if (!upstream) return 'image/png'
@@ -76,8 +85,10 @@ function safeImageContentType(upstream: string | null): string {
 }
 
 export async function GET(request: NextRequest) {
-  // Rate limit: 60 req/min per IP (avatar proxy is public but must not be abused)
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.search)
+  // Rate limit: 600 req/min per IP — avatars are read-only cacheable resources.
+  // A leaderboard page loads 20+ avatars simultaneously; the old `search` preset
+  // (60/min) caused 429s on every page load.
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.read)
   if (rateLimitResp) return rateLimitResp
 
   const { searchParams } = new URL(request.url)
@@ -99,10 +110,16 @@ export async function GET(request: NextRequest) {
     // Data URIs should never be proxied — return 1x1 transparent PNG so the
     // browser shows the CSS fallback (gradient + initial) without 400 errors.
     if (decodedUrl.startsWith('data:')) {
-      const transparentPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRU5ErkJggg==', 'base64')
+      const transparentPng = Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRU5ErkJggg==',
+        'base64'
+      )
       return new NextResponse(transparentPng, {
         status: 200,
-        headers: { 'Content-Type': 'image/png', 'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable` },
+        headers: {
+          'Content-Type': 'image/png',
+          'Cache-Control': `public, max-age=${CACHE_MAX_AGE}, immutable`,
+        },
       })
     }
 
@@ -206,14 +223,14 @@ export async function GET(request: NextRequest) {
       'randomuser.me',
       'ui-avatars.com',
     ]
-    
+
     const urlObj = new URL(decodedUrl)
     // Strict suffix match: hostname must equal or be a subdomain of an allowed domain.
     // e.g. "cdn.bnbstatic.com" matches "bnbstatic.com", but "evil-bnbstatic.com" does not.
     const isAllowed = allowedDomains.some(
-      domain => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain)
+      (domain) => urlObj.hostname === domain || urlObj.hostname.endsWith('.' + domain)
     )
-    
+
     if (!isAllowed) {
       return new NextResponse('Domain not allowed', { status: 403 })
     }
@@ -238,10 +255,11 @@ export async function GET(request: NextRequest) {
     const response = await fetch(decodedUrl, {
       signal: controller.signal,
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer': urlObj.origin + '/',
-        'Origin': urlObj.origin,
-        'Accept': 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
+        'User-Agent':
+          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        Referer: urlObj.origin + '/',
+        Origin: urlObj.origin,
+        Accept: 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9,zh-CN;q=0.8,zh;q=0.7',
         'Sec-Fetch-Dest': 'image',
         'Sec-Fetch-Mode': 'no-cors',
@@ -249,7 +267,13 @@ export async function GET(request: NextRequest) {
       },
     }).finally(() => clearTimeout(timeout))
 
-    if (!response.ok && (response.status === 403 || response.status === 401 || response.status === 502 || response.status === 503)) {
+    if (
+      !response.ok &&
+      (response.status === 403 ||
+        response.status === 401 ||
+        response.status === 502 ||
+        response.status === 503)
+    ) {
       // Retry with minimal headers — some CDNs block specific header combos
       const controller2 = new AbortController()
       const timeout2 = setTimeout(() => controller2.abort(), 5_000)
@@ -258,7 +282,7 @@ export async function GET(request: NextRequest) {
           signal: controller2.signal,
           headers: {
             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-            'Accept': 'image/*,*/*;q=0.8',
+            Accept: 'image/*,*/*;q=0.8',
           },
         }).finally(() => clearTimeout(timeout2))
 
