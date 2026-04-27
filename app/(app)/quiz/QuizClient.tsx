@@ -93,7 +93,7 @@ export default function QuizClient() {
         setTimeout(
           () => {
             const el = document.getElementById(`quiz-q-${nextId}`)
-            if (el) el.scrollIntoView({ behavior: scrollBehavior, block: 'start' })
+            if (el) el.scrollIntoView({ behavior: scrollBehavior, block: 'nearest' })
           },
           prefersReducedMotion ? 0 : 300
         )

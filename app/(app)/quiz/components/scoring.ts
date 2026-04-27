@@ -77,8 +77,8 @@ export function calculateResult(answers: Record<number, string>): QuizResult {
     return maxPossible > 0 ? scores[typeId] / maxPossible : 0
   })
 
-  // 3. Apply softmax with temperature 1.5
-  const probabilities = softmax(normalized, 1.5)
+  // 3. Apply softmax with temperature 0.8 (lower = more peaked, primary type stands out)
+  const probabilities = softmax(normalized, 0.8)
 
   // 4. Primary = argmax, Secondary = second argmax
   const indexed = ALL_TYPE_IDS.map((id, i) => ({ id, prob: probabilities[i] }))
@@ -97,7 +97,7 @@ export function calculateResult(answers: Record<number, string>): QuizResult {
 
   // 6. allTypePercents: softmax probabilities * 100, rounded to integers summing to 100
   const rawPercents = probabilities.map((p) => Math.round(p * 100))
-  let currentSum = rawPercents.reduce((a, b) => a + b, 0)
+  const currentSum = rawPercents.reduce((a, b) => a + b, 0)
 
   // Adjust the largest value so the total sums to exactly 100
   if (currentSum !== 100) {
