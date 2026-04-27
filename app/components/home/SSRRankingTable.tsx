@@ -6,7 +6,6 @@
 
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { formatROI, formatPnL } from '@/lib/utils/format'
-import { getServerTranslation } from '@/lib/i18n/server'
 
 function getScoreColor(score: number): string {
   if (score >= 90) return 'ssr-score-s'
@@ -29,13 +28,17 @@ interface Props {
 }
 
 export default async function SSRRankingTable({ traders, startRank = 0 }: Props) {
-  const { t } = await getServerTranslation()
-
   if (!traders.length) {
     return (
-      <div style={{ padding: '48px 16px', textAlign: 'center', color: 'var(--color-text-tertiary, #888)' }}>
-        <p style={{ fontSize: 16, marginBottom: 8 }}>{t('ssrLoadingRanking')}</p>
-        <p style={{ fontSize: 13 }}>{t('ssrDataRefreshHint')}</p>
+      <div
+        style={{
+          padding: '48px 16px',
+          textAlign: 'center',
+          color: 'var(--color-text-tertiary, #888)',
+        }}
+      >
+        <p style={{ fontSize: 16, marginBottom: 8 }}>{'Loading rankings... / 加载排名中...'}</p>
+        <p style={{ fontSize: 13 }}>{'Data refreshes every few minutes / 数据每几分钟刷新一次'}</p>
       </div>
     )
   }
@@ -59,16 +62,19 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                 <span
                   className="ssr-rank-circle"
                   style={{
-                    background: rank === 1
-                      ? 'linear-gradient(135deg, var(--color-rank-gold, #FFD700), #FFA500)'
-                      : rank === 2
-                      ? 'linear-gradient(135deg, var(--color-rank-silver, #C0C0C0), #A0A0A0)'
-                      : 'linear-gradient(135deg, var(--color-rank-bronze, #CD7F32), #A0522D)',
+                    background:
+                      rank === 1
+                        ? 'linear-gradient(135deg, var(--color-rank-gold, #FFD700), #FFA500)'
+                        : rank === 2
+                          ? 'linear-gradient(135deg, var(--color-rank-silver, #C0C0C0), #A0A0A0)'
+                          : 'linear-gradient(135deg, var(--color-rank-bronze, #CD7F32), #A0522D)',
                   }}
                 >
                   {rank}
                 </span>
-              ) : rank}
+              ) : (
+                rank
+              )}
             </span>
 
             {/* Avatar + Name + Platform */}
@@ -81,7 +87,9 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
             </div>
 
             {/* Score */}
-            <span className={`ssr-score ${trader.arena_score != null ? getScoreColor(trader.arena_score) : ''}`}>
+            <span
+              className={`ssr-score ${trader.arena_score != null ? getScoreColor(trader.arena_score) : ''}`}
+            >
               {trader.arena_score != null ? Number(trader.arena_score).toFixed(0) : '—'}
             </span>
 
