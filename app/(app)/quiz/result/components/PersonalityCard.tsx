@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState } from 'react'
+import Image from 'next/image'
 import type { PersonalityType } from '../../components/types'
 import { TYPE_TEXT_COLOR } from '../../components/quiz-data'
-import { QuizIcon } from './QuizIcon'
 
 // Approximate rarity distribution per type (updated periodically)
 const TYPE_RARITY: Record<string, number> = {
@@ -111,15 +111,27 @@ export default function PersonalityCard({
         </div>
       )}
 
-      {/* Hero icon with spring entrance */}
+      {/* Hero character illustration */}
       <div
         className="quiz-hero-icon"
         style={{
-          background: `${type.color}15`,
-          border: `1px solid ${type.color}30`,
+          background: `${type.color}10`,
+          border: `1px solid ${type.color}20`,
+          width: 140,
+          height: 140,
+          borderRadius: 24,
+          overflow: 'hidden',
         }}
       >
-        <QuizIcon name={type.icon} color={type.color} size={34} />
+        <Image
+          src={`/images/quiz/${type.id}.jpg`}
+          alt={tr(type.nameKey)}
+          width={140}
+          height={140}
+          style={{ objectFit: 'contain', objectPosition: 'center bottom' }}
+          priority
+          unoptimized
+        />
       </div>
 
       {/* Type name — large hero weight */}

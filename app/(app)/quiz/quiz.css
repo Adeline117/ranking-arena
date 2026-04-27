@@ -643,9 +643,9 @@
 
 /* Hero icon with spring entrance */
 .quiz-hero-icon {
-  width: 72px;
-  height: 72px;
-  border-radius: 18px;
+  width: 140px;
+  height: 140px;
+  border-radius: 24px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1114,9 +1114,9 @@
   }
 
   .quiz-hero-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 14px;
+    width: 120px;
+    height: 120px;
+    border-radius: 20px;
   }
 
   .quiz-risk-segment {
