@@ -1,4 +1,3 @@
-
 'use client'
 
 import { Suspense, lazy, useEffect } from 'react'
@@ -31,10 +30,10 @@ const TrendingHashtags = lazy(() => import('../sidebar/TrendingHashtags'))
 // Others stagger by ~800ms each. Total spread: 0 → 2400ms which is well
 // under any reasonable user-first-interaction window.
 const WIDGET_DELAYS = {
-  watchlist: 0,         // first to mount — most visible above the fold
-  hotDiscussions: 800,  // left column, social, secondary priority
+  watchlist: 0, // first to mount — most visible above the fold
+  hotDiscussions: 800, // left column, social, secondary priority
   trendingHashtags: 1600,
-  newsFlash: 2400,      // bottom of right column, lowest priority
+  newsFlash: 2400, // bottom of right column, lowest priority
 }
 
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
@@ -47,119 +46,188 @@ interface HomePageProps {
   initialCategoryCounts?: CategoryCounts
 }
 
-export default function HomePage({ initialTraders, initialLastUpdated, heroStats, initialTotalCount, initialCategoryCounts }: HomePageProps) {
+export default function HomePage({
+  initialTraders,
+  initialLastUpdated,
+  heroStats,
+  initialTotalCount,
+  initialCategoryCounts,
+}: HomePageProps) {
   // SSR TopNav stays visible permanently (no portal, no removal).
   // globals.css no longer hides #ssr-topnav when Phase 2 loads.
 
-  // :has() fallback — older browsers (Firefox <121, Safari <15.4) don't support :has().
-  // Add class to <html> so the CSS rule .homepage-interactive-mounted can hide SSR shells.
-  useEffect(() => {
-    document.documentElement.classList.add('homepage-interactive-mounted')
-    return () => {
-      document.documentElement.classList.remove('homepage-interactive-mounted')
-    }
-  }, [])
+  // SSR shell hiding moved to HomePageClient.tsx — only hides when data is ready.
 
   return (
     <>
-      <div
-        id="homepage-interactive"
-        suppressHydrationWarning
-        className="home-page-root"
-      >
-
-      <div className="container-padding has-mobile-nav home-page-container">
-        <h1 className="sr-only">Arena</h1>
-        {/* Phase 2 hero REMOVED — SSR hero stays visible permanently as LCP element.
+      <div id="homepage-interactive" suppressHydrationWarning className="home-page-root">
+        <div className="container-padding has-mobile-nav home-page-container">
+          <h1 className="sr-only">Arena</h1>
+          {/* Phase 2 hero REMOVED — SSR hero stays visible permanently as LCP element.
             Rendering a Phase 2 hero would paint a new large element at ~10s on slow 4G,
             resetting LCP from 1.2s to 10s. SSR hero is identical visual content. */}
-        <div className="contain-content">
-          <Suspense fallback={null}><FoundingMemberBanner /></Suspense>
-        </div>
-        {/* ExchangePartners fallback: padding:10px*2 + content~26px + border:1px = 47px.
+          <div className="contain-content">
+            <Suspense fallback={null}>
+              <FoundingMemberBanner />
+            </Suspense>
+          </div>
+          {/* ExchangePartners fallback: padding:10px*2 + content~26px + border:1px = 47px.
             Must match actual rendered height to avoid CLS when component loads. */}
-        <Suspense fallback={<div className="contain-layout-style" style={{ height: 47, borderBottom: '1px solid var(--color-border-primary)' }} />}><ExchangePartners /></Suspense>
-        <ThreeColumnLayout
-          leftSidebar={
-            features.social ? (
-              <SectionErrorBoundary>
-                <DeferredMount
-                  delayMs={WIDGET_DELAYS.hotDiscussions}
-                  fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 400, borderRadius: tokens.radius.lg }} />}
-                >
-                  <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 400, borderRadius: tokens.radius.lg }} />}>
-                    <HotDiscussions />
-                  </Suspense>
-                </DeferredMount>
-              </SectionErrorBoundary>
-            ) : null
-          }
-          rightSidebar={
-            <div className="contain-layout-style" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              <div style={{ flexShrink: 0 }}>
+          <Suspense
+            fallback={
+              <div
+                className="contain-layout-style"
+                style={{ height: 47, borderBottom: '1px solid var(--color-border-primary)' }}
+              />
+            }
+          >
+            <ExchangePartners />
+          </Suspense>
+          <ThreeColumnLayout
+            leftSidebar={
+              features.social ? (
                 <SectionErrorBoundary>
                   <DeferredMount
-                    delayMs={WIDGET_DELAYS.watchlist}
-                    fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 200, borderRadius: tokens.radius.lg }} />}
+                    delayMs={WIDGET_DELAYS.hotDiscussions}
+                    fallback={
+                      <div
+                        className="skeleton contain-layout-style"
+                        style={{ minHeight: 400, borderRadius: tokens.radius.lg }}
+                      />
+                    }
                   >
-                    <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 200, borderRadius: tokens.radius.lg }} />}>
-                      <WatchlistMarket />
+                    <Suspense
+                      fallback={
+                        <div
+                          className="skeleton contain-layout-style"
+                          style={{ minHeight: 400, borderRadius: tokens.radius.lg }}
+                        />
+                      }
+                    >
+                      <HotDiscussions />
                     </Suspense>
                   </DeferredMount>
                 </SectionErrorBoundary>
-              </div>
-              {features.social && (
+              ) : null
+            }
+            rightSidebar={
+              <div
+                className="contain-layout-style"
+                style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+              >
                 <div style={{ flexShrink: 0 }}>
                   <SectionErrorBoundary>
                     <DeferredMount
-                      delayMs={WIDGET_DELAYS.trendingHashtags}
-                      fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 120, borderRadius: tokens.radius.lg }} />}
+                      delayMs={WIDGET_DELAYS.watchlist}
+                      fallback={
+                        <div
+                          className="skeleton contain-layout-style"
+                          style={{ minHeight: 200, borderRadius: tokens.radius.lg }}
+                        />
+                      }
                     >
-                      <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 120, borderRadius: tokens.radius.lg }} />}>
-                        <TrendingHashtags />
+                      <Suspense
+                        fallback={
+                          <div
+                            className="skeleton contain-layout-style"
+                            style={{ minHeight: 200, borderRadius: tokens.radius.lg }}
+                          />
+                        }
+                      >
+                        <WatchlistMarket />
                       </Suspense>
                     </DeferredMount>
                   </SectionErrorBoundary>
                 </div>
-              )}
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <SectionErrorBoundary>
-                  <DeferredMount
-                    delayMs={WIDGET_DELAYS.newsFlash}
-                    fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 300, borderRadius: tokens.radius.lg }} />}
-                  >
-                    <Suspense fallback={<div className="skeleton contain-layout-style" style={{ minHeight: 300, borderRadius: tokens.radius.lg }} />}>
-                      <NewsFlash />
-                    </Suspense>
-                  </DeferredMount>
-                </SectionErrorBoundary>
+                {features.social && (
+                  <div style={{ flexShrink: 0 }}>
+                    <SectionErrorBoundary>
+                      <DeferredMount
+                        delayMs={WIDGET_DELAYS.trendingHashtags}
+                        fallback={
+                          <div
+                            className="skeleton contain-layout-style"
+                            style={{ minHeight: 120, borderRadius: tokens.radius.lg }}
+                          />
+                        }
+                      >
+                        <Suspense
+                          fallback={
+                            <div
+                              className="skeleton contain-layout-style"
+                              style={{ minHeight: 120, borderRadius: tokens.radius.lg }}
+                            />
+                          }
+                        >
+                          <TrendingHashtags />
+                        </Suspense>
+                      </DeferredMount>
+                    </SectionErrorBoundary>
+                  </div>
+                )}
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <SectionErrorBoundary>
+                    <DeferredMount
+                      delayMs={WIDGET_DELAYS.newsFlash}
+                      fallback={
+                        <div
+                          className="skeleton contain-layout-style"
+                          style={{ minHeight: 300, borderRadius: tokens.radius.lg }}
+                        />
+                      }
+                    >
+                      <Suspense
+                        fallback={
+                          <div
+                            className="skeleton contain-layout-style"
+                            style={{ minHeight: 300, borderRadius: tokens.radius.lg }}
+                          />
+                        }
+                      >
+                        <NewsFlash />
+                      </Suspense>
+                    </DeferredMount>
+                  </SectionErrorBoundary>
+                </div>
               </div>
-            </div>
-          }
-        >
-          <SectionErrorBoundary>
-            {/* Structured ranking skeleton (header row + 25 table rows) instead of a
+            }
+          >
+            <SectionErrorBoundary>
+              {/* Structured ranking skeleton (header row + 25 table rows) instead of a
                 flat shimmer block — better hints at the real content structure and
                 reduces perceived jank. min-height is preserved by the wrapping div
                 so mobile-sidebar-widgets button doesn't shift on content swap. */}
-            <Suspense fallback={
-              <div className="contain-layout-style" style={{ minHeight: 1340 }}>
-                <RankingSkeleton rows={25} />
-              </div>
-            }>
-                <HomePageClient initialTraders={initialTraders} initialLastUpdated={initialLastUpdated} initialTotalCount={initialTotalCount} initialCategoryCounts={initialCategoryCounts} />
-            </Suspense>
-          </SectionErrorBoundary>
-        </ThreeColumnLayout>
-      </div>
+              <Suspense
+                fallback={
+                  <div className="contain-layout-style" style={{ minHeight: 1340 }}>
+                    <RankingSkeleton rows={25} />
+                  </div>
+                }
+              >
+                <HomePageClient
+                  initialTraders={initialTraders}
+                  initialLastUpdated={initialLastUpdated}
+                  initialTotalCount={initialTotalCount}
+                  initialCategoryCounts={initialCategoryCounts}
+                />
+              </Suspense>
+            </SectionErrorBoundary>
+          </ThreeColumnLayout>
+        </div>
 
-      <div className="contain-content">
-        <Suspense fallback={<div style={{ minHeight: 200 }} />}><Footer /></Suspense>
+        <div className="contain-content">
+          <Suspense fallback={<div style={{ minHeight: 200 }} />}>
+            <Footer />
+          </Suspense>
+        </div>
+        <Suspense fallback={null}>
+          <MobileBottomNav />
+        </Suspense>
+        <Suspense fallback={null}>
+          <GuestSignupPrompt />
+        </Suspense>
+        {/* WelcomeModal removed — homepage content IS the onboarding */}
       </div>
-      <Suspense fallback={null}><MobileBottomNav /></Suspense>
-      <Suspense fallback={null}><GuestSignupPrompt /></Suspense>
-      {/* WelcomeModal removed — homepage content IS the onboarding */}
-    </div>
     </>
   )
 }

@@ -24,26 +24,32 @@ interface HomePageClientProps {
  * Server-side pagination: SSR provides first page + totalCount.
  * Client fetches subsequent pages from /api/traders on demand.
  */
-export default function HomePageClient({ initialTraders, initialLastUpdated, initialTotalCount, initialCategoryCounts }: HomePageClientProps) {
+export default function HomePageClient({
+  initialTraders,
+  initialLastUpdated,
+  initialTotalCount,
+  initialCategoryCounts,
+}: HomePageClientProps) {
   const { isLoggedIn } = useAuthSession()
   const { t } = useLanguage()
   const router = useRouter()
 
   // Convert InitialTrader[] to Trader[] for compatibility
-  const convertedInitialTraders: Trader[] | undefined = useMemo(() =>
-    initialTraders?.map(t => ({
-      id: t.id,
-      handle: t.handle,
-      roi: t.roi,
-      pnl: t.pnl,
-      win_rate: t.win_rate,
-      max_drawdown: t.max_drawdown,
-      followers: t.followers,
-      source: t.source,
-      avatar_url: t.avatar_url,
-      arena_score: t.arena_score,
-      score_confidence: t.score_confidence,
-    })),
+  const convertedInitialTraders: Trader[] | undefined = useMemo(
+    () =>
+      initialTraders?.map((t) => ({
+        id: t.id,
+        handle: t.handle,
+        roi: t.roi,
+        pnl: t.pnl,
+        win_rate: t.win_rate,
+        max_drawdown: t.max_drawdown,
+        followers: t.followers,
+        source: t.source,
+        avatar_url: t.avatar_url,
+        arena_score: t.arena_score,
+        score_confidence: t.score_confidence,
+      })),
     [initialTraders]
   )
 
@@ -70,42 +76,47 @@ export default function HomePageClient({ initialTraders, initialLastUpdated, ini
     initialCategoryCounts,
   })
 
-  // Hide SSR ranking table AFTER Phase 2 content has rendered.
+  // Hide SSR ranking table only AFTER we have real data to show.
+  // Previously this ran on mount (useLayoutEffect + []), which hid the SSR
+  // table immediately — before React had data to replace it with. On slow
+  // mobile connections (4MB JS), this created a "spinner of death" where the
+  // SSR content vanished and the loading skeleton appeared for seconds or forever.
   //
-  // Previously: ssrTable.remove() caused layout recalc + a visible gap if
-  // Phase 2 hadn't painted yet (the 1340px element disappearing shifts
-  // everything below it). Now we use display:none which is repaint-only
-  // and avoids the layout thrash. A single CSS class also lets us defer
-  // the removal until the NEXT frame if needed for a crossfade.
-  //
-  // useLayoutEffect still runs before paint → browser sees a single
-  // consistent frame, never the double-content state.
+  // Root fix: wait until `loading` is false (data ready) before hiding SSR.
+  // Hide SSR shells only AFTER we have real data to show.
+  // This prevents the "spinner of death" on slow mobile — SSR content stays
+  // visible until React has fully loaded and has data to display.
   useLayoutEffect(() => {
-    const ssrTable = document.getElementById('ssr-ranking-table')
-    if (ssrTable) {
-      // display:none is cheaper than .remove() (no DOM mutation, just
-      // style invalidation). Also keeps the element around in case of
-      // hydration errors that would benefit from fallback content.
-      ;(ssrTable as HTMLElement).style.display = 'none'
+    if (loading) return
+    for (const id of ['ssr-ranking-table', 'ssr-hero-shell']) {
+      const el = document.getElementById(id)
+      if (el) el.style.display = 'none'
     }
-  }, [])
+  }, [loading])
 
   // Sync time range with URL on initial load
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const urlTimeRange = params.get('range') as TimeRange | null
-    if (urlTimeRange && ['90D', '30D', '7D'].includes(urlTimeRange) && urlTimeRange !== activeTimeRange) {
+    if (
+      urlTimeRange &&
+      ['90D', '30D', '7D'].includes(urlTimeRange) &&
+      urlTimeRange !== activeTimeRange
+    ) {
       changeTimeRange(urlTimeRange)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount
   }, [])
 
-  const handleTimeRangeChange = useCallback((range: TimeRange) => {
-    changeTimeRange(range)
-    const params = new URLSearchParams(window.location.search)
-    params.set('range', range)
-    router.replace(`?${params.toString()}`, { scroll: false })
-  }, [changeTimeRange, router])
+  const handleTimeRangeChange = useCallback(
+    (range: TimeRange) => {
+      changeTimeRange(range)
+      const params = new URLSearchParams(window.location.search)
+      params.set('range', range)
+      router.replace(`?${params.toString()}`, { scroll: false })
+    },
+    [changeTimeRange, router]
+  )
 
   const handlePullRefresh = async () => {
     if (refresh) {
