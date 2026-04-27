@@ -268,7 +268,7 @@ export async function GET(request: NextRequest) {
     // the Promise.race here fires first, allowing us to mark the platform as
     // timed out and continue to the next one without the watchdog firing.
     function getRoutePlatformTimeout(platform: string): number {
-      if (tierFastSet.has(platform)) return 8_000 // batch-cached: <5s typical, 8s safety margin
+      if (tierFastSet.has(platform)) return 15_000 // was 8s — too tight, bitunix/bitfinex need 10-12s
       if (tierSlowSet.has(platform)) return 45_000 // VPS/rate-limited: 45s (was 90s — 3 batches × 90s = 270s blew 300s limit)
       return 25_000 // medium tier: 25s (was 50s — 4 batches × 50s = 200s blew budget)
     }
