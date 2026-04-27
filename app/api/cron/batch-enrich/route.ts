@@ -89,16 +89,18 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
 // Each tier has its own concurrency to prevent slow platforms from starving the time budget.
 const TIER_FAST = [
   'bitunix',
-  'xt',
-  'bitfinex',
-  'toobit',
-  'coinex', // batch-cached: instant
+  // bitfinex moved to MEDIUM — enrichment-runner internal timeout is 30s,
+  // xt, toobit, coinex, btcc moved to MEDIUM — they use VPS scraper (15-30s)
 ]
 const TIER_MEDIUM = [
   'binance_futures',
   'okx_futures',
   'hyperliquid',
-  'jupiter_perps', // fast APIs
+  'jupiter_perps',
+  'xt', // VPS scraper — moved from FAST
+  'toobit', // VPS scraper — moved from FAST
+  'coinex', // VPS scraper — moved from FAST
+  'bitfinex', // enrichment needs 30s — moved from FAST
   'htx_futures',
   'gateio',
   'mexc',
