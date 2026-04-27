@@ -336,10 +336,11 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     cachedResolveTrader(decodedHandle),
   ])
 
-  // If not found, 404
-  if (!resolved) {
-    notFound()
-  }
+  // notFound() handled in generateMetadata() — do NOT call here.
+  // Calling notFound() inside a page component triggers Next.js Suspense
+  // to inject <meta name="robots" content="noindex"/> for ALL pages,
+  // even valid ones. generateMetadata runs before streaming starts.
+  if (!resolved) return null
 
   // Redirect claimed traders to canonical /u/ URL (avoids SEO duplicate content)
   if (userHandle) {
