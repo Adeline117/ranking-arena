@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import Image from 'next/image'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { setLanguage, onTranslationsReady } from '@/lib/i18n'
@@ -228,8 +229,44 @@ export default function ResultPageClient({
           </div>
         )}
 
+        {/* All 12 Types Overview */}
+        <div
+          className="quiz-section-card"
+          style={{ marginTop: 16, '--section-delay': '1.0s' } as React.CSSProperties}
+        >
+          <div className="quiz-section-header">
+            <div
+              className="quiz-section-accent"
+              style={{
+                background: 'linear-gradient(135deg, var(--color-brand), var(--color-brand-deep))',
+              }}
+            />
+            <h3 className="quiz-section-title">
+              {t('quizAllTypesTitle') !== 'quizAllTypesTitle'
+                ? t('quizAllTypesTitle')
+                : '12 Trading Personalities'}
+            </h3>
+          </div>
+          <div
+            style={{
+              borderRadius: 10,
+              overflow: 'hidden',
+              border: '1px solid var(--glass-border-light)',
+            }}
+          >
+            <Image
+              src="/images/quiz/types-overview.jpg"
+              alt="12 Trading Personality Types Overview"
+              width={640}
+              height={427}
+              style={{ width: '100%', height: 'auto', display: 'block' }}
+              unoptimized
+            />
+          </div>
+        </div>
+
         {/* Master Biography */}
-        <div style={{ marginTop: 20, '--section-delay': '1.1s' } as React.CSSProperties}>
+        <div style={{ marginTop: 20, '--section-delay': '1.2s' } as React.CSSProperties}>
           <MasterSection type={pType} tr={t} />
         </div>
 
