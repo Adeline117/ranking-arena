@@ -81,12 +81,18 @@ function getWatchlist(): string[] {
       const parsed = JSON.parse(stored)
       return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_COINS
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return DEFAULT_COINS
 }
 
 function saveWatchlist(ids: string[]) {
-  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(ids)) } catch { /* ignore */ }
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(ids))
+  } catch {
+    /* ignore */
+  }
 }
 
 export default function WatchlistMarket() {
@@ -101,46 +107,59 @@ export default function WatchlistMarket() {
   }, [])
 
   // Build pairs param for SWR key
-  const pairsParam = watchIds.map(id => {
-    const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
-    return opt ? `${opt.symbol}-USD` : null
-  }).filter(Boolean).join(',')
+  const pairsParam = watchIds
+    .map((id) => {
+      const opt = FALLBACK_COIN_OPTIONS.find((c) => c.id === id)
+      return opt ? `${opt.symbol}-USD` : null
+    })
+    .filter(Boolean)
+    .join(',')
 
-  const marketFetcher = useCallback(async (url: string): Promise<CoinPrice[]> => {
-    try {
-      const res = await fetch(url)
-      // On non-200, return empty array instead of throwing — stale data or "–" is
-      // better than a visible error state in the sidebar.
-      if (!res.ok) return []
-      const data = await res.json()
-      // Handle both { rows: [...] } envelope and plain error objects gracefully
-      if (!data || typeof data !== 'object') return []
-      const rows = Array.isArray(data.rows) ? data.rows : []
-      if (rows.length === 0) return []
+  const marketFetcher = useCallback(
+    async (url: string): Promise<CoinPrice[]> => {
+      try {
+        const res = await fetch(url)
+        // On non-200, return empty array instead of throwing — stale data or "–" is
+        // better than a visible error state in the sidebar.
+        if (!res.ok) return []
+        const data = await res.json()
+        // Handle both { rows: [...] } envelope and plain error objects gracefully
+        if (!data || typeof data !== 'object') return []
+        const rows = Array.isArray(data.rows) ? data.rows : []
+        if (rows.length === 0) return []
 
-      return watchIds.map(id => {
-        const opt = FALLBACK_COIN_OPTIONS.find(c => c.id === id)
-        if (!opt) return null
-        const row = rows.find((r: { symbol: string }) => r.symbol === `${opt.symbol}-USD`)
-        if (!row) return null
-        const price = parseFloat(String(row.price ?? '').replace(/,/g, '')) || 0
-        const change = parseFloat(String(row.changePct ?? '')) || 0
-        return { id, symbol: opt.symbol, price, change24h: change }
-      }).filter((r): r is CoinPrice => r !== null)
-    } catch {
-      // Network error or parse failure — return empty array to avoid error state
-      return []
-    }
-  }, [watchIds])
+        return watchIds
+          .map((id) => {
+            const opt = FALLBACK_COIN_OPTIONS.find((c) => c.id === id)
+            if (!opt) return null
+            const row = rows.find((r: { symbol: string }) => r.symbol === `${opt.symbol}-USD`)
+            if (!row) return null
+            const price = parseFloat(String(row.price ?? '').replace(/,/g, '')) || 0
+            const change = parseFloat(String(row.changePct ?? '')) || 0
+            return { id, symbol: opt.symbol, price, change24h: change }
+          })
+          .filter((r): r is CoinPrice => r !== null)
+      } catch {
+        // Network error or parse failure — return empty array to avoid error state
+        return []
+      }
+    },
+    [watchIds]
+  )
 
   // Defer query activation until after LCP — prevents simultaneous sidebar fetches from blocking main thread
   const marketUrl = pairsParam ? `/api/market?pairs=${encodeURIComponent(pairsParam)}` : null
   const deferredReady = useDeferredKey(!!marketUrl, 1200)
 
-  const { data: coins = [], isLoading: loading, error: swrError, refetch: mutateMarket } = useQuery({
+  const {
+    data: coins = [],
+    isLoading: loading,
+    error: swrError,
+    refetch: mutateMarket,
+  } = useQuery({
     queryKey: ['watchlist-market', pairsParam],
     queryFn: () => marketFetcher(marketUrl!),
-    enabled: !!deferredReady && !!marketUrl,
+    enabled: !!deferredReady && !!marketUrl && typeof window !== 'undefined',
     refetchOnWindowFocus: false,
     staleTime: 30000,
     refetchInterval: 60000,
@@ -150,18 +169,17 @@ export default function WatchlistMarket() {
   })
 
   const toggleCoin = (coinId: string) => {
-    setWatchIds(prev => {
-      const next = prev.includes(coinId)
-        ? prev.filter(id => id !== coinId)
-        : [...prev, coinId]
+    setWatchIds((prev) => {
+      const next = prev.includes(coinId) ? prev.filter((id) => id !== coinId) : [...prev, coinId]
       saveWatchlist(next)
       return next
     })
   }
 
-  const filteredOptions = coinOptions.filter(c =>
-    c.symbol.toLowerCase().includes(search.toLowerCase()) ||
-    c.name.toLowerCase().includes(search.toLowerCase())
+  const filteredOptions = coinOptions.filter(
+    (c) =>
+      c.symbol.toLowerCase().includes(search.toLowerCase()) ||
+      c.name.toLowerCase().includes(search.toLowerCase())
   )
 
   const handleRowEnter = useCallback((e: ReactMouseEvent<HTMLDivElement>) => {
@@ -173,28 +191,65 @@ export default function WatchlistMarket() {
 
   return (
     <SidebarCard title={t('sidebarWatchlist')}>
-      {loading ? (
+      {loading || !deferredReady ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-          {[1, 2, 3, 4].map(i => (
-            <div key={i} className="skeleton" style={{ height: 40, borderRadius: tokens.radius.md }} />
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="skeleton"
+              style={{ height: 40, borderRadius: tokens.radius.md }}
+            />
           ))}
         </div>
       ) : swrError ? (
-        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.sm }}>
+        <div
+          style={{
+            padding: `${tokens.spacing[3]} 0`,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
           <div>{t('sidebarLoadFailedShort')}</div>
           <button
             onClick={() => mutateMarket()}
-            style={{ marginTop: tokens.spacing[1.5], padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{
+              marginTop: tokens.spacing[1.5],
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.sm,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              cursor: 'pointer',
+            }}
           >
             {t('retry') || 'Retry'}
           </button>
         </div>
       ) : coins.length === 0 ? (
-        <div style={{ padding: `${tokens.spacing[3]} 0`, textAlign: 'center', color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>
-          {t('marketDataLoading') || 'Loading market data...'}
+        <div
+          style={{
+            padding: `${tokens.spacing[3]} 0`,
+            textAlign: 'center',
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
+          <div>{t('sidebarLoadFailedShort')}</div>
           <button
             onClick={() => mutateMarket()}
-            style={{ display: 'block', margin: `${tokens.spacing[2]} auto 0`, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`, borderRadius: tokens.radius.sm, border: `1px solid ${tokens.colors.border.primary}`, background: 'transparent', color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.xs, cursor: 'pointer' }}
+            style={{
+              display: 'block',
+              margin: `${tokens.spacing[2]} auto 0`,
+              padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.sm,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.xs,
+              cursor: 'pointer',
+            }}
           >
             {t('retry') || 'Retry'}
           </button>
@@ -206,28 +261,56 @@ export default function WatchlistMarket() {
               <div
                 key={coin.id}
                 style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
                   padding: `${tokens.spacing[2]} ${tokens.spacing[1.5]}`,
-                  borderBottom: idx < coins.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+                  borderBottom:
+                    idx < coins.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                   borderRadius: tokens.radius.sm,
                   transition: `background ${tokens.transition.fast}`,
                 }}
                 onMouseEnter={handleRowEnter}
                 onMouseLeave={handleRowLeave}
               >
-                <span style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1.5], fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.semibold, color: tokens.colors.text.primary }}>
+                <span
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[1.5],
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: tokens.typography.fontWeight.semibold,
+                    color: tokens.colors.text.primary,
+                  }}
+                >
                   <CryptoIcon symbol={coin.symbol} size={18} />
                   {coin.symbol}
                 </span>
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.medium, color: tokens.colors.text.primary }}>
-                    ${coin.price.toLocaleString('en-US', { maximumFractionDigits: coin.price < 1 ? 4 : 2 })}
+                  <div
+                    style={{
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.medium,
+                      color: tokens.colors.text.primary,
+                    }}
+                  >
+                    $
+                    {coin.price.toLocaleString('en-US', {
+                      maximumFractionDigits: coin.price < 1 ? 4 : 2,
+                    })}
                   </div>
-                  <div style={{
-                    fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.semibold,
-                    color: coin.change24h >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                  }}>
-                    {coin.change24h >= 0 ? '+' : ''}{coin.change24h.toFixed(2)}%
+                  <div
+                    style={{
+                      fontSize: tokens.typography.fontSize.xs,
+                      fontWeight: tokens.typography.fontWeight.semibold,
+                      color:
+                        coin.change24h >= 0
+                          ? tokens.colors.accent.success
+                          : tokens.colors.accent.error,
+                    }}
+                  >
+                    {coin.change24h >= 0 ? '+' : ''}
+                    {coin.change24h.toFixed(2)}%
                   </div>
                 </div>
               </div>
@@ -238,28 +321,28 @@ export default function WatchlistMarket() {
           <button
             onClick={() => setShowPicker(!showPicker)}
             style={{
-              width: '100%', marginTop: tokens.spacing[2], padding: `${tokens.spacing[2]} 0`,
+              width: '100%',
+              marginTop: tokens.spacing[2],
+              padding: `${tokens.spacing[2]} 0`,
               background: 'transparent',
               border: `1px dashed ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.md,
               color: tokens.colors.text.secondary,
-              fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.medium,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: tokens.typography.fontWeight.medium,
               cursor: 'pointer',
               transition: `all ${tokens.transition.fast}`,
             }}
-            onMouseEnter={e => {
+            onMouseEnter={(e) => {
               e.currentTarget.style.borderColor = tokens.colors.accent.brand
               e.currentTarget.style.color = tokens.colors.accent.brand
             }}
-            onMouseLeave={e => {
+            onMouseLeave={(e) => {
               e.currentTarget.style.borderColor = tokens.colors.border.primary
               e.currentTarget.style.color = tokens.colors.text.secondary
             }}
           >
-            {showPicker
-              ? t('sidebarCollapse')
-              : t('sidebarManageWatchlist')
-            }
+            {showPicker ? t('sidebarCollapse') : t('sidebarManageWatchlist')}
           </button>
 
           {/* Coin picker */}
@@ -268,11 +351,13 @@ export default function WatchlistMarket() {
               <input
                 type="text"
                 value={search}
-                onChange={e => setSearch(e.target.value)}
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder={t('sidebarSearchCoins')}
                 aria-label={t('searchCoin')}
                 style={{
-                  width: '100%', padding: `${tokens.spacing[1.5]} ${tokens.spacing[2.5]}`, marginBottom: tokens.spacing[2],
+                  width: '100%',
+                  padding: `${tokens.spacing[1.5]} ${tokens.spacing[2.5]}`,
+                  marginBottom: tokens.spacing[2],
                   borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.bg.primary,
@@ -283,7 +368,7 @@ export default function WatchlistMarket() {
                 }}
               />
               <div style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[1.5] }}>
-                {filteredOptions.map(opt => {
+                {filteredOptions.map((opt) => {
                   const selected = watchIds.includes(opt.id)
                   return (
                     <button
@@ -295,7 +380,8 @@ export default function WatchlistMarket() {
                         border: selected ? 'none' : `1px solid ${tokens.colors.border.primary}`,
                         background: selected ? tokens.colors.accent.brand : 'transparent',
                         color: selected ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
-                        fontSize: tokens.typography.fontSize.xs, fontWeight: tokens.typography.fontWeight.medium,
+                        fontSize: tokens.typography.fontSize.xs,
+                        fontWeight: tokens.typography.fontWeight.medium,
                         cursor: 'pointer',
                         transition: `all ${tokens.transition.fast}`,
                       }}
