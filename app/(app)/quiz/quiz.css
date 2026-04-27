@@ -777,17 +777,7 @@
   position: relative;
 }
 
-/* Dark overlay behind character art so luminosity blend reads correctly on dark bg */
-.quiz-hero-icon::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: rgba(10, 10, 20, 0.55);
-  z-index: 0;
-  pointer-events: none;
-}
-
+/* Character art image positioning */
 .quiz-hero-icon img {
   position: relative;
   z-index: 1;
