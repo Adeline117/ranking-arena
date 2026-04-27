@@ -30,8 +30,15 @@ const loadedLangs = new Set<Language>()
 // Track when translations finish loading (client-side re-render trigger)
 let translationVersion = 0
 const translationListeners = new Set<() => void>()
-export function getTranslationVersion() { return translationVersion }
-export function onTranslationsReady(cb: () => void) { translationListeners.add(cb); return () => { translationListeners.delete(cb) } }
+export function getTranslationVersion() {
+  return translationVersion
+}
+export function onTranslationsReady(cb: () => void) {
+  translationListeners.add(cb)
+  return () => {
+    translationListeners.delete(cb)
+  }
+}
 
 function populateEnglish(dict: Record<string, string>) {
   translationCache.en = dict
@@ -46,19 +53,22 @@ function populateEnglish(dict: Record<string, string>) {
 if (typeof window === 'undefined') {
   // Server-side: synchronous require so t() works during SSR.
   // Server bundles are NOT sent to the client — zero bundle size impact.
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  try { populateEnglish(require('./i18n/en').default) } catch { /* build env fallback: async below */ }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    populateEnglish(require('./i18n/en').default)
+  } catch {
+    /* build env fallback: async below */
+  }
 }
 
 // Client-side: async import for code splitting (saves ~62KB gzipped from initial bundle).
 // Fires immediately at module load time. On client, resolves before Phase 2 hydration (~4s).
 // On server, this is a no-op if require() already populated above.
 if (typeof window !== 'undefined' || !loadedLangs.has('en')) {
-  // eslint-disable-next-line @typescript-eslint/no-floating-promises
-  import('./i18n/en').then(m => {
+  import('./i18n/en').then((m) => {
     populateEnglish(m.default as Record<string, string>)
     translationVersion++
-    translationListeners.forEach(cb => cb())
+    translationListeners.forEach((cb) => cb())
   })
 }
 
@@ -98,7 +108,7 @@ let currentLanguage: Language = 'en'
 export function getLanguage(): Language {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('language') as Language | null
-    if (saved && SUPPORTED_LANGUAGES.some(l => l.code === saved)) {
+    if (saved && SUPPORTED_LANGUAGES.some((l) => l.code === saved)) {
       currentLanguage = saved
       return saved
     }
@@ -118,5 +128,14 @@ export function setLanguage(lang: Language) {
 
 export function t(key: TranslationKey): string {
   const lang = getLanguage()
-  return translationCache[lang][key] || translationCache.en[key] || key
+  const value = translationCache[lang][key] || translationCache.en[key]
+  if (!value) {
+    // Surface missing keys loudly in development so they get fixed before deploy.
+    // In production, fall back to the key itself to avoid blank UI.
+    if (process.env.NODE_ENV === 'development') {
+      console.warn(`[i18n] Missing translation key: "${key}" (lang=${lang})`)
+    }
+    return key
+  }
+  return value
 }
