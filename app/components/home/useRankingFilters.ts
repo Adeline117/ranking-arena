@@ -102,7 +102,7 @@ interface UseRankingFiltersOptions {
   categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
   fetchPage?: (
     page: number,
-    opts?: { category?: string; sortBy?: string; sortDir?: string }
+    opts?: { category?: string; sortBy?: string; sortDir?: string; exchange?: string }
   ) => Promise<void>
 }
 
