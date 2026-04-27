@@ -193,24 +193,19 @@ export default function HomePage({
             }
           >
             <SectionErrorBoundary>
-              {/* Structured ranking skeleton (header row + 25 table rows) instead of a
-                flat shimmer block — better hints at the real content structure and
-                reduces perceived jank. min-height is preserved by the wrapping div
-                so mobile-sidebar-widgets button doesn't shift on content swap. */}
-              <Suspense
-                fallback={
-                  <div className="contain-layout-style" style={{ minHeight: 1340 }}>
-                    <RankingSkeleton rows={25} />
-                  </div>
-                }
-              >
-                <HomePageClient
-                  initialTraders={initialTraders}
-                  initialLastUpdated={initialLastUpdated}
-                  initialTotalCount={initialTotalCount}
-                  initialCategoryCounts={initialCategoryCounts}
-                />
-              </Suspense>
+              {/* No Suspense wrapper — HomePageClient is statically imported (not lazy),
+                  so its code is already in the main bundle. Wrapping in Suspense caused
+                  the "spinner of death" on mobile: during hydration, Suspense showed
+                  <RankingSkeleton> which replaced the visible SSR content with a skeleton,
+                  then CSS :has() hid #ssr-ranking-table, leaving users staring at a
+                  spinner while 4.2MB JS loaded. Without Suspense, React hydrates
+                  HomePageClient in-place and SSR content stays visible throughout. */}
+              <HomePageClient
+                initialTraders={initialTraders}
+                initialLastUpdated={initialLastUpdated}
+                initialTotalCount={initialTotalCount}
+                initialCategoryCounts={initialCategoryCounts}
+              />
             </SectionErrorBoundary>
           </ThreeColumnLayout>
         </div>
