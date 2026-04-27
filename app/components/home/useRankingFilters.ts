@@ -135,13 +135,6 @@ export function useRankingFilters({
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedExchange, setSelectedExchange] = useState<string | null>(null)
 
-  // Ref so all fetchPage callers always read the latest exchange without
-  // recreating callbacks (avoids the same closure-capture issue as stateRef).
-  const selectedExchangeRef = useRef<string | null>(null)
-  useEffect(() => {
-    selectedExchangeRef.current = selectedExchange
-  }, [selectedExchange])
-
   // Listen for exchange filter events from ExchangePartners bar
   useEffect(() => {
     const handler = (e: Event) => {
@@ -165,7 +158,7 @@ export function useRankingFilters({
       setCurrentPage(1)
       if (fetchPage) {
         const apiCategory = cat === 'web3' ? 'onchain' : cat === 'all' ? undefined : cat
-        fetchPage(0, { category: apiCategory, exchange: selectedExchangeRef.current || undefined })
+        fetchPage(0, { category: apiCategory })
       }
     },
     [fetchPage]
@@ -422,7 +415,6 @@ export function useRankingFilters({
           category: apiCategory,
           sortBy: sortByMap[col] || 'arena_score',
           sortDir: dir,
-          exchange: selectedExchangeRef.current || undefined,
         })
       }
     },
@@ -449,7 +441,6 @@ export function useRankingFilters({
           category: apiCategory,
           sortBy: sortByMap[sortColumn] || 'arena_score',
           sortDir: sortDir,
-          exchange: selectedExchangeRef.current || undefined,
         })
       }
     },
@@ -794,7 +785,11 @@ export function useRankingFilters({
     setSelectedExchange(null)
     setActivePreset(null)
     setCategory('all')
-  }, [handleFilterChange])
+    // Clear sticky exchange filter and refetch all-exchange data
+    if (fetchPage) {
+      fetchPage(0, { exchange: undefined, category: undefined })
+    }
+  }, [handleFilterChange, fetchPage])
 
   const handleFilterToggle = useCallback(() => {
     if (window.matchMedia('(max-width: 768px)').matches) {

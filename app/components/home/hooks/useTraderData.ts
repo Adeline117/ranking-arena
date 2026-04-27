@@ -219,8 +219,26 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   }, [state.activeTimeRange, on])
 
   /**
+   * Sticky filter state — fetchPage remembers the last-set values for each
+   * filter dimension. Callers only pass what they want to CHANGE; everything
+   * else is carried forward automatically. This prevents any caller from
+   * accidentally dropping a filter (the root-root-root cause of the exchange
+   * page bug where pagination/sort/refresh lost the exchange param).
+   */
+  const stickyFilters = useRef<{
+    category?: string
+    sortBy: string
+    sortDir: string
+    exchange?: string
+  }>({ sortBy: 'arena_score', sortDir: 'desc' })
+
+  /**
    * Fetch a specific page from the API.
    * This is the core server-side pagination function.
+   *
+   * Filter persistence: any filter passed in opts is "sticky" — it persists
+   * across subsequent calls until explicitly changed. Pass `exchange: undefined`
+   * or `exchange: ''` to explicitly clear a sticky filter.
    */
   const fetchPage = useCallback(
     async (
@@ -233,11 +251,19 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         exchange?: string
       }
     ): Promise<void> => {
+      // Merge opts into sticky filters — only override what caller explicitly passes
+      if (opts) {
+        if ('category' in opts) stickyFilters.current.category = opts.category
+        if ('sortBy' in opts) stickyFilters.current.sortBy = opts.sortBy || 'arena_score'
+        if ('sortDir' in opts) stickyFilters.current.sortDir = opts.sortDir || 'desc'
+        if ('exchange' in opts) stickyFilters.current.exchange = opts.exchange || undefined
+      }
+
       const timeRange = opts?.timeRange || state.activeTimeRange
-      const category = opts?.category
-      const sortBy = opts?.sortBy || 'arena_score'
-      const sortDir = opts?.sortDir || 'desc'
-      const exchange = opts?.exchange ? resolveExchangeSlug(opts.exchange) : undefined
+      const { category, sortBy, sortDir } = stickyFilters.current
+      const exchange = stickyFilters.current.exchange
+        ? resolveExchangeSlug(stickyFilters.current.exchange)
+        : undefined
 
       // Cancel existing request
       const cancelKey = `page-${timeRange}`
@@ -360,13 +386,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       return
     }
     isInitialMount.current = false
-    // Preserve current exchange filter from URL (set by exchange page redirect)
-    const currentEx =
-      typeof window !== 'undefined'
-        ? new URLSearchParams(window.location.search).get('ex') ||
-          new URLSearchParams(window.location.search).get('exchange')
-        : null
-    fetchPage(0, { timeRange: state.activeTimeRange, exchange: currentEx || undefined })
+    // Sticky filters automatically preserve the current exchange
+    fetchPage(0, { timeRange: state.activeTimeRange })
   }, [state.activeTimeRange, hasInitialData, fetchPage])
 
   // Save time range preference
@@ -385,11 +406,8 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
     const silentRefresh = () => {
       lastFetchTime = Date.now()
-      // Preserve current exchange filter from URL during auto-refresh
-      const currentEx =
-        new URLSearchParams(window.location.search).get('ex') ||
-        new URLSearchParams(window.location.search).get('exchange')
-      fetchPage(0, currentEx ? { exchange: currentEx } : undefined)
+      // Sticky filters automatically preserve the current exchange
+      fetchPage(0)
         .then(() => {
           refreshFailCountRef.current = 0
         })
