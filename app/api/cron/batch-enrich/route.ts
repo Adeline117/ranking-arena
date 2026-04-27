@@ -551,6 +551,30 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    // Fallback: if plog.success() silently timed out (withDbTimeout 15s cap),
+    // pipeline_logs stays 'running' forever. Direct UPDATE as safety net.
+    try {
+      const { getSupabaseAdmin } = await import('@/lib/supabase/server')
+      const fallbackDb = getSupabaseAdmin()
+      await Promise.race([
+        fallbackDb
+          .from('pipeline_logs')
+          .update({
+            status: failed === 0 ? 'success' : 'error',
+            records_processed: succeeded,
+            ended_at: new Date().toISOString(),
+            error_message: failed > 0 ? failedItems.join('; ').slice(0, 500) : null,
+          })
+          .eq('job_name', `batch-enrich-${periodParam}${tierParam ? '-' + tierParam : ''}`)
+          .eq('status', 'running')
+          .order('started_at', { ascending: false })
+          .limit(1),
+        new Promise((r) => setTimeout(r, 10000)),
+      ])
+    } catch {
+      /* non-blocking fallback */
+    }
+
     // Finalize checkpoint and trigger downstream with trace metadata from checkpoint
     const traceMetadata = await PipelineCheckpoint.finalize(checkpoint, elapsed())
     if (succeeded > 0) {
