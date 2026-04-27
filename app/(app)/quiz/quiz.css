@@ -711,48 +711,57 @@
   z-index: 1;
 }
 
-/* The hero personality card */
+/* The hero personality card — premium collectible card feel */
 .quiz-personality-card {
-  border-radius: 16px;
-  background: var(--glass-bg-primary);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border: 1px solid var(--glass-border-light);
-  padding: clamp(28px, 5vw, 40px) clamp(20px, 4vw, 32px);
+  border-radius: clamp(18px, 4vw, 24px);
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px) saturate(1.3);
+  -webkit-backdrop-filter: blur(20px) saturate(1.3);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  padding: clamp(32px, 6vw, 48px) clamp(24px, 5vw, 36px);
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 20px;
+  gap: clamp(16px, 3.5vw, 24px);
   position: relative;
   overflow: hidden;
   animation: quizHeroEnter 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   box-shadow:
-    0 12px 40px rgba(0, 0, 0, 0.15),
-    0 0 0 1px var(--glass-border-light);
+    0 24px 80px rgba(0, 0, 0, 0.35),
+    0 4px 16px rgba(0, 0, 0, 0.2),
+    0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 1px 0 rgba(255, 255, 255, 0.04);
 }
 
-/* Wide gradient accent bar at top */
+/* Animated gradient accent bar at top — trading card edge */
 .quiz-personality-card::before {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 4px;
+  height: 2px;
   background: var(--quiz-type-gradient);
   animation: quizShimmerLine 3s ease-in-out infinite;
   background-size: 200% 100%;
+  box-shadow: 0 0 12px var(--quiz-type-color-25, transparent);
 }
 
-/* Subtle gradient wash from type color */
+/* Deep atmospheric wash from type color — trading card aura */
 .quiz-personality-card::after {
   content: '';
   position: absolute;
   top: 0;
   left: 0;
   right: 0;
-  height: 50%;
-  background: linear-gradient(180deg, var(--quiz-type-color-08, transparent) 0%, transparent 100%);
+  height: 65%;
+  background:
+    radial-gradient(
+      ellipse 80% 50% at 50% 0%,
+      var(--quiz-type-color-15, transparent) 0%,
+      transparent 70%
+    ),
+    linear-gradient(180deg, var(--quiz-type-color-08, transparent) 0%, transparent 100%);
   pointer-events: none;
   z-index: 0;
 }
@@ -762,18 +771,12 @@
   z-index: 1;
 }
 
-/* Hero icon with spring entrance */
+/* Hero icon — large character art centerpiece */
 .quiz-hero-icon {
-  width: 148px;
-  height: 148px;
-  border-radius: 28px;
   display: flex;
   align-items: center;
   justify-content: center;
   animation: quizIconSpringIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275) 0.2s both;
-  box-shadow:
-    0 8px 32px var(--quiz-type-color-25, rgba(0, 0, 0, 0.2)),
-    0 0 0 1px var(--quiz-type-color-15, transparent);
   position: relative;
 }
 
@@ -783,65 +786,33 @@
   z-index: 1;
 }
 
+/* Type name inherits inline styles from component for size/color/shadow */
 .quiz-hero-type-name {
-  font-size: clamp(28px, 7vw, 40px);
-  font-weight: 800;
+  /* Base styles — overridden by inline for premium feel */
   margin: 0;
-  text-align: center;
-  letter-spacing: -0.02em;
-  line-height: 1.1;
-  animation: quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both;
 }
 
-/* Animated match percentage counter */
+/* Match section — inline styles from component handle layout */
 .quiz-match-section {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  width: 100%;
-  max-width: 260px;
-  animation: quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both;
+  /* Inherits inline styles */
 }
 
+/* Match bar track — inline styles from component */
 .quiz-match-bar-track {
-  width: 100%;
-  height: 16px;
-  border-radius: 8px;
-  background: var(--color-bg-tertiary);
-  overflow: hidden;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.3);
+  /* Inherits inline styles */
 }
 
+/* Match bar fill — inline styles from component handle glow + gradient */
 .quiz-match-bar-fill {
-  height: 100%;
-  border-radius: 8px;
-  transition: width 1.2s cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative;
-  box-shadow:
-    0 0 12px var(--quiz-type-color-25, rgba(0, 0, 0, 0.2)),
-    0 0 24px var(--quiz-type-color-15, transparent);
+  /* Inherits inline styles */
 }
 
-/* Glowing trailing edge on match bar */
+/* Remove the old ::after — now handled by inline child divs */
 .quiz-match-bar-fill::after {
-  content: '';
-  position: absolute;
-  right: -1px;
-  top: 1px;
-  bottom: 1px;
-  width: 20px;
-  border-radius: 0 8px 8px 0;
-  background: rgba(255, 255, 255, 0.35);
-  filter: blur(4px);
+  display: none;
 }
 
-.quiz-match-label {
-  font-size: 22px;
-  font-weight: 800;
-  font-variant-numeric: tabular-nums;
-  letter-spacing: -0.02em;
-}
+/* Removed: .quiz-match-label — counter is now inline styled in component */
 
 .quiz-hero-description {
   font-size: 15px;

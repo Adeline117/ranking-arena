@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { useToast } from '@/app/components/ui/Toast'
 import type { PersonalityType } from '../../components/types'
 
@@ -15,6 +15,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
   const { showToast } = useToast()
   const [downloading, setDownloading] = useState(false)
   const [canNativeShare, setCanNativeShare] = useState(false)
+  const [ogLoaded, setOgLoaded] = useState(false)
 
   useEffect(() => {
     setCanNativeShare(typeof navigator !== 'undefined' && 'share' in navigator)
@@ -105,13 +106,32 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
 
   const ogImageUrl = `/api/og/quiz?type=${type.id}&match=${matchPercent}`
 
-  const btnStyle: React.CSSProperties = {
+  // --- Hover / active helpers for inline-styled buttons ---
+  const addHover = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.transform = 'translateY(-1px)'
+    e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.18)'
+  }, [])
+  const removeHover = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.transform = 'translateY(0)'
+    e.currentTarget.style.boxShadow = 'none'
+  }, [])
+  const addActive = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.transform = 'scale(0.98)'
+  }, [])
+  const removeActive = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
+    e.currentTarget.style.transform = 'translateY(-1px)'
+  }, [])
+
+  // --- Shared style tokens ---
+  const secondaryBtn: React.CSSProperties = {
     flex: 1,
-    minWidth: 80,
-    padding: '9px 12px',
+    minWidth: 0,
+    padding: '10px 14px',
     borderRadius: 10,
-    border: '1px solid var(--glass-border-light)',
-    background: 'var(--color-bg-tertiary)',
+    border: '1px solid rgba(255,255,255,0.08)',
+    background: 'rgba(255,255,255,0.04)',
+    backdropFilter: 'blur(8px)',
+    WebkitBackdropFilter: 'blur(8px)',
     color: 'var(--color-text-primary)',
     fontSize: 13,
     fontWeight: 500,
@@ -123,19 +143,104 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
     transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
   }
 
+  const tertiaryBtn: React.CSSProperties = {
+    flex: 1,
+    minWidth: 0,
+    padding: '8px 10px',
+    borderRadius: 10,
+    border: '1px solid transparent',
+    background: 'transparent',
+    color: 'var(--color-text-tertiary)',
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+  }
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {/* OG card preview — show users what they are sharing */}
-      <div className="quiz-og-preview">
-        <img src={ogImageUrl} alt={`${tr(type.nameKey)} personality card preview`} loading="lazy" />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {/* ── OG Card Preview ─────────────────────────────────────── */}
+      <div
+        style={{
+          borderRadius: 12,
+          overflow: 'hidden',
+          border: '1px solid rgba(255,255,255,0.08)',
+          aspectRatio: '1200 / 630',
+          width: '100%',
+          background: 'var(--color-bg-tertiary)',
+          position: 'relative',
+        }}
+      >
+        {/* Skeleton pulse while loading */}
+        {!ogLoaded && (
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background:
+                'linear-gradient(90deg, var(--color-bg-tertiary) 25%, rgba(255,255,255,0.04) 50%, var(--color-bg-tertiary) 75%)',
+              backgroundSize: '200% 100%',
+              animation: 'quizOgSkeleton 1.8s ease-in-out infinite',
+            }}
+          />
+        )}
+        <img
+          src={ogImageUrl}
+          alt={`${tr(type.nameKey)} personality card preview`}
+          loading="lazy"
+          onLoad={() => setOgLoaded(true)}
+          style={{
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            display: 'block',
+            opacity: ogLoaded ? 1 : 0,
+            transition: 'opacity 0.4s ease',
+          }}
+        />
       </div>
 
-      {/* X/Twitter — primary CTA for crypto traders */}
+      {/* ── Primary CTA: Share on X ─────────────────────────────── */}
       <button
         type="button"
         onClick={handleShareX}
         aria-label="Share on X"
-        className="quiz-share-x-btn"
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+          e.currentTarget.style.boxShadow = '0 6px 24px rgba(0,0,0,0.35)'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'translateY(0)'
+          e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.15)'
+        }}
+        onMouseDown={(e) => {
+          e.currentTarget.style.transform = 'scale(0.98)'
+        }}
+        onMouseUp={(e) => {
+          e.currentTarget.style.transform = 'translateY(-2px)'
+        }}
+        style={{
+          width: '100%',
+          padding: '14px 20px',
+          borderRadius: 10,
+          border: 'none',
+          background: '#000',
+          color: '#fff',
+          fontSize: 15,
+          fontWeight: 700,
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+          letterSpacing: '-0.01em',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+        }}
       >
         <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
           <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
@@ -143,34 +248,51 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
         {tr('quizShareOnX') !== 'quizShareOnX' ? tr('quizShareOnX') : 'Share on X'}
       </button>
 
-      {/* Secondary share buttons */}
+      {/* ── Secondary Row: TG / WA / Copy Link ──────────────────── */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
         <button
           type="button"
           onClick={handleShareTelegram}
           aria-label="Share on Telegram"
-          style={btnStyle}
+          onMouseEnter={addHover}
+          onMouseLeave={removeHover}
+          onMouseDown={addActive}
+          onMouseUp={removeActive}
+          style={secondaryBtn}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.479.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z" />
           </svg>
-          TG
+          Telegram
         </button>
         <button
           type="button"
           onClick={handleShareWhatsApp}
           aria-label="Share on WhatsApp"
-          style={btnStyle}
+          onMouseEnter={addHover}
+          onMouseLeave={removeHover}
+          onMouseDown={addActive}
+          onMouseUp={removeActive}
+          style={secondaryBtn}
         >
           <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
             <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
           </svg>
-          WA
+          WhatsApp
         </button>
-        <button type="button" onClick={handleCopy} aria-label={tr('quizCopyLink')} style={btnStyle}>
+        <button
+          type="button"
+          onClick={handleCopy}
+          aria-label={tr('quizCopyLink')}
+          onMouseEnter={addHover}
+          onMouseLeave={removeHover}
+          onMouseDown={addActive}
+          onMouseUp={removeActive}
+          style={secondaryBtn}
+        >
           <svg
-            width="14"
-            height="14"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -186,21 +308,39 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
         </button>
       </div>
 
-      {/* Download + Challenge + Native share */}
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+      {/* ── Tertiary Row: Download / Challenge / Share ───────────── */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: canNativeShare ? '1fr 1fr 1fr' : '1fr 1fr',
+          gap: 6,
+          marginTop: 2,
+        }}
+      >
+        {/* Download — muted, borderless feel */}
         <button
           type="button"
           onClick={handleDownload}
           disabled={downloading}
           aria-label={tr('quizDownloadCard')}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+            e.currentTarget.style.transform = 'translateY(-1px)'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.transform = 'translateY(0)'
+          }}
+          onMouseDown={addActive}
+          onMouseUp={removeActive}
           style={{
-            ...btnStyle,
-            opacity: downloading ? 0.6 : 1,
+            ...tertiaryBtn,
+            opacity: downloading ? 0.5 : 1,
           }}
         >
           <svg
-            width="14"
-            height="14"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -215,20 +355,34 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
           </svg>
           {downloading ? '...' : tr('quizDownloadCard')}
         </button>
+
+        {/* Challenge — type-colored border, special feel */}
         <button
           type="button"
           onClick={handleChallengeFriend}
           aria-label="Challenge a friend"
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = `${type.color}10`
+            e.currentTarget.style.transform = 'translateY(-1px)'
+            e.currentTarget.style.boxShadow = `0 4px 14px ${type.color}18`
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'transparent'
+            e.currentTarget.style.transform = 'translateY(0)'
+            e.currentTarget.style.boxShadow = 'none'
+          }}
+          onMouseDown={addActive}
+          onMouseUp={removeActive}
           style={{
-            ...btnStyle,
-            borderColor: `${type.color}30`,
+            ...tertiaryBtn,
+            border: `1px solid ${type.color}40`,
             color: type.color,
             fontWeight: 600,
           }}
         >
           <svg
-            width="14"
-            height="14"
+            width="13"
+            height="13"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -244,16 +398,28 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
           </svg>
           Challenge
         </button>
+
+        {/* Native Share — only when supported */}
         {canNativeShare && (
           <button
             type="button"
             onClick={handleNativeShare}
             aria-label={tr('quizShare')}
-            style={btnStyle}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+              e.currentTarget.style.transform = 'translateY(-1px)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+              e.currentTarget.style.transform = 'translateY(0)'
+            }}
+            onMouseDown={addActive}
+            onMouseUp={removeActive}
+            style={tertiaryBtn}
           >
             <svg
-              width="14"
-              height="14"
+              width="13"
+              height="13"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -272,6 +438,14 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
           </button>
         )}
       </div>
+
+      {/* Skeleton animation keyframe (injected once) */}
+      <style>{`
+        @keyframes quizOgSkeleton {
+          0% { background-position: 200% 0; }
+          100% { background-position: -200% 0; }
+        }
+      `}</style>
     </div>
   )
 }

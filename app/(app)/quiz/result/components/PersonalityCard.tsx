@@ -38,6 +38,18 @@ const TYPE_RARITY: Record<string, number> = {
   narrator: 3,
 }
 
+// Rarity tier classification
+function getRarityTier(percent: number): {
+  label: string
+  symbol: string
+  tier: 'legendary' | 'epic' | 'rare' | 'common'
+} {
+  if (percent <= 3) return { label: 'Legendary', symbol: '\u25C6', tier: 'legendary' }
+  if (percent <= 5) return { label: 'Ultra Rare', symbol: '\u25C6', tier: 'epic' }
+  if (percent <= 9) return { label: 'Rare', symbol: '\u2605', tier: 'rare' }
+  return { label: 'Common', symbol: '\u25A3', tier: 'common' }
+}
+
 interface PersonalityCardProps {
   type: PersonalityType
   matchPercent: number
@@ -82,6 +94,11 @@ export default function PersonalityCard({
   const [animatedWidth, setAnimatedWidth] = useState(0)
   const animatedMatch = useAnimatedCounter(matchPercent, 1200)
   const [showConfetti, setShowConfetti] = useState(false)
+
+  const hasArt = TYPES_WITH_ART.has(type.id)
+  const typeColor = TYPE_TEXT_COLOR[type.id] || type.color
+  const rarityPercent = TYPE_RARITY[type.id]
+  const rarity = rarityPercent ? getRarityTier(rarityPercent) : null
 
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
@@ -132,33 +149,80 @@ export default function PersonalityCard({
         </div>
       )}
 
-      {/* Hero character illustration (or SVG fallback for types without art) */}
+      {/* Grain texture overlay */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E\")",
+          opacity: 0.03,
+          mixBlendMode: 'overlay' as const,
+          pointerEvents: 'none',
+          zIndex: 2,
+          borderRadius: 'inherit',
+        }}
+      />
+
+      {/* Inner card border glow — type-colored edge light */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          borderRadius: 'inherit',
+          border: `1px solid ${type.color}18`,
+          boxShadow: `inset 0 0 80px ${type.color}08, inset 0 1px 0 rgba(255,255,255,0.04)`,
+          pointerEvents: 'none',
+          zIndex: 1,
+        }}
+      />
+
+      {/* ---- Hero character illustration ---- */}
       <div
         className="quiz-hero-icon"
         style={{
-          background: TYPES_WITH_ART.has(type.id)
-            ? `linear-gradient(160deg, ${type.color}22 0%, ${type.color}08 100%)`
+          background: hasArt
+            ? `radial-gradient(ellipse at 50% 30%, ${type.color}18 0%, ${type.color}06 60%, transparent 100%)`
             : `${type.color}10`,
-          border: `1px solid ${type.color}30`,
-          width: TYPES_WITH_ART.has(type.id) ? 148 : 72,
-          height: TYPES_WITH_ART.has(type.id) ? 148 : 72,
-          borderRadius: TYPES_WITH_ART.has(type.id) ? 28 : 18,
+          border: `1.5px solid ${type.color}30`,
+          width: hasArt ? 'clamp(160px, 44vw, 200px)' : 'clamp(64px, 18vw, 80px)',
+          height: hasArt ? 'clamp(160px, 44vw, 200px)' : 'clamp(64px, 18vw, 80px)',
+          borderRadius: hasArt ? 'clamp(24px, 5vw, 32px)' : 'clamp(14px, 3vw, 20px)',
           overflow: 'hidden',
-          boxShadow: TYPES_WITH_ART.has(type.id)
-            ? `0 0 0 1px ${type.color}20, 0 12px 36px ${type.color}30, inset 0 1px 0 rgba(255,255,255,0.06)`
-            : `0 8px 24px ${type.color}25`,
+          position: 'relative',
+          boxShadow: hasArt
+            ? `0 0 0 1px ${type.color}15, 0 20px 60px ${type.color}30, 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08)`
+            : `0 12px 32px ${type.color}25`,
         }}
       >
-        {TYPES_WITH_ART.has(type.id) ? (
+        {/* Inner shine on art frame */}
+        {hasArt && (
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background: `linear-gradient(170deg, rgba(255,255,255,0.08) 0%, transparent 40%, transparent 80%, ${type.color}10 100%)`,
+              zIndex: 2,
+              pointerEvents: 'none',
+              borderRadius: 'inherit',
+            }}
+          />
+        )}
+        {hasArt ? (
           <Image
             src={`/images/quiz/${type.id}.jpg`}
             alt={tr(type.nameKey)}
-            width={148}
-            height={148}
+            width={200}
+            height={200}
             style={{
               objectFit: 'cover',
               objectPosition: 'center',
               display: 'block',
+              width: '100%',
+              height: '100%',
             }}
             priority
             unoptimized
@@ -168,61 +232,205 @@ export default function PersonalityCard({
         )}
       </div>
 
-      {/* Type name — large hero weight */}
-      <h2 className="quiz-hero-type-name" style={{ color: TYPE_TEXT_COLOR[type.id] || type.color }}>
+      {/* ---- Rarity badge — positioned above the type name ---- */}
+      {rarity && rarityPercent && (
+        <span
+          style={{
+            fontSize: 'clamp(11px, 2.8vw, 12px)',
+            fontWeight: 700,
+            color: type.color,
+            padding: 'clamp(5px, 1.2vw, 7px) clamp(12px, 3vw, 18px)',
+            borderRadius: 'clamp(16px, 4vw, 20px)',
+            background: `rgba(${hexToRgb(type.color)}, 0.06)`,
+            border: `1px solid ${type.color}35`,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase' as const,
+            boxShadow: `0 0 20px ${type.color}15, 0 0 40px ${type.color}08`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'clamp(5px, 1.2vw, 7px)',
+            animation: 'quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.35s both',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 'clamp(10px, 2.5vw, 12px)',
+              fontWeight: 800,
+              filter: `drop-shadow(0 0 4px ${type.color}80)`,
+            }}
+          >
+            {rarity.symbol}
+          </span>
+          {rarity.label}
+          <span
+            style={{
+              width: 1,
+              height: 12,
+              background: `${type.color}40`,
+              flexShrink: 0,
+            }}
+          />
+          <span style={{ fontVariantNumeric: 'tabular-nums', fontWeight: 800 }}>
+            Top {rarityPercent}%
+          </span>
+        </span>
+      )}
+
+      {/* ---- Type name — huge hero weight ---- */}
+      <h2
+        className="quiz-hero-type-name"
+        style={{
+          color: typeColor,
+          fontSize: 'clamp(32px, 9vw, 48px)',
+          fontWeight: 800,
+          margin: 0,
+          textAlign: 'center',
+          letterSpacing: '-0.03em',
+          lineHeight: 1.05,
+          textShadow: `0 0 40px ${type.color}30, 0 2px 4px rgba(0,0,0,0.3)`,
+          animation: 'quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both',
+        }}
+      >
         {tr(type.nameKey)}
       </h2>
 
-      {/* Animated match percentage — counts up from 0 */}
-      <div className="quiz-match-section">
-        <div className="quiz-match-bar-track">
+      {/* ---- Match percentage section ---- */}
+      <div
+        className="quiz-match-section"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 'clamp(8px, 2vw, 12px)',
+          width: '100%',
+          maxWidth: 'clamp(240px, 60vw, 300px)',
+          animation: 'quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.4s both',
+        }}
+      >
+        {/* Animated match counter */}
+        <span
+          style={{
+            fontSize: 'clamp(28px, 7vw, 36px)',
+            fontWeight: 800,
+            color: typeColor,
+            fontVariantNumeric: 'tabular-nums',
+            letterSpacing: '-0.02em',
+            lineHeight: 1,
+            textShadow: `0 0 24px ${type.color}40`,
+          }}
+        >
+          {animatedMatch}%
+          <span
+            style={{
+              fontSize: 'clamp(13px, 3.2vw, 15px)',
+              fontWeight: 600,
+              color: 'var(--color-text-tertiary)',
+              marginLeft: 'clamp(4px, 1vw, 6px)',
+              letterSpacing: '0.02em',
+            }}
+          >
+            {tr('quizMatch')}
+          </span>
+        </span>
+
+        {/* Thick progress bar with inner glow */}
+        <div
+          className="quiz-match-bar-track"
+          style={{
+            width: '100%',
+            height: 'clamp(16px, 4vw, 20px)',
+            borderRadius: 'clamp(8px, 2vw, 10px)',
+            background: 'rgba(255,255,255,0.04)',
+            overflow: 'hidden',
+            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.04)',
+            position: 'relative',
+          }}
+        >
           <div
             className="quiz-match-bar-fill"
             style={{
               width: `${animatedWidth}%`,
+              height: '100%',
+              borderRadius: 'inherit',
               background: type.gradient,
+              transition: 'width 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
+              position: 'relative',
+              boxShadow: `0 0 16px ${type.color}50, 0 0 32px ${type.color}25, inset 0 1px 0 rgba(255,255,255,0.2)`,
             }}
-          />
+          >
+            {/* Inner glow pulse */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                inset: 0,
+                borderRadius: 'inherit',
+                background: 'linear-gradient(180deg, rgba(255,255,255,0.15) 0%, transparent 60%)',
+              }}
+            />
+            {/* Glowing trailing edge */}
+            <div
+              aria-hidden="true"
+              style={{
+                position: 'absolute',
+                right: -1,
+                top: 1,
+                bottom: 1,
+                width: 'clamp(16px, 4vw, 24px)',
+                borderRadius: '0 10px 10px 0',
+                background: 'rgba(255,255,255,0.3)',
+                filter: 'blur(4px)',
+              }}
+            />
+          </div>
         </div>
-        <span className="quiz-match-label" style={{ color: type.color }}>
-          {animatedMatch}% {tr('quizMatch')}
-        </span>
       </div>
 
-      {/* Description */}
-      <p className="quiz-hero-description">{tr(type.descriptionKey)}</p>
+      {/* ---- Description ---- */}
+      <p
+        className="quiz-hero-description"
+        style={{
+          fontSize: 'clamp(13px, 3.2vw, 15px)',
+          color: 'var(--color-text-secondary)',
+          lineHeight: 1.7,
+          textAlign: 'center',
+          margin: 0,
+          maxWidth: 'clamp(320px, 80vw, 440px)',
+          animation: 'quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.5s both',
+        }}
+      >
+        {tr(type.descriptionKey)}
+      </p>
 
-      {/* Rarity badge — prominent social proof */}
-      {TYPE_RARITY[type.id] && (
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 700,
-            color: type.color,
-            padding: '7px 16px',
-            borderRadius: 24,
-            background: `${type.color}18`,
-            border: `1px solid ${type.color}40`,
-            letterSpacing: '0.02em',
-            boxShadow: `0 2px 12px ${type.color}20`,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-        >
-          <span style={{ fontSize: 13, fontWeight: 800 }}>
-            {TYPE_RARITY[type.id] <= 5 ? '◆' : TYPE_RARITY[type.id] <= 9 ? '★' : '▣'}
-          </span>
-          {TYPE_RARITY[type.id] <= 5
-            ? `Top ${TYPE_RARITY[type.id]}% — Ultra Rare`
-            : `Only ${TYPE_RARITY[type.id]}% of traders`}
-        </span>
-      )}
-
-      {/* Secondary type badge — pill-shaped */}
-      <span className="quiz-shadow-badge">
-        {tr('quizShadowType')}: {secondaryTypeLabel}
+      {/* ---- Secondary type badge — pill with type color tint ---- */}
+      <span
+        className="quiz-shadow-badge"
+        style={{
+          padding: 'clamp(6px, 1.5vw, 8px) clamp(14px, 3.5vw, 20px)',
+          borderRadius: 'clamp(18px, 4.5vw, 24px)',
+          background: `rgba(${hexToRgb(type.color)}, 0.06)`,
+          border: `1px solid ${type.color}22`,
+          fontSize: 'clamp(12px, 3vw, 13px)',
+          fontWeight: 600,
+          color: 'var(--color-text-secondary)',
+          animation: 'quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.6s both',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 'clamp(4px, 1vw, 6px)',
+        }}
+      >
+        <span style={{ color: `${type.color}CC`, fontWeight: 700 }}>{tr('quizShadowType')}</span>
+        <span style={{ color: typeColor, fontWeight: 700 }}>{secondaryTypeLabel}</span>
       </span>
     </div>
   )
+}
+
+/** Convert hex color to r,g,b string for use in rgba() */
+function hexToRgb(hex: string): string {
+  const h = hex.replace('#', '')
+  const r = parseInt(h.substring(0, 2), 16)
+  const g = parseInt(h.substring(2, 4), 16)
+  const b = parseInt(h.substring(4, 6), 16)
+  return `${r},${g},${b}`
 }

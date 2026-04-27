@@ -93,65 +93,49 @@ export default function ResultPageClient({
         } as React.CSSProperties
       }
     >
-      <div className="quiz-result-container">
-        {/* Language toggle */}
-        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
-          <button
-            type="button"
-            onClick={handleToggleLanguage}
-            style={{
-              padding: '4px 10px',
-              borderRadius: 6,
-              border: '1px solid var(--glass-border-light)',
-              background: 'var(--color-bg-secondary)',
-              color: 'var(--color-text-tertiary)',
-              fontSize: 12,
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
-            aria-label={
-              language === 'en'
-                ? 'Switch to Chinese / \u5207\u6362\u5230\u4E2D\u6587'
-                : 'Switch to English / \u5207\u6362\u5230\u82F1\u6587'
-            }
-          >
-            {language === 'en' ? '\u4E2D\u6587' : 'EN'}
-          </button>
-        </div>
-
-        {/* Top navigation — retake button for quick access */}
-        <div style={{ marginBottom: 8 }}>
+      <div className="quiz-result-container" style={{ gap: 24 }}>
+        {/* Top bar: retake + language toggle */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <Link
             href="/quiz"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
-              padding: '6px 12px',
+              padding: '5px 10px',
               borderRadius: 6,
-              border: '1px solid var(--glass-border-light)',
+              border: 'none',
               background: 'transparent',
-              color: 'var(--color-text-secondary)',
-              fontSize: 13,
+              color: 'var(--color-text-tertiary)',
+              fontSize: 12,
               fontWeight: 500,
               textDecoration: 'none',
-              transition: 'border-color 0.2s, color 0.2s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.borderColor = 'var(--color-text-tertiary)'
-              e.currentTarget.style.color = 'var(--color-text-primary)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.borderColor = 'var(--glass-border-light)'
-              e.currentTarget.style.color = 'var(--color-text-secondary)'
+              transition: 'color 0.2s',
             }}
           >
-            <span aria-hidden="true">&larr;</span>
-            {t('quizRetake') !== 'quizRetake' ? t('quizRetake') : 'Retake Quiz'}
+            <span aria-hidden="true">{'\u2190'}</span>
+            {t('quizRetake') !== 'quizRetake' ? t('quizRetake') : 'Retake'}
           </Link>
+          <button
+            type="button"
+            onClick={handleToggleLanguage}
+            style={{
+              padding: '4px 10px',
+              borderRadius: 6,
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'transparent',
+              color: 'var(--color-text-tertiary)',
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+            aria-label={language === 'en' ? 'Switch to Chinese' : 'Switch to English'}
+          >
+            {language === 'en' ? '\u4E2D\u6587' : 'EN'}
+          </button>
         </div>
 
-        {/* Hero Personality Card */}
+        {/* 1. Hero Personality Card */}
         <PersonalityCard
           type={pType}
           matchPercent={matchPercent}
@@ -159,8 +143,8 @@ export default function ResultPageClient({
           tr={t}
         />
 
-        {/* Mini share — capture impulse moment */}
-        <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+        {/* 2. Mini share — X + Copy only */}
+        <div style={{ display: 'flex', gap: 8 }}>
           <button
             type="button"
             onClick={() => {
@@ -182,14 +166,12 @@ export default function ResultPageClient({
           </button>
           <button
             type="button"
-            onClick={() => {
-              navigator.clipboard.writeText(resultUrl).catch(() => {})
-            }}
+            onClick={() => navigator.clipboard.writeText(resultUrl).catch(() => {})}
             style={{
               padding: '12px 16px',
               borderRadius: 10,
-              border: '1px solid var(--glass-border-light)',
-              background: 'var(--color-bg-tertiary)',
+              border: '1px solid rgba(255,255,255,0.08)',
+              background: 'rgba(255,255,255,0.04)',
               color: 'var(--color-text-primary)',
               fontSize: 13,
               fontWeight: 500,
@@ -217,27 +199,22 @@ export default function ResultPageClient({
           </button>
         </div>
 
-        {/* Style Analysis — personal feedback first */}
-        <div style={{ marginTop: 20, '--section-delay': '0.6s' } as React.CSSProperties}>
+        {/* 3. Style Analysis */}
+        <div style={{ '--section-delay': '0.4s' } as React.CSSProperties}>
           <StyleAnalysis type={pType} tr={t} />
         </div>
 
-        {/* Type Breakdown (only if data available from quiz completion) */}
+        {/* 4. Type Breakdown */}
         {allTypePercents && (
-          <div style={{ marginTop: 16, '--section-delay': '0.9s' } as React.CSSProperties}>
+          <div style={{ '--section-delay': '0.6s' } as React.CSSProperties}>
             <TypeBreakdown allTypePercents={allTypePercents} primaryTypeId={typeId} tr={t} />
           </div>
         )}
 
-        {/* Master Biography */}
-        <div style={{ marginTop: 20, '--section-delay': '1.2s' } as React.CSSProperties}>
-          <MasterSection type={pType} tr={t} />
-        </div>
-
-        {/* Type Compatibility */}
+        {/* 5. Compatibility */}
         <div
           className="quiz-section-card"
-          style={{ marginTop: 14, '--section-delay': '1.3s' } as React.CSSProperties}
+          style={{ '--section-delay': '0.8s' } as React.CSSProperties}
         >
           <div className="quiz-section-header">
             <div className="quiz-section-accent" style={{ background: pType.gradient }} />
@@ -253,7 +230,7 @@ export default function ResultPageClient({
               fontWeight: 600,
             }}
           >
-            <span>&#x2713;</span>
+            <span>{'\u2713'}</span>
             {t('quizCompatWith')}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -263,9 +240,9 @@ export default function ResultPageClient({
                 <span
                   key={id}
                   style={{
-                    padding: '5px 12px',
+                    padding: '6px 14px',
                     borderRadius: 20,
-                    background: ct.color + '15',
+                    background: ct.color + '12',
                     border: '1px solid ' + ct.color + '25',
                     fontSize: 13,
                     color: ct.color,
@@ -285,10 +262,10 @@ export default function ResultPageClient({
               fontSize: 13,
               color: 'var(--color-accent-error)',
               fontWeight: 600,
-              marginTop: 12,
+              marginTop: 8,
             }}
           >
-            <span>&#x2717;</span>
+            <span>{'\u2717'}</span>
             {t('quizIncompatWith')}
           </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -298,7 +275,7 @@ export default function ResultPageClient({
                 <span
                   key={id}
                   style={{
-                    padding: '5px 12px',
+                    padding: '6px 14px',
                     borderRadius: 20,
                     background: 'var(--color-accent-error-10)',
                     border: '1px solid var(--color-accent-error-20)',
@@ -314,13 +291,21 @@ export default function ResultPageClient({
           </div>
         </div>
 
-        {/* Recommended Arena Traders */}
-        <div style={{ marginTop: 24 }}>
+        {/* 6. Master Biography */}
+        <div style={{ '--section-delay': '1.0s' } as React.CSSProperties}>
+          <MasterSection type={pType} tr={t} />
+        </div>
+
+        {/* 7. Recommended Traders */}
+        <div style={{ '--section-delay': '1.2s' } as React.CSSProperties}>
           <RecommendedTraders type={pType} traders={recommendedTraders} tr={t} />
         </div>
 
-        {/* Full Share Actions */}
-        <div className="quiz-section-card" style={{ marginTop: 18 }}>
+        {/* 8. Full Share Actions */}
+        <div
+          className="quiz-section-card"
+          style={{ '--section-delay': '1.4s' } as React.CSSProperties}
+        >
           <div className="quiz-section-header">
             <div className="quiz-section-accent" style={{ background: pType.gradient }} />
             <h3 className="quiz-section-title">{t('quizShareTitle')}</h3>
@@ -328,12 +313,16 @@ export default function ResultPageClient({
           <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
         </div>
 
-        {/* CTAs — product conversion focus */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 28 }}>
+        {/* 9. Bottom CTAs */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
           <Link href="/quiz" className="quiz-cta-secondary">
             {t('quizRetake')}
           </Link>
-          <Link href="/rankings" className="quiz-cta-primary">
+          <Link
+            href="/rankings"
+            className="quiz-cta-primary"
+            style={{ background: pType.gradient }}
+          >
             {t('quizFindTraders')}
           </Link>
         </div>
