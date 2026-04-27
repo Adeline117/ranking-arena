@@ -117,10 +117,14 @@ export default function PersonalityCard({
           {[
             type.color,
             'var(--color-brand)',
-            `${type.color}80`,
+            `${type.color}CC`,
             '#FFD700',
             'var(--color-brand-deep)',
-            `${type.color}60`,
+            `${type.color}99`,
+            '#FFFFFF',
+            type.color,
+            '#FFD700',
+            'var(--color-brand)',
           ].map((c, i) => (
             <span key={i} style={{ background: c }} />
           ))}
@@ -131,21 +135,32 @@ export default function PersonalityCard({
       <div
         className="quiz-hero-icon"
         style={{
-          background: `${type.color}10`,
-          border: `1px solid ${type.color}20`,
-          width: TYPES_WITH_ART.has(type.id) ? 140 : 72,
-          height: TYPES_WITH_ART.has(type.id) ? 140 : 72,
-          borderRadius: TYPES_WITH_ART.has(type.id) ? 24 : 18,
+          background: TYPES_WITH_ART.has(type.id)
+            ? `linear-gradient(160deg, ${type.color}22 0%, ${type.color}08 100%)`
+            : `${type.color}10`,
+          border: `1px solid ${type.color}30`,
+          width: TYPES_WITH_ART.has(type.id) ? 148 : 72,
+          height: TYPES_WITH_ART.has(type.id) ? 148 : 72,
+          borderRadius: TYPES_WITH_ART.has(type.id) ? 28 : 18,
           overflow: 'hidden',
+          boxShadow: TYPES_WITH_ART.has(type.id)
+            ? `0 0 0 1px ${type.color}20, 0 12px 36px ${type.color}30, inset 0 1px 0 rgba(255,255,255,0.06)`
+            : `0 8px 24px ${type.color}25`,
         }}
       >
         {TYPES_WITH_ART.has(type.id) ? (
           <Image
             src={`/images/quiz/${type.id}.jpg`}
             alt={tr(type.nameKey)}
-            width={140}
-            height={140}
-            style={{ objectFit: 'contain', objectPosition: 'center bottom' }}
+            width={148}
+            height={148}
+            style={{
+              objectFit: 'cover',
+              objectPosition: 'center',
+              mixBlendMode: 'luminosity',
+              filter: `saturate(1.3) contrast(1.05)`,
+              display: 'block',
+            }}
             priority
             unoptimized
           />
@@ -178,25 +193,30 @@ export default function PersonalityCard({
       {/* Description */}
       <p className="quiz-hero-description">{tr(type.descriptionKey)}</p>
 
-      {/* Rarity badge */}
+      {/* Rarity badge — prominent social proof */}
       {TYPE_RARITY[type.id] && (
         <span
           style={{
-            fontSize: 12,
-            fontWeight: 600,
-            color: 'var(--color-text-tertiary)',
-            padding: '4px 12px',
-            borderRadius: 20,
-            background: TYPE_RARITY[type.id] <= 5 ? `${type.color}12` : 'var(--color-bg-tertiary)',
-            border:
-              TYPE_RARITY[type.id] <= 5
-                ? `1px solid ${type.color}25`
-                : '1px solid var(--glass-border-light)',
+            fontSize: 13,
+            fontWeight: 700,
+            color: type.color,
+            padding: '7px 16px',
+            borderRadius: 24,
+            background: `${type.color}18`,
+            border: `1px solid ${type.color}40`,
+            letterSpacing: '0.02em',
+            boxShadow: `0 2px 12px ${type.color}20`,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
           }}
         >
+          <span style={{ fontSize: 15 }}>
+            {TYPE_RARITY[type.id] <= 5 ? '💎' : TYPE_RARITY[type.id] <= 9 ? '⭐' : '📊'}
+          </span>
           {TYPE_RARITY[type.id] <= 5
-            ? `Top ${TYPE_RARITY[type.id]}% rarest`
-            : `${TYPE_RARITY[type.id]}% of traders`}
+            ? `Top ${TYPE_RARITY[type.id]}% — Ultra Rare`
+            : `Only ${TYPE_RARITY[type.id]}% of traders`}
         </span>
       )}
 
