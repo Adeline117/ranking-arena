@@ -4,7 +4,7 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
-import { type Language, translations, loadTranslations } from '@/lib/i18n'
+import { type Language, translations, loadTranslations, onTranslationsReady } from '@/lib/i18n'
 import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from './components/quiz-data'
 import { calculateResult } from './components/scoring'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -22,6 +22,11 @@ export default function QuizClient() {
   const router = useRouter()
   // Quiz always starts in English, independent of global language
   const [quizLang, setQuizLang] = useState<Language>('en')
+  // Bump to force re-render when async English translations finish loading
+  const [, setTxnBump] = useState(0)
+  useEffect(() => {
+    return onTranslationsReady(() => setTxnBump((v) => v + 1))
+  }, [])
   const t = useCallback(
     (key: string): string => {
       const k = key as keyof typeof translations.en
