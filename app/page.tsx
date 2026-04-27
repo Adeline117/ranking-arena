@@ -13,22 +13,32 @@ import type { Period } from '@/lib/utils/arena-score'
 
 export const metadata: Metadata = {
   title: 'Arena — Crypto Trader Rankings & Community',
-  description: 'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+  description:
+    'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
   alternates: {
     canonical: BASE_URL,
   },
   openGraph: {
     title: 'Arena — Crypto Trader Rankings & Community',
-    description: 'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+    description:
+      'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
     url: BASE_URL,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${BASE_URL}/api/og/homepage`, width: 1200, height: 630, alt: 'Arena - Crypto Trader Rankings' }],
+    images: [
+      {
+        url: `${BASE_URL}/api/og/homepage`,
+        width: 1200,
+        height: 630,
+        alt: 'Arena - Crypto Trader Rankings',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Arena — Crypto Trader Rankings & Community',
-    description: 'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+    description:
+      'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
     images: [`${BASE_URL}/api/og/homepage`],
     creator: '@arenafi',
   },
@@ -45,7 +55,8 @@ const organizationJsonLd = {
   url: BASE_URL,
   logo: `${BASE_URL}/logo-symbol.png`,
   sameAs: ['https://twitter.com/arenafi'],
-  description: 'Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.',
+  description:
+    'Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.',
 }
 
 const PER_PAGE = 50
@@ -61,15 +72,14 @@ const VALID_RANGES = new Set(['7D', '30D', '90D'])
  *   (discussions, watchlist, flash news) until user interaction or idle callback.
  *   When Phase 2 mounts, it replaces the SSR ranking table with the interactive version.
  */
-export default async function Page({
-  searchParams,
-}: {
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>
-}) {
-  const sp = await searchParams
-  const rawRange = typeof sp?.range === 'string' ? sp.range : '90D'
-  const timeRange = (VALID_RANGES.has(rawRange) ? rawRange : '90D') as Period
-  const page = Math.max(0, parseInt(typeof sp?.page === 'string' ? sp.page : '0', 10) || 0)
+// SSR always renders default view (90D, page 0) for edge cacheability.
+// Client-side HomePageLoader reads searchParams via useSearchParams() and
+// switches to the requested range/page after hydration.
+// ROOT CAUSE FIX: reading searchParams server-side made Next.js mark the page
+// as dynamic → no edge cache → every request hit Tokyo origin.
+export default async function Page() {
+  const timeRange: Period = '90D'
+  const page = 0
 
   // Fetch data in parallel
   const [{ traders, lastUpdated, totalCount, categoryCounts }, heroStats] = await Promise.all([
