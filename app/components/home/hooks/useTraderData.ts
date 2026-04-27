@@ -47,14 +47,26 @@ interface TraderDataState {
 }
 
 type TraderDataAction =
-  | { type: 'SET_TRADERS'; traders: Trader[]; lastUpdated: string | null; availableSources?: string[] }
+  | {
+      type: 'SET_TRADERS'
+      traders: Trader[]
+      lastUpdated: string | null
+      availableSources?: string[]
+    }
   | { type: 'SET_LOADING'; loading: boolean }
   | { type: 'SET_ERROR'; error: string | null }
   | { type: 'SET_TIME_RANGE'; timeRange: TimeRange }
   | { type: 'SET_CHANGING_TIME_RANGE'; isChanging: boolean }
   | { type: 'SET_DEFERRED_FETCH_FAILED'; failed: boolean }
   | { type: 'LOAD_START' }
-  | { type: 'LOAD_SUCCESS'; traders: Trader[]; lastUpdated: string | null; availableSources: string[]; totalCount?: number; categoryCounts?: CategoryCounts }
+  | {
+      type: 'LOAD_SUCCESS'
+      traders: Trader[]
+      lastUpdated: string | null
+      availableSources: string[]
+      totalCount?: number
+      categoryCounts?: CategoryCounts
+    }
   | { type: 'LOAD_ERROR'; error: string }
   | { type: 'LOAD_ABORT' }
   | { type: 'SET_COUNTS'; totalCount: number; categoryCounts: CategoryCounts }
@@ -135,7 +147,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
   const { t } = useLanguage()
   const tRef = useRef(t)
-  useEffect(() => { tRef.current = t }, [t])
+  useEffect(() => {
+    tRef.current = t
+  }, [t])
 
   const hasInitialData = initialTraders && initialTraders.length > 0
 
@@ -183,14 +197,20 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   }, [])
 
   // Keep totalCount ref in sync with state
-  useEffect(() => { totalCountRef.current = state.totalCount }, [state.totalCount])
+  useEffect(() => {
+    totalCountRef.current = state.totalCount
+  }, [state.totalCount])
 
   // Multi-tab sync
   useEffect(() => {
     const unsubscribe = on('TRADER_DATA_UPDATED', (payload: TraderDataPayload) => {
       if (payload.timeRange === state.activeTimeRange) {
         startTransition(() => {
-          dispatch({ type: 'SET_TRADERS', traders: payload.traders as Trader[], lastUpdated: payload.lastUpdated })
+          dispatch({
+            type: 'SET_TRADERS',
+            traders: payload.traders as Trader[],
+            lastUpdated: payload.lastUpdated,
+          })
         })
       }
     })
@@ -201,108 +221,121 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
    * Fetch a specific page from the API.
    * This is the core server-side pagination function.
    */
-  const fetchPage = useCallback(async (
-    page: number,
-    opts?: { category?: string; sortBy?: string; sortDir?: string; timeRange?: TimeRange }
-  ): Promise<void> => {
-    const timeRange = opts?.timeRange || state.activeTimeRange
-    const category = opts?.category
-    const sortBy = opts?.sortBy || 'arena_score'
-    const sortDir = opts?.sortDir || 'desc'
-
-    // Cancel existing request
-    const cancelKey = `page-${timeRange}`
-    const existing = abortControllers.get(cancelKey)
-    if (existing) existing.abort()
-    const controller = new AbortController()
-    abortControllers.set(cancelKey, controller)
-
-    dispatch({ type: 'LOAD_START' })
-
-    try {
-      let url = `/api/traders?timeRange=${timeRange}&limit=${PAGE_SIZE}&page=${page}`
-      if (category && category !== 'all') {
-        url += `&category=${category}`
+  const fetchPage = useCallback(
+    async (
+      page: number,
+      opts?: {
+        category?: string
+        sortBy?: string
+        sortDir?: string
+        timeRange?: TimeRange
+        exchange?: string
       }
-      if (sortBy !== 'arena_score') {
-        url += `&sortBy=${sortBy}&order=${sortDir}`
-      }
+    ): Promise<void> => {
+      const timeRange = opts?.timeRange || state.activeTimeRange
+      const category = opts?.category
+      const sortBy = opts?.sortBy || 'arena_score'
+      const sortDir = opts?.sortDir || 'desc'
+      const exchange = opts?.exchange
 
-      // 8s timeout prevents indefinite hang if API is slow
-      const timeoutId = setTimeout(() => controller.abort(), 8_000)
-      const response = await fetch(url, { signal: controller.signal })
-      clearTimeout(timeoutId)
-      if (!response.ok) {
-        throw new Error(`${tRef.current('loadFailed')} (${response.status})`)
-      }
+      // Cancel existing request
+      const cancelKey = `page-${timeRange}`
+      const existing = abortControllers.get(cancelKey)
+      if (existing) existing.abort()
+      const controller = new AbortController()
+      abortControllers.set(cancelKey, controller)
 
-      const data = await response.json()
-      const traders: Trader[] = (data.traders || []).map((t: Record<string, unknown>) => ({
-        id: t.id as string,
-        handle: (t.handle as string) || null,
-        roi: t.roi != null ? Number(t.roi) : null,
-        pnl: t.pnl != null ? Number(t.pnl) : null,
-        win_rate: t.win_rate != null ? Number(t.win_rate) : null,
-        max_drawdown: t.max_drawdown != null ? Number(t.max_drawdown) : null,
-        trades_count: t.trades_count != null ? Number(t.trades_count) : null,
-        followers: t.followers != null ? Number(t.followers) : null,
-        source: t.source as string,
-        avatar_url: t.avatar_url as string | null,
-        arena_score: t.arena_score != null ? Number(t.arena_score) : null,
-        rank: t.rank as number,
-        profitability_score: t.profitability_score ?? null,
-        risk_control_score: t.risk_control_score ?? null,
-        execution_score: t.execution_score ?? null,
-        score_completeness: t.score_completeness ?? null,
-        trading_style: t.trading_style ?? null,
-        avg_holding_hours: t.avg_holding_hours != null ? Number(t.avg_holding_hours) : null,
-        style_confidence: t.style_confidence ?? null,
-        is_bot: t.is_bot ?? false,
-        trader_type: t.trader_type ?? null,
-        sharpe_ratio: t.sharpe_ratio != null ? Number(t.sharpe_ratio) : null,
-        sortino_ratio: t.sortino_ratio != null ? Number(t.sortino_ratio) : null,
-        calmar_ratio: t.calmar_ratio != null ? Number(t.calmar_ratio) : null,
-        profit_factor: t.profit_factor != null ? Number(t.profit_factor) : null,
-      }))
+      dispatch({ type: 'LOAD_START' })
 
-      // Fingerprint check: skip dispatch if data is identical to current state.
-      // This prevents the full 50-row re-render cascade on auto-refresh when
-      // the leaderboard hasn't changed (which is most of the time).
-      const fingerprint = traders.map(t => `${t.id}:${t.arena_score}:${t.roi}`).join('|')
-      if (fingerprint === dataFingerprintRef.current) {
-        // Data unchanged — skip dispatch to avoid unnecessary re-renders
-        dispatch({ type: 'SET_LOADING', loading: false })
-        return
-      }
-      dataFingerprintRef.current = fingerprint
+      try {
+        let url = `/api/traders?timeRange=${timeRange}&limit=${PAGE_SIZE}&page=${page}`
+        if (category && category !== 'all') {
+          url += `&category=${category}`
+        }
+        if (exchange) {
+          url += `&exchange=${encodeURIComponent(exchange)}`
+        }
+        if (sortBy !== 'arena_score') {
+          url += `&sortBy=${sortBy}&order=${sortDir}`
+        }
 
-      startTransition(() => {
-        dispatch({
-          type: 'LOAD_SUCCESS',
-          traders,
-          lastUpdated: data.lastUpdated || data.as_of || null,
-          availableSources: data.availableSources || [],
-          totalCount: data.totalCount ?? totalCountRef.current,
+        // 8s timeout prevents indefinite hang if API is slow
+        const timeoutId = setTimeout(() => controller.abort(), 8_000)
+        const response = await fetch(url, { signal: controller.signal })
+        clearTimeout(timeoutId)
+        if (!response.ok) {
+          throw new Error(`${tRef.current('loadFailed')} (${response.status})`)
+        }
+
+        const data = await response.json()
+        const traders: Trader[] = (data.traders || []).map((t: Record<string, unknown>) => ({
+          id: t.id as string,
+          handle: (t.handle as string) || null,
+          roi: t.roi != null ? Number(t.roi) : null,
+          pnl: t.pnl != null ? Number(t.pnl) : null,
+          win_rate: t.win_rate != null ? Number(t.win_rate) : null,
+          max_drawdown: t.max_drawdown != null ? Number(t.max_drawdown) : null,
+          trades_count: t.trades_count != null ? Number(t.trades_count) : null,
+          followers: t.followers != null ? Number(t.followers) : null,
+          source: t.source as string,
+          avatar_url: t.avatar_url as string | null,
+          arena_score: t.arena_score != null ? Number(t.arena_score) : null,
+          rank: t.rank as number,
+          profitability_score: t.profitability_score ?? null,
+          risk_control_score: t.risk_control_score ?? null,
+          execution_score: t.execution_score ?? null,
+          score_completeness: t.score_completeness ?? null,
+          trading_style: t.trading_style ?? null,
+          avg_holding_hours: t.avg_holding_hours != null ? Number(t.avg_holding_hours) : null,
+          style_confidence: t.style_confidence ?? null,
+          is_bot: t.is_bot ?? false,
+          trader_type: t.trader_type ?? null,
+          sharpe_ratio: t.sharpe_ratio != null ? Number(t.sharpe_ratio) : null,
+          sortino_ratio: t.sortino_ratio != null ? Number(t.sortino_ratio) : null,
+          calmar_ratio: t.calmar_ratio != null ? Number(t.calmar_ratio) : null,
+          profit_factor: t.profit_factor != null ? Number(t.profit_factor) : null,
+        }))
+
+        // Fingerprint check: skip dispatch if data is identical to current state.
+        // This prevents the full 50-row re-render cascade on auto-refresh when
+        // the leaderboard hasn't changed (which is most of the time).
+        const fingerprint = traders.map((t) => `${t.id}:${t.arena_score}:${t.roi}`).join('|')
+        if (fingerprint === dataFingerprintRef.current) {
+          // Data unchanged — skip dispatch to avoid unnecessary re-renders
+          dispatch({ type: 'SET_LOADING', loading: false })
+          return
+        }
+        dataFingerprintRef.current = fingerprint
+
+        startTransition(() => {
+          dispatch({
+            type: 'LOAD_SUCCESS',
+            traders,
+            lastUpdated: data.lastUpdated || data.as_of || null,
+            availableSources: data.availableSources || [],
+            totalCount: data.totalCount ?? totalCountRef.current,
+          })
         })
-      })
 
-      // Broadcast for multi-tab sync
-      broadcast('TRADER_DATA_UPDATED', {
-        timeRange,
-        traders,
-        lastUpdated: data.lastUpdated || '',
-      })
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
-        dispatch({ type: 'LOAD_ABORT' })
-        return
+        // Broadcast for multi-tab sync
+        broadcast('TRADER_DATA_UPDATED', {
+          timeRange,
+          traders,
+          lastUpdated: data.lastUpdated || '',
+        })
+      } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+          dispatch({ type: 'LOAD_ABORT' })
+          return
+        }
+        const errorMsg = err instanceof Error ? err.message : tRef.current('errorNetworkFailed')
+        dispatch({ type: 'LOAD_ERROR', error: errorMsg })
+      } finally {
+        abortControllers.delete(cancelKey)
       }
-      const errorMsg = err instanceof Error ? err.message : tRef.current('errorNetworkFailed')
-      dispatch({ type: 'LOAD_ERROR', error: errorMsg })
-    } finally {
-      abortControllers.delete(cancelKey)
-    }
-  }, [state.activeTimeRange, broadcast])
+    },
+    [state.activeTimeRange, broadcast]
+  )
   // NOTE: state.totalCount was deliberately REMOVED from this dependency array.
   // Including it caused a re-fetch loop: each LOAD_SUCCESS updates totalCount →
   // fetchPage gets new identity → useEffect re-runs → triggers another fetch → loop.
@@ -363,7 +396,10 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     }
 
     const stopInterval = () => {
-      if (intervalId) { clearInterval(intervalId); intervalId = null }
+      if (intervalId) {
+        clearInterval(intervalId)
+        intervalId = null
+      }
     }
 
     const handleVisibilityChange = () => {
@@ -387,7 +423,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
   // Ref for activeTimeRange to keep changeTimeRange identity stable
   const activeTimeRangeRef = useRef(state.activeTimeRange)
-  useEffect(() => { activeTimeRangeRef.current = state.activeTimeRange }, [state.activeTimeRange])
+  useEffect(() => {
+    activeTimeRangeRef.current = state.activeTimeRange
+  }, [state.activeTimeRange])
 
   // Time range switching with debounce (stable identity — no state in deps)
   const changeTimeRange = useCallback((range: TimeRange) => {
@@ -420,31 +458,45 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     })
   }, [fetchPage])
 
-  const result = useMemo(() => ({
-    traders: state.currentTraders,
-    loading: state.loading,
-    error: state.error,
-    activeTimeRange: state.activeTimeRange,
-    lastUpdated: state.lastUpdated,
-    availableSources: state.availableSources,
-    changeTimeRange,
-    refresh,
-    clearCache: () => {},
-    deferredFetchFailed: state.deferredFetchFailed,
-    retryDeferredFetch,
-    isChangingTimeRange: state.isChangingTimeRange,
-    totalCount: state.totalCount,
-    categoryCounts: state.categoryCounts,
-    fetchPage,
-    lastRefreshFailed: state.lastRefreshFailed,
-    staleDataWarning: state.staleDataWarning,
-  }), [
-    state.currentTraders, state.loading, state.error, state.activeTimeRange,
-    state.lastUpdated, state.availableSources, state.deferredFetchFailed,
-    state.isChangingTimeRange, state.totalCount, state.categoryCounts,
-    state.lastRefreshFailed, state.staleDataWarning,
-    changeTimeRange, refresh, retryDeferredFetch, fetchPage,
-  ])
+  const result = useMemo(
+    () => ({
+      traders: state.currentTraders,
+      loading: state.loading,
+      error: state.error,
+      activeTimeRange: state.activeTimeRange,
+      lastUpdated: state.lastUpdated,
+      availableSources: state.availableSources,
+      changeTimeRange,
+      refresh,
+      clearCache: () => {},
+      deferredFetchFailed: state.deferredFetchFailed,
+      retryDeferredFetch,
+      isChangingTimeRange: state.isChangingTimeRange,
+      totalCount: state.totalCount,
+      categoryCounts: state.categoryCounts,
+      fetchPage,
+      lastRefreshFailed: state.lastRefreshFailed,
+      staleDataWarning: state.staleDataWarning,
+    }),
+    [
+      state.currentTraders,
+      state.loading,
+      state.error,
+      state.activeTimeRange,
+      state.lastUpdated,
+      state.availableSources,
+      state.deferredFetchFailed,
+      state.isChangingTimeRange,
+      state.totalCount,
+      state.categoryCounts,
+      state.lastRefreshFailed,
+      state.staleDataWarning,
+      changeTimeRange,
+      refresh,
+      retryDeferredFetch,
+      fetchPage,
+    ]
+  )
 
   return result
 }

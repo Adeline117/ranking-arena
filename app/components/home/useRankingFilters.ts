@@ -139,11 +139,17 @@ export function useRankingFilters({
   useEffect(() => {
     const handler = (e: Event) => {
       const exchange = (e as CustomEvent).detail?.exchange
-      if (exchange) setSelectedExchange(exchange)
+      if (exchange) {
+        setSelectedExchange(exchange)
+        setCurrentPage(1)
+        if (fetchPage) {
+          fetchPage(0, { exchange })
+        }
+      }
     }
     window.addEventListener('arena:filter-exchange', handler)
     return () => window.removeEventListener('arena:filter-exchange', handler)
-  }, [])
+  }, [fetchPage])
 
   // Server-side category change: fetch page 0 of the new category
   const setCategory = useCallback(
@@ -188,7 +194,15 @@ export function useRankingFilters({
     if (minPnl) config.min_pnl = Number(minPnl)
     if (minScore) config.min_score = Number(minScore)
     if (minWr) config.min_win_rate = Number(minWr)
-    if (exchange) config.exchange = exchange.split(',').map((ex) => resolveExchangeSlug(ex))
+    // Legacy ?exchange= param: route through selectedExchange (server-side) instead of
+    // client-side advanced filter. Old links like /?exchange=binance-futures still work.
+    if (exchange && !searchParams.get('ex')) {
+      const resolvedEx = resolveExchangeSlug(exchange.split(',')[0])
+      setSelectedExchange(resolvedEx)
+      if (fetchPage) {
+        fetchPage(0, { exchange: resolvedEx })
+      }
+    }
     if (fcat) config.category = fcat.split(',')
 
     const storedPrefs = getStoredPreferences()
@@ -234,7 +248,12 @@ export function useRankingFilters({
     }
 
     if (urlEx) {
-      setSelectedExchange(urlEx)
+      const resolvedEx = resolveExchangeSlug(urlEx)
+      setSelectedExchange(resolvedEx)
+      // Trigger server-side fetch filtered by exchange (e.g. from /exchange/binance-futures redirect)
+      if (fetchPage) {
+        fetchPage(0, { exchange: resolvedEx })
+      }
     } else if (storedPrefs.exchange) {
       setSelectedExchange(storedPrefs.exchange)
     }
@@ -582,19 +601,24 @@ export function useRankingFilters({
     [traders, category, fetchPage]
   )
 
+  // With server-side pagination (fetchPage available), exchange is already filtered by the API.
+  // Skip client-side exchange filter to avoid double-filtering.
   const exchangeFiltered = useMemo(() => {
+    if (fetchPage) return categoryFiltered
     const raw = selectedExchange
       ? categoryFiltered.filter((trader) => trader.source === selectedExchange)
       : categoryFiltered
     return selectedExchange && raw.length === 0 && categoryFiltered.length > 0
       ? categoryFiltered
       : raw
-  }, [categoryFiltered, selectedExchange])
+  }, [categoryFiltered, selectedExchange, fetchPage])
 
   // Auto-clear exchange filter when no traders match (avoids stale filter)
   // NOTE: syncStateToUrl intentionally excluded from deps to prevent infinite loop
   // (calling syncStateToUrl changes its deps → recreates → re-triggers this effect)
+  // Skip when fetchPage is available — server already filters by exchange.
   useEffect(() => {
+    if (fetchPage) return
     if (selectedExchange && categoryFiltered.length > 0) {
       const hasMatch = categoryFiltered.some((trader) => trader.source === selectedExchange)
       if (!hasMatch) {
@@ -700,7 +724,7 @@ export function useRankingFilters({
         })
         .catch(() => {
           /* silent best-effort fallback */
-        }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+        })
     }, 400)
     return () => {
       clearTimeout(timer)

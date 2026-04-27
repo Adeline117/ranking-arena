@@ -692,8 +692,8 @@ const nextConfig = {
       // /rankings/tokens pages unreachable. Negative lookahead fixes it.
       {
         source: '/rankings/:exchange((?!bots|tokens|traders)[^/]+)',
-        destination: '/?exchange=:exchange',
-        permanent: true,
+        destination: '/?ex=:exchange',
+        permanent: false,
       },
     ]
   },
