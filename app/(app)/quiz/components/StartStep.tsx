@@ -1,5 +1,7 @@
 'use client'
 
+import Image from 'next/image'
+
 interface StartStepProps {
   tr: (key: string) => string
   onStart: () => void
@@ -8,27 +10,16 @@ interface StartStepProps {
 export default function StartStep({ tr, onStart }: StartStepProps) {
   return (
     <div className="quiz-start-content">
-      {/* Animated floating icon */}
-      <div className="quiz-start-icon">
-        <svg
-          width="38"
-          height="38"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="white"
-          strokeWidth="2"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <circle cx="12" cy="12" r="10" />
-          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
-          <line x1="12" y1="17" x2="12.01" y2="17" />
-        </svg>
+      {/* Arena logo with glow ring */}
+      <div className="quiz-start-logo-wrap">
+        <div className="quiz-start-logo-ring" />
+        <div className="quiz-start-logo">
+          <Image src="/logo-symbol.png" alt="Arena" width={52} height={52} priority />
+        </div>
       </div>
 
       {/* Title with dramatic hierarchy */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div className="quiz-start-text">
         <h1 className="quiz-start-title">{tr('quizTitle')}</h1>
         <p className="quiz-start-subtitle">{tr('quizSubtitle')}</p>
       </div>
