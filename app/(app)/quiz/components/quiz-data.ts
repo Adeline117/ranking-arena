@@ -302,8 +302,8 @@ export const PERSONALITY_TYPE_MAP = Object.fromEntries(
  * on dark glass backgrounds. These lightened variants maintain brand identity with proper contrast.
  */
 export const TYPE_TEXT_COLOR: Record<string, string> = {
-  hodler: '#34D399', // emerald-400 for dark bg contrast
-  paperhands: '#FCA5A5', // red-300 for dark bg contrast
+  // Overrides only for types whose base color has poor contrast on BOTH light and dark glass.
+  // Most types use their base color directly.
 }
 
 // ─── 30 Quiz Questions ──────────────────────────────────────────────
