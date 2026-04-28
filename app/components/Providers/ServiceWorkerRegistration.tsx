@@ -9,9 +9,6 @@ import { useEffect } from 'react'
  */
 export function ServiceWorkerRegistration() {
   useEffect(() => {
-    // Mark that React hydrated successfully — used by emergency SW recovery in layout.tsx
-    document.body.setAttribute('data-hydrated', '1')
-
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return
     if (process.env.NODE_ENV !== 'production') return
 
