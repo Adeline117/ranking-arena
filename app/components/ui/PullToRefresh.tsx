@@ -38,39 +38,63 @@ export default function PullToRefresh({
 
   const containerRef = useRef<HTMLDivElement>(null)
   const startYRef = useRef(0)
+  const startXRef = useRef(0)
   const currentYRef = useRef(0)
   const isActiveRef = useRef(false)
+  const directionLockedRef = useRef(false)
 
   const canPull = useCallback(() => {
     if (disabled || isRefreshing) return false
-    // Only allow pull if at top of scroll
     if (containerRef.current) {
-      return window.scrollY === 0
+      return window.scrollY <= 1
     }
     return false
   }, [disabled, isRefreshing])
 
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (!canPull()) return
-    startYRef.current = e.touches[0].clientY
-    isActiveRef.current = true
-  }, [canPull])
+  const handleTouchStart = useCallback(
+    (e: TouchEvent) => {
+      if (!canPull()) return
+      startYRef.current = e.touches[0].clientY
+      startXRef.current = e.touches[0].clientX
+      isActiveRef.current = true
+      directionLockedRef.current = false
+    },
+    [canPull]
+  )
 
-  const handleTouchMove = useCallback((e: TouchEvent) => {
-    if (!isActiveRef.current || !canPull()) return
+  const handleTouchMove = useCallback(
+    (e: TouchEvent) => {
+      if (!isActiveRef.current || !canPull()) return
 
-    currentYRef.current = e.touches[0].clientY
-    const distance = currentYRef.current - startYRef.current
+      currentYRef.current = e.touches[0].clientY
+      const dy = currentYRef.current - startYRef.current
+      const dx = Math.abs(e.touches[0].clientX - startXRef.current)
 
-    if (distance > 0) {
-      // Prevent default scroll when pulling down
-      e.preventDefault()
-      setIsPulling(true)
-      // Apply resistance for a more natural feel
-      const resistedDistance = Math.min(distance * 0.5, threshold * 1.5)
-      setPullDistance(resistedDistance)
-    }
-  }, [canPull, threshold])
+      // Direction lock: horizontal swipe wins — bail and let native handle it
+      if (!directionLockedRef.current && dx > 10) {
+        isActiveRef.current = false
+        return
+      }
+
+      // Scrolling up — bail
+      if (dy < -5) {
+        isActiveRef.current = false
+        return
+      }
+
+      // Dead zone: only intercept after clear downward intent (10px)
+      // overscroll-behavior:contain on body prevents native bounce, so
+      // this dead zone has no visible side-effect.
+      if (dy > 10) {
+        directionLockedRef.current = true
+        e.preventDefault()
+        setIsPulling(true)
+        const resistedDistance = Math.min(dy * 0.5, threshold * 1.5)
+        setPullDistance(resistedDistance)
+      }
+    },
+    [canPull, threshold]
+  )
 
   const handleTouchEnd = useCallback(async () => {
     if (!isActiveRef.current) return
@@ -155,7 +179,9 @@ export default function PullToRefresh({
           stroke={tokens.colors.accent.primary}
           strokeWidth="2"
           style={{
-            transform: isRefreshing ? 'none' : `rotate(${Math.min(pullDistance / threshold, 1) * 360}deg)`,
+            transform: isRefreshing
+              ? 'none'
+              : `rotate(${Math.min(pullDistance / threshold, 1) * 360}deg)`,
             transition: 'transform 0.1s ease-out',
             animation: isRefreshing ? 'spin 1s linear infinite' : 'none',
           }}
@@ -189,8 +215,12 @@ export default function PullToRefresh({
       {/* CSS for spinner animation */}
       <style jsx global>{`
         @keyframes spin {
-          from { transform: rotate(0deg); }
-          to { transform: rotate(360deg); }
+          from {
+            transform: rotate(0deg);
+          }
+          to {
+            transform: rotate(360deg);
+          }
         }
 
         @media (min-width: 768px) {

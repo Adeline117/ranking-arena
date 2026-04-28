@@ -1,6 +1,6 @@
 /**
  * 移动端手势 Hooks
- * 
+ *
  * 包含:
  * - usePullToRefresh: 下拉刷新
  * - useSwipeActions: 滑动操作
@@ -32,48 +32,71 @@ export function usePullToRefresh({
 }: UsePullToRefreshOptions) {
   const [state, setState] = useState<PullToRefreshState>('idle')
   const [pullDistance, setPullDistance] = useState(0)
-  
+
   const containerRef = useRef<HTMLDivElement>(null)
   const startY = useRef(0)
+  const startX = useRef(0)
   const currentY = useRef(0)
   const isTracking = useRef(false)
+  const directionLocked = useRef(false)
 
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (disabled || state === 'refreshing') return
-    
-    const container = containerRef.current
-    if (!container || container.scrollTop > 0) return
-    
-    startY.current = e.touches[0].clientY
-    isTracking.current = true
-  }, [disabled, state])
+  const handleTouchStart = useCallback(
+    (e: TouchEvent) => {
+      if (disabled || state === 'refreshing') return
 
-  const handleTouchMove = useCallback((e: TouchEvent) => {
-    if (!isTracking.current || disabled || state === 'refreshing') return
-    
-    currentY.current = e.touches[0].clientY
-    const deltaY = currentY.current - startY.current
-    
-    if (deltaY > 0) {
-      // 使用阻尼效果
-      const dampedDistance = Math.min(deltaY * 0.5, maxPull)
-      setPullDistance(dampedDistance)
-      
-      if (dampedDistance >= threshold) {
-        setState('ready')
-      } else {
-        setState('pulling')
+      const container = containerRef.current
+      if (!container || container.scrollTop > 0) return
+
+      startY.current = e.touches[0].clientY
+      startX.current = e.touches[0].clientX
+      isTracking.current = true
+      directionLocked.current = false
+    },
+    [disabled, state]
+  )
+
+  const handleTouchMove = useCallback(
+    (e: TouchEvent) => {
+      if (!isTracking.current || disabled || state === 'refreshing') return
+
+      currentY.current = e.touches[0].clientY
+      const deltaY = currentY.current - startY.current
+      const deltaX = Math.abs(e.touches[0].clientX - startX.current)
+
+      // Direction lock: horizontal swipe wins
+      if (!directionLocked.current && deltaX > 10) {
+        isTracking.current = false
+        return
       }
-      
-      // 阻止默认滚动
-      e.preventDefault()
-    }
-  }, [disabled, state, threshold, maxPull])
+
+      // Scrolling up — bail
+      if (deltaY < -5) {
+        isTracking.current = false
+        return
+      }
+
+      // Dead zone: only intercept after clear downward intent (10px)
+      if (deltaY > 10) {
+        directionLocked.current = true
+        const dampedDistance = Math.min(deltaY * 0.5, maxPull)
+        setPullDistance(dampedDistance)
+
+        if (dampedDistance >= threshold) {
+          setState('ready')
+        } else {
+          setState('pulling')
+        }
+
+        e.preventDefault()
+      }
+    },
+    [disabled, state, threshold, maxPull]
+  )
 
   const handleTouchEnd = useCallback(async () => {
     if (!isTracking.current) return
     isTracking.current = false
-    
+
     if (state === 'ready') {
       setState('refreshing')
       try {
@@ -140,50 +163,56 @@ export function useSwipeActions({
 }: UseSwipeActionsOptions) {
   const [swiping, setSwiping] = useState(false)
   const [swipeOffset, setSwipeOffset] = useState({ x: 0, y: 0 })
-  
+
   const elementRef = useRef<HTMLDivElement>(null)
   const startPos = useRef({ x: 0, y: 0 })
   const startTime = useRef(0)
   const isTracking = useRef(false)
 
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (disabled) return
-    
-    startPos.current = {
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY,
-    }
-    startTime.current = Date.now()
-    isTracking.current = true
-    setSwiping(true)
-  }, [disabled])
+  const handleTouchStart = useCallback(
+    (e: TouchEvent) => {
+      if (disabled) return
 
-  const handleTouchMove = useCallback((e: TouchEvent) => {
-    if (!isTracking.current || disabled) return
-    
-    const currentX = e.touches[0].clientX
-    const currentY = e.touches[0].clientY
-    
-    setSwipeOffset({
-      x: currentX - startPos.current.x,
-      y: currentY - startPos.current.y,
-    })
-  }, [disabled])
+      startPos.current = {
+        x: e.touches[0].clientX,
+        y: e.touches[0].clientY,
+      }
+      startTime.current = Date.now()
+      isTracking.current = true
+      setSwiping(true)
+    },
+    [disabled]
+  )
+
+  const handleTouchMove = useCallback(
+    (e: TouchEvent) => {
+      if (!isTracking.current || disabled) return
+
+      const currentX = e.touches[0].clientX
+      const currentY = e.touches[0].clientY
+
+      setSwipeOffset({
+        x: currentX - startPos.current.x,
+        y: currentY - startPos.current.y,
+      })
+    },
+    [disabled]
+  )
 
   const handleTouchEnd = useCallback(() => {
     if (!isTracking.current) return
     isTracking.current = false
     setSwiping(false)
-    
+
     const deltaX = swipeOffset.x
     const deltaY = swipeOffset.y
     const duration = Date.now() - startTime.current
     const velocityX = Math.abs(deltaX) / duration
     const velocityY = Math.abs(deltaY) / duration
-    
+
     const absX = Math.abs(deltaX)
     const absY = Math.abs(deltaY)
-    
+
     // 判断是水平滑动还是垂直滑动
     if (absX > absY) {
       // 水平滑动
@@ -204,7 +233,7 @@ export function useSwipeActions({
         }
       }
     }
-    
+
     setSwipeOffset({ x: 0, y: 0 })
   }, [swipeOffset, threshold, velocityThreshold, onSwipeLeft, onSwipeRight, onSwipeUp, onSwipeDown])
 
@@ -249,16 +278,16 @@ export function useLongPress({
 }: UseLongPressOptions) {
   const [pressing, setPressing] = useState(false)
   const [longPressed, setLongPressed] = useState(false)
-  
+
   const timerRef = useRef<NodeJS.Timeout | null>(null)
   const isLongPressRef = useRef(false)
 
   const start = useCallback(() => {
     if (disabled) return
-    
+
     setPressing(true)
     isLongPressRef.current = false
-    
+
     timerRef.current = setTimeout(() => {
       isLongPressRef.current = true
       setLongPressed(true)
@@ -269,12 +298,12 @@ export function useLongPress({
   const stop = useCallback(() => {
     setPressing(false)
     setLongPressed(false)
-    
+
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
     }
-    
+
     // 如果不是长按，触发普通点击
     if (!isLongPressRef.current && onPress) {
       onPress()
@@ -284,7 +313,7 @@ export function useLongPress({
   const cancel = useCallback(() => {
     setPressing(false)
     setLongPressed(false)
-    
+
     if (timerRef.current) {
       clearTimeout(timerRef.current)
       timerRef.current = null
@@ -338,25 +367,31 @@ export function useSwipeToDelete({
   const startX = useRef(0)
   const isTracking = useRef(false)
 
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (disabled) return
-    startX.current = e.touches[0].clientX
-    isTracking.current = true
-    setIsAnimating(false)
-  }, [disabled])
+  const handleTouchStart = useCallback(
+    (e: TouchEvent) => {
+      if (disabled) return
+      startX.current = e.touches[0].clientX
+      isTracking.current = true
+      setIsAnimating(false)
+    },
+    [disabled]
+  )
 
-  const handleTouchMove = useCallback((e: TouchEvent) => {
-    if (!isTracking.current || disabled) return
+  const handleTouchMove = useCallback(
+    (e: TouchEvent) => {
+      if (!isTracking.current || disabled) return
 
-    const deltaX = e.touches[0].clientX - startX.current
+      const deltaX = e.touches[0].clientX - startX.current
 
-    // 只允许向左滑动
-    if (deltaX < 0) {
-      const dampedX = Math.max(deltaX * 0.8, -maxSwipe)
-      setSwipeX(dampedX)
-      setShowDelete(Math.abs(dampedX) >= deleteThreshold)
-    }
-  }, [disabled, deleteThreshold, maxSwipe])
+      // 只允许向左滑动
+      if (deltaX < 0) {
+        const dampedX = Math.max(deltaX * 0.8, -maxSwipe)
+        setSwipeX(dampedX)
+        setShowDelete(Math.abs(dampedX) >= deleteThreshold)
+      }
+    },
+    [disabled, deleteThreshold, maxSwipe]
+  )
 
   const handleTouchEnd = useCallback(() => {
     if (!isTracking.current) return
