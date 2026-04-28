@@ -183,43 +183,27 @@ export default function PersonalityCard({
       <div
         className="quiz-hero-icon"
         style={{
-          background: hasArt
-            ? `radial-gradient(ellipse at 50% 30%, ${type.color}18 0%, ${type.color}06 60%, transparent 100%)`
-            : `${type.color}10`,
-          border: `1.5px solid ${type.color}30`,
-          width: hasArt ? 'clamp(150px, 42vw, 190px)' : 'clamp(64px, 18vw, 80px)',
-          height: hasArt ? 'clamp(220px, 60vw, 280px)' : 'clamp(64px, 18vw, 80px)',
-          borderRadius: hasArt ? 'clamp(18px, 4vw, 24px)' : 'clamp(14px, 3vw, 20px)',
+          background: hasArt ? '#111118' : `${type.color}10`,
+          border: 'none',
+          width: hasArt ? 'clamp(200px, 56vw, 260px)' : 'clamp(64px, 18vw, 80px)',
+          height: hasArt ? 'clamp(200px, 56vw, 260px)' : 'clamp(64px, 18vw, 80px)',
+          borderRadius: hasArt ? '50%' : 'clamp(14px, 3vw, 20px)',
           overflow: 'hidden',
           position: 'relative',
           boxShadow: hasArt
-            ? `0 0 0 1px ${type.color}15, 0 20px 60px ${type.color}30, 0 8px 24px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.08)`
+            ? `0 0 0 3px ${type.color}30, 0 0 0 6px ${type.color}12, 0 12px 40px ${type.color}25, 0 4px 16px rgba(0,0,0,0.3)`
             : `0 12px 32px ${type.color}25`,
         }}
       >
-        {/* Inner shine on art frame */}
-        {hasArt && (
-          <div
-            aria-hidden="true"
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: `linear-gradient(170deg, rgba(255,255,255,0.08) 0%, transparent 40%, transparent 80%, ${type.color}10 100%)`,
-              zIndex: 2,
-              pointerEvents: 'none',
-              borderRadius: 'inherit',
-            }}
-          />
-        )}
         {hasArt ? (
           <Image
             src={`/images/quiz/${type.id}.jpg`}
             alt={tr(type.nameKey)}
-            width={200}
-            height={400}
+            width={260}
+            height={520}
             style={{
               objectFit: 'cover',
-              objectPosition: 'center 30%',
+              objectPosition: 'center 35%',
               display: 'block',
               width: '100%',
               height: '100%',
