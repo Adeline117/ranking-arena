@@ -154,7 +154,7 @@ export default function PersonalityCard({
         <div
           className="quiz-hero-icon"
           style={{
-            width: 'clamp(140px, 40vw, 180px)',
+            width: 'clamp(200px, 58vw, 280px)',
             position: 'relative',
           }}
         >
