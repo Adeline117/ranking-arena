@@ -53,45 +53,41 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
   useEffect(() => {
     if (prefersReducedMotion) return
 
+    let rafId: number
+    let cancelled = false
     const start = Date.now()
     const duration = 1500
     const tick = () => {
+      if (cancelled) return
       const elapsed = Date.now() - start
       const pct = Math.min(100, (elapsed / duration) * 100)
       setProgress(pct)
       if (elapsed < duration) {
-        requestAnimationFrame(tick)
+        rafId = requestAnimationFrame(tick)
       } else {
         onDoneRef.current()
       }
     }
-    requestAnimationFrame(tick)
-  }, [prefersReducedMotion]) // eslint-disable-line react-hooks/exhaustive-deps
+    rafId = requestAnimationFrame(tick)
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(rafId)
+    }
+  }, [prefersReducedMotion])
 
   return (
     <div className="quiz-calculating">
       {/* Spinner with glow */}
-      <div
-        role="status"
-        aria-label="Calculating results"
-        className="quiz-calc-spinner"
-      />
+      <div role="status" aria-label="Calculating results" className="quiz-calc-spinner" />
 
       {/* Rotating messages */}
-      <p
-        aria-live="polite"
-        className="quiz-calc-message"
-        key={messageIdx}
-      >
+      <p aria-live="polite" className="quiz-calc-message" key={messageIdx}>
         {messages[messageIdx]}
       </p>
 
       {/* Progress bar */}
       <div className="quiz-calc-bar-track">
-        <div
-          className="quiz-calc-bar-fill"
-          style={{ width: `${progress}%` }}
-        />
+        <div className="quiz-calc-bar-fill" style={{ width: `${progress}%` }} />
       </div>
     </div>
   )

@@ -2,8 +2,8 @@
  * Trading Personality Quiz — Scoring algorithm
  *
  * Tallies weighted scores from all 30 answers, normalizes per-type,
- * applies softmax with temperature 1.5 for smooth probability distribution,
- * then produces primary + secondary type, match percentage (55-99%),
+ * applies softmax with temperature 0.8 for peaked probability distribution,
+ * then produces primary + secondary type, match percentage (62-97%),
  * and allTypePercents (summing to 100).
  */
 
@@ -91,9 +91,13 @@ export function calculateResult(answers: Record<number, string>): QuizResult {
   const primaryType = indexed[0].id
   const secondaryType = indexed[1].id
 
-  // 5. matchPercent = floor(55 + softmaxProb[primary] * 44), clamped [55, 99]
+  // 5. matchPercent — map softmax probability to a meaningful 62-97% range
+  // With 12 types, uniform = 8.3%, strong primary ≈ 19%. Map [0.083, 0.20] → [62, 97].
   const primaryProb = indexed[0].prob
-  const matchPercent = Math.min(99, Math.max(55, Math.floor(55 + primaryProb * 44)))
+  const minProb = 1 / ALL_TYPE_IDS.length // ~0.0833
+  const maxProb = 0.22 // practical ceiling
+  const t = Math.min(1, Math.max(0, (primaryProb - minProb) / (maxProb - minProb)))
+  const matchPercent = Math.min(97, Math.max(62, Math.round(62 + t * 35)))
 
   // 6. allTypePercents: softmax probabilities * 100, rounded to integers summing to 100
   const rawPercents = probabilities.map((p) => Math.round(p * 100))

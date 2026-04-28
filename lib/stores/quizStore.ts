@@ -29,7 +29,11 @@ export const useQuizStore = create<QuizState>()(
     }),
     {
       name: 'arena-quiz-progress',
-      partialize: (state) => ({ answers: state.answers, currentQuestion: state.currentQuestion }),
+      partialize: (state) => ({
+        answers: state.answers,
+        currentQuestion: state.currentQuestion,
+        result: state.result,
+      }),
     }
   )
 )

@@ -39,7 +39,12 @@ export default function ResultPageClient({
     setMounted(true)
     const unsub = onTranslationsReady(() => setTxnReady(true))
     if (t('quizTitle') !== 'quizTitle') setTxnReady(true)
-    return unsub
+    // Fallback: if translations fail to load within 3s, render anyway with raw keys
+    const timeout = setTimeout(() => setTxnReady(true), 3000)
+    return () => {
+      unsub()
+      clearTimeout(timeout)
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const pType = PERSONALITY_TYPE_MAP[typeId] || PERSONALITY_TYPES[0]
