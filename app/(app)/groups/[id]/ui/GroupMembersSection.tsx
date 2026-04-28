@@ -1,20 +1,15 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
-import { useModalA11y } from '@/lib/hooks/useModalA11y'
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-
-/** Shared hook for modal behavior: scroll lock + Escape key + focus restore */
-function useModalBehavior(onClose: () => void) {
-  useModalA11y({ open: true, onClose })
-}
 
 interface Group {
   id: string
@@ -41,20 +36,6 @@ interface GroupInfoModalProps {
   language: string
   onClose: () => void
   onShowMembers: () => void
-}
-
-// Shared modal backdrop styles
-const modalBackdropStyle: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  background: 'var(--color-backdrop)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  zIndex: tokens.zIndex.modal,
 }
 
 // Shared close button component
@@ -210,7 +191,6 @@ export function GroupInfoModal({
   onShowMembers,
 }: GroupInfoModalProps): React.ReactElement {
   const { t } = useLanguage()
-  useModalBehavior(onClose)
   const description =
     language === 'en' && group.description_en ? group.description_en : group.description
   // Use rules_json for bilingual rules, fallback to rules
@@ -229,26 +209,8 @@ export function GroupInfoModal({
     : t('unknown')
 
   return (
-    <Box
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('groupInfo')}
-      style={modalBackdropStyle}
-      onClick={onClose}
-    >
-      <Box
-        style={{
-          background: tokens.colors.bg.primary,
-          borderRadius: tokens.radius.xl,
-          padding: tokens.spacing[6],
-          width: '90%',
-          maxWidth: 500,
-          maxHeight: '80vh',
-          overflowY: 'auto',
-          border: `1px solid ${tokens.colors.border.primary}`,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalOverlay open onClose={onClose} label={t('groupInfo')} maxWidth={500}>
+      <div style={{ padding: tokens.spacing[6] }}>
         <ModalHeader title={t('groupInfo')} onClose={onClose} />
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -317,8 +279,8 @@ export function GroupInfoModal({
             {t('close')}
           </Button>
         </Box>
-      </Box>
-    </Box>
+      </div>
+    </ModalOverlay>
   )
 }
 
@@ -419,7 +381,6 @@ export function MembersListModal({
   onClose,
 }: MembersListModalProps): React.ReactElement {
   const { t } = useLanguage()
-  useModalBehavior(onClose)
   const title = `${t('groupMembers')} (${memberCount})`
 
   function renderContent(): React.ReactElement {
@@ -447,26 +408,8 @@ export function MembersListModal({
   }
 
   return (
-    <Box
-      role="dialog"
-      aria-modal="true"
-      aria-label={title}
-      style={modalBackdropStyle}
-      onClick={onClose}
-    >
-      <Box
-        style={{
-          background: tokens.colors.bg.primary,
-          borderRadius: tokens.radius.xl,
-          padding: tokens.spacing[6],
-          width: '90%',
-          maxWidth: 400,
-          maxHeight: '80vh',
-          overflowY: 'auto',
-          border: `1px solid ${tokens.colors.border.primary}`,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalOverlay open onClose={onClose} label={title} maxWidth={400}>
+      <div style={{ padding: tokens.spacing[6] }}>
         <ModalHeader title={title} onClose={onClose} />
         {renderContent()}
         <Box style={{ marginTop: tokens.spacing[4], textAlign: 'right' }}>
@@ -474,7 +417,7 @@ export function MembersListModal({
             {t('close')}
           </Button>
         </Box>
-      </Box>
-    </Box>
+      </div>
+    </ModalOverlay>
   )
 }

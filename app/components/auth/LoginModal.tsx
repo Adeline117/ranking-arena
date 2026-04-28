@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import { useModalA11y } from '@/lib/hooks/useModalA11y'
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
 
@@ -90,7 +90,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
     if (step === 'email-sent' && otpRef.current) otpRef.current.focus()
   }, [step])
 
-  useModalA11y({ open, onClose })
+  // scroll lock + escape + focus handled by ModalOverlay
 
   const handleGoogle = useCallback(async () => {
     setError('')
@@ -169,41 +169,9 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
     }
   }, [email, otp, loading, onClose, t])
 
-  if (!open) return null
-
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('login')}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) onClose()
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: tokens.zIndex.modal,
-        background: 'var(--color-backdrop-heavy, rgba(0,0,0,0.75))',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-        backdropFilter: tokens.glass.blur.xs,
-        WebkitBackdropFilter: tokens.glass.blur.xs,
-      }}
-    >
-      <div
-        style={{
-          background: 'var(--color-bg-secondary)',
-          border: '1px solid var(--glass-border-medium)',
-          borderRadius: tokens.radius.xl,
-          padding: '32px 24px',
-          width: '100%',
-          maxWidth: 400,
-          boxShadow: '0 24px 64px var(--color-overlay-dark, rgba(0,0,0,0.6))',
-          position: 'relative',
-        }}
-      >
+    <ModalOverlay open={open} onClose={onClose} label={t('login')} maxWidth={400} backdrop="heavy">
+      <div style={{ padding: '32px 24px', position: 'relative' }}>
         {/* Close button */}
         <button
           onClick={onClose}
@@ -603,6 +571,6 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
           </>
         )}
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

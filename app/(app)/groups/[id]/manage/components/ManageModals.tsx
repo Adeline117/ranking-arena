@@ -2,12 +2,7 @@
 
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
-import { useModalA11y } from '@/lib/hooks/useModalA11y'
-
-/** Shared ESC key + body scroll lock for simple modals */
-function useLocalModalA11y(onClose: () => void) {
-  useModalA11y({ open: true, onClose })
-}
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 
 interface MuteModalProps {
   targetUserId: string
@@ -32,34 +27,9 @@ export function MuteModal({
   inputStyle,
   t,
 }: MuteModalProps) {
-  useLocalModalA11y(onClose)
   return (
-    <Box
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'var(--color-backdrop)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: tokens.zIndex.modal,
-      }}
-      onClick={onClose}
-    >
-      <Box
-        style={{
-          background: tokens.colors.bg.primary,
-          borderRadius: tokens.radius.xl,
-          padding: tokens.spacing[6],
-          width: '90%',
-          maxWidth: 400,
-          border: `1px solid ${tokens.colors.border.primary}`,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalOverlay open onClose={onClose} label={t('muteMember')} maxWidth={400}>
+      <div style={{ padding: tokens.spacing[6] }}>
         <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
           {t('muteMember')}
         </Text>
@@ -115,8 +85,8 @@ export function MuteModal({
             {t('confirmMute')}
           </Button>
         </Box>
-      </Box>
-    </Box>
+      </div>
+    </ModalOverlay>
   )
 }
 
@@ -143,34 +113,9 @@ export function NotifyModal({
   inputStyle,
   t,
 }: NotifyModalProps) {
-  useLocalModalA11y(onClose)
   return (
-    <Box
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'var(--color-backdrop)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: tokens.zIndex.modal,
-      }}
-      onClick={onClose}
-    >
-      <Box
-        style={{
-          background: tokens.colors.bg.primary,
-          borderRadius: tokens.radius.xl,
-          padding: tokens.spacing[6],
-          width: '90%',
-          maxWidth: 450,
-          border: `1px solid ${tokens.colors.border.primary}`,
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <ModalOverlay open onClose={onClose} label={t('notifyAllMembers')} maxWidth={450}>
+      <div style={{ padding: tokens.spacing[6] }}>
         <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
           {t('notifyAllMembers')}
         </Text>
@@ -231,7 +176,7 @@ export function NotifyModal({
             {notifySending ? t('sending') : t('sendNotification')}
           </Button>
         </Box>
-      </Box>
-    </Box>
+      </div>
+    </ModalOverlay>
   )
 }

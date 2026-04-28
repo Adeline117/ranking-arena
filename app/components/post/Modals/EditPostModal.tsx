@@ -1,8 +1,7 @@
 'use client'
 
-import { useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useModalA11y } from '@/lib/hooks/useModalA11y'
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 
 interface EditPostModalProps {
@@ -26,39 +25,9 @@ export function EditPostModal({
   saving,
   t,
 }: EditPostModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null)
-
-  useModalA11y({ open: true, onClose: onCancel, modalRef: dialogRef })
-
   return (
-    <div
-      onClick={onCancel}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'var(--color-backdrop-medium)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-        zIndex: tokens.zIndex.modal,
-      }}
-    >
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('editPost') || 'Edit post'}
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: '100%',
-          maxWidth: 500,
-          background: tokens.colors.bg.secondary,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.xl,
-          padding: 24,
-        }}
-      >
+    <ModalOverlay open onClose={onCancel} label={t('editPost') || 'Edit post'} maxWidth={500}>
+      <div style={{ padding: 24 }}>
         <h2
           style={{
             fontSize: 18,
@@ -173,6 +142,6 @@ export function EditPostModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }

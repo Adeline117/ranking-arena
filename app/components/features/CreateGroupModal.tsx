@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import { useModalA11y } from '@/lib/hooks/useModalA11y'
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
@@ -28,9 +28,6 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const { showToast } = useToast()
   const { t } = useLanguage()
   const { accessToken } = useAuthSession()
-  const modalRef = useRef<HTMLDivElement>(null)
-
-  useModalA11y({ open: isOpen, onClose, modalRef: modalRef })
   const [step, setStep] = useState<'members' | 'details'>('members')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<UserResult[]>([])
@@ -134,37 +131,13 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
     }
   }
 
-  if (!isOpen) return null
-
   return (
-    <Box
-      ref={modalRef}
-      role="dialog"
-      aria-modal="true"
-      aria-label={t('createGroupChat')}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: tokens.zIndex.max,
-        background: 'var(--color-backdrop)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-      onClick={onClose}
-    >
-      <Box
-        onClick={(e: React.MouseEvent) => e.stopPropagation()}
+    <ModalOverlay open={isOpen} onClose={onClose} label={t('createGroupChat')}>
+      <div
         style={{
-          width: 420,
-          maxWidth: '90vw',
-          maxHeight: '80vh',
-          background: tokens.colors.bg.secondary,
-          borderRadius: tokens.radius.xl,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          boxShadow: tokens.shadow.xl,
           display: 'flex',
           flexDirection: 'column',
+          maxHeight: '80vh',
         }}
       >
         {/* Header */}
@@ -474,7 +447,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
             )}
           </button>
         </Box>
-      </Box>
-    </Box>
+      </div>
+    </ModalOverlay>
   )
 }
