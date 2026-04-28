@@ -54,6 +54,17 @@ function populateEnglish(dict: Record<string, string>) {
 // populateEnglish sets up fallback chains for other languages.
 populateEnglish(enTranslations as unknown as Record<string, string>)
 
+// Guard: English must ALWAYS be synchronously available. If someone changes the
+// import above to async (dynamic import) again for "bundle optimization", this
+// will throw at module load time — before any component renders raw keys.
+if (Object.keys(translationCache.en).length === 0) {
+  throw new Error(
+    '[i18n] FATAL: English translations are empty at module load time. ' +
+      'English must be statically imported (not lazy-loaded). ' +
+      'See: 97207363c fix(i18n): static import English translations'
+  )
+}
+
 async function loadLang(lang: Language): Promise<void> {
   if (loadedLangs.has(lang)) return
   const loaders: Record<string, () => Promise<{ default: Record<string, string> }>> = {
