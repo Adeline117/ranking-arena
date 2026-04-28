@@ -149,41 +149,11 @@ export default function PersonalityCard({
         </div>
       )}
 
-      {/* Grain texture overlay */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          backgroundImage:
-            "url(\"data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E\")",
-          opacity: 0.03,
-          mixBlendMode: 'overlay' as const,
-          pointerEvents: 'none',
-          zIndex: 2,
-          borderRadius: 'inherit',
-        }}
-      />
-
-      {/* Inner card border glow — type-colored edge light */}
-      <div
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          inset: 0,
-          borderRadius: 'inherit',
-          border: `1px solid ${type.color}18`,
-          boxShadow: `inset 0 0 80px ${type.color}08, inset 0 1px 0 rgba(255,255,255,0.04)`,
-          pointerEvents: 'none',
-          zIndex: 1,
-        }}
-      />
-
       {/* ---- Hero character illustration ---- */}
       <div
         className="quiz-hero-icon"
         style={{
-          background: hasArt ? '#111118' : `${type.color}10`,
+          background: hasArt ? `${type.color}08` : `${type.color}10`,
           border: 'none',
           width: hasArt ? 'clamp(200px, 56vw, 260px)' : 'clamp(64px, 18vw, 80px)',
           height: hasArt ? 'clamp(200px, 56vw, 260px)' : 'clamp(64px, 18vw, 80px)',
@@ -191,8 +161,8 @@ export default function PersonalityCard({
           overflow: 'hidden',
           position: 'relative',
           boxShadow: hasArt
-            ? `0 0 0 3px ${type.color}30, 0 0 0 6px ${type.color}12, 0 12px 40px ${type.color}25, 0 4px 16px rgba(0,0,0,0.3)`
-            : `0 12px 32px ${type.color}25`,
+            ? `0 0 0 3px ${type.color}30, 0 0 0 6px ${type.color}12, 0 12px 40px ${type.color}15`
+            : `0 12px 32px ${type.color}15`,
         }}
       >
         {hasArt ? (
@@ -271,7 +241,7 @@ export default function PersonalityCard({
           textAlign: 'center',
           letterSpacing: '-0.03em',
           lineHeight: 1.05,
-          textShadow: `0 0 40px ${type.color}30, 0 2px 4px rgba(0,0,0,0.3)`,
+          textShadow: `0 0 40px ${type.color}20`,
           animation: 'quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both',
         }}
       >

@@ -115,7 +115,7 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
                   style={{
                     flex: 1,
                     height: 1,
-                    background: `${group.accentColor}18`,
+                    background: `${group.accentColor}25`,
                   }}
                 />
               </div>

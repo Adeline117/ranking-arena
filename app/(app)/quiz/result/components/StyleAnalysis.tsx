@@ -87,7 +87,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
                     width: 'clamp(26px, 6vw, 32px)',
                     height: 12,
                     borderRadius: 6,
-                    background: isActive ? type.color : 'var(--color-bg-tertiary)',
+                    background: isActive ? type.color : 'var(--color-border-secondary)',
                     boxShadow: isActive
                       ? `0 0 8px ${type.color}50, 0 2px 4px ${type.color}30`
                       : 'none',
@@ -215,7 +215,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
                 padding: 'clamp(8px, 2vw, 10px) clamp(10px, 2.5vw, 14px)',
                 borderRadius: 10,
                 background: 'transparent',
-                border: '1px solid var(--glass-border-light)',
+                border: '1px solid var(--color-border-primary)',
               }}
             >
               <span
@@ -226,7 +226,6 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
                   fontSize: 13,
                   fontWeight: 700,
                   lineHeight: 1.4,
-                  opacity: 0.7,
                 }}
               >
                 -

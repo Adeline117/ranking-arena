@@ -109,10 +109,12 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
   // --- Hover / active helpers for inline-styled buttons ---
   const addHover = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.style.transform = 'translateY(-1px)'
-    e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.18)'
+    e.currentTarget.style.background = 'var(--color-bg-secondary)'
+    e.currentTarget.style.boxShadow = '0 4px 14px rgba(0,0,0,0.08)'
   }, [])
   const removeHover = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.style.transform = 'translateY(0)'
+    e.currentTarget.style.background = 'var(--color-bg-tertiary)'
     e.currentTarget.style.boxShadow = 'none'
   }, [])
   const addActive = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
@@ -128,8 +130,8 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
     minWidth: 0,
     padding: '10px 14px',
     borderRadius: 10,
-    border: '1px solid rgba(255,255,255,0.08)',
-    background: 'rgba(255,255,255,0.04)',
+    border: '1px solid var(--glass-border-light)',
+    background: 'var(--color-bg-tertiary)',
     backdropFilter: 'blur(8px)',
     WebkitBackdropFilter: 'blur(8px)',
     color: 'var(--color-text-primary)',
@@ -148,7 +150,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
     minWidth: 0,
     padding: '8px 10px',
     borderRadius: 10,
-    border: '1px solid transparent',
+    border: '1px solid var(--glass-border-light)',
     background: 'transparent',
     color: 'var(--color-text-tertiary)',
     fontSize: 12,
@@ -168,7 +170,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
         style={{
           borderRadius: 12,
           overflow: 'hidden',
-          border: '1px solid rgba(255,255,255,0.08)',
+          border: '1px solid var(--glass-border-light)',
           aspectRatio: '1200 / 630',
           width: '100%',
           background: 'var(--color-bg-tertiary)',
@@ -182,7 +184,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
               position: 'absolute',
               inset: 0,
               background:
-                'linear-gradient(90deg, var(--color-bg-tertiary) 25%, rgba(255,255,255,0.04) 50%, var(--color-bg-tertiary) 75%)',
+                'linear-gradient(90deg, var(--color-bg-tertiary) 25%, var(--color-bg-secondary) 50%, var(--color-bg-tertiary) 75%)',
               backgroundSize: '200% 100%',
               animation: 'quizOgSkeleton 1.8s ease-in-out infinite',
             }}
@@ -324,7 +326,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
           disabled={downloading}
           aria-label={tr('quizDownloadCard')}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+            e.currentTarget.style.background = 'var(--color-bg-secondary)'
             e.currentTarget.style.transform = 'translateY(-1px)'
           }}
           onMouseLeave={(e) => {
@@ -406,7 +408,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
             onClick={handleNativeShare}
             aria-label={tr('quizShare')}
             onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'rgba(255,255,255,0.04)'
+              e.currentTarget.style.background = 'var(--color-bg-secondary)'
               e.currentTarget.style.transform = 'translateY(-1px)'
             }}
             onMouseLeave={(e) => {
