@@ -113,7 +113,7 @@ const TYPES: Record<
     icon: '\u21BA',
   },
   hodler: {
-    name: 'THE HODLER',
+    name: 'THE HODLer',
     nameZh: '\u94BB\u77F3\u624B',
     color: '#10B981',
     colorLight: '#6EE7B7',
@@ -161,7 +161,7 @@ const TYPES: Record<
     icon: '\u265F',
   },
   copycat: {
-    name: 'THE COPYCAT',
+    name: 'THE COPY TRADER',
     nameZh: '\u8DDF\u5355\u8FBE\u4EBA',
     color: '#2563EB',
     colorLight: '#93C5FD',
@@ -209,7 +209,7 @@ const TYPES: Record<
     icon: '\u2610',
   },
   narrator: {
-    name: 'THE NARRATOR',
+    name: 'THE NARRATIVE TRADER',
     nameZh: '\u53D9\u4E8B\u8005',
     color: '#22C55E',
     colorLight: '#86EFAC',
