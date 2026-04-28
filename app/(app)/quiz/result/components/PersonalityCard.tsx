@@ -187,9 +187,9 @@ export default function PersonalityCard({
             ? `radial-gradient(ellipse at 50% 30%, ${type.color}18 0%, ${type.color}06 60%, transparent 100%)`
             : `${type.color}10`,
           border: `1.5px solid ${type.color}30`,
-          width: hasArt ? 'clamp(160px, 44vw, 200px)' : 'clamp(64px, 18vw, 80px)',
-          height: hasArt ? 'clamp(160px, 44vw, 200px)' : 'clamp(64px, 18vw, 80px)',
-          borderRadius: hasArt ? 'clamp(24px, 5vw, 32px)' : 'clamp(14px, 3vw, 20px)',
+          width: hasArt ? 'clamp(150px, 42vw, 190px)' : 'clamp(64px, 18vw, 80px)',
+          height: hasArt ? 'clamp(220px, 60vw, 280px)' : 'clamp(64px, 18vw, 80px)',
+          borderRadius: hasArt ? 'clamp(18px, 4vw, 24px)' : 'clamp(14px, 3vw, 20px)',
           overflow: 'hidden',
           position: 'relative',
           boxShadow: hasArt
@@ -219,7 +219,7 @@ export default function PersonalityCard({
             height={400}
             style={{
               objectFit: 'cover',
-              objectPosition: 'center 35%',
+              objectPosition: 'center 30%',
               display: 'block',
               width: '100%',
               height: '100%',
