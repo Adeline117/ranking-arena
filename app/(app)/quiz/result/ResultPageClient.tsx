@@ -127,7 +127,7 @@ export default function ResultPageClient({
             style={{
               padding: '4px 10px',
               borderRadius: 6,
-              border: '1px solid rgba(255,255,255,0.08)',
+              border: '1px solid var(--glass-border-light)',
               background: 'transparent',
               color: 'var(--color-text-tertiary)',
               fontSize: 11,
@@ -175,8 +175,8 @@ export default function ResultPageClient({
             style={{
               padding: '12px 16px',
               borderRadius: 10,
-              border: '1px solid rgba(255,255,255,0.08)',
-              background: 'rgba(255,255,255,0.04)',
+              border: '1px solid var(--glass-border-light)',
+              background: 'var(--color-bg-tertiary)',
               color: 'var(--color-text-primary)',
               fontSize: 13,
               fontWeight: 500,
@@ -247,8 +247,8 @@ export default function ResultPageClient({
                   style={{
                     padding: '6px 14px',
                     borderRadius: 20,
-                    background: ct.color + '12',
-                    border: '1px solid ' + ct.color + '25',
+                    background: ct.color + '18',
+                    border: '1px solid ' + ct.color + '30',
                     fontSize: 13,
                     color: ct.color,
                     fontWeight: 600,
@@ -282,8 +282,8 @@ export default function ResultPageClient({
                   style={{
                     padding: '6px 14px',
                     borderRadius: 20,
-                    background: '#EF444412',
-                    border: '1px solid #EF444425',
+                    background: '#EF444420',
+                    border: '1px solid #EF444430',
                     fontSize: 13,
                     color: '#EF4444',
                     fontWeight: 600,

@@ -40,7 +40,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
             margin: 0,
             letterSpacing: '-0.02em',
             lineHeight: 1.15,
-            textShadow: `0 0 20px ${type.color}40, 0 0 40px ${type.color}18`,
+            /* no textShadow — glow looks bad on light backgrounds */
           }}
         >
           {tr(master.nameKey)}
@@ -52,7 +52,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
             fontSize: 11,
             fontWeight: 600,
             color: 'var(--color-text-tertiary)',
-            background: 'var(--color-bg-tertiary, rgba(255,255,255,0.06))',
+            background: 'var(--color-bg-tertiary, rgba(128,128,128,0.08))',
             padding: '3px 10px',
             borderRadius: 100,
             letterSpacing: '0.02em',
