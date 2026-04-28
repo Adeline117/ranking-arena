@@ -71,14 +71,20 @@ export default function BottomSheet({
   }, [onClose])
 
   // Cleanup close timer on unmount
-  useEffect(() => () => {
-    if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
-  }, [])
+  useEffect(
+    () => () => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current)
+    },
+    []
+  )
 
   // Backdrop click
-  const handleBackdropClick = useCallback((e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) handleClose()
-  }, [handleClose])
+  const handleBackdropClick = useCallback(
+    (e: React.MouseEvent) => {
+      if (e.target === e.currentTarget) handleClose()
+    },
+    [handleClose]
+  )
 
   // Drag handlers
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
@@ -87,13 +93,16 @@ export default function BottomSheet({
     setIsDragging(true)
   }, [])
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!isDragging) return
-    currentYRef.current = e.touches[0].clientY
-    const delta = currentYRef.current - startYRef.current
-    // Only allow dragging down (positive delta) or up (negative delta)
-    setDragOffset(delta)
-  }, [isDragging])
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (!isDragging) return
+      currentYRef.current = e.touches[0].clientY
+      const delta = currentYRef.current - startYRef.current
+      // Only allow dragging down (positive delta) or up (negative delta)
+      setDragOffset(delta)
+    },
+    [isDragging]
+  )
 
   const handleTouchEnd = useCallback(() => {
     if (!isDragging) return
@@ -131,12 +140,10 @@ export default function BottomSheet({
   // dvh fallback: use vh for browsers without dvh support, dvh for modern browsers.
   // CSS custom property --bs-h is set on the sheet element; the @supports rule in
   // the <style> block below upgrades it to dvh when available.
-  const translateY = snap === 'closed'
-    ? '100%'
-    : `calc(${100 - heightVh}vh + ${Math.max(0, dragOffset)}px)`
-  const translateYDvh = snap === 'closed'
-    ? '100%'
-    : `calc(${100 - heightVh}dvh + ${Math.max(0, dragOffset)}px)`
+  const translateY =
+    snap === 'closed' ? '100%' : `calc(${100 - heightVh}vh + ${Math.max(0, dragOffset)}px)`
+  const translateYDvh =
+    snap === 'closed' ? '100%' : `calc(${100 - heightVh}dvh + ${Math.max(0, dragOffset)}px)`
 
   if (!open && snap === 'closed') return null
 
@@ -152,30 +159,31 @@ export default function BottomSheet({
         zIndex: tokens.zIndex.modal,
         background: snap !== 'closed' ? 'rgba(0,0,0,0.4)' : 'transparent',
         transition: isDragging ? 'none' : 'background 0.3s ease',
-        touchAction: 'none',
       }}
     >
       <div
         ref={sheetRef}
         className="bottom-sheet-panel"
-        style={{
-          position: 'absolute',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          maxHeight: `${maxHeightVh}vh`,
-          transform: `translateY(${translateY})`,
-          // CSS custom properties for dvh upgrade (see <style> block below)
-          '--bs-max-h-dvh': `${maxHeightVh}dvh`,
-          '--bs-translate-dvh': `translateY(${translateYDvh})`,
-          transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
-          background: 'var(--color-bg-primary)',
-          borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
-          boxShadow: '0 -4px 24px var(--color-overlay-light, rgba(0,0,0,0.15))',
-          display: 'flex',
-          flexDirection: 'column',
-          paddingBottom: 'env(safe-area-inset-bottom, 0)',
-        } as React.CSSProperties}
+        style={
+          {
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            maxHeight: `${maxHeightVh}vh`,
+            transform: `translateY(${translateY})`,
+            // CSS custom properties for dvh upgrade (see <style> block below)
+            '--bs-max-h-dvh': `${maxHeightVh}dvh`,
+            '--bs-translate-dvh': `translateY(${translateYDvh})`,
+            transition: isDragging ? 'none' : 'transform 0.3s cubic-bezier(0.32, 0.72, 0, 1)',
+            background: 'var(--color-bg-primary)',
+            borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+            boxShadow: '0 -4px 24px var(--color-overlay-light, rgba(0,0,0,0.15))',
+            display: 'flex',
+            flexDirection: 'column',
+            paddingBottom: 'env(safe-area-inset-bottom, 0)',
+          } as React.CSSProperties
+        }
       >
         {/* Handle */}
         {showHandle && (
@@ -216,11 +224,13 @@ export default function BottomSheet({
               flexShrink: 0,
             }}
           >
-            <span style={{
-              fontSize: tokens.typography.fontSize.md,
-              fontWeight: tokens.typography.fontWeight.bold,
-              color: 'var(--color-text-primary)',
-            }}>
+            <span
+              style={{
+                fontSize: tokens.typography.fontSize.md,
+                fontWeight: tokens.typography.fontWeight.bold,
+                color: 'var(--color-text-primary)',
+              }}
+            >
               {title}
             </span>
             <button
@@ -240,7 +250,14 @@ export default function BottomSheet({
                 color: 'var(--color-text-secondary)',
               }}
             >
-              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+              <svg
+                width={16}
+                height={16}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth={2.5}
+              >
                 <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
               </svg>
             </button>
