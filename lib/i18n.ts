@@ -1,13 +1,13 @@
-// Internationalization — ALL languages lazy-loaded for code splitting.
-// English (default) loads via eager dynamic import() — fires immediately at module
-// evaluation, resolves before any component calls t(). Saves ~62KB gzipped from
-// the initial JS bundle (210KB source was previously statically imported).
-// Other languages (zh/ja/ko) loaded on-demand when user switches.
+// Internationalization — English statically imported (always available),
+// other languages (zh/ja/ko) lazy-loaded on demand for code splitting.
+// English was previously lazy-loaded too ("saves 62KB") but this caused raw
+// i18n keys (foundingMemberBannerText, categoryAll, etc.) to flash on mobile
+// when the async chunk hadn't loaded yet during React hydration.
+
+import enTranslations from './i18n/en'
 
 export type Language = 'en' | 'zh' | 'ja' | 'ko'
 
-// TranslationKey was `keyof typeof en` — changed to string to avoid
-// static import of en.ts. Type safety preserved via IDE autocomplete.
 export type TranslationKey = string
 
 export const SUPPORTED_LANGUAGES: { code: Language; label: string; nativeLabel: string }[] = [
@@ -17,18 +17,18 @@ export const SUPPORTED_LANGUAGES: { code: Language; label: string; nativeLabel: 
   { code: 'ko', label: 'Korean', nativeLabel: '한국어' },
 ]
 
-// Translation dictionaries — start empty, populated by dynamic import.
+// Translation dictionaries — English available immediately, others lazy-loaded.
 const translationCache: Record<Language, Record<string, string>> = {
-  en: {},
+  en: enTranslations as unknown as Record<string, string>,
   zh: {},
   ja: {},
   ko: {},
 }
 
-const loadedLangs = new Set<Language>()
+const loadedLangs = new Set<Language>(['en'])
 
 // Track when translations finish loading (client-side re-render trigger)
-let translationVersion = 0
+const translationVersion = 0
 const translationListeners = new Set<() => void>()
 export function getTranslationVersion() {
   return translationVersion
@@ -50,27 +50,9 @@ function populateEnglish(dict: Record<string, string>) {
   loadedLangs.add('en')
 }
 
-if (typeof window === 'undefined') {
-  // Server-side: synchronous require so t() works during SSR.
-  // Server bundles are NOT sent to the client — zero bundle size impact.
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    populateEnglish(require('./i18n/en').default)
-  } catch {
-    /* build env fallback: async below */
-  }
-}
-
-// Client-side: async import for code splitting (saves ~62KB gzipped from initial bundle).
-// Fires immediately at module load time. On client, resolves before Phase 2 hydration (~4s).
-// On server, this is a no-op if require() already populated above.
-if (typeof window !== 'undefined' || !loadedLangs.has('en')) {
-  import('./i18n/en').then((m) => {
-    populateEnglish(m.default as Record<string, string>)
-    translationVersion++
-    translationListeners.forEach((cb) => cb())
-  })
-}
+// English is statically imported — always available, no async loading needed.
+// populateEnglish sets up fallback chains for other languages.
+populateEnglish(enTranslations as unknown as Record<string, string>)
 
 async function loadLang(lang: Language): Promise<void> {
   if (loadedLangs.has(lang)) return
