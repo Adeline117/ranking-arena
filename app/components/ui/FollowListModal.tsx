@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import { useModalA11y } from '@/lib/hooks/useModalA11y'
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { Box, Text } from '../base'
 import Avatar from './Avatar'
 import UserFollowButton from './UserFollowButton'
@@ -47,7 +47,6 @@ export default function FollowListModal({
   const [hidden, setHidden] = useState(false)
   const [hiddenMessage, setHiddenMessage] = useState('')
   const abortControllerRef = useRef<AbortController | null>(null)
-  const modalRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (isOpen && handle) {
@@ -61,8 +60,6 @@ export default function FollowListModal({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadUsers is defined in closure, not a stable ref
   }, [isOpen, handle, type])
-
-  useModalA11y({ open: isOpen, onClose, modalRef })
 
   const loadUsers = async () => {
     if (abortControllerRef.current) {
@@ -130,43 +127,17 @@ export default function FollowListModal({
     router.push(`/u/${encodeURIComponent(userHandle)}`)
   }
 
-  if (!isOpen) return null
-
   const title = type === 'followers' ? t('followers') : t('following')
 
   return (
-    <Box
-      style={{
-        position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: 'var(--color-backdrop)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: tokens.zIndex.modal,
-      }}
-      onClick={onClose}
-    >
-      <Box
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="follow-list-modal-title"
+    <ModalOverlay open={isOpen} onClose={onClose} label={title}>
+      <div
         style={{
-          background: tokens.colors.bg.primary,
-          borderRadius: tokens.radius.xl,
           padding: tokens.spacing[6],
-          width: '90%',
-          maxWidth: 420,
-          maxHeight: '80vh',
           display: 'flex',
           flexDirection: 'column',
-          border: `1px solid ${tokens.colors.border.primary}`,
+          maxHeight: '80vh',
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <Box
@@ -337,7 +308,7 @@ export default function FollowListModal({
             </Box>
           )}
         </Box>
-      </Box>
-    </Box>
+      </div>
+    </ModalOverlay>
   )
 }

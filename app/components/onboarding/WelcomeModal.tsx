@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect } from 'react'
-import { tokens } from '@/lib/design-tokens'
-import { useModalA11y } from '@/lib/hooks/useModalA11y'
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 
 const STORAGE_KEY = 'onboarding_complete'
 
@@ -67,43 +66,17 @@ export default function WelcomeModal() {
     }
   }, [currentStep])
 
-  useModalA11y({ open: visible, onClose: handleClose })
-
-  if (!visible) return null
-
   const step = STEPS[currentStep]
 
   return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Welcome to Arena"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: tokens.zIndex.modal,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: 'rgba(0, 0, 0, 0.6)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-      }}
-      onClick={handleClose}
+    <ModalOverlay
+      open={visible}
+      onClose={handleClose}
+      label="Welcome to Arena"
+      maxWidth={400}
+      backdrop="heavy"
     >
-      <div
-        style={{
-          maxWidth: 400,
-          width: '90%',
-          background: 'var(--color-bg-secondary, #1a1a2e)',
-          border: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))',
-          borderRadius: 16,
-          padding: '32px 28px 24px',
-          boxShadow: '0 24px 80px var(--color-overlay-heavy, rgba(0,0,0,0.5))',
-          position: 'relative',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div style={{ padding: '32px 28px 24px', position: 'relative' }}>
         {/* Close button — 44px touch target */}
         <button
           onClick={handleClose}
@@ -219,6 +192,6 @@ export default function WelcomeModal() {
           ))}
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   )
 }
