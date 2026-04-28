@@ -163,31 +163,30 @@ export default function QuizClient() {
     }
   }, [quizLang])
 
-  // Show loading only until mounted (translations can hydrate in place)
+  // Before hydration: show the start page content (not a spinner)
+  // so mobile users see real content even if JS is slow to load
   if (!mounted) {
     return (
-      <Box
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '80vh',
-          padding: 20,
-        }}
-      >
-        <div
-          role="status"
-          aria-label="Loading quiz"
-          style={{
-            width: 40,
-            height: 40,
-            border: '3px solid var(--color-accent-primary-08)',
-            borderTopColor: 'var(--color-brand)',
-            borderRadius: '50%',
-            animation: 'spin 1s linear infinite',
-          }}
-        />
-      </Box>
+      <div className="quiz-start-wrapper">
+        <div className="quiz-start-card">
+          <StartStep
+            tr={(key: string) =>
+              key === 'quizTitle'
+                ? 'Trading Personality Test'
+                : key === 'quizSubtitle'
+                  ? 'Answer 30 fun questions to discover your trading alter ego, get matched with a legendary trader, and find Arena traders who trade just like you.'
+                  : key === 'quizStartBtn'
+                    ? 'Start Test'
+                    : key === 'quizBadge12Types'
+                      ? '12 Personalities'
+                      : key === 'quizBadge5Min'
+                        ? '~5 min'
+                        : key
+            }
+            onStart={() => {}}
+          />
+        </div>
+      </div>
     )
   }
 
