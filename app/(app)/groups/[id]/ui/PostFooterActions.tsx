@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
 import { useToast } from '@/app/components/ui/Toast'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { supabase } from '@/lib/supabase/client'
@@ -180,17 +180,7 @@ function TipModalOverlay({
   onClose: () => void
   children: React.ReactNode
 }) {
-  useScrollLock(true)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- onClose is stable
-  }, [])
+  useModalA11y({ open: true, onClose })
 
   return (
     <div

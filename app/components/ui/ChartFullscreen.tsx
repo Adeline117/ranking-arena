@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useCallback, type ReactNode } from 'react'
+import { useCallback, type ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
 interface ChartFullscreenProps {
   open: boolean
@@ -16,24 +16,14 @@ interface ChartFullscreenProps {
  * Forces landscape orientation hint, hides all chrome
  */
 export default function ChartFullscreen({ open, onClose, children, title }: ChartFullscreenProps) {
-  useScrollLock(open)
-
-  // Escape to close
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [open, onClose])
+  useModalA11y({ open, onClose })
 
   const handleFullscreen = useCallback(() => {
     const el = document.documentElement
     if (el.requestFullscreen) {
       el.requestFullscreen().catch(() => {
         /* ignore */
-      }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+      })
     }
   }, [])
 

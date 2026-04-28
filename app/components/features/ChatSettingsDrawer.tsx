@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
@@ -161,19 +161,7 @@ export default function ChatSettingsDrawer({
 
   const profileUrl = getProfileUrl(otherUser)
 
-  useScrollLock(isOpen)
-
-  // Escape key when drawer is open
-  useEffect(() => {
-    if (!isOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [isOpen, onClose])
+  useModalA11y({ open: isOpen, onClose })
 
   if (!isOpen) return null
 

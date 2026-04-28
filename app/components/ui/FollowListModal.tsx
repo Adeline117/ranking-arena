@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text } from '../base'
 import Avatar from './Avatar'
 import UserFollowButton from './UserFollowButton'
@@ -48,7 +48,6 @@ export default function FollowListModal({
   const [hiddenMessage, setHiddenMessage] = useState('')
   const abortControllerRef = useRef<AbortController | null>(null)
   const modalRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   useEffect(() => {
     if (isOpen && handle) {
@@ -63,50 +62,7 @@ export default function FollowListModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadUsers is defined in closure, not a stable ref
   }, [isOpen, handle, type])
 
-  useScrollLock(isOpen)
-
-  // Focus trap + escape key
-  useEffect(() => {
-    if (!isOpen) return
-    previousFocusRef.current = document.activeElement as HTMLElement
-    const timer = setTimeout(() => {
-      if (modalRef.current) {
-        const firstBtn = modalRef.current.querySelector<HTMLElement>('button')
-        firstBtn?.focus()
-      }
-    }, 50)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            e.preventDefault()
-            last.focus()
-          }
-        } else {
-          if (document.activeElement === last) {
-            e.preventDefault()
-            first.focus()
-          }
-        }
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('keydown', handleKeyDown)
-      previousFocusRef.current?.focus()
-    }
-  }, [isOpen, onClose])
+  useModalA11y({ open: isOpen, onClose, modalRef })
 
   const loadUsers = async () => {
     if (abortControllerRef.current) {

@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text, Button } from '../base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from './Toast'
@@ -45,7 +45,6 @@ export default function BookmarkModal({
   const [newFolderName, setNewFolderName] = useState('')
   const [newFolderPublic, setNewFolderPublic] = useState(true)
   const modalRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<Element | null>(null)
 
   useEffect(() => {
     if (isOpen && authChecked && accessToken) {
@@ -59,52 +58,7 @@ export default function BookmarkModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadFolders is defined in closure, not a stable ref
   }, [isOpen, authChecked, accessToken])
 
-  useScrollLock(isOpen)
-
-  useEffect(() => {
-    if (!isOpen) return
-
-    triggerRef.current = document.activeElement
-
-    // Focus first focusable element
-    requestAnimationFrame(() => {
-      if (modalRef.current) {
-        const first = modalRef.current.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        first?.focus()
-      }
-    })
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-      }
-      if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      if (triggerRef.current instanceof HTMLElement) {
-        triggerRef.current.focus()
-      }
-    }
-  }, [isOpen, onClose])
+  useModalA11y({ open: isOpen, onClose, modalRef })
 
   const loadFolders = async () => {
     setLoading(true)

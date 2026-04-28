@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
@@ -29,50 +29,8 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const { t } = useLanguage()
   const { accessToken } = useAuthSession()
   const modalRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<Element | null>(null)
 
-  useScrollLock(isOpen)
-
-  useEffect(() => {
-    if (!isOpen) return
-    triggerRef.current = document.activeElement
-
-    requestAnimationFrame(() => {
-      if (modalRef.current) {
-        const first = modalRef.current.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        first?.focus()
-      }
-    })
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      if (triggerRef.current instanceof HTMLElement) triggerRef.current.focus()
-    }
-  }, [isOpen, onClose])
+  useModalA11y({ open: isOpen, onClose, modalRef: modalRef })
   const [step, setStep] = useState<'members' | 'details'>('members')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<UserResult[]>([])

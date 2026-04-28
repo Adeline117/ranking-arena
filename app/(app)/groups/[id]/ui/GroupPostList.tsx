@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import MasonryGrid from '@/app/components/ui/MasonryGrid'
@@ -490,19 +490,7 @@ function RepostModal({
     setRepostComment('')
   }
 
-  useScrollLock(true)
-
-  // Escape key
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeModal()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- closeModal is stable within this render
-  }, [])
+  useModalA11y({ open: true, onClose: closeModal })
 
   return (
     <Box

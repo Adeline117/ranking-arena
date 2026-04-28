@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -56,7 +56,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
   // Post detail modal state
   const [openPost, setOpenPost] = useState<Post | null>(null)
-  useScrollLock(!!openPost)
   const [comments, setComments] = useState<Comment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewCommentRaw] = useState('')
@@ -509,7 +508,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       } finally {
         setTranslating(false)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
     },
     [translationCache, showToast]
   )
@@ -567,7 +565,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     router.replace(newUrl, { scroll: false })
   }, [searchParams, router])
 
-  // Post modal: URL restore, ESC key, body scroll lock, and browser back button
+  useModalA11y({ open: !!openPost, onClose: handleClosePost })
+
+  // Post modal: URL restore + browser back button
   useEffect(() => {
     const postId = searchParams.get('post')
     if (postId && posts.length > 0 && !openPost) {
@@ -579,12 +579,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
     if (!openPost) return
 
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleClosePost()
-      }
-    }
-
     const handlePopState = () => {
       const urlParams = new URLSearchParams(window.location.search)
       if (!urlParams.get('post') && openPost) {
@@ -592,11 +586,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       }
     }
 
-    document.addEventListener('keydown', handleKeyDown)
     window.addEventListener('popstate', handlePopState)
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('popstate', handlePopState)
     }
   }, [searchParams, posts, openPost, handleOpenPost, handleClosePost])

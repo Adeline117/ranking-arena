@@ -1,9 +1,8 @@
 'use client'
 
-import { useEffect } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text } from '@/app/components/base'
 import { isPdfFile } from './types'
 
@@ -20,18 +19,7 @@ interface MediaPreviewProps {
 }
 
 export default function MediaPreview({ preview, onClose, t }: MediaPreviewProps) {
-  useScrollLock(true)
-
-  // Escape key
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [onClose])
+  useModalA11y({ open: true, onClose })
 
   return (
     <Box

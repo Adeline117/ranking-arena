@@ -14,7 +14,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
@@ -74,52 +74,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   const commentPendingRef = useRef(false)
   const reactionPendingRef = useRef(false)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  useScrollLock(true)
-
-  // Focus management: trap focus, handle Escape, restore focus on close
-  useEffect(() => {
-    previousFocusRef.current = document.activeElement as HTMLElement
-
-    const timer = setTimeout(() => {
-      if (dialogRef.current) {
-        const firstFocusable = dialogRef.current.querySelector<HTMLElement>(
-          'button, [href], input, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        firstFocusable?.focus()
-      }
-    }, 50)
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('keydown', handleKeyDown)
-      previousFocusRef.current?.focus()
-    }
-  }, [onClose])
+  useModalA11y({ open: true, onClose, modalRef: dialogRef })
 
   // Read from canonical store
   const post = usePostStore((s) => s.posts[postId])

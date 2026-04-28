@@ -6,23 +6,14 @@ import Image from 'next/image'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-/** Shared hook for modal behavior: scroll lock + Escape key */
+/** Shared hook for modal behavior: scroll lock + Escape key + focus restore */
 function useModalBehavior(onClose: () => void) {
-  useScrollLock(true)
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => {
-      window.removeEventListener('keydown', handler)
-    }
-  }, [onClose])
+  useModalA11y({ open: true, onClose })
 }
 
 interface Group {

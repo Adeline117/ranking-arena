@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 // CSS animations replace framer-motion (~40KB bundle savings)
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
 import { apiFetch } from '@/lib/utils/api-fetch'
@@ -191,15 +191,7 @@ export default function TokenSidePanel({
     return () => observer.disconnect()
   }, [])
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [onClose])
-
-  useScrollLock(!!token)
+  useModalA11y({ open: !!token, onClose })
 
   // Fetch coin detail
   useEffect(() => {

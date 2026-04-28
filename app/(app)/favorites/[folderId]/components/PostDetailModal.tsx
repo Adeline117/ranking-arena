@@ -4,7 +4,7 @@ import { useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text } from '@/app/components/base'
 import { formatTimeAgo } from '@/lib/utils/date'
 
@@ -36,20 +36,7 @@ export default function PostDetailModal({
 }: PostDetailModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
 
-  useScrollLock(!!post)
-
-  // ESC key handler
-  useEffect(() => {
-    if (!post) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    dialogRef.current?.focus()
-    return () => {
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [post, onClose])
+  useModalA11y({ open: !!post, onClose })
 
   if (!post) return null
 
