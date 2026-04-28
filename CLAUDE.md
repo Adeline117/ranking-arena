@@ -137,6 +137,44 @@ Arena Score = (ReturnScore + PnlScore) * confidenceMultiplier * trustWeight
 
 ## Conventions
 
+### Modals & Overlays — MANDATORY PATTERN
+
+All modals MUST use the shared infrastructure. NEVER hand-write backdrop divs, scroll lock, or escape handlers.
+
+```
+Architectural layers:
+  ModalOverlay  →  useModalA11y  →  useScrollLock
+  (structure)      (behavior)       (scroll)
+```
+
+**Centered modals** — use `<ModalOverlay>`:
+
+```typescript
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
+
+<ModalOverlay open={isOpen} onClose={onClose} label="Edit post" maxWidth={420}>
+  <div style={{ padding: 24 }}>
+    {/* just the content — backdrop, click-outside, a11y, scroll lock all handled */}
+  </div>
+</ModalOverlay>
+```
+
+**Special layouts** (bottom sheets, fullscreen, drawers) — use `useModalA11y` directly:
+
+```typescript
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
+
+useModalA11y({ open, onClose }) // scroll lock + escape + focus restore
+useModalA11y({ open, onClose, modalRef }) // + focus trap + auto-focus
+```
+
+**NEVER do**:
+
+- `document.body.style.overflow = 'hidden'` (pre-push hook blocks this)
+- `import { useScrollLock }` directly (internal to useModalA11y)
+- Hand-write escape key listeners for modals
+- Hand-write focus trap logic
+
 ### API Routes
 
 - Cron routes require `Authorization: Bearer CRON_SECRET` header
