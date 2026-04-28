@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
 interface PostModalProps {
   children: React.ReactNode
@@ -17,55 +17,12 @@ interface PostModalProps {
 export function PostModal({ children, onClose }: PostModalProps) {
   const [mounted, setMounted] = useState(false)
   const modalRef = useRef<HTMLDivElement>(null)
-  const triggerRef = useRef<Element | null>(null)
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    },
-    [onClose]
-  )
-
-  useScrollLock(true)
+  useModalA11y({ open: true, onClose, modalRef })
 
   useEffect(() => {
-    triggerRef.current = document.activeElement
     setMounted(true)
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      if (triggerRef.current instanceof HTMLElement) {
-        triggerRef.current.focus()
-      }
-    }
-  }, [handleKeyDown])
-
-  useEffect(() => {
-    if (mounted && modalRef.current) {
-      const firstFocusable = modalRef.current.querySelector<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      )
-      firstFocusable?.focus()
-    }
-  }, [mounted])
+  }, [])
 
   const modalContent = (
     <div

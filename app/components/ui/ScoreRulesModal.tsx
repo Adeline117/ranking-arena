@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { t } from '@/lib/i18n'
 import { Text } from '../base'
 
@@ -20,56 +20,7 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
     setMounted(true)
   }, [])
 
-  useScrollLock(isOpen)
-
-  useEffect(() => {
-    if (!isOpen) return
-
-    const previousFocus = document.activeElement as HTMLElement
-
-    // Focus the modal after render
-    const focusTimer = setTimeout(() => {
-      if (modalRef.current) {
-        const firstBtn = modalRef.current.querySelector<HTMLElement>('button')
-        firstBtn?.focus()
-      }
-    }, 50)
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      // Focus trap
-      if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            e.preventDefault()
-            last.focus()
-          }
-        } else {
-          if (document.activeElement === last) {
-            e.preventDefault()
-            first.focus()
-          }
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-
-    return () => {
-      clearTimeout(focusTimer)
-      document.removeEventListener('keydown', handleKeyDown)
-      previousFocus?.focus()
-    }
-  }, [isOpen, onClose])
+  useModalA11y({ open: isOpen, onClose, modalRef })
 
   if (!isOpen || !mounted) return null
 

@@ -1,8 +1,8 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
 const STORAGE_KEY = 'onboarding_complete'
 
@@ -67,17 +67,7 @@ export default function WelcomeModal() {
     }
   }, [currentStep])
 
-  // Escape key closes modal
-  useEffect(() => {
-    if (!visible) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [visible, handleClose])
-
-  useScrollLock(visible)
+  useModalA11y({ open: visible, onClose: handleClose })
 
   if (!visible) return null
 

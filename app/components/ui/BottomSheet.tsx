@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useCallback, useState, type ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
 type SnapPoint = 'closed' | 'half' | 'full'
 
@@ -45,9 +45,6 @@ export default function BottomSheet({
   const sheetRef = useRef<HTMLDivElement>(null)
   const startYRef = useRef(0)
   const currentYRef = useRef(0)
-
-  // iOS-safe scroll lock when bottom sheet is open
-  useScrollLock(open)
 
   // Sync open state
   useEffect(() => {
@@ -126,15 +123,7 @@ export default function BottomSheet({
     setDragOffset(0)
   }, [isDragging, snap, handleClose])
 
-  // Escape key
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleClose()
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [open, handleClose])
+  useModalA11y({ open, onClose: handleClose })
 
   const heightVh = Math.min(SNAP_POINTS[snap], maxHeightVh)
   // dvh fallback: use vh for browsers without dvh support, dvh for modern browsers.

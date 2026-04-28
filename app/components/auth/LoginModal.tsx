@@ -11,7 +11,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
 
@@ -90,17 +90,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
     if (step === 'email-sent' && otpRef.current) otpRef.current.focus()
   }, [step])
 
-  useScrollLock(open)
-
-  // Close on Escape
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', handler)
-    return () => document.removeEventListener('keydown', handler)
-  }, [open, onClose])
+  useModalA11y({ open, onClose })
 
   const handleGoogle = useCallback(async () => {
     setError('')

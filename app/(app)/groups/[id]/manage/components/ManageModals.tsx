@@ -1,22 +1,12 @@
 'use client'
 
-import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
 /** Shared ESC key + body scroll lock for simple modals */
-function useModalA11y(onClose: () => void) {
-  useScrollLock(true)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    return () => {
-      document.removeEventListener('keydown', onKey)
-    }
-  }, [onClose])
+function useLocalModalA11y(onClose: () => void) {
+  useModalA11y({ open: true, onClose })
 }
 
 interface MuteModalProps {
@@ -42,7 +32,7 @@ export function MuteModal({
   inputStyle,
   t,
 }: MuteModalProps) {
-  useModalA11y(onClose)
+  useLocalModalA11y(onClose)
   return (
     <Box
       style={{
@@ -153,7 +143,7 @@ export function NotifyModal({
   inputStyle,
   t,
 }: NotifyModalProps) {
-  useModalA11y(onClose)
+  useLocalModalA11y(onClose)
   return (
     <Box
       style={{

@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
+import { useState, useRef } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text } from '../base'
 import { useToast } from './Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -65,60 +65,12 @@ export default function ReportModal({
   const MIN_DESC_LENGTH = 15
   const MAX_IMAGES = 4
   const modalRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   const contentTypeLabel = t(
     CONTENT_TYPE_KEYS[contentType] as keyof typeof import('@/lib/i18n/en').default
   )
 
-  useScrollLock(isOpen)
-
-  // Focus trap + escape key for modal
-  useEffect(() => {
-    if (!isOpen) return
-    previousFocusRef.current = document.activeElement as HTMLElement
-
-    const timer = setTimeout(() => {
-      if (modalRef.current) {
-        const firstFocusable = modalRef.current.querySelector<HTMLElement>(
-          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-        )
-        firstFocusable?.focus()
-      }
-    }, 50)
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-        return
-      }
-      if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            e.preventDefault()
-            last.focus()
-          }
-        } else {
-          if (document.activeElement === last) {
-            e.preventDefault()
-            first.focus()
-          }
-        }
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('keydown', handleKeyDown)
-      previousFocusRef.current?.focus()
-    }
-  }, [isOpen, onClose])
+  useModalA11y({ open: isOpen, onClose, modalRef })
 
   const handleSubmit = async () => {
     if (!reason) {

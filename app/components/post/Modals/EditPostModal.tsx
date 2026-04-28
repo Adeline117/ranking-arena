@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 
 interface EditPostModalProps {
@@ -27,49 +27,8 @@ export function EditPostModal({
   t,
 }: EditPostModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  useScrollLock(true)
-
-  useEffect(() => {
-    previousFocusRef.current = document.activeElement as HTMLElement
-
-    const timer = setTimeout(() => {
-      if (dialogRef.current) {
-        const firstInput = dialogRef.current.querySelector<HTMLElement>('input, textarea')
-        firstInput?.focus()
-      }
-    }, 50)
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onCancel()
-        return
-      }
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('keydown', handleKeyDown)
-      previousFocusRef.current?.focus()
-    }
-  }, [onCancel])
+  useModalA11y({ open: true, onClose: onCancel, modalRef: dialogRef })
 
   return (
     <div

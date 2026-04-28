@@ -8,7 +8,7 @@ import { CloseIcon } from '../ui/icons'
 import SearchDropdown from './SearchDropdown'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { addToHistory } from '@/lib/services/search-history'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
 interface MobileSearchOverlayProps {
   open: boolean
@@ -42,18 +42,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
     }
   }, [open])
 
-  // Close on Escape key
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [open, onClose])
-
-  // iOS-safe scroll lock when overlay is open
-  useScrollLock(open)
+  useModalA11y({ open, onClose })
 
   if (!open) return null
 

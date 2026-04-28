@@ -1,9 +1,18 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect, useRef } from 'react'
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  ReactNode,
+  useEffect,
+  useRef,
+} from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
-import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
 interface DialogOptions {
   title: string
@@ -56,7 +65,6 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(false)
   const closeTimerRef = useRef<NodeJS.Timeout | null>(null)
   const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
 
   // Cleanup close timer on unmount
   useEffect(() => {
@@ -67,65 +75,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // Forward declaration ref for handleCancel (used in useEffect before declaration)
+  // Forward declaration ref for handleCancel (used before declaration)
   const handleCancelRef = useRef<() => void>(() => {})
 
-  // iOS-safe scroll lock when dialog is open
-  useScrollLock(state.isOpen)
+  // Stable wrapper so useModalA11y always calls the latest handleCancel
+  const handleEscape = useCallback(() => handleCancelRef.current(), [])
 
-  // Focus trap + escape key
-  useEffect(() => {
-    if (!state.isOpen) return
-
-    // Save previously focused element
-    previousFocusRef.current = document.activeElement as HTMLElement
-
-    // Focus the dialog after render
-    const timer = setTimeout(() => {
-      if (dialogRef.current) {
-        const firstButton = dialogRef.current.querySelector('button') as HTMLElement
-        firstButton?.focus()
-      }
-    }, 50)
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        handleCancelRef.current()
-        return
-      }
-
-      // Focus trap: keep Tab within dialog
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-
-        if (e.shiftKey) {
-          if (document.activeElement === first) {
-            e.preventDefault()
-            last.focus()
-          }
-        } else {
-          if (document.activeElement === last) {
-            e.preventDefault()
-            first.focus()
-          }
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('keydown', handleKeyDown)
-      // Restore focus when dialog closes
-      previousFocusRef.current?.focus()
-    }
-  }, [state.isOpen])
+  useModalA11y({ open: state.isOpen, onClose: handleEscape, modalRef: dialogRef })
 
   const showDialog = useCallback((options: DialogOptions): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -154,32 +110,38 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     })
   }, [])
 
-  const showConfirm = useCallback((title: string, message: string): Promise<boolean> => {
-    return showDialog({
-      title,
-      message,
-      type: 'confirm',
-      confirmText: t('confirm'),
-      cancelText: t('cancel'),
-    })
-  }, [showDialog])
+  const showConfirm = useCallback(
+    (title: string, message: string): Promise<boolean> => {
+      return showDialog({
+        title,
+        message,
+        type: 'confirm',
+        confirmText: t('confirm'),
+        cancelText: t('cancel'),
+      })
+    },
+    [showDialog]
+  )
 
-  const showDangerConfirm = useCallback((title: string, message: string): Promise<boolean> => {
-    return showDialog({
-      title,
-      message,
-      type: 'danger',
-      confirmText: t('confirm'),
-      cancelText: t('cancel'),
-    })
-  }, [showDialog])
+  const showDangerConfirm = useCallback(
+    (title: string, message: string): Promise<boolean> => {
+      return showDialog({
+        title,
+        message,
+        type: 'danger',
+        confirmText: t('confirm'),
+        cancelText: t('cancel'),
+      })
+    },
+    [showDialog]
+  )
 
   const closeDialog = useCallback(() => {
     // Clear any existing close timer
     if (closeTimerRef.current) {
       clearTimeout(closeTimerRef.current)
     }
-    setState(prev => ({ ...prev, isExiting: true }))
+    setState((prev) => ({ ...prev, isExiting: true }))
     closeTimerRef.current = setTimeout(() => {
       setState({
         isOpen: false,
@@ -254,7 +216,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
   return (
     <DialogContext.Provider value={contextValue}>
       {children}
-      
+
       {/* Dialog Overlay */}
       {state.isOpen && state.options && (
         <div
@@ -297,12 +259,11 @@ export function DialogProvider({ children }: { children: ReactNode }) {
             <div
               style={{
                 height: 4,
-                background: state.options.type === 'danger' 
-                  ? tokens.gradient.error 
-                  : tokens.gradient.primary,
+                background:
+                  state.options.type === 'danger' ? tokens.gradient.error : tokens.gradient.primary,
               }}
             />
-            
+
             {/* Content */}
             <div style={{ padding: tokens.spacing[6] }}>
               {/* Icon */}
@@ -311,57 +272,71 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                   width: 56,
                   height: 56,
                   borderRadius: tokens.radius.full,
-                  background: state.options.type === 'danger'
-                    ? tokens.gradient.errorSubtle
-                    : tokens.gradient.primarySubtle,
+                  background:
+                    state.options.type === 'danger'
+                      ? tokens.gradient.errorSubtle
+                      : tokens.gradient.primarySubtle,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   margin: '0 auto',
                   marginBottom: tokens.spacing[4],
-                  border: `1px solid ${state.options.type === 'danger' 
-                    ? `${tokens.colors.accent.error}30` 
-                    : `${tokens.colors.accent.primary}30`}`,
+                  border: `1px solid ${
+                    state.options.type === 'danger'
+                      ? `${tokens.colors.accent.error}30`
+                      : `${tokens.colors.accent.primary}30`
+                  }`,
                 }}
               >
-                <span aria-hidden="true" style={{
-                  fontSize: 24,
-                  color: state.options.type === 'danger'
-                    ? tokens.colors.accent.error
-                    : tokens.colors.accent.primary,
-                }}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    fontSize: 24,
+                    color:
+                      state.options.type === 'danger'
+                        ? tokens.colors.accent.error
+                        : tokens.colors.accent.primary,
+                  }}
+                >
                   {getDialogIcon(state.options.type)}
                 </span>
               </div>
-              
+
               {/* Title */}
-              <h2 id="dialog-title" style={{
-                fontSize: tokens.typography.fontSize.xl,
-                fontWeight: tokens.typography.fontWeight.black,
-                color: tokens.colors.text.primary,
-                marginBottom: tokens.spacing[2],
-                textAlign: 'center',
-              }}>
+              <h2
+                id="dialog-title"
+                style={{
+                  fontSize: tokens.typography.fontSize.xl,
+                  fontWeight: tokens.typography.fontWeight.black,
+                  color: tokens.colors.text.primary,
+                  marginBottom: tokens.spacing[2],
+                  textAlign: 'center',
+                }}
+              >
                 {state.options.title}
               </h2>
 
               {/* Message */}
-              <p style={{
-                fontSize: tokens.typography.fontSize.sm,
-                color: tokens.colors.text.secondary,
-                lineHeight: 1.6,
-                marginBottom: tokens.spacing[6],
-                textAlign: 'center',
-              }}>
+              <p
+                style={{
+                  fontSize: tokens.typography.fontSize.sm,
+                  color: tokens.colors.text.secondary,
+                  lineHeight: 1.6,
+                  marginBottom: tokens.spacing[6],
+                  textAlign: 'center',
+                }}
+              >
                 {state.options.message}
               </p>
 
               {/* Buttons */}
-              <div style={{
-                display: 'flex',
-                gap: tokens.spacing[3],
-                justifyContent: 'center',
-              }}>
+              <div
+                style={{
+                  display: 'flex',
+                  gap: tokens.spacing[3],
+                  justifyContent: 'center',
+                }}
+              >
                 {state.options.type !== 'alert' && (
                   <button
                     onClick={handleCancel}
