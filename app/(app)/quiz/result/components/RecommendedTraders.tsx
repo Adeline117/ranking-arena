@@ -81,8 +81,8 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               style={{
                 padding: '12px 14px',
                 borderRadius: 12,
-                background: 'rgba(255,255,255,0.03)',
-                border: '1px solid rgba(255,255,255,0.06)',
+                background: 'var(--color-bg-tertiary)',
+                border: '1px solid var(--glass-border-light)',
                 display: 'flex',
                 alignItems: 'center',
                 gap: 12,
@@ -92,10 +92,10 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = `${type.color}40`
                 e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = `0 8px 24px ${type.color}15`
+                e.currentTarget.style.boxShadow = `0 4px 16px ${type.color}12`
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'
+                e.currentTarget.style.borderColor = 'var(--glass-border-light)'
                 e.currentTarget.style.transform = 'translateY(0)'
                 e.currentTarget.style.boxShadow = 'none'
               }}
