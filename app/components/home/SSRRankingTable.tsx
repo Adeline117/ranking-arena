@@ -1,18 +1,20 @@
 /**
- * SSRRankingTable - Simple row-based ranking list.
- * Each trader = one row: Rank | Avatar+Name | Score | ROI+PnL
- * No grid columns, no hide-mobile — one consistent layout across all devices.
+ * SSRRankingTable — Server-rendered mobile card layout.
+ * Visually matches the React TraderCard component so the SSR→hydration
+ * transition is invisible. Same card structure, same sizes, same colors.
  */
 
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { formatROI, formatPnL } from '@/lib/utils/format'
 
-function getScoreColor(score: number): string {
-  if (score >= 90) return 'ssr-score-s'
-  if (score >= 80) return 'ssr-score-a'
-  if (score >= 70) return 'ssr-score-b'
-  if (score >= 50) return 'ssr-score-c'
-  return 'ssr-score-d'
+function getScoreStyle(score: number) {
+  if (score >= 80)
+    return { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', color: '#22c55e' }
+  if (score >= 60)
+    return { bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.3)', color: '#a78bfa' }
+  if (score >= 40)
+    return { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.3)', color: '#94a3b8' }
+  return { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)', color: '#64748b' }
 }
 
 function getInitial(name: string): string {
@@ -20,6 +22,12 @@ function getInitial(name: string): string {
   const clean = name.startsWith('@') ? name.slice(1) : name
   if (clean.startsWith('0x')) return clean.charAt(2).toUpperCase()
   return clean.charAt(0).toUpperCase()
+}
+
+const SOURCE_TYPE_COLORS: Record<string, string> = {
+  futures: '#F59E0B',
+  spot: '#3B82F6',
+  web3: '#8B5CF6',
 }
 
 interface Props {
@@ -37,72 +45,265 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
           color: 'var(--color-text-tertiary, #888)',
         }}
       >
-        <p style={{ fontSize: 16, marginBottom: 8 }}>{'Loading rankings... / 加载排名中...'}</p>
-        <p style={{ fontSize: 13 }}>{'Data refreshes every few minutes / 数据每几分钟刷新一次'}</p>
+        <p style={{ fontSize: 16, marginBottom: 8 }}>Loading rankings... / 加载排名中...</p>
+        <p style={{ fontSize: 13 }}>Data refreshes every few minutes / 数据每几分钟刷新一次</p>
       </div>
     )
   }
 
   return (
-    <>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
       {traders.map((trader, idx) => {
         const rank = startRank + idx + 1
         const roiVal = trader.roi ?? 0
         const roiPositive = roiVal >= 0
+        const score = trader.arena_score != null ? Number(trader.arena_score).toFixed(0) : null
+        const scoreStyle = trader.arena_score != null ? getScoreStyle(trader.arena_score) : null
+        const typeColor = SOURCE_TYPE_COLORS[trader.source_type] || '#94a3b8'
+        const typeLabel =
+          trader.source_type === 'web3'
+            ? 'On-chain'
+            : trader.source_type === 'futures'
+              ? 'Futures'
+              : 'Spot'
+        const winRate = trader.win_rate != null ? `${Number(trader.win_rate).toFixed(1)}%` : '—'
+        const mdd =
+          trader.max_drawdown != null
+            ? Math.abs(trader.max_drawdown) < 0.05
+              ? '< 0.1%'
+              : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`
+            : '—'
 
         return (
           <a
             key={`${trader.source}-${trader.id}`}
             href={`/trader/${encodeURIComponent(trader.id)}?platform=${trader.source}`}
-            className={`ssr-row${rank === 1 ? ' ssr-row-gold' : rank === 2 ? ' ssr-row-silver' : rank === 3 ? ' ssr-row-bronze' : ''}`}
+            className="ssr-card"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              padding: '12px 16px',
+              borderRadius: 12,
+              background: 'var(--color-bg-secondary, #14121C)',
+              border: '1px solid var(--color-border-primary, #2A2836)',
+              textDecoration: 'none',
+              color: 'inherit',
+            }}
           >
-            {/* Rank */}
-            <span className={`ssr-rank${rank <= 3 ? '' : ' ssr-rank-default'}`}>
-              {rank <= 3 ? (
-                <span
-                  className="ssr-rank-circle"
+            {/* Row 1: Rank + Avatar + Name + Score */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {/* Rank */}
+              <div style={{ minWidth: 32, textAlign: 'center' }}>
+                {rank <= 3 ? (
+                  <span
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: '50%',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 13,
+                      fontWeight: 700,
+                      color: 'var(--color-bg-primary, #0B0A10)',
+                      background:
+                        rank === 1
+                          ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+                          : rank === 2
+                            ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
+                            : 'linear-gradient(135deg, #CD7F32, #A0522D)',
+                    }}
+                  >
+                    {rank}
+                  </span>
+                ) : (
+                  <span
+                    style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-tertiary)' }}
+                  >
+                    {rank}
+                  </span>
+                )}
+              </div>
+
+              {/* Avatar */}
+              <div
+                style={{
+                  width: 44,
+                  height: 44,
+                  minWidth: 44,
+                  borderRadius: '50%',
+                  background:
+                    'linear-gradient(135deg, var(--color-accent-primary-30, rgba(139,111,168,0.3)), var(--color-pro-gold-border, #a78bfa))',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 16,
+                  fontWeight: 700,
+                  color: '#fff',
+                  overflow: 'hidden',
+                  position: 'relative',
+                }}
+              >
+                {trader.avatar_url ? (
+                  <img
+                    src={`/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`}
+                    alt=""
+                    loading="lazy"
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      borderRadius: '50%',
+                      position: 'absolute',
+                      inset: 0,
+                    }}
+                  />
+                ) : (
+                  getInitial(trader.handle)
+                )}
+              </div>
+
+              {/* Name + Source */}
+              <div
+                style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}
+              >
+                <div
                   style={{
-                    background:
-                      rank === 1
-                        ? 'linear-gradient(135deg, var(--color-rank-gold, #FFD700), #FFA500)'
-                        : rank === 2
-                          ? 'linear-gradient(135deg, var(--color-rank-silver, #C0C0C0), #A0A0A0)'
-                          : 'linear-gradient(135deg, var(--color-rank-bronze, #CD7F32), #A0522D)',
+                    fontSize: 14,
+                    fontWeight: 700,
+                    color: 'var(--color-text-primary)',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                   }}
                 >
-                  {rank}
-                </span>
-              ) : (
-                rank
-              )}
-            </span>
-
-            {/* Avatar + Name + Platform */}
-            <div className="ssr-info">
-              <div className="ssr-av">{getInitial(trader.handle)}</div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="ssr-name">{trader.handle}</div>
-                <div className="ssr-src">{trader.source_type}</div>
+                  {trader.handle}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span
+                    style={{
+                      padding: '1px 6px',
+                      borderRadius: 6,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      lineHeight: 1.4,
+                      color: typeColor,
+                      background: `${typeColor}15`,
+                      border: `1px solid ${typeColor}30`,
+                    }}
+                  >
+                    {typeLabel}
+                  </span>
+                </div>
               </div>
+
+              {/* Score badge */}
+              {score && scoreStyle && (
+                <div
+                  style={{
+                    minWidth: 50,
+                    height: 28,
+                    borderRadius: 8,
+                    background: scoreStyle.bg,
+                    border: `1px solid ${scoreStyle.border}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 14,
+                    fontWeight: 900,
+                    color: scoreStyle.color,
+                  }}
+                >
+                  {score}
+                </div>
+              )}
             </div>
 
-            {/* Score */}
-            <span
-              className={`ssr-score ${trader.arena_score != null ? getScoreColor(trader.arena_score) : ''}`}
-            >
-              {trader.arena_score != null ? Number(trader.arena_score).toFixed(0) : '—'}
-            </span>
-
-            {/* ROI + PnL */}
-            <div className="ssr-roi">
-              <div className={`ssr-roi-val ${roiPositive ? 'ssr-roi-pos' : 'ssr-roi-neg'}`}>
+            {/* Row 2: ROI bar + ROI value */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div
+                style={{
+                  flex: 1,
+                  height: 6,
+                  borderRadius: 3,
+                  background: roiPositive
+                    ? `linear-gradient(90deg, #22c55e ${Math.min(100, Math.abs(roiVal) / 20)}%, transparent)`
+                    : `linear-gradient(90deg, #ef4444 ${Math.min(100, Math.abs(roiVal) / 20)}%, transparent)`,
+                  opacity: 0.7,
+                }}
+              />
+              <span
+                style={{
+                  fontSize: 18,
+                  fontWeight: 900,
+                  marginLeft: 'auto',
+                  color: roiPositive ? '#22c55e' : '#ef4444',
+                }}
+              >
                 {formatROI(trader.roi)}
-              </div>
-              <div className="ssr-pnl">{formatPnL(trader.pnl)}</div>
+              </span>
+            </div>
+
+            {/* Row 3: Stats grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
+              {[
+                { label: 'Sharpe', value: '—' },
+                {
+                  label: 'PnL',
+                  value: formatPnL(trader.pnl),
+                  color: trader.pnl != null ? (trader.pnl >= 0 ? '#22c55e' : '#ef4444') : undefined,
+                },
+                {
+                  label: 'Win%',
+                  value: winRate,
+                  color: trader.win_rate != null && trader.win_rate > 50 ? '#22c55e' : undefined,
+                },
+                {
+                  label: 'MDD',
+                  value: mdd,
+                  color: trader.max_drawdown != null ? '#ef4444' : undefined,
+                },
+              ].map((stat) => (
+                <div
+                  key={stat.label}
+                  style={{
+                    background: 'var(--color-bg-tertiary, #1C1926)',
+                    borderRadius: 8,
+                    padding: '6px 8px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--color-text-tertiary)',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                      letterSpacing: '0.5px',
+                    }}
+                  >
+                    {stat.label}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: stat.color || 'var(--color-text-primary)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {stat.value}
+                  </span>
+                </div>
+              ))}
             </div>
           </a>
         )
       })}
-    </>
+    </div>
   )
 }
