@@ -340,9 +340,9 @@ export default function PersonalityCard({
             width: '100%',
             height: 'clamp(16px, 4vw, 20px)',
             borderRadius: 'clamp(8px, 2vw, 10px)',
-            background: 'rgba(255,255,255,0.04)',
+            background: 'var(--color-bg-tertiary, rgba(255,255,255,0.04))',
             overflow: 'hidden',
-            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.4), inset 0 0 0 1px rgba(255,255,255,0.04)',
+            boxShadow: 'inset 0 1px 2px rgba(0,0,0,0.1)',
             position: 'relative',
           }}
         >
