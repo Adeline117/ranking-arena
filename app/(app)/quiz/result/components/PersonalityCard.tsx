@@ -159,7 +159,7 @@ export default function PersonalityCard({
           }}
         >
           <Image
-            src={`/images/quiz/${type.id}.jpg`}
+            src={`/images/quiz/${type.id}.png`}
             alt={tr(type.nameKey)}
             width={256}
             height={512}
