@@ -318,17 +318,17 @@ export default function ResultPageClient({
           <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
         </div>
 
-        {/* 9. Bottom CTAs */}
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          <Link href="/quiz" className="quiz-cta-secondary">
-            {t('quizRetake')}
-          </Link>
+        {/* 9. Bottom CTAs — stack vertically so text never wraps */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Link
             href="/rankings"
             className="quiz-cta-primary"
-            style={{ background: pType.gradient }}
+            style={{ background: pType.gradient, width: '100%' }}
           >
             {t('quizFindTraders')}
+          </Link>
+          <Link href="/quiz" className="quiz-cta-secondary" style={{ width: '100%' }}>
+            {t('quizRetake')}
           </Link>
         </div>
       </div>
