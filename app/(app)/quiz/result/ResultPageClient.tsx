@@ -282,10 +282,10 @@ export default function ResultPageClient({
                   style={{
                     padding: '6px 14px',
                     borderRadius: 20,
-                    background: 'var(--color-accent-error-10)',
-                    border: '1px solid var(--color-accent-error-20)',
+                    background: '#EF444412',
+                    border: '1px solid #EF444425',
                     fontSize: 13,
-                    color: 'var(--color-accent-error)',
+                    color: '#EF4444',
                     fontWeight: 600,
                   }}
                 >
