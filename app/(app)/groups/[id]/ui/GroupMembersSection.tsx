@@ -6,20 +6,20 @@ import Image from 'next/image'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 /** Shared hook for modal behavior: scroll lock + Escape key */
 function useModalBehavior(onClose: () => void) {
+  useScrollLock(true)
   useEffect(() => {
-    document.body.style.overflow = 'hidden'
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose()
     }
     window.addEventListener('keydown', handler)
     return () => {
-      document.body.style.overflow = ''
       window.removeEventListener('keydown', handler)
     }
   }, [onClose])
@@ -69,7 +69,8 @@ const modalBackdropStyle: React.CSSProperties = {
 // Shared close button component
 function CloseButton({ onClick }: { onClick: () => void }): React.ReactElement {
   return (
-    <button aria-label="Close"
+    <button
+      aria-label="Close"
       onClick={onClick}
       style={{
         background: 'transparent',
@@ -98,8 +99,17 @@ interface ModalHeaderProps {
 
 function ModalHeader({ title, onClose }: ModalHeaderProps): React.ReactElement {
   return (
-    <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
-      <Text size="xl" weight="bold">{title}</Text>
+    <Box
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: tokens.spacing[4],
+      }}
+    >
+      <Text size="xl" weight="bold">
+        {title}
+      </Text>
       <CloseButton onClick={onClose} />
     </Box>
   )
@@ -114,7 +124,12 @@ interface InfoRowProps {
 function InfoRow({ label, children }: InfoRowProps): React.ReactElement {
   return (
     <Box>
-      <Text size="sm" weight="semibold" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+      <Text
+        size="sm"
+        weight="semibold"
+        color="tertiary"
+        style={{ marginBottom: tokens.spacing[1] }}
+      >
         {label}
       </Text>
       {children}
@@ -146,7 +161,13 @@ function MemberAvatar({ avatarUrl, handle, size = 36 }: MemberAvatarProps): Reac
       }}
     >
       {avatarUrl ? (
-        <Image src={avatarUrl} alt={handle || 'User'} fill sizes="36px" style={{ objectFit: 'cover' }} />
+        <Image
+          src={avatarUrl}
+          alt={handle || 'User'}
+          fill
+          sizes="36px"
+          style={{ objectFit: 'cover' }}
+        />
       ) : (
         <Text size="sm" color="tertiary">
           {(handle || 'U').charAt(0).toUpperCase()}
@@ -173,11 +194,7 @@ function RoleBadge({ role }: RoleBadgeProps): React.ReactElement {
       ? `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-deep))`
       : tokens.colors.bg.tertiary || tokens.colors.bg.secondary
 
-  const label = isOwner
-    ? t('owner')
-    : isAdmin
-      ? t('admin')
-      : t('groupMember')
+  const label = isOwner ? t('owner') : isAdmin ? t('admin') : t('groupMember')
 
   return (
     <span
@@ -195,13 +212,22 @@ function RoleBadge({ role }: RoleBadgeProps): React.ReactElement {
   )
 }
 
-export function GroupInfoModal({ group, language, onClose, onShowMembers }: GroupInfoModalProps): React.ReactElement {
+export function GroupInfoModal({
+  group,
+  language,
+  onClose,
+  onShowMembers,
+}: GroupInfoModalProps): React.ReactElement {
   const { t } = useLanguage()
   useModalBehavior(onClose)
-  const description = (language === 'en' && group.description_en) ? group.description_en : group.description
+  const description =
+    language === 'en' && group.description_en ? group.description_en : group.description
   // Use rules_json for bilingual rules, fallback to rules
   const rules = group.rules_json
-    ? group.rules_json.map(r => language === 'en' ? r.en : r.zh).filter(Boolean).join('\n')
+    ? group.rules_json
+        .map((r) => (language === 'en' ? r.en : r.zh))
+        .filter(Boolean)
+        .join('\n')
     : group.rules
   const createdDate = group.created_at
     ? new Date(group.created_at).toLocaleDateString(getLocaleFromLanguage(language), {
@@ -212,7 +238,13 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
     : t('unknown')
 
   return (
-    <Box role="dialog" aria-modal="true" aria-label={t('groupInfo')} style={modalBackdropStyle} onClick={onClose}>
+    <Box
+      role="dialog"
+      aria-modal="true"
+      aria-label={t('groupInfo')}
+      style={modalBackdropStyle}
+      onClick={onClose}
+    >
       <Box
         style={{
           background: tokens.colors.bg.primary,
@@ -232,10 +264,18 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
           <InfoRow label={t('owner')}>
             <Text size="md">
               {group.owner_handle ? (
-                <Link href={`/u/${encodeURIComponent(group.owner_handle)}`} style={{ color: tokens.colors.accent?.primary || tokens.colors.accent.brand, textDecoration: 'none' }}>
+                <Link
+                  href={`/u/${encodeURIComponent(group.owner_handle)}`}
+                  style={{
+                    color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
+                    textDecoration: 'none',
+                  }}
+                >
                   @{group.owner_handle}
                 </Link>
-              ) : t('none')}
+              ) : (
+                t('none')
+              )}
             </Text>
           </InfoRow>
 
@@ -251,7 +291,7 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
                 {group.rules_json.map((rule, index) => (
                   <Box as="li" key={index} style={{ marginBottom: tokens.spacing[1] }}>
                     <Text size="md" style={{ lineHeight: 1.6 }}>
-                      {(language === 'en' && rule.en) ? rule.en : rule.zh}
+                      {language === 'en' && rule.en ? rule.en : rule.zh}
                     </Text>
                   </Box>
                 ))}
@@ -271,7 +311,10 @@ export function GroupInfoModal({ group, language, onClose, onShowMembers }: Grou
             <Text
               size="md"
               style={{ cursor: 'pointer', textDecoration: 'underline' }}
-              onClick={() => { onClose(); onShowMembers() }}
+              onClick={() => {
+                onClose()
+                onShowMembers()
+              }}
             >
               {group.member_count || 0} {t('membersUnit')}
             </Text>
@@ -315,12 +358,18 @@ function MemberRow({ member }: MemberRowProps): React.ReactElement {
         color: tokens.colors.text.primary,
         transition: `background ${tokens.transition.base}`,
       }}
-      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
-      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.background = tokens.colors.bg.secondary
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.background = 'transparent'
+      }}
     >
       <MemberAvatar avatarUrl={member.avatar_url} handle={member.handle} />
       <Box style={{ flex: 1 }}>
-        <Text size="sm" weight="medium">@{member.handle || 'Unknown'}</Text>
+        <Text size="sm" weight="medium">
+          @{member.handle || 'Unknown'}
+        </Text>
       </Box>
       <RoleBadge role={member.role} />
     </Link>
@@ -350,7 +399,7 @@ function VirtualizedMemberList({ members }: { members: GroupMember[] }): React.R
       }}
     >
       <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
-        {virtualizer.getVirtualItems().map(virtualItem => (
+        {virtualizer.getVirtualItems().map((virtualItem) => (
           <div
             key={members[virtualItem.index].user_id}
             style={{
@@ -371,7 +420,13 @@ function VirtualizedMemberList({ members }: { members: GroupMember[] }): React.R
   )
 }
 
-export function MembersListModal({ members, memberCount, loading, language: _language, onClose }: MembersListModalProps): React.ReactElement {
+export function MembersListModal({
+  members,
+  memberCount,
+  loading,
+  language: _language,
+  onClose,
+}: MembersListModalProps): React.ReactElement {
   const { t } = useLanguage()
   useModalBehavior(onClose)
   const title = `${t('groupMembers')} (${memberCount})`
@@ -401,7 +456,13 @@ export function MembersListModal({ members, memberCount, loading, language: _lan
   }
 
   return (
-    <Box role="dialog" aria-modal="true" aria-label={title} style={modalBackdropStyle} onClick={onClose}>
+    <Box
+      role="dialog"
+      aria-modal="true"
+      aria-label={title}
+      style={modalBackdropStyle}
+      onClick={onClose}
+    >
       <Box
         style={{
           background: tokens.colors.bg.primary,

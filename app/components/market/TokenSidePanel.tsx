@@ -4,16 +4,16 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 // CSS animations replace framer-motion (~40KB bundle savings)
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
 import { apiFetch } from '@/lib/utils/api-fetch'
 import type { OHLCVDataPoint } from '@/app/components/charts/TradingViewChart'
 import type { Time } from 'lightweight-charts'
 
-const TradingViewChart = dynamic(
-  () => import('@/app/components/charts/TradingViewChart'),
-  { ssr: false }
-)
+const TradingViewChart = dynamic(() => import('@/app/components/charts/TradingViewChart'), {
+  ssr: false,
+})
 
 interface TokenInfo {
   id: string
@@ -77,7 +77,8 @@ function formatSupply(n: number | null | undefined): string {
 }
 
 function formatPrice(n: number): string {
-  if (n >= 1) return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  if (n >= 1)
+    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
   return `$${n.toPrecision(4)}`
 }
 
@@ -85,18 +86,24 @@ function formatPrice(n: number): string {
 // Kept as wrapper for backward compatibility within this file.
 function formatDate(iso: string, locale = 'en'): string {
   const localeMap: Record<string, string> = { zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }
-  return new Date(iso).toLocaleDateString(localeMap[locale] || 'en-US', { year: 'numeric', month: 'short', day: 'numeric' })
+  return new Date(iso).toLocaleDateString(localeMap[locale] || 'en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
 function StatRow({ label, value }: { label: string; value: string }) {
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'space-between',
-      padding: '7px 0',
-      borderBottom: `1px solid ${tokens.colors.border.primary}`,
-      fontSize: 13,
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        padding: '7px 0',
+        borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        fontSize: 13,
+      }}
+    >
       <span style={{ color: tokens.colors.text.tertiary }}>{label}</span>
       <span style={{ color: tokens.colors.text.primary, fontWeight: 500 }}>{value}</span>
     </div>
@@ -104,35 +111,62 @@ function StatRow({ label, value }: { label: string; value: string }) {
 }
 
 function PriceChangeBar({ label, value }: { label: string; value: number | null | undefined }) {
-  if (value == null) return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
-      <span style={{ color: tokens.colors.text.tertiary, width: 32, flexShrink: 0 }}>{label}</span>
-      <span style={{ color: tokens.colors.text.tertiary }}>--</span>
-    </div>
-  )
+  if (value == null)
+    return (
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}
+      >
+        <span style={{ color: tokens.colors.text.tertiary, width: 32, flexShrink: 0 }}>
+          {label}
+        </span>
+        <span style={{ color: tokens.colors.text.tertiary }}>--</span>
+      </div>
+    )
   const isPositive = value >= 0
   const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
   const barWidth = Math.min(Math.abs(value), 100)
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
       <span style={{ color: tokens.colors.text.tertiary, width: 32, flexShrink: 0 }}>{label}</span>
-      <div style={{ flex: 1, height: 6, background: tokens.colors.bg.tertiary, borderRadius: tokens.radius.sm, overflow: 'hidden' }}>
-        <div style={{
-          width: `${barWidth}%`,
-          height: '100%',
-          background: color,
+      <div
+        style={{
+          flex: 1,
+          height: 6,
+          background: tokens.colors.bg.tertiary,
           borderRadius: tokens.radius.sm,
-          transition: 'width 0.3s ease',
-        }} />
+          overflow: 'hidden',
+        }}
+      >
+        <div
+          style={{
+            width: `${barWidth}%`,
+            height: '100%',
+            background: color,
+            borderRadius: tokens.radius.sm,
+            transition: 'width 0.3s ease',
+          }}
+        />
       </div>
-      <span style={{ color, fontWeight: 500, minWidth: 52, textAlign: 'right', fontFamily: 'var(--font-mono, monospace)' }}>
-        {isPositive ? '+' : ''}{value.toFixed(2)}%
+      <span
+        style={{
+          color,
+          fontWeight: 500,
+          minWidth: 52,
+          textAlign: 'right',
+          fontFamily: 'var(--font-mono, monospace)',
+        }}
+      >
+        {isPositive ? '+' : ''}
+        {value.toFixed(2)}%
       </span>
     </div>
   )
 }
 
-export default function TokenSidePanel({ token, onClose }: {
+export default function TokenSidePanel({
+  token,
+  onClose,
+}: {
   token: TokenInfo | null
   onClose: () => void
 }) {
@@ -146,10 +180,14 @@ export default function TokenSidePanel({ token, onClose }: {
   const [chartTheme, setChartTheme] = useState<'dark' | 'light'>('dark')
 
   useEffect(() => {
-    const getTheme = () => (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark'
+    const getTheme = () =>
+      (document.documentElement.getAttribute('data-theme') as 'dark' | 'light') || 'dark'
     setChartTheme(getTheme())
     const observer = new MutationObserver(() => setChartTheme(getTheme()))
-    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme'],
+    })
     return () => observer.disconnect()
   }, [])
 
@@ -161,24 +199,16 @@ export default function TokenSidePanel({ token, onClose }: {
     return () => window.removeEventListener('keydown', handler)
   }, [onClose])
 
-  // Scroll lock when panel is open
-  useEffect(() => {
-    if (token) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => { document.body.style.overflow = '' }
-  }, [token])
+  useScrollLock(!!token)
 
   // Fetch coin detail
   useEffect(() => {
     if (!token) return
     setCoinDetail(null)
     apiFetch<CoinDetail>(`/api/market/coin/${token.id}`)
-      .then(d => setCoinDetail(d))
-      .catch(err => console.warn('[TokenSidePanel] fetch failed', err))
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
+      .then((d) => setCoinDetail(d))
+      .catch((err) => console.warn('[TokenSidePanel] fetch failed', err))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
   }, [token?.id])
 
   // Fetch OHLC data
@@ -206,7 +236,7 @@ export default function TokenSidePanel({ token, onClose }: {
   useEffect(() => {
     if (!token) return
     fetchOhlc(token.id, selectedPeriod)
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- token.id is sufficient
   }, [token?.id, selectedPeriod, fetchOhlc])
 
   const md = coinDetail?.market_data
@@ -226,330 +256,458 @@ export default function TokenSidePanel({ token, onClose }: {
               animation: 'fadeIn 0.2s ease-out',
             }}
           />
-          <div style={{
-            position: 'fixed',
-            inset: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: tokens.zIndex.overlay + 1,
-            pointerEvents: 'none',
-          }}>
           <div
-            ref={panelRef}
-            role="dialog"
-            aria-modal="true"
-            aria-label={`${token.symbol} token details`}
             style={{
-              animation: 'fadeInScale 0.2s ease-out',
-              width: 'min(95vw, 900px)',
-              maxHeight: '90vh',
-              background: tokens.colors.bg.primary,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: tokens.radius.xl,
-              overflowY: 'auto',
-              padding: 'clamp(16px, 4vw, 28px)',
-              pointerEvents: 'auto',
+              position: 'fixed',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: tokens.zIndex.overlay + 1,
+              pointerEvents: 'none',
             }}
           >
-            {/* Header */}
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {token.image ? (
-                  <Image
-                    src={token.image}
-                    alt={`${token.symbol} icon`}
-                    width={36}
-                    height={36}
-                    style={{ borderRadius: '50%' }}
-                    unoptimized
-                  />
-                ) : (
-                  <span style={{ width: 36, height: 36, borderRadius: '50%', background: tokens.colors.bg.tertiary, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: tokens.colors.text.secondary }}>
-                    {token.symbol.charAt(0)}
-                  </span>
-                )}
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 700, color: tokens.colors.text.primary }}>
-                    {token.symbol}
-                  </div>
-                  <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{token.name}</div>
-                </div>
-                <span style={{
-                  fontSize: 11,
-                  color: tokens.colors.text.tertiary,
-                  background: tokens.colors.bg.tertiary,
-                  padding: '2px 8px',
-                  borderRadius: tokens.radius.sm,
-                  marginLeft: 4,
-                }}>
-                  #{token.rank}
-                </span>
-              </div>
-              <button
-                onClick={onClose}
-                aria-label="Close panel"
+            <div
+              ref={panelRef}
+              role="dialog"
+              aria-modal="true"
+              aria-label={`${token.symbol} token details`}
+              style={{
+                animation: 'fadeInScale 0.2s ease-out',
+                width: 'min(95vw, 900px)',
+                maxHeight: '90vh',
+                background: tokens.colors.bg.primary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                borderRadius: tokens.radius.xl,
+                overflowY: 'auto',
+                padding: 'clamp(16px, 4vw, 28px)',
+                pointerEvents: 'auto',
+              }}
+            >
+              {/* Header */}
+              <div
                 style={{
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  width: 44,
-                  height: 44,
                   display: 'flex',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  color: tokens.colors.text.tertiary,
-                  borderRadius: tokens.radius.md,
+                  marginBottom: 16,
                 }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                  <path d="M18 6L6 18M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Price */}
-            <div style={{ marginBottom: 16 }}>
-              <div style={{
-                fontSize: 28,
-                fontWeight: 700,
-                color: tokens.colors.text.primary,
-                fontFamily: 'var(--font-mono, monospace)',
-              }}>
-                {formatPrice(token.price)}
-              </div>
-              <span style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: token.change24h >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-              }}>
-                {token.change24h >= 0 ? '+' : ''}{token.change24h.toFixed(2)}% (24h)
-              </span>
-            </div>
-
-            {/* Chart */}
-            <div style={{
-              marginBottom: 20,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: tokens.radius.lg,
-              overflow: 'hidden',
-            }}>
-              {/* Period selector */}
-              <div style={{
-                display: 'flex',
-                gap: 4,
-                padding: '8px 12px',
-                borderBottom: `1px solid ${tokens.colors.border.primary}`,
-              }}>
-                {PERIODS.map(p => (
-                  <button
-                    key={p.days}
-                    onClick={() => setSelectedPeriod(p.days)}
-                    style={{
-                      background: selectedPeriod === p.days ? tokens.colors.accent.primary : 'transparent',
-                      color: selectedPeriod === p.days ? tokens.colors.white : tokens.colors.text.tertiary,
-                      border: 'none',
-                      borderRadius: tokens.radius.sm,
-                      padding: '4px 10px',
-                      fontSize: 12,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      transition: tokens.transition.fast,
-                    }}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ position: 'relative', minHeight: 280 }}>
-                {chartLoading && (
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 2,
-                    color: tokens.colors.text.tertiary,
-                    fontSize: 13,
-                  }}>
-                    {t('loading')}
-                  </div>
-                )}
-                {chartError && !chartLoading && (
-                  <div style={{
-                    position: 'absolute',
-                    inset: 0,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: tokens.colors.text.tertiary,
-                    fontSize: 13,
-                  }}>
-                    {t('chartUnavailable') || 'Chart data unavailable'}
-                  </div>
-                )}
-                {ohlcData.length > 0 && (
-                  <TradingViewChart
-                    data={ohlcData}
-                    type="candlestick"
-                    height={280}
-                    theme={chartTheme}
-                    locale={language === 'zh' ? 'zh' : 'en'}
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Price change bars */}
-            {md && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: tokens.colors.text.primary,
-                  marginBottom: 8,
-                }}>
-                  {t('priceChanges')}
-                </div>
-                <PriceChangeBar label="1h" value={md.price_change_percentage_1h_in_currency?.usd} />
-                <PriceChangeBar label="24h" value={md.price_change_percentage_24h} />
-                <PriceChangeBar label="7d" value={md.price_change_percentage_7d} />
-                <PriceChangeBar label="30d" value={md.price_change_percentage_30d} />
-              </div>
-            )}
-
-            {/* Market data */}
-            <div style={{ marginBottom: 20 }}>
-              <div style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: tokens.colors.text.primary,
-                marginBottom: 8,
-              }}>
-                {t('fundamentalData')}
-              </div>
-              <StatRow label={t('marketRank')} value={`${token.rank}`} />
-              <StatRow label={t('tokenMarketCap')} value={formatNum(token.marketCap)} />
-              <StatRow label={t('tokenVolume24h')} value={formatNum(token.volume24h)} />
-              <StatRow label={t('tokenHigh24h')} value={formatPrice(token.high24h)} />
-              <StatRow label={t('tokenLow24h')} value={formatPrice(token.low24h)} />
-              {md && (
-                <>
-                  <StatRow label={t('fullyDilutedValuation')} value={formatNum(md.fully_diluted_valuation?.usd)} />
-                  <StatRow label={t('circulatingSupply')} value={formatSupply(md.circulating_supply)} />
-                  <StatRow label={t('totalSupply')} value={formatSupply(md.total_supply)} />
-                  <StatRow label={t('maxSupply')} value={formatSupply(md.max_supply)} />
-                </>
-              )}
-            </div>
-
-            {/* ATH / ATL */}
-            {md && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: tokens.colors.text.primary,
-                  marginBottom: 8,
-                }}>
-                  {t('historicalExtremes')}
-                </div>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: '1fr 1fr',
-                  gap: 12,
-                }}>
-                  <div style={{
-                    padding: 12,
-                    background: tokens.colors.bg.tertiary,
-                    borderRadius: tokens.radius.md,
-                  }}>
-                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>{t('allTimeHigh')}</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.accent.success, fontFamily: 'var(--font-mono, monospace)' }}>
-                      {formatPrice(md.ath.usd)}
-                    </div>
-                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}>
-                      {formatDate(md.ath_date.usd)}
-                    </div>
-                    <div style={{ fontSize: 11, color: tokens.colors.accent.error, marginTop: 2 }}>
-                      {(md.ath_change_percentage?.usd ?? 0).toFixed(1)}%
-                    </div>
-                  </div>
-                  <div style={{
-                    padding: 12,
-                    background: tokens.colors.bg.tertiary,
-                    borderRadius: tokens.radius.md,
-                  }}>
-                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginBottom: 4 }}>{t('allTimeLow')}</div>
-                    <div style={{ fontSize: 16, fontWeight: 700, color: tokens.colors.accent.error, fontFamily: 'var(--font-mono, monospace)' }}>
-                      {formatPrice(md.atl.usd)}
-                    </div>
-                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}>
-                      {formatDate(md.atl_date.usd)}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* Links - official website only */}
-            {(coinDetail?.links?.homepage?.filter(Boolean)?.length ?? 0) > 0 && (
-              <div style={{ marginBottom: 20 }}>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                  {coinDetail!.links.homepage.filter(Boolean).slice(0, 1).map((url: string, i: number) => (
-                    <a
-                      key={i}
-                      href={url}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  {token.image ? (
+                    <Image
+                      src={token.image}
+                      alt={`${token.symbol} icon`}
+                      width={36}
+                      height={36}
+                      style={{ borderRadius: '50%' }}
+                      unoptimized
+                    />
+                  ) : (
+                    <span
                       style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        background: tokens.colors.bg.tertiary,
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: 6,
-                        padding: '6px 12px',
-                        background: tokens.colors.bg.tertiary,
-                        borderRadius: tokens.radius.md,
-                        color: tokens.colors.accent.primary,
-                        fontSize: 12,
-                        textDecoration: 'none',
-                        border: `1px solid ${tokens.colors.border.primary}`,
+                        justifyContent: 'center',
+                        fontWeight: 700,
+                        fontSize: 14,
+                        color: tokens.colors.text.secondary,
                       }}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-                        <circle cx="12" cy="12" r="10" />
-                        <line x1="2" y1="12" x2="22" y2="12" />
-                        <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
-                      </svg>
-                      {t('officialWebsite')}
-                    </a>
+                      {token.symbol.charAt(0)}
+                    </span>
+                  )}
+                  <div>
+                    <div
+                      style={{ fontSize: 18, fontWeight: 700, color: tokens.colors.text.primary }}
+                    >
+                      {token.symbol}
+                    </div>
+                    <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
+                      {token.name}
+                    </div>
+                  </div>
+                  <span
+                    style={{
+                      fontSize: 11,
+                      color: tokens.colors.text.tertiary,
+                      background: tokens.colors.bg.tertiary,
+                      padding: '2px 8px',
+                      borderRadius: tokens.radius.sm,
+                      marginLeft: 4,
+                    }}
+                  >
+                    #{token.rank}
+                  </span>
+                </div>
+                <button
+                  onClick={onClose}
+                  aria-label="Close panel"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    width: 44,
+                    height: 44,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: tokens.colors.text.tertiary,
+                    borderRadius: tokens.radius.md,
+                  }}
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  >
+                    <path d="M18 6L6 18M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+
+              {/* Price */}
+              <div style={{ marginBottom: 16 }}>
+                <div
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 700,
+                    color: tokens.colors.text.primary,
+                    fontFamily: 'var(--font-mono, monospace)',
+                  }}
+                >
+                  {formatPrice(token.price)}
+                </div>
+                <span
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color:
+                      token.change24h >= 0
+                        ? tokens.colors.accent.success
+                        : tokens.colors.accent.error,
+                  }}
+                >
+                  {token.change24h >= 0 ? '+' : ''}
+                  {token.change24h.toFixed(2)}% (24h)
+                </span>
+              </div>
+
+              {/* Chart */}
+              <div
+                style={{
+                  marginBottom: 20,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: tokens.radius.lg,
+                  overflow: 'hidden',
+                }}
+              >
+                {/* Period selector */}
+                <div
+                  style={{
+                    display: 'flex',
+                    gap: 4,
+                    padding: '8px 12px',
+                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                  }}
+                >
+                  {PERIODS.map((p) => (
+                    <button
+                      key={p.days}
+                      onClick={() => setSelectedPeriod(p.days)}
+                      style={{
+                        background:
+                          selectedPeriod === p.days ? tokens.colors.accent.primary : 'transparent',
+                        color:
+                          selectedPeriod === p.days
+                            ? tokens.colors.white
+                            : tokens.colors.text.tertiary,
+                        border: 'none',
+                        borderRadius: tokens.radius.sm,
+                        padding: '4px 10px',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        transition: tokens.transition.fast,
+                      }}
+                    >
+                      {p.label}
+                    </button>
                   ))}
                 </div>
+                <div style={{ position: 'relative', minHeight: 280 }}>
+                  {chartLoading && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        zIndex: 2,
+                        color: tokens.colors.text.tertiary,
+                        fontSize: 13,
+                      }}
+                    >
+                      {t('loading')}
+                    </div>
+                  )}
+                  {chartError && !chartLoading && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        color: tokens.colors.text.tertiary,
+                        fontSize: 13,
+                      }}
+                    >
+                      {t('chartUnavailable') || 'Chart data unavailable'}
+                    </div>
+                  )}
+                  {ohlcData.length > 0 && (
+                    <TradingViewChart
+                      data={ohlcData}
+                      type="candlestick"
+                      height={280}
+                      theme={chartTheme}
+                      locale={language === 'zh' ? 'zh' : 'en'}
+                    />
+                  )}
+                </div>
               </div>
-            )}
 
-            {/* Related Traders */}
-            <div>
-              <div style={{
-                fontSize: 14,
-                fontWeight: 600,
-                color: tokens.colors.text.primary,
-                marginBottom: 8,
-              }}>
-                {t('relatedTraders')}
+              {/* Price change bars */}
+              {md && (
+                <div style={{ marginBottom: 20 }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: tokens.colors.text.primary,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {t('priceChanges')}
+                  </div>
+                  <PriceChangeBar
+                    label="1h"
+                    value={md.price_change_percentage_1h_in_currency?.usd}
+                  />
+                  <PriceChangeBar label="24h" value={md.price_change_percentage_24h} />
+                  <PriceChangeBar label="7d" value={md.price_change_percentage_7d} />
+                  <PriceChangeBar label="30d" value={md.price_change_percentage_30d} />
+                </div>
+              )}
+
+              {/* Market data */}
+              <div style={{ marginBottom: 20 }}>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: tokens.colors.text.primary,
+                    marginBottom: 8,
+                  }}
+                >
+                  {t('fundamentalData')}
+                </div>
+                <StatRow label={t('marketRank')} value={`${token.rank}`} />
+                <StatRow label={t('tokenMarketCap')} value={formatNum(token.marketCap)} />
+                <StatRow label={t('tokenVolume24h')} value={formatNum(token.volume24h)} />
+                <StatRow label={t('tokenHigh24h')} value={formatPrice(token.high24h)} />
+                <StatRow label={t('tokenLow24h')} value={formatPrice(token.low24h)} />
+                {md && (
+                  <>
+                    <StatRow
+                      label={t('fullyDilutedValuation')}
+                      value={formatNum(md.fully_diluted_valuation?.usd)}
+                    />
+                    <StatRow
+                      label={t('circulatingSupply')}
+                      value={formatSupply(md.circulating_supply)}
+                    />
+                    <StatRow label={t('totalSupply')} value={formatSupply(md.total_supply)} />
+                    <StatRow label={t('maxSupply')} value={formatSupply(md.max_supply)} />
+                  </>
+                )}
               </div>
-              <div style={{
-                padding: 16,
-                background: tokens.colors.bg.tertiary,
-                borderRadius: tokens.radius.md,
-                textAlign: 'center',
-                color: tokens.colors.text.tertiary,
-                fontSize: 13,
-              }}>
-                {t('noDataComingSoon')}
+
+              {/* ATH / ATL */}
+              {md && (
+                <div style={{ marginBottom: 20 }}>
+                  <div
+                    style={{
+                      fontSize: 14,
+                      fontWeight: 600,
+                      color: tokens.colors.text.primary,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {t('historicalExtremes')}
+                  </div>
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: 12,
+                    }}
+                  >
+                    <div
+                      style={{
+                        padding: 12,
+                        background: tokens.colors.bg.tertiary,
+                        borderRadius: tokens.radius.md,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: tokens.colors.text.tertiary,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {t('allTimeHigh')}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 700,
+                          color: tokens.colors.accent.success,
+                          fontFamily: 'var(--font-mono, monospace)',
+                        }}
+                      >
+                        {formatPrice(md.ath.usd)}
+                      </div>
+                      <div
+                        style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}
+                      >
+                        {formatDate(md.ath_date.usd)}
+                      </div>
+                      <div
+                        style={{ fontSize: 11, color: tokens.colors.accent.error, marginTop: 2 }}
+                      >
+                        {(md.ath_change_percentage?.usd ?? 0).toFixed(1)}%
+                      </div>
+                    </div>
+                    <div
+                      style={{
+                        padding: 12,
+                        background: tokens.colors.bg.tertiary,
+                        borderRadius: tokens.radius.md,
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: tokens.colors.text.tertiary,
+                          marginBottom: 4,
+                        }}
+                      >
+                        {t('allTimeLow')}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: 16,
+                          fontWeight: 700,
+                          color: tokens.colors.accent.error,
+                          fontFamily: 'var(--font-mono, monospace)',
+                        }}
+                      >
+                        {formatPrice(md.atl.usd)}
+                      </div>
+                      <div
+                        style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}
+                      >
+                        {formatDate(md.atl_date.usd)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Links - official website only */}
+              {(coinDetail?.links?.homepage?.filter(Boolean)?.length ?? 0) > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {coinDetail!.links.homepage
+                      .filter(Boolean)
+                      .slice(0, 1)
+                      .map((url: string, i: number) => (
+                        <a
+                          key={i}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '6px 12px',
+                            background: tokens.colors.bg.tertiary,
+                            borderRadius: tokens.radius.md,
+                            color: tokens.colors.accent.primary,
+                            fontSize: 12,
+                            textDecoration: 'none',
+                            border: `1px solid ${tokens.colors.border.primary}`,
+                          }}
+                        >
+                          <svg
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                          >
+                            <circle cx="12" cy="12" r="10" />
+                            <line x1="2" y1="12" x2="22" y2="12" />
+                            <path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
+                          </svg>
+                          {t('officialWebsite')}
+                        </a>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Related Traders */}
+              <div>
+                <div
+                  style={{
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: tokens.colors.text.primary,
+                    marginBottom: 8,
+                  }}
+                >
+                  {t('relatedTraders')}
+                </div>
+                <div
+                  style={{
+                    padding: 16,
+                    background: tokens.colors.bg.tertiary,
+                    borderRadius: tokens.radius.md,
+                    textAlign: 'center',
+                    color: tokens.colors.text.tertiary,
+                    fontSize: 13,
+                  }}
+                >
+                  {t('noDataComingSoon')}
+                </div>
               </div>
             </div>
-          </div>
           </div>
         </>
       )}

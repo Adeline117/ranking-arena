@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
@@ -67,7 +68,7 @@ export default function ChatSettingsDrawer({
     try {
       setLoading(true)
       const res = await fetch(`/api/chat/${conversationId}/settings`, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
+        headers: { Authorization: `Bearer ${accessToken}` },
       })
       if (res.ok) {
         const data = await res.json()
@@ -94,7 +95,7 @@ export default function ChatSettingsDrawer({
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify(updates),
@@ -160,14 +161,18 @@ export default function ChatSettingsDrawer({
 
   const profileUrl = getProfileUrl(otherUser)
 
-  // Scroll lock + Escape key when drawer is open
+  useScrollLock(isOpen)
+
+  // Escape key when drawer is open
   useEffect(() => {
     if (!isOpen) return
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
     document.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+    return () => {
+      document.removeEventListener('keydown', onKey)
+    }
   }, [isOpen, onClose])
 
   if (!isOpen) return null
@@ -214,7 +219,9 @@ export default function ChatSettingsDrawer({
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
-          <Text size="lg" weight="bold">{t('chatSettings')}</Text>
+          <Text size="lg" weight="bold">
+            {t('chatSettings')}
+          </Text>
           <button
             onClick={onClose}
             style={{
@@ -231,7 +238,16 @@ export default function ChatSettingsDrawer({
               transition: 'all 0.2s',
             }}
           >
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -240,7 +256,9 @@ export default function ChatSettingsDrawer({
 
         {loading ? (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">{t('loading')}</Text>
+            <Text size="sm" color="tertiary">
+              {t('loading')}
+            </Text>
           </Box>
         ) : (
           <Box style={{ flex: 1, overflow: 'auto' }}>
@@ -271,7 +289,11 @@ export default function ChatSettingsDrawer({
                   </Text>
                 )}
                 {otherUser.bio && (
-                  <Text size="sm" color="secondary" style={{ marginTop: 4, maxWidth: 240, lineHeight: 1.5 }}>
+                  <Text
+                    size="sm"
+                    color="secondary"
+                    style={{ marginTop: 4, maxWidth: 240, lineHeight: 1.5 }}
+                  >
                     {otherUser.bio}
                   </Text>
                 )}
@@ -285,8 +307,17 @@ export default function ChatSettingsDrawer({
                 borderBottom: `1px solid ${tokens.colors.border.primary}`,
               }}
             >
-              <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[2] }}>
-                <Text size="sm" weight="semibold" color="secondary">{t('remarkName')}</Text>
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  marginBottom: tokens.spacing[2],
+                }}
+              >
+                <Text size="sm" weight="semibold" color="secondary">
+                  {t('remarkName')}
+                </Text>
                 {!editingRemark && (
                   <button
                     onClick={() => {
@@ -376,19 +407,40 @@ export default function ChatSettingsDrawer({
               {/* Search */}
               <SettingsButton
                 icon={
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <circle cx="11" cy="11" r="8" />
                     <line x1="21" y1="21" x2="16.65" y2="16.65" />
                   </svg>
                 }
                 label={t('searchChatHistory')}
-                onClick={() => { onSearchOpen(); onClose() }}
+                onClick={() => {
+                  onSearchOpen()
+                  onClose()
+                }}
               />
 
               {/* Mute Toggle */}
               <SettingsToggle
                 icon={
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     {settings.is_muted ? (
                       <>
                         <path d="M11 5L6 9H2v6h4l5 4V5z" />
@@ -412,7 +464,16 @@ export default function ChatSettingsDrawer({
               {/* Pin Toggle */}
               <SettingsToggle
                 icon={
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <line x1="12" y1="17" x2="12" y2="22" />
                     <path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V17z" />
                   </svg>
@@ -426,22 +487,48 @@ export default function ChatSettingsDrawer({
               {profileUrl && (
                 <SettingsButton
                   icon={
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg
+                      width="18"
+                      height="18"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                       <circle cx="12" cy="7" r="4" />
                     </svg>
                   }
                   label={t('viewProfile')}
-                  onClick={() => { window.location.href = profileUrl }}
+                  onClick={() => {
+                    window.location.href = profileUrl
+                  }}
                 />
               )}
 
-              <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[2]} ${tokens.spacing[4]}` }} />
+              <Box
+                style={{
+                  height: 1,
+                  background: tokens.colors.border.primary,
+                  margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                }}
+              />
 
               {/* Clear History */}
               <SettingsButton
                 icon={
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="3 6 5 6 21 6" />
                     <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                   </svg>
@@ -454,7 +541,16 @@ export default function ChatSettingsDrawer({
               {/* Block */}
               <SettingsButton
                 icon={
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <circle cx="12" cy="12" r="10" />
                     <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
                   </svg>
@@ -467,7 +563,16 @@ export default function ChatSettingsDrawer({
               {/* Report */}
               <SettingsButton
                 icon={
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
                     <line x1="4" y1="22" x2="4" y2="15" />
                   </svg>
@@ -532,12 +637,19 @@ function SettingsButton({
         e.currentTarget.style.background = 'transparent'
       }}
     >
-      <Box style={{ color: iconColor, flexShrink: 0 }}>
-        {icon}
-      </Box>
-      <Text size="sm" style={{ color: 'inherit' }}>{label}</Text>
+      <Box style={{ color: iconColor, flexShrink: 0 }}>{icon}</Box>
+      <Text size="sm" style={{ color: 'inherit' }}>
+        {label}
+      </Text>
       <Box style={{ marginLeft: 'auto', color: tokens.colors.text.tertiary }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <path d="M9 18l6-6-6-6" />
         </svg>
       </Box>
@@ -585,14 +697,18 @@ function SettingsToggle({
       }}
     >
       <Box style={{ color: tokens.colors.text.secondary, flexShrink: 0 }}>{icon}</Box>
-      <Text size="sm" style={{ flex: 1, color: 'inherit' }}>{label}</Text>
+      <Text size="sm" style={{ flex: 1, color: 'inherit' }}>
+        {label}
+      </Text>
       {/* Toggle Switch */}
       <Box
         style={{
           width: 44,
           height: 24,
           borderRadius: tokens.radius.lg,
-          background: checked ? `linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)` : tokens.colors.bg.tertiary || 'var(--glass-border-medium)',
+          background: checked
+            ? `linear-gradient(135deg, ${tokens.colors.accent.brandHover} 0%, ${tokens.colors.accent.brand} 100%)`
+            : tokens.colors.bg.tertiary || 'var(--glass-border-medium)',
           position: 'relative',
           transition: 'background 0.2s',
           flexShrink: 0,

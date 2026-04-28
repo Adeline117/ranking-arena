@@ -20,11 +20,14 @@ export default function GuestSignupPrompt() {
   const [dismissed, setDismissed] = useState(false)
   const sentinelRef = useRef<HTMLDivElement | null>(null)
 
-  // Check if already dismissed this session
+  // Check if already dismissed this session, or if cookie consent is pending
   useEffect(() => {
     if (typeof window !== 'undefined') {
       const d = sessionStorage.getItem('guest-signup-dismissed')
       if (d) setDismissed(true)
+      // Don't stack with CookieConsent — wait until user has responded
+      const consent = localStorage.getItem('cookie_consent')
+      if (consent !== 'accepted' && consent !== 'rejected') setDismissed(true)
     }
   }, [])
 

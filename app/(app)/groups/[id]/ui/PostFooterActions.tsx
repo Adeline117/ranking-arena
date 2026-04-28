@@ -1,11 +1,12 @@
-"use client"
+'use client'
 
-import React, { useState, useEffect } from "react";
-import { ThumbsUpIcon, CommentIcon } from "@/app/components/ui/icons";
-import { useToast } from '@/app/components/ui/Toast';
-import { useLanguage } from '@/app/components/Providers/LanguageProvider';
-import { getCsrfHeaders } from '@/lib/api/client';
-import { supabase } from '@/lib/supabase/client';
+import React, { useState, useEffect } from 'react'
+import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
+import { useToast } from '@/app/components/ui/Toast'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getCsrfHeaders } from '@/lib/api/client'
+import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
 type Post = {
@@ -34,8 +35,10 @@ export default function PostFooterActions({ post }: { post: Post }) {
     setLoading(true)
     try {
       // 获取用户 session
-       
-      const { data: { session } } = await supabase.auth.getSession()
+
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       const token = session?.access_token
 
       if (!token) {
@@ -44,11 +47,11 @@ export default function PostFooterActions({ post }: { post: Post }) {
         return
       }
 
-      const res = await fetch("/api/tip/checkout", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`,
+      const res = await fetch('/api/tip/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
@@ -58,7 +61,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
       })
 
       const json = await res.json()
-      
+
       if (!res.ok) {
         showToast(json.error || t('createPaymentFailed'), 'error')
         return
@@ -79,7 +82,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
   return (
     <>
       <div className="mt-3 flex items-center gap-4 text-xs opacity-70">
-        <span>@{post.author_handle ?? "user"}</span>
+        <span>@{post.author_handle ?? 'user'}</span>
         <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
           <ThumbsUpIcon size={12} /> {post.like_count ?? 0}
         </span>
@@ -89,7 +92,10 @@ export default function PostFooterActions({ post }: { post: Post }) {
 
         <button
           className="ml-auto rounded-md px-2 py-1 transition-colors"
-          style={{ border: '1px solid var(--color-border-primary)', background: 'var(--color-bg-tertiary)' }}
+          style={{
+            border: '1px solid var(--color-border-primary)',
+            background: 'var(--color-bg-tertiary)',
+          }}
           onClick={() => setShowTipModal(true)}
         >
           {t('tip')}
@@ -102,12 +108,15 @@ export default function PostFooterActions({ post }: { post: Post }) {
           <div
             className="w-full max-w-sm rounded-lg p-6"
             style={{ background: 'var(--color-bg-secondary)', boxShadow: 'var(--shadow-elevated)' }}
-            onClick={e => e.stopPropagation()}
+            onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="mb-4 text-lg font-semibold" style={{ color: 'var(--color-text-primary)' }}>
-              {t('tipAuthor')} @{post.author_handle ?? "user"}
+            <h3
+              className="mb-4 text-lg font-semibold"
+              style={{ color: 'var(--color-text-primary)' }}
+            >
+              {t('tipAuthor')} @{post.author_handle ?? 'user'}
             </h3>
-            
+
             <p className="mb-4 text-sm" style={{ color: 'var(--color-text-secondary)' }}>
               {t('selectTipAmount')}
             </p>
@@ -118,8 +127,14 @@ export default function PostFooterActions({ post }: { post: Post }) {
                   key={cents}
                   className="rounded-lg py-2 text-sm font-medium transition-colors"
                   style={{
-                    background: selectedAmount === cents ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary)',
-                    color: selectedAmount === cents ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
+                    background:
+                      selectedAmount === cents
+                        ? 'var(--color-accent-primary)'
+                        : 'var(--color-bg-tertiary)',
+                    color:
+                      selectedAmount === cents
+                        ? 'var(--color-on-accent)'
+                        : 'var(--color-text-secondary)',
                   }}
                   onClick={() => setSelectedAmount(cents)}
                 >
@@ -131,7 +146,10 @@ export default function PostFooterActions({ post }: { post: Post }) {
             <div className="flex gap-3">
               <button
                 className="flex-1 rounded-lg py-2.5 text-sm font-medium transition-colors"
-                style={{ background: 'var(--color-bg-tertiary)', color: 'var(--color-text-secondary)' }}
+                style={{
+                  background: 'var(--color-bg-tertiary)',
+                  color: 'var(--color-text-secondary)',
+                }}
                 onClick={() => setShowTipModal(false)}
               >
                 {t('cancel')}
@@ -144,7 +162,7 @@ export default function PostFooterActions({ post }: { post: Post }) {
               >
                 {loading
                   ? t('processing')
-                  : `${t('pay')} ${TIP_AMOUNTS.find(a => a.cents === selectedAmount)?.label}`}
+                  : `${t('pay')} ${TIP_AMOUNTS.find((a) => a.cents === selectedAmount)?.label}`}
               </button>
             </div>
           </div>
@@ -155,13 +173,22 @@ export default function PostFooterActions({ post }: { post: Post }) {
 }
 
 /** Overlay wrapper: scroll lock + Escape key + backdrop click */
-function TipModalOverlay({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+function TipModalOverlay({
+  onClose,
+  children,
+}: {
+  onClose: () => void
+  children: React.ReactNode
+}) {
+  useScrollLock(true)
   useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
     document.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+    return () => {
+      document.removeEventListener('keydown', onKey)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- onClose is stable
   }, [])
 

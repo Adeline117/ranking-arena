@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { Box, Text } from '../base'
 import { useToast } from './Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -10,7 +11,13 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 
 export type ReportContentType = 'post' | 'comment' | 'message' | 'user'
-export type ReportReason = 'spam' | 'harassment' | 'inappropriate' | 'misinformation' | 'fraud' | 'other'
+export type ReportReason =
+  | 'spam'
+  | 'harassment'
+  | 'inappropriate'
+  | 'misinformation'
+  | 'fraud'
+  | 'other'
 
 interface ReportModalProps {
   isOpen: boolean
@@ -60,17 +67,11 @@ export default function ReportModal({
   const modalRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
-  const contentTypeLabel = t(CONTENT_TYPE_KEYS[contentType] as keyof typeof import('@/lib/i18n/en').default)
+  const contentTypeLabel = t(
+    CONTENT_TYPE_KEYS[contentType] as keyof typeof import('@/lib/i18n/en').default
+  )
 
-  // Scroll lock when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => { document.body.style.overflow = '' }
-  }, [isOpen])
+  useScrollLock(isOpen)
 
   // Focus trap + escape key for modal
   useEffect(() => {
@@ -79,7 +80,9 @@ export default function ReportModal({
 
     const timer = setTimeout(() => {
       if (modalRef.current) {
-        const firstFocusable = modalRef.current.querySelector<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')
+        const firstFocusable = modalRef.current.querySelector<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        )
         firstFocusable?.focus()
       }
     }, 50)
@@ -97,9 +100,15 @@ export default function ReportModal({
         const first = focusable[0]
         const last = focusable[focusable.length - 1]
         if (e.shiftKey) {
-          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+          if (document.activeElement === first) {
+            e.preventDefault()
+            last.focus()
+          }
         } else {
-          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+          if (document.activeElement === last) {
+            e.preventDefault()
+            first.focus()
+          }
         }
       }
     }
@@ -133,7 +142,7 @@ export default function ReportModal({
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
@@ -215,7 +224,16 @@ export default function ReportModal({
           >
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <Box style={{ color: 'var(--color-accent-error)' }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
                   <line x1="4" y1="22" x2="4" y2="15" />
                 </svg>
@@ -240,7 +258,15 @@ export default function ReportModal({
                 justifyContent: 'center',
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -261,7 +287,9 @@ export default function ReportModal({
               >
                 <Text size="sm" color="secondary">
                   {t('reportTarget')}
-                  <span style={{ color: tokens.colors.text.primary, fontWeight: 600 }}>{targetName}</span>
+                  <span style={{ color: tokens.colors.text.primary, fontWeight: 600 }}>
+                    {targetName}
+                  </span>
                 </Text>
               </Box>
             )}
@@ -281,12 +309,14 @@ export default function ReportModal({
                       alignItems: 'center',
                       gap: tokens.spacing[3],
                       padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                      background: reason === option.value
-                        ? 'var(--color-accent-error-20)'
-                        : tokens.colors.bg.secondary,
-                      border: reason === option.value
-                        ? '1px solid var(--color-accent-error)'
-                        : `1px solid ${tokens.colors.border.primary}`,
+                      background:
+                        reason === option.value
+                          ? 'var(--color-accent-error-20)'
+                          : tokens.colors.bg.secondary,
+                      border:
+                        reason === option.value
+                          ? '1px solid var(--color-accent-error)'
+                          : `1px solid ${tokens.colors.border.primary}`,
                       borderRadius: tokens.radius.md,
                       color: tokens.colors.text.primary,
                       cursor: 'pointer',
@@ -299,9 +329,10 @@ export default function ReportModal({
                         width: 18,
                         height: 18,
                         borderRadius: '50%',
-                        border: reason === option.value
-                          ? '2px solid var(--color-accent-error)'
-                          : `2px solid ${tokens.colors.border.secondary}`,
+                        border:
+                          reason === option.value
+                            ? '2px solid var(--color-accent-error)'
+                            : `2px solid ${tokens.colors.border.secondary}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
@@ -319,7 +350,9 @@ export default function ReportModal({
                         />
                       )}
                     </Box>
-                    <Text size="sm">{t(option.key as keyof typeof import('@/lib/i18n/en').default)}</Text>
+                    <Text size="sm">
+                      {t(option.key as keyof typeof import('@/lib/i18n/en').default)}
+                    </Text>
                   </button>
                 ))}
               </Box>
@@ -328,7 +361,8 @@ export default function ReportModal({
             {/* Description */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('reportDetailsLabel')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
+                {t('reportDetailsLabel')}{' '}
+                <span style={{ color: 'var(--color-accent-error)' }}>*</span>
               </Text>
               <textarea
                 value={description}
@@ -357,51 +391,116 @@ export default function ReportModal({
                   e.target.style.borderColor = tokens.colors.border.primary
                 }}
               />
-              <Text size="xs" style={{ marginTop: tokens.spacing[1], textAlign: 'right', color: description.trim().length < MIN_DESC_LENGTH ? 'var(--color-accent-error)' : tokens.colors.text.tertiary }}>
-                {description.trim().length}/{MIN_DESC_LENGTH} {t('reportMinChars')} · {description.length}/1000
+              <Text
+                size="xs"
+                style={{
+                  marginTop: tokens.spacing[1],
+                  textAlign: 'right',
+                  color:
+                    description.trim().length < MIN_DESC_LENGTH
+                      ? 'var(--color-accent-error)'
+                      : tokens.colors.text.tertiary,
+                }}
+              >
+                {description.trim().length}/{MIN_DESC_LENGTH} {t('reportMinChars')} ·{' '}
+                {description.length}/1000
               </Text>
             </Box>
 
             {/* Image Upload */}
             <Box style={{ marginBottom: tokens.spacing[4] }}>
               <Text size="sm" weight="semibold" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('reportScreenshot')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
-                <span style={{ fontWeight: 400, color: tokens.colors.text.tertiary, marginLeft: tokens.spacing[1], fontSize: tokens.typography.fontSize.xs }}>
+                {t('reportScreenshot')}{' '}
+                <span style={{ color: 'var(--color-accent-error)' }}>*</span>
+                <span
+                  style={{
+                    fontWeight: 400,
+                    color: tokens.colors.text.tertiary,
+                    marginLeft: tokens.spacing[1],
+                    fontSize: tokens.typography.fontSize.xs,
+                  }}
+                >
                   ({images.length}/{MAX_IMAGES})
                 </span>
               </Text>
 
               <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                 {images.map((img, i) => (
-                  <Box key={i} style={{ position: 'relative', width: 72, height: 72, borderRadius: tokens.radius.md, overflow: 'hidden', border: `1px solid ${tokens.colors.border.primary}` }}>
-                    <Image src={img} alt="Report evidence" fill sizes="80px" loading="lazy" style={{ objectFit: 'cover' }} />
+                  <Box
+                    key={i}
+                    style={{
+                      position: 'relative',
+                      width: 72,
+                      height: 72,
+                      borderRadius: tokens.radius.md,
+                      overflow: 'hidden',
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                    }}
+                  >
+                    <Image
+                      src={img}
+                      alt="Report evidence"
+                      fill
+                      sizes="80px"
+                      loading="lazy"
+                      style={{ objectFit: 'cover' }}
+                    />
                     <button
-                      onClick={() => setImages(prev => prev.filter((_, j) => j !== i))}
+                      onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
                       aria-label={`Remove image ${i + 1}`}
                       style={{
-                        position: 'absolute', top: tokens.spacing[0.5], right: tokens.spacing[0.5], width: 20, height: 20,
-                        borderRadius: '50%', background: 'var(--color-backdrop-medium)', border: 'none',
-                        color: tokens.colors.white, fontSize: 12, cursor: 'pointer', display: 'flex',
-                        alignItems: 'center', justifyContent: 'center',
+                        position: 'absolute',
+                        top: tokens.spacing[0.5],
+                        right: tokens.spacing[0.5],
+                        width: 20,
+                        height: 20,
+                        borderRadius: '50%',
+                        background: 'var(--color-backdrop-medium)',
+                        border: 'none',
+                        color: tokens.colors.white,
+                        fontSize: 12,
+                        cursor: 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
                       }}
-                    ><span aria-hidden="true">X</span></button>
+                    >
+                      <span aria-hidden="true">X</span>
+                    </button>
                   </Box>
                 ))}
 
                 {images.length < MAX_IMAGES && (
-                  <label style={{
-                    width: 72, height: 72, borderRadius: tokens.radius.md,
-                    border: `2px dashed ${tokens.colors.border.secondary}`,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: uploading ? 'wait' : 'pointer', opacity: uploading ? 0.5 : 1,
-                    flexDirection: 'column', gap: tokens.spacing[0.5],
-                  }}>
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2">
-                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                      <circle cx="8.5" cy="8.5" r="1.5"/>
-                      <polyline points="21 15 16 10 5 21"/>
+                  <label
+                    style={{
+                      width: 72,
+                      height: 72,
+                      borderRadius: tokens.radius.md,
+                      border: `2px dashed ${tokens.colors.border.secondary}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      cursor: uploading ? 'wait' : 'pointer',
+                      opacity: uploading ? 0.5 : 1,
+                      flexDirection: 'column',
+                      gap: tokens.spacing[0.5],
+                    }}
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke={tokens.colors.text.tertiary}
+                      strokeWidth="2"
+                    >
+                      <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                      <circle cx="8.5" cy="8.5" r="1.5" />
+                      <polyline points="21 15 16 10 5 21" />
                     </svg>
-                    <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{uploading ? '...' : t('upload')}</span>
+                    <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
+                      {uploading ? '...' : t('upload')}
+                    </span>
                     <input
                       type="file"
                       accept="image/*"
@@ -421,17 +520,17 @@ export default function ReportModal({
                           formData.append('bucket', 'reports')
                           const res = await fetch('/api/upload', {
                             method: 'POST',
-                            headers: { 'Authorization': `Bearer ${accessToken}` },
+                            headers: { Authorization: `Bearer ${accessToken}` },
                             body: formData,
                           })
                           if (res.ok) {
                             const { url } = await res.json()
-                            setImages(prev => [...prev, url])
+                            setImages((prev) => [...prev, url])
                           } else {
                             // Fallback to base64 if upload API not available
                             const reader = new FileReader()
                             reader.onload = () => {
-                              setImages(prev => [...prev, reader.result as string])
+                              setImages((prev) => [...prev, reader.result as string])
                             }
                             reader.readAsDataURL(file)
                           }
@@ -439,7 +538,7 @@ export default function ReportModal({
                           // Fallback to base64
                           const reader = new FileReader()
                           reader.onload = () => {
-                            setImages(prev => [...prev, reader.result as string])
+                            setImages((prev) => [...prev, reader.result as string])
                           }
                           reader.readAsDataURL(file)
                         } finally {
@@ -488,17 +587,34 @@ export default function ReportModal({
               </button>
               <button
                 onClick={handleSubmit}
-                disabled={submitting || !reason || description.trim().length < MIN_DESC_LENGTH || images.length === 0}
+                disabled={
+                  submitting ||
+                  !reason ||
+                  description.trim().length < MIN_DESC_LENGTH ||
+                  images.length === 0
+                }
                 style={{
                   flex: 1,
                   padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                  background: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? 'var(--color-accent-error)' : tokens.colors.bg.tertiary,
+                  background:
+                    reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0
+                      ? 'var(--color-accent-error)'
+                      : tokens.colors.bg.tertiary,
                   border: 'none',
                   borderRadius: tokens.radius.md,
-                  color: reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0 ? 'var(--color-on-accent)' : tokens.colors.text.tertiary,
+                  color:
+                    reason && description.trim().length >= MIN_DESC_LENGTH && images.length > 0
+                      ? 'var(--color-on-accent)'
+                      : tokens.colors.text.tertiary,
                   fontSize: tokens.typography.fontSize.sm,
                   fontWeight: 600,
-                  cursor: submitting || !reason || description.trim().length < MIN_DESC_LENGTH || images.length === 0 ? 'not-allowed' : 'pointer',
+                  cursor:
+                    submitting ||
+                    !reason ||
+                    description.trim().length < MIN_DESC_LENGTH ||
+                    images.length === 0
+                      ? 'not-allowed'
+                      : 'pointer',
                   opacity: submitting ? 0.6 : 1,
                   transition: 'all 0.2s',
                 }}

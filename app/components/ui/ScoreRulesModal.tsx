@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { t } from '@/lib/i18n'
 import { Text } from '../base'
 
@@ -19,11 +20,13 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
     setMounted(true)
   }, [])
 
+  useScrollLock(isOpen)
+
   useEffect(() => {
     if (!isOpen) return
 
     const previousFocus = document.activeElement as HTMLElement
-    
+
     // Focus the modal after render
     const focusTimer = setTimeout(() => {
       if (modalRef.current) {
@@ -31,9 +34,12 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
         firstBtn?.focus()
       }
     }, 50)
-    
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
       // Focus trap
       if (e.key === 'Tab' && modalRef.current) {
         const focusable = modalRef.current.querySelectorAll<HTMLElement>(
@@ -43,20 +49,24 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
         const first = focusable[0]
         const last = focusable[focusable.length - 1]
         if (e.shiftKey) {
-          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+          if (document.activeElement === first) {
+            e.preventDefault()
+            last.focus()
+          }
         } else {
-          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+          if (document.activeElement === last) {
+            e.preventDefault()
+            first.focus()
+          }
         }
       }
     }
-    
+
     document.addEventListener('keydown', handleKeyDown)
-    document.body.style.overflow = 'hidden'
-    
+
     return () => {
       clearTimeout(focusTimer)
       document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = ''
       previousFocus?.focus()
     }
   }, [isOpen, onClose])
@@ -113,7 +123,12 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
             borderBottom: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
-          <Text id="score-rules-modal-title" size="lg" weight="bold" style={{ color: tokens.colors.text.primary }}>
+          <Text
+            id="score-rules-modal-title"
+            size="lg"
+            weight="bold"
+            style={{ color: tokens.colors.text.primary }}
+          >
             Arena Score Methodology
           </Text>
           <button
@@ -142,7 +157,15 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
               e.currentTarget.style.color = tokens.colors.text.secondary
             }}
           >
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+            <svg
+              width={16}
+              height={16}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              aria-hidden="true"
+            >
               <path d="M18 6L6 18M6 6l12 12" />
             </svg>
           </button>
@@ -162,14 +185,35 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
           {/* Score Composition */}
           <Section title={t('scoreComposition')} accent>
             <FormulaBox>
-              S<sub>total</sub> = S<sub>return</sub> + S<sub>pnl</sub> + S<sub>dd</sub> + S<sub>stab</sub>
+              S<sub>total</sub> = S<sub>return</sub> + S<sub>pnl</sub> + S<sub>dd</sub> + S
+              <sub>stab</sub>
             </FormulaBox>
             <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <ScoreBadge label={t('returnScoreLabel')} value="[0, 70]" color={tokens.colors.accent.success} />
-              <ScoreBadge label={t('pnlScoreLabel')} value="[0, 15]" color={tokens.colors.accent.brand} />
-              <ScoreBadge label={t('drawdownLabel')} value="[0, 8]" color={tokens.colors.accent.warning} />
-              <ScoreBadge label={t('stabilityLabel')} value="[0, 7]" color={tokens.colors.accent.primary} />
-              <ScoreBadge label={t('totalLabel')} value="[0, 100]" color={tokens.colors.accent.warning} />
+              <ScoreBadge
+                label={t('returnScoreLabel')}
+                value="[0, 70]"
+                color={tokens.colors.accent.success}
+              />
+              <ScoreBadge
+                label={t('pnlScoreLabel')}
+                value="[0, 15]"
+                color={tokens.colors.accent.brand}
+              />
+              <ScoreBadge
+                label={t('drawdownLabel')}
+                value="[0, 8]"
+                color={tokens.colors.accent.warning}
+              />
+              <ScoreBadge
+                label={t('stabilityLabel')}
+                value="[0, 7]"
+                color={tokens.colors.accent.primary}
+              />
+              <ScoreBadge
+                label={t('totalLabel')}
+                value="[0, 100]"
+                color={tokens.colors.accent.warning}
+              />
             </div>
           </Section>
 
@@ -224,14 +268,18 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
           {/* Risk Score */}
           <Section title={t('riskScoreTitle')}>
             <div style={{ marginBottom: 16 }}>
-              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}>
+              <Text
+                size="sm"
+                weight="bold"
+                style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}
+              >
                 {t('drawdownComponent')}
               </Text>
               <FormulaBox small>
                 S<sub>dd</sub> = 8 · max(0, 1 − MDD / θ<sub>d</sub>)
               </FormulaBox>
               <div style={{ marginTop: 8 }}>
-                <ParamTable 
+                <ParamTable
                   headers={[t('periodHeader'), t('thresholdHeader')]}
                   rows={[
                     ['7D', '15%'],
@@ -242,16 +290,20 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
                 />
               </div>
             </div>
-            
+
             <div>
-              <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}>
+              <Text
+                size="sm"
+                weight="bold"
+                style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}
+              >
                 {t('stabilityComponent')}
               </Text>
               <FormulaBox small>
                 S<sub>stab</sub> = 7 · clip((WR − 0.45) / (γ<sub>d</sub> − 0.45), 0, 1)
               </FormulaBox>
               <div style={{ marginTop: 8 }}>
-                <ParamTable 
+                <ParamTable
                   headers={[t('periodHeader'), t('winRateCapHeader')]}
                   rows={[
                     ['7D', '62%'],
@@ -267,21 +319,27 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
           {/* Ranking Logic */}
           <Section title={t('rankingLogicTitle')}>
             <FormulaBox small>
-              <div>{t('primarySortDesc')}<sub>total</sub>{t('primarySortSuffix')}</div>
+              <div>
+                {t('primarySortDesc')}
+                <sub>total</sub>
+                {t('primarySortSuffix')}
+              </div>
               <div style={{ marginTop: 4 }}>{t('secondarySortDesc')}</div>
             </FormulaBox>
           </Section>
 
           {/* Score Distribution */}
           <Section title={t('scoreDistTitle')} last>
-            <div style={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              gap: 8,
-              background: tokens.glass.bg.light,
-              padding: 12,
-              borderRadius: tokens.radius.lg,
-            }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+                background: tokens.glass.bg.light,
+                padding: 12,
+                borderRadius: tokens.radius.lg,
+              }}
+            >
               <ScoreRange range="30-40" description={t('medianPerformers')} />
               <ScoreRange range="50-60" description={t('aboveAverage')} highlight />
               <ScoreRange range="60-80" description={t('topQuartile')} highlight />
@@ -297,27 +355,29 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
 }
 
 // Helper components
-function Section({ 
-  title, 
-  children, 
+function Section({
+  title,
+  children,
   accent = false,
   last = false,
-}: { 
+}: {
   title: string
   children: React.ReactNode
   accent?: boolean
   last?: boolean
 }) {
   return (
-    <div style={{ 
-      marginBottom: last ? 0 : 20,
-      paddingBottom: last ? 0 : 20,
-      borderBottom: last ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-    }}>
-      <Text 
-        size="md" 
-        weight="bold" 
-        style={{ 
+    <div
+      style={{
+        marginBottom: last ? 0 : 20,
+        paddingBottom: last ? 0 : 20,
+        borderBottom: last ? 'none' : `1px solid ${tokens.colors.border.primary}`,
+      }}
+    >
+      <Text
+        size="md"
+        weight="bold"
+        style={{
           color: accent ? tokens.colors.accent.primary : tokens.colors.text.primary,
           marginBottom: 12,
           display: 'block',
@@ -330,96 +390,95 @@ function Section({
   )
 }
 
-function FormulaBox({ 
-  children, 
-  small = false 
-}: { 
-  children: React.ReactNode
-  small?: boolean 
-}) {
+function FormulaBox({ children, small = false }: { children: React.ReactNode; small?: boolean }) {
   return (
-    <div style={{
-      background: 'var(--color-accent-primary-10)',
-      border: `1px solid ${tokens.colors.accent.primary}30`,
-      borderRadius: tokens.radius.lg,
-      padding: small ? '10px 14px' : '14px 18px',
-      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
-      fontSize: small ? 13 : 14,
-      color: tokens.colors.text.primary,
-      letterSpacing: '0.02em',
-    }}>
+    <div
+      style={{
+        background: 'var(--color-accent-primary-10)',
+        border: `1px solid ${tokens.colors.accent.primary}30`,
+        borderRadius: tokens.radius.lg,
+        padding: small ? '10px 14px' : '14px 18px',
+        fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+        fontSize: small ? 13 : 14,
+        color: tokens.colors.text.primary,
+        letterSpacing: '0.02em',
+      }}
+    >
       {children}
     </div>
   )
 }
 
-function ScoreBadge({ 
-  label, 
-  value, 
-  color 
-}: { 
-  label: string
-  value: string
-  color: string 
-}) {
+function ScoreBadge({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div style={{
-      display: 'flex',
-      alignItems: 'center',
-      gap: 6,
-      background: `${color}15`,
-      border: `1px solid ${color}30`,
-      borderRadius: tokens.radius.md,
-      padding: '4px 10px',
-      fontSize: 12,
-    }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 6,
+        background: `${color}15`,
+        border: `1px solid ${color}30`,
+        borderRadius: tokens.radius.md,
+        padding: '4px 10px',
+        fontSize: 12,
+      }}
+    >
       <span style={{ color: tokens.colors.text.secondary }}>{label}</span>
       <span style={{ color, fontWeight: 600, fontFamily: 'monospace' }}>{value}</span>
     </div>
   )
 }
 
-function ParamTable({ 
-  headers, 
+function ParamTable({
+  headers,
   rows,
   compact = false,
-}: { 
+}: {
   headers: string[]
   rows: string[][]
   compact?: boolean
 }) {
   return (
-    <div style={{
-      background: tokens.glass.bg.light,
-      borderRadius: tokens.radius.md,
-      overflow: 'hidden',
-      fontSize: compact ? 11 : 12,
-    }}>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: `repeat(${headers.length}, 1fr)`,
-        background: tokens.glass.bg.medium,
-        padding: compact ? '6px 10px' : '8px 12px',
-        fontWeight: 600,
-        color: tokens.colors.text.tertiary,
-        textTransform: 'uppercase',
-        letterSpacing: '0.05em',
-        fontSize: 12,
-      }}>
+    <div
+      style={{
+        background: tokens.glass.bg.light,
+        borderRadius: tokens.radius.md,
+        overflow: 'hidden',
+        fontSize: compact ? 11 : 12,
+      }}
+    >
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${headers.length}, 1fr)`,
+          background: tokens.glass.bg.medium,
+          padding: compact ? '6px 10px' : '8px 12px',
+          fontWeight: 600,
+          color: tokens.colors.text.tertiary,
+          textTransform: 'uppercase',
+          letterSpacing: '0.05em',
+          fontSize: 12,
+        }}
+      >
         {headers.map((h, i) => (
           <div key={i}>{h}</div>
         ))}
       </div>
       {rows.map((row, i) => (
-        <div key={i} style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${headers.length}, 1fr)`,
-          padding: compact ? '6px 10px' : '8px 12px',
-          borderTop: `1px solid ${tokens.colors.border.primary}`,
-          color: tokens.colors.text.secondary,
-        }}>
+        <div
+          key={i}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${headers.length}, 1fr)`,
+            padding: compact ? '6px 10px' : '8px 12px',
+            borderTop: `1px solid ${tokens.colors.border.primary}`,
+            color: tokens.colors.text.secondary,
+          }}
+        >
           {row.map((cell, j) => (
-            <div key={j} style={{ fontFamily: j > 0 ? 'monospace' : 'inherit' }}>{cell}</div>
+            <div key={j} style={{ fontFamily: j > 0 ? 'monospace' : 'inherit' }}>
+              {cell}
+            </div>
           ))}
         </div>
       ))}
@@ -427,39 +486,41 @@ function ParamTable({
   )
 }
 
-function ScoreRange({ 
-  range, 
-  description, 
+function ScoreRange({
+  range,
+  description,
   highlight = false,
   gold = false,
-}: { 
+}: {
   range: string
   description: string
   highlight?: boolean
   gold?: boolean
 }) {
-  const color = gold 
-    ? tokens.colors.medal.gold 
-    : highlight 
-      ? tokens.colors.accent.success 
+  const color = gold
+    ? tokens.colors.medal.gold
+    : highlight
+      ? tokens.colors.accent.success
       : tokens.colors.text.secondary
 
   return (
-    <div style={{ 
-      display: 'flex', 
-      justifyContent: 'space-between',
-      alignItems: 'center',
-    }}>
-      <span style={{ 
-        fontWeight: 600, 
-        color,
-        fontFamily: 'ui-monospace, monospace',
-      }}>
+    <div
+      style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+      }}
+    >
+      <span
+        style={{
+          fontWeight: 600,
+          color,
+          fontFamily: 'ui-monospace, monospace',
+        }}
+      >
         {range}
       </span>
-      <span style={{ color: tokens.colors.text.tertiary, fontSize: 12 }}>
-        {description}
-      </span>
+      <span style={{ color: tokens.colors.text.tertiary, fontSize: 12 }}>{description}</span>
     </div>
   )
 }

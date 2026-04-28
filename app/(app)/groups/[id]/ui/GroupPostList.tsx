@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import MasonryGrid from '@/app/components/ui/MasonryGrid'
@@ -59,7 +60,9 @@ interface GroupPostListProps {
   setNewComment: (fn: (prev: Record<string, string>) => Record<string, string>) => void
   commentLoading: Record<string, boolean>
   replyingTo: Record<string, string | null>
-  setReplyingTo: (fn: (prev: Record<string, string | null>) => Record<string, string | null>) => void
+  setReplyingTo: (
+    fn: (prev: Record<string, string | null>) => Record<string, string | null>
+  ) => void
   replyContent: Record<string, string>
   setReplyContent: (fn: (prev: Record<string, string>) => Record<string, string>) => void
   expandedReplies: Record<string, boolean>
@@ -86,20 +89,60 @@ interface GroupPostListProps {
 export default function GroupPostList(props: GroupPostListProps) {
   const { t } = useLanguage()
   const {
-    groupId, language, userId, accessToken, userRole,
-    isMember, joining: _joining, onJoin: _onJoin,
-    sortedPosts, sortMode, setSortMode, viewMode, setViewMode,
-    hasMorePosts, loadingMore, sentinelRef,
-    editingPost, setEditingPost, editTitle, setEditTitle, editContent, setEditContent,
-    savingEdit, deletingPost,
-    likeLoading, bookmarkLoading, repostLoading,
-    showRepostModal, setShowRepostModal, repostComment, setRepostComment,
-    expandedComments, comments, newComment, setNewComment, commentLoading,
-    replyingTo, setReplyingTo, replyContent, setReplyContent,
-    expandedReplies, setExpandedReplies,
-    expandedPosts, setExpandedPosts, translatedPosts,
-    handleLike, handleBookmark, handleRepost, handleDeletePost,
-    handleSaveEdit, handlePinPost, toggleComments, submitComment, submitReply,
+    groupId,
+    language,
+    userId,
+    accessToken,
+    userRole,
+    isMember,
+    joining: _joining,
+    onJoin: _onJoin,
+    sortedPosts,
+    sortMode,
+    setSortMode,
+    viewMode,
+    setViewMode,
+    hasMorePosts,
+    loadingMore,
+    sentinelRef,
+    editingPost,
+    setEditingPost,
+    editTitle,
+    setEditTitle,
+    editContent,
+    setEditContent,
+    savingEdit,
+    deletingPost,
+    likeLoading,
+    bookmarkLoading,
+    repostLoading,
+    showRepostModal,
+    setShowRepostModal,
+    repostComment,
+    setRepostComment,
+    expandedComments,
+    comments,
+    newComment,
+    setNewComment,
+    commentLoading,
+    replyingTo,
+    setReplyingTo,
+    replyContent,
+    setReplyContent,
+    expandedReplies,
+    setExpandedReplies,
+    expandedPosts,
+    setExpandedPosts,
+    translatedPosts,
+    handleLike,
+    handleBookmark,
+    handleRepost,
+    handleDeletePost,
+    handleSaveEdit,
+    handlePinPost,
+    toggleComments,
+    submitComment,
+    submitReply,
     getHeatColor,
   } = props
 
@@ -107,18 +150,33 @@ export default function GroupPostList(props: GroupPostListProps) {
   const [reportingPost, setReportingPost] = useState<{ id: string; title: string } | null>(null)
 
   // Non-member banner removed per Adeline's request
-  const nonMemberBanner = null;
+  const nonMemberBanner = null
 
   return (
     <Box style={{ position: 'relative' }}>
       {nonMemberBanner}
       {/* Sort Tabs + View Toggle */}
-      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: tokens.spacing[4],
+        }}
+      >
         <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
-          <Button variant={sortMode === 'latest' ? 'primary' : 'secondary'} size="sm" onClick={() => setSortMode('latest')}>
+          <Button
+            variant={sortMode === 'latest' ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setSortMode('latest')}
+          >
             {t('latest')}
           </Button>
-          <Button variant={sortMode === 'hot' ? 'primary' : 'secondary'} size="sm" onClick={() => setSortMode('hot')}>
+          <Button
+            variant={sortMode === 'hot' ? 'primary' : 'secondary'}
+            size="sm"
+            onClick={() => setSortMode('hot')}
+          >
             {t('hot')}
           </Button>
         </Box>
@@ -131,14 +189,28 @@ export default function GroupPostList(props: GroupPostListProps) {
               borderRadius: tokens.radius.md,
               border: 'none',
               background: viewMode === 'list' ? `${tokens.colors.accent.primary}20` : 'transparent',
-              color: viewMode === 'list' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+              color:
+                viewMode === 'list' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
               cursor: 'pointer',
               transition: `all ${tokens.transition.base}`,
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="8" y1="6" x2="21" y2="6" /><line x1="8" y1="12" x2="21" y2="12" /><line x1="8" y1="18" x2="21" y2="18" />
-              <line x1="3" y1="6" x2="3.01" y2="6" /><line x1="3" y1="12" x2="3.01" y2="12" /><line x1="3" y1="18" x2="3.01" y2="18" />
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <line x1="8" y1="6" x2="21" y2="6" />
+              <line x1="8" y1="12" x2="21" y2="12" />
+              <line x1="8" y1="18" x2="21" y2="18" />
+              <line x1="3" y1="6" x2="3.01" y2="6" />
+              <line x1="3" y1="12" x2="3.01" y2="12" />
+              <line x1="3" y1="18" x2="3.01" y2="18" />
             </svg>
           </button>
           <button
@@ -148,15 +220,28 @@ export default function GroupPostList(props: GroupPostListProps) {
               padding: tokens.spacing[2],
               borderRadius: tokens.radius.md,
               border: 'none',
-              background: viewMode === 'masonry' ? `${tokens.colors.accent.primary}20` : 'transparent',
-              color: viewMode === 'masonry' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+              background:
+                viewMode === 'masonry' ? `${tokens.colors.accent.primary}20` : 'transparent',
+              color:
+                viewMode === 'masonry' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
               cursor: 'pointer',
               transition: `all ${tokens.transition.base}`,
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" />
-              <rect x="3" y="15" width="7" height="6" rx="1" /><rect x="14" y="11" width="7" height="10" rx="1" />
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="3" y="3" width="7" height="9" rx="1" />
+              <rect x="14" y="3" width="7" height="5" rx="1" />
+              <rect x="3" y="15" width="7" height="6" rx="1" />
+              <rect x="14" y="11" width="7" height="10" rx="1" />
             </svg>
           </button>
         </Box>
@@ -234,7 +319,9 @@ export default function GroupPostList(props: GroupPostListProps) {
                   getHeatColor={getHeatColor}
                   setShowRepostModal={setShowRepostModal}
                   showToast={() => {}} // handled by repost modal
-                  onReport={accessToken ? (id, title) => setReportingPost({ id, title }) : undefined}
+                  onReport={
+                    accessToken ? (id, title) => setReportingPost({ id, title }) : undefined
+                  }
                   isMember={isMember}
                 />
               ))}
@@ -245,13 +332,15 @@ export default function GroupPostList(props: GroupPostListProps) {
 
       {/* Empty masonry state */}
       {viewMode === 'masonry' && sortedPosts.length === 0 && (
-        <Box style={{
-          padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`,
-          textAlign: 'center',
-          background: tokens.colors.bg.secondary,
-          borderRadius: tokens.radius.xl,
-          border: `1px solid ${tokens.colors.border.primary}`,
-        }}>
+        <Box
+          style={{
+            padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`,
+            textAlign: 'center',
+            background: tokens.colors.bg.secondary,
+            borderRadius: tokens.radius.xl,
+            border: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
           <EmptyPostsState groupId={groupId} language={language} isMember={isMember} />
         </Box>
       )}
@@ -298,28 +387,73 @@ export default function GroupPostList(props: GroupPostListProps) {
 // Empty State (shared between list and masonry)
 // ─────────────────────────────────────────────
 
-function EmptyPostsState({ groupId, language: _language, isMember }: { groupId: string; language: string; isMember: boolean }) {
+function EmptyPostsState({
+  groupId,
+  language: _language,
+  isMember,
+}: {
+  groupId: string
+  language: string
+  isMember: boolean
+}) {
   const { t } = useLanguage()
 
   return (
     <Box style={{ padding: `${tokens.spacing[12]} ${tokens.spacing[6]}`, textAlign: 'center' }}>
-      <Box className="empty-state-icon" style={{ marginBottom: tokens.spacing[4], display: 'inline-block' }}>
-        <svg width="56" height="56" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" style={{ color: tokens.colors.accent?.primary || tokens.colors.accent.brand, opacity: 0.5 }}>
-          <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+      <Box
+        className="empty-state-icon"
+        style={{ marginBottom: tokens.spacing[4], display: 'inline-block' }}
+      >
+        <svg
+          width="56"
+          height="56"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{
+            color: tokens.colors.accent?.primary || tokens.colors.accent.brand,
+            opacity: 0.5,
+          }}
+        >
+          <path d="M12 20h9" />
+          <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
         </svg>
       </Box>
       <Text size="md" weight="bold" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
         {t('noPostsYet')}
       </Text>
-      <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[5], lineHeight: 1.6, maxWidth: 280, margin: '0 auto', marginTop: 4 }}>
+      <Text
+        size="sm"
+        color="tertiary"
+        style={{
+          marginBottom: tokens.spacing[5],
+          lineHeight: 1.6,
+          maxWidth: 280,
+          margin: '0 auto',
+          marginTop: 4,
+        }}
+      >
         {t('beFirstToPost')}
       </Text>
       {isMember && (
         <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
           <Button variant="primary" size="sm" style={{ marginTop: tokens.spacing[4] }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M12 20h9" /><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M12 20h9" />
+                <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
               </svg>
               {t('writeFirstPostButton')}
             </span>
@@ -351,15 +485,22 @@ function RepostModal({
 }) {
   const { t } = useLanguage()
 
-  const closeModal = () => { setShowRepostModal(null); setRepostComment('') }
+  const closeModal = () => {
+    setShowRepostModal(null)
+    setRepostComment('')
+  }
 
-  // Scroll lock + Escape key
+  useScrollLock(true)
+
+  // Escape key
   useEffect(() => {
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') closeModal() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') closeModal()
+    }
     document.addEventListener('keydown', onKey)
-    return () => { document.body.style.overflow = prev; document.removeEventListener('keydown', onKey) }
+    return () => {
+      document.removeEventListener('keydown', onKey)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- closeModal is stable within this render
   }, [])
 
@@ -370,7 +511,10 @@ function RepostModal({
       aria-label={t('repostToFeed')}
       style={{
         position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
         background: 'var(--color-backdrop)',
         display: 'flex',
         alignItems: 'center',
@@ -421,9 +565,7 @@ function RepostModal({
             onClick={() => handleRepost(showRepostModal, repostComment)}
             disabled={repostLoading[showRepostModal]}
           >
-            {repostLoading[showRepostModal]
-              ? t('reposting')
-              : t('repost')}
+            {repostLoading[showRepostModal] ? t('reposting') : t('repost')}
           </Button>
         </Box>
       </Box>

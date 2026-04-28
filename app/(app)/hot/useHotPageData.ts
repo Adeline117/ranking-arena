@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -30,25 +31,32 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const [showingOriginal, setShowingOriginal] = useState(true)
   const [translating, setTranslating] = useState(false)
   const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
-  const [translatedListPosts, setTranslatedListPosts] = useState<Record<string, { title?: string; body?: string }>>({})
+  const [translatedListPosts, setTranslatedListPosts] = useState<
+    Record<string, { title?: string; body?: string }>
+  >({})
   const [translatingList, setTranslatingList] = useState(false)
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
   const [_traders, setTraders] = useState<Trader[]>([])
   const [_loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>(options.initialPosts || [])
-  const [loadingPosts, setLoadingPosts] = useState(!options.initialPosts || options.initialPosts.length === 0)
+  const [loadingPosts, setLoadingPosts] = useState(
+    !options.initialPosts || options.initialPosts.length === 0
+  )
 
   // Tabbed sections state
   const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
 
   // Groups data for the groups tab
-  const [groups, setGroups] = useState<{ id: string; name: string; name_en?: string | null; member_count: number }[]>([])
+  const [groups, setGroups] = useState<
+    { id: string; name: string; name_en?: string | null; member_count: number }[]
+  >([])
   const [loadingGroups, setLoadingGroups] = useState(false)
 
   const latestPostTime = useRef<string>('')
 
   // Post detail modal state
   const [openPost, setOpenPost] = useState<Post | null>(null)
+  useScrollLock(!!openPost)
   const [comments, setComments] = useState<Comment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
   const [newComment, setNewCommentRaw] = useState('')
@@ -66,7 +74,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       try {
         if (value.trim()) localStorage.setItem(`comment-draft-${pid}`, value)
         else localStorage.removeItem(`comment-draft-${pid}`)
-      } catch { /* quota exceeded */ }
+      } catch {
+        /* quota exceeded */
+      }
     }, 500)
   }, [])
 
@@ -100,30 +110,35 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         }
 
         const seen = new Set<string>()
-        const uniqueData = (data || []).filter(row => {
-          const key = `${row.source}:${row.source_trader_id}`
-          if (seen.has(key)) return false
-          seen.add(key)
-          return true
-        }).slice(0, 10)
+        const uniqueData = (data || [])
+          .filter((row) => {
+            const key = `${row.source}:${row.source_trader_id}`
+            if (seen.has(key)) return false
+            seen.add(key)
+            return true
+          })
+          .slice(0, 10)
 
         // Use handle from leaderboard_ranks directly (no trader_sources lookup needed)
         const isAddr = (v: string) => /^0x[0-9a-fA-F]{10,}$/.test(v)
         const fmtAddr = (v: string) => `${v.slice(0, 6)}...${v.slice(-4)}`
 
-        setTraders(uniqueData.map(item => {
-          const h = (item as Record<string, unknown>).handle as string | null
-          const sid = item.source_trader_id || ''
-          const displayHandle = h && !isAddr(h) ? h : h ? fmtAddr(h) : (sid ? fmtAddr(sid) : null)
-          return {
-            id: sid,
-            handle: displayHandle,
-            roi: typeof item.roi === 'string' ? parseFloat(item.roi) : (item.roi || 0),
-            win_rate: typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : (item.win_rate || 0),
-            followers: item.followers || 0,
-            source: item.source || 'binance',
-          }
-        }))
+        setTraders(
+          uniqueData.map((item) => {
+            const h = (item as Record<string, unknown>).handle as string | null
+            const sid = item.source_trader_id || ''
+            const displayHandle = h && !isAddr(h) ? h : h ? fmtAddr(h) : sid ? fmtAddr(sid) : null
+            return {
+              id: sid,
+              handle: displayHandle,
+              roi: typeof item.roi === 'string' ? parseFloat(item.roi) : item.roi || 0,
+              win_rate:
+                typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : item.win_rate || 0,
+              followers: item.followers || 0,
+              source: item.source || 'binance',
+            }
+          })
+        )
       } catch (error) {
         logger.error('Trader load error:', error)
         setTraders([])
@@ -167,13 +182,17 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           const groupName = (post.group_name as string) || t('generalDiscussion')
           const groupNameEn = (post.group_name_en as string) || t('generalDiscussionEn')
 
-          const hotScore = (post.hot_score as number) || (() => {
-            const hours = diffMs / 3600000
-            return ((post.like_count as number) || 0) * 3 +
-              ((post.comment_count as number) || 0) * 5 +
-              ((post.view_count as number) || 0) * 0.1 -
-              Math.log(hours + 2) * 2
-          })()
+          const hotScore =
+            (post.hot_score as number) ||
+            (() => {
+              const hours = diffMs / 3600000
+              return (
+                ((post.like_count as number) || 0) * 3 +
+                ((post.comment_count as number) || 0) * 5 +
+                ((post.view_count as number) || 0) * 0.1 -
+                Math.log(hours + 2) * 2
+              )
+            })()
 
           return {
             id: post.id as string,
@@ -210,7 +229,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     } finally {
       if (!controller.signal.aborted) setLoadingPosts(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
   }, [showToast, language, accessToken])
 
   useEffect(() => {
@@ -234,12 +253,14 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         const res = await fetch('/api/groups?sort_by=activity&limit=30')
         const json = await res.json()
         const data = json.data?.groups || json.groups || json.data || []
-        setGroups(data.map((g: Record<string, unknown>) => ({
-          id: (g.id as string) || '',
-          name: (g.name as string) || '',
-          name_en: (g.name_en as string | null) || null,
-          member_count: (g.member_count as number) || 0,
-        })))
+        setGroups(
+          data.map((g: Record<string, unknown>) => ({
+            id: (g.id as string) || '',
+            name: (g.name as string) || '',
+            name_en: (g.name_en as string | null) || null,
+            member_count: (g.member_count as number) || 0,
+          }))
+        )
       } catch (error) {
         logger.error('Groups load error:', error)
         setGroups([])
@@ -256,23 +277,26 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   }, [posts])
 
   // Hot tags
-  const getHotTag = useCallback((post: Post, _rank: number): { label: string; color: string } | null => {
-    const createdAt = post.created_at ? new Date(post.created_at) : null
-    const hoursAgo = createdAt ? (Date.now() - createdAt.getTime()) / 3600000 : 999
-    const score = post.hotScore ?? 0
-    const commentCount = post.comments ?? 0
+  const getHotTag = useCallback(
+    (post: Post, _rank: number): { label: string; color: string } | null => {
+      const createdAt = post.created_at ? new Date(post.created_at) : null
+      const hoursAgo = createdAt ? (Date.now() - createdAt.getTime()) / 3600000 : 999
+      const score = post.hotScore ?? 0
+      const commentCount = post.comments ?? 0
 
-    if (score >= 95 && commentCount >= 150) {
-      return { label: t('hotPageTagBoom'), color: 'var(--color-accent-error)' }
-    }
-    if (score >= 80 && hoursAgo < 24) {
-      return { label: t('hotPageTagHot'), color: 'var(--color-chart-orange)' }
-    }
-    if (hoursAgo < 6) {
-      return { label: t('hotPageTagNew'), color: 'var(--color-chart-blue)' }
-    }
-    return null
-  }, [t])
+      if (score >= 95 && commentCount >= 150) {
+        return { label: t('hotPageTagBoom'), color: 'var(--color-accent-error)' }
+      }
+      if (score >= 80 && hoursAgo < 24) {
+        return { label: t('hotPageTagHot'), color: 'var(--color-chart-orange)' }
+      }
+      if (hoursAgo < 6) {
+        return { label: t('hotPageTagNew'), color: 'var(--color-chart-blue)' }
+      }
+      return null
+    },
+    [t]
+  )
 
   const visibleHot = useMemo(() => {
     // Show all posts for everyone — non-logged users get full feed
@@ -281,32 +305,37 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   }, [hotPosts])
 
   // Load comments (initial)
-  const loadComments = useCallback(async (postId: string) => {
-    try {
-      setLoadingComments(true)
-      setCommentsOffset(0)
-      setHasMoreComments(true)
+  const loadComments = useCallback(
+    async (postId: string) => {
+      try {
+        setLoadingComments(true)
+        setCommentsOffset(0)
+        setHasMoreComments(true)
 
-      const response = await fetch(`/api/posts/${postId}/comments?limit=${COMMENTS_PER_PAGE}&offset=0`)
-      const json = await response.json()
-      if (response.ok && json.success) {
-        const commentsData = json.data?.comments || []
-        setComments(commentsData)
-        setHasMoreComments(json.meta?.pagination?.has_more ?? false)
-        setCommentsOffset(COMMENTS_PER_PAGE)
-      } else {
+        const response = await fetch(
+          `/api/posts/${postId}/comments?limit=${COMMENTS_PER_PAGE}&offset=0`
+        )
+        const json = await response.json()
+        if (response.ok && json.success) {
+          const commentsData = json.data?.comments || []
+          setComments(commentsData)
+          setHasMoreComments(json.meta?.pagination?.has_more ?? false)
+          setCommentsOffset(COMMENTS_PER_PAGE)
+        } else {
+          setComments([])
+          setHasMoreComments(false)
+        }
+      } catch (err) {
+        logger.error('[HotPage] Load comments failed:', err)
         setComments([])
         setHasMoreComments(false)
+        showToast(t('loadCommentsFailed'), 'error')
+      } finally {
+        setLoadingComments(false)
       }
-    } catch (err) {
-      logger.error('[HotPage] Load comments failed:', err)
-      setComments([])
-      setHasMoreComments(false)
-      showToast(t('loadCommentsFailed'), 'error')
-    } finally {
-      setLoadingComments(false)
-    }
-  }, [showToast, t])
+    },
+    [showToast, t]
+  )
 
   // Load more comments
   const loadMoreComments = useCallback(async () => {
@@ -314,14 +343,16 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
     try {
       setLoadingMoreComments(true)
-      const response = await fetch(`/api/posts/${openPost.id}/comments?limit=${COMMENTS_PER_PAGE}&offset=${commentsOffset}`)
+      const response = await fetch(
+        `/api/posts/${openPost.id}/comments?limit=${COMMENTS_PER_PAGE}&offset=${commentsOffset}`
+      )
       const json = await response.json()
 
       if (response.ok && json.success) {
         const newComments = json.data?.comments || []
-        setComments(prev => [...prev, ...newComments])
+        setComments((prev) => [...prev, ...newComments])
         setHasMoreComments(json.meta?.pagination?.has_more ?? false)
-        setCommentsOffset(prev => prev + COMMENTS_PER_PAGE)
+        setCommentsOffset((prev) => prev + COMMENTS_PER_PAGE)
       } else {
         setHasMoreComments(false)
       }
@@ -342,80 +373,93 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   }, [])
 
   // Batch translate list posts
-  const translateListPosts = useCallback(async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
-    if (translatingList) return
+  const translateListPosts = useCallback(
+    async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
+      if (translatingList) return
 
-    const needsTranslation = postsToTranslate.filter(p => {
-      if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
-      if (!p.title && !p.body) return false
-      const titleIsChinese = isChineseText(p.title || '')
-      const bodyIsChinese = isChineseText(p.body || '')
-      return targetLang === 'en' ? (titleIsChinese || bodyIsChinese) : (!titleIsChinese || !bodyIsChinese)
-    })
-
-    if (needsTranslation.length === 0) return
-
-    setTranslatingList(true)
-
-    try {
-      const items: Array<{ id: string; text: string; contentType: 'post_title' | 'post_content'; contentId: string }> = []
-
-      needsTranslation.slice(0, 10).forEach(post => {
-        if (post.title && !translatedListPosts[post.id]?.title) {
-          items.push({
-            id: `${post.id}_title`,
-            text: post.title,
-            contentType: 'post_title',
-            contentId: post.id,
-          })
-        }
-        if (post.body && !translatedListPosts[post.id]?.body) {
-          items.push({
-            id: `${post.id}_body`,
-            text: post.body.slice(0, 500),
-            contentType: 'post_content',
-            contentId: post.id,
-          })
-        }
+      const needsTranslation = postsToTranslate.filter((p) => {
+        if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
+        if (!p.title && !p.body) return false
+        const titleIsChinese = isChineseText(p.title || '')
+        const bodyIsChinese = isChineseText(p.body || '')
+        return targetLang === 'en'
+          ? titleIsChinese || bodyIsChinese
+          : !titleIsChinese || !bodyIsChinese
       })
 
-      if (items.length === 0) return
+      if (needsTranslation.length === 0) return
 
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ items, targetLang }),
-      })
-      const data = await response.json()
+      setTranslatingList(true)
 
-      if (response.ok && data.success && data.data?.results) {
-        const results = data.data.results as Record<string, { translatedText: string; cached: boolean }>
+      try {
+        const items: Array<{
+          id: string
+          text: string
+          contentType: 'post_title' | 'post_content'
+          contentId: string
+        }> = []
 
-        setTranslatedListPosts(prev => {
-          const updated = { ...prev }
-          for (const [id, result] of Object.entries(results)) {
-            const [postId, type] = id.split('_')
-            if (!updated[postId]) {
-              updated[postId] = {}
-            }
-            if (type === 'title') {
-              updated[postId].title = result.translatedText
-            } else if (type === 'body') {
-              updated[postId].body = result.translatedText
-            }
+        needsTranslation.slice(0, 10).forEach((post) => {
+          if (post.title && !translatedListPosts[post.id]?.title) {
+            items.push({
+              id: `${post.id}_title`,
+              text: post.title,
+              contentType: 'post_title',
+              contentId: post.id,
+            })
           }
-          return updated
+          if (post.body && !translatedListPosts[post.id]?.body) {
+            items.push({
+              id: `${post.id}_body`,
+              text: post.body.slice(0, 500),
+              contentType: 'post_content',
+              contentId: post.id,
+            })
+          }
         })
+
+        if (items.length === 0) return
+
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ items, targetLang }),
+        })
+        const data = await response.json()
+
+        if (response.ok && data.success && data.data?.results) {
+          const results = data.data.results as Record<
+            string,
+            { translatedText: string; cached: boolean }
+          >
+
+          setTranslatedListPosts((prev) => {
+            const updated = { ...prev }
+            for (const [id, result] of Object.entries(results)) {
+              const [postId, type] = id.split('_')
+              if (!updated[postId]) {
+                updated[postId] = {}
+              }
+              if (type === 'title') {
+                updated[postId].title = result.translatedText
+              } else if (type === 'body') {
+                updated[postId].body = result.translatedText
+              }
+            }
+            return updated
+          })
+        }
+      } catch {
+        // Translation failed, silent
+      } finally {
+        setTranslatingList(false)
       }
-    } catch {
-      // Translation failed, silent
-    } finally {
-      setTranslatingList(false)
-    }
-  }, [translatingList, translatedListPosts, isChineseText])
+    },
+    [translatingList, translatedListPosts, isChineseText]
+  )
 
   // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
   useEffect(() => {
@@ -425,84 +469,93 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   }, [posts, language, translateListPosts, email])
 
   // Translate post content (with cache)
-  const translateContent = useCallback(async (postId: string, content: string, targetLang: 'zh' | 'en') => {
-    const cacheKey = `${postId}-content-${targetLang}`
+  const translateContent = useCallback(
+    async (postId: string, content: string, targetLang: 'zh' | 'en') => {
+      const cacheKey = `${postId}-content-${targetLang}`
 
-    if (translationCache[cacheKey]) {
-      setTranslatedContent(translationCache[cacheKey])
-      setShowingOriginal(false)
-      return
-    }
-
-    setTranslating(true)
-    try {
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({
-          text: content,
-          targetLang,
-          contentType: 'post_content',
-          contentId: postId,
-        }),
-      })
-      const data = await response.json()
-
-      if (response.ok && data.success && data.data?.translatedText) {
-        const translated = data.data.translatedText
-        setTranslatedContent(translated)
+      if (translationCache[cacheKey]) {
+        setTranslatedContent(translationCache[cacheKey])
         setShowingOriginal(false)
-        setTranslationCache(prev => ({ ...prev, [cacheKey]: translated }))
-      } else {
-        showToast(data.error || t('translationFailed'), 'error')
+        return
       }
-    } catch {
-      showToast(t('translationServiceError'), 'error')
-    } finally {
-      setTranslating(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
-  }, [translationCache, showToast])
+
+      setTranslating(true)
+      try {
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({
+            text: content,
+            targetLang,
+            contentType: 'post_content',
+            contentId: postId,
+          }),
+        })
+        const data = await response.json()
+
+        if (response.ok && data.success && data.data?.translatedText) {
+          const translated = data.data.translatedText
+          setTranslatedContent(translated)
+          setShowingOriginal(false)
+          setTranslationCache((prev) => ({ ...prev, [cacheKey]: translated }))
+        } else {
+          showToast(data.error || t('translationFailed'), 'error')
+        }
+      } catch {
+        showToast(t('translationServiceError'), 'error')
+      } finally {
+        setTranslating(false)
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
+    },
+    [translationCache, showToast]
+  )
 
   // Track whether this modal was opened via navigation
   const openedViaNav = useRef(false)
 
   // Open post detail
-  const handleOpenPost = useCallback((post: Post, fromUrlRestore = false) => {
-    setOpenPost(post)
-    openPostIdRef.current = post.id
-    // Restore draft comment for this post
-    try {
-      const draft = localStorage.getItem(`comment-draft-${post.id}`)
-      if (draft) setNewCommentRaw(draft)
-      else setNewCommentRaw('')
-    } catch { setNewCommentRaw('') }
-    setComments([])
-    setCommentsOffset(0)
-    setHasMoreComments(true)
-    setTranslatedContent(null)
-    setShowingOriginal(true)
-    loadComments(post.id)
-
-    if (!fromUrlRestore) {
-      const params = new URLSearchParams(searchParams.toString())
-      params.set('post', post.id)
-      openedViaNav.current = true
-      router.push(`/hot?${params.toString()}`, { scroll: false })
-    }
-
-    if (post.body) {
-      const isChinese = isChineseText(post.body)
-      const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
-
-      if (needsTranslation) {
-        translateContent(post.id, post.body, (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en')
+  const handleOpenPost = useCallback(
+    (post: Post, fromUrlRestore = false) => {
+      setOpenPost(post)
+      openPostIdRef.current = post.id
+      // Restore draft comment for this post
+      try {
+        const draft = localStorage.getItem(`comment-draft-${post.id}`)
+        if (draft) setNewCommentRaw(draft)
+        else setNewCommentRaw('')
+      } catch {
+        setNewCommentRaw('')
       }
-    }
-  }, [loadComments, language, isChineseText, translateContent, searchParams, router])
+      setComments([])
+      setCommentsOffset(0)
+      setHasMoreComments(true)
+      setTranslatedContent(null)
+      setShowingOriginal(true)
+      loadComments(post.id)
+
+      if (!fromUrlRestore) {
+        const params = new URLSearchParams(searchParams.toString())
+        params.set('post', post.id)
+        openedViaNav.current = true
+        router.push(`/hot?${params.toString()}`, { scroll: false })
+      }
+
+      if (post.body) {
+        const isChinese = isChineseText(post.body)
+        const needsTranslation =
+          (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
+
+        if (needsTranslation) {
+          translateContent(post.id, post.body, (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en')
+        }
+      }
+    },
+    [loadComments, language, isChineseText, translateContent, searchParams, router]
+  )
 
   // Close post detail
   const handleClosePost = useCallback(() => {
@@ -518,16 +571,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   useEffect(() => {
     const postId = searchParams.get('post')
     if (postId && posts.length > 0 && !openPost) {
-      const post = posts.find(p => p.id === postId)
+      const post = posts.find((p) => p.id === postId)
       if (post) {
         handleOpenPost(post, true)
       }
     }
 
     if (!openPost) return
-
-    const prev = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -546,7 +596,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     window.addEventListener('popstate', handlePopState)
 
     return () => {
-      document.body.style.overflow = prev
       document.removeEventListener('keydown', handleKeyDown)
       window.removeEventListener('popstate', handlePopState)
     }
@@ -562,120 +611,142 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       setShowingOriginal(true)
 
       if (needsTranslation) {
-        translateContent(openPost.id, openPost.body, (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en')
+        translateContent(
+          openPost.id,
+          openPost.body,
+          (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en'
+        )
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-translate when language changes; openPost and translateContent are stable refs
   }, [language])
 
   // Submit comment
-  const submitComment = useCallback(async (postId: string) => {
-    if (!accessToken) {
-      showToast(t('pleaseLoginFirst'), 'warning')
-      return
-    }
-    if (!newComment.trim()) return
+  const submitComment = useCallback(
+    async (postId: string) => {
+      if (!accessToken) {
+        showToast(t('pleaseLoginFirst'), 'warning')
+        return
+      }
+      if (!newComment.trim()) return
 
-    setSubmittingComment(true)
-    try {
-      const response = await fetch(`/api/posts/${postId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ content: newComment.trim() }),
-      })
+      setSubmittingComment(true)
+      try {
+        const response = await fetch(`/api/posts/${postId}/comments`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ content: newComment.trim() }),
+        })
 
-      if (!response.ok) {
-        if (response.status === 401) {
-          showToast(t('sessionExpired'), 'error')
-        } else if (response.status === 403) {
-          showToast(t('permissionDenied'), 'error')
-        } else if (response.status >= 500) {
-          showToast(t('serverErrorRetry'), 'error')
-        } else {
-          const json = await response.json().catch(() => null)
-          showToast(json?.error?.message || t('postCommentFailed'), 'error')
+        if (!response.ok) {
+          if (response.status === 401) {
+            showToast(t('sessionExpired'), 'error')
+          } else if (response.status === 403) {
+            showToast(t('permissionDenied'), 'error')
+          } else if (response.status >= 500) {
+            showToast(t('serverErrorRetry'), 'error')
+          } else {
+            const json = await response.json().catch(() => null)
+            showToast(json?.error?.message || t('postCommentFailed'), 'error')
+          }
+          return
         }
+
+        const json = await response.json()
+        if (json.success && json.data?.comment) {
+          setNewCommentRaw('')
+          try {
+            localStorage.removeItem(`comment-draft-${postId}`)
+          } catch {
+            /* ignore */
+          }
+          setComments((prev) => [...prev, json.data.comment])
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.id === postId) {
+                return { ...p, comments: p.comments + 1 }
+              }
+              return p
+            })
+          )
+          if (openPost?.id === postId) {
+            setOpenPost((prev) => (prev ? { ...prev, comments: prev.comments + 1 } : null))
+          }
+        } else {
+          showToast(json.error?.message || t('postCommentFailed'), 'error')
+        }
+      } catch (err) {
+        logger.error('[HotPage] Submit comment failed:', err)
+        showToast(t('networkErrorRetry'), 'error')
+      } finally {
+        setSubmittingComment(false)
+      }
+    },
+    [accessToken, newComment, openPost?.id, showToast, t]
+  )
+
+  // Toggle reaction (like/dislike)
+  const toggleReaction = useCallback(
+    async (postId: string, reactionType: 'up' | 'down') => {
+      if (!accessToken) {
+        showToast(t('pleaseLoginFirst'), 'warning')
         return
       }
 
-      const json = await response.json()
-      if (json.success && json.data?.comment) {
-        setNewCommentRaw('')
-        try { localStorage.removeItem(`comment-draft-${postId}`) } catch { /* ignore */ }
-        setComments(prev => [...prev, json.data.comment])
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return { ...p, comments: p.comments + 1 }
+      try {
+        const response = await fetch(`/api/posts/${postId}/like`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ reaction_type: reactionType }),
+        })
+
+        const json = await response.json()
+        if (response.ok && json.success) {
+          const result = json.data
+          setPosts((prev) =>
+            prev.map((p) => {
+              if (p.id === postId) {
+                return {
+                  ...p,
+                  likes: result.like_count,
+                  dislikes: result.dislike_count,
+                  user_reaction: result.reaction,
+                }
+              }
+              return p
+            })
+          )
+          if (openPost?.id === postId) {
+            setOpenPost((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    likes: result.like_count,
+                    dislikes: result.dislike_count,
+                    user_reaction: result.reaction,
+                  }
+                : null
+            )
           }
-          return p
-        }))
-        if (openPost?.id === postId) {
-          setOpenPost(prev => prev ? { ...prev, comments: prev.comments + 1 } : null)
+        } else {
+          logger.error('[HotPage] Reaction API error:', json.error || response.status)
+          showToast(t('actionFailedRetry'), 'error')
         }
-      } else {
-        showToast(json.error?.message || t('postCommentFailed'), 'error')
-      }
-    } catch (err) {
-      logger.error('[HotPage] Submit comment failed:', err)
-      showToast(t('networkErrorRetry'), 'error')
-    } finally {
-      setSubmittingComment(false)
-    }
-  }, [accessToken, newComment, openPost?.id, showToast, t])
-
-  // Toggle reaction (like/dislike)
-  const toggleReaction = useCallback(async (postId: string, reactionType: 'up' | 'down') => {
-    if (!accessToken) {
-      showToast(t('pleaseLoginFirst'), 'warning')
-      return
-    }
-
-    try {
-      const response = await fetch(`/api/posts/${postId}/like`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ reaction_type: reactionType }),
-      })
-
-      const json = await response.json()
-      if (response.ok && json.success) {
-        const result = json.data
-        setPosts(prev => prev.map(p => {
-          if (p.id === postId) {
-            return {
-              ...p,
-              likes: result.like_count,
-              dislikes: result.dislike_count,
-              user_reaction: result.reaction,
-            }
-          }
-          return p
-        }))
-        if (openPost?.id === postId) {
-          setOpenPost(prev => prev ? {
-            ...prev,
-            likes: result.like_count,
-            dislikes: result.dislike_count,
-            user_reaction: result.reaction,
-          } : null)
-        }
-      } else {
-        logger.error('[HotPage] Reaction API error:', json.error || response.status)
+      } catch (err) {
+        logger.error('[HotPage] Reaction failed:', err)
         showToast(t('actionFailedRetry'), 'error')
       }
-    } catch (err) {
-      logger.error('[HotPage] Reaction failed:', err)
-      showToast(t('actionFailedRetry'), 'error')
-    }
-  }, [accessToken, openPost?.id, showToast, t])
+    },
+    [accessToken, openPost?.id, showToast, t]
+  )
 
   return {
     // Language

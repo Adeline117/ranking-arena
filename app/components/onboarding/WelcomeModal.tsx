@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 
 const STORAGE_KEY = 'onboarding_complete'
 
@@ -54,7 +55,7 @@ export default function WelcomeModal() {
 
   const handleNext = useCallback(() => {
     if (currentStep < STEPS.length - 1) {
-      setCurrentStep(prev => prev + 1)
+      setCurrentStep((prev) => prev + 1)
     } else {
       handleClose()
     }
@@ -62,7 +63,7 @@ export default function WelcomeModal() {
 
   const handleBack = useCallback(() => {
     if (currentStep > 0) {
-      setCurrentStep(prev => prev - 1)
+      setCurrentStep((prev) => prev - 1)
     }
   }, [currentStep])
 
@@ -76,15 +77,7 @@ export default function WelcomeModal() {
     return () => window.removeEventListener('keydown', handler)
   }, [visible, handleClose])
 
-  // Scroll lock when modal is open
-  useEffect(() => {
-    if (visible) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => { document.body.style.overflow = '' }
-  }, [visible])
+  useScrollLock(visible)
 
   if (!visible) return null
 
@@ -119,7 +112,7 @@ export default function WelcomeModal() {
           boxShadow: '0 24px 80px var(--color-overlay-heavy, rgba(0,0,0,0.5))',
           position: 'relative',
         }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Close button — 44px touch target */}
         <button
