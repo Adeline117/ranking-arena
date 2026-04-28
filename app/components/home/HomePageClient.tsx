@@ -83,14 +83,18 @@ export default function HomePageClient({
   // SSR content vanished and the loading skeleton appeared for seconds or forever.
   //
   // Root fix: wait until `loading` is false (data ready) before hiding SSR.
-  // Hide SSR shells only AFTER we have real data to show.
-  // This prevents the "spinner of death" on slow mobile — SSR content stays
-  // visible until React has fully loaded and has data to display.
+  // Hide SSR shells when React has data to show.
+  // useLayoutEffect runs BEFORE paint — on fast connections, the browser
+  // never shows the SSR table (it's hidden before first paint).
+  // On slow connections (SSR already painted), we collapse it instantly
+  // since any transition would show "double content" (SSR + React stacked).
   useLayoutEffect(() => {
     if (loading) return
     for (const id of ['ssr-ranking-table', 'ssr-hero-shell']) {
       const el = document.getElementById(id)
-      if (el) el.style.display = 'none'
+      if (el) {
+        el.style.display = 'none'
+      }
     }
   }, [loading])
 
