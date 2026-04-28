@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 
 interface EditPostModalProps {
@@ -28,10 +29,10 @@ export function EditPostModal({
   const dialogRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
+  useScrollLock(true)
+
   useEffect(() => {
     previousFocusRef.current = document.activeElement as HTMLElement
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
 
     const timer = setTimeout(() => {
       if (dialogRef.current) {
@@ -65,7 +66,6 @@ export function EditPostModal({
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       clearTimeout(timer)
-      document.body.style.overflow = prevOverflow
       document.removeEventListener('keydown', handleKeyDown)
       previousFocusRef.current?.focus()
     }
@@ -100,12 +100,28 @@ export function EditPostModal({
           padding: 24,
         }}
       >
-        <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 20, color: tokens.colors.text.primary }}>
+        <h2
+          style={{
+            fontSize: 18,
+            fontWeight: 900,
+            marginBottom: 20,
+            color: tokens.colors.text.primary,
+          }}
+        >
           {t('editPost')}
         </h2>
 
         <div style={{ marginBottom: 16 }}>
-          <label htmlFor="edit-post-title" style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
+          <label
+            htmlFor="edit-post-title"
+            style={{
+              display: 'block',
+              marginBottom: 6,
+              fontSize: 13,
+              fontWeight: 800,
+              color: tokens.colors.text.primary,
+            }}
+          >
             {t('title')}
           </label>
           <input
@@ -127,7 +143,16 @@ export function EditPostModal({
         </div>
 
         <div style={{ marginBottom: 20 }}>
-          <label htmlFor="edit-post-content" style={{ display: 'block', marginBottom: 6, fontSize: 13, fontWeight: 800, color: tokens.colors.text.primary }}>
+          <label
+            htmlFor="edit-post-content"
+            style={{
+              display: 'block',
+              marginBottom: 6,
+              fontSize: 13,
+              fontWeight: 800,
+              color: tokens.colors.text.primary,
+            }}
+          >
             {t('content')}
           </label>
           <textarea
@@ -174,7 +199,10 @@ export function EditPostModal({
               padding: '10px 20px',
               borderRadius: tokens.radius.md,
               border: 'none',
-              background: saving || !title.trim() ? 'var(--color-accent-primary-30)' : tokens.colors.accent.brand,
+              background:
+                saving || !title.trim()
+                  ? 'var(--color-accent-primary-30)'
+                  : tokens.colors.accent.brand,
               color: tokens.colors.white,
               fontWeight: 900,
               fontSize: 14,

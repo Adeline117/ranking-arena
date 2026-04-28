@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback, type ReactNode } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 
 interface ChartFullscreenProps {
   open: boolean
@@ -15,15 +16,7 @@ interface ChartFullscreenProps {
  * Forces landscape orientation hint, hides all chrome
  */
 export default function ChartFullscreen({ open, onClose, children, title }: ChartFullscreenProps) {
-  // Lock body scroll
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => { document.body.style.overflow = '' }
-  }, [open])
+  useScrollLock(open)
 
   // Escape to close
   useEffect(() => {
@@ -38,7 +31,9 @@ export default function ChartFullscreen({ open, onClose, children, title }: Char
   const handleFullscreen = useCallback(() => {
     const el = document.documentElement
     if (el.requestFullscreen) {
-      el.requestFullscreen().catch(() => { /* ignore */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+      el.requestFullscreen().catch(() => {
+        /* ignore */
+      }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     }
   }, [])
 
@@ -69,7 +64,13 @@ export default function ChartFullscreen({ open, onClose, children, title }: Char
           flexShrink: 0,
         }}
       >
-        <span style={{ fontSize: tokens.typography.fontSize.sm, fontWeight: 600, color: 'var(--color-text-primary)' }}>
+        <span
+          style={{
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: 600,
+            color: 'var(--color-text-primary)',
+          }}
+        >
           {title}
         </span>
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
@@ -91,8 +92,19 @@ export default function ChartFullscreen({ open, onClose, children, title }: Char
               height: 32,
             }}
           >
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3" strokeLinecap="round" strokeLinejoin="round" />
+            <svg
+              width={14}
+              height={14}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+            >
+              <path
+                d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
             </svg>
           </button>
           {/* Close */}
@@ -113,7 +125,14 @@ export default function ChartFullscreen({ open, onClose, children, title }: Char
               height: 32,
             }}
           >
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+            <svg
+              width={14}
+              height={14}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2.5}
+            >
               <path d="M18 6L6 18M6 6l12 12" strokeLinecap="round" />
             </svg>
           </button>
@@ -130,9 +149,7 @@ export default function ChartFullscreen({ open, onClose, children, title }: Char
           alignItems: 'stretch',
         }}
       >
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>
-          {children}
-        </div>
+        <div style={{ flex: 1, minWidth: 0, minHeight: 0 }}>{children}</div>
       </div>
     </div>
   )

@@ -2660,9 +2660,10 @@ input[type='search']::-webkit-search-cancel-button:hover {
     grid-template-columns: 1fr !important;
   }
 
-  /* Dialog / Modal: full-width bottom sheet on mobile */
-  .dialog-overlay-mobile,
-  [role='dialog'] {
+  /* Dialog / Modal inner panel: full-width bottom sheet on mobile.
+     Only target the inner panel (.dialog-overlay-mobile), NOT the outer
+     [role='dialog'] backdrop — that needs inset:0 with no overflow. */
+  .dialog-overlay-mobile {
     max-width: 100vw !important;
     width: 100% !important;
     max-height: 92vh !important;

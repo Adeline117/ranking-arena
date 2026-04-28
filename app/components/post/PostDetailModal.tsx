@@ -14,6 +14,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
@@ -42,23 +43,32 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
 
   // Restore draft comment from localStorage on mount
   const [newComment, setNewCommentRaw] = useState(() => {
-    try { return localStorage.getItem(`comment-draft-${postId}`) || '' } catch { return '' }
+    try {
+      return localStorage.getItem(`comment-draft-${postId}`) || ''
+    } catch {
+      return ''
+    }
   })
   const [submittingComment, setSubmittingComment] = useState(false)
   const [reacting, setReacting] = useState(false)
 
   // Auto-save comment draft (debounced 500ms)
   const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const setNewComment = useCallback((value: string) => {
-    setNewCommentRaw(value)
-    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-    draftTimerRef.current = setTimeout(() => {
-      try {
-        if (value.trim()) localStorage.setItem(`comment-draft-${postId}`, value)
-        else localStorage.removeItem(`comment-draft-${postId}`)
-      } catch { /* quota exceeded */ }
-    }, 500)
-  }, [postId])
+  const setNewComment = useCallback(
+    (value: string) => {
+      setNewCommentRaw(value)
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+      draftTimerRef.current = setTimeout(() => {
+        try {
+          if (value.trim()) localStorage.setItem(`comment-draft-${postId}`, value)
+          else localStorage.removeItem(`comment-draft-${postId}`)
+        } catch {
+          /* quota exceeded */
+        }
+      }, 500)
+    },
+    [postId]
+  )
 
   // Prevent duplicate submissions
   const commentPendingRef = useRef(false)
@@ -66,11 +76,11 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   const dialogRef = useRef<HTMLDivElement>(null)
   const previousFocusRef = useRef<HTMLElement | null>(null)
 
+  useScrollLock(true)
+
   // Focus management: trap focus, handle Escape, restore focus on close
   useEffect(() => {
     previousFocusRef.current = document.activeElement as HTMLElement
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
 
     const timer = setTimeout(() => {
       if (dialogRef.current) {
@@ -106,16 +116,15 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
     document.addEventListener('keydown', handleKeyDown)
     return () => {
       clearTimeout(timer)
-      document.body.style.overflow = prevOverflow
       document.removeEventListener('keydown', handleKeyDown)
       previousFocusRef.current?.focus()
     }
   }, [onClose])
 
   // Read from canonical store
-  const post = usePostStore(s => s.posts[postId])
-  const comments = usePostStore(s => s.comments[postId] || [])
-  const pagination = usePostStore(s => s.commentsPagination[postId])
+  const post = usePostStore((s) => s.posts[postId])
+  const comments = usePostStore((s) => s.comments[postId] || [])
+  const pagination = usePostStore((s) => s.commentsPagination[postId])
 
   // Load comments on mount
   useEffect(() => {
@@ -138,7 +147,11 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         showToast(result.error, 'error')
       } else {
         setNewCommentRaw('')
-        try { localStorage.removeItem(`comment-draft-${postId}`) } catch { /* ignore */ }
+        try {
+          localStorage.removeItem(`comment-draft-${postId}`)
+        } catch {
+          /* ignore */
+        }
       }
     } catch {
       showToast(t('commentFailedRetry'), 'error')
@@ -148,27 +161,30 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
     }
   }, [postId, newComment, auth, showToast, t])
 
-  const handleReaction = useCallback(async (reactionType: 'up' | 'down') => {
-    // Prevent duplicate reactions
-    if (reactionPendingRef.current || reacting) return
+  const handleReaction = useCallback(
+    async (reactionType: 'up' | 'down') => {
+      // Prevent duplicate reactions
+      if (reactionPendingRef.current || reacting) return
 
-    const token = auth.requireAuth()
-    if (!token) return
+      const token = auth.requireAuth()
+      if (!token) return
 
-    reactionPendingRef.current = true
-    setReacting(true)
-    try {
-      const result = await togglePostReaction(postId, reactionType, token)
-      if (!result.success) {
-        showToast(result.error || t('operationFailed'), 'error')
+      reactionPendingRef.current = true
+      setReacting(true)
+      try {
+        const result = await togglePostReaction(postId, reactionType, token)
+        if (!result.success) {
+          showToast(result.error || t('operationFailed'), 'error')
+        }
+      } catch {
+        showToast(t('operationFailedRetry'), 'error')
+      } finally {
+        setReacting(false)
+        reactionPendingRef.current = false
       }
-    } catch {
-      showToast(t('operationFailedRetry'), 'error')
-    } finally {
-      setReacting(false)
-      reactionPendingRef.current = false
-    }
-  }, [postId, auth, showToast, reacting, t])
+    },
+    [postId, auth, showToast, reacting, t]
+  )
 
   const handleLoadMore = useCallback(() => {
     loadMorePostComments(postId)
@@ -275,14 +291,16 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         </div>
 
         {/* Meta: author (clickable) + time + comments */}
-        <div style={{
-          marginTop: 8,
-          fontSize: 12,
-          color: tokens.colors.text.tertiary,
-          display: 'flex',
-          alignItems: 'center',
-          gap: 6,
-        }}>
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 12,
+            color: tokens.colors.text.tertiary,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
           <Link
             href={`/u/${encodeURIComponent(post.author_handle)}`}
             onClick={(e) => e.stopPropagation()}
@@ -311,14 +329,16 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         </div>
 
         {/* Reactions */}
-        <div style={{
-          marginTop: 14,
-          paddingTop: 12,
-          borderTop: `1px solid ${tokens.colors.border.secondary}`,
-          display: 'flex',
-          gap: 14,
-          flexWrap: 'wrap',
-        }}>
+        <div
+          style={{
+            marginTop: 14,
+            paddingTop: 12,
+            borderTop: `1px solid ${tokens.colors.border.secondary}`,
+            display: 'flex',
+            gap: 14,
+            flexWrap: 'wrap',
+          }}
+        >
           <button
             onClick={() => handleReaction('up')}
             disabled={reacting}
@@ -329,8 +349,14 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               padding: '6px 12px',
               border: 'none',
               borderRadius: tokens.radius.md,
-              background: post.user_reaction === 'up' ? `${tokens.colors.accent.success}20` : tokens.colors.bg.tertiary,
-              color: post.user_reaction === 'up' ? tokens.colors.accent.success : tokens.colors.text.secondary,
+              background:
+                post.user_reaction === 'up'
+                  ? `${tokens.colors.accent.success}20`
+                  : tokens.colors.bg.tertiary,
+              color:
+                post.user_reaction === 'up'
+                  ? tokens.colors.accent.success
+                  : tokens.colors.text.secondary,
               cursor: reacting ? 'not-allowed' : 'pointer',
               fontSize: 13,
               fontWeight: 600,
@@ -349,8 +375,14 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               padding: '6px 12px',
               border: 'none',
               borderRadius: tokens.radius.md,
-              background: post.user_reaction === 'down' ? `${tokens.colors.accent.error}20` : tokens.colors.bg.tertiary,
-              color: post.user_reaction === 'down' ? tokens.colors.accent.error : tokens.colors.text.secondary,
+              background:
+                post.user_reaction === 'down'
+                  ? `${tokens.colors.accent.error}20`
+                  : tokens.colors.bg.tertiary,
+              color:
+                post.user_reaction === 'down'
+                  ? tokens.colors.accent.error
+                  : tokens.colors.text.secondary,
               cursor: reacting ? 'not-allowed' : 'pointer',
               fontSize: 13,
               fontWeight: 600,
@@ -362,7 +394,13 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         </div>
 
         {/* Comments Section */}
-        <div style={{ marginTop: 16, borderTop: `1px solid ${tokens.colors.border.secondary}`, paddingTop: 16 }}>
+        <div
+          style={{
+            marginTop: 16,
+            borderTop: `1px solid ${tokens.colors.border.secondary}`,
+            paddingTop: 16,
+          }}
+        >
           <div style={{ fontWeight: 900, marginBottom: 12 }}>
             {t('comments')} ({post.comment_count})
           </div>
@@ -395,7 +433,10 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                 style={{
                   marginTop: 8,
                   padding: '8px 16px',
-                  background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'var(--color-accent-primary-30)',
+                  background:
+                    newComment.trim() && !submittingComment
+                      ? ARENA_PURPLE
+                      : 'var(--color-accent-primary-30)',
                   color: tokens.colors.white,
                   border: 'none',
                   borderRadius: tokens.radius.md,
@@ -411,9 +452,13 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
 
           {/* Comment list */}
           {pagination?.loading ? (
-            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('loadingComments')}</div>
+            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>
+              {t('loadingComments')}
+            </div>
           ) : comments.length === 0 ? (
-            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>{t('noCommentsBeFirst')}</div>
+            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>
+              {t('noCommentsBeFirst')}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {comments.filter(Boolean).map((comment) => (
@@ -431,12 +476,23 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                       <Link
                         href={`/u/${encodeURIComponent(comment.author_handle)}`}
                         onClick={(e) => e.stopPropagation()}
-                        style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.secondary, textDecoration: 'none' }}
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: tokens.colors.text.secondary,
+                          textDecoration: 'none',
+                        }}
                       >
                         {comment.author_handle}
                       </Link>
                     ) : (
-                      <span style={{ fontSize: 12, fontWeight: 700, color: tokens.colors.text.tertiary }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: tokens.colors.text.tertiary,
+                        }}
+                      >
                         {'user'}
                       </span>
                     )}
@@ -444,7 +500,10 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                       {formatTimeAgo(comment.created_at, language)}
                     </span>
                   </div>
-                  <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
+                  <div
+                    translate="no"
+                    style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}
+                  >
                     {renderContentWithLinks(comment.content || '')}
                   </div>
                 </div>

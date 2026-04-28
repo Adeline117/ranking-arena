@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
+import { useScrollLock } from '@/lib/hooks/useScrollLock'
 import { Box, Text } from '../base'
 import Avatar from './Avatar'
 import UserFollowButton from './UserFollowButton'
@@ -62,15 +63,7 @@ export default function FollowListModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- loadUsers is defined in closure, not a stable ref
   }, [isOpen, handle, type])
 
-  // Scroll lock when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden'
-    } else {
-      document.body.style.overflow = ''
-    }
-    return () => { document.body.style.overflow = '' }
-  }, [isOpen])
+  useScrollLock(isOpen)
 
   // Focus trap + escape key
   useEffect(() => {
@@ -83,7 +76,10 @@ export default function FollowListModal({
       }
     }, 50)
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
       if (e.key === 'Tab' && modalRef.current) {
         const focusable = modalRef.current.querySelectorAll<HTMLElement>(
           'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
@@ -92,9 +88,15 @@ export default function FollowListModal({
         const first = focusable[0]
         const last = focusable[focusable.length - 1]
         if (e.shiftKey) {
-          if (document.activeElement === first) { e.preventDefault(); last.focus() }
+          if (document.activeElement === first) {
+            e.preventDefault()
+            last.focus()
+          }
         } else {
-          if (document.activeElement === last) { e.preventDefault(); first.focus() }
+          if (document.activeElement === last) {
+            e.preventDefault()
+            first.focus()
+          }
         }
       }
     }
@@ -118,7 +120,9 @@ export default function FollowListModal({
 
       // Pass auth token instead of requesterId in query params (security: prevent IDOR)
       const headers: Record<string, string> = {}
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (session?.access_token) {
         headers['Authorization'] = `Bearer ${session.access_token}`
       }
@@ -209,22 +213,28 @@ export default function FollowListModal({
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <Box style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          marginBottom: tokens.spacing[4],
-          paddingBottom: tokens.spacing[3],
-          borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        }}>
+        <Box
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: tokens.spacing[4],
+            paddingBottom: tokens.spacing[3],
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
-            <Text id="follow-list-modal-title" size="lg" weight="bold">{title}</Text>
+            <Text id="follow-list-modal-title" size="lg" weight="bold">
+              {title}
+            </Text>
             {isOwnProfile && (
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-                <span style={{
-                  fontSize: 12,
-                  color: isPublic ? tokens.colors.accent.success : tokens.colors.accent.warning,
-                }}>
+                <span
+                  style={{
+                    fontSize: 12,
+                    color: isPublic ? tokens.colors.accent.success : tokens.colors.accent.warning,
+                  }}
+                >
                   {isPublic ? '\u25CB' : '\u25CF'}
                 </span>
                 <Text size="xs" color="tertiary">
@@ -254,28 +264,43 @@ export default function FollowListModal({
         <Box style={{ overflowY: 'auto', flex: 1 }}>
           {loading ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
-              <Text size="sm" color="tertiary">{t('loading')}</Text>
+              <Text size="sm" color="tertiary">
+                {t('loading')}
+              </Text>
             </Box>
           ) : hidden ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
-              <Box style={{
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                background: tokens.colors.bg.tertiary,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto',
-                marginBottom: tokens.spacing[3],
-                opacity: 0.5,
-              }}>
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <Box
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: '50%',
+                  background: tokens.colors.bg.tertiary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto',
+                  marginBottom: tokens.spacing[3],
+                  opacity: 0.5,
+                }}
+              >
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
                   <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
                 </svg>
               </Box>
-              <Text size="sm" color="tertiary">{hiddenMessage}</Text>
+              <Text size="sm" color="tertiary">
+                {hiddenMessage}
+              </Text>
             </Box>
           ) : users.length === 0 ? (
             <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
@@ -314,20 +339,28 @@ export default function FollowListModal({
                   />
 
                   <Box style={{ flex: 1, minWidth: 0 }}>
-                    <Text size="sm" weight="semibold" style={{
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
-                      {user.handle}
-                    </Text>
-                    {user.bio && (
-                      <Text size="xs" color="tertiary" style={{
+                    <Text
+                      size="sm"
+                      weight="semibold"
+                      style={{
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        marginTop: 2,
-                      }}>
+                      }}
+                    >
+                      {user.handle}
+                    </Text>
+                    {user.bio && (
+                      <Text
+                        size="xs"
+                        color="tertiary"
+                        style={{
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          marginTop: 2,
+                        }}
+                      >
                         {user.bio}
                       </Text>
                     )}
