@@ -1391,11 +1391,7 @@
     border-radius: 18px !important;
   }
 
-  .quiz-hero-icon {
-    width: 128px;
-    height: 128px;
-    border-radius: 22px;
-  }
+  /* quiz-hero-icon uses inline clamp() — no CSS override needed */
 
   .quiz-risk-segment {
     width: 18px;

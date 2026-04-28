@@ -216,10 +216,10 @@ export default function PersonalityCard({
             src={`/images/quiz/${type.id}.jpg`}
             alt={tr(type.nameKey)}
             width={200}
-            height={200}
+            height={400}
             style={{
               objectFit: 'cover',
-              objectPosition: 'center',
+              objectPosition: 'center 35%',
               display: 'block',
               width: '100%',
               height: '100%',
