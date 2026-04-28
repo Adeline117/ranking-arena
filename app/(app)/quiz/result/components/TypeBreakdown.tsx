@@ -147,10 +147,10 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
                       {/* Type name — wider column, responsive */}
                       <span
                         style={{
-                          width: 'clamp(80px, 22vw, 110px)',
+                          width: 'clamp(90px, 28vw, 130px)',
                           fontSize: isPrimary
-                            ? 'clamp(13px, 3.2vw, 14px)'
-                            : 'clamp(12px, 3vw, 13px)',
+                            ? 'clamp(12px, 3vw, 13px)'
+                            : 'clamp(11px, 2.8vw, 12px)',
                           fontWeight: isPrimary ? 700 : 400,
                           color: isPrimary ? type.color : 'var(--color-text-secondary)',
                           flexShrink: 0,
