@@ -113,6 +113,10 @@ export default async function Page() {
       {/* SSR three-col grid — matches Phase 2 exactly. Sidebar grid tracks are
           reserved by empty divs (no height, just grid placement) so center column
           renders at the correct width from frame 1. Zero CLS on Phase 2 swap. */}
+      {/* SSR ranking table — visible until React takes over.
+          The HomePageClient useLayoutEffect hides this BEFORE first paint
+          (when initialTraders is provided, loading starts as false).
+          On slow mobile without JS, this stays visible as the primary content. */}
       <div id="ssr-ranking-table" className="three-col-layout">
         <div className="three-col-left hide-tablet" aria-hidden="true" />
         <div className="three-col-center">
@@ -129,10 +133,6 @@ export default async function Page() {
         <div className="three-col-right hide-mobile" aria-hidden="true" />
       </div>
 
-      {/* Phase 2: Full interactive three-column layout with sidebars.
-          Loaded via next/dynamic(ssr:false) — deferred until user interaction.
-          Left: HotDiscussions | Center: Interactive rankings | Right: Watchlist + FlashNews
-          Providers are inside HomePageLoader (client-side only) to avoid hydration mismatch. */}
       <PageErrorBoundary>
         <HomePageLoader
           initialTraders={traders}
