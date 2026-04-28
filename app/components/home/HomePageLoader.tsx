@@ -27,11 +27,11 @@ const HomePage = dynamic(() => import('./HomePage'), {
 // Web Vitals + SpeedInsights: homepage uses root layout (not (app)/layout.tsx
 // where these live), so we lazy-load them here when Phase 2 activates.
 const WebVitals = dynamic(
-  () => import('../Providers/WebVitals').then(m => ({ default: m.WebVitals })),
+  () => import('../Providers/WebVitals').then((m) => ({ default: m.WebVitals })),
   { ssr: false }
 )
 const SpeedInsights = dynamic(
-  () => import('@vercel/speed-insights/next').then(m => ({ default: m.SpeedInsights })),
+  () => import('@vercel/speed-insights/next').then((m) => ({ default: m.SpeedInsights })),
   { ssr: false }
 )
 
@@ -47,48 +47,12 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
   const [activated, setActivated] = useState(false)
 
   useEffect(() => {
-    // Render Phase 2 on first user interaction (locks LCP at SSR time).
-    //
-    // Critical: do NOT listen for `scroll` or `touchstart` — on mobile, the first
-    // scroll gesture fires touchstart immediately, which would activate Phase 2
-    // mid-gesture. Phase 2 chunks loading + SSR table swap in the middle of a
-    // scroll interrupts the user's motion and feels janky.
-    //
-    // Instead: listen for `pointermove` (fires on hover/drag AFTER acquisition),
-    // `pointerdown` on non-scroll elements (buttons), and `keydown`. Scroll itself
-    // is handled by the idle-callback fallback below, which preloads Phase 2
-    // during idle time BEFORE the user scrolls.
-    let done = false
-    const activate = () => {
-      if (done) return
-      done = true
-      setActivated(true)
-      cleanup()
-    }
-    const cleanup = () => {
-      window.removeEventListener('pointermove', activate)
-      window.removeEventListener('click', activate)
-      window.removeEventListener('keydown', activate)
-    }
-    window.addEventListener('pointermove', activate, { once: true, passive: true })
-    window.addEventListener('click', activate, { once: true })
-    window.addEventListener('keydown', activate, { once: true })
-
-    // Preload Phase 2 proactively during idle time.
-    // On fast devices: fires almost immediately after LCP paint, so Phase 2 is
-    // ready by the time the user scrolls. On throttled devices (Lighthouse,
-    // slow CPUs): 2.5s hard cap. Shorter than the previous 4s so Phase 2 is
-    // usually ready before the first real user interaction.
-    const ric = typeof window.requestIdleCallback === 'function'
-      ? window.requestIdleCallback
-      : ((cb: IdleRequestCallback) => setTimeout(cb, 100)) as typeof requestIdleCallback
-    const idleHandle = ric(activate, { timeout: 2500 })
-    return () => {
-      cleanup()
-      if (typeof window.cancelIdleCallback === 'function') {
-        window.cancelIdleCallback(idleHandle)
-      }
-    }
+    // Activate immediately — no deferral.
+    // Previously deferred up to 2.5s to "lock LCP at SSR time" for Lighthouse.
+    // But this caused a visible flash: users saw the rough SSR table for 2.5s,
+    // then it abruptly swapped to the refined React table. The visual jump was
+    // worse than any Lighthouse score improvement.
+    setActivated(true)
   }, [])
 
   // SSR topnav removal is handled by HomePage.useLayoutEffect.
