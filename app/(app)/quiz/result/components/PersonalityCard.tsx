@@ -149,42 +149,47 @@ export default function PersonalityCard({
         </div>
       )}
 
-      {/* ---- Hero character illustration ---- */}
-      <div
-        className="quiz-hero-icon"
-        style={{
-          background: hasArt ? `${type.color}08` : `${type.color}10`,
-          border: 'none',
-          width: hasArt ? 'clamp(200px, 56vw, 260px)' : 'clamp(64px, 18vw, 80px)',
-          height: hasArt ? 'clamp(200px, 56vw, 260px)' : 'clamp(64px, 18vw, 80px)',
-          borderRadius: hasArt ? '50%' : 'clamp(14px, 3vw, 20px)',
-          overflow: 'hidden',
-          position: 'relative',
-          boxShadow: hasArt
-            ? `0 0 0 3px ${type.color}30, 0 0 0 6px ${type.color}12, 0 12px 40px ${type.color}15`
-            : `0 12px 32px ${type.color}15`,
-        }}
-      >
-        {hasArt ? (
+      {/* ---- Hero character illustration — show full image, no cropping ---- */}
+      {hasArt ? (
+        <div
+          className="quiz-hero-icon"
+          style={{
+            width: 'clamp(140px, 40vw, 180px)',
+            position: 'relative',
+          }}
+        >
           <Image
             src={`/images/quiz/${type.id}.jpg`}
             alt={tr(type.nameKey)}
-            width={260}
-            height={520}
+            width={256}
+            height={512}
             style={{
-              objectFit: 'cover',
-              objectPosition: 'center 35%',
               display: 'block',
               width: '100%',
-              height: '100%',
+              height: 'auto',
             }}
             priority
             unoptimized
           />
-        ) : (
+        </div>
+      ) : (
+        <div
+          className="quiz-hero-icon"
+          style={{
+            background: `${type.color}10`,
+            width: 'clamp(64px, 18vw, 80px)',
+            height: 'clamp(64px, 18vw, 80px)',
+            borderRadius: 'clamp(14px, 3vw, 20px)',
+            overflow: 'hidden',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: `0 12px 32px ${type.color}15`,
+          }}
+        >
           <QuizIcon name={type.icon} color={type.color} size={34} />
-        )}
-      </div>
+        </div>
+      )}
 
       {/* ---- Rarity badge — positioned above the type name ---- */}
       {rarity && rarityPercent && (
