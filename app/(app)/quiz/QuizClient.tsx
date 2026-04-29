@@ -58,12 +58,24 @@ export default function QuizClient() {
     }
   }, [step, t])
 
+  // Progressive rendering: render first batch immediately, rest after first paint.
+  const INITIAL_BATCH = 8
+  const [renderCount, setRenderCount] = useState(INITIAL_BATCH)
+
   useEffect(() => {
     setMounted(true)
     // Only reset if quiz was previously completed (has result); preserve in-progress answers
     if (useQuizStore.getState().result) reset()
     document.body.style.overflow = ''
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    if (!mounted || step !== 'questions' || renderCount >= TOTAL_QUESTIONS) return
+    const id = requestAnimationFrame(() => {
+      setRenderCount(TOTAL_QUESTIONS)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [mounted, step, renderCount])
 
   const answeredCount = useMemo(
     () => (mounted ? Object.keys(answers).length : 0),
@@ -343,9 +355,9 @@ export default function QuizClient() {
           {langToggleButton}
         </div>
 
-        {/* All questions rendered */}
+        {/* Questions — progressive render to avoid blocking main thread */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {QUIZ_QUESTIONS.map((q, idx) => (
+          {QUIZ_QUESTIONS.slice(0, renderCount).map((q, idx) => (
             <QuestionStep
               key={q.id}
               question={q}
