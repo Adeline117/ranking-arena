@@ -1,6 +1,15 @@
 'use client'
 
-import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
@@ -310,7 +319,7 @@ export default function QuizQuestionsClient() {
               totalQuestions={TOTAL_QUESTIONS}
               selectedOption={answers[q.id]}
               tr={t}
-              onSelect={(optionId) => handleSelectOption(q.id, optionId)}
+              onSelect={handleSelectOption}
             />
           ))}
         </div>
