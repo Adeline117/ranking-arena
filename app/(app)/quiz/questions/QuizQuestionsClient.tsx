@@ -1,15 +1,6 @@
 'use client'
 
-import React, {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-} from 'react'
+import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '@/app/components/base'
 import { useQuizStore } from '@/lib/stores/quizStore'
@@ -44,23 +35,29 @@ export default function QuizQuestionsClient() {
   const [stepAnnouncement, setStepAnnouncement] = useState('')
   const questionsTopRef = useRef<HTMLDivElement>(null)
 
-  // Progressive rendering: render first batch immediately, rest after first paint.
-  // Without this, 30 cards mount in a single synchronous render → blocks main
-  // thread 200-500ms on mobile → page appears frozen.
+  // Mobile detection: one-card-at-a-time vs desktop scroll-through-all.
+  // This is the architectural root fix — mobile renders only 1 card,
+  // eliminating ALL performance problems at the source.
+  const [isMobile, setIsMobile] = useState(false)
+  const [currentIdx, setCurrentIdx] = useState(0)
+  const [slideDir, setSlideDir] = useState<'next' | 'prev' | null>(null)
+
+  // Desktop progressive rendering (only used when !isMobile)
   const INITIAL_BATCH = 8
   const [renderCount, setRenderCount] = useState(INITIAL_BATCH)
 
   useEffect(() => {
     setMounted(true)
+    setIsMobile(window.innerWidth < 640)
   }, [])
 
   useEffect(() => {
-    if (!mounted || renderCount >= TOTAL_QUESTIONS) return
+    if (!mounted || isMobile || renderCount >= TOTAL_QUESTIONS) return
     const id = requestAnimationFrame(() => {
       setRenderCount(TOTAL_QUESTIONS)
     })
     return () => cancelAnimationFrame(id)
-  }, [mounted, renderCount])
+  }, [mounted, isMobile, renderCount])
 
   useEffect(() => {
     if (mounted && questionsTopRef.current) {
@@ -91,12 +88,33 @@ export default function QuizQuestionsClient() {
     [mounted]
   )
 
-  const handleSelectOption = useCallback(
+  // Mobile: navigate to a specific question index
+  const goToQuestion = useCallback((idx: number, dir: 'next' | 'prev') => {
+    const clamped = Math.max(0, Math.min(idx, TOTAL_QUESTIONS - 1))
+    setSlideDir(dir)
+    setCurrentIdx(clamped)
+  }, [])
+
+  // Mobile: after selecting an answer, auto-advance to next question
+  const handleSelectMobile = useCallback(
     (questionId: number, optionId: string) => {
       setAnswer(questionId, optionId)
-      const currentIdx = QUIZ_QUESTIONS.findIndex((q) => q.id === questionId)
-      if (currentIdx < QUIZ_QUESTIONS.length - 1) {
-        const nextId = QUIZ_QUESTIONS[currentIdx + 1].id
+      const idx = QUIZ_QUESTIONS.findIndex((q) => q.id === questionId)
+      if (idx < TOTAL_QUESTIONS - 1) {
+        const delay = prefersReducedMotion ? 100 : 350
+        setTimeout(() => goToQuestion(idx + 1, 'next'), delay)
+      }
+    },
+    [setAnswer, prefersReducedMotion, goToQuestion]
+  )
+
+  // Desktop: scroll to next question after answering
+  const handleSelectDesktop = useCallback(
+    (questionId: number, optionId: string) => {
+      setAnswer(questionId, optionId)
+      const idx = QUIZ_QUESTIONS.findIndex((q) => q.id === questionId)
+      if (idx < TOTAL_QUESTIONS - 1) {
+        const nextId = QUIZ_QUESTIONS[idx + 1].id
         const scrollBehavior = prefersReducedMotion ? 'auto' : 'smooth'
         setTimeout(
           () => {
@@ -121,7 +139,6 @@ export default function QuizQuestionsClient() {
     }
     const result = calculateResult(answers)
     setResult(result)
-    // Save (fire-and-forget)
     try {
       const sessionId =
         typeof crypto !== 'undefined' && crypto.randomUUID
@@ -166,7 +183,7 @@ export default function QuizQuestionsClient() {
     }
   }, [quizLang])
 
-  // Loading state — show progress bar skeleton
+  // Loading state
   if (!mounted) {
     return (
       <Box
@@ -269,7 +286,185 @@ export default function QuizQuestionsClient() {
     )
   }
 
-  // Questions
+  // ═══════════════════════════════════════════════════════════════
+  // MOBILE: one question at a time — renders only 1 card
+  // ═══════════════════════════════════════════════════════════════
+  if (isMobile) {
+    const q = QUIZ_QUESTIONS[currentIdx]
+    const isFirst = currentIdx === 0
+    const isLast = currentIdx === TOTAL_QUESTIONS - 1
+    const percent = Math.round((answeredCount / TOTAL_QUESTIONS) * 100)
+
+    return (
+      <div
+        className="quiz-mobile-flow"
+        style={{
+          minHeight: '100dvh',
+          display: 'flex',
+          flexDirection: 'column',
+          padding: '16px 16px calc(16px + env(safe-area-inset-bottom, 0px))',
+        }}
+      >
+        {/* Screen reader announcement */}
+        <div
+          aria-live="polite"
+          aria-atomic="true"
+          style={{
+            position: 'absolute',
+            width: 1,
+            height: 1,
+            overflow: 'hidden',
+            clip: 'rect(0,0,0,0)',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {stepAnnouncement}
+        </div>
+
+        {/* Header: progress + lang */}
+        <div
+          ref={questionsTopRef}
+          tabIndex={-1}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 12,
+            outline: 'none',
+          }}
+        >
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--color-text-tertiary)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {currentIdx + 1} / {TOTAL_QUESTIONS}
+          </span>
+          <div
+            style={{
+              flex: 1,
+              height: 4,
+              borderRadius: 2,
+              background: 'var(--color-bg-tertiary)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${percent}%`,
+                borderRadius: 2,
+                background: 'linear-gradient(90deg, var(--color-brand), var(--color-brand-deep))',
+                transition: 'width 0.3s ease',
+              }}
+            />
+          </div>
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 700,
+              color: 'var(--color-brand)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {percent}%
+          </span>
+          {langToggleButton}
+        </div>
+
+        {/* Single question card — the only card in the DOM */}
+        <div
+          key={q.id}
+          style={{
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            animation: slideDir
+              ? prefersReducedMotion
+                ? undefined
+                : `quizSlide${slideDir === 'next' ? 'Left' : 'Right'} 0.25s ease-out`
+              : undefined,
+          }}
+        >
+          <QuestionStep
+            question={q}
+            questionNumber={currentIdx + 1}
+            totalQuestions={TOTAL_QUESTIONS}
+            selectedOption={answers[q.id]}
+            tr={t}
+            onSelect={handleSelectMobile}
+          />
+        </div>
+
+        {/* Bottom nav: Back / Next or Submit */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 10,
+            marginTop: 12,
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => goToQuestion(currentIdx - 1, 'prev')}
+            disabled={isFirst}
+            className="quiz-mobile-nav-btn"
+            aria-label="Previous question"
+          >
+            ←
+          </button>
+
+          {allAnswered && isLast ? (
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="quiz-submit-btn"
+              data-ready="true"
+              style={{ flex: 1 }}
+            >
+              {t('quizSeeResults')}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => goToQuestion(currentIdx + 1, 'next')}
+              disabled={isLast}
+              className="quiz-mobile-nav-btn"
+              style={{ flex: 1 }}
+            >
+              {answers[q.id]
+                ? isLast
+                  ? `${TOTAL_QUESTIONS - answeredCount} ${t('quizLeft') !== 'quizLeft' ? t('quizLeft') : 'left'}`
+                  : t('quizNext') !== 'quizNext'
+                    ? t('quizNext')
+                    : 'Next'
+                : t('quizSkip') !== 'quizSkip'
+                  ? t('quizSkip')
+                  : 'Skip'}
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => goToQuestion(currentIdx + 1, 'next')}
+            disabled={isLast}
+            className="quiz-mobile-nav-btn"
+            aria-label="Next question"
+          >
+            →
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // DESKTOP: scroll-through-all (progressive rendering)
+  // ═══════════════════════════════════════════════════════════════
   return (
     <Box
       style={
@@ -333,7 +528,7 @@ export default function QuizQuestionsClient() {
               totalQuestions={TOTAL_QUESTIONS}
               selectedOption={answers[q.id]}
               tr={t}
-              onSelect={handleSelectOption}
+              onSelect={handleSelectDesktop}
             />
           ))}
         </div>
