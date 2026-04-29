@@ -44,9 +44,23 @@ export default function QuizQuestionsClient() {
   const [stepAnnouncement, setStepAnnouncement] = useState('')
   const questionsTopRef = useRef<HTMLDivElement>(null)
 
+  // Progressive rendering: render first batch immediately, rest after first paint.
+  // Without this, 30 cards mount in a single synchronous render → blocks main
+  // thread 200-500ms on mobile → page appears frozen.
+  const INITIAL_BATCH = 8
+  const [renderCount, setRenderCount] = useState(INITIAL_BATCH)
+
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (!mounted || renderCount >= TOTAL_QUESTIONS) return
+    const id = requestAnimationFrame(() => {
+      setRenderCount(TOTAL_QUESTIONS)
+    })
+    return () => cancelAnimationFrame(id)
+  }, [mounted, renderCount])
 
   useEffect(() => {
     if (mounted && questionsTopRef.current) {
@@ -311,7 +325,7 @@ export default function QuizQuestionsClient() {
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {QUIZ_QUESTIONS.map((q, idx) => (
+          {QUIZ_QUESTIONS.slice(0, renderCount).map((q, idx) => (
             <QuestionStep
               key={q.id}
               question={q}
