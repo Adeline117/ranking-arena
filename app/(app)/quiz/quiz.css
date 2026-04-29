@@ -333,6 +333,9 @@
   transition:
     border-color 0.3s ease,
     box-shadow 0.3s ease;
+  /* Skip rendering off-screen cards — huge mobile perf win */
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
 }
 
 .quiz-question-card:hover {
@@ -1386,6 +1389,35 @@
 
   .quiz-risk-segment {
     width: 18px;
+  }
+
+  /* Compact progress dots — shrink oversized 44px touch targets */
+  .quiz-progress-dots {
+    gap: 2px;
+    padding: 6px 0;
+    margin-top: -4px;
+  }
+
+  .quiz-progress-dot {
+    padding: 10px 4px;
+    width: 10px;
+    height: 4px;
+  }
+
+  /* Kill infinite glow animation on progress fill — constant GPU repaint */
+  .quiz-progress-fill::after {
+    animation: none;
+    box-shadow: none;
+  }
+
+  /* Remove hover transitions on touch devices — saves compositing */
+  .quiz-question-card {
+    transition: none;
+  }
+
+  .quiz-option-btn,
+  .quiz-yesno-btn {
+    transition: transform 0.15s ease;
   }
 }
 

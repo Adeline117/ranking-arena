@@ -353,7 +353,7 @@ export default function QuizClient() {
               totalQuestions={TOTAL_QUESTIONS}
               selectedOption={answers[q.id]}
               tr={t}
-              onSelect={(optionId) => handleSelectOption(q.id, optionId)}
+              onSelect={handleSelectOption}
             />
           ))}
         </div>

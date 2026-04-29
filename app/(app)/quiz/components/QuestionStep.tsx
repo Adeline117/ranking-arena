@@ -1,5 +1,6 @@
 'use client'
 
+import React from 'react'
 import type { QuizQuestion } from './types'
 
 interface QuestionStepProps {
@@ -8,7 +9,7 @@ interface QuestionStepProps {
   totalQuestions: number
   selectedOption: string | undefined
   tr: (key: string) => string
-  onSelect: (optionId: string) => void
+  onSelect: (questionId: number, optionId: string) => void
 }
 
 /* Yes/No/Unsure icon config */
@@ -18,7 +19,7 @@ const YESNO_ICON: Record<string, string> = {
   unsure: '?',
 }
 
-export default function QuestionStep({
+const QuestionStep = React.memo(function QuestionStep({
   question,
   questionNumber,
   totalQuestions,
@@ -84,7 +85,7 @@ export default function QuestionStep({
                 <button
                   key={option.id}
                   type="button"
-                  onClick={() => onSelect(option.id)}
+                  onClick={() => onSelect(question.id, option.id)}
                   aria-pressed={isSelected}
                   className="quiz-yesno-btn"
                 >
@@ -109,7 +110,7 @@ export default function QuestionStep({
               <button
                 key={option.id}
                 type="button"
-                onClick={() => onSelect(option.id)}
+                onClick={() => onSelect(question.id, option.id)}
                 aria-pressed={isSelected}
                 className="quiz-option-btn"
               >
@@ -122,4 +123,6 @@ export default function QuestionStep({
       )}
     </div>
   )
-}
+})
+
+export default QuestionStep

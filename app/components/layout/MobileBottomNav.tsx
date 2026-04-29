@@ -10,7 +10,13 @@ import { useLanguage } from '../Providers/LanguageProvider'
 // Only needed for auth state (getSession + onAuthStateChange).
 type SupabaseClient = Awaited<typeof import('@/lib/supabase/client')>['supabase']
 let _sb: SupabaseClient | null = null
-const getSb = () => _sb ? Promise.resolve(_sb) : import('@/lib/supabase/client').then(m => { _sb = m.supabase; return _sb })
+const getSb = () =>
+  _sb
+    ? Promise.resolve(_sb)
+    : import('@/lib/supabase/client').then((m) => {
+        _sb = m.supabase
+        return _sb
+      })
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 
@@ -19,9 +25,20 @@ interface IconProps {
 }
 
 const ICON_SIZE = 24
-const ICON_PROPS = { width: ICON_SIZE, height: ICON_SIZE, viewBox: '0 0 24 24', strokeWidth: 2, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const, 'aria-hidden': true as const }
+const ICON_PROPS = {
+  width: ICON_SIZE,
+  height: ICON_SIZE,
+  viewBox: '0 0 24 24',
+  strokeWidth: 2,
+  strokeLinecap: 'round' as const,
+  strokeLinejoin: 'round' as const,
+  'aria-hidden': true as const,
+}
 
-function NavIcon({ active, children }: IconProps & { children: React.ReactNode }): React.ReactElement {
+function NavIcon({
+  active,
+  children,
+}: IconProps & { children: React.ReactNode }): React.ReactElement {
   return (
     <svg {...ICON_PROPS} fill={active ? 'currentColor' : 'none'} stroke="currentColor">
       {children}
@@ -121,7 +138,10 @@ interface NotificationBadgeProps {
   ariaLabel: string
 }
 
-function NotificationBadge({ count, ariaLabel }: NotificationBadgeProps): React.ReactElement | null {
+function NotificationBadge({
+  count,
+  ariaLabel,
+}: NotificationBadgeProps): React.ReactElement | null {
   if (count <= 0) return null
 
   return (
@@ -145,7 +165,11 @@ const USER_HANDLE_CACHE_KEY = 'arena:user_handle'
 function useUserHandle(): string | null {
   const [userHandle, setUserHandle] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
-    try { return sessionStorage.getItem(USER_HANDLE_CACHE_KEY) } catch { return null }
+    try {
+      return sessionStorage.getItem(USER_HANDLE_CACHE_KEY)
+    } catch {
+      return null
+    }
   })
 
   useEffect(() => {
@@ -153,49 +177,60 @@ function useUserHandle(): string | null {
 
     let subscriptionRef: { unsubscribe: () => void } | null = null
 
-    getSb().then(sb => {
+    getSb().then((sb) => {
       if (!alive) return
 
       function loadHandle(userId: string, email?: string | null) {
         const emailHandle = email?.split('@')[0] || null
         if (userHandle) return // already cached
-        sb
-          .from('user_profiles')
+        sb.from('user_profiles')
           .select('handle')
           .eq('id', userId)
           .maybeSingle()
           .then(({ data: profile, error: profileError }) => {
             if (!alive) return
-            const resolved = profileError ? emailHandle : (profile?.handle || emailHandle)
+            const resolved = profileError ? emailHandle : profile?.handle || emailHandle
             setUserHandle(resolved)
             if (resolved) {
-              try { sessionStorage.setItem(USER_HANDLE_CACHE_KEY, resolved) } catch { /* ignore */ }
+              try {
+                sessionStorage.setItem(USER_HANDLE_CACHE_KEY, resolved)
+              } catch {
+                /* ignore */
+              }
             }
           })
       }
 
       // Initial load from local session (no network)
-      sb.auth.getSession()
-        .then(({ data, error }) => {
-          if (!alive || error) return
-          const userId = data.session?.user?.id
-          if (userId) loadHandle(userId, data.session?.user?.email)
-        })
+      sb.auth.getSession().then(({ data, error }) => {
+        if (!alive || error) return
+        const userId = data.session?.user?.id
+        if (userId) loadHandle(userId, data.session?.user?.email)
+      })
 
       // Listen for auth changes (login/logout) — clear handle on logout
-      const { data: { subscription } } = sb.auth.onAuthStateChange((_event, session) => {
+      const {
+        data: { subscription },
+      } = sb.auth.onAuthStateChange((_event, session) => {
         if (!alive) return
         if (session?.user?.id) {
           loadHandle(session.user.id, session.user.email)
         } else {
           setUserHandle(null)
-          try { sessionStorage.removeItem(USER_HANDLE_CACHE_KEY) } catch { /* ignore */ }
+          try {
+            sessionStorage.removeItem(USER_HANDLE_CACHE_KEY)
+          } catch {
+            /* ignore */
+          }
         }
       })
       subscriptionRef = subscription
     })
 
-    return () => { alive = false; subscriptionRef?.unsubscribe() }
+    return () => {
+      alive = false
+      subscriptionRef?.unsubscribe()
+    }
   }, [userHandle])
 
   return userHandle
@@ -220,7 +255,7 @@ function useScrollVisibility(): boolean {
       // Show immediately on scroll up
       if (scrollDelta < -10) {
         setIsVisible(true)
-      } 
+      }
       // Hide after scrolling down with debounce
       else if (scrollDelta > 50 && currentScrollY > 100) {
         hideTimeoutRef.current = setTimeout(() => {
@@ -253,7 +288,7 @@ function isActivePath(href: string, pathname: string): boolean {
 }
 
 /** Pages where the bottom nav should be completely hidden */
-const HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callback']
+const HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callback', '/quiz']
 
 /* ── Module-level style constants ──
    Extracted from render to avoid creating new objects every frame.
@@ -367,32 +402,39 @@ export default function MobileBottomNav(): React.ReactElement {
   const userHandle = useUserHandle()
   const isVisible = useScrollVisibility()
   const keyboardOpen = useKeyboardOpen()
-  const unreadCount = useInboxStore(s => s.unreadNotifications + s.unreadMessages)
+  const unreadCount = useInboxStore((s) => s.unreadNotifications + s.unreadMessages)
 
   const handleNavClick = useCallback(() => {
     impact('light')
   }, [impact])
 
   const navItems: NavItem[] = useMemo(() => {
-    const items: NavItem[] = [
-      { href: '/', labelKey: 'rankings', Icon: RankingsIcon },
-    ]
+    const items: NavItem[] = [{ href: '/', labelKey: 'rankings', Icon: RankingsIcon }]
     if (features.social) {
-      items.push({ href: '/hot', labelKey: 'hot', Icon: FireIcon, badge: unreadCount > 0 ? unreadCount : undefined })
+      items.push({
+        href: '/hot',
+        labelKey: 'hot',
+        Icon: FireIcon,
+        badge: unreadCount > 0 ? unreadCount : undefined,
+      })
       items.push({ href: '/groups', labelKey: 'groups', Icon: GroupsIcon })
     }
     items.push({ href: '/market', labelKey: 'market', Icon: MarketIcon })
-    items.push({ href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me', Icon: UserIcon })
+    items.push({
+      href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
+      labelKey: 'me',
+      Icon: UserIcon,
+    })
     return items
   }, [userHandle, unreadCount])
 
   // Compute active index for sliding indicator
   const activeIndex = useMemo(() => {
-    return navItems.findIndex(item => isActivePath(item.href, pathname))
+    return navItems.findIndex((item) => isActivePath(item.href, pathname))
   }, [navItems, pathname])
 
   // Hide nav on auth / onboarding pages
-  if (HIDDEN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) {
+  if (HIDDEN_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))) {
     return <></>
   }
 
@@ -409,7 +451,7 @@ export default function MobileBottomNav(): React.ReactElement {
         className="mobile-bottom-nav safe-area-inset-bottom glass"
         style={{
           ...NAV_BASE_STYLE,
-          transform: (isVisible && !keyboardOpen) ? 'translateY(0)' : 'translateY(100%)',
+          transform: isVisible && !keyboardOpen ? 'translateY(0)' : 'translateY(100%)',
         }}
       >
         {/* Sliding active indicator pill */}
@@ -516,7 +558,5 @@ function _ActiveIndicator(): React.ReactElement {
 }
 
 function HighlightDot(): React.ReactElement {
-  return (
-    <span style={HIGHLIGHT_DOT_STYLE} aria-hidden="true" />
-  )
+  return <span style={HIGHLIGHT_DOT_STYLE} aria-hidden="true" />
 }
