@@ -38,7 +38,7 @@ export default function QuizPage() {
           <div className="quiz-start-text">
             <h1 className="quiz-start-title">Trading Personality Test</h1>
             <p className="quiz-start-subtitle">
-              Answer 30 fun questions to discover your trading alter ego, get matched with a
+              Answer 15 fun questions to discover your trading alter ego, get matched with a
               legendary trader, and find Arena traders who trade just like you.
             </p>
           </div>
@@ -98,7 +98,7 @@ export default function QuizPage() {
                   <polyline points="12 6 12 12 16 14" />
                 </svg>
               </span>
-              ~5 min
+              ~2 min
             </span>
           </div>
 
