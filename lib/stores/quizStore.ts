@@ -7,7 +7,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { QuizState } from '@/app/(app)/quiz/components/types'
+import type { QuizState } from '@/app/(quiz)/quiz/components/types'
 
 export const useQuizStore = create<QuizState>()(
   persist(
