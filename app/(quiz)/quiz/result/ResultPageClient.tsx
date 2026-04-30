@@ -1,17 +1,17 @@
 'use client'
 
-import { lazy, Suspense, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { type Language, translations, loadTranslations, onTranslationsReady } from '../i18n'
 import { BASE_URL } from '@/lib/constants/urls'
 import { PERSONALITY_TYPE_MAP, PERSONALITY_TYPES } from '../components/quiz-data'
 import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
-const PersonalityCard = lazy(() => import('./components/PersonalityCard'))
-const MasterSection = lazy(() => import('./components/MasterSection'))
-const StyleAnalysis = lazy(() => import('./components/StyleAnalysis'))
-const TypeBreakdown = lazy(() => import('./components/TypeBreakdown'))
-const RecommendedTraders = lazy(() => import('./components/RecommendedTraders'))
-const ShareActions = lazy(() => import('./components/ShareActions'))
+import PersonalityCard from './components/PersonalityCard'
+import MasterSection from './components/MasterSection'
+import StyleAnalysis from './components/StyleAnalysis'
+import TypeBreakdown from './components/TypeBreakdown'
+import RecommendedTraders from './components/RecommendedTraders'
+import ShareActions from './components/ShareActions'
 import '../quiz.css'
 
 interface ResultPageClientProps {
@@ -142,143 +142,141 @@ export default function ResultPageClient({
           </button>
         </div>
 
-        <Suspense fallback={null}>
-          {/* 1. Hero Personality Card */}
-          <PersonalityCard
-            type={pType}
-            matchPercent={matchPercent}
-            secondaryTypeLabel={secondaryLabel}
-            tr={t}
-          />
+        {/* 1. Hero Personality Card */}
+        <PersonalityCard
+          type={pType}
+          matchPercent={matchPercent}
+          secondaryTypeLabel={secondaryLabel}
+          tr={t}
+        />
 
-          {/* 2. Style Analysis */}
-          <div style={{ '--section-delay': '0.4s' } as React.CSSProperties}>
-            <StyleAnalysis type={pType} tr={t} />
+        {/* 2. Style Analysis */}
+        <div style={{ '--section-delay': '0.4s' } as React.CSSProperties}>
+          <StyleAnalysis type={pType} tr={t} />
+        </div>
+
+        {/* 4. Type Breakdown */}
+        {allTypePercents && (
+          <div style={{ '--section-delay': '0.6s' } as React.CSSProperties}>
+            <TypeBreakdown allTypePercents={allTypePercents} primaryTypeId={typeId} tr={t} />
           </div>
+        )}
 
-          {/* 4. Type Breakdown */}
-          {allTypePercents && (
-            <div style={{ '--section-delay': '0.6s' } as React.CSSProperties}>
-              <TypeBreakdown allTypePercents={allTypePercents} primaryTypeId={typeId} tr={t} />
-            </div>
-          )}
-
-          {/* 5. Compatibility */}
+        {/* 5. Compatibility */}
+        <div
+          className="quiz-section-card"
+          style={{ '--section-delay': '0.8s' } as React.CSSProperties}
+        >
+          <div className="quiz-section-header">
+            <div className="quiz-section-accent" style={{ background: pType.gradient }} />
+            <h3 className="quiz-section-title">{t('quizCompatTitle')}</h3>
+          </div>
           <div
-            className="quiz-section-card"
-            style={{ '--section-delay': '0.8s' } as React.CSSProperties}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              color: 'var(--color-accent-success)',
+              fontWeight: 600,
+            }}
           >
-            <div className="quiz-section-header">
-              <div className="quiz-section-accent" style={{ background: pType.gradient }} />
-              <h3 className="quiz-section-title">{t('quizCompatTitle')}</h3>
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                fontSize: 13,
-                color: 'var(--color-accent-success)',
-                fontWeight: 600,
-              }}
-            >
-              <span>{'\u2713'}</span>
-              {t('quizCompatWith')}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {pType.compatibleTypes.map((id) => {
-                const ct = PERSONALITY_TYPE_MAP[id]
-                return ct ? (
-                  <span
-                    key={id}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: 20,
-                      background: ct.color + '18',
-                      border: '1px solid ' + ct.color + '30',
-                      fontSize: 13,
-                      color: ct.color,
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t(ct.nameKey)}
-                  </span>
-                ) : null
-              })}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                fontSize: 13,
-                color: 'var(--color-accent-error)',
-                fontWeight: 600,
-                marginTop: 8,
-              }}
-            >
-              <span>{'\u2717'}</span>
-              {t('quizIncompatWith')}
-            </div>
-            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              {pType.incompatibleTypes.map((id) => {
-                const ct = PERSONALITY_TYPE_MAP[id]
-                return ct ? (
-                  <span
-                    key={id}
-                    style={{
-                      padding: '6px 14px',
-                      borderRadius: 20,
-                      background: '#EF444420',
-                      border: '1px solid #EF444430',
-                      fontSize: 13,
-                      color: '#EF4444',
-                      fontWeight: 600,
-                    }}
-                  >
-                    {t(ct.nameKey)}
-                  </span>
-                ) : null
-              })}
-            </div>
+            <span>{'\u2713'}</span>
+            {t('quizCompatWith')}
           </div>
-
-          {/* 6. Master Biography */}
-          <div style={{ '--section-delay': '1.0s' } as React.CSSProperties}>
-            <MasterSection type={pType} tr={t} />
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {pType.compatibleTypes.map((id) => {
+              const ct = PERSONALITY_TYPE_MAP[id]
+              return ct ? (
+                <span
+                  key={id}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 20,
+                    background: ct.color + '18',
+                    border: '1px solid ' + ct.color + '30',
+                    fontSize: 13,
+                    color: ct.color,
+                    fontWeight: 600,
+                  }}
+                >
+                  {t(ct.nameKey)}
+                </span>
+              ) : null
+            })}
           </div>
-
-          {/* 7. Recommended Traders */}
-          <div style={{ '--section-delay': '1.2s' } as React.CSSProperties}>
-            <RecommendedTraders type={pType} traders={recommendedTraders} tr={t} />
-          </div>
-
-          {/* 8. Full Share Actions */}
           <div
-            className="quiz-section-card"
-            style={{ '--section-delay': '1.4s' } as React.CSSProperties}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 13,
+              color: 'var(--color-accent-error)',
+              fontWeight: 600,
+              marginTop: 8,
+            }}
           >
-            <div className="quiz-section-header">
-              <div className="quiz-section-accent" style={{ background: pType.gradient }} />
-              <h3 className="quiz-section-title">{t('quizShareTitle')}</h3>
-            </div>
-            <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
+            <span>{'\u2717'}</span>
+            {t('quizIncompatWith')}
           </div>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {pType.incompatibleTypes.map((id) => {
+              const ct = PERSONALITY_TYPE_MAP[id]
+              return ct ? (
+                <span
+                  key={id}
+                  style={{
+                    padding: '6px 14px',
+                    borderRadius: 20,
+                    background: '#EF444420',
+                    border: '1px solid #EF444430',
+                    fontSize: 13,
+                    color: '#EF4444',
+                    fontWeight: 600,
+                  }}
+                >
+                  {t(ct.nameKey)}
+                </span>
+              ) : null
+            })}
+          </div>
+        </div>
 
-          {/* 9. Bottom CTAs — stack vertically so text never wraps */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <Link
-              href="/rankings"
-              className="quiz-cta-primary"
-              style={{ background: pType.gradient, width: '100%' }}
-            >
-              {t('quizFindTraders')}
-            </Link>
-            <Link href="/quiz" className="quiz-cta-secondary" style={{ width: '100%' }}>
-              {t('quizRetake')}
-            </Link>
+        {/* 6. Master Biography */}
+        <div style={{ '--section-delay': '1.0s' } as React.CSSProperties}>
+          <MasterSection type={pType} tr={t} />
+        </div>
+
+        {/* 7. Recommended Traders */}
+        <div style={{ '--section-delay': '1.2s' } as React.CSSProperties}>
+          <RecommendedTraders type={pType} traders={recommendedTraders} tr={t} />
+        </div>
+
+        {/* 8. Full Share Actions */}
+        <div
+          className="quiz-section-card"
+          style={{ '--section-delay': '1.4s' } as React.CSSProperties}
+        >
+          <div className="quiz-section-header">
+            <div className="quiz-section-accent" style={{ background: pType.gradient }} />
+            <h3 className="quiz-section-title">{t('quizShareTitle')}</h3>
           </div>
-        </Suspense>
+          <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
+        </div>
+
+        {/* 9. Bottom CTAs — stack vertically so text never wraps */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <Link
+            href="/rankings"
+            className="quiz-cta-primary"
+            style={{ background: pType.gradient, width: '100%' }}
+          >
+            {t('quizFindTraders')}
+          </Link>
+          <Link href="/quiz" className="quiz-cta-secondary" style={{ width: '100%' }}>
+            {t('quizRetake')}
+          </Link>
+        </div>
       </div>
     </div>
   )
