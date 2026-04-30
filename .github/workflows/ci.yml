@@ -211,9 +211,14 @@ jobs:
           name: nextjs-build
           path: .next
 
-      - run: npx playwright install --with-deps chromium
+      # Install ALL browsers needed by the device matrix (desktop=chromium,
+      # iPhone/iPad=webkit). Without webkit, mobile projects silently skip.
+      - run: npx playwright install --with-deps chromium webkit
 
-      - run: npm run test:e2e -- --project=chromium
+      # Run ALL projects — desktop + iPhone SE + iPhone 14 + iPad.
+      # This is the gate that prevents "works on desktop, broken on mobile"
+      # bugs from ever reaching production.
+      - run: npm run test:e2e
         env:
           CI: true
 
