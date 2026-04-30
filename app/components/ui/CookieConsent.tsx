@@ -59,7 +59,7 @@ export default function CookieConsent() {
         left: 0,
         right: 0,
         zIndex: tokens.zIndex.overlay,
-        padding: '6px 12px',
+        padding: '4px 12px',
         background: tokens.glass.bg.darkHeavy,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
@@ -103,7 +103,7 @@ export default function CookieConsent() {
             onClick={handleReject}
             style={{
               padding: '4px 10px',
-              minHeight: 28,
+              minHeight: 24,
               borderRadius: 6,
               border: '1px solid var(--glass-border-light)',
               background: 'transparent',
@@ -119,7 +119,7 @@ export default function CookieConsent() {
             onClick={handleAccept}
             style={{
               padding: '4px 12px',
-              minHeight: 28,
+              minHeight: 24,
               borderRadius: 6,
               border: 'none',
               background: tokens.gradient.primary,
