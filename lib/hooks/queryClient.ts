@@ -20,17 +20,21 @@ export function createQueryClient() {
       queries: {
         refetchOnWindowFocus: false,
         refetchOnReconnect: true,
-        staleTime: 5_000,                // SWR dedupingInterval: 5000
-        gcTime: 5 * 60 * 1000,           // 5 min garbage collection
+        staleTime: 5_000, // SWR dedupingInterval: 5000
+        gcTime: 5 * 60 * 1000, // 5 min garbage collection
         retry: (failureCount, error) => {
-          if (failureCount >= 2) return false               // SWR errorRetryCount: 2
+          if (failureCount >= 2) return false // SWR errorRetryCount: 2
           const status = (error as { status?: number })?.status
-          if (status === 429) return true                   // rate limit — transient
-          if (status && status >= 400 && status < 500) return false  // 4xx — don't retry
-          return true                                       // network errors + 5xx
+          // 429 = rate limited — NEVER retry. Retrying amplifies the problem:
+          // each retry also counts against the limit, creating a cascade where
+          // N widgets × 3 retries = 3N extra 429s. The server's Retry-After
+          // header tells the client when to try again, but React Query's retry
+          // fires much sooner, guaranteeing another 429.
+          if (status === 429) return false
+          if (status && status >= 400 && status < 500) return false // 4xx — don't retry
+          return true // network errors + 5xx
         },
-        retryDelay: (attempt) =>
-          Math.min(1_000 * Math.pow(2, attempt), 30_000),   // SWR errorRetryInterval: 3000 → exponential
+        retryDelay: (attempt) => Math.min(1_000 * Math.pow(2, attempt), 30_000), // SWR errorRetryInterval: 3000 → exponential
       },
       mutations: {
         retry: false,
