@@ -28,11 +28,11 @@ describe('parseError', () => {
     expect(parsed.type).toBe('unauthorized')
   })
 
-  it('parses 429 as rate_limit', () => {
+  it('parses 429 as rate_limit (not retryable)', () => {
     const err = Object.assign(new Error('Too many'), { status: 429 })
     const parsed = parseError(err)
     expect(parsed.type).toBe('rate_limit')
-    expect(parsed.retryable).toBe(true)
+    expect(parsed.retryable).toBe(false)
   })
 
   it('handles unknown errors', () => {
