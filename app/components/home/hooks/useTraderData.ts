@@ -83,7 +83,11 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
         availableSources: action.availableSources || state.availableSources,
       }
     case 'SET_LOADING':
-      return { ...state, loading: action.loading }
+      return {
+        ...state,
+        loading: action.loading,
+        isChangingTimeRange: action.loading ? state.isChangingTimeRange : false,
+      }
     case 'SET_ERROR':
       return { ...state, error: action.error }
     case 'SET_TIME_RANGE':
@@ -191,9 +195,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // the SSR-provided '90D' data to avoid layout shift.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
-    const urlWindow = params.get('window')?.toUpperCase()
-    if (urlWindow === '90D' || urlWindow === '30D' || urlWindow === '7D') {
-      dispatch({ type: 'SET_TIME_RANGE', timeRange: urlWindow })
+    const urlRange = params.get('range')?.toUpperCase()
+    if (urlRange === '90D' || urlRange === '30D' || urlRange === '7D') {
+      dispatch({ type: 'SET_TIME_RANGE', timeRange: urlRange })
     }
   }, [])
 
