@@ -9,7 +9,9 @@ import type { Exchange, Ticker } from 'ccxt'
 
 let _ccxt: typeof import('ccxt') | null = null
 async function getCcxt() {
-  if (!_ccxt) { _ccxt = await import('ccxt') }
+  if (!_ccxt) {
+    _ccxt = await import('ccxt')
+  }
   return _ccxt
 }
 
@@ -53,10 +55,37 @@ const resultCache: CacheEntry<ArbitrageOpportunity[]> = { data: [], ts: 0 }
 const EXCHANGE_IDS = ['binance', 'okx', 'bybit', 'gateio', 'kucoin', 'htx'] as const
 
 const TARGET_SYMBOLS = [
-  'BTC/USDT', 'ETH/USDT', 'SOL/USDT', 'XRP/USDT', 'DOGE/USDT',
-  'ADA/USDT', 'AVAX/USDT', 'LINK/USDT', 'DOT/USDT', 'BNB/USDT',
-  'ETH/BTC', 'SOL/BTC', 'XRP/BTC', 'DOGE/BTC',
-  'SOL/ETH', 'LINK/ETH',
+  'BTC/USDT',
+  'ETH/USDT',
+  'SOL/USDT',
+  'XRP/USDT',
+  'DOGE/USDT',
+  'ADA/USDT',
+  'AVAX/USDT',
+  'LINK/USDT',
+  'DOT/USDT',
+  'BNB/USDT',
+  'MATIC/USDT',
+  'NEAR/USDT',
+  'FIL/USDT',
+  'ATOM/USDT',
+  'APT/USDT',
+  'ARB/USDT',
+  'OP/USDT',
+  'SUI/USDT',
+  'TIA/USDT',
+  'INJ/USDT',
+  'FET/USDT',
+  'RNDR/USDT',
+  'WIF/USDT',
+  'PEPE/USDT',
+  'FLOKI/USDT',
+  'ETH/BTC',
+  'SOL/BTC',
+  'XRP/BTC',
+  'DOGE/BTC',
+  'SOL/ETH',
+  'LINK/ETH',
 ]
 
 // 三角套利路径 (在同一交易所内)
@@ -77,16 +106,23 @@ async function getExchange(id: string): Promise<Exchange> {
   return new Ex({ enableRateLimit: true, timeout: 10_000 })
 }
 
+const TARGET_SET = new Set(TARGET_SYMBOLS)
+
 async function fetchTickers(exchangeId: string): Promise<Record<string, Ticker>> {
   const cached = tickerCache.get(exchangeId)
   if (cached && Date.now() - cached.ts < CACHE_TTL) return cached.data
 
   const ex = await getExchange(exchangeId)
   try {
-    const tickers = await ex.fetchTickers(TARGET_SYMBOLS)
-    const entry = { data: tickers, ts: Date.now() }
+    // Fetch all tickers then filter — avoids failures from unsupported symbols
+    const all = await ex.fetchTickers()
+    const filtered: Record<string, Ticker> = {}
+    for (const [sym, ticker] of Object.entries(all)) {
+      if (TARGET_SET.has(sym)) filtered[sym] = ticker
+    }
+    const entry = { data: filtered, ts: Date.now() }
     tickerCache.set(exchangeId, entry)
-    return tickers
+    return filtered
   } catch (_err) {
     /* exchange ticker fetch failed, fall back to cached data */
     return cached?.data ?? {}
@@ -112,7 +148,8 @@ function detectCrossExchange(
   for (const [symbol, entries] of symbolMap) {
     if (entries.length < 2) continue
 
-    let bestBid = entries[0], bestAsk = entries[0]
+    let bestBid = entries[0],
+      bestAsk = entries[0]
     for (const e of entries) {
       if (e.bid > bestBid.bid) bestBid = e
       if (e.ask < bestAsk.ask) bestAsk = e
@@ -120,7 +157,7 @@ function detectCrossExchange(
 
     if (bestBid.exchange === bestAsk.exchange) continue
     const spreadPct = ((bestBid.bid - bestAsk.ask) / bestAsk.ask) * 100
-    if (spreadPct <= 0.05) continue // 过滤掉太小的价差
+    if (spreadPct <= 0) continue // 只过滤负价差，保留所有正向机会
 
     opportunities.push({
       type: 'cross-exchange',
@@ -158,7 +195,7 @@ function detectTriangular(
       const finalAmount = rate1.rate * rate2.rate * rate3.rate
       const profitPct = (finalAmount - 1) * 100
 
-      if (profitPct <= 0.05) continue
+      if (profitPct <= 0) continue
 
       opportunities.push({
         type: 'triangular',
