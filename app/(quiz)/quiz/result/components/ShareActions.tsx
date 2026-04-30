@@ -1,7 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { useToast } from '@/app/components/ui/Toast'
 import type { PersonalityType } from '../../components/types'
 
 interface ShareActionsProps {
@@ -12,7 +11,12 @@ interface ShareActionsProps {
 }
 
 export default function ShareActions({ type, matchPercent, resultUrl, tr }: ShareActionsProps) {
-  const { showToast } = useToast()
+  // Local toast — quiz runs outside (app) Providers so useToast() is unavailable
+  const [toastMsg, setToastMsg] = useState<string | null>(null)
+  const showToast = useCallback((msg: string, _type?: string) => {
+    setToastMsg(msg)
+    setTimeout(() => setToastMsg(null), 2500)
+  }, [])
   const [downloading, setDownloading] = useState(false)
   const [canNativeShare, setCanNativeShare] = useState(false)
   const [ogLoaded, setOgLoaded] = useState(false)
@@ -448,6 +452,29 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
           100% { background-position: -200% 0; }
         }
       `}</style>
+
+      {/* Local toast — standalone quiz has no ToastProvider */}
+      {toastMsg && (
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 24,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '10px 20px',
+            borderRadius: 10,
+            background: 'var(--color-bg-secondary)',
+            border: '1px solid var(--glass-border-light)',
+            color: 'var(--color-text-primary)',
+            fontSize: 13,
+            fontWeight: 600,
+            zIndex: 9999,
+            boxShadow: '0 4px 20px rgba(0,0,0,0.3)',
+          }}
+        >
+          {toastMsg}
+        </div>
+      )}
     </div>
   )
 }
