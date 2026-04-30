@@ -2,9 +2,9 @@
 
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Box } from '@/app/components/base'
+// Box replaced with plain div — avoids pulling design-tokens into quiz bundle
 import { useQuizStore } from '@/lib/stores/quizStore'
-import { type Language, translations, loadTranslations, onTranslationsReady } from '@/lib/i18n'
+import { type Language, translations, loadTranslations, onTranslationsReady } from './i18n'
 import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from './components/quiz-data'
 import { calculateResult } from './components/scoring'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -300,7 +300,7 @@ export default function QuizClient() {
 
   // Questions — scrollable flow
   return (
-    <Box
+    <div
       style={
         {
           minHeight: '80vh',
@@ -395,6 +395,6 @@ export default function QuizClient() {
           </button>
         </div>
       </div>
-    </Box>
+    </div>
   )
 }
