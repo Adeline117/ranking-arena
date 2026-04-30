@@ -53,15 +53,19 @@ export function useSearchData(open: boolean, query: string) {
   const abortControllerRef = useRef<AbortController | null>(null)
 
   // Flatten results for keyboard navigation
-  const flatResults: UnifiedSearchResult[] = useMemo(() => searchData
-    ? [
-        ...searchData.results.traders,
-        ...(features.social ? searchData.results.posts : []),
-        ...searchData.results.library,
-        ...(features.social ? searchData.results.users : []),
-        ...(features.social ? (searchData.results.groups || []) : []),
-      ]
-    : [], [searchData])
+  const flatResults: UnifiedSearchResult[] = useMemo(
+    () =>
+      searchData
+        ? [
+            ...searchData.results.traders,
+            ...(features.social ? searchData.results.posts : []),
+            ...searchData.results.library,
+            ...(features.social ? searchData.results.users : []),
+            ...(features.social ? searchData.results.groups || [] : []),
+          ]
+        : [],
+    [searchData]
+  )
 
   // Load search history
   useEffect(() => {
@@ -96,7 +100,7 @@ export function useSearchData(open: boolean, query: string) {
             query: q,
             searchCount: 100 - index * 10,
             rank: index + 1,
-            category: /^[A-Z]{2,6}$/.test(q) ? 'token' as const : 'general' as const,
+            category: /^[A-Z]{2,6}$/.test(q) ? ('token' as const) : ('general' as const),
           }))
         }
         _trendingCache = { data: items, ts: Date.now() }
@@ -106,7 +110,10 @@ export function useSearchData(open: boolean, query: string) {
       logger.error('Failed to load trending searches:', e)
       const fallback = ['BTC', 'ETH', 'SOL', 'DOGE', 'PEPE']
       const items = fallback.map((q, index) => ({
-        query: q, searchCount: 100 - index * 10, rank: index + 1, category: 'token' as const,
+        query: q,
+        searchCount: 100 - index * 10,
+        rank: index + 1,
+        category: 'token' as const,
       }))
       setTrendingSearches(items)
     } finally {
@@ -121,7 +128,7 @@ export function useSearchData(open: boolean, query: string) {
     try {
       const { data, error } = await supabase
         .from('posts')
-        .select('id, title, hot_score, view_count, like_count, comment_count')
+        .select('id, title, content, hot_score, view_count, like_count, comment_count')
         .order('hot_score', { ascending: false, nullsFirst: false })
         .order('view_count', { ascending: false, nullsFirst: false })
         .order('like_count', { ascending: false, nullsFirst: false })
@@ -131,17 +138,32 @@ export function useSearchData(open: boolean, query: string) {
 
       if (data && data.length > 0) {
         setHotPosts(
-          data.map((post, index) => ({
-            id: post.id,
-            title: post.title || t('noTitle'),
-            hotScore:
-              post.hot_score ||
-              (post.view_count || 0) * 0.1 +
-                (post.like_count || 0) * 2 +
-                (post.comment_count || 0) * 3,
-            rank: index + 1,
-            view_count: post.view_count,
-          }))
+          data.map((post, index) => {
+            // Derive a display title: prefer real title, fall back to content snippet
+            const rawTitle = post.title
+            const hasRealTitle = rawTitle && rawTitle !== 'Untitled' && rawTitle !== 'untitled'
+            let displayTitle: string
+            if (hasRealTitle) {
+              displayTitle = rawTitle
+            } else if (post.content) {
+              // Strip markdown/HTML-like artifacts for a clean snippet
+              const plain = post.content.replace(/[#*_~`>|\[\]()]/g, '').trim()
+              displayTitle = plain.length > 80 ? plain.slice(0, 80) + '...' : plain
+            } else {
+              displayTitle = t('noTitle')
+            }
+            return {
+              id: post.id,
+              title: displayTitle,
+              hotScore:
+                post.hot_score ||
+                (post.view_count || 0) * 0.1 +
+                  (post.like_count || 0) * 2 +
+                  (post.comment_count || 0) * 3,
+              rank: index + 1,
+              view_count: post.view_count,
+            }
+          })
         )
       }
     } catch (e) {
@@ -149,7 +171,7 @@ export function useSearchData(open: boolean, query: string) {
     } finally {
       setLoading(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t is stable
   }, [open])
 
   useEffect(() => {
@@ -196,7 +218,10 @@ export function useSearchData(open: boolean, query: string) {
             headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
             body: JSON.stringify({
               items: postsToTranslate.map((p) => ({
-                id: p.id, text: p.title, contentType: 'post_title', contentId: p.id,
+                id: p.id,
+                text: p.title,
+                contentType: 'post_title',
+                contentId: p.id,
               })),
               targetLang: language === 'zh' ? 'zh' : 'en',
             }),
@@ -225,7 +250,6 @@ export function useSearchData(open: boolean, query: string) {
       doTranslate()
       return prev // return unchanged until async finishes
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- translatedTitles intentionally omitted; read via functional updater to avoid re-fire loop
   }, [language, hotPosts, translating])
 
   // Unified search with debounce
@@ -254,10 +278,9 @@ export function useSearchData(open: boolean, query: string) {
       setSearching(true)
 
       try {
-        const response = await fetch(
-          `/api/search?q=${encodeURIComponent(query.trim())}&limit=10`,
-          { signal: controller.signal }
-        )
+        const response = await fetch(`/api/search?q=${encodeURIComponent(query.trim())}&limit=10`, {
+          signal: controller.signal,
+        })
         if (!response.ok) throw new Error('Search failed')
         const json = await response.json()
         const data: UnifiedSearchResponse = json.data || json
@@ -279,11 +302,14 @@ export function useSearchData(open: boolean, query: string) {
     }
   }, [query, open])
 
-  const saveToHistory = useCallback(async (searchQuery: string) => {
-    if (!searchQuery.trim()) return
-    const newHistory = await addToHistory(searchQuery, userId ?? undefined)
-    setSearchHistory(newHistory)
-  }, [userId])
+  const saveToHistory = useCallback(
+    async (searchQuery: string) => {
+      if (!searchQuery.trim()) return
+      const newHistory = await addToHistory(searchQuery, userId ?? undefined)
+      setSearchHistory(newHistory)
+    },
+    [userId]
+  )
 
   const handleDeleteHistory = async (term: string, e: React.MouseEvent) => {
     e.preventDefault()
