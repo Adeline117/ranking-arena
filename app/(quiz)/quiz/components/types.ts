@@ -64,7 +64,7 @@ export interface QuizResult {
 }
 
 export interface QuizState {
-  currentQuestion: number // 0 = start, 1-30 = questions, 31 = calculating
+  currentQuestion: number // 0 = start, 1-15 = questions, 16 = calculating
   answers: Record<number, string>
   result: QuizResult | null
 

@@ -2,14 +2,14 @@
 const quizEn: Record<string, string> = {
   quizTitle: 'Trading Personality Test',
   quizSubtitle:
-    'Answer 30 fun questions to discover your trading alter ego, get matched with a legendary trader, and find Arena traders who trade just like you.',
+    'Answer 15 fun questions to discover your trading alter ego, get matched with a legendary trader, and find Arena traders who trade just like you.',
   quizStartBtn: 'Start Test',
   quizBadge15Q: '15 Questions',
   quizBadge8Types: '8 Personalities',
   quizBadge2Min: '~2 min',
-  quizBadge30Q: '30 Questions',
+  quizBadge30Q: '15 Questions',
   quizBadge12Types: '12 Personalities',
-  quizBadge5Min: '~5 min',
+  quizBadge5Min: '~2 min',
   quizSeeResults: 'See My Results',
   quizBack: 'Back',
   quizCalculating: 'Analyzing your trading personality...',
