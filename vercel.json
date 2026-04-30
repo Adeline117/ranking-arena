@@ -3,6 +3,10 @@
   "regions": ["hnd1"],
   "crons": [
     {
+      "path": "/api/cron/flash-news-fetch",
+      "schedule": "*/30 * * * *"
+    },
+    {
       "path": "/api/cron/smoke-test",
       "schedule": "*/30 * * * *"
     },
