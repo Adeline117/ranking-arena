@@ -210,7 +210,7 @@ export function TraderAvatar({
             loading={rank <= 3 ? 'eager' : 'lazy'}
             sizes={`${size}px`}
             priority={rank <= 3}
-            unoptimized={!proxyAvatarUrl.startsWith('/api/avatar')}
+            unoptimized
             style={{
               width: '100%',
               height: '100%',
