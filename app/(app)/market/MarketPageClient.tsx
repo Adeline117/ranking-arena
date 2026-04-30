@@ -409,26 +409,31 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
               marginBottom: 24,
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gridTemplateRows: '284px',
               gap: tokens.spacing[4],
               overflowX: 'hidden',
             }}
           >
-            <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
-              <Suspense fallback={<LoadingCard height={160} />}>
-                <FearGreedGauge />
-              </Suspense>
-            </SectionErrorBoundary>
-            <SectionErrorBoundary fallbackMessage="Failed to load arbitrage">
-              <Suspense fallback={<LoadingCard height={160} />}>
-                <ArbitrageOpportunities />
-              </Suspense>
-            </SectionErrorBoundary>
-            <SectionErrorBoundary fallbackMessage="Failed to load live trades">
-              <Suspense fallback={<LoadingCard height={160} />}>
-                <LiveTradesFeed />
-              </Suspense>
-            </SectionErrorBoundary>
+            <div style={{ height: 284, overflow: 'hidden' }}>
+              <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
+                <Suspense fallback={<LoadingCard height={160} />}>
+                  <FearGreedGauge />
+                </Suspense>
+              </SectionErrorBoundary>
+            </div>
+            <div style={{ height: 284, overflow: 'hidden' }}>
+              <SectionErrorBoundary fallbackMessage="Failed to load arbitrage">
+                <Suspense fallback={<LoadingCard height={160} />}>
+                  <ArbitrageOpportunities />
+                </Suspense>
+              </SectionErrorBoundary>
+            </div>
+            <div style={{ height: 284, overflow: 'hidden' }}>
+              <SectionErrorBoundary fallbackMessage="Failed to load live trades">
+                <Suspense fallback={<LoadingCard height={160} />}>
+                  <LiveTradesFeed />
+                </Suspense>
+              </SectionErrorBoundary>
+            </div>
           </section>
 
           {/* L2: Data Table + Sector Heatmap — side by side */}
