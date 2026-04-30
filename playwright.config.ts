@@ -28,10 +28,7 @@ export default defineConfig({
   workers: process.env.CI ? 1 : 2,
 
   /* Reporter to use */
-  reporter: [
-    ['html', { open: 'never' }],
-    ['list'],
-  ],
+  reporter: [['html', { open: 'never' }], ['list']],
 
   /* Shared settings for all the projects below. */
   use: {
@@ -54,11 +51,26 @@ export default defineConfig({
     video: 'on-first-retry',
   },
 
-  /* Only run chromium by default — use --project flag for others */
+  /* Multi-device matrix: every E2E test runs on desktop + mobile + tablet.
+   * This is the systemic fix for the class of bugs where features work on
+   * desktop but break on mobile (quiz freeze, cookie overlap, tab overflow,
+   * rankings width, etc.). All caught automatically before merge. */
   projects: [
     {
-      name: 'chromium',
+      name: 'desktop',
       use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'mobile-iphone-se',
+      use: { ...devices['iPhone SE'] },
+    },
+    {
+      name: 'mobile-iphone-14',
+      use: { ...devices['iPhone 14'] },
+    },
+    {
+      name: 'tablet-ipad',
+      use: { ...devices['iPad (gen 7)'] },
     },
   ],
 
