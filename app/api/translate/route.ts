@@ -1,7 +1,7 @@
 /**
  * AI 翻译 API（带数据库缓存）
  * POST /api/translate - 翻译文本（单个或批量）
- * 
+ *
  * 每个帖子/评论只消耗一次 GPT 翻译容量，结果会缓存到数据库
  */
 
@@ -40,22 +40,22 @@ interface BatchTranslateRequest {
 async function translateWithGoogle(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
   const sourceLang = targetLang === 'zh' ? 'en' : 'zh-CN'
   const target = targetLang === 'zh' ? 'zh-CN' : 'en'
-  
+
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${target}&dt=t&q=${encodeURIComponent(text)}`
     const response = await fetch(url, { signal: AbortSignal.timeout(5000) })
-    
+
     if (!response.ok) return null
-    
+
     const data = await response.json()
     if (!Array.isArray(data) || !Array.isArray(data[0])) return null
-    
+
     // Concatenate all translated segments
     const translated = data[0]
       .filter((segment: unknown[]) => Array.isArray(segment) && segment[0])
       .map((segment: unknown[]) => segment[0])
       .join('')
-    
+
     return translated || null
   } catch (error: unknown) {
     logger.warn('Google Translate failed, falling back to GPT', { error: String(error) })
@@ -97,20 +97,20 @@ function fixCryptoTerms(text: string, targetLang: 'zh' | 'en'): string {
 // 调用 OpenAI 翻译 (fallback, slower but higher quality)
 async function translateWithGPT(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY
-  
+
   if (!OPENAI_API_KEY) {
     logger.error('OPENAI_API_KEY not configured')
     return null
   }
 
   const targetLanguage = targetLang === 'zh' ? '简体中文' : 'English'
-  
+
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`,
+        Authorization: `Bearer ${OPENAI_API_KEY}`,
       },
       body: JSON.stringify({
         model: 'gpt-4o-mini',
@@ -127,12 +127,12 @@ Rules:
 1. Keep original meaning, tone, and slang
 2. Keep numbers, punctuation, emoji unchanged
 3. Keep crypto tickers ($BTC, $ETH) and addresses unchanged
-4. Output translated text only, no explanations`
+4. Output translated text only, no explanations`,
           },
           {
             role: 'user',
-            content: text
-          }
+            content: text,
+          },
         ],
         temperature: 0.3,
         max_tokens: 2000,
@@ -169,7 +169,10 @@ function detectSourceLang(text: string): 'zh' | 'en' {
 
 export async function GET() {
   return NextResponse.json(
-    { error: 'Use POST to translate. Body: { text, targetLang: "zh"|"en" } or { items: [...], targetLang }' },
+    {
+      error:
+        'Use POST to translate. Body: { text, targetLang: "zh"|"en" } or { items: [...], targetLang }',
+    },
     { status: 400 }
   )
 }
@@ -182,8 +185,10 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
   }
 
-  // 限流：使用敏感操作级别（15/分钟），防止滥用 OpenAI 额度
-  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.sensitive)
+  // 限流：翻译是只读缓存操作，groups 页一次加载 10+ 帖子各触发一次翻译。
+  // 之前用 sensitive (15/min) 导致 groups 页加载即触发 429 风暴。
+  // 改为 authenticated (300/min) — 已有 auth guard 防未登录滥用。
+  const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.authenticated)
   if (rateLimitResponse) return rateLimitResponse
 
   try {
@@ -231,7 +236,7 @@ async function handleSingleTranslate(
         targetLang,
         cached: true,
         sameLanguage: true,
-      }
+      },
     })
   }
 
@@ -256,7 +261,7 @@ async function handleSingleTranslate(
             originalText: text,
             targetLang,
             cached: true,
-          }
+          },
         })
       }
     } catch (err: unknown) {
@@ -269,18 +274,14 @@ async function handleSingleTranslate(
   const translatedText = await translate(text, targetLang)
 
   if (!translatedText) {
-    return NextResponse.json(
-      { success: false, error: 'Translation failed' },
-      { status: 500 }
-    )
+    return NextResponse.json({ success: false, error: 'Translation failed' }, { status: 500 })
   }
 
   // 3. 保存到缓存（如果有 contentType 和 contentId）
   if (contentType && contentId) {
     try {
-      await supabase
-        .from('translation_cache')
-        .upsert({
+      await supabase.from('translation_cache').upsert(
+        {
           content_type: contentType,
           content_id: contentId,
           content_hash: contentHash,
@@ -288,9 +289,11 @@ async function handleSingleTranslate(
           target_lang: targetLang,
           translated_text: translatedText,
           updated_at: new Date().toISOString(),
-        }, {
+        },
+        {
           onConflict: 'content_type,content_id,target_lang',
-        })
+        }
+      )
       logger.debug(`Cache saved: ${contentType}/${contentId}`)
     } catch (err: unknown) {
       logger.warn('Cache save failed', { error: String(err) })
@@ -304,7 +307,7 @@ async function handleSingleTranslate(
       originalText: text,
       targetLang,
       cached: false,
-    }
+    },
   })
 }
 
@@ -325,8 +328,8 @@ async function handleBatchTranslate(
   const results: Record<string, { translatedText: string; cached: boolean }> = {}
 
   // 1. 批量查询缓存
-  const _contentIds = limitedItems.map(item => item.contentId)
-  const contentTypes = [...new Set(limitedItems.map(item => item.contentType))]
+  const _contentIds = limitedItems.map((item) => item.contentId)
+  const contentTypes = [...new Set(limitedItems.map((item) => item.contentType))]
 
   // 准备需要翻译的项目列表
   const needsTranslation: typeof limitedItems = []
@@ -334,8 +337,8 @@ async function handleBatchTranslate(
   // 为每种 contentType 批量查询缓存
   for (const contentType of contentTypes) {
     const idsOfType = limitedItems
-      .filter(item => item.contentType === contentType)
-      .map(item => item.contentId)
+      .filter((item) => item.contentType === contentType)
+      .map((item) => item.contentId)
 
     if (idsOfType.length === 0) continue
 
@@ -348,9 +351,17 @@ async function handleBatchTranslate(
         .eq('target_lang', targetLang)
 
       if (cached) {
-        const cachedMap = new Map(cached.map(c => [c.content_id, c] as [string, { content_id: string; translated_text: string; content_hash: string }]))
-        
-        for (const item of limitedItems.filter(i => i.contentType === contentType)) {
+        const cachedMap = new Map(
+          cached.map(
+            (c) =>
+              [c.content_id, c] as [
+                string,
+                { content_id: string; translated_text: string; content_hash: string },
+              ]
+          )
+        )
+
+        for (const item of limitedItems.filter((i) => i.contentType === contentType)) {
           const cachedItem = cachedMap.get(item.contentId)
           const currentHash = hashContent(item.text)
 
@@ -367,15 +378,17 @@ async function handleBatchTranslate(
         }
       } else {
         // 没有缓存，全部需要翻译
-        needsTranslation.push(...limitedItems.filter(i => i.contentType === contentType))
+        needsTranslation.push(...limitedItems.filter((i) => i.contentType === contentType))
       }
     } catch (err: unknown) {
       logger.warn('Batch cache query failed', { error: String(err) })
-      needsTranslation.push(...limitedItems.filter(i => i.contentType === contentType))
+      needsTranslation.push(...limitedItems.filter((i) => i.contentType === contentType))
     }
   }
 
-  logger.info(`Batch translate: ${limitedItems.length} requests, ${needsTranslation.length} need GPT`)
+  logger.info(
+    `Batch translate: ${limitedItems.length} requests, ${needsTranslation.length} need GPT`
+  )
 
   // 2. 翻译未缓存的项目（限制并发数，使用错误隔离）
   const concurrencyLimit = 5
@@ -383,40 +396,45 @@ async function handleBatchTranslate(
     const batch = needsTranslation.slice(i, i + concurrencyLimit)
 
     // 使用 Promise.allSettled 确保单个翻译失败不会影响其他翻译
-    const batchResults = await Promise.allSettled(batch.map(async (item) => {
-      const sourceLang = detectSourceLang(item.text)
+    const batchResults = await Promise.allSettled(
+      batch.map(async (item) => {
+        const sourceLang = detectSourceLang(item.text)
 
-      // 如果源语言和目标语言相同
-      if (sourceLang === targetLang) {
-        return { id: item.id, translatedText: item.text, cached: true }
-      }
+        // 如果源语言和目标语言相同
+        if (sourceLang === targetLang) {
+          return { id: item.id, translatedText: item.text, cached: true }
+        }
 
-      const translatedText = await translate(item.text, targetLang)
+        const translatedText = await translate(item.text, targetLang)
 
-      if (translatedText) {
-        // 保存到缓存（不阻塞返回）
-        supabase
-          .from('translation_cache')
-          .upsert({
-            content_type: item.contentType,
-            content_id: item.contentId,
-            content_hash: hashContent(item.text),
-            source_lang: sourceLang,
-            target_lang: targetLang,
-            translated_text: translatedText,
-            updated_at: new Date().toISOString(),
-          }, {
-            onConflict: 'content_type,content_id,target_lang',
-          })
-          .then(({ error }) => {
-            if (error) logger.warn('Cache save failed', { error: error.message, itemId: item.id })
-          })
+        if (translatedText) {
+          // 保存到缓存（不阻塞返回）
+          supabase
+            .from('translation_cache')
+            .upsert(
+              {
+                content_type: item.contentType,
+                content_id: item.contentId,
+                content_hash: hashContent(item.text),
+                source_lang: sourceLang,
+                target_lang: targetLang,
+                translated_text: translatedText,
+                updated_at: new Date().toISOString(),
+              },
+              {
+                onConflict: 'content_type,content_id,target_lang',
+              }
+            )
+            .then(({ error }) => {
+              if (error) logger.warn('Cache save failed', { error: error.message, itemId: item.id })
+            })
 
-        return { id: item.id, translatedText, cached: false }
-      }
+          return { id: item.id, translatedText, cached: false }
+        }
 
-      return { id: item.id, translatedText: null, cached: false }
-    }))
+        return { id: item.id, translatedText: null, cached: false }
+      })
+    )
 
     // 处理结果，记录失败的翻译
     for (const result of batchResults) {
@@ -438,6 +456,6 @@ async function handleBatchTranslate(
       total: limitedItems.length,
       cached: limitedItems.length - needsTranslation.length,
       translated: needsTranslation.length,
-    }
+    },
   })
 }
