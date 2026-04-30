@@ -83,6 +83,10 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
         availableSources: action.availableSources || state.availableSources,
       }
     case 'SET_LOADING':
+      // Invariant: loading=false implies isChangingTimeRange=false.
+      // The fingerprint dedup at fetchPage skips LOAD_SUCCESS on cache hit and
+      // dispatches SET_LOADING(false) instead — without this invariant the spinner
+      // would stay forever.
       return {
         ...state,
         loading: action.loading,
@@ -187,19 +191,11 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
   // re-render cascade through 5 useMemo chains → 50 TraderRow memo checks.
   const dataFingerprintRef = useRef('')
 
-  // Read time range preference from URL param only (deep-linking).
-  // localStorage is NOT restored on mount — doing so would discard SSR data
-  // for '90D' and trigger a fetch+skeleton flash for 200-800ms.
-  // The time range is saved to localStorage on change (see below), so it
-  // persists for explicit user actions, but the initial load always uses
-  // the SSR-provided '90D' data to avoid layout shift.
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    const urlRange = params.get('range')?.toUpperCase()
-    if (urlRange === '90D' || urlRange === '30D' || urlRange === '7D') {
-      dispatch({ type: 'SET_TIME_RANGE', timeRange: urlRange })
-    }
-  }, [])
+  // URL → state sync is handled by HomePageClient.tsx (the single owner).
+  // It calls changeTimeRange() which properly sets isChangingTimeRange + debounce.
+  // Previously this hook ALSO read ?range= and dispatched SET_TIME_RANGE directly,
+  // creating a race (two dispatches for same URL param) and skipping the spinner.
+  // Root-cause fix: removed duplicate — HomePageClient is the single source of truth.
 
   // Keep totalCount ref in sync with state
   useEffect(() => {
