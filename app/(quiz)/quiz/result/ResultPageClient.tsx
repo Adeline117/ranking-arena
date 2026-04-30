@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react'
 import Image from 'next/image'
 import Link from 'next/link'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { setLanguage, onTranslationsReady } from '@/lib/i18n'
+import { type Language, translations, loadTranslations, onTranslationsReady } from '../i18n'
 import { BASE_URL } from '@/lib/constants/urls'
 import { PERSONALITY_TYPE_MAP, PERSONALITY_TYPES } from '../components/quiz-data'
 import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
@@ -31,7 +30,10 @@ export default function ResultPageClient({
   secondaryTypeId,
   allTypePercents,
 }: ResultPageClientProps) {
-  const { language, t } = useLanguage()
+  const [language, setLanguage] = useState<Language>('en')
+  const t = (key: string): string => {
+    return translations[language]?.[key] ?? translations.en[key] ?? key
+  }
   const [mounted, setMounted] = useState(false)
   const [txnReady, setTxnReady] = useState(false)
 
@@ -56,8 +58,9 @@ export default function ResultPageClient({
 
   const resultUrl = `${BASE_URL}/quiz/result?type=${typeId}&match=${matchPercent}`
 
-  const handleToggleLanguage = () => {
+  const handleToggleLanguage = async () => {
     const newLang = language === 'en' ? 'zh' : 'en'
+    if (newLang !== 'en') await loadTranslations(newLang)
     setLanguage(newLang)
   }
 

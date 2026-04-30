@@ -2,9 +2,9 @@
 
 import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Box } from '@/app/components/base'
+// Box replaced with plain div — avoids pulling design-tokens into quiz bundle
 import { useQuizStore } from '@/lib/stores/quizStore'
-import { type Language, translations, loadTranslations, onTranslationsReady } from '@/lib/i18n'
+import { type Language, translations, loadTranslations, onTranslationsReady } from '../i18n'
 import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from '../components/quiz-data'
 import { calculateResult } from '../components/scoring'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -186,7 +186,7 @@ export default function QuizQuestionsClient() {
   // Loading state
   if (!mounted) {
     return (
-      <Box
+      <div
         style={{
           minHeight: '80vh',
           padding: 20,
@@ -207,7 +207,7 @@ export default function QuizQuestionsClient() {
             animation: 'spin 1s linear infinite',
           }}
         />
-      </Box>
+      </div>
     )
   }
 
@@ -467,7 +467,7 @@ export default function QuizQuestionsClient() {
   // DESKTOP: scroll-through-all (progressive rendering)
   // ═══════════════════════════════════════════════════════════════
   return (
-    <Box
+    <div
       style={
         {
           minHeight: '80vh',
@@ -558,6 +558,6 @@ export default function QuizQuestionsClient() {
           </button>
         </div>
       </div>
-    </Box>
+    </div>
   )
 }
