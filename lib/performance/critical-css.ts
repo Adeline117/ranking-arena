@@ -73,6 +73,7 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 .three-col-layout{display:grid;grid-template-columns:1fr;gap:20px;align-items:start;max-width:1400px;margin:0 auto;padding:0 16px;min-height:calc(100vh - 120px);contain:layout style}
 @media(min-width:1024px){.three-col-layout{grid-template-columns:200px 1fr}}
 @media(min-width:1280px){.three-col-layout{grid-template-columns:240px 1fr 260px}}
+@media(min-width:1441px){.three-col-layout{max-width:1600px;grid-template-columns:260px 1fr 280px}}
 @media(max-width:1023px){.three-col-layout{display:block;padding:0 12px}.three-col-left,.three-col-right{display:none !important}}
 .three-col-center{min-height:calc(100vh - 60px);min-width:0;overflow-x:clip}
 
@@ -250,10 +251,10 @@ export function getCriticalCss(): string {
   if (process.env.NODE_ENV === 'production') {
     // 生产环境：full minification pipeline (~30% smaller than whitespace-only)
     return criticalCss
-      .replace(/\/\*[\s\S]*?\*\//g, '')           // Remove CSS comments
-      .replace(/\s+/g, ' ')                        // Collapse whitespace
-      .replace(/\s*([{}:;,>+~])\s*/g, '$1')        // Remove space around operators
-      .replace(/;}/g, '}')                          // Remove trailing semicolons before }
+      .replace(/\/\*[\s\S]*?\*\//g, '') // Remove CSS comments
+      .replace(/\s+/g, ' ') // Collapse whitespace
+      .replace(/\s*([{}:;,>+~])\s*/g, '$1') // Remove space around operators
+      .replace(/;}/g, '}') // Remove trailing semicolons before }
       .trim()
   }
   // 开发环境：保持可读性
@@ -264,7 +265,12 @@ export function getCriticalCss(): string {
  * 预加载字体
  * 确保关键字体尽早加载
  */
-export function getFontPreloadLinks(): Array<{ href: string; as: string; type: string; crossOrigin: string }> {
+export function getFontPreloadLinks(): Array<{
+  href: string
+  as: string
+  type: string
+  crossOrigin: string
+}> {
   return [
     {
       href: '/_next/static/media/inter-var.woff2',
@@ -282,8 +288,16 @@ export function getFontPreloadLinks(): Array<{ href: string; as: string; type: s
  * preconnect: Establishes early connection (DNS + TCP + TLS) -- use for origins fetched within seconds.
  * dns-prefetch: DNS lookup only -- cheaper fallback for browsers that cap preconnects.
  */
-export function getResourceHints(): Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> {
-  const hints: Array<{ rel: string; href: string; crossOrigin?: 'anonymous' | 'use-credentials' | '' }> = [
+export function getResourceHints(): Array<{
+  rel: string
+  href: string
+  crossOrigin?: 'anonymous' | 'use-credentials' | ''
+}> {
+  const hints: Array<{
+    rel: string
+    href: string
+    crossOrigin?: 'anonymous' | 'use-credentials' | ''
+  }> = [
     // Supabase preconnect REMOVED — homepage SSR fetches server-side only.
     // Client-side Supabase calls don't start until Phase 2 interaction (~4s+).
     // Preconnect was wasting a TCP+TLS handshake on initial load.
