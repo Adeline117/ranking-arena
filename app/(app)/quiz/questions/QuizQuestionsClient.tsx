@@ -382,7 +382,8 @@ export default function QuizQuestionsClient() {
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            justifyContent: 'center',
+            justifyContent: 'flex-start',
+            paddingTop: '8vh',
             animation: slideDir
               ? prefersReducedMotion
                 ? undefined

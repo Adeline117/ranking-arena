@@ -8,13 +8,13 @@ import { tokens } from '@/lib/design-tokens'
 const LS_KEY = 'cookie_consent'
 
 /** Pages where the mobile bottom nav is hidden (must mirror MobileBottomNav.HIDDEN_PATHS) */
-const NAV_HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callback']
+const NAV_HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/callback', '/quiz']
 
 export default function CookieConsent() {
   const [visible, setVisible] = useState(false)
   const pathname = usePathname()
 
-  const isNavHidden = NAV_HIDDEN_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))
+  const isNavHidden = NAV_HIDDEN_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
 
   useEffect(() => {
     try {
@@ -73,9 +73,21 @@ export default function CookieConsent() {
           flexWrap: 'wrap',
         }}
       >
-        <p style={{ margin: 0, fontSize: 12, color: 'var(--color-text-secondary)', lineHeight: 1.4, flex: 1, minWidth: 140 }}>
+        <p
+          style={{
+            margin: 0,
+            fontSize: 12,
+            color: 'var(--color-text-secondary)',
+            lineHeight: 1.4,
+            flex: 1,
+            minWidth: 140,
+          }}
+        >
           We use cookies to improve your experience.{' '}
-          <Link href="/legal/privacy" style={{ color: tokens.colors.accent.brand, textDecoration: 'underline' }}>
+          <Link
+            href="/legal/privacy"
+            style={{ color: tokens.colors.accent.brand, textDecoration: 'underline' }}
+          >
             Privacy Policy
           </Link>
         </p>
@@ -97,8 +109,12 @@ export default function CookieConsent() {
               alignItems: 'center',
               transition: 'background 0.15s, border-color 0.15s',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-bg-tertiary)' }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'var(--color-bg-tertiary)'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
           >
             Reject
           </button>
@@ -117,8 +133,12 @@ export default function CookieConsent() {
               cursor: 'pointer',
               transition: 'opacity 0.15s',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85' }}
-            onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.opacity = '0.85'
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.opacity = '1'
+            }}
           >
             Accept
           </button>
