@@ -12,9 +12,8 @@ import {
   isWalletAddress,
   generateBlockieSvg,
   needsProxy,
-  type AvatarProps
+  type AvatarProps,
 } from '@/lib/utils/avatar'
-
 
 function resolveAvatarUrl(
   isTrader: boolean,
@@ -44,10 +43,10 @@ export default function Avatar({
 }: AvatarProps): ReactElement {
   const [imageError, setImageError] = useState(false)
   const [imageLoading, setImageLoading] = useState(true)
-  
+
   const initial = getAvatarInitial(name || userId)
   const backgroundGradient = getAvatarGradient(userId)
-  
+
   const finalAvatarUrl = resolveAvatarUrl(isTrader, avatarUrl, userId, name)
   // Data URIs (blockie/identicon SVGs) bypass Next.js Image Optimization — they're already tiny.
   // All other images go through /_next/image for resize + webp conversion (749KB → ~5KB).
@@ -98,12 +97,16 @@ export default function Avatar({
             </Box>
           )}
           <Image
-            src={needsProxy(finalAvatarUrl) ? `/api/avatar?url=${encodeURIComponent(finalAvatarUrl)}` : finalAvatarUrl}
+            src={
+              needsProxy(finalAvatarUrl)
+                ? `/api/avatar?url=${encodeURIComponent(finalAvatarUrl)}`
+                : finalAvatarUrl
+            }
             alt={name || userId || 'Avatar'}
             width={size}
             height={size}
             sizes={`${size}px`}
-            unoptimized={isDataUri}
+            unoptimized
             style={{
               width: '100%',
               height: '100%',
@@ -178,4 +181,3 @@ export function SimpleAvatar({
     </Box>
   )
 }
-
