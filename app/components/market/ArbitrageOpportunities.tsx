@@ -22,7 +22,6 @@ interface TriangularOpp {
 
 type ArbOpp = CrossExchangeOpp | TriangularOpp
 
-
 export default function ArbitrageOpportunities() {
   const { t } = useLanguage()
   const [opps, setOpps] = useState<ArbOpp[]>([])
@@ -35,129 +34,194 @@ export default function ArbitrageOpportunities() {
           setOpps(json.opportunities.slice(0, 4))
         }
       })
-      .catch(err => console.warn('[ArbitrageOpportunities] fetch failed', err))
+      .catch((err) => console.warn('[ArbitrageOpportunities] fetch failed', err))
       .finally(() => setLoading(false))
   }, [])
 
   const hasOpps = opps.length > 0
 
   return (
-    <div style={{
-      padding: tokens.spacing[5],
-      background: tokens.glass.bg.medium,
-      backdropFilter: tokens.glass.blur.lg,
-      borderRadius: tokens.radius.xl,
-      border: tokens.glass.border.light,
-      height: '100%',
-      minHeight: 220,
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
+    <div
+      style={{
+        padding: tokens.spacing[5],
+        background: tokens.glass.bg.medium,
+        backdropFilter: tokens.glass.blur.lg,
+        borderRadius: tokens.radius.xl,
+        border: tokens.glass.border.light,
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
       {/* Top accent line */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 2,
-        background: tokens.gradient.purple,
-        opacity: 0.6,
-      }} />
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          background: tokens.gradient.purple,
+          opacity: 0.6,
+        }}
+      />
 
       {/* Title */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: tokens.spacing[3],
-      }}>
-        <span style={{
-          fontSize: tokens.typography.fontSize.base,
-          fontWeight: 700,
-          color: tokens.colors.text.primary,
-          letterSpacing: '0.3px',
-        }}>
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: tokens.spacing[3],
+        }}
+      >
+        <span
+          style={{
+            fontSize: tokens.typography.fontSize.base,
+            fontWeight: 700,
+            color: tokens.colors.text.primary,
+            letterSpacing: '0.3px',
+          }}
+        >
           {t('arbitrageOpportunities')}
         </span>
-        <span style={{
-          fontSize: tokens.typography.fontSize.xs,
-          color: hasOpps ? tokens.colors.accent.success : tokens.colors.text.tertiary,
-          fontWeight: 600,
-          padding: `${tokens.spacing[0.5]} ${tokens.spacing[2]}`,
-          borderRadius: tokens.radius.sm,
-          background: hasOpps ? 'var(--color-accent-success-10)' : tokens.colors.bg.tertiary,
-        }}>
-          {hasOpps ? t('arbitrageOppsCount').replace('{n}', String(opps.length)) : t('arbitrageOppsCount').replace('{n}', '0')}
+        <span
+          style={{
+            fontSize: tokens.typography.fontSize.xs,
+            color: hasOpps ? tokens.colors.accent.success : tokens.colors.text.tertiary,
+            fontWeight: 600,
+            padding: `${tokens.spacing[0.5]} ${tokens.spacing[2]}`,
+            borderRadius: tokens.radius.sm,
+            background: hasOpps ? 'var(--color-accent-success-10)' : tokens.colors.bg.tertiary,
+          }}
+        >
+          {hasOpps
+            ? t('arbitrageOppsCount').replace('{n}', String(opps.length))
+            : t('arbitrageOppsCount').replace('{n}', '0')}
         </span>
       </div>
 
       {loading ? (
         <div className="skeleton" style={{ height: 120, borderRadius: tokens.radius.md }} />
       ) : hasOpps ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: `${tokens.spacing[1]}`, flex: 1 }}>
+        <div
+          style={{ display: 'flex', flexDirection: 'column', gap: `${tokens.spacing[1]}`, flex: 1 }}
+        >
           {opps.map((opp, i) => {
             if (opp.type === 'cross-exchange') {
               return (
-                <div key={`${opp.symbol}-${opp.buyExchange}-${opp.sellExchange}`} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.md,
-                  background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
-                  minHeight: tokens.spacing[10],
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1.5], fontSize: tokens.typography.fontSize.sm }}>
+                <div
+                  key={`${opp.symbol}-${opp.buyExchange}-${opp.sellExchange}`}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
+                    minHeight: tokens.spacing[10],
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[1.5],
+                      fontSize: tokens.typography.fontSize.sm,
+                    }}
+                  >
                     <span style={{ color: tokens.colors.text.primary, fontWeight: 700 }}>
                       {opp.symbol.replace('/USDT', '')}
                     </span>
-                    <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, textTransform: 'lowercase' }}>
+                    <span
+                      style={{
+                        color: tokens.colors.text.tertiary,
+                        fontSize: tokens.typography.fontSize.xs,
+                        textTransform: 'lowercase',
+                      }}
+                    >
                       {opp.buyExchange}
                     </span>
                     <svg width="14" height="10" viewBox="0 0 14 10" fill="none">
-                      <path d="M1 5h12M9 1l4 4-4 4" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                      <path
+                        d="M1 5h12M9 1l4 4-4 4"
+                        stroke={tokens.colors.text.tertiary}
+                        strokeWidth="1.5"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                      />
                     </svg>
-                    <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, textTransform: 'lowercase' }}>
+                    <span
+                      style={{
+                        color: tokens.colors.text.tertiary,
+                        fontSize: tokens.typography.fontSize.xs,
+                        textTransform: 'lowercase',
+                      }}
+                    >
                       {opp.sellExchange}
                     </span>
                   </div>
-                  <span style={{
-                    color: tokens.colors.accent.success,
-                    fontWeight: 800,
-                    fontSize: tokens.typography.fontSize.sm,
-                    fontFamily: 'var(--font-mono, monospace)',
-                    fontVariantNumeric: 'tabular-nums',
-                  } as React.CSSProperties}>
+                  <span
+                    style={
+                      {
+                        color: tokens.colors.accent.success,
+                        fontWeight: 800,
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontFamily: 'var(--font-mono, monospace)',
+                        fontVariantNumeric: 'tabular-nums',
+                      } as React.CSSProperties
+                    }
+                  >
                     +{opp.spreadPct.toFixed(2)}%
                   </span>
                 </div>
               )
             }
             return (
-              <div key={`${opp.exchange}-${opp.path.join('-')}`} style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.md,
-                background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
-                minHeight: 36,
-              }}>
+              <div
+                key={`${opp.exchange}-${opp.path.join('-')}`}
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.md,
+                  background: i % 2 === 0 ? tokens.glass.bg.light : 'transparent',
+                  minHeight: 36,
+                }}
+              >
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{ color: tokens.colors.text.primary, fontWeight: 600, fontSize: tokens.typography.fontSize.xs }}>
+                  <span
+                    style={{
+                      color: tokens.colors.text.primary,
+                      fontWeight: 600,
+                      fontSize: tokens.typography.fontSize.xs,
+                    }}
+                  >
                     {opp.path.join(' > ')}
                   </span>
-                  <span style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs }}>{opp.exchange}</span>
+                  <span
+                    style={{
+                      color: tokens.colors.text.tertiary,
+                      fontSize: tokens.typography.fontSize.xs,
+                    }}
+                  >
+                    {opp.exchange}
+                  </span>
                 </div>
-                <span style={{
-                  color: tokens.colors.accent.success,
-                  fontWeight: 800,
-                  fontSize: tokens.typography.fontSize.sm,
-                  fontFamily: 'var(--font-mono, monospace)',
-                  fontVariantNumeric: 'tabular-nums',
-                } as React.CSSProperties}>
+                <span
+                  style={
+                    {
+                      color: tokens.colors.accent.success,
+                      fontWeight: 800,
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontFamily: 'var(--font-mono, monospace)',
+                      fontVariantNumeric: 'tabular-nums',
+                    } as React.CSSProperties
+                  }
+                >
                   +{opp.profitPct.toFixed(2)}%
                 </span>
               </div>
@@ -165,34 +229,57 @@ export default function ArbitrageOpportunities() {
           })}
         </div>
       ) : (
-        <div style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          justifyContent: 'center',
-          flex: 1,
-          gap: tokens.spacing[3],
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flex: 1,
+            gap: tokens.spacing[3],
+          }}
+        >
           <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <circle cx="24" cy="24" r="20" stroke={tokens.colors.border.primary} strokeWidth="1.5" strokeDasharray="4 4" />
-            <path d="M16 24h16" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" />
-            <path d="M24 18v12" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" />
+            <circle
+              cx="24"
+              cy="24"
+              r="20"
+              stroke={tokens.colors.border.primary}
+              strokeWidth="1.5"
+              strokeDasharray="4 4"
+            />
+            <path
+              d="M16 24h16"
+              stroke={tokens.colors.text.tertiary}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
+            <path
+              d="M24 18v12"
+              stroke={tokens.colors.text.tertiary}
+              strokeWidth="1.5"
+              strokeLinecap="round"
+            />
             <circle cx="24" cy="24" r="3" fill={tokens.colors.text.tertiary} opacity="0.3" />
           </svg>
-          <div style={{
-            fontSize: tokens.typography.fontSize.sm,
-            color: tokens.colors.text.tertiary,
-            textAlign: 'center',
-            lineHeight: 1.5,
-          }}>
+          <div
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.tertiary,
+              textAlign: 'center',
+              lineHeight: 1.5,
+            }}
+          >
             {t('arbitrageEquilibrium')}
           </div>
-          <div style={{
-            fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.text.tertiary,
-            opacity: 0.6,
-            textAlign: 'center',
-          }}>
+          <div
+            style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: tokens.colors.text.tertiary,
+              opacity: 0.6,
+              textAlign: 'center',
+            }}
+          >
             {t('arbitrageNoOpps')}
           </div>
         </div>

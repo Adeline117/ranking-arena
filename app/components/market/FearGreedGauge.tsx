@@ -51,7 +51,9 @@ export default function FearGreedGauge() {
 
   useEffect(() => {
     if (!data) return
-    const prefersReduced = typeof window !== 'undefined' && window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+    const prefersReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
     const from = prevValueRef.current
     const to = data.value
 
@@ -82,7 +84,6 @@ export default function FearGreedGauge() {
     borderRadius: tokens.radius.xl,
     border: tokens.glass.border.light,
     height: '100%',
-    minHeight: 220,
   }
 
   if (!data && !error) {
@@ -104,9 +105,11 @@ export default function FearGreedGauge() {
   const label = getLabel(displayValue)
 
   // Dashboard arc geometry
-  const cx = 120, cy = 95, r = 70
-  const startAngle = 135  // bottom-left
-  const endAngle = 405    // bottom-right (135 + 270)
+  const cx = 120,
+    cy = 95,
+    r = 70
+  const startAngle = 135 // bottom-left
+  const endAngle = 405 // bottom-right (135 + 270)
   const totalArc = endAngle - startAngle // 270 degrees
 
   // Progress angle
@@ -142,49 +145,67 @@ export default function FearGreedGauge() {
   const ny = cy + needleLen * Math.sin(needleAngle)
 
   return (
-    <div style={{
-      ...cardStyle,
-      display: 'flex',
-      flexDirection: 'column',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
+    <div
+      style={{
+        ...cardStyle,
+        display: 'flex',
+        flexDirection: 'column',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
       {/* Top accent line */}
-      <div style={{
-        position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: 2,
-        background: tokens.gradient.purple,
-        opacity: 0.6,
-      }} />
+      <div
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: 2,
+          background: tokens.gradient.purple,
+          opacity: 0.6,
+        }}
+      />
 
       {/* Title */}
-      <div style={{
-        fontSize: tokens.typography.fontSize.base,
-        fontWeight: 700,
-        color: tokens.colors.text.primary,
-        marginBottom: tokens.spacing[2],
-        letterSpacing: '0.3px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
+      <div
+        style={{
+          fontSize: tokens.typography.fontSize.base,
+          fontWeight: 700,
+          color: tokens.colors.text.primary,
+          marginBottom: tokens.spacing[2],
+          letterSpacing: '0.3px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
         <span>{t('fearGreedTitle')}</span>
         {data.timestamp && (
-          <span style={{
-            fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.text.tertiary,
-            fontWeight: 400,
-          }}>
-            {new Date(Number(data.timestamp) * 1000).toLocaleDateString(getLocaleFromLanguage(language))}
+          <span
+            style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: tokens.colors.text.tertiary,
+              fontWeight: 400,
+            }}
+          >
+            {new Date(Number(data.timestamp) * 1000).toLocaleDateString(
+              getLocaleFromLanguage(language)
+            )}
           </span>
         )}
       </div>
 
       {/* Dashboard Gauge */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
+      <div
+        style={{
+          flex: 1,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <svg width="240" height="150" viewBox="0 0 240 150" style={{ overflow: 'visible' }}>
           <defs>
             <linearGradient id="fgGradient" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -233,27 +254,28 @@ export default function FearGreedGauge() {
           })}
 
           {/* Active arc (filled up to current value) */}
-          {animatedValue > 0 && gradientSegments.map((seg, i) => {
-            const segFrom = startAngle + seg.from * totalArc
-            const segTo = startAngle + seg.to * totalArc
-            if (progressAngle <= segFrom) return null
-            const clampedTo = Math.min(progressAngle, segTo)
-            if (segFrom >= clampedTo) return null
-            return (
-              <path
-                key={`active-${i}`}
-                d={arcPath(segFrom, clampedTo, r)}
-                fill="none"
-                stroke={seg.color}
-                strokeWidth="12"
-                strokeLinecap={i === 0 ? 'round' : 'butt'}
-                filter="url(#fgGlow)"
-              />
-            )
-          })}
+          {animatedValue > 0 &&
+            gradientSegments.map((seg, i) => {
+              const segFrom = startAngle + seg.from * totalArc
+              const segTo = startAngle + seg.to * totalArc
+              if (progressAngle <= segFrom) return null
+              const clampedTo = Math.min(progressAngle, segTo)
+              if (segFrom >= clampedTo) return null
+              return (
+                <path
+                  key={`active-${i}`}
+                  d={arcPath(segFrom, clampedTo, r)}
+                  fill="none"
+                  stroke={seg.color}
+                  strokeWidth="12"
+                  strokeLinecap={i === 0 ? 'round' : 'butt'}
+                  filter="url(#fgGlow)"
+                />
+              )
+            })}
 
           {/* Tick marks + labels */}
-          {ticks.map(val => {
+          {ticks.map((val) => {
             const angle = toRad(startAngle + (val / 100) * totalArc)
             const innerR = r - 8
             const outerR = r + 8
@@ -267,13 +289,17 @@ export default function FearGreedGauge() {
             return (
               <g key={val}>
                 <line
-                  x1={x1} y1={y1} x2={x2} y2={y2}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
                   stroke="var(--color-text-tertiary, #666)"
                   strokeWidth="1.5"
                   opacity={0.4}
                 />
                 <text
-                  x={lx} y={ly}
+                  x={lx}
+                  y={ly}
                   textAnchor="middle"
                   dominantBaseline="middle"
                   fill="var(--color-text-tertiary, #666)"
@@ -288,20 +314,30 @@ export default function FearGreedGauge() {
 
           {/* Needle */}
           <line
-            x1={cx} y1={cy}
-            x2={nx} y2={ny}
+            x1={cx}
+            y1={cy}
+            x2={nx}
+            y2={ny}
             stroke={color}
             strokeWidth="2.5"
             strokeLinecap="round"
             filter="url(#fgNeedleGlow)"
           />
           {/* Needle hub */}
-          <circle cx={cx} cy={cy} r="8" fill="var(--color-bg-primary, #1a1a2e)" stroke={color} strokeWidth="2.5" />
+          <circle
+            cx={cx}
+            cy={cy}
+            r="8"
+            fill="var(--color-bg-primary, #1a1a2e)"
+            stroke={color}
+            strokeWidth="2.5"
+          />
           <circle cx={cx} cy={cy} r="3" fill={color} />
 
           {/* Center value */}
           <text
-            x={cx} y={cy + 24}
+            x={cx}
+            y={cy + 24}
             textAnchor="middle"
             dominantBaseline="middle"
             fill={color}
@@ -316,7 +352,8 @@ export default function FearGreedGauge() {
 
           {/* Label below value */}
           <text
-            x={cx} y={cy + 42}
+            x={cx}
+            y={cy + 42}
             textAnchor="middle"
             dominantBaseline="middle"
             fill={color}
