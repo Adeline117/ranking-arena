@@ -1,10 +1,24 @@
-// Internationalization — English statically imported (always available),
-// other languages (zh/ja/ko) lazy-loaded on demand for code splitting.
-// English was previously lazy-loaded too ("saves 62KB") but this caused raw
-// i18n keys (foundingMemberBannerText, categoryAll, etc.) to flash on mobile
-// when the async chunk hadn't loaded yet during React hydration.
+// Internationalization — two-phase loading for performance:
+//
+// Phase 1 (sync, in bundle): en-core.ts (~300 keys) covers navigation, errors,
+//   loading states, rankings table, footer — everything visible in the first paint.
+//   This replaces the previous full static import of en.ts (~5700 lines / ~180KB).
+//
+// Phase 2 (async, after mount): the full en.ts is lazy-loaded and merged in.
+//   Once loaded, all ~5400 feature keys become available. Components that already
+//   rendered with a core key keep working; components that need a feature key
+//   get it after the merge (typically < 100ms on broadband).
+//
+// For non-English languages, zh-core.ts is also statically imported so Chinese
+// users see translated core keys immediately. The full zh.ts is lazy-loaded.
+//
+// History: en.ts was previously statically imported in its entirety ("always
+// available") but at 5700 lines it added ~180KB to the main JS bundle. Before
+// that it was fully lazy-loaded which caused raw i18n keys to flash on mobile
+// during React hydration. This two-phase approach gives us the best of both.
 
-import enTranslations from './i18n/en'
+import enCore from './i18n/en-core'
+import zhCore from './i18n/zh-core'
 
 export type Language = 'en' | 'zh' | 'ja' | 'ko'
 
@@ -17,18 +31,28 @@ export const SUPPORTED_LANGUAGES: { code: Language; label: string; nativeLabel: 
   { code: 'ko', label: 'Korean', nativeLabel: '한국어' },
 ]
 
-// Translation dictionaries — English available immediately, others lazy-loaded.
+// Translation dictionaries — core keys available immediately, full sets lazy-loaded.
+// We use a mutable record so we can merge in the full dictionaries at runtime.
 const translationCache: Record<Language, Record<string, string>> = {
-  en: enTranslations as unknown as Record<string, string>,
-  zh: {},
+  en: { ...(enCore as unknown as Record<string, string>) },
+  zh: { ...(zhCore as unknown as Record<string, string>) },
   ja: {},
   ko: {},
 }
 
-const loadedLangs = new Set<Language>(['en'])
+// Track which languages have their FULL dictionaries loaded.
+// 'en' and 'zh' start with core-only; full load happens async.
+const loadedLangs = new Set<Language>()
+// Track which languages have at least core keys (to avoid setting fallback twice)
+const hasCoreLangs = new Set<Language>(['en', 'zh'])
+
+// For unloaded languages, fall back to English core so t() never returns undefined.
+for (const lang of ['ja', 'ko'] as const) {
+  translationCache[lang] = { ...(enCore as unknown as Record<string, string>) }
+}
 
 // Track when translations finish loading (client-side re-render trigger)
-const translationVersion = 0
+let translationVersion = 0
 const translationListeners = new Set<() => void>()
 export function getTranslationVersion() {
   return translationVersion
@@ -40,33 +64,34 @@ export function onTranslationsReady(cb: () => void) {
   }
 }
 
-function populateEnglish(dict: Record<string, string>) {
-  translationCache.en = dict
-  for (const lang of ['zh', 'ja', 'ko'] as const) {
-    if (!loadedLangs.has(lang)) {
-      translationCache[lang] = dict
+function notifyListeners() {
+  translationVersion++
+  for (const cb of translationListeners) {
+    try {
+      cb()
+    } catch {
+      // ignore listener errors
     }
   }
-  loadedLangs.add('en')
 }
 
-// English is statically imported — always available, no async loading needed.
-// populateEnglish sets up fallback chains for other languages.
-populateEnglish(enTranslations as unknown as Record<string, string>)
-
-// Guard: English must ALWAYS be synchronously available. If someone changes the
-// import above to async (dynamic import) again for "bundle optimization", this
-// will throw at module load time — before any component renders raw keys.
+// Guard: English core must ALWAYS be synchronously available.
 if (Object.keys(translationCache.en).length === 0) {
   throw new Error(
-    '[i18n] FATAL: English translations are empty at module load time. ' +
-      'English must be statically imported (not lazy-loaded). ' +
-      'See: 97207363c fix(i18n): static import English translations'
+    '[i18n] FATAL: English core translations are empty at module load time. ' +
+      'en-core.ts must be statically imported (not lazy-loaded).'
   )
 }
 
+// ── Full dictionary loading ───────────────────────────────────────────
+
+// In-flight promises to avoid duplicate loads
+const loadingPromises: Partial<Record<Language, Promise<void>>> = {}
+
 async function loadLang(lang: Language): Promise<void> {
   if (loadedLangs.has(lang)) return
+  if (loadingPromises[lang]) return loadingPromises[lang]
+
   const loaders: Record<string, () => Promise<{ default: Record<string, string> }>> = {
     en: () => import('./i18n/en') as Promise<{ default: Record<string, string> }>,
     zh: () => import('./i18n/zh') as Promise<{ default: Record<string, string> }>,
@@ -75,9 +100,46 @@ async function loadLang(lang: Language): Promise<void> {
   }
   const loader = loaders[lang]
   if (!loader) return
-  const { default: dict } = await loader()
-  translationCache[lang] = dict
-  loadedLangs.add(lang)
+
+  const promise = (async () => {
+    const { default: dict } = await loader()
+    // Merge full dictionary over existing core keys
+    Object.assign(translationCache[lang], dict)
+    loadedLangs.add(lang)
+
+    // For languages without their own core (ja, ko), also update their fallback
+    // from the full English dictionary now that it's available
+    if (lang === 'en') {
+      for (const fallbackLang of ['ja', 'ko'] as const) {
+        if (!loadedLangs.has(fallbackLang) && !hasCoreLangs.has(fallbackLang)) {
+          Object.assign(translationCache[fallbackLang], dict)
+        }
+      }
+    }
+
+    notifyListeners()
+  })()
+
+  loadingPromises[lang] = promise
+  try {
+    await promise
+  } finally {
+    delete loadingPromises[lang]
+  }
+}
+
+// Eagerly start loading the full English dictionary on module init.
+// This is async so it doesn't block; core keys cover the first paint.
+if (typeof window !== 'undefined') {
+  // Client: load after a microtask so it doesn't compete with hydration
+  Promise.resolve().then(() => {
+    loadLang('en').catch(() => {
+      // Silent fail — core keys are still available
+    })
+  })
+} else {
+  // Server: load synchronously is not possible with dynamic import,
+  // but core keys cover SSR output. Full dict loads on client hydration.
 }
 
 export async function loadZhTranslations(): Promise<void> {
