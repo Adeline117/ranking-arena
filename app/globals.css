@@ -806,6 +806,14 @@ select:focus-visible {
   contain: layout style;
 }
 
+/* Wide desktop (>1440px): expand max-width so center column uses more of the viewport */
+@media (min-width: 1441px) {
+  .three-col-layout {
+    max-width: 1600px;
+    grid-template-columns: 260px 1fr 280px;
+  }
+}
+
 /* Between 1024-1280: hide right sidebar, give more space to center */
 @media (min-width: 1024px) and (max-width: 1279px) {
   .three-col-layout {
@@ -838,6 +846,19 @@ select:focus-visible {
 @media (min-width: 1024px) and (max-width: 1279px) {
   .three-col-layout.three-col-no-left {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Wide desktop: no-left/no-right variants */
+@media (min-width: 1441px) {
+  .three-col-layout.three-col-no-left {
+    grid-template-columns: 1fr 280px;
+  }
+  .three-col-layout.three-col-no-left.three-col-no-right {
+    grid-template-columns: 1fr;
+  }
+  .three-col-layout.three-col-no-right:not(.three-col-no-left) {
+    grid-template-columns: 260px 1fr;
   }
 }
 
