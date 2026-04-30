@@ -7,7 +7,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { lookup as dnsLookup } from 'node:dns/promises'
 import logger from '@/lib/logger'
 import { getCorsOrigin } from '@/lib/utils/cors'
-import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+// Rate limiting removed — avatars are read-only cacheable resources with
+// domain allowlist + SSRF protection. See GET handler comment for rationale.
 
 /** Reject IPv4/IPv6 addresses that point at private, loopback, link-local, or cloud-metadata ranges. */
 function isPrivateIP(ip: string): boolean {
@@ -85,11 +86,13 @@ function safeImageContentType(upstream: string | null): string {
 }
 
 export async function GET(request: NextRequest) {
-  // Rate limit: 600 req/min per IP — avatars are read-only cacheable resources.
-  // A leaderboard page loads 20+ avatars simultaneously; the old `search` preset
-  // (60/min) caused 429s on every page load.
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.read)
-  if (rateLimitResp) return rateLimitResp
+  // NO rate limiting on avatar proxy. Rationale:
+  // - Read-only, idempotent image proxy — no mutation, no abuse vector
+  // - Already protected by: domain allowlist, SSRF check, 5s timeout
+  // - CDN caches responses for 1 year (immutable) — repeat requests never hit origin
+  // - Homepage loads 50 avatars simultaneously; any rate limit < 600 causes 429s
+  // - The `read` bucket was shared with /api/traders, causing cascading 429s
+  //   when both avatar + trader requests competed for the same 600/min budget
 
   const { searchParams } = new URL(request.url)
   const url = searchParams.get('url')
