@@ -53,12 +53,47 @@ jobs:
             echo "✅ $PASS/$((PASS+FAIL)) passed"
           fi
 
-      - name: Alert on failure
+      - name: Auto-rollback on failure
         if: steps.smoke.outputs.fail != '0'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
-          # Send Telegram alert if configured
+          ROLLED_BACK="false"
+
+          # Auto-rollback: find the previous production deployment and promote it
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+            echo "🔄 Attempting auto-rollback..."
+            # List recent production deployments, skip the current one, promote the previous
+            DEPLOYMENTS=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&limit=5&state=READY")
+
+            # Get the second deployment (previous production) — first is the broken one
+            PREV_ID=$(echo "$DEPLOYMENTS" | jq -r '.deployments[1].uid // empty')
+
+            if [ -n "$PREV_ID" ]; then
+              echo "Promoting previous deployment: $PREV_ID"
+              PROMOTE_RESULT=$(curl -s -X POST \
+                -H "Authorization: Bearer $VERCEL_TOKEN" \
+                -H "Content-Type: application/json" \
+                "https://api.vercel.com/v6/deployments/$PREV_ID/promote" 2>&1)
+              echo "Promote result: $PROMOTE_RESULT"
+              ROLLED_BACK="true"
+              echo "✅ Auto-rollback complete"
+            else
+              echo "⚠️ Could not find previous deployment to rollback to"
+            fi
+          else
+            echo "⚠️ VERCEL_TOKEN or VERCEL_PROJECT_ID not configured — cannot auto-rollback"
+          fi
+
+          # Send Telegram alert with rollback status
           if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" ]; then
-            MSG="🚨 *POST-DEPLOY SMOKE TEST FAILED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned 500%0A%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A%0A⚡ *Action needed*: Roll back in Vercel Dashboard → Deployments → Previous green → Promote"
+            if [ "$ROLLED_BACK" = "true" ]; then
+              MSG="🚨 *SMOKE TEST FAILED → AUTO-ROLLED BACK*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned 500%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A✅ Automatically rolled back to previous deployment"
+            else
+              MSG="🚨 *SMOKE TEST FAILED — MANUAL ROLLBACK NEEDED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned 500%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A⚡ Roll back: Vercel Dashboard → Deployments → Previous green → Promote"
+            fi
             curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
               -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
               -d "text=${MSG}" \
