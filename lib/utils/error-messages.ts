@@ -83,7 +83,7 @@ export function parseError(error: unknown): ParsedError {
     return {
       type,
       message: DEFAULT_ERROR_MESSAGES[type],
-      retryable: [408, 429, 500, 502, 503, 504].includes(status),
+      retryable: [408, 500, 502, 503, 504].includes(status),
       statusCode: status,
     }
   }
@@ -115,12 +115,13 @@ export function parseError(error: unknown): ParsedError {
       }
     }
 
-    // 限流
+    // 限流 — NOT retryable: retrying amplifies the problem (each retry
+    // also counts against the limit, creating a cascade)
     if (message.includes('rate limit') || message.includes('too many')) {
       return {
         type: 'rate_limit',
         message: DEFAULT_ERROR_MESSAGES.rate_limit,
-        retryable: true,
+        retryable: false,
       }
     }
 
@@ -220,8 +221,11 @@ export async function safeJsonFetch<T>(
         data: null,
         error: {
           type: STATUS_CODE_MAP[response.status] || 'unknown',
-          message: errorBody.error || errorBody.message || DEFAULT_ERROR_MESSAGES[STATUS_CODE_MAP[response.status] || 'unknown'],
-          retryable: [408, 429, 500, 502, 503, 504].includes(response.status),
+          message:
+            errorBody.error ||
+            errorBody.message ||
+            DEFAULT_ERROR_MESSAGES[STATUS_CODE_MAP[response.status] || 'unknown'],
+          retryable: [408, 500, 502, 503, 504].includes(response.status),
           statusCode: response.status,
         },
       }
