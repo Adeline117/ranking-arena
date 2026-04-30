@@ -1628,6 +1628,23 @@
 }
 
 /* ============================================
+   Small Mobile (iPhone SE 375px etc.) — compact overrides
+   ============================================ */
+
+@media (max-width: 480px) {
+  /* Founding Member banner: more compact on small screens */
+  .founding-member-banner {
+    padding: 3px 8px !important;
+    font-size: 11px !important;
+    gap: 3px !important;
+  }
+  .founding-member-banner a {
+    font-size: 10px !important;
+    padding: 1px 8px !important;
+  }
+}
+
+/* ============================================
    Me Tab / User Profile Mobile
    ============================================ */
 

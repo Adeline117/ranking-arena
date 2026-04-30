@@ -11,69 +11,148 @@
    Only define keyframes NOT already in the critical path. */
 
 @keyframes fadeOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
 }
 
 @keyframes fadeInUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes fadeInDown {
-  from { opacity: 0; transform: translateY(-20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes scaleIn {
-  from { opacity: 0; transform: scale(0.9); }
-  to { opacity: 1; transform: scale(1); }
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
 
 @keyframes scaleOut {
-  from { opacity: 1; transform: scale(1); }
-  to { opacity: 0; transform: scale(0.9); }
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(0.9);
+  }
 }
 
 @keyframes slideInRight {
-  from { opacity: 0; transform: translateX(100%); }
-  to { opacity: 1; transform: translateX(0); }
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
 }
 
 @keyframes slideOutUp {
-  from { opacity: 1; transform: translateY(0); }
-  to { opacity: 0; transform: translateY(-100%); }
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-100%);
+  }
 }
 
 @keyframes skeletonPulse {
-  0% { background-color: rgba(255, 255, 255, 0.05); }
-  50% { background-color: rgba(255, 255, 255, 0.1); }
-  100% { background-color: rgba(255, 255, 255, 0.05); }
+  0% {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+  50% {
+    background-color: rgba(255, 255, 255, 0.1);
+  }
+  100% {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
 }
 
 @keyframes modalSlideUp {
-  from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 @keyframes tabFadeIn {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .tab-pane-enter {
   animation: tabFadeIn 0.2s ease-out;
+  overflow: hidden;
 }
 
 @keyframes ripple {
-  from { transform: scale(0); opacity: 0.4; }
-  to { transform: scale(4); opacity: 0; }
+  from {
+    transform: scale(0);
+    opacity: 0.4;
+  }
+  to {
+    transform: scale(4);
+    opacity: 0;
+  }
 }
 
 @keyframes shake {
-  0%, 100% { transform: translateX(0); }
-  10%, 30%, 50%, 70%, 90% { transform: translateX(-4px); }
-  20%, 40%, 60%, 80% { transform: translateX(4px); }
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  10%,
+  30%,
+  50%,
+  70%,
+  90% {
+    transform: translateX(-4px);
+  }
+  20%,
+  40%,
+  60%,
+  80% {
+    transform: translateX(4px);
+  }
 }
 
 /* ============================================
@@ -87,20 +166,24 @@
    ============================================ */
 
 .card-hover-lift {
-  transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-              box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    transform 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-hover-lift:hover {
   transform: translateY(-4px);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.15),
-              0 0 0 1px rgba(139, 111, 168, 0.1);
+  box-shadow:
+    0 20px 40px rgba(0, 0, 0, 0.15),
+    0 0 0 1px rgba(139, 111, 168, 0.1);
 }
 
 /* card-hover-scale: removed (unused in codebase) */
 
 .card-hover-glow {
-  transition: box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    box-shadow 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+    border-color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-hover-glow:hover {
@@ -135,7 +218,9 @@
    ============================================ */
 
 .list-item-hover {
-  transition: background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1), transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  transition:
+    background-color 0.25s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .list-item-hover:hover {
@@ -151,15 +236,33 @@
   animation: fadeInUp 0.4s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
-.stagger-children > *:nth-child(1) { animation-delay: 0.05s; }
-.stagger-children > *:nth-child(2) { animation-delay: 0.1s; }
-.stagger-children > *:nth-child(3) { animation-delay: 0.15s; }
-.stagger-children > *:nth-child(4) { animation-delay: 0.2s; }
-.stagger-children > *:nth-child(5) { animation-delay: 0.25s; }
-.stagger-children > *:nth-child(6) { animation-delay: 0.3s; }
-.stagger-children > *:nth-child(7) { animation-delay: 0.35s; }
-.stagger-children > *:nth-child(8) { animation-delay: 0.4s; }
-.stagger-children > *:nth-child(n+9) { animation-delay: 0.45s; }
+.stagger-children > *:nth-child(1) {
+  animation-delay: 0.05s;
+}
+.stagger-children > *:nth-child(2) {
+  animation-delay: 0.1s;
+}
+.stagger-children > *:nth-child(3) {
+  animation-delay: 0.15s;
+}
+.stagger-children > *:nth-child(4) {
+  animation-delay: 0.2s;
+}
+.stagger-children > *:nth-child(5) {
+  animation-delay: 0.25s;
+}
+.stagger-children > *:nth-child(6) {
+  animation-delay: 0.3s;
+}
+.stagger-children > *:nth-child(7) {
+  animation-delay: 0.35s;
+}
+.stagger-children > *:nth-child(8) {
+  animation-delay: 0.4s;
+}
+.stagger-children > *:nth-child(n + 9) {
+  animation-delay: 0.45s;
+}
 
 /* stagger-fast: removed (unused in codebase) */
 
@@ -185,7 +288,11 @@
 .glass-card-hover {
   background: var(--glass-bg-secondary);
   border: 1px solid var(--glass-border-light);
-  transition: background-color 0.2s ease, border-color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .glass-card-hover:hover {
@@ -204,7 +311,12 @@
    ============================================ */
 
 .gradient-text {
-  background: linear-gradient(135deg, var(--color-brand-accent) 0%, var(--color-verified-web3) 50%, var(--color-chart-violet) 100%);
+  background: linear-gradient(
+    135deg,
+    var(--color-brand-accent) 0%,
+    var(--color-verified-web3) 50%,
+    var(--color-chart-violet) 100%
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -294,7 +406,7 @@
   }
 
   /* Hide 4th+ toast on mobile to avoid blocking content */
-  .toast-container > :nth-child(n+4) {
+  .toast-container > :nth-child(n + 4) {
     display: none;
   }
 }
@@ -338,7 +450,9 @@
 }
 
 .dropdown-item {
-  transition: background-color 0.15s ease, transform 0.15s ease;
+  transition:
+    background-color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .dropdown-item:hover {
@@ -351,7 +465,9 @@
    ============================================ */
 
 .input-focus-glow {
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
 }
 
 .input-focus-glow:focus {
@@ -388,8 +504,16 @@
 
 /* Content appear — skeleton-to-content smooth transition */
 @keyframes contentAppear {
-  from { opacity: 0; filter: blur(4px); transform: translateY(4px); }
-  to { opacity: 1; filter: blur(0); transform: translateY(0); }
+  from {
+    opacity: 0;
+    filter: blur(4px);
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: translateY(0);
+  }
 }
 .content-appear {
   animation: contentAppear 0.3s cubic-bezier(0.4, 0, 0.2, 1) both;
@@ -397,12 +521,24 @@
 
 /* Like/bookmark bounce animation on click */
 @keyframes likeBounce {
-  0% { transform: scale(1); }
-  15% { transform: scale(0.85); }
-  40% { transform: scale(1.15); }
-  60% { transform: scale(0.95); }
-  80% { transform: scale(1.04); }
-  100% { transform: scale(1); }
+  0% {
+    transform: scale(1);
+  }
+  15% {
+    transform: scale(0.85);
+  }
+  40% {
+    transform: scale(1.15);
+  }
+  60% {
+    transform: scale(0.95);
+  }
+  80% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 .like-bounce {
   animation: likeBounce 0.45s cubic-bezier(0.68, -0.55, 0.265, 1.55);
@@ -410,9 +546,15 @@
 
 /* Follow button state transition */
 @keyframes followPulse {
-  0% { box-shadow: 0 0 0 0 var(--color-accent-primary-40); }
-  70% { box-shadow: 0 0 0 8px transparent; }
-  100% { box-shadow: 0 0 0 0 transparent; }
+  0% {
+    box-shadow: 0 0 0 0 var(--color-accent-primary-40);
+  }
+  70% {
+    box-shadow: 0 0 0 8px transparent;
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
 }
 .follow-pulse {
   animation: followPulse 0.6s ease-out;
@@ -420,9 +562,15 @@
 
 /* Number value change flash */
 @keyframes valueFlash {
-  0% { background-color: transparent; }
-  15% { background-color: var(--color-accent-primary-12); }
-  100% { background-color: transparent; }
+  0% {
+    background-color: transparent;
+  }
+  15% {
+    background-color: var(--color-accent-primary-12);
+  }
+  100% {
+    background-color: transparent;
+  }
 }
 .value-flash {
   animation: valueFlash 0.8s ease-out;
@@ -462,16 +610,36 @@
    Stagger fade (prefers-reduced-motion aware)
    ============================================ */
 @media (prefers-reduced-motion: no-preference) {
-  .stagger-fade > * { opacity: 0; }
-  .stagger-fade > *:nth-child(1) { animation: fadeInUp 0.3s ease-out 0ms both; }
-  .stagger-fade > *:nth-child(2) { animation: fadeInUp 0.3s ease-out 40ms both; }
-  .stagger-fade > *:nth-child(3) { animation: fadeInUp 0.3s ease-out 80ms both; }
-  .stagger-fade > *:nth-child(4) { animation: fadeInUp 0.3s ease-out 120ms both; }
-  .stagger-fade > *:nth-child(5) { animation: fadeInUp 0.3s ease-out 160ms both; }
-  .stagger-fade > *:nth-child(6) { animation: fadeInUp 0.3s ease-out 200ms both; }
-  .stagger-fade > *:nth-child(7) { animation: fadeInUp 0.3s ease-out 240ms both; }
-  .stagger-fade > *:nth-child(8) { animation: fadeInUp 0.3s ease-out 280ms both; }
-  .stagger-fade > *:nth-child(n+9) { animation: fadeInUp 0.3s ease-out 300ms both; }
+  .stagger-fade > * {
+    opacity: 0;
+  }
+  .stagger-fade > *:nth-child(1) {
+    animation: fadeInUp 0.3s ease-out 0ms both;
+  }
+  .stagger-fade > *:nth-child(2) {
+    animation: fadeInUp 0.3s ease-out 40ms both;
+  }
+  .stagger-fade > *:nth-child(3) {
+    animation: fadeInUp 0.3s ease-out 80ms both;
+  }
+  .stagger-fade > *:nth-child(4) {
+    animation: fadeInUp 0.3s ease-out 120ms both;
+  }
+  .stagger-fade > *:nth-child(5) {
+    animation: fadeInUp 0.3s ease-out 160ms both;
+  }
+  .stagger-fade > *:nth-child(6) {
+    animation: fadeInUp 0.3s ease-out 200ms both;
+  }
+  .stagger-fade > *:nth-child(7) {
+    animation: fadeInUp 0.3s ease-out 240ms both;
+  }
+  .stagger-fade > *:nth-child(8) {
+    animation: fadeInUp 0.3s ease-out 280ms both;
+  }
+  .stagger-fade > *:nth-child(n + 9) {
+    animation: fadeInUp 0.3s ease-out 300ms both;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
