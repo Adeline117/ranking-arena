@@ -158,6 +158,7 @@ iframe{display:block;max-width:100%}
 /* Homepage layout — prevents CLS when Phase 2 mounts */
 .home-page-root{min-height:100vh;background:var(--bg-primary,#0B0A10);color:var(--text-primary,#EDEDED)}
 .home-page-container{max-width:1400px;margin:0 auto;padding:8px 16px}
+@media(min-width:1441px){.home-page-container{max-width:1600px}}
 
 /* CSS Containment for rendering performance */
 .trader-card-contained{contain:layout style paint}
