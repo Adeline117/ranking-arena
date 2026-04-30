@@ -20,7 +20,9 @@ export default function CookieConsent() {
     try {
       const consent = localStorage.getItem(LS_KEY)
       if (consent !== 'accepted' && consent !== 'rejected') {
-        setVisible(true)
+        // Delay showing banner — don't fight with LCP on first paint
+        const t = setTimeout(() => setVisible(true), 2000)
+        return () => clearTimeout(t)
       }
     } catch {
       // localStorage unavailable
@@ -47,6 +49,8 @@ export default function CookieConsent() {
 
   if (!visible) return null
 
+  // Mobile: ultra-slim single-line bar (36px vs ~95px before)
+  // Desktop: standard two-button layout
   return (
     <div
       style={{
@@ -55,11 +59,12 @@ export default function CookieConsent() {
         left: 0,
         right: 0,
         zIndex: tokens.zIndex.overlay,
-        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+        padding: '6px 12px',
         background: tokens.glass.bg.darkHeavy,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
         borderTop: tokens.glass.border.medium,
+        animation: 'fadeIn 0.3s ease-out',
       }}
     >
       <div
@@ -69,78 +74,62 @@ export default function CookieConsent() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          gap: tokens.spacing[4],
-          flexWrap: 'wrap',
+          gap: 8,
         }}
       >
         <p
           style={{
             margin: 0,
-            fontSize: 12,
-            color: 'var(--color-text-secondary)',
-            lineHeight: 1.4,
+            fontSize: 11,
+            color: 'var(--color-text-tertiary)',
+            lineHeight: 1.3,
             flex: 1,
-            minWidth: 140,
+            minWidth: 0,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
-          We use cookies to improve your experience.{' '}
+          We use cookies.{' '}
           <Link
             href="/legal/privacy"
             style={{ color: tokens.colors.accent.brand, textDecoration: 'underline' }}
           >
-            Privacy Policy
+            Privacy
           </Link>
         </p>
-        <div style={{ display: 'flex', gap: tokens.spacing[2], flexShrink: 0 }}>
+        <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
           <button
             onClick={handleReject}
-            className="interactive-scale"
             style={{
-              padding: '8px 14px',
-              minHeight: 44,
-              borderRadius: tokens.radius.md,
-              border: tokens.glass.border.medium,
+              padding: '4px 10px',
+              minHeight: 28,
+              borderRadius: 6,
+              border: '1px solid var(--glass-border-light)',
               background: 'transparent',
-              color: 'var(--color-text-secondary)',
-              fontSize: 13,
+              color: 'var(--color-text-tertiary)',
+              fontSize: 11,
               fontWeight: 600,
               cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              transition: 'background 0.15s, border-color 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--color-bg-tertiary)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent'
             }}
           >
             Reject
           </button>
           <button
             onClick={handleAccept}
-            className="interactive-scale"
             style={{
-              padding: '8px 18px',
-              minHeight: 44,
-              borderRadius: tokens.radius.md,
+              padding: '4px 12px',
+              minHeight: 28,
+              borderRadius: 6,
               border: 'none',
               background: tokens.gradient.primary,
               color: '#fff',
-              fontSize: 13,
+              fontSize: 11,
               fontWeight: 700,
               cursor: 'pointer',
-              transition: 'opacity 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.opacity = '0.85'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.opacity = '1'
             }}
           >
-            Accept
+            OK
           </button>
         </div>
       </div>
