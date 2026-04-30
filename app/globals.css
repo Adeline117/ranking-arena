@@ -2558,6 +2558,13 @@ input[type='search']::-webkit-search-cancel-button:hover {
   z-index: 1;
   padding: 8px 16px;
 }
+
+/* Wide desktop: expand outer container to match three-col-layout */
+@media (min-width: 1441px) {
+  .home-page-container {
+    max-width: 1600px;
+  }
+}
 .home-mesh-bg {
   display: none;
 }
