@@ -5097,14 +5097,14 @@ const zh = {
   // ─── 交易人格测试 ─────────────────────────────────────────────
   quizTitle: '交易人格测试',
   quizSubtitle:
-    '30道灵魂拷问，测出你的交易人格，匹配传奇交易大师，还能找到Arena上和你一样的交易员。',
+    '15道灵魂拷问，测出你的交易人格，匹配传奇交易大师，还能找到Arena上和你一样的交易员。',
   quizStartBtn: '开始测试',
   quizBadge15Q: '15 个问题',
   quizBadge8Types: '8 种人格',
   quizBadge2Min: '约 2 分钟',
-  quizBadge30Q: '30 个问题',
+  quizBadge30Q: '15 个问题',
   quizBadge12Types: '12 种人格',
-  quizBadge5Min: '约 5 分钟',
+  quizBadge5Min: '约 2 分钟',
   quizSeeResults: '查看我的结果',
   quizBack: '返回',
   quizCalculating: '正在分析你的交易人格...',

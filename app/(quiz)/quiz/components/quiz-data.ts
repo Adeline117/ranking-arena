@@ -2,7 +2,7 @@
  * Trading Personality Quiz — Data definitions
  *
  * 12 personality types (each with a legendary trader master)
- * 30 questions across 10+ dimensions
+ * 15 questions across 10+ dimensions
  *
  * All user-facing strings use i18n keys (quizXxx).
  * Translations in lib/i18n/{en,zh,ja,ko}.ts.
@@ -306,7 +306,7 @@ export const TYPE_TEXT_COLOR: Record<string, string> = {
   // Most types use their base color directly.
 }
 
-// ─── 30 Quiz Questions ──────────────────────────────────────────────
+// ─── 15 Quiz Questions ──────────────────────────────────────────────
 
 export const QUIZ_QUESTIONS: QuizQuestion[] = [
   // Q1 — Risk tolerance
@@ -397,35 +397,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
       { id: 'unsure', labelKey: 'quizUnsure', scores: { analyst: 0.5, sniper: 0.25 } },
     ],
   },
-  // Q9 — Time horizon (deeper)
+  // Q9 — Reaction to gains
   {
     id: 9,
-    titleKey: 'quizQ9',
-    options: [
-      { id: 'a', labelKey: 'quizQ9A', scores: { scalper: 1.0, tourist: 0.25 } },
-      { id: 'b', labelKey: 'quizQ9B', scores: { copycat: 1.0, analyst: 0.25, sniper: 0.25 } },
-      { id: 'c', labelKey: 'quizQ9C', scores: { whale: 0.5, strategist: 1.0 } },
-      { id: 'd', labelKey: 'quizQ9D', scores: { hodler: 1.0, contrarian: 0.5, narrator: 0.25 } },
-    ],
-  },
-  // Q10 — Decision-making (deeper)
-  {
-    id: 10,
-    titleKey: 'quizQ10',
-    options: [
-      { id: 'a', labelKey: 'quizQ10A', scores: { whale: 1.0, contrarian: 0.5 } },
-      {
-        id: 'b',
-        labelKey: 'quizQ10B',
-        scores: { analyst: 1.0, paperhands: 0.25, strategist: 0.25 },
-      },
-      { id: 'c', labelKey: 'quizQ10C', scores: { sniper: 1.0, scalper: 0.5 } },
-      { id: 'd', labelKey: 'quizQ10D', scores: { degen: 0.5, hodler: 0.25, narrator: 0.5 } },
-    ],
-  },
-  // Q11 — Reaction to gains
-  {
-    id: 11,
     titleKey: 'quizQ11',
     options: [
       { id: 'a', labelKey: 'quizQ11A', scores: { scalper: 1.0, sniper: 0.5 } },
@@ -438,20 +412,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
       { id: 'd', labelKey: 'quizQ11D', scores: { degen: 1.0, contrarian: 0.5 } },
     ],
   },
-  // Q12 — Market analysis (deeper)
+  // Q10 — Risk scenario
   {
-    id: 12,
-    titleKey: 'quizQ12',
-    options: [
-      { id: 'a', labelKey: 'quizQ12A', scores: { analyst: 1.0, tourist: 0.5, strategist: 0.25 } },
-      { id: 'b', labelKey: 'quizQ12B', scores: { sniper: 1.0, scalper: 0.25 } },
-      { id: 'c', labelKey: 'quizQ12C', scores: { whale: 1.0, contrarian: 0.5 } },
-      { id: 'd', labelKey: 'quizQ12D', scores: { copycat: 1.0, hodler: 0.5, degen: 0.25 } },
-    ],
-  },
-  // Q13 — Risk scenario
-  {
-    id: 13,
+    id: 10,
     titleKey: 'quizQ13',
     options: [
       { id: 'a', labelKey: 'quizQ13A', scores: { degen: 1.0, scalper: 0.5 } },
@@ -464,9 +427,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
       { id: 'd', labelKey: 'quizQ13D', scores: { tourist: 1.0, sniper: 0.25, hodler: 0.25 } },
     ],
   },
-  // Q14 — Social trading (deeper)
+  // Q11 — Staying informed
   {
-    id: 14,
+    id: 11,
     titleKey: 'quizQ14',
     options: [
       { id: 'a', labelKey: 'quizQ14A', scores: { analyst: 1.0, sniper: 0.5 } },
@@ -475,31 +438,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
       { id: 'd', labelKey: 'quizQ14D', scores: { hodler: 1.0, strategist: 0.5 } },
     ],
   },
-  // Q15 — Portfolio management (deeper)
+  // Q12 — New token listing
   {
-    id: 15,
-    titleKey: 'quizQ15',
-    options: [
-      { id: 'a', labelKey: 'quizQ15A', scores: { strategist: 1.0, hodler: 0.5 } },
-      { id: 'b', labelKey: 'quizQ15B', scores: { tourist: 1.0, sniper: 0.25, analyst: 0.25 } },
-      { id: 'c', labelKey: 'quizQ15C', scores: { whale: 1.0, contrarian: 0.5 } },
-      { id: 'd', labelKey: 'quizQ15D', scores: { degen: 1.0, scalper: 0.5 } },
-    ],
-  },
-  // Q16 — Trading journal (Yes/No)
-  {
-    id: 16,
-    format: 'yesno',
-    titleKey: 'quizQ16',
-    options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { analyst: 1.0, strategist: 0.5, sniper: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { degen: 1.0, tourist: 0.5 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { copycat: 0.5, narrator: 0.25 } },
-    ],
-  },
-  // Q17 — New token listing
-  {
-    id: 17,
+    id: 12,
     titleKey: 'quizQ17',
     options: [
       { id: 'a', labelKey: 'quizQ17A', scores: { narrator: 1.0, hodler: 0.25 } },
@@ -508,75 +449,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
       { id: 'd', labelKey: 'quizQ17D', scores: { sniper: 0.5, copycat: 1.0 } },
     ],
   },
-  // Q18 — Friend asks for trading advice
+  // Q13 — Extreme positive funding rates
   {
-    id: 18,
-    titleKey: 'quizQ18',
-    options: [
-      { id: 'a', labelKey: 'quizQ18A', scores: { copycat: 1.0, narrator: 0.25 } },
-      { id: 'b', labelKey: 'quizQ18B', scores: { analyst: 1.0, strategist: 0.5 } },
-      { id: 'c', labelKey: 'quizQ18C', scores: { hodler: 1.0, whale: 0.25 } },
-      { id: 'd', labelKey: 'quizQ18D', scores: { contrarian: 0.5, paperhands: 1.0 } },
-    ],
-  },
-  // Q19 — Cross-exchange price (Yes/No)
-  {
-    id: 19,
-    format: 'yesno',
-    titleKey: 'quizQ19',
-    options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { scalper: 1.0, analyst: 0.5, strategist: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { narrator: 1.0, hodler: 0.5 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { tourist: 0.5, copycat: 0.25 } },
-    ],
-  },
-  // Q20 — Bot trading preference (Yes/No)
-  {
-    id: 20,
-    format: 'yesno',
-    titleKey: 'quizQ20',
-    options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { strategist: 1.0, analyst: 0.5, sniper: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { whale: 1.0, degen: 0.5, tourist: 0.25 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { copycat: 0.5, hodler: 0.25 } },
-    ],
-  },
-  // Q21 — New narrative forming
-  {
-    id: 21,
-    titleKey: 'quizQ21',
-    options: [
-      { id: 'a', labelKey: 'quizQ21A', scores: { narrator: 1.0, whale: 0.25 } },
-      { id: 'b', labelKey: 'quizQ21B', scores: { copycat: 1.0, degen: 0.5 } },
-      { id: 'c', labelKey: 'quizQ21C', scores: { scalper: 1.0, degen: 0.25 } },
-      { id: 'd', labelKey: 'quizQ21D', scores: { analyst: 0.5, contrarian: 1.0 } },
-    ],
-  },
-  // Q22 — Drawdown tolerance (Yes/No)
-  {
-    id: 22,
-    format: 'yesno',
-    titleKey: 'quizQ22',
-    options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { hodler: 1.0, narrator: 0.5, whale: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { strategist: 1.0, scalper: 0.5, sniper: 0.25 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { strategist: 0.5, contrarian: 0.25 } },
-    ],
-  },
-  // Q23 — Discover top trader's position
-  {
-    id: 23,
-    titleKey: 'quizQ23',
-    options: [
-      { id: 'a', labelKey: 'quizQ23A', scores: { copycat: 1.0, degen: 0.25 } },
-      { id: 'b', labelKey: 'quizQ23B', scores: { sniper: 1.0, analyst: 0.5 } },
-      { id: 'c', labelKey: 'quizQ23C', scores: { whale: 1.0, narrator: 0.25 } },
-      { id: 'd', labelKey: 'quizQ23D', scores: { contrarian: 1.0, strategist: 0.25 } },
-    ],
-  },
-  // Q24 — Extreme positive funding rates
-  {
-    id: 24,
+    id: 13,
     titleKey: 'quizQ24',
     options: [
       { id: 'a', labelKey: 'quizQ24A', scores: { tourist: 1.0, paperhands: 0.25 } },
@@ -585,42 +460,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
       { id: 'd', labelKey: 'quizQ24D', scores: { hodler: 0.5, narrator: 1.0 } },
     ],
   },
-  // Q25 — Decision speed (Yes/No)
+  // Q14 — Narrative vs chart (Yes/No)
   {
-    id: 25,
-    format: 'yesno',
-    titleKey: 'quizQ25',
-    options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { scalper: 1.0, degen: 0.5, tourist: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { hodler: 1.0, strategist: 0.5, analyst: 0.25 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { sniper: 0.5, narrator: 0.25 } },
-    ],
-  },
-  // Q26 — Bad news, price hasn't moved
-  {
-    id: 26,
-    titleKey: 'quizQ26',
-    options: [
-      { id: 'a', labelKey: 'quizQ26A', scores: { sniper: 1.0, scalper: 0.5 } },
-      { id: 'b', labelKey: 'quizQ26B', scores: { analyst: 1.0, tourist: 0.25 } },
-      { id: 'c', labelKey: 'quizQ26C', scores: { narrator: 1.0, hodler: 0.25 } },
-      { id: 'd', labelKey: 'quizQ26D', scores: { paperhands: 0.5, whale: 1.0 } },
-    ],
-  },
-  // Q27 — Grid bot made 2% this week
-  {
-    id: 27,
-    titleKey: 'quizQ27',
-    options: [
-      { id: 'a', labelKey: 'quizQ27A', scores: { paperhands: 1.0, tourist: 0.5 } },
-      { id: 'b', labelKey: 'quizQ27B', scores: { strategist: 1.0, analyst: 0.25 } },
-      { id: 'c', labelKey: 'quizQ27C', scores: { tourist: 1.0, paperhands: 0.25 } },
-      { id: 'd', labelKey: 'quizQ27D', scores: { degen: 1.0, whale: 0.25 } },
-    ],
-  },
-  // Q28 — Narrative vs chart (Yes/No)
-  {
-    id: 28,
+    id: 14,
     format: 'yesno',
     titleKey: 'quizQ28',
     options: [
@@ -629,20 +471,9 @@ export const QUIZ_QUESTIONS: QuizQuestion[] = [
       { id: 'unsure', labelKey: 'quizUnsure', scores: { contrarian: 0.5, whale: 0.25 } },
     ],
   },
-  // Q29 — Systematic vs gut (Yes/No)
+  // Q15 — What does success in trading mean?
   {
-    id: 29,
-    format: 'yesno',
-    titleKey: 'quizQ29',
-    options: [
-      { id: 'yes', labelKey: 'quizYes', scores: { analyst: 1.0, strategist: 0.5, sniper: 0.25 } },
-      { id: 'no', labelKey: 'quizNo', scores: { degen: 1.0, whale: 0.5, contrarian: 0.25 } },
-      { id: 'unsure', labelKey: 'quizUnsure', scores: { copycat: 0.5, tourist: 0.25 } },
-    ],
-  },
-  // Q30 — What does success in trading mean?
-  {
-    id: 30,
+    id: 15,
     titleKey: 'quizQ30',
     options: [
       { id: 'a', labelKey: 'quizQ30A', scores: { strategist: 1.0, narrator: 0.5, hodler: 0.25 } },

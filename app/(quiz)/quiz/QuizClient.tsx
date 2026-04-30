@@ -186,13 +186,13 @@ export default function QuizClient() {
               key === 'quizTitle'
                 ? 'Trading Personality Test'
                 : key === 'quizSubtitle'
-                  ? 'Answer 30 fun questions to discover your trading alter ego, get matched with a legendary trader, and find Arena traders who trade just like you.'
+                  ? 'Answer 15 fun questions to discover your trading alter ego, get matched with a legendary trader, and find Arena traders who trade just like you.'
                   : key === 'quizStartBtn'
                     ? 'Start Test'
                     : key === 'quizBadge12Types'
                       ? '12 Personalities'
                       : key === 'quizBadge5Min'
-                        ? '~5 min'
+                        ? '~2 min'
                         : key
             }
             onStart={() => {}}

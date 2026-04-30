@@ -93,7 +93,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
               <polyline points="12 6 12 12 16 14" />
             </svg>
           </span>
-          {tr('quizBadge5Min') !== 'quizBadge5Min' ? tr('quizBadge5Min') : '~5 min'}
+          {tr('quizBadge2Min') !== 'quizBadge2Min' ? tr('quizBadge2Min') : '~2 min'}
         </span>
       </div>
 
