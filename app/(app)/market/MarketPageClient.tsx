@@ -409,7 +409,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
               marginBottom: 24,
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-              gridAutoRows: '284px',
+              gridTemplateRows: '284px',
               gap: tokens.spacing[4],
               overflowX: 'hidden',
             }}
