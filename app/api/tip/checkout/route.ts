@@ -78,10 +78,7 @@ export const POST = withAuth(
       .maybeSingle()
 
     if (postError || !post) {
-      return NextResponse.json(
-        { error: 'Post not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
 
     // 不能给自己打赏
@@ -104,7 +101,9 @@ export const POST = withAuth(
 
     if (existingTip?.stripe_checkout_session_id) {
       try {
-        const session = await stripe.checkout.sessions.retrieve(existingTip.stripe_checkout_session_id)
+        const session = await stripe.checkout.sessions.retrieve(
+          existingTip.stripe_checkout_session_id
+        )
         if (session.customer && typeof session.customer === 'string') {
           customerId = session.customer
         }
@@ -133,41 +132,43 @@ export const POST = withAuth(
     }
 
     // 创建 Stripe Checkout Session（一次性支付）
-    const session = await stripe.checkout.sessions.create({
-      customer: customerId,
-      customer_email: customerId ? undefined : user.email,
-      mode: 'payment',
-      payment_method_types: ['card'],
-      line_items: [
-        {
-          price_data: {
-            currency: 'usd',
-            product_data: {
-              name: `Tip @${post.author_handle || 'user'}`,
-              description: post.title ? `Post: ${post.title.slice(0, 50)}` : 'Thank the creator',
+    // Idempotency key: user + post + amount + minute window. Stripe deduplicates within 24h.
+    const tipIdempotencyKey = `tip_${user.id}_${post_id}_${amount}_${Math.floor(Date.now() / 60_000)}`
+    const session = await stripe.checkout.sessions.create(
+      {
+        customer: customerId,
+        customer_email: customerId ? undefined : user.email,
+        mode: 'payment',
+        payment_method_types: ['card'],
+        line_items: [
+          {
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: `Tip @${post.author_handle || 'user'}`,
+                description: post.title ? `Post: ${post.title.slice(0, 50)}` : 'Thank the creator',
+              },
+              unit_amount: amount,
             },
-            unit_amount: amount,
+            quantity: 1,
           },
-          quantity: 1,
+        ],
+        success_url: `${env.NEXT_PUBLIC_APP_URL}/tip/success?session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${env.NEXT_PUBLIC_APP_URL}/groups/${post_id}?tip_canceled=true`,
+        metadata: {
+          type: 'tip',
+          tip_id: tip.id,
+          post_id,
+          from_user_id: user.id,
+          to_user_id: post.author_id || '',
+          amount_cents: String(amount),
         },
-      ],
-      success_url: `${env.NEXT_PUBLIC_APP_URL}/tip/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${env.NEXT_PUBLIC_APP_URL}/groups/${post_id}?tip_canceled=true`,
-      metadata: {
-        type: 'tip',
-        tip_id: tip.id,
-        post_id,
-        from_user_id: user.id,
-        to_user_id: post.author_id || '',
-        amount_cents: String(amount),
       },
-    })
+      { idempotencyKey: tipIdempotencyKey }
+    )
 
     // 更新打赏记录的 session ID
-    await supabase
-      .from('tips')
-      .update({ stripe_checkout_session_id: session.id })
-      .eq('id', tip.id)
+    await supabase.from('tips').update({ stripe_checkout_session_id: session.id }).eq('id', tip.id)
 
     return NextResponse.json({
       sessionId: session.id,
