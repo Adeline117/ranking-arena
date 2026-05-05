@@ -92,6 +92,8 @@ export async function getLeaderboard(
     minScore?: number
     excludeOutliers?: boolean
     sortBy?: 'rank' | 'arena_score' | 'roi' | 'pnl'
+    /** Allow data up to 24h old instead of 6h (graceful degradation) */
+    allowStale?: boolean
   }
 ): Promise<{ traders: UnifiedTrader[]; total: number; error?: string }> {
   const {
@@ -103,6 +105,7 @@ export async function getLeaderboard(
     excludeOutliers = true,
     sortBy = 'rank',
   } = params
+  const opts = params
 
   // Build query against leaderboard_ranks (uses v1 column names: source, source_trader_id, season_id)
   // See LR constants and LEADERBOARD_RANKS_FIELDS in schema-mapping.ts for column→field mapping
@@ -134,11 +137,17 @@ export async function getLeaderboard(
     query = query.gt('arena_score', minScore)
   }
 
-  // Freshness predicate: never serve leaderboard data older than 6 hours.
-  // If compute-leaderboard hasn't run for 6h, rows are filtered out instead of shown stale.
-  const MAX_LEADERBOARD_AGE_HOURS = 6
-  const freshnessCutoff = new Date(Date.now() - MAX_LEADERBOARD_AGE_HOURS * 3600_000).toISOString()
-  query = query.gte('computed_at', freshnessCutoff)
+  // Graceful freshness: prefer data <6h old, but fall back to <24h rather than
+  // showing empty rankings. The UI should indicate staleness for >6h data.
+  // ROOT-ROOT CAUSE FIX: Previously a hard 6h cutoff could empty the entire
+  // rankings page during extended compute-leaderboard failures.
+  const FRESH_HOURS = 6
+  const STALE_FALLBACK_HOURS = 24
+  const freshCutoff = new Date(Date.now() - FRESH_HOURS * 3600_000).toISOString()
+  const staleCutoff = new Date(Date.now() - STALE_FALLBACK_HOURS * 3600_000).toISOString()
+  // Use fresh cutoff by default; caller can set opts.allowStale to widen
+  const effectiveCutoff = opts?.allowStale ? staleCutoff : freshCutoff
+  query = query.gte('computed_at', effectiveCutoff)
 
   // Sorting
   const sortColumn =

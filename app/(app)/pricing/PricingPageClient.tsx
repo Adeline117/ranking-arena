@@ -9,6 +9,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { trackEvent } from '@/lib/analytics/track'
 import { PRICING } from '@/app/(app)/user-center/membership-config'
+import { useDirectCheckout } from '@/lib/hooks/useDirectCheckout'
 
 const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
   <svg
@@ -92,7 +93,15 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
   const currentPrice = PRICING[billing]
   const yearlySavings = Math.round((1 - PRICING.yearly.price / 12 / PRICING.monthly.price) * 100)
-  const ctaHref = email ? '/user-center?tab=membership' : '/login'
+  const { checkout: directCheckout, isLoading: checkoutLoading } = useDirectCheckout()
+  // Logged-in users go directly to Stripe checkout; anonymous users go to login
+  const ctaHref = email ? undefined : '/login'
+  const handleCta = email
+    ? () => {
+        trackEvent('click_upgrade_cta', { plan: billing })
+        directCheckout(billing)
+      }
+    : undefined
 
   return (
     <div
@@ -348,8 +357,11 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               ))}
             </ul>
             <Link
-              href={ctaHref}
-              onClick={() => trackEvent('click_upgrade_cta', { plan: 'free', billing })}
+              href={ctaHref || '#'}
+              onClick={(e) => {
+                if (email) e.preventDefault()
+                trackEvent('click_upgrade_cta', { plan: 'free', billing })
+              }}
               style={{
                 display: 'block',
                 padding: '14px 0',
@@ -457,28 +469,56 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               ))}
             </ul>
 
-            <Link
-              href={ctaHref}
-              onClick={() => trackEvent('click_upgrade_cta', { plan: 'pro', billing })}
-              style={{
-                display: 'block',
-                padding: '14px 0',
-                borderRadius: tokens.radius.md,
-                background: tokens.colors.accent.brand,
-                textAlign: 'center',
-                color: 'var(--color-on-accent, #fff)',
-                textDecoration: 'none',
-                fontWeight: 700,
-                fontSize: 15,
-                marginTop: tokens.spacing[6],
-                transition: 'all 0.2s',
-                boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
-              }}
-            >
-              {email
-                ? resolved(t('upgradeToPro'), 'upgradeToPro', 'Upgrade to Pro')
-                : resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
-            </Link>
+            {/* Direct checkout for logged-in users; login redirect for anonymous */}
+            {handleCta ? (
+              <button
+                onClick={handleCta}
+                disabled={checkoutLoading}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '14px 0',
+                  borderRadius: tokens.radius.md,
+                  background: checkoutLoading
+                    ? tokens.colors.bg.tertiary
+                    : tokens.colors.accent.brand,
+                  textAlign: 'center',
+                  color: 'var(--color-on-accent, #fff)',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  marginTop: tokens.spacing[6],
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
+                  cursor: checkoutLoading ? 'wait' : 'pointer',
+                }}
+              >
+                {checkoutLoading
+                  ? '...'
+                  : resolved(t('upgradeToPro'), 'upgradeToPro', 'Upgrade to Pro')}
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => trackEvent('click_upgrade_cta', { plan: 'pro', billing })}
+                style={{
+                  display: 'block',
+                  padding: '14px 0',
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.accent.brand,
+                  textAlign: 'center',
+                  color: 'var(--color-on-accent, #fff)',
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  marginTop: tokens.spacing[6],
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
+                }}
+              >
+                {resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
+              </Link>
+            )}
 
             <div
               style={{
@@ -658,30 +698,66 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               )
             })()}
 
-            <Link
-              href={ctaHref}
-              onClick={() => trackEvent('click_upgrade_cta', { plan: 'lifetime' })}
-              style={{
-                display: 'block',
-                padding: '14px 0',
-                borderRadius: tokens.radius.md,
-                background: 'var(--color-founding-accent)',
-                textAlign: 'center',
-                color: 'var(--color-on-accent, #fff)',
-                textDecoration: 'none',
-                fontWeight: 700,
-                fontSize: 15,
-                marginTop: tokens.spacing[6],
-                transition: 'all 0.2s',
-                boxShadow: '0 4px 14px var(--color-founding-accent-shadow)',
-              }}
-            >
-              {resolved(
-                t('pricingGetFoundingAccess'),
-                'pricingGetFoundingAccess',
-                'Get Founding Member Access'
-              )}
-            </Link>
+            {handleCta ? (
+              <button
+                onClick={() => {
+                  trackEvent('click_upgrade_cta', { plan: 'lifetime' })
+                  directCheckout('lifetime')
+                }}
+                disabled={checkoutLoading}
+                style={{
+                  display: 'block',
+                  width: '100%',
+                  padding: '14px 0',
+                  borderRadius: tokens.radius.md,
+                  background: checkoutLoading
+                    ? tokens.colors.bg.tertiary
+                    : 'var(--color-founding-accent)',
+                  textAlign: 'center',
+                  color: 'var(--color-on-accent, #fff)',
+                  border: 'none',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  marginTop: tokens.spacing[6],
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 14px var(--color-founding-accent-shadow)',
+                  cursor: checkoutLoading ? 'wait' : 'pointer',
+                }}
+              >
+                {checkoutLoading
+                  ? '...'
+                  : resolved(
+                      t('pricingGetFoundingAccess'),
+                      'pricingGetFoundingAccess',
+                      'Get Founding Member Access'
+                    )}
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => trackEvent('click_upgrade_cta', { plan: 'lifetime' })}
+                style={{
+                  display: 'block',
+                  padding: '14px 0',
+                  borderRadius: tokens.radius.md,
+                  background: 'var(--color-founding-accent)',
+                  textAlign: 'center',
+                  color: 'var(--color-on-accent, #fff)',
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                  fontSize: 15,
+                  marginTop: tokens.spacing[6],
+                  transition: 'all 0.2s',
+                  boxShadow: '0 4px 14px var(--color-founding-accent-shadow)',
+                }}
+              >
+                {resolved(
+                  t('pricingGetFoundingAccess'),
+                  'pricingGetFoundingAccess',
+                  'Get Founding Member Access'
+                )}
+              </Link>
+            )}
           </div>
         </div>
         {/* Feature Comparison Table */}

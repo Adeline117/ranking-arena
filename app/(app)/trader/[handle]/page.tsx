@@ -59,25 +59,38 @@ const cachedResolveTraderISR = unstable_cache(
 //
 // AbortSignal.timeout actually cancels the underlying HTTP request to
 // PostgREST, freeing the connection. Promise.race just abandons it.
-const cachedResolveTrader = cache(async (handle: string, platform?: string) => {
-  try {
-    return await Promise.race([
-      cachedResolveTraderISR(handle, platform),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)),
-    ])
-  } catch (err) {
-    // TRADER_RESOLVE_NULL = trader not found (thrown to prevent unstable_cache
-    // from caching null). Convert to null so callers can check normally.
-    if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') {
-      return null
+// Sentinel to distinguish "not found" from "timed out / error".
+// ROOT-ROOT CAUSE FIX: Previously both returned null → 404.
+// Now timeout/error returns RESOLVE_UNAVAILABLE → generateMetadata skips notFound()
+// and lets the page render with client-side retry (TraderProfileClient).
+const RESOLVE_UNAVAILABLE = Symbol('unavailable')
+type ResolveResult =
+  | Awaited<ReturnType<typeof cachedResolveTraderISR>>
+  | null
+  | typeof RESOLVE_UNAVAILABLE
+
+const cachedResolveTrader = cache(
+  async (handle: string, platform?: string): Promise<ResolveResult> => {
+    try {
+      const result = await Promise.race([
+        cachedResolveTraderISR(handle, platform),
+        new Promise<typeof RESOLVE_UNAVAILABLE>((resolve) =>
+          setTimeout(() => resolve(RESOLVE_UNAVAILABLE), SSR_QUERY_TIMEOUT_MS)
+        ),
+      ])
+      return result
+    } catch (err) {
+      // TRADER_RESOLVE_NULL = trader genuinely not found (thrown to prevent unstable_cache
+      // from caching null). Convert to null so callers can check normally.
+      if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') {
+        return null
+      }
+      // Real DB failures — return unavailable so page doesn't 404 valid traders
+      logger.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
+      return RESOLVE_UNAVAILABLE
     }
-    // Real DB failures — log but return null to let page show 404 instead of
-    // crashing with an error page. The client-side TraderProfileClient will
-    // retry the fetch anyway.
-    logger.error('[trader/page] resolveTrader failed:', err instanceof Error ? err.message : err)
-    return null
   }
-})
+)
 
 // Heavy query (~11 parallel DB queries). Caching this eliminates the dominant
 // TTFB contribution on repeat requests (expected: 973ms -> <200ms on cache hit).
@@ -229,13 +242,21 @@ export async function generateMetadata({
   // restrictive directive, so ALL 34k trader pages were effectively de-indexed.
   // Fix: call notFound() HERE in generateMetadata() so it executes BEFORE
   // Suspense streaming starts, producing a clean 404 without conflicting meta tags.
-  if (!resolved) {
+  // Only 404 when genuinely not found. Timeout/error → return generic metadata
+  // and let client-side retry. This prevents valid traders from being 404'd
+  // during cron contention and de-indexed by Google.
+  if (resolved === null) {
     notFound()
   }
 
-  const name = resolved?.handle || decoded
-  const exchange = resolved
-    ? EXCHANGE_DISPLAY[resolved.platform] || resolved.platform || 'Crypto'
+  const isUnavailable = resolved === RESOLVE_UNAVAILABLE
+  const resolvedData = (isUnavailable ? null : resolved) as Exclude<
+    ResolveResult,
+    typeof RESOLVE_UNAVAILABLE
+  >
+  const name = resolvedData?.handle || decoded
+  const exchange = resolvedData
+    ? EXCHANGE_DISPLAY[resolvedData.platform] || resolvedData.platform || 'Crypto'
     : 'Crypto'
 
   // ---------- fetch leaderboard stats (best-effort, never fails metadata) ----------
@@ -245,9 +266,9 @@ export async function generateMetadata({
     roi?: number | null
     pnl?: number | null
   } | null = null
-  if (resolved) {
+  if (resolvedData) {
     try {
-      lr = await cachedLeaderboardMeta(resolved.platform, resolved.traderKey)
+      lr = await cachedLeaderboardMeta(resolvedData.platform, resolvedData.traderKey)
     } catch (err) {
       // Leaderboard fetch failure should NOT prevent title generation.
       // The trader name is already known — produce metadata without stats.
@@ -280,7 +301,7 @@ export async function generateMetadata({
   if (roi != null) ogParams.set('roi', roi.toFixed(2))
   if (score != null) ogParams.set('score', score.toFixed(0))
   if (rank != null) ogParams.set('rank', String(rank))
-  if (resolved?.platform) ogParams.set('source', resolved.platform)
+  if (resolvedData?.platform) ogParams.set('source', resolvedData.platform)
   const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
 
   return {
@@ -340,7 +361,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   // Calling notFound() inside a page component triggers Next.js Suspense
   // to inject <meta name="robots" content="noindex"/> for ALL pages,
   // even valid ones. generateMetadata runs before streaming starts.
-  if (!resolved) return null
+  if (!resolved || resolved === RESOLVE_UNAVAILABLE) return null
 
   // Redirect claimed traders to canonical /u/ URL (avoids SEO duplicate content)
   if (userHandle) {
