@@ -120,7 +120,8 @@
     "@walletconnect/sign-client": "2.23.6",
     "@walletconnect/types": "2.23.6",
     "@walletconnect/utils": "2.23.6",
-    "viem": "$viem"
+    "viem": "$viem",
+    "postcss": "8.5.14"
   },
   "pnpm": {
     "overrides": {
@@ -130,7 +131,8 @@
       "@walletconnect/sign-client": "2.23.6",
       "@walletconnect/types": "2.23.6",
       "@walletconnect/utils": "2.23.6",
-      "viem": "$viem"
+      "viem": "$viem",
+      "postcss": "8.5.14"
     }
   },
   "devDependencies": {
