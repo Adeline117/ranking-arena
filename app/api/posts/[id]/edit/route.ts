@@ -4,6 +4,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { socialFeatureGuard } from '@/lib/features'
+import { sanitizeInput } from '@/lib/utils/sanitize'
 
 const logger = createLogger('posts-edit')
 
@@ -11,10 +12,7 @@ const logger = createLogger('posts-edit')
 const MAX_TITLE_LENGTH = 200
 const MAX_CONTENT_LENGTH = 50000
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = socialFeatureGuard()
   if (guard) return guard
 
@@ -37,11 +35,17 @@ export async function PUT(
 
       // 内容长度验证
       if ((title as string).length > MAX_TITLE_LENGTH) {
-        return NextResponse.json({ error: `Title cannot exceed ${MAX_TITLE_LENGTH} characters` }, { status: 400 })
+        return NextResponse.json(
+          { error: `Title cannot exceed ${MAX_TITLE_LENGTH} characters` },
+          { status: 400 }
+        )
       }
 
       if (content && (content as string).length > MAX_CONTENT_LENGTH) {
-        return NextResponse.json({ error: `Content cannot exceed ${MAX_CONTENT_LENGTH} characters` }, { status: 400 })
+        return NextResponse.json(
+          { error: `Content cannot exceed ${MAX_CONTENT_LENGTH} characters` },
+          { status: 400 }
+        )
       }
 
       // 获取帖子信息，验证所有权
@@ -59,12 +63,16 @@ export async function PUT(
         return NextResponse.json({ error: 'No permission to edit this post' }, { status: 403 })
       }
 
+      // Sanitize to prevent XSS (same as post creation)
+      const sanitizedTitle = sanitizeInput((title as string).trim())
+      const sanitizedContent = content ? sanitizeInput(content.trim()) : null
+
       // 更新帖子
       const { data: updatedPost, error: updateError } = await supabase
         .from('posts')
         .update({
-          title: (title as string).trim(),
-          content: content?.trim() || null,
+          title: sanitizedTitle,
+          content: sanitizedContent,
           updated_at: new Date().toISOString(),
         })
         .eq('id', postId)

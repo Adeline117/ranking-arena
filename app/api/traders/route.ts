@@ -30,10 +30,16 @@ export const dynamic = 'force-dynamic'
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const tradersQuerySchema = z.object({
-  timeRange: z.string().toUpperCase().pipe(z.enum(['7D', '30D', '90D'])).catch('90D'),
+  timeRange: z
+    .string()
+    .toUpperCase()
+    .pipe(z.enum(['7D', '30D', '90D']))
+    .catch('90D'),
   exchange: z.string().optional(),
   category: z.enum(['futures', 'spot', 'onchain']).optional(),
-  sortBy: z.enum(['arena_score', 'roi', 'win_rate', 'max_drawdown']).catch('arena_score'),
+  sortBy: z
+    .enum(['arena_score', 'roi', 'pnl', 'win_rate', 'max_drawdown', 'sortino_ratio', 'alpha'])
+    .catch('arena_score'),
   order: z.enum(['asc', 'desc']).catch('desc'),
   cursor: z.coerce.number().int().min(0).optional(),
   limit: z.coerce.number().int().min(1).max(500).catch(50),
@@ -46,7 +52,8 @@ const SOURCES_TTL = 30 * 60 * 1000 // 30 min — sources change only on cron run
 const SOURCES_CACHE_MAX = 50 // prevent unbounded growth
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
-const LEADERBOARD_COLUMNS = 'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
+const LEADERBOARD_COLUMNS =
+  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
@@ -57,7 +64,14 @@ export const GET = withPublic(
       return badRequest('Invalid parameters')
     }
 
-    const { timeRange: timeRangeStr, exchange: exchangeFilter, category: categoryFilter, sortBy, order, limit } = parsed.data
+    const {
+      timeRange: timeRangeStr,
+      exchange: exchangeFilter,
+      category: categoryFilter,
+      sortBy,
+      order,
+      limit,
+    } = parsed.data
     const timeRange = timeRangeStr as Period
     const cursor = parsed.data.cursor != null ? String(parsed.data.cursor) : null
     const page = parsed.data.page ?? NaN
@@ -108,8 +122,11 @@ export const GET = withPublic(
 const SORT_COLUMN: Record<string, string> = {
   arena_score: 'arena_score',
   roi: 'roi',
+  pnl: 'pnl',
   win_rate: 'win_rate',
   max_drawdown: 'max_drawdown',
+  sortino_ratio: 'sortino_ratio',
+  alpha: 'alpha',
 }
 
 async function fetchFromLeaderboard(
@@ -126,7 +143,17 @@ async function fetchFromLeaderboard(
     page: number
   }
 ) {
-  const { timeRange, exchangeFilter, categoryFilter, sortBy, order, cursor, limit, useLegacyPaging, page } = params
+  const {
+    timeRange,
+    exchangeFilter,
+    categoryFilter,
+    sortBy,
+    order,
+    cursor,
+    limit,
+    useLegacyPaging,
+    page,
+  } = params
 
   // Build query — select only needed columns (avoid SELECT *)
   // ROOT CAUSE FIX: count: 'exact' was taking 47 SECONDS on this 73K-row table
@@ -150,8 +177,7 @@ async function fetchFromLeaderboard(
 
   // Include all scored traders (score > 0 means valid ROI data)
   // Filter out outlier traders from rankings display
-  query = query.gt('arena_score', 0)
-    .or('is_outlier.is.null,is_outlier.eq.false')
+  query = query.gt('arena_score', 0).or('is_outlier.is.null,is_outlier.eq.false')
 
   // Cursor-based: filter by rank
   if (cursor != null) {
@@ -275,9 +301,7 @@ async function fetchFromLeaderboard(
   // Next cursor
   const lastTrader = dedupedTraders[dedupedTraders.length - 1]
   const nextCursor = lastTrader ? lastTrader.rank : null
-  const hasMore = useLegacyPaging
-    ? (page + 1) * limit < totalCount
-    : traders.length === limit
+  const hasMore = useLegacyPaging ? (page + 1) * limit < totalCount : traders.length === limit
 
   // Available sources (for UI filter) — cached in-memory with 5-min TTL
   const sourceCacheEntry = availableSourcesCache.get(timeRange)
@@ -288,7 +312,7 @@ async function fetchFromLeaderboard(
     // Extract distinct sources from the full query data (already fetched above)
     // Plus a lightweight supplementary query for sources not in the current page
     const allSourceSet = new Set<string>()
-    for (const r of (data || [])) allSourceSet.add((r as { source: string }).source)
+    for (const r of data || []) allSourceSet.add((r as { source: string }).source)
     // Supplementary: get distinct sources via lightweight query
     const { data: sourceRows } = await supabase
       .from('leaderboard_ranks')
@@ -296,7 +320,7 @@ async function fetchFromLeaderboard(
       .eq('season_id', timeRange)
       .gt('arena_score', 0)
       .limit(500)
-    for (const r of (sourceRows || [])) allSourceSet.add((r as { source: string }).source)
+    for (const r of sourceRows || []) allSourceSet.add((r as { source: string }).source)
     availableSources = [...allSourceSet].sort()
     if (availableSourcesCache.size >= SOURCES_CACHE_MAX) {
       availableSourcesCache.clear()
@@ -312,10 +336,12 @@ async function fetchFromLeaderboard(
   const isStale = dataAgeMs > 2 * 60 * 60 * 1000
 
   // Apply profanity filter to all handles before returning
-  const sanitizedTraders = dedupedTraders.map((t: { handle: string | null; [key: string]: unknown }) => ({
-    ...t,
-    handle: sanitizeDisplayName(t.handle)
-  }))
+  const sanitizedTraders = dedupedTraders.map(
+    (t: { handle: string | null; [key: string]: unknown }) => ({
+      ...t,
+      handle: sanitizeDisplayName(t.handle),
+    })
+  )
 
   return {
     traders: sanitizedTraders,

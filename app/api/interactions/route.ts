@@ -5,11 +5,20 @@ import { z } from 'zod'
 
 const logger = createLogger('api:interactions')
 
-const InteractionSchema = z.object({
-  action: z.enum(['like', 'dislike', 'view', 'share', 'bookmark', 'follow', 'unfollow']),
-  target_type: z.enum(['post', 'comment', 'trader', 'group', 'user']),
-  target_id: z.string().min(1).max(255),
-})
+const InteractionSchema = z.union([
+  // Legacy format (existing consumers)
+  z.object({
+    action: z.enum(['like', 'dislike', 'view', 'share', 'bookmark', 'follow', 'unfollow']),
+    target_type: z.enum(['post', 'comment', 'trader', 'group', 'user']),
+    target_id: z.string().min(1).max(255),
+  }),
+  // Exchange link click format (ExchangeLinksBar)
+  z.object({
+    type: z.literal('exchange_link_click'),
+    platform: z.string().min(1).max(50),
+    traderKey: z.string().min(1).max(255),
+  }),
+])
 
 export const dynamic = 'force-dynamic'
 
@@ -25,17 +34,29 @@ export const POST = withAuth(
     const parsed = InteractionSchema.safeParse(body)
     if (!parsed.success) {
       return badRequest(
-        `Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')}`
+        `Invalid input: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')}`
       )
     }
-    const { action, target_type, target_id } = parsed.data
 
-    const { error } = await supabase.from('user_interactions').insert({
-      user_id: user.id,
-      action,
-      target_type,
-      target_id,
-    })
+    // Normalize both formats into the interactions table schema
+    const data = parsed.data
+    const insertRow =
+      'type' in data
+        ? {
+            user_id: user.id,
+            action: 'view',
+            target_type: 'trader' as const,
+            target_id: `${data.platform}:${data.traderKey}`,
+            metadata: { type: data.type, platform: data.platform },
+          }
+        : {
+            user_id: user.id,
+            action: data.action,
+            target_type: data.target_type,
+            target_id: data.target_id,
+          }
+
+    const { error } = await supabase.from('user_interactions').insert(insertRow)
 
     if (error) {
       logger.error('POST insert failed', { error: error.message })
