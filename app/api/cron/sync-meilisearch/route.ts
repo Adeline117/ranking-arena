@@ -54,7 +54,7 @@ export async function GET(request: NextRequest) {
   }
 
   if (!MEILI_URL || !MEILI_KEY) {
-    return NextResponse.json({ error: 'Meilisearch not configured' }, { status: 200 })
+    return NextResponse.json({ error: 'Meilisearch not configured' }, { status: 503 })
   }
 
   const releaseLock = await acquireCronLock('sync-meilisearch', { ttlSeconds: 180 })

@@ -12,8 +12,7 @@ interface BeforeInstallPromptEvent extends Event {
  * Captures the beforeinstallprompt event and provides a way to trigger it
  */
 export function usePWAInstall() {
-  const [deferredPrompt, setDeferredPrompt] =
-    useState<BeforeInstallPromptEvent | null>(null)
+  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
   const [isInstalled, setIsInstalled] = useState(false)
 
   useEffect(() => {
@@ -24,7 +23,10 @@ export function usePWAInstall() {
     }
 
     // iOS Safari standalone check
-    if ('standalone' in window.navigator && (window.navigator as unknown as { standalone: boolean }).standalone) {
+    if (
+      'standalone' in window.navigator &&
+      (window.navigator as unknown as { standalone: boolean }).standalone
+    ) {
       setIsInstalled(true)
       return
     }
@@ -37,13 +39,15 @@ export function usePWAInstall() {
     window.addEventListener('beforeinstallprompt', handler)
 
     // Detect successful install
-    window.addEventListener('appinstalled', () => {
+    const installedHandler = () => {
       setDeferredPrompt(null)
       setIsInstalled(true)
-    })
+    }
+    window.addEventListener('appinstalled', installedHandler)
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handler)
+      window.removeEventListener('appinstalled', installedHandler)
     }
   }, [])
 

@@ -2,7 +2,6 @@
 
 import { Suspense, lazy, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '../layout/TopNav'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const MobileBottomNav = lazy(() => import('../layout/MobileBottomNav'))
 const Footer = lazy(() => import('../layout/Footer'))
