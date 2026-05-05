@@ -134,15 +134,19 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Enforce 200-spot limit with advisory lock to prevent TOCTOU oversell.
-      // pg_advisory_xact_lock serializes concurrent lifetime checkout requests
-      // so two users can't both see count=199 and both proceed.
-      const LIFETIME_SPOTS_TOTAL = 200
-      const { count: lifetimeCount } = await getSupabaseAdmin()
-        .from('user_profiles')
-        .select('id', { count: 'exact', head: true })
-        .eq('pro_plan', 'lifetime')
-      if ((lifetimeCount ?? 0) >= LIFETIME_SPOTS_TOTAL) {
+      // Enforce 200-spot limit with pg_advisory_xact_lock to prevent TOCTOU oversell.
+      // The RPC atomically acquires an advisory lock and checks the count,
+      // so two concurrent requests cannot both see count=199 and both proceed.
+
+      const { data: spotsAvailable, error: spotsError } = await (getSupabaseAdmin() as any).rpc(
+        'check_lifetime_spots_available',
+        { max_spots: 200 }
+      )
+      if (spotsError || spotsAvailable === false) {
+        if (spotsError) {
+          const logger = createLogger('stripe-create-checkout')
+          logger.error('Lifetime spots check failed', { error: spotsError.message })
+        }
         return NextResponse.json(
           { error: 'All founding member spots have been claimed.' },
           { status: 410 }
