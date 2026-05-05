@@ -5,12 +5,7 @@
 
 import Stripe from 'stripe'
 import { withAuth } from '@/lib/api/middleware'
-import {
-  success,
-  error,
-  badRequest,
-  handleError,
-} from '@/lib/api/response'
+import { success, error, badRequest, handleError } from '@/lib/api/response'
 import { validateString } from '@/lib/api/validation'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
@@ -52,7 +47,9 @@ export const GET = withAuth(
       // 获取群组信息
       const { data: group, error: groupError } = await supabase
         .from('groups')
-        .select('id, name, is_premium_only, subscription_price_monthly, subscription_price_yearly, original_price_monthly, original_price_yearly, allow_trial, trial_days')
+        .select(
+          'id, name, is_premium_only, subscription_price_monthly, subscription_price_yearly, original_price_monthly, original_price_yearly, allow_trial, trial_days'
+        )
         .eq('id', groupId)
         .single()
 
@@ -72,13 +69,15 @@ export const GET = withAuth(
           allow_trial: group.allow_trial,
           trial_days: group.trial_days,
         },
-        subscription: subscription ? {
-          id: subscription.id,
-          tier: subscription.tier,
-          status: subscription.status,
-          expires_at: subscription.expires_at,
-          price_paid: subscription.price_paid,
-        } : null,
+        subscription: subscription
+          ? {
+              id: subscription.id,
+              tier: subscription.tier,
+              status: subscription.status,
+              expires_at: subscription.expires_at,
+              price_paid: subscription.price_paid,
+            }
+          : null,
         is_subscribed: !!subscription,
       })
     } catch (e: unknown) {
@@ -105,7 +104,10 @@ export const POST = withAuth(
       }
 
       const groupId = validateString(body.group_id, { required: true, fieldName: 'group_id' })
-      const tier = validateString(body.tier, { required: true, fieldName: 'tier' }) as 'monthly' | 'yearly' | 'trial'
+      const tier = validateString(body.tier, { required: true, fieldName: 'tier' }) as
+        | 'monthly'
+        | 'yearly'
+        | 'trial'
       const paymentReference = (body.payment_reference as string | null | undefined) ?? null
       const paymentProvider = (body.payment_provider as string | null | undefined) ?? null
 
@@ -117,7 +119,9 @@ export const POST = withAuth(
       // 获取群组信息
       const { data: group, error: groupError } = await supabase
         .from('groups')
-        .select('id, is_premium_only, subscription_price_monthly, subscription_price_yearly, allow_trial, trial_days')
+        .select(
+          'id, is_premium_only, subscription_price_monthly, subscription_price_yearly, allow_trial, trial_days'
+        )
         .eq('id', groupId)
         .single()
 
@@ -146,34 +150,69 @@ export const POST = withAuth(
 
         const stripe = new Stripe(stripeSecret, { apiVersion: '2026-03-25.dahlia' })
 
+        // Determine expected price (in cents) from the group record
+        const expectedPriceDollars =
+          tier === 'monthly'
+            ? group.subscription_price_monthly || 9.9
+            : group.subscription_price_yearly || 99.9
+        const expectedCents = Math.round(expectedPriceDollars * 100)
+
         try {
           if (checkoutSessionId) {
             const session = await stripe.checkout.sessions.retrieve(checkoutSessionId)
             if (session.payment_status !== 'paid') {
-              return error('Payment not completed. Please complete payment before subscribing.', 402)
+              return error(
+                'Payment not completed. Please complete payment before subscribing.',
+                402
+              )
             }
-            // Ensure the session belongs to this user (metadata or client_reference_id)
+            // Ensure the session belongs to this user — mandatory, not optional
             const sessionUserId = session.client_reference_id || session.metadata?.user_id
-            if (sessionUserId && sessionUserId !== user.id) {
+            if (!sessionUserId || sessionUserId !== user.id) {
               return error('Payment session does not belong to this user', 403)
             }
-            // Ensure the session is for the correct group
+            // Ensure the session is for the correct group — mandatory
             const sessionGroupId = session.metadata?.group_id
-            if (sessionGroupId && sessionGroupId !== groupId) {
+            if (!sessionGroupId || sessionGroupId !== groupId) {
               return error('Payment session is for a different group', 400)
+            }
+            // Verify the paid amount matches expected price (±5% tolerance for currency rounding)
+            const paidAmount = session.amount_total ?? 0
+            if (paidAmount < expectedCents * 0.95 || paidAmount > expectedCents * 1.05) {
+              logger.error('[group-subscribe] Amount mismatch', {
+                paidAmount,
+                expectedCents,
+                groupId,
+              })
+              return error('Payment amount does not match group subscription price', 400)
             }
           } else if (paymentIntentId) {
             const intent = await stripe.paymentIntents.retrieve(paymentIntentId)
             if (intent.status !== 'succeeded') {
-              return error('Payment not completed. Please complete payment before subscribing.', 402)
+              return error(
+                'Payment not completed. Please complete payment before subscribing.',
+                402
+              )
             }
+            // Mandatory user check
             const intentUserId = intent.metadata?.user_id
-            if (intentUserId && intentUserId !== user.id) {
+            if (!intentUserId || intentUserId !== user.id) {
               return error('Payment intent does not belong to this user', 403)
             }
+            // Mandatory group check
             const intentGroupId = intent.metadata?.group_id
-            if (intentGroupId && intentGroupId !== groupId) {
+            if (!intentGroupId || intentGroupId !== groupId) {
               return error('Payment intent is for a different group', 400)
+            }
+            // Verify the paid amount matches expected price
+            const paidAmount = intent.amount ?? 0
+            if (paidAmount < expectedCents * 0.95 || paidAmount > expectedCents * 1.05) {
+              logger.error('[group-subscribe] Amount mismatch', {
+                paidAmount,
+                expectedCents,
+                groupId,
+              })
+              return error('Payment amount does not match group subscription price', 400)
             }
           }
         } catch (stripeError: unknown) {
@@ -256,32 +295,33 @@ export const POST = withAuth(
       }
 
       // 自动加入群组成员（如果还不是）
-      const { error: memberError } = await supabase
-        .from('group_members')
-        .upsert(
-          {
-            group_id: groupId,
-            user_id: user.id,
-            role: 'member',
-          },
-          { onConflict: 'group_id,user_id' }
-        )
+      const { error: memberError } = await supabase.from('group_members').upsert(
+        {
+          group_id: groupId,
+          user_id: user.id,
+          role: 'member',
+        },
+        { onConflict: 'group_id,user_id' }
+      )
 
       if (memberError) {
         logger.warn('[group-subscribe] Error adding member:', memberError)
         // 不阻止订阅成功
       }
 
-      return success({
-        subscription: {
-          id: subscription.id,
-          tier: subscription.tier,
-          status: subscription.status,
-          expires_at: subscription.expires_at,
-          price_paid: subscription.price_paid,
+      return success(
+        {
+          subscription: {
+            id: subscription.id,
+            tier: subscription.tier,
+            status: subscription.status,
+            expires_at: subscription.expires_at,
+            price_paid: subscription.price_paid,
+          },
+          message: tier === 'trial' ? 'Trial started!' : 'Subscription successful!',
         },
-        message: tier === 'trial' ? 'Trial started!' : 'Subscription successful!',
-      }, 201)
+        201
+      )
     } catch (e: unknown) {
       return handleError(e)
     }
@@ -299,7 +339,10 @@ export const DELETE = withAuth(
 
     try {
       const { searchParams } = new URL(request.url)
-      const subscriptionId = validateString(searchParams.get('id'), { required: true, fieldName: 'id' })
+      const subscriptionId = validateString(searchParams.get('id'), {
+        required: true,
+        fieldName: 'id',
+      })
 
       // 获取订阅并验证所有权
       const { data: subscription, error: fetchError } = await supabase
@@ -334,7 +377,10 @@ export const DELETE = withAuth(
         return error('Failed to cancel subscription', 500)
       }
 
-      return success({ message: 'Subscription cancelled. You can continue using until the end of the current period.' })
+      return success({
+        message:
+          'Subscription cancelled. You can continue using until the end of the current period.',
+      })
     } catch (e: unknown) {
       return handleError(e)
     }
