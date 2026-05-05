@@ -28,6 +28,7 @@ import { searchTraders as unifiedSearchTraders, getSearchSuggestions } from '@/l
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { searchTradersMeili, isMeilisearchAvailable } from '@/lib/search/meilisearch'
 import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
+import { escapeLikePattern } from '@/lib/sanitize'
 
 // Removed force-dynamic: search results are cacheable via Redis + HTTP cache headers
 // Previous force-dynamic blocked Vercel CDN caching entirely
@@ -130,67 +131,86 @@ interface TrendingSearchResponse {
   lastUpdated: string
 }
 
-async function handleTrendingSearch(supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']) {
-  const trending = await getOrSetWithLock('search:trending:queries', async () => {
-    const sevenDaysAgo = new Date()
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+async function handleTrendingSearch(
+  supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']
+) {
+  const trending = await getOrSetWithLock(
+    'search:trending:queries',
+    async () => {
+      const sevenDaysAgo = new Date()
+      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
 
-    const { data: analyticsData, error } = await supabase
-      .from('search_analytics')
-      .select('query, result_count, created_at')
-      .gte('created_at', sevenDaysAgo.toISOString())
-      .gte('result_count', 1)
-      .limit(1000)
+      const { data: analyticsData, error } = await supabase
+        .from('search_analytics')
+        .select('query, result_count, created_at')
+        .gte('created_at', sevenDaysAgo.toISOString())
+        .gte('result_count', 1)
+        .limit(1000)
 
-    let trendingItems: TrendingSearchItem[] = []
+      let trendingItems: TrendingSearchItem[] = []
 
-    if (!error && analyticsData?.length) {
-      const queryStats = new Map<string, { count: number; totalResults: number }>()
+      if (!error && analyticsData?.length) {
+        const queryStats = new Map<string, { count: number; totalResults: number }>()
 
-      analyticsData.forEach(({ query, result_count }: { query: string; result_count: number }) => {
-        if (!query || query.length < 2) return
-        const normalizedQuery = query.toLowerCase().trim()
-        if (normalizedQuery.length < 2) return
-        // Skip malicious/SQL-injection search terms so they never appear as pills
-        if (isMaliciousSearchQuery(normalizedQuery)) return
-        const current = queryStats.get(normalizedQuery) || { count: 0, totalResults: 0 }
-        current.count += 1
-        current.totalResults += result_count || 0
-        queryStats.set(normalizedQuery, current)
-      })
+        analyticsData.forEach(
+          ({ query, result_count }: { query: string; result_count: number }) => {
+            if (!query || query.length < 2) return
+            const normalizedQuery = query.toLowerCase().trim()
+            if (normalizedQuery.length < 2) return
+            // Skip malicious/SQL-injection search terms so they never appear as pills
+            if (isMaliciousSearchQuery(normalizedQuery)) return
+            const current = queryStats.get(normalizedQuery) || { count: 0, totalResults: 0 }
+            current.count += 1
+            current.totalResults += result_count || 0
+            queryStats.set(normalizedQuery, current)
+          }
+        )
 
-      const sortedQueries = Array.from(queryStats.entries())
-        .filter(([, stats]) => stats.count >= 3)
-        .sort(([, a], [, b]) => {
-          const scoreA = a.count * 2 + (a.totalResults / a.count) * 0.1
-          const scoreB = b.count * 2 + (b.totalResults / b.count) * 0.1
-          return scoreB - scoreA
+        const sortedQueries = Array.from(queryStats.entries())
+          .filter(([, stats]) => stats.count >= 3)
+          .sort(([, a], [, b]) => {
+            const scoreA = a.count * 2 + (a.totalResults / a.count) * 0.1
+            const scoreB = b.count * 2 + (b.totalResults / b.count) * 0.1
+            return scoreB - scoreA
+          })
+          .slice(0, 20)
+
+        trendingItems = sortedQueries.map(([q, stats], index) => {
+          let category: TrendingSearchItem['category'] = 'general'
+          if (/^[A-Z]{2,6}$/.test(q.toUpperCase())) {
+            category = 'token'
+          } else if (q.includes('@') || /binance|bybit|okx|bitget|mexc/i.test(q)) {
+            category = 'trader'
+          }
+          return { query: q, searchCount: stats.count, rank: index + 1, category }
         })
-        .slice(0, 20)
+      }
 
-      trendingItems = sortedQueries.map(([q, stats], index) => {
-        let category: TrendingSearchItem['category'] = 'general'
-        if (/^[A-Z]{2,6}$/.test(q.toUpperCase())) {
-          category = 'token'
-        } else if (q.includes('@') || /binance|bybit|okx|bitget|mexc/i.test(q)) {
-          category = 'trader'
-        }
-        return { query: q, searchCount: stats.count, rank: index + 1, category }
-      })
-    }
+      const fallbackQueries = [
+        'BTC',
+        'ETH',
+        'SOL',
+        'PEPE',
+        'WIF',
+        'Binance',
+        'Bybit',
+        'OKX',
+        'Bitget',
+        'Futures',
+        'Spot',
+        'Options',
+        'NFT',
+        'DeFi',
+      ]
 
-    const fallbackQueries = [
-      'BTC', 'ETH', 'SOL', 'PEPE', 'WIF',
-      'Binance', 'Bybit', 'OKX', 'Bitget',
-      'Futures', 'Spot', 'Options', 'NFT', 'DeFi',
-    ]
-
-    return {
-      trending: trendingItems.length >= 5 ? trendingItems : [],
-      fallback: fallbackQueries,
-      lastUpdated: new Date().toISOString(),
-    } satisfies TrendingSearchResponse
-  }, { ttl: 300 })
+      return {
+        trending: trendingItems.length >= 5 ? trendingItems : [],
+        fallback: fallbackQueries,
+        lastUpdated: new Date().toISOString(),
+      } satisfies TrendingSearchResponse
+    },
+    { ttl: 300 }
+  )
 
   return success(trending, 200, {
     'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=3600',
@@ -219,7 +239,7 @@ function extractKeyword(title: string): string | null {
     .replace(/\s+/g, ' ')
     .trim()
 
-  const words = cleaned.split(/\s+/).filter(w => w.length >= 2)
+  const words = cleaned.split(/\s+/).filter((w) => w.length >= 2)
   if (words.length === 0) return null
 
   let result = ''
@@ -231,7 +251,9 @@ function extractKeyword(title: string): string | null {
   return result || null
 }
 
-async function handleHotSearch(supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']) {
+async function handleHotSearch(
+  supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']
+) {
   const CACHE_KEY = 'search:hot:v1'
 
   const cached = await cacheGet<HotSearchItem[]>(CACHE_KEY)
@@ -262,10 +284,9 @@ async function handleHotSearch(supabase: Parameters<Parameters<typeof withPublic
         // Skip malicious keywords extracted from post titles
         if (isMaliciousSearchQuery(keyword)) continue
         seenKeywords.add(keyword.toLowerCase())
-        const score = post.hot_score ||
-          (post.view_count || 0) * 0.1 +
-          (post.like_count || 0) * 2 +
-          (post.comment_count || 0) * 3
+        const score =
+          post.hot_score ||
+          (post.view_count || 0) * 0.1 + (post.like_count || 0) * 2 + (post.comment_count || 0) * 3
         hotSearches.push({
           keyword,
           count: Math.round(score),
@@ -279,7 +300,7 @@ async function handleHotSearch(supabase: Parameters<Parameters<typeof withPublic
     hotSearches.push(
       { keyword: 'BTC', count: 1000, trend: 'up' },
       { keyword: 'ETH', count: 800, trend: 'up' },
-      { keyword: 'SOL', count: 500, trend: 'stable' },
+      { keyword: 'SOL', count: 500, trend: 'stable' }
     )
   }
 
@@ -297,7 +318,7 @@ async function handleHotSearch(supabase: Parameters<Parameters<typeof withPublic
 // table is restricted to service_role access via RLS.
 async function handleClickTracking(
   supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase'],
-  searchParams: URLSearchParams,
+  searchParams: URLSearchParams
 ) {
   const query = searchParams.get('q')?.trim()
   const resultId = searchParams.get('id')
@@ -308,13 +329,16 @@ async function handleClickTracking(
   }
 
   fireAndForget(
-    supabase.from('search_analytics').insert({
-      query: query.slice(0, 200),
-      result_count: 1,
-      source: 'click',
-      clicked_result_id: resultId.slice(0, 200),
-      clicked_result_type: resultType?.slice(0, 20) || null,
-    }).then(),
+    supabase
+      .from('search_analytics')
+      .insert({
+        query: query.slice(0, 200),
+        result_count: 1,
+        source: 'click',
+        clicked_result_id: resultId.slice(0, 200),
+        clicked_result_type: resultType?.slice(0, 20) || null,
+      })
+      .then(),
     'Record search click-through'
   )
 
@@ -385,12 +409,13 @@ export const GET = withPublic(
     }
 
     // Sanitize
-    const sanitizedQuery = query
-      .slice(0, 100)
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
-      .replace(/<[^>]*>/g, '')
-      .replace(/[\\%_]/g, (c) => `\\${c}`)
-      .replace(/[.,()]/g, '')
+    const sanitizedQuery = escapeLikePattern(
+      query
+        .slice(0, 100)
+        .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\u200B-\u200F\u2028-\u202F\uFEFF]/g, '')
+        .replace(/<[^>]*>/g, ''),
+      100
+    )
 
     if (!sanitizedQuery) {
       return success({
@@ -406,11 +431,16 @@ export const GET = withPublic(
     // Stats-based query (e.g., "ROI > 100", "top bybit")
     const statsFilter = parseStatsQuery(sanitizedQuery)
 
-    const effectivePlatform = statsFilter?.platform || (matchedExchange && !platformFilter ? matchedExchange : platformFilter)
-    const effectiveLimit = matchedExchange && !platformFilter ? Math.max(limitPerCategory, 10) : limitPerCategory
+    const effectivePlatform =
+      statsFilter?.platform ||
+      (matchedExchange && !platformFilter ? matchedExchange : platformFilter)
+    const effectiveLimit =
+      matchedExchange && !platformFilter ? Math.max(limitPerCategory, 10) : limitPerCategory
 
     // Parallel queries
-    const safeQuery = async <T>(promise: PromiseLike<{ data: T[] | null; error: unknown }>): Promise<T[]> => {
+    const safeQuery = async <T>(
+      promise: PromiseLike<{ data: T[] | null; error: unknown }>
+    ): Promise<T[]> => {
       try {
         const { data, error } = await promise
         if (error) return []
@@ -420,92 +450,135 @@ export const GET = withPublic(
       }
     }
 
-    interface PostRow { id: string; title: string | null; author_handle: string | null; created_at: string; view_count: number | null }
-    interface LibraryRow { id: string; title: string; author: string | null; slug: string | null; category: string | null }
-    interface UserRow { id: string; handle: string | null; display_name: string | null; avatar_url: string | null; bio: string | null }
-    interface GroupRow { id: string; name: string; member_count: number | null; description: string | null }
+    interface PostRow {
+      id: string
+      title: string | null
+      author_handle: string | null
+      created_at: string
+      view_count: number | null
+    }
+    interface LibraryRow {
+      id: string
+      title: string
+      author: string | null
+      slug: string | null
+      category: string | null
+    }
+    interface UserRow {
+      id: string
+      handle: string | null
+      display_name: string | null
+      avatar_url: string | null
+      bio: string | null
+    }
+    interface GroupRow {
+      id: string
+      name: string
+      member_count: number | null
+      description: string | null
+    }
 
     // Try Meilisearch first (1-6ms), fall back to Supabase (100-300ms)
     let meliFacetDistribution: Record<string, Record<string, number>> | undefined
     let meiliDegraded = false
-    const meiliTraderSearch = isMeilisearchAvailable() && sanitizedQuery.length >= 2
-      ? searchTradersMeili(sanitizedQuery, { limit: effectiveLimit, platform: effectivePlatform || undefined, season: '90D' })
-          .then(result => {
-            if (!result) return null
-            // Capture facet distribution for response
-            if (result.facetDistribution) meliFacetDistribution = result.facetDistribution
-            return result.hits.map(h => ({
-              handle: h.handle,
-              traderKey: h.id.split('--').slice(1, -1).join('--') || h.id.split('--')[1] || h.handle,
-              platform: h.platform,
-              roi: h.roi,
-              pnl: h.pnl,
-              arenaScore: h.arena_score,
-              rank: h.rank,
-              avatarUrl: h.avatar_url,
-              traderType: h.trader_type,
-            }))
+    const meiliTraderSearch =
+      isMeilisearchAvailable() && sanitizedQuery.length >= 2
+        ? searchTradersMeili(sanitizedQuery, {
+            limit: effectiveLimit,
+            platform: effectivePlatform || undefined,
+            season: '90D',
           })
-          .catch((err) => {
-            logger.warn('Meilisearch trader search failed, falling back to Supabase', { error: err instanceof Error ? err.message : String(err), query: sanitizedQuery })
-            meiliDegraded = true
-            return null
+            .then((result) => {
+              if (!result) return null
+              // Capture facet distribution for response
+              if (result.facetDistribution) meliFacetDistribution = result.facetDistribution
+              return result.hits.map((h) => ({
+                handle: h.handle,
+                traderKey:
+                  h.id.split('--').slice(1, -1).join('--') || h.id.split('--')[1] || h.handle,
+                platform: h.platform,
+                roi: h.roi,
+                pnl: h.pnl,
+                arenaScore: h.arena_score,
+                rank: h.rank,
+                avatarUrl: h.avatar_url,
+                traderType: h.trader_type,
+              }))
+            })
+            .catch((err) => {
+              logger.warn('Meilisearch trader search failed, falling back to Supabase', {
+                error: err instanceof Error ? err.message : String(err),
+                query: sanitizedQuery,
+              })
+              meiliDegraded = true
+              return null
+            })
+        : Promise.resolve(null)
+
+    const [meiliResults, supabaseTraders, postsData, libraryData, usersData, groupsData] =
+      await Promise.all([
+        meiliTraderSearch,
+        // Supabase fallback (skipped if Meilisearch returns results)
+        unifiedSearchTraders(supabase, {
+          query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+          limit: effectiveLimit,
+          platform: effectivePlatform,
+        }).catch((err) => {
+          logger.warn('Supabase trader search failed', {
+            error: err instanceof Error ? err.message : String(err),
+            query: sanitizedQuery,
           })
-      : Promise.resolve(null)
+          return []
+        }),
 
-    const [meiliResults, supabaseTraders, postsData, libraryData, usersData, groupsData] = await Promise.all([
-      meiliTraderSearch,
-      // Supabase fallback (skipped if Meilisearch returns results)
-      unifiedSearchTraders(supabase, {
-        query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
-        limit: effectiveLimit,
-        platform: effectivePlatform,
-      }).catch((err) => {
-        logger.warn('Supabase trader search failed', { error: err instanceof Error ? err.message : String(err), query: sanitizedQuery })
-        return []
-      }),
-
-      // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
-      features.social
-        ? safeQuery(supabase
-            .from('posts')
-            .select('id, title, author_handle, created_at, view_count')
-            .or(`title.ilike.%${sanitizedQuery}%`)
-            .eq('visibility', 'public')
-            .order('view_count', { ascending: false, nullsFirst: false })
-            .limit(limitPerCategory))
-        : Promise.resolve([]),
-
-      safeQuery(supabase
-        .from('library_items')
-        .select('id, title, author, slug, category')
-        .or(
-          `title.ilike.%${sanitizedQuery}%,author.ilike.%${sanitizedQuery}%`
-        )
-        .limit(limitPerCategory)),
-
-      features.social
-        ? safeQuery(supabase
-            .from('user_profiles')
-            .select('id, handle, display_name, avatar_url, bio')
-            .or(
-              `handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%,bio.ilike.%${sanitizedQuery}%`
+        // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
+        features.social
+          ? safeQuery(
+              supabase
+                .from('posts')
+                .select('id, title, author_handle, created_at, view_count')
+                .or(`title.ilike.%${sanitizedQuery}%`)
+                .eq('visibility', 'public')
+                .order('view_count', { ascending: false, nullsFirst: false })
+                .limit(limitPerCategory)
             )
-            .limit(limitPerCategory))
-        : Promise.resolve([]),
+          : Promise.resolve([]),
 
-      features.social
-        ? safeQuery(supabase
-            .from('groups')
-            .select('id, name, member_count, description')
-            .ilike('name', `%${sanitizedQuery}%`)
-            .limit(limitPerCategory))
-        : Promise.resolve([]),
-    ])
+        safeQuery(
+          supabase
+            .from('library_items')
+            .select('id, title, author, slug, category')
+            .or(`title.ilike.%${sanitizedQuery}%,author.ilike.%${sanitizedQuery}%`)
+            .limit(limitPerCategory)
+        ),
+
+        features.social
+          ? safeQuery(
+              supabase
+                .from('user_profiles')
+                .select('id, handle, display_name, avatar_url, bio')
+                .or(
+                  `handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%,bio.ilike.%${sanitizedQuery}%`
+                )
+                .limit(limitPerCategory)
+            )
+          : Promise.resolve([]),
+
+        features.social
+          ? safeQuery(
+              supabase
+                .from('groups')
+                .select('id, name, member_count, description')
+                .ilike('name', `%${sanitizedQuery}%`)
+                .limit(limitPerCategory)
+            )
+          : Promise.resolve([]),
+      ])
 
     // For exchange name search, fetch top traders from leaderboard if direct search returned nothing
     // Use Meilisearch results if available (1-6ms), otherwise Supabase (100-300ms)
-    let exchangeTopTraders = (meiliResults && meiliResults.length > 0) ? meiliResults : supabaseTraders
+    let exchangeTopTraders =
+      meiliResults && meiliResults.length > 0 ? meiliResults : supabaseTraders
     if (matchedExchange && !platformFilter && exchangeTopTraders.length === 0) {
       try {
         const { getLeaderboard } = await import('@/lib/data/unified')
@@ -524,30 +597,45 @@ export const GET = withPublic(
     // When searching for an exchange name, prioritize arena_score (best traders first).
     // For text searches, prioritize text match quality.
     const isExchangeSearch = !!matchedExchange && !platformFilter
-    const scoredTraders = exchangeTopTraders.map(t => {
-      let relevance = 0
-      if (isExchangeSearch) {
-        // Exchange search: sort by arena_score (most relevant = best performer)
-        relevance = (t.arenaScore ?? 0)
-      } else {
-        const handle = (t.handle || t.traderKey || '').toLowerCase()
-        const q = sanitizedQuery.toLowerCase()
-        if (handle === q) relevance += 100 // Exact match
-        else if (handle.startsWith(q)) relevance += 50 // Prefix match
-        else if (handle.includes(q)) relevance += 20 // Contains
-        relevance += Math.min((t.arenaScore ?? 0) / 2, 30) // Score bonus (max 30)
-        relevance += Math.min(Math.log10(Math.max(t.roi ?? 1, 1)) * 5, 15) // ROI bonus (max 15)
-      }
-      return { ...t, _relevance: relevance }
-    }).sort((a, b) => b._relevance - a._relevance)
+    const scoredTraders = exchangeTopTraders
+      .map((t) => {
+        let relevance = 0
+        if (isExchangeSearch) {
+          // Exchange search: sort by arena_score (most relevant = best performer)
+          relevance = t.arenaScore ?? 0
+        } else {
+          const handle = (t.handle || t.traderKey || '').toLowerCase()
+          const q = sanitizedQuery.toLowerCase()
+          if (handle === q)
+            relevance += 100 // Exact match
+          else if (handle.startsWith(q))
+            relevance += 50 // Prefix match
+          else if (handle.includes(q)) relevance += 20 // Contains
+          relevance += Math.min((t.arenaScore ?? 0) / 2, 30) // Score bonus (max 30)
+          relevance += Math.min(Math.log10(Math.max(t.roi ?? 1, 1)) * 5, 15) // ROI bonus (max 15)
+        }
+        return { ...t, _relevance: relevance }
+      })
+      .sort((a, b) => b._relevance - a._relevance)
 
     // Map traders to UnifiedSearchResult
     const traders: UnifiedSearchResult[] = scoredTraders.map((t) => {
-      const exchangeName = EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
+      const exchangeName =
+        EXCHANGE_CONFIG[t.platform as keyof typeof EXCHANGE_CONFIG]?.name || t.platform
       const isBot = t.traderType === 'bot' || t.platform === 'web3_bot'
-      const roiStr = t.roi != null ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%` : null
+      const roiStr =
+        t.roi != null
+          ? `${t.roi >= 0 ? '+' : ''}${t.roi >= 1000 ? `${(t.roi / 1000).toFixed(1)}K` : t.roi.toFixed(1)}%`
+          : null
       const rankStr = t.rank != null ? `#${t.rank}` : null
-      const subtitle = [exchangeName, rankStr, roiStr, t.arenaScore != null ? `Score ${Math.round(t.arenaScore)}` : null].filter(Boolean).join(' \u00B7 ')
+      const subtitle = [
+        exchangeName,
+        rankStr,
+        roiStr,
+        t.arenaScore != null ? `Score ${Math.round(t.arenaScore)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' \u00B7 ')
       return {
         id: `${t.platform}:${t.traderKey}`,
         type: 'trader' as const,
@@ -574,15 +662,13 @@ export const GET = withPublic(
       meta: { view_count: p.view_count },
     }))
 
-    const library: UnifiedSearchResult[] = (libraryData as LibraryRow[]).map(
-      (l) => ({
-        id: l.id,
-        type: 'library' as const,
-        title: l.title,
-        subtitle: l.author || l.category || undefined,
-        href: `/learn/${l.slug || l.id}`,
-      })
-    )
+    const library: UnifiedSearchResult[] = (libraryData as LibraryRow[]).map((l) => ({
+      id: l.id,
+      type: 'library' as const,
+      title: l.title,
+      subtitle: l.author || l.category || undefined,
+      href: `/learn/${l.slug || l.id}`,
+    }))
 
     const users: UnifiedSearchResult[] = (usersData as UserRow[]).map((u) => ({
       id: u.id,
@@ -602,7 +688,8 @@ export const GET = withPublic(
       meta: { member_count: g.member_count },
     }))
 
-    const totalResults = traders.length + posts.length + library.length + users.length + groups.length
+    const totalResults =
+      traders.length + posts.length + library.length + users.length + groups.length
 
     // "Did you mean" suggestions — combines trader handles + hot posts + popular groups
     let suggestions: string[] | undefined
@@ -619,7 +706,9 @@ export const GET = withPublic(
               .or(`title.ilike.%${sanitizedQuery.slice(0, 20)}%`)
               .order('hot_score', { ascending: false, nullsFirst: false })
               .limit(2)
-              .then(({ data }) => (data || []).map((p: { title: string }) => p.title).filter(Boolean))
+              .then(({ data }) =>
+                (data || []).map((p: { title: string }) => p.title).filter(Boolean)
+              )
           : Promise.resolve([]),
         // Popular groups with similar names
         features.social
@@ -633,11 +722,9 @@ export const GET = withPublic(
           : Promise.resolve([]),
       ])
       // Merge & dedupe: trader handles first, then hot posts, then groups
-      const allSuggestions = [...new Set([
-        ...traderSuggestions,
-        ...hotPostSuggestions,
-        ...groupSuggestions,
-      ])].slice(0, 5)
+      const allSuggestions = [
+        ...new Set([...traderSuggestions, ...hotPostSuggestions, ...groupSuggestions]),
+      ].slice(0, 5)
       if (allSuggestions.length > 0) suggestions = allSuggestions
     }
 
@@ -662,11 +749,14 @@ export const GET = withPublic(
     // Search analytics (async) — skip malicious queries to keep analytics clean
     if (!isMaliciousSearchQuery(query)) {
       fireAndForget(
-        supabase.from('search_analytics').insert({
-          query: query.slice(0, 200),
-          result_count: totalResults,
-          source: 'unified',
-        }).then(),
+        supabase
+          .from('search_analytics')
+          .insert({
+            query: query.slice(0, 200),
+            result_count: totalResults,
+            source: 'unified',
+          })
+          .then(),
         'Record search analytics'
       )
     }

@@ -4,6 +4,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { parseLimit } from '@/lib/utils/safe-parse'
+import { escapeLikePattern } from '@/lib/sanitize'
 
 const logger = createLogger('api:users-search')
 
@@ -27,8 +28,7 @@ export async function GET(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    // Escape LIKE special characters to prevent wildcard injection
-    const escapedQ = q.replace(/%/g, '\\%').replace(/_/g, '\\_')
+    const escapedQ = escapeLikePattern(q)
 
     const { data: users } = await supabase
       .from('user_profiles')
