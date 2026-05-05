@@ -11,6 +11,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { badRequest, notFound, forbidden, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import { parseLimit } from '@/lib/utils/safe-parse'
+import { escapeLikePattern } from '@/lib/sanitize'
 
 const logger = createLogger('chat-search')
 
@@ -69,7 +70,7 @@ export async function GET(
         .from('direct_messages')
         .select('id, content, created_at, sender_id')
         .eq('conversation_id', conversationId)
-        .ilike('content', `%${query.trim().replace(/[\\%_]/g, (c) => `\\${c}`)}%`)
+        .ilike('content', `%${escapeLikePattern(query.trim())}%`)
 
       // Apply cleared_before filter
       if (memberSettings?.cleared_before) {
