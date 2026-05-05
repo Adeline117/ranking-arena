@@ -66,7 +66,6 @@ export default function QuizClient() {
     setMounted(true)
     // Only reset if quiz was previously completed (has result); preserve in-progress answers
     if (useQuizStore.getState().result) reset()
-    document.body.style.overflow = ''
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
