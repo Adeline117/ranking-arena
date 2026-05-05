@@ -4,6 +4,7 @@
  * POST /api/follow - 关注/取消关注
  */
 
+import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
@@ -79,6 +80,31 @@ export const POST = withAuth(
     const { traderId, action } = parsed.data
 
     if (action === 'follow') {
+      // Enforce follow limit per tier (free=10, pro=100)
+      const [{ count: followCount }, { data: sub }] = await Promise.all([
+        supabase
+          .from('trader_follows')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', user.id),
+        supabase
+          .from('subscriptions')
+          .select('tier')
+          .eq('user_id', user.id)
+          .in('status', ['active', 'trialing'])
+          .maybeSingle(),
+      ])
+      const tier = sub?.tier || 'free'
+      const limit = tier === 'pro' || tier === 'elite' ? 100 : 10
+      if ((followCount ?? 0) >= limit) {
+        return NextResponse.json(
+          {
+            error: `Follow limit reached (${limit}). Upgrade to Pro for more.`,
+            code: 'FOLLOW_LIMIT',
+          },
+          { status: 429 }
+        )
+      }
+
       // 关注
       const { error } = await supabase
         .from('trader_follows')

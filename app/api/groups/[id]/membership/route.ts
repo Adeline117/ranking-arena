@@ -50,6 +50,20 @@ export const POST = withAuth(
     }
 
     if (action === 'join') {
+      // Check if user is banned from this group
+      const { data: ban } = await sb
+        .from('group_bans')
+        .select('id')
+        .eq('group_id', groupId)
+        .eq('user_id', user.id)
+        .maybeSingle()
+      if (ban) {
+        return NextResponse.json(
+          { error: 'You are banned from this group', code: 'BANNED' },
+          { status: 403 }
+        )
+      }
+
       // Check score gate and verified-only restrictions
       if (group.min_arena_score > 0 || group.is_verified_only) {
         const { data: profile } = await sb
