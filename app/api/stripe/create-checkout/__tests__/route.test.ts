@@ -15,7 +15,9 @@ jest.mock('next/server', () => {
       this._body = body
       this.status = init.status || 200
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -27,10 +29,15 @@ jest.mock('next/server', () => {
     _headers: Map<string, string>
     _body: unknown
 
-    constructor(url: string, opts?: { method?: string; headers?: Record<string, string>; body?: string }) {
+    constructor(
+      url: string,
+      opts?: { method?: string; headers?: Record<string, string>; body?: string }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
-      this._headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) }))
+      this._headers = new Map(
+        Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) })
+      )
       this._body = opts?.body
     }
 
@@ -39,7 +46,9 @@ jest.mock('next/server', () => {
       return { get: (key: string) => headers.get(key) || null }
     }
 
-    async json() { return JSON.parse(this._body as string) }
+    async json() {
+      return JSON.parse(this._body as string)
+    }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
@@ -54,11 +63,14 @@ const mockEnv: Record<string, string | undefined> = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: 'test-anon-key',
 }
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      return mockEnv[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        return mockEnv[String(key)]
+      },
+    }
+  ),
 }))
 
 const mockCheckRateLimit = jest.fn().mockResolvedValue(null)
@@ -68,16 +80,33 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 }))
 
 jest.mock('@/lib/utils/logger', () => {
-  const inst = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() }
-  return { createLogger: jest.fn(() => inst), logger: inst, fireAndForget: jest.fn(), captureError: jest.fn(), captureMessage: jest.fn() }
+  const inst = {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  }
+  return {
+    createLogger: jest.fn(() => inst),
+    logger: inst,
+    fireAndForget: jest.fn(),
+    captureError: jest.fn(),
+    captureMessage: jest.fn(),
+  }
 })
 
 const mockGetOrCreateStripeCustomer = jest.fn().mockResolvedValue('cus_test123')
-const mockCreateCheckoutSession = jest.fn().mockResolvedValue({ url: 'https://checkout.stripe.com/session', id: 'cs_test123' })
+const mockCreateCheckoutSession = jest
+  .fn()
+  .mockResolvedValue({ url: 'https://checkout.stripe.com/session', id: 'cs_test123' })
 const mockGetStripe = jest.fn(() => ({
   checkout: {
     sessions: {
-      create: jest.fn().mockResolvedValue({ url: 'https://checkout.stripe.com/lifetime', id: 'cs_lifetime123' }),
+      create: jest
+        .fn()
+        .mockResolvedValue({ url: 'https://checkout.stripe.com/lifetime', id: 'cs_lifetime123' }),
     },
   },
 }))
@@ -115,6 +144,7 @@ jest.mock('@/lib/supabase/server', () => ({
         ...mockSubscriptionQuery,
       }),
     })),
+    rpc: jest.fn().mockResolvedValue({ data: true, error: null }),
   })),
 }))
 
@@ -149,7 +179,10 @@ describe('POST /api/stripe/create-checkout', () => {
     mockGetUser.mockResolvedValue({ data: { user: validUser }, error: null })
     mockExtractUser.mockResolvedValue({ user: validUser, error: null })
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_test123')
-    mockCreateCheckoutSession.mockResolvedValue({ url: 'https://checkout.stripe.com/session', id: 'cs_test123' })
+    mockCreateCheckoutSession.mockResolvedValue({
+      url: 'https://checkout.stripe.com/session',
+      id: 'cs_test123',
+    })
     // Reset env mock
     mockEnv.STRIPE_SECRET_KEY = 'sk_test_123'
     mockEnv.NEXT_PUBLIC_APP_URL = 'https://app.test.com'
@@ -165,7 +198,9 @@ describe('POST /api/stripe/create-checkout', () => {
 
   it('returns rate limit response when rate limited', async () => {
     const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
-    mockCheckRateLimit.mockResolvedValue(NextResponse.json({ error: 'Rate limited' }, { status: 429 }))
+    mockCheckRateLimit.mockResolvedValue(
+      NextResponse.json({ error: 'Rate limited' }, { status: 429 })
+    )
 
     const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
       method: 'POST',
