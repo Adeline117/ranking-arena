@@ -4,25 +4,15 @@
  */
 
 import { NextResponse } from 'next/server'
-import Stripe from 'stripe'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
+import { createOneTimePaymentSession, getStripe as getStripeInstance } from '@/lib/stripe'
 
 const logger = createLogger('tip-checkout')
 
 export const dynamic = 'force-dynamic'
-
-function getStripe(): Stripe {
-  const secretKey = env.STRIPE_SECRET_KEY
-  if (!secretKey) {
-    throw new Error('STRIPE_SECRET_KEY is not configured')
-  }
-  return new Stripe(secretKey, {
-    apiVersion: '2026-03-25.dahlia',
-  })
-}
 
 // 打赏金额选项（美分）
 const _TIP_AMOUNTS = [100, 300, 500, 1000, 2000, 5000] // $1, $3, $5, $10, $20, $50
@@ -86,9 +76,7 @@ export const POST = withAuth(
       return badRequest('Cannot tip your own post')
     }
 
-    const stripe = getStripe()
-
-    // 检查或创建 Stripe 客户
+    // 检查或创建 Stripe 客户 (reuse from previous tip sessions)
     const { data: existingTip } = await supabase
       .from('tips')
       .select('stripe_checkout_session_id')
@@ -101,7 +89,7 @@ export const POST = withAuth(
 
     if (existingTip?.stripe_checkout_session_id) {
       try {
-        const session = await stripe.checkout.sessions.retrieve(
+        const session = await getStripeInstance().checkout.sessions.retrieve(
           existingTip.stripe_checkout_session_id
         )
         if (session.customer && typeof session.customer === 'string') {
@@ -131,41 +119,36 @@ export const POST = withAuth(
       return serverError('Failed to create tip record')
     }
 
-    // 创建 Stripe Checkout Session（一次性支付）
-    // Idempotency key: user + post + amount + minute window. Stripe deduplicates within 24h.
-    const tipIdempotencyKey = `tip_${user.id}_${post_id}_${amount}_${Math.floor(Date.now() / 60_000)}`
-    const session = await stripe.checkout.sessions.create(
-      {
-        customer: customerId,
-        customer_email: customerId ? undefined : user.email,
-        mode: 'payment',
-        payment_method_types: ['card'],
-        line_items: [
-          {
-            price_data: {
-              currency: 'usd',
-              product_data: {
-                name: `Tip @${post.author_handle || 'user'}`,
-                description: post.title ? `Post: ${post.title.slice(0, 50)}` : 'Thank the creator',
-              },
-              unit_amount: amount,
+    // Shared one-time payment session — idempotency + metadata enforced automatically
+    const session = await createOneTimePaymentSession({
+      customerId,
+      customerEmail: user.email,
+      userId: user.id,
+      discriminator: `tip_${post_id}_${amount}`,
+      lineItems: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: `Tip @${post.author_handle || 'user'}`,
+              description: post.title ? `Post: ${post.title.slice(0, 50)}` : 'Thank the creator',
             },
-            quantity: 1,
+            unit_amount: amount,
           },
-        ],
-        success_url: `${env.NEXT_PUBLIC_APP_URL}/tip/success?session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${env.NEXT_PUBLIC_APP_URL}/groups/${post_id}?tip_canceled=true`,
-        metadata: {
-          type: 'tip',
-          tip_id: tip.id,
-          post_id,
-          from_user_id: user.id,
-          to_user_id: post.author_id || '',
-          amount_cents: String(amount),
+          quantity: 1,
         },
+      ],
+      successUrl: `${env.NEXT_PUBLIC_APP_URL}/tip/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${env.NEXT_PUBLIC_APP_URL}/groups/${post_id}?tip_canceled=true`,
+      metadata: {
+        type: 'tip',
+        tip_id: tip.id,
+        post_id,
+        from_user_id: user.id,
+        to_user_id: post.author_id || '',
+        amount_cents: String(amount),
       },
-      { idempotencyKey: tipIdempotencyKey }
-    )
+    })
 
     // 更新打赏记录的 session ID
     await supabase.from('tips').update({ stripe_checkout_session_id: session.id }).eq('id', tip.id)

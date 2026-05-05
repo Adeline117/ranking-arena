@@ -205,6 +205,48 @@ export async function createCheckoutSession(params: {
   return session
 }
 
+/**
+ * Create a one-time payment checkout session with MANDATORY idempotency.
+ * Use for lifetime purchases, tips, group payments — anything mode:'payment'.
+ *
+ * Idempotency key is auto-generated from userId + a discriminator + minute window.
+ * Stripe deduplicates within 24h, preventing double-charges on retry/double-click.
+ */
+export async function createOneTimePaymentSession(params: {
+  customerId?: string
+  customerEmail?: string
+  userId: string
+  /** Unique discriminator (e.g. 'lifetime', `tip_${postId}`, `group_${groupId}`) */
+  discriminator: string
+  lineItems: Stripe.Checkout.SessionCreateParams.LineItem[]
+  successUrl: string
+  cancelUrl: string
+  metadata: Record<string, string>
+  promotionCode?: string
+}): Promise<Stripe.Checkout.Session> {
+  const idempotencyKey = `payment_${params.userId}_${params.discriminator}_${Math.floor(Date.now() / 60_000)}`
+
+  const sessionParams: Stripe.Checkout.SessionCreateParams = {
+    customer: params.customerId,
+    customer_email: params.customerId ? undefined : params.customerEmail,
+    payment_method_types: ['card', 'link'],
+    line_items: params.lineItems,
+    mode: 'payment',
+    success_url: params.successUrl,
+    cancel_url: params.cancelUrl,
+    metadata: { ...params.metadata, user_id: params.userId },
+    allow_promotion_codes: !params.promotionCode,
+    billing_address_collection: 'auto',
+    locale: 'auto',
+  }
+
+  if (params.promotionCode) {
+    sessionParams.discounts = [{ promotion_code: params.promotionCode }]
+  }
+
+  return stripe.checkout.sessions.create(sessionParams, { idempotencyKey })
+}
+
 // 创建客户门户会话 (用于管理订阅)
 export async function createPortalSession(
   customerId: string,
