@@ -694,6 +694,15 @@ select:focus-visible {
   }
 }
 
+@keyframes toastProgress {
+  from {
+    width: 100%;
+  }
+  to {
+    width: 0%;
+  }
+}
+
 /* pulse is needed for Tailwind animate-pulse on skeletons */
 @keyframes pulse {
   0%,

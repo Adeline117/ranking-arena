@@ -9,6 +9,7 @@ import { HeroMetrics } from './performance/HeroMetrics'
 import { MetricBadgesGrid } from './performance/MetricBadgesGrid'
 import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
 import type { Period } from './performance/PeriodSelector'
+import { usePeriodStore } from '@/lib/stores/periodStore'
 
 export interface ExtendedPerformance extends TraderPerformance {
   arena_score_7d?: number
@@ -93,7 +94,15 @@ export default function OverviewPerformanceCard({
   positionSummary,
 }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
-  const [period, setPeriod] = useState<Period>('90D')
+  const globalPeriod = usePeriodStore((s) => s.period) as Period
+  const [period, setPeriod] = useState<Period>(globalPeriod || '90D')
+
+  // Sync from global store (e.g. URL ?period=7D on initial load)
+  useEffect(() => {
+    if (globalPeriod && globalPeriod !== period) {
+      setPeriod(globalPeriod)
+    }
+  }, [globalPeriod]) // eslint-disable-line react-hooks/exhaustive-deps
   const [isAnimating, setIsAnimating] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
@@ -192,87 +201,102 @@ export default function OverviewPerformanceCard({
   }
 
   const data = getData()
-  const { roi, pnl, winRate, maxDrawdown, sharpeRatio, winningPositions, totalPositions, returnScore: periodReturnScore, pnlScore: periodPnlScore, drawdownScore: periodDrawdownScore, stabilityScore: periodStabilityScore, sortinoRatio, calmarRatio, alpha, arenaScoreV3, tradesCount, avgHoldingTimeHours } = data
+  const {
+    roi,
+    pnl,
+    winRate,
+    maxDrawdown,
+    sharpeRatio,
+    winningPositions,
+    totalPositions,
+    returnScore: periodReturnScore,
+    pnlScore: periodPnlScore,
+    drawdownScore: periodDrawdownScore,
+    stabilityScore: periodStabilityScore,
+    sortinoRatio,
+    calmarRatio,
+    alpha,
+    arenaScoreV3,
+    tradesCount,
+    avgHoldingTimeHours,
+  } = data
   const periodArenaScore = data.arenaScore
 
   // 生成 sparkline 数据 — 使用当前 period 对应的 equity curve，过滤掉 null/NaN 值
   const periodCurve = allEquityCurves?.[period] ?? equityCurve
-  const sparklineRawData = (periodCurve?.map(d => d.roi) || []).filter(v => v != null && !isNaN(v as number)) as number[]
+  const sparklineRawData = (periodCurve?.map((d) => d.roi) || []).filter(
+    (v) => v != null && !isNaN(v as number)
+  ) as number[]
   const sparklineData = sparklineRawData.length >= 2 ? sparklineRawData : []
 
   return (
     <div ref={cardRef}>
-    <Box
-      className="performance-card glass-card"
-      style={{
-        background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
-        borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}`,
-        overflow: 'hidden',
-        opacity: mounted ? 1 : 0,
-        transform: mounted ? 'translateY(0)' : 'translateY(20px)',
-        transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
-        boxShadow: `0 4px 24px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)`,
-      }}
-    >
-      <Box style={{ padding: tokens.spacing[5] }}>
-        {/* Header */}
-        <PeriodSelector
-          period={period}
-          onPeriodChange={handlePeriodChange}
-          source={source}
-          lastUpdated={lastUpdated}
-        />
-
-        {/* Content — shimmer on period switch */}
-        <Box
-          className={isAnimating ? 'period-switch-shimmer' : ''}
-          style={{
-            opacity: isAnimating ? 0.4 : 1,
-            transform: isAnimating ? 'scale(0.98)' : 'scale(1)',
-            transition: `opacity 0.2s ease, transform 0.2s ease`,
-          }}
-        >
-          {/* ROI & PnL - 主指标区 Hero Metrics */}
-          <HeroMetrics
-            roi={roi}
-            pnl={pnl}
-            sparklineData={sparklineData}
-            isVisible={isVisible}
+      <Box
+        className="performance-card glass-card"
+        style={{
+          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
+          borderRadius: tokens.radius.xl,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          overflow: 'hidden',
+          opacity: mounted ? 1 : 0,
+          transform: mounted ? 'translateY(0)' : 'translateY(20px)',
+          transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
+          boxShadow: `0 4px 24px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)`,
+        }}
+      >
+        <Box style={{ padding: tokens.spacing[5] }}>
+          {/* Header */}
+          <PeriodSelector
+            period={period}
+            onPeriodChange={handlePeriodChange}
+            source={source}
+            lastUpdated={lastUpdated}
           />
 
-          {/* 二级指标 - 紧凑徽章布局 */}
-          <MetricBadgesGrid
-            sharpeRatio={sharpeRatio}
-            maxDrawdown={maxDrawdown}
-            winRate={winRate}
-            winningPositions={winningPositions}
-            totalPositions={totalPositions}
-            sortinoRatio={sortinoRatio}
-            calmarRatio={calmarRatio}
-            alpha={alpha}
-            tradesCount={tradesCount}
-            avgHoldingTimeHours={avgHoldingTimeHours}
-            avgLeverage={positionSummary?.avgLeverage ?? undefined}
-            longPositions={positionSummary?.longPositions ?? undefined}
-            shortPositions={positionSummary?.shortPositions ?? undefined}
-            isVisible={isVisible}
-          />
+          {/* Content — shimmer on period switch */}
+          <Box
+            className={isAnimating ? 'period-switch-shimmer' : ''}
+            style={{
+              opacity: isAnimating ? 0.4 : 1,
+              transform: isAnimating ? 'scale(0.98)' : 'scale(1)',
+              transition: `opacity 0.2s ease, transform 0.2s ease`,
+            }}
+          >
+            {/* ROI & PnL - 主指标区 Hero Metrics */}
+            <HeroMetrics roi={roi} pnl={pnl} sparklineData={sparklineData} isVisible={isVisible} />
 
-          {/* 评分详情 - 免费展示 (period-specific) */}
-          <ScoreBreakdownSection
-            performance={performance}
-            periodArenaScore={periodArenaScore}
-            periodReturnScore={periodReturnScore}
-            periodPnlScore={periodPnlScore}
-            periodDrawdownScore={periodDrawdownScore}
-            periodStabilityScore={periodStabilityScore}
-            arenaScoreV3={arenaScoreV3}
-            isVisible={isVisible}
-          />
+            {/* 二级指标 - 紧凑徽章布局 */}
+            <MetricBadgesGrid
+              sharpeRatio={sharpeRatio}
+              maxDrawdown={maxDrawdown}
+              winRate={winRate}
+              winningPositions={winningPositions}
+              totalPositions={totalPositions}
+              sortinoRatio={sortinoRatio}
+              calmarRatio={calmarRatio}
+              alpha={alpha}
+              tradesCount={tradesCount}
+              avgHoldingTimeHours={avgHoldingTimeHours}
+              avgLeverage={positionSummary?.avgLeverage ?? undefined}
+              longPositions={positionSummary?.longPositions ?? undefined}
+              shortPositions={positionSummary?.shortPositions ?? undefined}
+              isVisible={isVisible}
+            />
+
+            {/* 评分详情 - 免费展示 (period-specific) */}
+            <ScoreBreakdownSection
+              performance={performance}
+              periodArenaScore={periodArenaScore}
+              periodReturnScore={periodReturnScore}
+              periodPnlScore={periodPnlScore}
+              periodDrawdownScore={periodDrawdownScore}
+              periodStabilityScore={periodStabilityScore}
+              arenaScoreV3={arenaScoreV3}
+              isVisible={isVisible}
+            />
+          </Box>
         </Box>
       </Box>
-    </Box>
     </div>
   )
 }

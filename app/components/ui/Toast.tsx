@@ -1,6 +1,15 @@
 'use client'
 
-import { createContext, useContext, useState, useCallback, useMemo, ReactNode, useEffect, useRef } from 'react'
+import {
+  createContext,
+  useContext,
+  useState,
+  useCallback,
+  useMemo,
+  ReactNode,
+  useEffect,
+  useRef,
+} from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { setGlobalToast } from '@/lib/hooks/useApiMutation'
 import { t } from '@/lib/i18n'
@@ -39,7 +48,14 @@ function getTxExplorerUrl(txHash: string, chainId?: number): string {
 }
 
 interface ToastContextType {
-  showToast: (message: string | { message?: string; code?: string; txHash?: string; chainId?: number; action?: ToastAction } | unknown, type?: ToastType, duration?: number) => void
+  showToast: (
+    message:
+      | string
+      | { message?: string; code?: string; txHash?: string; chainId?: number; action?: ToastAction }
+      | unknown,
+    type?: ToastType,
+    duration?: number
+  ) => void
   hideToast: (id: string) => void
 }
 
@@ -98,28 +114,12 @@ const getToastConfig = (type: ToastType) => {
 function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
   const config = getToastConfig(toast.type)
   const [isExiting, setIsExiting] = useState(false)
-  const [progress, setProgress] = useState(100)
-  const startTimeRef = useRef(Date.now())
   const exitTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   // #25: Swipe-to-dismiss touch state
   const touchStartXRef = useRef(0)
   const touchDeltaRef = useRef(0)
   const toastElRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const elapsed = Date.now() - startTimeRef.current
-      const remaining = Math.max(0, 100 - (elapsed / toast.duration) * 100)
-      setProgress(remaining)
-
-      if (remaining <= 0) {
-        clearInterval(interval)
-      }
-    }, 50)
-
-    return () => clearInterval(interval)
-  }, [toast.duration])
 
   // Cleanup exit timer on unmount
   useEffect(() => {
@@ -215,24 +215,28 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             boxShadow: `0 4px 12px ${config.textColor}40`,
           }}
         >
-          <span style={{ 
-            color: tokens.colors.white, 
-            fontSize: 14, 
-            fontWeight: 900,
-            textShadow: 'var(--text-shadow-sm)',
-          }}>
+          <span
+            style={{
+              color: tokens.colors.white,
+              fontSize: 14,
+              fontWeight: 900,
+              textShadow: 'var(--text-shadow-sm)',
+            }}
+          >
             {config.icon}
           </span>
         </div>
-        
+
         {/* Message */}
         <div style={{ flex: 1 }}>
-          <span style={{ 
-            color: tokens.colors.text.primary,
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: tokens.typography.fontWeight.semibold,
-            lineHeight: 1.4,
-          }}>
+          <span
+            style={{
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              lineHeight: 1.4,
+            }}
+          >
             {toast.message}
           </span>
           {toast.txHash && (
@@ -257,7 +261,10 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
         {/* Action Button (optional undo / custom action) */}
         {toast.action && (
           <button
-            onClick={() => { toast.action!.onClick(); handleClose() }}
+            onClick={() => {
+              toast.action!.onClick()
+              handleClose()
+            }}
             className="btn-press"
             style={{
               background: `${config.textColor}18`,
@@ -302,7 +309,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
           ×
         </button>
       </div>
-      
+
       {/* Progress Bar */}
       <div
         style={{
@@ -318,9 +325,9 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             left: 0,
             top: 0,
             bottom: 0,
-            width: `${progress}%`,
+            width: '100%',
             background: `linear-gradient(90deg, ${config.progressColor}, ${config.progressColor}80)`,
-            transition: 'width 0.05s linear',
+            animation: `toastProgress ${toast.duration}ms linear forwards`,
             borderRadius: '0 2px 2px 0',
           }}
         />
@@ -341,74 +348,86 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const showToast = useCallback((
-    message: string | { message?: string; code?: string; error?: string } | unknown,
-    type: ToastType = 'info',
-    duration?: number
-  ) => {
-    // Error/warning toasts need more reading time
-    const defaultDurations: Record<ToastType, number> = {
-      success: 4000,
-      info: 4000,
-      warning: 5000,
-      error: 5500,
-    }
-    const finalDuration = duration ?? defaultDurations[type]
-    // Parse message
-    let finalMessage: string
-    if (typeof message === 'string') {
-      finalMessage = message
-    } else if (message && typeof message === 'object') {
-      const msgObj = message as Record<string, unknown>
-      if (typeof msgObj.message === 'string') {
-        finalMessage = msgObj.message
-      } else if (typeof msgObj.error === 'string') {
-        finalMessage = msgObj.error
-      } else if (typeof msgObj.msg === 'string') {
-        finalMessage = msgObj.msg
-      } else {
-        finalMessage = t('operationFailed')
+  const showToast = useCallback(
+    (
+      message: string | { message?: string; code?: string; error?: string } | unknown,
+      type: ToastType = 'info',
+      duration?: number
+    ) => {
+      // Error/warning toasts need more reading time
+      const defaultDurations: Record<ToastType, number> = {
+        success: 4000,
+        info: 4000,
+        warning: 5000,
+        error: 5500,
       }
-    } else {
-      finalMessage = String(message || t('unknownError'))
-    }
+      const finalDuration = duration ?? defaultDurations[type]
+      // Parse message
+      let finalMessage: string
+      if (typeof message === 'string') {
+        finalMessage = message
+      } else if (message && typeof message === 'object') {
+        const msgObj = message as Record<string, unknown>
+        if (typeof msgObj.message === 'string') {
+          finalMessage = msgObj.message
+        } else if (typeof msgObj.error === 'string') {
+          finalMessage = msgObj.error
+        } else if (typeof msgObj.msg === 'string') {
+          finalMessage = msgObj.msg
+        } else {
+          finalMessage = t('operationFailed')
+        }
+      } else {
+        finalMessage = String(message || t('unknownError'))
+      }
 
-    // Extract txHash and action if present
-    let txHash: string | undefined
-    let chainId: number | undefined
-    let action: ToastAction | undefined
-    if (message && typeof message === 'object') {
-      const msgObj = message as Record<string, unknown>
-      if (typeof msgObj.txHash === 'string') txHash = msgObj.txHash
-      if (typeof msgObj.chainId === 'number') chainId = msgObj.chainId
-      if (msgObj.action && typeof msgObj.action === 'object') {
-        const a = msgObj.action as Record<string, unknown>
-        if (typeof a.label === 'string' && typeof a.onClick === 'function') {
-          action = { label: a.label, onClick: a.onClick as () => void }
+      // Extract txHash and action if present
+      let txHash: string | undefined
+      let chainId: number | undefined
+      let action: ToastAction | undefined
+      if (message && typeof message === 'object') {
+        const msgObj = message as Record<string, unknown>
+        if (typeof msgObj.txHash === 'string') txHash = msgObj.txHash
+        if (typeof msgObj.chainId === 'number') chainId = msgObj.chainId
+        if (msgObj.action && typeof msgObj.action === 'object') {
+          const a = msgObj.action as Record<string, unknown>
+          if (typeof a.label === 'string' && typeof a.onClick === 'function') {
+            action = { label: a.label, onClick: a.onClick as () => void }
+          }
         }
       }
-    }
 
-    const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    const newToast: Toast = { id, message: finalMessage, type, duration: finalDuration, createdAt: Date.now(), txHash, chainId, action }
+      const id = `toast-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+      const newToast: Toast = {
+        id,
+        message: finalMessage,
+        type,
+        duration: finalDuration,
+        createdAt: Date.now(),
+        txHash,
+        chainId,
+        action,
+      }
 
-    setToasts((prev) => {
-      // Deduplicate: skip if same message shown within last 1.5s
-      const isDuplicate = prev.some(
-        (t) => t.message === finalMessage && Date.now() - t.createdAt < 1500
-      )
-      if (isDuplicate) return prev
-      return [...prev.slice(-4), newToast]
-    })
+      setToasts((prev) => {
+        // Deduplicate: skip if same message shown within last 1.5s
+        const isDuplicate = prev.some(
+          (t) => t.message === finalMessage && Date.now() - t.createdAt < 1500
+        )
+        if (isDuplicate) return prev
+        return [...prev.slice(-4), newToast]
+      })
 
-    if (finalDuration > 0) {
-      const timer = setTimeout(() => {
-        setToasts((prev) => prev.filter((t) => t.id !== id))
-        dismissTimersRef.current.delete(id)
-      }, finalDuration)
-      dismissTimersRef.current.set(id, timer)
-    }
-  }, [])
+      if (finalDuration > 0) {
+        const timer = setTimeout(() => {
+          setToasts((prev) => prev.filter((t) => t.id !== id))
+          dismissTimersRef.current.delete(id)
+        }, finalDuration)
+        dismissTimersRef.current.set(id, timer)
+      }
+    },
+    []
+  )
 
   const hideToast = useCallback((id: string) => {
     // Clear auto-dismiss timer if exists
@@ -426,9 +445,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, [showToast])
 
   return (
-    <ToastContext.Provider value={useMemo(() => ({ showToast, hideToast }), [showToast, hideToast])}>
+    <ToastContext.Provider
+      value={useMemo(() => ({ showToast, hideToast }), [showToast, hideToast])}
+    >
       {children}
-      
+
       {/* Toast Container */}
       {toasts.length > 0 && (
         <div
@@ -450,10 +471,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         >
           {toasts.map((toast) => (
             <div key={toast.id} style={{ pointerEvents: 'auto' }}>
-              <ToastItem
-                toast={toast}
-                onClose={() => hideToast(toast.id)}
-              />
+              <ToastItem toast={toast} onClose={() => hideToast(toast.id)} />
             </div>
           ))}
         </div>

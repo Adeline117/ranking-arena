@@ -10,7 +10,11 @@ import { getCsrfHeaders } from '@/lib/api/client'
 
 /** Referral config per exchange */
 const REFERRAL_LINKS: Record<string, { url: string; code: string; color: string }> = {
-  binance: { url: 'https://www.bsmkweb.cc/register?ref=ARENA', code: 'ARENA', color: '#F0B90B' },
+  binance: {
+    url: 'https://www.binance.com/en/register?ref=ARENA',
+    code: 'ARENA',
+    color: '#F0B90B',
+  },
 }
 
 function getReferralKey(source: string): string | null {
@@ -34,38 +38,46 @@ interface ExchangeLinksBarProps {
   isOwnProfile?: boolean
 }
 
-export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccount, isOwnProfile }: ExchangeLinksBarProps) {
+export default function ExchangeLinksBar({
+  primary,
+  linkedAccounts,
+  activeAccount,
+  isOwnProfile,
+}: ExchangeLinksBarProps) {
   const { t } = useLanguage()
 
   // Dedupe: primary + linked, unique by platform+traderKey
   const allAccounts: ExchangeLink[] = [primary]
   if (linkedAccounts) {
     for (const acc of linkedAccounts) {
-      if (!allAccounts.some(a => a.platform === acc.platform && a.traderKey === acc.traderKey)) {
+      if (!allAccounts.some((a) => a.platform === acc.platform && a.traderKey === acc.traderKey)) {
         allAccounts.push(acc)
       }
     }
   }
 
   // Build link entries
-  const entries = allAccounts.map(acc => {
-    const copyUrl = getCopyTradeUrl(acc.platform, acc.traderKey, acc.handle ?? undefined)
-    const dexUrl = getDexUrl(acc.platform, acc.traderKey)
-    const url = copyUrl || dexUrl
-    if (!url) return null
+  const entries = allAccounts
+    .map((acc) => {
+      const copyUrl = getCopyTradeUrl(acc.platform, acc.traderKey, acc.handle ?? undefined)
+      const dexUrl = getDexUrl(acc.platform, acc.traderKey)
+      const url = copyUrl || dexUrl
+      if (!url) return null
 
-    const name = EXCHANGE_NAMES[acc.platform.toLowerCase()] || acc.platform
-    const isCopyTrade = !!copyUrl
-    const referralKey = getReferralKey(acc.platform)
-    const referral = referralKey ? REFERRAL_LINKS[referralKey] : null
+      const name = EXCHANGE_NAMES[acc.platform.toLowerCase()] || acc.platform
+      const isCopyTrade = !!copyUrl
+      const referralKey = getReferralKey(acc.platform)
+      const referral = referralKey ? REFERRAL_LINKS[referralKey] : null
 
-    // Highlight when this account is the active tab
-    const isActive = activeAccount && activeAccount !== 'all'
-      ? activeAccount === `${acc.platform}:${acc.traderKey}`
-      : acc.platform === primary.platform && acc.traderKey === primary.traderKey
+      // Highlight when this account is the active tab
+      const isActive =
+        activeAccount && activeAccount !== 'all'
+          ? activeAccount === `${acc.platform}:${acc.traderKey}`
+          : acc.platform === primary.platform && acc.traderKey === primary.traderKey
 
-    return { acc, url, name, isCopyTrade, referral, isActive }
-  }).filter(Boolean) as Array<{
+      return { acc, url, name, isCopyTrade, referral, isActive }
+    })
+    .filter(Boolean) as Array<{
     acc: ExchangeLink
     url: string
     name: string
@@ -87,11 +99,16 @@ export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccoun
       }}
     >
       {entries.map(({ acc, url, name, isCopyTrade, referral, isActive }) => {
-        const activeBorder = isActive ? tokens.colors.accent.primary + '80' : tokens.colors.border.primary
+        const activeBorder = isActive
+          ? tokens.colors.accent.primary + '80'
+          : tokens.colors.border.primary
         const activeBg = isActive ? tokens.colors.accent.primary + '10' : tokens.colors.bg.secondary
 
         return (
-          <Box key={`${acc.platform}:${acc.traderKey}`} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <Box
+            key={`${acc.platform}:${acc.traderKey}`}
+            style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+          >
             <a
               href={url}
               target="_blank"
@@ -114,27 +131,47 @@ export default function ExchangeLinksBar({ primary, linkedAccounts, activeAccoun
                 fetch('/api/interactions', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-                  body: JSON.stringify({ type: 'exchange_link_click', platform: acc.platform, traderKey: acc.traderKey }),
+                  body: JSON.stringify({
+                    type: 'exchange_link_click',
+                    platform: acc.platform,
+                    traderKey: acc.traderKey,
+                  }),
                 }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget: analytics is non-critical
               }}
-              onMouseEnter={e => {
+              onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = tokens.colors.accent.primary + '80'
                 e.currentTarget.style.background = tokens.colors.accent.primary + '10'
               }}
-              onMouseLeave={e => {
+              onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = activeBorder
                 e.currentTarget.style.background = activeBg
               }}
             >
               <ExchangeLogo exchange={acc.platform} size={18} />
-              <Text size="sm" weight="bold" style={{ color: isActive ? tokens.colors.accent.primary : tokens.colors.text.primary, whiteSpace: 'nowrap' }}>
+              <Text
+                size="sm"
+                weight="bold"
+                style={{
+                  color: isActive ? tokens.colors.accent.primary : tokens.colors.text.primary,
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {isOwnProfile
                   ? t('dexViewOn').replace('{platform}', name)
                   : isCopyTrade
                     ? t('copyTradeOn').replace('{exchange}', name)
                     : t('dexViewOn').replace('{platform}', name)}
               </Text>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M18 13v6a2 2 0 01-2 2H5a2 2 0 01-2-2V8a2 2 0 012-2h6" />
                 <polyline points="15 3 21 3 21 9" />
                 <line x1="10" y1="14" x2="21" y2="3" />
