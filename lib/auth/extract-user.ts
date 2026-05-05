@@ -57,10 +57,18 @@ function classifyAuthError(message: string | null | undefined): AuthFailureReaso
   if (!message) return 'invalid_token'
   const m = message.toLowerCase()
   if (m.includes('jwt expired') || m.includes('jwtexpired')) return 'jwt_expired'
-  if (m.includes('invalid') || m.includes('bad jwt') || m.includes('signature')) return 'invalid_token'
+  if (m.includes('invalid') || m.includes('bad jwt') || m.includes('signature'))
+    return 'invalid_token'
   // Supabase service errors (500/timeout/network)
-  if (m.includes('fetch failed') || m.includes('etimedout') || m.includes('econnreset') ||
-      m.includes('network') || m.includes('503') || m.includes('502') || m.includes('500')) {
+  if (
+    m.includes('fetch failed') ||
+    m.includes('etimedout') ||
+    m.includes('econnreset') ||
+    m.includes('network') ||
+    m.includes('503') ||
+    m.includes('502') ||
+    m.includes('500')
+  ) {
     return 'supabase_error'
   }
   return 'invalid_token'
@@ -71,16 +79,22 @@ function classifyAuthError(message: string | null | undefined): AuthFailureReaso
  * /api/health/detailed to surface elevated rates (e.g. a Supabase auth
  * outage shows up as spiking `supabase_error` count).
  */
-export function getAuthFailureStats(): Record<AuthFailureReason, {
-  count: number
-  lastMessage: string
-  lastAt: string
-}> {
-  const out = {} as Record<AuthFailureReason, {
+export function getAuthFailureStats(): Record<
+  AuthFailureReason,
+  {
     count: number
     lastMessage: string
     lastAt: string
-  }>
+  }
+> {
+  const out = {} as Record<
+    AuthFailureReason,
+    {
+      count: number
+      lastMessage: string
+      lastAt: string
+    }
+  >
   for (const [reason, s] of _authFailureStats.entries()) {
     out[reason] = {
       count: s.count,
@@ -100,9 +114,20 @@ export async function extractUserFromRequest(request: Request): Promise<{
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.substring(7)
     try {
-      const { data, error } = await getSupabaseAdmin().auth.getUser(token)
+      const admin = getSupabaseAdmin()
+      const { data, error } = await admin.auth.getUser(token)
       if (error) recordAuthFailure(classifyAuthError(error.message), error.message)
-      return { user: data?.user ?? null, error: error?.message ?? null }
+      if (error || !data?.user) return { user: null, error: error?.message ?? null }
+      // Check ban/deletion status — prevent banned users from performing sensitive ops
+      const { data: profile } = await admin
+        .from('user_profiles')
+        .select('banned_at, deleted_at')
+        .eq('id', data.user.id)
+        .maybeSingle()
+      if (profile?.banned_at || profile?.deleted_at) {
+        return { user: null, error: 'Account suspended' }
+      }
+      return { user: data.user, error: null }
     } catch (err) {
       // Network error / unexpected exception talking to Supabase Auth.
       const message = err instanceof Error ? err.message : String(err)
