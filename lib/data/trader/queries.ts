@@ -918,8 +918,11 @@ export async function resolveTrader(
   handle: string | null
   avatarUrl: string | null
 } | null> {
-  // Sanitize handle for PostgREST .or() filter safety — reject chars that break filter syntax
-  let decodedHandle = decodeURIComponent(params.handle).replace(/[(),]/g, '')
+  // Sanitize handle for PostgREST .or() filter safety — reject chars that break filter syntax.
+  // Do NOT decode here — callers are responsible for decoding (page.tsx already decodes).
+  // Only strip characters that actually break PostgREST .or() syntax: commas and parentheses.
+  // Dots are safe in PostgREST filters and must be preserved (many handles contain dots).
+  let decodedHandle = params.handle.replace(/[(),]/g, '')
 
   // ETH-address normalization: incoming URLs sometimes carry mixed-case
   // checksum addresses (0x880Ac484...) but the DB always stores lowercase.
@@ -938,7 +941,7 @@ export async function resolveTrader(
       .from('traders')
       .select('platform, trader_key, handle, avatar_url')
       .or(
-        `handle.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')},trader_key.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`
+        `handle.eq.${decodedHandle.replace(/[,()\[\]\\%_]/g, '')},trader_key.eq.${decodedHandle.replace(/[,()\[\]\\%_]/g, '')}`
       )
 
     if (platformFilter) {
