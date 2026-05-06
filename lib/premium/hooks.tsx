@@ -298,19 +298,14 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     }
   }, []) // stable — subscription read via subscriptionRef to avoid recreation on sub change
 
-  // Defer subscription load until browser is idle — this makes network requests
-  // to /api/subscription and Supabase auth, which block the main thread during
-  // initial hydration. Deferring keeps the hydration fast; paywall-gated UI
-  // treats unresolved subscription as "free" until resolved.
+  // Load subscription immediately on mount. Previously deferred via
+  // requestIdleCallback (up to 4s), which caused Pro users to see locked
+  // content for 2-4 seconds — the worst moment being right after payment.
+  // loadSubscription() is async (fetch-based), so it doesn't block the
+  // main thread. The SSR cookie hint (arena_tier) already handles hydration perf.
   useEffect(() => {
     if (!initialSubscription) {
-      if ('requestIdleCallback' in window) {
-        const id = requestIdleCallback(() => loadSubscription(), { timeout: 4000 })
-        return () => cancelIdleCallback(id)
-      } else {
-        const id = setTimeout(() => loadSubscription(), 2000)
-        return () => clearTimeout(id)
-      }
+      loadSubscription()
     }
   }, [initialSubscription, loadSubscription])
 

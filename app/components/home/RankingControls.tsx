@@ -82,31 +82,34 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
   // after a transient error instead of having to re-click.
   const lastNavRef = useRef<{ range: string; pg: number } | null>(null)
 
-  const navigate = useCallback((range: string, pg: number) => {
-    if (isOffline) {
-      setNavError(true)
-      return
-    }
-    setNavError(false)
-    lastNavRef.current = { range, pg }
+  const navigate = useCallback(
+    (range: string, pg: number) => {
+      if (isOffline) {
+        setNavError(true)
+        return
+      }
+      setNavError(false)
+      lastNavRef.current = { range, pg }
 
-    const params = new URLSearchParams()
-    if (range !== '90D') params.set('range', range)
-    if (pg > 0) params.set('page', String(pg))
-    const qs = params.toString()
+      const params = new URLSearchParams()
+      if (range !== '90D') params.set('range', range)
+      if (pg > 0) params.set('page', String(pg))
+      const qs = params.toString()
 
-    // PROD-2 (audit): reduced from 8s → 3s. Users started repeat-clicking
-    // around the 3-4s mark on slow connections because the loading bar
-    // alone wasn't enough feedback. Earlier error visibility lets them
-    // retry instead of building a queue of router.push() calls.
-    navTimerRef.current = setTimeout(() => {
-      setNavError(true)
-    }, 3000)
+      // PROD-2 (audit): reduced from 8s → 3s. Users started repeat-clicking
+      // around the 3-4s mark on slow connections because the loading bar
+      // alone wasn't enough feedback. Earlier error visibility lets them
+      // retry instead of building a queue of router.push() calls.
+      navTimerRef.current = setTimeout(() => {
+        setNavError(true)
+      }, 3000)
 
-    startTransition(() => {
-      router.push(qs ? `/?${qs}` : '/', { scroll: false })
-    })
-  }, [isOffline, router, startTransition])
+      startTransition(() => {
+        router.push(qs ? `/?${qs}` : '/', { scroll: false })
+      })
+    },
+    [isOffline, router, startTransition]
+  )
 
   const retryLastNav = useCallback(() => {
     const last = lastNavRef.current
@@ -115,22 +118,43 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
 
   return (
     <div className="ssr-controls" data-pending={isPending ? 'true' : undefined}>
+      {/* Data freshness timestamp — always visible so users know data age */}
+      {lastDataTime && !isOffline && !navError && (
+        <div
+          style={{
+            width: '100%',
+            display: 'flex',
+            justifyContent: 'flex-end',
+            fontSize: 11,
+            color: 'var(--color-text-tertiary, #888)',
+            order: -1,
+            padding: '2px 4px 0',
+          }}
+        >
+          <span>
+            {t('rankingControlsDataAsOf')} {lastDataTime}
+          </span>
+        </div>
+      )}
+
       {(isOffline || navError) && (
-        <div style={{
-          width: '100%',
-          padding: '8px 12px',
-          borderRadius: 8,
-          fontSize: 12,
-          fontWeight: 500,
-          color: 'var(--color-text-primary, #fff)',
-          background: 'rgba(251, 146, 60, 0.15)',
-          border: '1px solid rgba(251, 146, 60, 0.3)',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          order: -1,
-        }}>
-          <span style={{ fontSize: 14 }}>⚠</span>
+        <div
+          style={{
+            width: '100%',
+            padding: '8px 12px',
+            borderRadius: 8,
+            fontSize: 12,
+            fontWeight: 500,
+            color: 'var(--color-text-primary, #fff)',
+            background: 'rgba(251, 146, 60, 0.15)',
+            border: '1px solid rgba(251, 146, 60, 0.3)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            order: -1,
+          }}
+        >
+          <span style={{ fontSize: 14 }}>&#x26A0;</span>
           <span style={{ flex: 1 }}>
             {isOffline
               ? `${t('rankingControlsOffline')}${lastDataTime ? ` ${t('rankingControlsDataAsOf')} ${lastDataTime}.` : ''}`
@@ -160,7 +184,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
       )}
 
       <div className="ssr-range-bar">
-        {RANGES.map(r => (
+        {RANGES.map((r) => (
           <button
             key={r}
             className={`ssr-range-btn${r === activeRange ? ' ssr-range-active' : ''}`}
@@ -210,8 +234,8 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
         </div>
       )}
 
-      {/* Free-tier limit banner — show when user reaches the last page */}
-      {page >= totalPages - 1 && totalCount > 0 && (
+      {/* Free-tier limit banner — always visible so users know scope upfront */}
+      {totalCount > 0 && (
         <a
           href="/pricing"
           style={{
@@ -219,26 +243,35 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             alignItems: 'center',
             gap: 8,
             width: '100%',
-            padding: '10px 14px',
+            padding: '8px 14px',
             borderRadius: 8,
-            fontSize: 13,
+            fontSize: 12,
             fontWeight: 500,
             color: 'var(--color-text-secondary, #aaa)',
-            background: 'linear-gradient(135deg, var(--color-bg-secondary, #1a1a2e) 0%, rgba(167,139,250,0.08) 100%)',
-            border: '1px solid rgba(167, 139, 250, 0.2)',
+            background:
+              page >= totalPages - 1
+                ? 'linear-gradient(135deg, var(--color-bg-secondary, #1a1a2e) 0%, rgba(167,139,250,0.12) 100%)'
+                : 'transparent',
+            border:
+              page >= totalPages - 1
+                ? '1px solid rgba(167, 139, 250, 0.2)'
+                : '1px solid transparent',
             textDecoration: 'none',
             transition: 'border-color 0.2s, background 0.2s',
+            opacity: page >= totalPages - 1 ? 1 : 0.7,
           }}
         >
           <span style={{ flex: 1 }}>
             {t('rankingControlsShowingTop').replace('{count}', totalCount.toLocaleString())}
           </span>
-          <span style={{
-            fontSize: 12,
-            fontWeight: 700,
-            color: 'var(--color-brand, #a78bfa)',
-            whiteSpace: 'nowrap',
-          }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: 'var(--color-brand, #a78bfa)',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {t('rankingControlsUpgrade')}
           </span>
         </a>

@@ -12,11 +12,19 @@ export type Period = '7D' | '30D' | '90D'
 // Data source period mapping notes
 // Platforms that return cumulative (all-time) ROI instead of period-specific
 export const CUMULATIVE_ROI_PLATFORMS = new Set([
-  'binance_futures', 'binance_spot', 'bybit', 'bitget_futures',
-  'dydx', 'gmx', 'btcc',
+  'binance_futures',
+  'binance_spot',
+  'bybit',
+  'bitget_futures',
+  'dydx',
+  'gmx',
+  'btcc',
 ])
 
-export const DATA_SOURCE_NOTES: Record<string, { titleKey: string; periods: Record<string, string> }> = {
+export const DATA_SOURCE_NOTES: Record<
+  string,
+  { titleKey: string; periods: Record<string, string> }
+> = {
   weex: {
     titleKey: 'weexDataNote',
     periods: {
@@ -34,9 +42,14 @@ export interface PeriodSelectorProps {
   lastUpdated?: string
 }
 
-export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: PeriodSelectorProps) {
+export function PeriodSelector({
+  period,
+  onPeriodChange,
+  source,
+  lastUpdated,
+}: PeriodSelectorProps) {
   const { t, language } = useLanguage()
-  const setGlobalPeriod = usePeriodStore(s => s.setPeriod)
+  const setGlobalPeriod = usePeriodStore((s) => s.setPeriod)
   const containerRef = useRef<HTMLDivElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
 
@@ -82,7 +95,12 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
         </Text>
         {lastUpdated && (
           <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
-            {t('updatedAt')} {new Date(lastUpdated).toLocaleTimeString(getLocaleFromLanguage(language), { hour: '2-digit', minute: '2-digit', timeZoneName: 'short' })}
+            {t('updatedAt')}{' '}
+            {new Date(lastUpdated).toLocaleTimeString(getLocaleFromLanguage(language), {
+              hour: '2-digit',
+              minute: '2-digit',
+              timeZoneName: 'short',
+            })}
           </Text>
         )}
       </Box>
@@ -102,7 +120,14 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
             }}
             title={t('cumulativeRoiTooltip')}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-tertiary)" strokeWidth="2">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-text-tertiary)"
+              strokeWidth="2"
+            >
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="16" x2="12" y2="12" />
               <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -132,7 +157,14 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
               return t(note.titleKey) + ': 30D=' + p30 + ', 90D=' + p90
             })()}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.warning} strokeWidth="2">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={tokens.colors.accent.warning}
+              strokeWidth="2"
+            >
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="16" x2="12" y2="12" />
               <line x1="12" y1="8" x2="12.01" y2="8" />
@@ -170,7 +202,8 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                 borderRadius: tokens.radius.md,
                 background: tokens.colors.bg.primary,
                 boxShadow: '0 2px 8px var(--color-overlay-subtle)',
-                transition: 'left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
+                transition:
+                  'left 0.25s cubic-bezier(0.4, 0, 0.2, 1), width 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                 pointerEvents: 'none',
                 zIndex: 0,
               }}
@@ -183,7 +216,9 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
             return (
               <button
                 key={p}
-                onClick={() => { if (!isDisabled) onPeriodChange(p) }}
+                onClick={() => {
+                  if (!isDisabled) onPeriodChange(p)
+                }}
                 disabled={isDisabled}
                 aria-pressed={period === p}
                 aria-label={`${label} period`}
@@ -208,18 +243,35 @@ export function PeriodSelector({ period, onPeriodChange, source, lastUpdated }: 
                   zIndex: 1,
                 }}
                 onMouseEnter={(e) => {
-                  if (!isDisabled && period !== p) e.currentTarget.style.background = 'var(--color-bg-tertiary, rgba(255,255,255,0.05))'
+                  if (!isDisabled && period !== p)
+                    e.currentTarget.style.background =
+                      'var(--color-bg-tertiary, rgba(255,255,255,0.05))'
                 }}
                 onMouseLeave={(e) => {
                   if (!isDisabled && period !== p) e.currentTarget.style.background = 'transparent'
                 }}
                 title={isDisabled ? t('noDataForPeriod') : undefined}
+                aria-disabled={isDisabled || undefined}
               >
                 {label}
               </button>
             )
           })}
         </Box>
+
+        {/* Always-visible note when selected period has no data for this platform */}
+        {source &&
+          (() => {
+            const sourceNote = DATA_SOURCE_NOTES[source.toLowerCase()]
+            if (sourceNote && sourceNote.periods[period] === '--') {
+              return (
+                <Text size="xs" style={{ color: tokens.colors.accent.warning, fontWeight: 500 }}>
+                  {t('noDataForPeriod')}
+                </Text>
+              )
+            }
+            return null
+          })()}
       </Box>
     </Box>
   )
