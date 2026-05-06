@@ -23,7 +23,8 @@ const SIZES = {
 }
 
 /** Shield checkmark SVG path - more distinctive than a simple circle */
-const SHIELD_CHECK_PATH = 'M10 1l6 3v4c0 4.5-2.5 8.5-6 10-3.5-1.5-6-5.5-6-10V4l6-3zm-1.5 11.5l5-5-1.4-1.4-3.6 3.6-1.6-1.6-1.4 1.4 3 3z'
+const SHIELD_CHECK_PATH =
+  'M10 1l6 3v4c0 4.5-2.5 8.5-6 10-3.5-1.5-6-5.5-6-10V4l6-3zm-1.5 11.5l5-5-1.4-1.4-3.6 3.6-1.6-1.6-1.4 1.4 3 3z'
 
 export default function VerifiedBadge({
   size = 'sm',
@@ -58,6 +59,8 @@ export default function VerifiedBadge({
 
   return (
     <span
+      role="img"
+      aria-label={t('verifiedTooltip')}
       title={t('verifiedTooltip')}
       style={{
         display: 'inline-flex',
@@ -78,10 +81,13 @@ export default function VerifiedBadge({
         viewBox="0 0 20 20"
         fill="currentColor"
       >
-        <path d={variant === 'subtle'
-          ? 'M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z'
-          : SHIELD_CHECK_PATH
-        }/>
+        <path
+          d={
+            variant === 'subtle'
+              ? 'M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z'
+              : SHIELD_CHECK_PATH
+          }
+        />
       </svg>
       {showLabel && (variant === 'prominent' ? t('verifiedTraderLabel') : t('verifiedBadge'))}
     </span>

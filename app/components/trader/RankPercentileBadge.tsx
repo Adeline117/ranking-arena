@@ -20,10 +20,11 @@ interface RankPercentileBadgeProps {
   platform: string | undefined
 }
 
-const fetcher = (url: string) => fetch(url).then(r => {
-  if (!r.ok) throw new Error(`${r.status}`)
-  return r.json()
-})
+const fetcher = (url: string) =>
+  fetch(url).then((r) => {
+    if (!r.ok) throw new Error(`${r.status}`)
+    return r.json()
+  })
 
 // Badge color tiers
 function getBadgeStyle(percentile: number): { bg: string; color: string; border: string } {
@@ -79,10 +80,15 @@ export default function RankPercentileBadge({ rank, platform }: RankPercentileBa
   )
   if (!platformStat || platformStat.traderCount <= 0) return null
 
-  const percentile = ((1 - rank / platformStat.traderCount) * 100)
+  const percentile = (1 - rank / platformStat.traderCount) * 100
   if (percentile <= 0) return null
 
-  const displayPct = percentile >= 99 ? 1 : percentile >= 90 ? Math.round(100 - percentile) : Math.round(100 - percentile)
+  const displayPct =
+    percentile >= 99
+      ? 1
+      : percentile >= 90
+        ? Math.round(100 - percentile)
+        : Math.round(100 - percentile)
 
   // Only show if top 50% or better
   if (displayPct > 50) return null
@@ -106,11 +112,22 @@ export default function RankPercentileBadge({ rank, platform }: RankPercentileBa
         border: `1px solid ${style.border}`,
         flexShrink: 0,
       }}
+      role="img"
+      aria-label={label}
       title={label}
     >
       {/* Trophy icon for top tiers */}
       {percentile >= 90 && (
-        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={style.color} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="10"
+          height="10"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={style.color}
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
           <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
           <path d="M4 22h16" />

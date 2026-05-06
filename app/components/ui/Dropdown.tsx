@@ -98,9 +98,17 @@ export interface DropdownProps<T = string> {
   fullWidth?: boolean
   className?: string
   style?: React.CSSProperties
-  renderOption?: (option: DropdownOption<T>, isActive: boolean, isSelected: boolean) => React.ReactNode
+  renderOption?: (
+    option: DropdownOption<T>,
+    isActive: boolean,
+    isSelected: boolean
+  ) => React.ReactNode
   /** Force show/hide search input (auto-shown when options > 8) */
   searchable?: boolean
+  /** Placeholder text for search input (default: "Search...") */
+  searchPlaceholder?: string
+  /** Text shown when search finds no matches (default: "No matches") */
+  noMatchesText?: string
 }
 
 export function Dropdown<T = string>({
@@ -117,6 +125,8 @@ export function Dropdown<T = string>({
   style,
   renderOption,
   searchable,
+  searchPlaceholder = 'Search...',
+  noMatchesText = 'No matches',
 }: DropdownProps<T>) {
   const [isOpen, setIsOpen] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
@@ -137,20 +147,22 @@ export function Dropdown<T = string>({
   const showSearch = searchable ?? options.length > 8
 
   // Filter options by search query
-  const filteredOptions = showSearch && searchQuery
-    ? options.filter((opt) =>
-        opt.label.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    : options
+  const filteredOptions =
+    showSearch && searchQuery
+      ? options.filter((opt) => opt.label.toLowerCase().includes(searchQuery.toLowerCase()))
+      : options
 
-  const handleSelect = useCallback((option: DropdownOption<T>) => {
-    if (!option.disabled) {
-      onChange(option.value)
-      setIsOpen(false)
-      setSearchQuery('')
-      buttonRef.current?.focus()
-    }
-  }, [onChange])
+  const handleSelect = useCallback(
+    (option: DropdownOption<T>) => {
+      if (!option.disabled) {
+        onChange(option.value)
+        setIsOpen(false)
+        setSearchQuery('')
+        buttonRef.current?.focus()
+      }
+    },
+    [onChange]
+  )
 
   const handleOpen = useCallback(() => {
     setIsOpen(true)
@@ -215,11 +227,7 @@ export function Dropdown<T = string>({
         ...style,
       }}
     >
-      {label && (
-        <label style={DDN_LABEL_STYLE}>
-          {label}
-        </label>
-      )}
+      {label && <label style={DDN_LABEL_STYLE}>{label}</label>}
 
       <button
         ref={buttonRef}
@@ -301,10 +309,7 @@ export function Dropdown<T = string>({
 
       {/* Dropdown list */}
       {isOpen && (
-        <div
-          className="dropdown-enter"
-          style={DDN_PANEL_STYLE}
-        >
+        <div className="dropdown-enter" style={DDN_PANEL_STYLE}>
           {/* Search input for long lists */}
           {showSearch && (
             <div style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[2]} 0` }}>
@@ -325,12 +330,13 @@ export function Dropdown<T = string>({
                   } else if (e.key === 'Enter') {
                     e.preventDefault()
                     if (filteredOptions.length > 0) {
-                      const target = activeIndex >= 0 ? filteredOptions[activeIndex] : filteredOptions[0]
+                      const target =
+                        activeIndex >= 0 ? filteredOptions[activeIndex] : filteredOptions[0]
                       if (target && !target.disabled) handleSelect(target)
                     }
                   }
                 }}
-                placeholder="Search..."
+                placeholder={searchPlaceholder}
                 aria-label={`Search ${label || 'options'}`}
                 style={{
                   width: '100%',
@@ -367,7 +373,7 @@ export function Dropdown<T = string>({
                   textAlign: 'center',
                 }}
               >
-                No matches
+                {noMatchesText}
               </li>
             )}
             {filteredOptions.map((option, index) => {
@@ -406,13 +412,13 @@ export function Dropdown<T = string>({
                     color: isDisabled
                       ? tokens.colors.text.disabled
                       : isSelected
-                      ? tokens.colors.accent.brand
-                      : tokens.colors.text.primary,
+                        ? tokens.colors.accent.brand
+                        : tokens.colors.text.primary,
                     background: isActive
                       ? tokens.colors.bg.hover
                       : isSelected
-                      ? `${tokens.colors.accent.brand}15`
-                      : 'transparent',
+                        ? `${tokens.colors.accent.brand}15`
+                        : 'transparent',
                     fontWeight: isSelected
                       ? tokens.typography.fontWeight.semibold
                       : tokens.typography.fontWeight.medium,
