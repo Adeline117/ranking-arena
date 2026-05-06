@@ -22,11 +22,13 @@ export function useDirectCheckout() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [alreadySubscribed, setAlreadySubscribed] = useState(false)
 
   const checkout = useCallback(
     async (plan: Plan, options?: { promotionCode?: string }) => {
       setIsLoading(true)
       setError(null)
+      setAlreadySubscribed(false)
 
       try {
         const res = await fetch('/api/stripe/create-checkout', {
@@ -47,6 +49,8 @@ export function useDirectCheckout() {
             return
           }
           if (data.code === 'ALREADY_SUBSCRIBED') {
+            // Signal to caller so they can show feedback (toast, banner, etc.)
+            setAlreadySubscribed(true)
             router.push('/user-center?tab=membership')
             return
           }
@@ -66,5 +70,5 @@ export function useDirectCheckout() {
     [router]
   )
 
-  return { checkout, isLoading, error }
+  return { checkout, isLoading, error, alreadySubscribed }
 }

@@ -3646,6 +3646,13 @@ const en = {
   cancelSubscriptionConfirm:
     'Are you sure you want to cancel? Your subscription will remain active until the end of the current billing period.',
   subscriptionCancelAtEnd: 'Subscription will cancel at period end',
+  cancelSubscriptionNote:
+    'You will keep Pro access until the end of your current billing period. No further charges will be made.',
+  confirmCancel: 'Yes, Cancel',
+  keepSubscription: 'Keep Subscription',
+  alreadyProMember: 'You already have an active Pro subscription!',
+  thisUsuallyTakesSeconds: 'This usually takes a few seconds...',
+  perMonthBilledYearly: 'mo (billed yearly)',
   paymentSystemComingSoon: 'Payment system coming soon',
   operationFailedTryAgain: 'Failed, please try again',
 
