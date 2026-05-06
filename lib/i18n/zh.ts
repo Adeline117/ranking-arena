@@ -4918,6 +4918,12 @@ const zh = {
   notifGroupUpdates: '群组更新',
   cumulativeRoiLabel: '累计 ROI',
   cumulativeRoiTooltip: '该平台 API 返回的是累计 ROI，30D 和 90D 可能相同',
+  allTime90dLabel: '90D = 全部时间',
+  allTime90dTooltip:
+    '该交易所不提供原生 90 天窗口数据。显示的 90D 数据实际上是全部时间（历史）的表现数据。',
+  derivedRoiLabel: '计算 ROI',
+  derivedRoiTooltip:
+    '该交易所的 ROI 通过 PnL/账户权益 计算得出，而非交易所原生 ROI 指标。数值可能与交易所显示的不同。',
   unlockFullStatistics: '解锁完整数据统计',
   upgradeProStatsDesc: '升级 Pro 会员查看详细的交易统计数据、收益曲线和历史表现',
   paginationNav: '分页导航',
