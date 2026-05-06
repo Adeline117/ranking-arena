@@ -4987,6 +4987,12 @@ const en = {
   cumulativeRoiLabel: 'Cumulative',
   cumulativeRoiTooltip:
     'This exchange API returns cumulative ROI. 30D and 90D values may be identical.',
+  allTime90dLabel: '90D = All-Time',
+  allTime90dTooltip:
+    'This exchange does not provide a native 90-day window. The 90D data shown is actually all-time (lifetime) performance data.',
+  derivedRoiLabel: 'Derived ROI',
+  derivedRoiTooltip:
+    'ROI for this exchange is calculated from PnL/Equity rather than a native ROI metric. Values may differ from what the exchange shows.',
   unlockFullStatistics: 'Unlock Full Statistics',
   upgradeProStatsDesc:
     'Upgrade to Pro to view detailed trading stats, equity curves and historical performance',

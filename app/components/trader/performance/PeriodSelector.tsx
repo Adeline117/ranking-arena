@@ -21,6 +21,12 @@ export const CUMULATIVE_ROI_PLATFORMS = new Set([
   'btcc',
 ])
 
+// Platforms where 90D data actually uses allTime window (API doesn't support 90D natively)
+export const ALLTIME_90D_PLATFORMS = new Set(['hyperliquid_perp'])
+
+// Platforms where ROI is derived from PnL/Equity rather than native ROI API
+export const DERIVED_ROI_PLATFORMS = new Set(['dydx'])
+
 export const DATA_SOURCE_NOTES: Record<
   string,
   { titleKey: string; periods: Record<string, string> }
@@ -107,6 +113,68 @@ export function PeriodSelector({
 
       {/* Period Selector */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        {/* Hyperliquid 90D = allTime disclosure */}
+        {source && ALLTIME_90D_PLATFORMS.has(source.toLowerCase()) && period === '90D' && (
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[1],
+              padding: '4px 8px',
+              background: 'color-mix(in srgb, var(--color-text-tertiary) 8%, transparent)',
+              borderRadius: tokens.radius.md,
+            }}
+            title={t('allTime90dTooltip')}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-text-tertiary)"
+              strokeWidth="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <Text size="xs" style={{ color: 'var(--color-text-tertiary)', fontWeight: 500 }}>
+              {t('allTime90dLabel')}
+            </Text>
+          </Box>
+        )}
+
+        {/* dYdX derived ROI disclosure */}
+        {source && DERIVED_ROI_PLATFORMS.has(source.toLowerCase()) && (
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[1],
+              padding: '4px 8px',
+              background: 'color-mix(in srgb, var(--color-text-tertiary) 8%, transparent)',
+              borderRadius: tokens.radius.md,
+            }}
+            title={t('derivedRoiTooltip')}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-text-tertiary)"
+              strokeWidth="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <Text size="xs" style={{ color: 'var(--color-text-tertiary)', fontWeight: 500 }}>
+              {t('derivedRoiLabel')}
+            </Text>
+          </Box>
+        )}
+
         {/* Cumulative ROI note for platforms that don't support period-specific ROI */}
         {source && CUMULATIVE_ROI_PLATFORMS.has(source.toLowerCase()) && period !== '7D' && (
           <Box
