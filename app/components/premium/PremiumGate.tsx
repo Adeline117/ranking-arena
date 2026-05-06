@@ -8,7 +8,13 @@ import Link from 'next/link'
 
 // 锁图标 SVG
 const LockIcon = ({ size = 24, color = 'currentColor' }: { size?: number; color?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <path
       d="M19 11H5C3.89543 11 3 11.8954 3 13V20C3 21.1046 3.89543 22 5 22H19C20.1046 22 21 21.1046 21 20V13C21 11.8954 20.1046 11 19 11Z"
       stroke={color}
@@ -28,8 +34,20 @@ const LockIcon = ({ size = 24, color = 'currentColor' }: { size?: number; color?
 )
 
 // 星星图标 SVG
-const StarIcon = ({ size = 12, color = 'var(--color-on-accent)' }: { size?: number; color?: string }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill={color} xmlns="http://www.w3.org/2000/svg">
+const StarIcon = ({
+  size = 12,
+  color = 'var(--color-on-accent)',
+}: {
+  size?: number
+  color?: string
+}) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill={color}
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
   </svg>
 )
@@ -56,11 +74,19 @@ type FeatureBenefitKey =
 const FEATURE_BENEFITS: Record<FeatureBenefitKey, { titleKey: string; benefitKeys: string[] }> = {
   advancedAlerts: {
     titleKey: 'gateAdvancedAlertsTitle',
-    benefitKeys: ['gateBenefitAlertsRealtime', 'gateBenefitAlertsConditions', 'gateBenefitAlertsHistory'],
+    benefitKeys: [
+      'gateBenefitAlertsRealtime',
+      'gateBenefitAlertsConditions',
+      'gateBenefitAlertsHistory',
+    ],
   },
   comparison: {
     titleKey: 'gateComparisonTitle',
-    benefitKeys: ['gateBenefitCompareSideBySide', 'gateBenefitCompareMetrics', 'gateBenefitCompareExport'],
+    benefitKeys: [
+      'gateBenefitCompareSideBySide',
+      'gateBenefitCompareMetrics',
+      'gateBenefitCompareExport',
+    ],
   },
   csvExport: {
     titleKey: 'gateCsvExportTitle',
@@ -72,19 +98,35 @@ const FEATURE_BENEFITS: Record<FeatureBenefitKey, { titleKey: string; benefitKey
   },
   scoreBreakdown: {
     titleKey: 'gateScoreBreakdownTitle',
-    benefitKeys: ['gateBenefitScoreSubScores', 'gateBenefitScoreFormula', 'gateBenefitScorePeerCompare'],
+    benefitKeys: [
+      'gateBenefitScoreSubScores',
+      'gateBenefitScoreFormula',
+      'gateBenefitScorePeerCompare',
+    ],
   },
   advancedFilters: {
     titleKey: 'gateAdvancedFiltersTitle',
-    benefitKeys: ['gateBenefitFilters150Plus', 'gateBenefitFiltersSaved', 'gateBenefitFiltersCombo'],
+    benefitKeys: [
+      'gateBenefitFilters150Plus',
+      'gateBenefitFiltersSaved',
+      'gateBenefitFiltersCombo',
+    ],
   },
   historicalData: {
     titleKey: 'gateHistoricalDataTitle',
-    benefitKeys: ['gateBenefitHistoryFullDepth', 'gateBenefitHistoryEquityCurves', 'gateBenefitHistoryDailyRollups'],
+    benefitKeys: [
+      'gateBenefitHistoryFullDepth',
+      'gateBenefitHistoryEquityCurves',
+      'gateBenefitHistoryDailyRollups',
+    ],
   },
   unlimitedWatchlist: {
     titleKey: 'gateUnlimitedWatchlistTitle',
-    benefitKeys: ['gateBenefitWatchlistUnlimited', 'gateBenefitWatchlistAlerts', 'gateBenefitWatchlistFolders'],
+    benefitKeys: [
+      'gateBenefitWatchlistUnlimited',
+      'gateBenefitWatchlistAlerts',
+      'gateBenefitWatchlistFolders',
+    ],
   },
 }
 
@@ -110,7 +152,7 @@ interface PremiumGateProps {
 export default function PremiumGate({
   children,
   isPro,
-  isLoggedIn = true,
+  isLoggedIn = false,
   blurAmount = 8,
   featureName,
   featureKey,
@@ -190,7 +232,11 @@ export default function PremiumGate({
 
         {/* 提示文字 */}
         <Box>
-          <Text size="md" weight="bold" style={{ color: 'var(--color-text-primary)', marginBottom: tokens.spacing[1] }}>
+          <Text
+            size="md"
+            weight="bold"
+            style={{ color: 'var(--color-text-primary)', marginBottom: tokens.spacing[1] }}
+          >
             {message}
           </Text>
           {isLoggedIn && benefitsConfig && (
@@ -207,9 +253,19 @@ export default function PremiumGate({
               }}
             >
               {benefitsConfig.benefitKeys.map((bk) => (
-                <li key={bk} style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[2] }}>
-                  <span aria-hidden="true" style={{ color: 'var(--color-pro-gradient-start)', lineHeight: 1.4 }}>✓</span>
-                  <Text size="sm" color="secondary">{t(bk)}</Text>
+                <li
+                  key={bk}
+                  style={{ display: 'flex', alignItems: 'flex-start', gap: tokens.spacing[2] }}
+                >
+                  <span
+                    aria-hidden="true"
+                    style={{ color: 'var(--color-pro-gradient-start)', lineHeight: 1.4 }}
+                  >
+                    ✓
+                  </span>
+                  <Text size="sm" color="secondary">
+                    {t(bk)}
+                  </Text>
                 </li>
               ))}
             </ul>
@@ -245,20 +301,12 @@ export default function PremiumGate({
 /**
  * 简化版模糊遮罩
  */
-export function PremiumBlur({ 
-  children, 
-  isPro,
-}: { 
-  children: ReactNode
-  isPro: boolean
-}) {
+export function PremiumBlur({ children, isPro }: { children: ReactNode; isPro: boolean }) {
   if (isPro) return <>{children}</>
 
   return (
     <Box style={{ position: 'relative', display: 'inline-flex', alignItems: 'center' }}>
-      <Box style={{ filter: 'blur(6px)', opacity: 0.4, pointerEvents: 'none' }}>
-        {children}
-      </Box>
+      <Box style={{ filter: 'blur(6px)', opacity: 0.4, pointerEvents: 'none' }}>{children}</Box>
       <Box
         style={{
           position: 'absolute',

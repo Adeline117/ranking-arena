@@ -1,5 +1,4 @@
 'use client'
- 
 
 import { Suspense, useEffect, useState, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
@@ -21,7 +20,13 @@ const CheckCircleIcon = ({ size = 64 }: { size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
     <circle cx="12" cy="12" r="10" fill="var(--color-accent-success)" fillOpacity="0.15" />
     <circle cx="12" cy="12" r="10" stroke="var(--color-accent-success)" strokeWidth="2" />
-    <path d="M8 12L11 15L16 9" stroke="var(--color-accent-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path
+      d="M8 12L11 15L16 9"
+      stroke="var(--color-accent-success)"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    />
   </svg>
 )
 
@@ -32,7 +37,13 @@ const StarIcon = ({ size = 20 }: { size?: number }) => (
 )
 
 const LoadingSpinner = ({ size = 24 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" style={{ animation: 'spin 1s linear infinite' }}>
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    style={{ animation: 'spin 1s linear infinite' }}
+  >
     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
     <path d="M12 2a10 10 0 0 1 10 10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -41,11 +52,21 @@ const LoadingSpinner = ({ size = 24 }: { size?: number }) => (
 
 export default function PaymentSuccessPage() {
   return (
-    <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <LoadingSpinner size={48} />
-      </Box>
-    }>
+    <Suspense
+      fallback={
+        <Box
+          style={{
+            minHeight: '100vh',
+            background: 'var(--color-bg-primary)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <LoadingSpinner size={48} />
+        </Box>
+      }
+    >
       <PaymentSuccessContent />
     </Suspense>
   )
@@ -57,26 +78,34 @@ function PaymentSuccessContent() {
   const { language: _language, t } = useLanguage()
   const { showToast } = useToast()
   const { refresh: refreshPremium } = usePremium()
-  
+
   const [email, setEmail] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState(8)
-  const [verificationStatus, setVerificationStatus] = useState<'verifying' | 'success' | 'error'>('verifying')
+  const [countdown, setCountdown] = useState(30)
+  const [verificationStatus, setVerificationStatus] = useState<'verifying' | 'success' | 'error'>(
+    'verifying'
+  )
   const [hasVerified, setHasVerified] = useState(false)
   const [retrying, setRetrying] = useState(false)
 
   useEffect(() => {
-     
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for success page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setEmail(data.user?.email ?? null)
+      })
+      .catch(() => {
+        /* Intentionally swallowed: auth check non-critical for success page */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   // 直接查询订阅状态（避免 React 状态闭包问题）
   const checkSubscriptionDirect = useCallback(async (): Promise<boolean> => {
     try {
       // 获取有效 session（自动刷新过期 token）
-       
-      let { data: { session } } = await supabase.auth.getSession()
+
+      let {
+        data: { session },
+      } = await supabase.auth.getSession()
 
       // 检查 token 是否过期或即将过期
       if (session?.expires_at) {
@@ -98,7 +127,7 @@ function PaymentSuccessContent() {
         const response = await fetch('/api/subscription', {
           method: 'GET',
           headers: {
-            'Authorization': `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${session.access_token}`,
           },
         })
         if (response.ok) {
@@ -134,8 +163,9 @@ function PaymentSuccessContent() {
 
   // 获取有效的 access token（自动刷新过期 token）
   const getValidAccessToken = useCallback(async (): Promise<string | null> => {
-     
-    let { data: { session } } = await supabase.auth.getSession()
+    let {
+      data: { session },
+    } = await supabase.auth.getSession()
 
     if (!session?.access_token) {
       // 尝试刷新 session（token 可能已过期但 refresh token 仍有效）
@@ -193,10 +223,7 @@ function PaymentSuccessContent() {
         await refreshPremium()
         setVerificationStatus('success')
         trackEvent('pro_subscribe', { source: 'verify_api' })
-        showToast(
-          t('membershipActivated'),
-          'success'
-        )
+        showToast(t('membershipActivated'), 'success')
         return
       }
 
@@ -215,18 +242,15 @@ function PaymentSuccessContent() {
       }
       clearSubscriptionCache()
 
-      // 轮询检查（最多尝试 4 次，间隔递增）
-      const delays = [1500, 2500, 3000, 4000]
+      // 轮询检查（最多尝试 4 次，间隔缩短以减少等待）
+      const delays = [800, 1200, 1500, 2000]
       for (const delay of delays) {
-        await new Promise(resolve => setTimeout(resolve, delay))
+        await new Promise((resolve) => setTimeout(resolve, delay))
         const isProNow = await checkSubscriptionDirect()
         if (isProNow) {
           await refreshPremium()
           setVerificationStatus('success')
-          showToast(
-            t('membershipActivated'),
-            'success'
-          )
+          showToast(t('membershipActivated'), 'success')
           return
         }
       }
@@ -244,15 +268,20 @@ function PaymentSuccessContent() {
         await refreshPremium()
         setVerificationStatus('success')
         trackEvent('pro_subscribe', { source: 'verify_api' })
-        showToast(
-          t('membershipActivated'),
-          'success'
-        )
+        showToast(t('membershipActivated'), 'success')
       } else {
         setVerificationStatus('error')
       }
     }
-  }, [searchParams, hasVerified, refreshPremium, showToast, t, checkSubscriptionDirect, getValidAccessToken])
+  }, [
+    searchParams,
+    hasVerified,
+    refreshPremium,
+    showToast,
+    t,
+    checkSubscriptionDirect,
+    getValidAccessToken,
+  ])
 
   // 手动重试 - 先刷新 session，再触发重新验证
   const handleRetry = useCallback(async () => {
@@ -327,19 +356,19 @@ function PaymentSuccessContent() {
         {/* 验证中状态 */}
         {verificationStatus === 'verifying' && (
           <>
-            <Box style={{ marginBottom: tokens.spacing[6], color: 'var(--color-pro-gradient-start)' }}>
+            <Box
+              style={{ marginBottom: tokens.spacing[6], color: 'var(--color-pro-gradient-start)' }}
+            >
               <LoadingSpinner size={80} />
             </Box>
-            <Text
-              as="h1"
-              size="2xl"
-              weight="black"
-              style={{ marginBottom: tokens.spacing[3] }}
-            >
+            <Text as="h1" size="2xl" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
               {t('activatingMembership')}
             </Text>
             <Text size="md" color="secondary">
               {t('syncingSubscription')}
+            </Text>
+            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[3] }}>
+              {t('thisUsuallyTakesSeconds')}
             </Text>
           </>
         )}
@@ -351,12 +380,7 @@ function PaymentSuccessContent() {
               <CheckCircleIcon size={80} />
             </Box>
 
-            <Text
-              as="h1"
-              size="2xl"
-              weight="black"
-              style={{ marginBottom: tokens.spacing[3] }}
-            >
+            <Text as="h1" size="2xl" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
               {t('paymentSuccess')}
             </Text>
 
@@ -414,7 +438,9 @@ function PaymentSuccessContent() {
                         background: 'var(--color-accent-success)',
                       }}
                     />
-                    <Text size="sm" color="secondary">{text}</Text>
+                    <Text size="sm" color="secondary">
+                      {text}
+                    </Text>
                   </Box>
                 ))}
               </Box>
@@ -454,7 +480,12 @@ function PaymentSuccessContent() {
         {/* 验证失败状态 */}
         {verificationStatus === 'error' && (
           <>
-            <Box style={{ marginBottom: tokens.spacing[6], color: 'var(--color-accent-warning, #f59e0b)' }}>
+            <Box
+              style={{
+                marginBottom: tokens.spacing[6],
+                color: 'var(--color-accent-warning, #f59e0b)',
+              }}
+            >
               <svg width={80} height={80} viewBox="0 0 24 24" fill="none">
                 <circle cx="12" cy="12" r="10" fill="currentColor" fillOpacity="0.15" />
                 <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" />
@@ -463,12 +494,7 @@ function PaymentSuccessContent() {
               </svg>
             </Box>
 
-            <Text
-              as="h1"
-              size="2xl"
-              weight="black"
-              style={{ marginBottom: tokens.spacing[3] }}
-            >
+            <Text as="h1" size="2xl" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
               {t('activationInProgress')}
             </Text>
 

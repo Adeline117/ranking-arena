@@ -3562,6 +3562,12 @@ const zh = {
   cancelSubscription: '取消订阅',
   cancelSubscriptionConfirm: '确定要取消订阅吗？取消后将在当前周期结束时失效。',
   subscriptionCancelAtEnd: '订阅将在到期后取消',
+  cancelSubscriptionNote: '您将在当前计费周期结束前继续享有 Pro 权益。之后不会再扣费。',
+  confirmCancel: '确认取消',
+  keepSubscription: '保留订阅',
+  alreadyProMember: '您已经是 Pro 会员！',
+  thisUsuallyTakesSeconds: '通常只需几秒钟...',
+  perMonthBilledYearly: '月（按年计费）',
   paymentSystemComingSoon: '支付系统暂未开放，敬请期待',
   operationFailedTryAgain: '操作失败，请稍后再试',
 

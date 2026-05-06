@@ -10,6 +10,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { trackEvent } from '@/lib/analytics/track'
 import { PRICING } from '@/app/(app)/user-center/membership-config'
 import { useDirectCheckout } from '@/lib/hooks/useDirectCheckout'
+import { useToast } from '@/app/components/ui/Toast'
 
 const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
   <svg
@@ -56,6 +57,7 @@ interface PricingPageClientProps {
 export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClientProps) {
   const { email } = useAuthSession()
   const { t } = useLanguage()
+  const { showToast } = useToast()
   const [billing, setBillingRaw] = useState<'monthly' | 'yearly'>(() => {
     // Persist billing selection across React re-mounts caused by Suspense/streaming
     if (typeof window !== 'undefined') {
@@ -93,7 +95,25 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
   const currentPrice = PRICING[billing]
   const yearlySavings = Math.round((1 - PRICING.yearly.price / 12 / PRICING.monthly.price) * 100)
-  const { checkout: directCheckout, isLoading: checkoutLoading } = useDirectCheckout()
+  const {
+    checkout: directCheckout,
+    isLoading: checkoutLoading,
+    alreadySubscribed,
+  } = useDirectCheckout()
+
+  // Show toast when user is already subscribed
+  useEffect(() => {
+    if (alreadySubscribed) {
+      showToast(
+        resolved(
+          t('alreadyProMember'),
+          'alreadyProMember',
+          'You already have an active Pro subscription!'
+        ),
+        'success'
+      )
+    }
+  }, [alreadySubscribed, showToast, t])
   // Logged-in users go directly to Stripe checkout; anonymous users go to login
   const ctaHref = email ? undefined : '/login'
   const handleCta = email
@@ -431,7 +451,10 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             >
               ${billing === 'yearly' ? (currentPrice.price / 12).toFixed(2) : currentPrice.price}
               <span style={{ fontSize: 15, fontWeight: 400, color: tokens.colors.text.secondary }}>
-                /mo
+                /
+                {billing === 'yearly'
+                  ? resolved(t('perMonthBilledYearly'), 'perMonthBilledYearly', 'mo')
+                  : 'mo'}
               </span>
             </p>
             {billing === 'yearly' && (
