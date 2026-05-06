@@ -1,4 +1,3 @@
-
 import { getLevelInfo } from '@/lib/utils/user-level'
 
 interface LevelBadgeProps {
@@ -16,11 +15,7 @@ function LevelIcon({ level, color, size }: { level: number; color: string; size:
   if (level === 1) {
     return (
       <svg width={iconSize} height={iconSize} viewBox="0 0 24 24" fill="none">
-        <path
-          d="M4 12c0-2 2-6 8-6s8 4 8 6-2 6-8 6-8-4-8-6z"
-          fill={color}
-          opacity={0.2}
-        />
+        <path d="M4 12c0-2 2-6 8-6s8 4 8 6-2 6-8 6-8-4-8-6z" fill={color} opacity={0.2} />
         <path
           d="M6 12c0-1.5 1.5-4 6-4s6 2.5 6 4-1.5 4-6 4-6-2.5-6-4z"
           stroke={color}
@@ -114,7 +109,10 @@ export default function LevelBadge({ exp, isPro, size = 'sm', showName = false }
   const s = SIZES[size]
 
   return (
-    <span className={`inline-flex items-center ${s.gap}`}>
+    <span
+      className={`inline-flex items-center ${s.gap}`}
+      aria-label={`Level ${info.level} - ${info.name}`}
+    >
       <LevelIcon level={info.level} color={info.colorHex} size={s.icon} />
       <span className={`${s.text} font-medium`} style={{ color: info.colorHex }}>
         Lv{info.level}
@@ -127,7 +125,10 @@ export default function LevelBadge({ exp, isPro, size = 'sm', showName = false }
       {isPro && (
         <span
           className={`${s.text} font-bold px-1 rounded`}
-          style={{ color: 'var(--color-accent-warning)', background: 'var(--color-orange-bg-light)' }}
+          style={{
+            color: 'var(--color-accent-warning)',
+            background: 'var(--color-orange-bg-light)',
+          }}
         >
           PRO
         </span>
