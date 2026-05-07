@@ -99,12 +99,12 @@ _None currently — see Retired below_
 - [ ] snapshots_v2 monthly partitioning (migration prepared, needs maintenance window)
 - [ ] US/EU VPS for BloFin + other geo-restricted platforms
 - [ ] leaderboard_ranks UNLOGGED + dual-table swap (reduce WAL writes 3-5x)
-- [ ] leaderboard_ranks LIST partition by season_id (3x scan reduction)
-- [ ] trader_snapshots v1 archival + BRIN index (cold data optimization)
+- [x] leaderboard_ranks LIST partition by season_id (migration prepared, apply during low-traffic)
+- [x] trader_snapshots v1 BRIN index (replaces 500MB B-tree with 100KB BRIN)
 - [ ] trader_position_history PK refactor (drop unused UUID PK, save 2GB)
-- [ ] Multi-source aggregation: Gains/Kwenta onchain as primary, Copin fallback
-- [ ] Enrichment completeness dashboard in /admin/monitoring
-- [ ] Cursor-based pagination for deep leaderboard pages (replace offset)
+- [x] ~~Multi-source aggregation: Gains/Kwenta~~ — already done (onchain primary + Copin fallback)
+- [x] Enrichment completeness dashboard in /admin/monitoring
+- [x] ~~Cursor-based pagination~~ — already in /api/rankings (cursor param)
 
 ---
 
