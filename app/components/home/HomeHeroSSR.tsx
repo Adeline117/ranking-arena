@@ -8,10 +8,12 @@
  * Hidden via CSS (#ssr-hero-shell) once the client HomeHero mounts inside HomePage.
  *
  * Key: No 'use client', no hooks — pure server component.
+ * Uses getServerTranslation() to read language from cookie for i18n.
  */
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { getServerTranslation } from '@/lib/i18n/server'
 
 interface HomeHeroSSRProps {
   traderCount?: number
@@ -23,17 +25,23 @@ function formatCount(n: number): string {
   return `${n}+`
 }
 
-export default function HomeHeroSSR({ traderCount = 17000, exchangeCount = 27 }: HomeHeroSSRProps) {
+export default async function HomeHeroSSR({
+  traderCount = 17000,
+  exchangeCount = 27,
+}: HomeHeroSSRProps) {
+  const { t } = await getServerTranslation()
   const traderCountStr = formatCount(traderCount)
   const exchangeCountStr = `${exchangeCount}+`
 
-  const headline = "Track the World's Best Crypto Traders"
-  const subtitle = `Real-time rankings across ${exchangeCount} exchanges. ${traderCountStr} traders ranked by Arena Score.`
+  const headline = t('heroHeadline')
+  const subtitle = t('heroSubtitle')
+    .replace('{exchanges}', String(exchangeCount))
+    .replace('{traders}', traderCountStr)
 
   const stats = [
-    { value: traderCountStr, label: 'Traders' },
-    { value: exchangeCountStr, label: 'Exchanges' },
-    { value: '30 min', label: 'Update Freq' },
+    { value: traderCountStr, label: t('heroStatTraders') },
+    { value: exchangeCountStr, label: t('heroStatExchanges') },
+    { value: '30 min', label: t('heroStatUpdated') },
   ]
 
   return (
@@ -41,7 +49,8 @@ export default function HomeHeroSSR({ traderCount = 17000, exchangeCount = 27 }:
       style={{
         padding: `${tokens.spacing[6]} ${tokens.spacing[6]} ${tokens.spacing[5]}`,
         marginBottom: tokens.spacing[3],
-        background: 'linear-gradient(135deg, var(--color-accent-primary-08, rgba(139,111,168,0.08)) 0%, transparent 60%, var(--color-accent-primary-05, rgba(139,111,168,0.05)) 100%)',
+        background:
+          'linear-gradient(135deg, var(--color-accent-primary-08, rgba(139,111,168,0.08)) 0%, transparent 60%, var(--color-accent-primary-05, rgba(139,111,168,0.05)) 100%)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))',
         position: 'relative',
@@ -65,64 +74,76 @@ export default function HomeHeroSSR({ traderCount = 17000, exchangeCount = 27 }:
         }}
       />
 
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: tokens.spacing[6],
-        flexWrap: 'wrap',
-        position: 'relative',
-        zIndex: 1,
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: tokens.spacing[6],
+          flexWrap: 'wrap',
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
         {/* Left: Headline + subtitle */}
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
           {/* LCP element: this headline is the largest above-fold text in the SSR HTML */}
-          <h1 style={{
-            fontSize: 'clamp(18px, 2.5vw, 24px)',
-            fontWeight: 900,
-            color: 'var(--color-text-primary, #fff)',
-            marginBottom: tokens.spacing[1],
-            lineHeight: 1.2,
-          }}>
+          <h1
+            style={{
+              fontSize: 'clamp(18px, 2.5vw, 24px)',
+              fontWeight: 900,
+              color: 'var(--color-text-primary, #fff)',
+              marginBottom: tokens.spacing[1],
+              lineHeight: 1.2,
+            }}
+          >
             {headline}
           </h1>
-          <p style={{
-            fontSize: '0.875rem',
-            color: 'var(--color-text-secondary, rgba(255,255,255,0.7))',
-            lineHeight: 1.5,
-            margin: 0,
-            maxWidth: 480,
-          }}>
+          <p
+            style={{
+              fontSize: '0.875rem',
+              color: 'var(--color-text-secondary, rgba(255,255,255,0.7))',
+              lineHeight: 1.5,
+              margin: 0,
+              maxWidth: 480,
+            }}
+          >
             {subtitle}
           </p>
         </div>
 
         {/* Right: Stats row */}
-        <div style={{
-          display: 'flex',
-          gap: 'clamp(16px, 3vw, 32px)',
-          flexShrink: 0,
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 'clamp(16px, 3vw, 32px)',
+            flexShrink: 0,
+          }}
+        >
           {stats.map((stat) => (
             <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
-              <div style={{
-                fontSize: '1.25rem',
-                fontWeight: 700,
-                color: 'var(--color-accent-primary, #8B6FA8)',
-                fontVariantNumeric: 'tabular-nums',
-                lineHeight: 1.2,
-                minHeight: '1.2em',
-              }}>
+              <div
+                style={{
+                  fontSize: '1.25rem',
+                  fontWeight: 700,
+                  color: 'var(--color-accent-primary, #8B6FA8)',
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1.2,
+                  minHeight: '1.2em',
+                }}
+              >
                 {stat.value}
               </div>
-              <div style={{
-                fontSize: '0.75rem',
-                color: 'var(--color-text-tertiary, rgba(255,255,255,0.45))',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                fontWeight: 500,
-                whiteSpace: 'nowrap',
-              }}>
+              <div
+                style={{
+                  fontSize: '0.75rem',
+                  color: 'var(--color-text-tertiary, rgba(255,255,255,0.45))',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {stat.label}
               </div>
             </div>
@@ -151,10 +172,16 @@ export default function HomeHeroSSR({ traderCount = 17000, exchangeCount = 27 }:
           fontWeight: 500,
         }}
       >
-        <svg width={12} height={12} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start, #a78bfa)" style={{ flexShrink: 0 }}>
+        <svg
+          width={12}
+          height={12}
+          viewBox="0 0 24 24"
+          fill="var(--color-pro-gradient-start, #a78bfa)"
+          style={{ flexShrink: 0 }}
+        >
           <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
         </svg>
-        <span>Go Pro — Unlock All Traders &amp; Advanced Filters</span>
+        <span>{t('heroProBadge')}</span>
       </Link>
     </section>
   )
