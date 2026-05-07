@@ -151,38 +151,67 @@ export default async function HomeHeroSSR({
         </div>
       </div>
 
-      {/* Pro CTA badge */}
-      <Link
-        href="/pricing"
-        prefetch={false}
+      {/* CTA row: Get Started + Pro badge */}
+      <div
         style={{
-          display: 'inline-flex',
+          display: 'flex',
           alignItems: 'center',
-          gap: 6,
+          gap: tokens.spacing[3],
           marginTop: tokens.spacing[3],
-          padding: '4px 12px',
-          fontSize: '0.75rem',
-          color: 'var(--color-pro-gradient-start, #a78bfa)',
-          background: 'var(--color-pro-glow, rgba(167,139,250,0.1))',
-          border: '1px solid var(--color-pro-border, rgba(167,139,250,0.25))',
-          borderRadius: 9999,
-          textDecoration: 'none',
           position: 'relative',
           zIndex: 1,
-          fontWeight: 500,
+          flexWrap: 'wrap',
         }}
       >
-        <svg
-          width={12}
-          height={12}
-          viewBox="0 0 24 24"
-          fill="var(--color-pro-gradient-start, #a78bfa)"
-          style={{ flexShrink: 0 }}
+        <Link
+          href="/login"
+          prefetch={false}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 16px',
+            fontSize: '0.8125rem',
+            fontWeight: 600,
+            color: 'var(--color-accent-primary, #8B6FA8)',
+            background: 'transparent',
+            border: '1px solid var(--color-accent-primary, #8B6FA8)',
+            borderRadius: 9999,
+            textDecoration: 'none',
+            minHeight: 36,
+          }}
         >
-          <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
-        </svg>
-        <span>{t('heroProBadge')}</span>
-      </Link>
+          {t('heroCTASignUp')}
+        </Link>
+        <Link
+          href="/pricing"
+          prefetch={false}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '4px 12px',
+            fontSize: '0.75rem',
+            color: 'var(--color-pro-gradient-start, #a78bfa)',
+            background: 'var(--color-pro-glow, rgba(167,139,250,0.1))',
+            border: '1px solid var(--color-pro-border, rgba(167,139,250,0.25))',
+            borderRadius: 9999,
+            textDecoration: 'none',
+            fontWeight: 500,
+          }}
+        >
+          <svg
+            width={12}
+            height={12}
+            viewBox="0 0 24 24"
+            fill="var(--color-pro-gradient-start, #a78bfa)"
+            style={{ flexShrink: 0 }}
+          >
+            <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+          </svg>
+          <span>{t('heroProBadge')}</span>
+        </Link>
+      </div>
     </section>
   )
 }

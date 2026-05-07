@@ -20,7 +20,10 @@ export interface HomeHeroProps {
   exchangeCount?: number
 }
 
-export default function HomeHero({ traderCount: traderCountProp, exchangeCount: exchangeCountProp }: HomeHeroProps) {
+export default function HomeHero({
+  traderCount: traderCountProp,
+  exchangeCount: exchangeCountProp,
+}: HomeHeroProps) {
   useLanguage() // subscribe to language changes for re-render
 
   const traderNum = traderCountProp ?? 17000
@@ -46,70 +49,100 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
         contain: 'layout style',
       }}
     >
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        gap: tokens.spacing[6],
-        flexWrap: 'wrap',
-        position: 'relative',
-        zIndex: tokens.zIndex.dropdown,
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: tokens.spacing[6],
+          flexWrap: 'wrap',
+          position: 'relative',
+          zIndex: tokens.zIndex.dropdown,
+        }}
+      >
         {/* Left: Headline + subtitle */}
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
-          <h1 style={{
-            fontSize: 'clamp(18px, 2.5vw, 24px)',
-            fontWeight: tokens.typography.fontWeight.black,
-            color: 'var(--color-text-primary)',
-            marginBottom: tokens.spacing[1],
-            lineHeight: tokens.typography.lineHeight.tight,
-          }}>
+          <h1
+            style={{
+              fontSize: 'clamp(18px, 2.5vw, 24px)',
+              fontWeight: tokens.typography.fontWeight.black,
+              color: 'var(--color-text-primary)',
+              marginBottom: tokens.spacing[1],
+              lineHeight: tokens.typography.lineHeight.tight,
+            }}
+          >
             {t('heroHeadline' as Parameters<typeof t>[0])}
           </h1>
 
-          <p style={{
-            fontSize: tokens.typography.fontSize.sm,
-            color: 'var(--color-text-secondary)',
-            lineHeight: tokens.typography.lineHeight.normal,
-            margin: 0,
-            maxWidth: 480,
-          }}>
+          <p
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: 'var(--color-text-secondary)',
+              lineHeight: tokens.typography.lineHeight.normal,
+              margin: 0,
+              maxWidth: 480,
+            }}
+          >
             {subtitle}
           </p>
         </div>
 
         {/* Right: Stats row */}
-        <div style={{
-          display: 'flex',
-          gap: 'clamp(16px, 3vw, 32px)',
-          flexShrink: 0,
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 'clamp(16px, 3vw, 32px)',
+            flexShrink: 0,
+          }}
+        >
           {[
-            { num: Math.floor(traderNum / 1000), suffix: 'K+', fallback: traderCountStr, label: t('heroStatTraders' as Parameters<typeof t>[0]), delay: 0 },
-            { num: exchangeNum, suffix: '+', fallback: exchangeCountStr, label: t('heroStatExchanges' as Parameters<typeof t>[0]), delay: 0.2 },
-            { num: 30, suffix: ' min', fallback: '30 min', label: t('heroStatUpdated' as Parameters<typeof t>[0]), delay: 0.4 },
+            {
+              num: Math.floor(traderNum / 1000),
+              suffix: 'K+',
+              fallback: traderCountStr,
+              label: t('heroStatTraders' as Parameters<typeof t>[0]),
+              delay: 0,
+            },
+            {
+              num: exchangeNum,
+              suffix: '+',
+              fallback: exchangeCountStr,
+              label: t('heroStatExchanges' as Parameters<typeof t>[0]),
+              delay: 0.2,
+            },
+            {
+              num: 30,
+              suffix: ' min',
+              fallback: '30 min',
+              label: t('heroStatUpdated' as Parameters<typeof t>[0]),
+              delay: 0.4,
+            },
           ].map((stat) => (
             <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
-              <div style={{
-                fontSize: tokens.typography.fontSize.xl,
-                fontWeight: tokens.typography.fontWeight.bold,
-                color: 'var(--color-accent-primary)',
-                fontVariantNumeric: 'tabular-nums',
-                lineHeight: 1.2,
-                minHeight: '1.2em',
-              }}>
+              <div
+                style={{
+                  fontSize: tokens.typography.fontSize.xl,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  color: 'var(--color-accent-primary)',
+                  fontVariantNumeric: 'tabular-nums',
+                  lineHeight: 1.2,
+                  minHeight: '1.2em',
+                }}
+              >
                 <Suspense fallback={<span>{stat.fallback}</span>}>
                   <NumberTicker value={stat.num} suffix={stat.suffix} delay={stat.delay} />
                 </Suspense>
               </div>
-              <div style={{
-                fontSize: tokens.typography.fontSize.xs,
-                color: 'var(--color-text-tertiary)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.05em',
-                fontWeight: 500,
-                whiteSpace: 'nowrap',
-              }}>
+              <div
+                style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: 'var(--color-text-tertiary)',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em',
+                  fontWeight: 500,
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {stat.label}
               </div>
             </div>
@@ -117,16 +150,18 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
         </div>
       </div>
 
-      {/* CTA row: Explore Rankings + Pro badge */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: tokens.spacing[3],
-        marginTop: tokens.spacing[3],
-        position: 'relative',
-        zIndex: tokens.zIndex.dropdown,
-        flexWrap: 'wrap',
-      }}>
+      {/* CTA row: Explore Rankings + Get Started + Pro badge */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+          marginTop: tokens.spacing[3],
+          position: 'relative',
+          zIndex: tokens.zIndex.dropdown,
+          flexWrap: 'wrap',
+        }}
+      >
         <button
           onClick={() => {
             const el = document.querySelector('.home-ranking-section')
@@ -149,10 +184,41 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
           }}
         >
           {t('heroExploreRankings' as Parameters<typeof t>[0])}
-          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+          <svg
+            width={14}
+            height={14}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0 }}
+          >
             <path d="M12 5v14M5 12l7 7 7-7" />
           </svg>
         </button>
+        <Link
+          href="/login"
+          prefetch={false}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            padding: '6px 16px',
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: 600,
+            color: 'var(--color-accent-primary, #8B6FA8)',
+            background: 'transparent',
+            border: '1px solid var(--color-accent-primary, #8B6FA8)',
+            borderRadius: tokens.radius.full,
+            textDecoration: 'none',
+            transition: tokens.transition.fast,
+            minHeight: 36,
+          }}
+        >
+          {t('heroCTASignUp' as Parameters<typeof t>[0])}
+        </Link>
         <Link
           href="/pricing"
           prefetch={false}
@@ -171,7 +237,13 @@ export default function HomeHero({ traderCount: traderCountProp, exchangeCount: 
             fontWeight: 500,
           }}
         >
-          <svg width={12} height={12} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start, #a78bfa)" style={{ flexShrink: 0 }}>
+          <svg
+            width={12}
+            height={12}
+            viewBox="0 0 24 24"
+            fill="var(--color-pro-gradient-start, #a78bfa)"
+            style={{ flexShrink: 0 }}
+          >
             <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
           </svg>
           <span className="shiny-text">{t('heroProBadge' as Parameters<typeof t>[0])}</span>
