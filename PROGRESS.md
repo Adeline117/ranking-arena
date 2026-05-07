@@ -2,6 +2,40 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Systematic DB + Leaderboard + Data Optimization (2026-05-07)
+
+**Trigger**: User requested 数据库系统性优化 + 排行榜数据优化 + 数据缺失修复.
+
+**Process**: 3 parallel audit agents + 6 rounds web research → 12-item optimization plan → full implementation.
+
+**Shipped (8 commits, 4 prod migrations)**:
+
+### DB Migrations (4)
+
+- `20260507125803` Posts composite indexes + subscriptions active filter (fixes 6,771 seq scans)
+- `20260507125804` pg_cron REFRESH MATERIALIZED VIEW CONCURRENTLY (zero read-lock MV refresh)
+- `20260507125805` find_data_gaps() + get_data_gap_summary() RPCs for automated reconciliation
+- `20260507125806` platform_heartbeats table + v_platform_health view for Mac Mini visibility
+
+### Redis-First Leaderboard (P0)
+
+- ranking-store.ts: syncSortedSetFromLeaderboard now stores top 200 trader details in Redis Hash
+- queries.ts: getLeaderboard tries Redis first for default queries (~90% of traffic), falls back to DB
+- Expected: homepage 200ms → <5ms for default queries
+
+### Automated Gap Detection + Dead Letter Retry (P0)
+
+- /api/cron/data-reconciliation: daily scan for traders missing from leaderboard >48h
+- /api/cron/retry-dead-letters: re-queues failed enrichment traders (enrich:retry:\* keys)
+- enrichment-runner.ts: checks retry keys before each run, prepends priority traders
+
+### Mac Mini Monitoring Visibility (P1)
+
+- /api/health/heartbeat: POST receives heartbeats, GET returns platform health with stale flags
+- Mac Mini scripts can now report their status (visible in pipeline monitoring)
+
+---
+
 ## 6-Domain Root-Root Cause Audit (2026-05-07)
 
 **Trigger**: User requested 全部根源的根源修复 — deep systemic fix across all layers.
