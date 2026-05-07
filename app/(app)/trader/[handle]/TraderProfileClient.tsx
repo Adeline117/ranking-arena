@@ -556,40 +556,38 @@ export default function TraderProfileClient({
             activeIndex={tabKeys.indexOf(activeTab)}
             onIndexChange={(i) => handleTabChange(tabKeys[i])}
           >
-            {/* Overview Tab */}
+            {/* Overview Tab — always mounted (primary tab, avoids skeleton flash on swipe-back) */}
             <Box style={{ minHeight: 200 }} className="tab-pane-enter">
-              {activeTab === 'overview' && (
-                <OverviewTab
-                  data={data}
-                  traderProfile={traderProfile}
-                  traderPerformance={traderPerformance}
-                  traderEquityCurve={
-                    traderEquityCurve as
-                      | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
-                      | undefined
-                  }
-                  traderSimilar={traderSimilar}
-                  positionSummary={
-                    traderData?.positionSummary as
-                      | {
-                          avgLeverage: number | null
-                          longPositions: number | null
-                          shortPositions: number | null
-                        }
-                      | null
-                      | undefined
-                  }
-                  selectedPeriod={selectedPeriod}
-                  hasMultipleAccounts={hasMultipleAccounts}
-                  activeAccount={activeAccount}
-                  aggregatedData={aggregatedData}
-                  linkedAccounts={linkedAccounts}
-                  currentUserId={currentUserId}
-                  isOwner={isOwner}
-                  isVerifiedTrader={isVerifiedTrader}
-                  claimedUser={claimedUser}
-                />
-              )}
+              <OverviewTab
+                data={data}
+                traderProfile={traderProfile}
+                traderPerformance={traderPerformance}
+                traderEquityCurve={
+                  traderEquityCurve as
+                    | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
+                    | undefined
+                }
+                traderSimilar={traderSimilar}
+                positionSummary={
+                  traderData?.positionSummary as
+                    | {
+                        avgLeverage: number | null
+                        longPositions: number | null
+                        shortPositions: number | null
+                      }
+                    | null
+                    | undefined
+                }
+                selectedPeriod={selectedPeriod}
+                hasMultipleAccounts={hasMultipleAccounts}
+                activeAccount={activeAccount}
+                aggregatedData={aggregatedData}
+                linkedAccounts={linkedAccounts}
+                currentUserId={currentUserId}
+                isOwner={isOwner}
+                isVerifiedTrader={isVerifiedTrader}
+                claimedUser={claimedUser}
+              />
             </Box>
 
             {/* Stats Tab — lazy: only mount after first visit */}
@@ -618,10 +616,10 @@ export default function TraderProfileClient({
               />
             </Box>
 
-            {/* Posts Tab (only for claimed traders) */}
+            {/* Posts Tab (only for claimed traders) — lazy mount on first visit */}
             {claimedUser && (
               <Box style={{ minHeight: 200 }} className="tab-pane-enter">
-                {activeTab === 'posts' && (
+                {visitedTabs.has('posts') && (
                   <Box bg="secondary" p={4} radius="lg" border="primary" style={{ maxWidth: 900 }}>
                     <Box
                       style={{
