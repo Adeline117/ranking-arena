@@ -158,6 +158,7 @@ export async function createCheckoutSession(params: {
   cancelUrl: string
   metadata?: Record<string, string>
   promotionCode?: string
+  trialDays?: number
 }): Promise<Stripe.Checkout.Session> {
   // Validate priceId before making Stripe API call
   if (!params.priceId || !params.priceId.startsWith('price_')) {
@@ -184,6 +185,7 @@ export async function createCheckoutSession(params: {
     metadata: params.metadata,
     subscription_data: {
       metadata: params.metadata,
+      ...(params.trialDays ? { trial_period_days: params.trialDays } : {}),
     },
     allow_promotion_codes: !params.promotionCode, // Disable UI promotion code input if one is explicitly provided
     billing_address_collection: 'auto',

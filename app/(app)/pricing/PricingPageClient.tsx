@@ -494,54 +494,119 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
             {/* Direct checkout for logged-in users; login redirect for anonymous */}
             {handleCta ? (
-              <button
-                onClick={handleCta}
-                disabled={checkoutLoading}
-                style={{
-                  display: 'block',
-                  width: '100%',
-                  padding: '14px 0',
-                  borderRadius: tokens.radius.md,
-                  background: checkoutLoading
-                    ? tokens.colors.bg.tertiary
-                    : tokens.colors.accent.brand,
-                  textAlign: 'center',
-                  color: 'var(--color-on-accent, #fff)',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: 15,
-                  marginTop: tokens.spacing[6],
-                  transition: 'all 0.2s',
-                  boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
-                  cursor: checkoutLoading ? 'wait' : 'pointer',
-                }}
-              >
-                {checkoutLoading
-                  ? '...'
-                  : resolved(t('upgradeToPro'), 'upgradeToPro', 'Upgrade to Pro')}
-              </button>
+              <>
+                <button
+                  onClick={handleCta}
+                  disabled={checkoutLoading}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '14px 0',
+                    borderRadius: tokens.radius.md,
+                    background: checkoutLoading
+                      ? tokens.colors.bg.tertiary
+                      : tokens.colors.accent.brand,
+                    textAlign: 'center',
+                    color: 'var(--color-on-accent, #fff)',
+                    border: 'none',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    marginTop: tokens.spacing[6],
+                    transition: 'all 0.2s',
+                    boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
+                    cursor: checkoutLoading ? 'wait' : 'pointer',
+                  }}
+                >
+                  {checkoutLoading
+                    ? '...'
+                    : resolved(t('upgradeToPro'), 'upgradeToPro', 'Upgrade to Pro')}
+                </button>
+                <button
+                  onClick={() => {
+                    trackEvent('click_free_trial', { plan: billing })
+                    directCheckout(billing, { trial: true })
+                  }}
+                  disabled={checkoutLoading}
+                  style={{
+                    display: 'block',
+                    width: '100%',
+                    padding: '12px 0',
+                    borderRadius: tokens.radius.md,
+                    background: 'transparent',
+                    textAlign: 'center',
+                    color: tokens.colors.accent.brand,
+                    border: `1px solid ${tokens.colors.accent.brand}`,
+                    fontWeight: 600,
+                    fontSize: 14,
+                    marginTop: tokens.spacing[3],
+                    transition: 'all 0.2s',
+                    cursor: checkoutLoading ? 'wait' : 'pointer',
+                    opacity: checkoutLoading ? 0.5 : 1,
+                  }}
+                >
+                  {resolved(t('startFreeTrial'), 'startFreeTrial', 'Start 7-Day Free Trial')}
+                </button>
+              </>
             ) : (
-              <Link
-                href="/login"
-                onClick={() => trackEvent('click_upgrade_cta', { plan: 'pro', billing })}
-                style={{
-                  display: 'block',
-                  padding: '14px 0',
-                  borderRadius: tokens.radius.md,
-                  background: tokens.colors.accent.brand,
-                  textAlign: 'center',
-                  color: 'var(--color-on-accent, #fff)',
-                  textDecoration: 'none',
-                  fontWeight: 700,
-                  fontSize: 15,
-                  marginTop: tokens.spacing[6],
-                  transition: 'all 0.2s',
-                  boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
-                }}
-              >
-                {resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
-              </Link>
+              <>
+                <Link
+                  href="/login"
+                  onClick={() => trackEvent('click_upgrade_cta', { plan: 'pro', billing })}
+                  style={{
+                    display: 'block',
+                    padding: '14px 0',
+                    borderRadius: tokens.radius.md,
+                    background: tokens.colors.accent.brand,
+                    textAlign: 'center',
+                    color: 'var(--color-on-accent, #fff)',
+                    textDecoration: 'none',
+                    fontWeight: 700,
+                    fontSize: 15,
+                    marginTop: tokens.spacing[6],
+                    transition: 'all 0.2s',
+                    boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
+                  }}
+                >
+                  {resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
+                </Link>
+                <Link
+                  href="/login"
+                  onClick={() => trackEvent('click_free_trial', { plan: billing })}
+                  style={{
+                    display: 'block',
+                    padding: '12px 0',
+                    borderRadius: tokens.radius.md,
+                    background: 'transparent',
+                    textAlign: 'center',
+                    color: tokens.colors.accent.brand,
+                    textDecoration: 'none',
+                    border: `1px solid ${tokens.colors.accent.brand}`,
+                    fontWeight: 600,
+                    fontSize: 14,
+                    marginTop: tokens.spacing[3],
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  {resolved(t('startFreeTrial'), 'startFreeTrial', 'Start 7-Day Free Trial')}
+                </Link>
+              </>
             )}
+
+            <p
+              style={{
+                fontSize: 12,
+                color: tokens.colors.text.tertiary,
+                textAlign: 'center',
+                marginTop: tokens.spacing[2],
+                marginBottom: 0,
+              }}
+            >
+              {resolved(
+                t('freeTrialDesc'),
+                'freeTrialDesc',
+                'Try all Pro features free for 7 days. Cancel anytime.'
+              )}
+            </p>
 
             <div
               style={{
