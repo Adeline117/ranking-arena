@@ -1,8 +1,8 @@
 /**
  * Backfill missing trader avatars by fetching from exchange APIs
- * 
+ *
  * GET /api/cron/backfill-avatars?platform=binance_futures&limit=100
- * 
+ *
  * Runs on Vercel (Japan region) to bypass geo-blocks
  */
 
@@ -22,7 +22,7 @@ export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function isAuthorized(request: Request): boolean {
   return verifyCronSecret(request)
@@ -41,15 +41,17 @@ async function fetchJSON(url: string, options: RequestInit = {}): Promise<unknow
       ...options,
       headers: {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        'Accept': 'application/json',
-        ...(options.headers as Record<string, string> || {}),
+        Accept: 'application/json',
+        ...((options.headers as Record<string, string>) || {}),
       },
       signal: AbortSignal.timeout(15000),
     })
     if (!resp.ok) return null
     return await resp.json()
   } catch (err) {
-    log.warn(`fetchJSON failed for ${url}`, { error: err instanceof Error ? err.message : String(err) })
+    log.warn(`fetchJSON failed for ${url}`, {
+      error: err instanceof Error ? err.message : String(err),
+    })
     return null
   }
 }
@@ -57,123 +59,127 @@ async function fetchJSON(url: string, options: RequestInit = {}): Promise<unknow
 // ── Platform-specific avatar fetchers ──
 
 async function fetchBinanceFuturesAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON('https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.binance.com' },
-    body: JSON.stringify({ portfolioId: traderId }),
-  }) as { data?: { userPhotoUrl?: string } } | null
+  const data = (await fetchJSON(
+    'https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://www.binance.com' },
+      body: JSON.stringify({ portfolioId: traderId }),
+    }
+  )) as { data?: { userPhotoUrl?: string } } | null
   return data?.data?.userPhotoUrl || null
 }
 
 async function _fetchBinanceSpotAvatar(traderId: string): Promise<string | null> {
   // Binance spot uses same portfolio API
-  const data = await fetchJSON('https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.binance.com' },
-    body: JSON.stringify({ portfolioId: traderId }),
-  }) as { data?: { userPhotoUrl?: string } } | null
+  const data = (await fetchJSON(
+    'https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/detail',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Origin: 'https://www.binance.com' },
+      body: JSON.stringify({ portfolioId: traderId }),
+    }
+  )) as { data?: { userPhotoUrl?: string } } | null
   return data?.data?.userPhotoUrl || null
 }
 
 async function fetchBybitAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://api2.bybit.com/fapi/beehive/public/v1/common/leader/detail?leaderMark=${encodeURIComponent(traderId)}`,
-    { headers: { 'Origin': 'https://www.bybit.com', 'Referer': 'https://www.bybit.com/' } },
-  ) as { result?: { avatar?: string } } | null
+    { headers: { Origin: 'https://www.bybit.com', Referer: 'https://www.bybit.com/' } }
+  )) as { result?: { avatar?: string } } | null
   return data?.result?.avatar || null
 }
 
 async function fetchBitgetAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://www.bitget.com/v1/copy/mix/trader/detail?traderId=${traderId}`,
-    { headers: { 'Origin': 'https://www.bitget.com' } },
-  ) as { data?: { traderImg?: string; avatar?: string; headUrl?: string } } | null
+    { headers: { Origin: 'https://www.bitget.com' } }
+  )) as { data?: { traderImg?: string; avatar?: string; headUrl?: string } } | null
   return data?.data?.traderImg || data?.data?.avatar || data?.data?.headUrl || null
 }
 
 async function fetchOKXAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://www.okx.com/api/v5/copytrading/public-lead-traders/detail?uniqueCode=${encodeURIComponent(traderId)}`,
-    { headers: { 'Origin': 'https://www.okx.com' } },
-  ) as { data?: Array<{ portLink?: string }> } | null
+    { headers: { Origin: 'https://www.okx.com' } }
+  )) as { data?: Array<{ portLink?: string }> } | null
   return data?.data?.[0]?.portLink || null
 }
 
 async function fetchKuCoinAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://www.kucoin.com/_api/copy-trade/leader/detail?leaderId=${traderId}`,
-    { headers: { 'Origin': 'https://www.kucoin.com' } },
-  ) as { data?: { avatar?: string; avatarUrl?: string } } | null
+    { headers: { Origin: 'https://www.kucoin.com' } }
+  )) as { data?: { avatar?: string; avatarUrl?: string } } | null
   return data?.data?.avatar || data?.data?.avatarUrl || null
 }
 
 async function fetchCoinExAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
-    `https://www.coinex.com/res/copy-trading/trader/${traderId}`,
-    { headers: { 'Origin': 'https://www.coinex.com' } },
-  ) as { data?: { avatar?: string } } | null
+  const data = (await fetchJSON(`https://www.coinex.com/res/copy-trading/trader/${traderId}`, {
+    headers: { Origin: 'https://www.coinex.com' },
+  })) as { data?: { avatar?: string } } | null
   return data?.data?.avatar || null
 }
 
 async function fetchHTXAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
-    `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/leaderInfo?userSign=${encodeURIComponent(traderId)}`,
-  ) as { data?: { imgUrl?: string; avatar?: string } } | null
+  const data = (await fetchJSON(
+    `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/leaderInfo?userSign=${encodeURIComponent(traderId)}`
+  )) as { data?: { imgUrl?: string; avatar?: string } } | null
   return data?.data?.imgUrl || data?.data?.avatar || null
 }
 
 async function fetchWeexAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://www.weex.com/gateway/v1/futures/copy-trade/trader/detail?traderId=${traderId}`,
-    { headers: { 'Origin': 'https://www.weex.com' } },
-  ) as { data?: { headPic?: string; avatar?: string } } | null
+    { headers: { Origin: 'https://www.weex.com' } }
+  )) as { data?: { headPic?: string; avatar?: string } } | null
   return data?.data?.headPic || data?.data?.avatar || null
 }
 
 async function fetchMEXCAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://futures.mexc.com/api/platform/copy-trade/trader/detail?traderId=${traderId}`,
-    { headers: { 'Origin': 'https://futures.mexc.com' } },
-  ) as { data?: { avatar?: string } } | null
+    { headers: { Origin: 'https://futures.mexc.com' } }
+  )) as { data?: { avatar?: string } } | null
   return data?.data?.avatar || null
 }
 
 async function fetchBingXAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://bingx.com/api/copy/public/v1/trader/detail?uniqueId=${traderId}`,
-    { headers: { 'Origin': 'https://bingx.com' } },
-  ) as { data?: { headUrl?: string; avatar?: string } } | null
+    { headers: { Origin: 'https://bingx.com' } }
+  )) as { data?: { headUrl?: string; avatar?: string } } | null
   return data?.data?.headUrl || data?.data?.avatar || null
 }
 
 async function fetchPhemexAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://api.phemex.com/api/copy/v1/leader/detail?traderId=${traderId}`,
-    { headers: { 'Origin': 'https://phemex.com' } },
-  ) as { data?: { avatar?: string } } | null
+    { headers: { Origin: 'https://phemex.com' } }
+  )) as { data?: { avatar?: string } } | null
   return data?.data?.avatar || null
 }
 
-async function fetchLBankAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
-    `https://www.lbank.com/api/v2/copy-trade/trader-detail?traderId=${traderId}`,
-    { headers: { 'Origin': 'https://www.lbank.com' } },
-  ) as { data?: { avatar?: string; headUrl?: string } } | null
-  return data?.data?.avatar || data?.data?.headUrl || null
-}
+// fetchLBankAvatar: REMOVED — lbank permanently dead (API 404 since 2026-04)
 
 async function fetchBlofinAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
-    `https://openapi.blofin.com/api/v1/copytrading/public-lead-traders/detail?uniqueCode=${traderId}`,
-  ) as { data?: Array<{ avatar?: string; portraitLink?: string }> } | null
+  const data = (await fetchJSON(
+    `https://openapi.blofin.com/api/v1/copytrading/public-lead-traders/detail?uniqueCode=${traderId}`
+  )) as { data?: Array<{ avatar?: string; portraitLink?: string }> } | null
   return data?.data?.[0]?.avatar || data?.data?.[0]?.portraitLink || null
 }
 
 async function fetchXTAvatar(traderId: string): Promise<string | null> {
-  const data = await fetchJSON(
+  const data = (await fetchJSON(
     `https://www.xt.com/fapi/user/v1/public/copy-trade/leader-detail?accountId=${traderId}`,
-    { headers: { 'Origin': 'https://www.xt.com', 'Referer': 'https://www.xt.com/en/copy-trading/futures' } },
-  ) as { result?: { avatar?: string } } | null
+    {
+      headers: {
+        Origin: 'https://www.xt.com',
+        Referer: 'https://www.xt.com/en/copy-trading/futures',
+      },
+    }
+  )) as { result?: { avatar?: string } } | null
   return data?.result?.avatar || null
 }
 
@@ -187,47 +193,60 @@ async function fetchXTBulk(): Promise<Map<string, string>> {
   for (const sortType of ['INCOME_RATE', 'TOTAL_INCOME', 'WIN_RATE', 'FOLLOWERS']) {
     for (const days of [7, 30, 90]) {
       for (let pageNo = 1; pageNo <= 100; pageNo++) {
-        const data = await fetchJSON(
+        const data = (await fetchJSON(
           `https://www.xt.com/fapi/user/v1/public/copy-trade/elite-leader-list-v2?size=50&days=${days}&sotType=${sortType}&pageNo=${pageNo}`,
-          { headers: { 'Origin': 'https://www.xt.com', 'Referer': 'https://www.xt.com/en/copy-trading/futures' } },
-        ) as { returnCode?: number; result?: Array<{ items?: Array<{ accountId?: string | number; avatar?: string }> }> } | null
-        
+          {
+            headers: {
+              Origin: 'https://www.xt.com',
+              Referer: 'https://www.xt.com/en/copy-trading/futures',
+            },
+          }
+        )) as {
+          returnCode?: number
+          result?: Array<{ items?: Array<{ accountId?: string | number; avatar?: string }> }>
+        } | null
+
         if (!data || data.returnCode !== 0) break
-        
+
         const items: Array<{ accountId?: string | number; avatar?: string }> = []
         if (Array.isArray(data.result)) {
           for (const group of data.result) {
             if (group.items) items.push(...group.items)
           }
         }
-        
+
         for (const item of items) {
           const id = String(item.accountId || '')
           if (id && item.avatar && !item.avatar.includes('default')) {
             avatarMap.set(id, item.avatar)
           }
         }
-        
+
         if (items.length < 50) break
         await sleep(200)
       }
     }
   }
-  
+
   return avatarMap
 }
 
 async function fetchHTXBulk(): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
-  
+
   for (let page = 1; page <= 30; page++) {
-    const data = await fetchJSON(
-      `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=50`,
-    ) as { code?: number; data?: { itemList?: Array<{ userSign?: string; uid?: number; nickName?: string; imgUrl?: string }> } } | null
-    
+    const data = (await fetchJSON(
+      `https://futures.htx.com/-/x/hbg/v1/futures/copytrading/rank?rankType=1&pageNo=${page}&pageSize=50`
+    )) as {
+      code?: number
+      data?: {
+        itemList?: Array<{ userSign?: string; uid?: number; nickName?: string; imgUrl?: string }>
+      }
+    } | null
+
     const items = data?.data?.itemList || []
     if (!items.length) break
-    
+
     for (const t of items) {
       if (t.imgUrl) {
         if (t.userSign) avatarMap.set(t.userSign, t.imgUrl)
@@ -238,49 +257,49 @@ async function fetchHTXBulk(): Promise<Map<string, string>> {
     if (items.length < 50) break
     await sleep(300)
   }
-  
+
   return avatarMap
 }
 
 async function fetchOKXBulk(): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
-  
+
   for (let page = 1; page <= 50; page++) {
-    const data = await fetchJSON(
-      `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&page=${page}`,
-    ) as { data?: Array<{ ranks?: Array<{ uniqueCode?: string; portLink?: string }> }> } | null
-    
+    const data = (await fetchJSON(
+      `https://www.okx.com/api/v5/copytrading/public-lead-traders?instType=SWAP&page=${page}`
+    )) as { data?: Array<{ ranks?: Array<{ uniqueCode?: string; portLink?: string }> }> } | null
+
     const ranks = data?.data?.[0]?.ranks || []
     if (!ranks.length) break
-    
+
     for (const t of ranks) {
       if (t.uniqueCode && t.portLink) avatarMap.set(t.uniqueCode, t.portLink)
     }
     if (ranks.length < 10) break
     await sleep(300)
   }
-  
+
   return avatarMap
 }
 
 async function fetchBinanceBulk(): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
-  
+
   // Try multiple ranking endpoints
   for (const timeRange of ['WEEKLY', 'MONTHLY', 'ALL']) {
     for (let page = 1; page <= 20; page++) {
-      const data = await fetchJSON(
+      const data = (await fetchJSON(
         'https://www.binance.com/bapi/futures/v1/public/future/copy-trade/lead-portfolio/list',
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Origin': 'https://www.binance.com' },
+          headers: { 'Content-Type': 'application/json', Origin: 'https://www.binance.com' },
           body: JSON.stringify({ pageNumber: page, pageSize: 50, timeRange }),
-        },
-      ) as { data?: { list?: Array<{ portfolioId?: string; userPhotoUrl?: string }> } } | null
-      
+        }
+      )) as { data?: { list?: Array<{ portfolioId?: string; userPhotoUrl?: string }> } } | null
+
       const list = data?.data?.list || []
       if (!list.length) break
-      
+
       for (const t of list) {
         if (t.portfolioId && t.userPhotoUrl && !t.userPhotoUrl.includes('default')) {
           avatarMap.set(t.portfolioId, t.userPhotoUrl)
@@ -290,23 +309,23 @@ async function fetchBinanceBulk(): Promise<Map<string, string>> {
       await sleep(300)
     }
   }
-  
+
   return avatarMap
 }
 
 async function fetchBybitBulk(): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
-  
+
   for (const timeRange of ['SEVEN_DAY', 'THIRTY_DAY', 'NINETY_DAY']) {
     for (let page = 1; page <= 20; page++) {
-      const data = await fetchJSON(
+      const data = (await fetchJSON(
         `https://api2.bybit.com/fapi/beehive/public/v1/common/leader/list?pageNo=${page}&pageSize=50&timeRange=${timeRange}&dataSortType=FOLLOWER_PNL_SORT&isRookie=0`,
-        { headers: { 'Origin': 'https://www.bybit.com', 'Referer': 'https://www.bybit.com/' } },
-      ) as { result?: Array<{ leaderMark?: string; avatar?: string }> } | null
-      
+        { headers: { Origin: 'https://www.bybit.com', Referer: 'https://www.bybit.com/' } }
+      )) as { result?: Array<{ leaderMark?: string; avatar?: string }> } | null
+
       const list = data?.result || []
       if (!list.length) break
-      
+
       for (const t of list) {
         if (t.leaderMark && t.avatar && !t.avatar.includes('default')) {
           avatarMap.set(t.leaderMark, t.avatar)
@@ -316,23 +335,28 @@ async function fetchBybitBulk(): Promise<Map<string, string>> {
       await sleep(300)
     }
   }
-  
+
   return avatarMap
 }
 
 async function fetchBitgetBulk(): Promise<Map<string, string>> {
   const avatarMap = new Map<string, string>()
-  
-  for (const periodType of [1, 2, 3]) { // 7d, 30d, 90d
+
+  for (const periodType of [1, 2, 3]) {
+    // 7d, 30d, 90d
     for (let page = 1; page <= 20; page++) {
-      const data = await fetchJSON(
+      const data = (await fetchJSON(
         `https://www.bitget.com/v1/copy/mix/trader/list?pageNo=${page}&pageSize=50&periodType=${periodType}`,
-        { headers: { 'Origin': 'https://www.bitget.com' } },
-      ) as { data?: { list?: Array<{ traderId?: string; headUrl?: string; avatar?: string; traderImg?: string }> } } | null
-      
+        { headers: { Origin: 'https://www.bitget.com' } }
+      )) as {
+        data?: {
+          list?: Array<{ traderId?: string; headUrl?: string; avatar?: string; traderImg?: string }>
+        }
+      } | null
+
       const list = data?.data?.list || []
       if (!list.length) break
-      
+
       for (const t of list) {
         const avatar = t.headUrl || t.avatar || t.traderImg
         if (t.traderId && avatar && !avatar.includes('default')) {
@@ -343,7 +367,7 @@ async function fetchBitgetBulk(): Promise<Map<string, string>> {
       await sleep(300)
     }
   }
-  
+
   return avatarMap
 }
 
@@ -353,7 +377,6 @@ const INDIVIDUAL_FETCHERS: Record<string, (id: string) => Promise<string | null>
   // binance_spot: REMOVED 2026-03-14
   bybit: fetchBybitAvatar,
   bitget_futures: fetchBitgetAvatar,
-  bitget_spot: fetchBitgetAvatar,
   okx_futures: fetchOKXAvatar,
   kucoin: fetchKuCoinAvatar,
   coinex: fetchCoinExAvatar,
@@ -363,7 +386,6 @@ const INDIVIDUAL_FETCHERS: Record<string, (id: string) => Promise<string | null>
   mexc: fetchMEXCAvatar,
   bingx: fetchBingXAvatar,
   phemex: fetchPhemexAvatar,
-  lbank: fetchLBankAvatar,
   blofin: fetchBlofinAvatar,
   xt: fetchXTAvatar,
 }
@@ -377,7 +399,6 @@ const BULK_FETCHERS: Record<string, () => Promise<Map<string, string>>> = {
   // binance_spot: REMOVED 2026-03-14
   bybit: fetchBybitBulk,
   bitget_futures: fetchBitgetBulk,
-  bitget_spot: fetchBitgetBulk,
 }
 
 export async function GET(request: Request) {
@@ -397,7 +418,10 @@ export async function GET(request: Request) {
 
   // Support comma-separated platforms for consolidated cron jobs
   if (platform && platform.includes(',')) {
-    const platforms = platform.split(',').map(p => p.trim()).filter(p => p && !DEAD_PLATFORMS.has(p))
+    const platforms = platform
+      .split(',')
+      .map((p) => p.trim())
+      .filter((p) => p && !DEAD_PLATFORMS.has(p))
     const results: AvatarResult[] = []
     const perPlatformLimit = Math.floor(limit / platforms.length) || 50
     const PER_PLATFORM_TIMEOUT = 18_000 // 18s per platform (14 platforms × 18s = 252s < 300s limit)
@@ -411,10 +435,13 @@ export async function GET(request: Request) {
         const subRes = await Promise.race([
           GET(subReq),
           new Promise<Response>((_, reject) =>
-            setTimeout(() => reject(new Error(`Avatar backfill ${p} timed out`)), PER_PLATFORM_TIMEOUT)
+            setTimeout(
+              () => reject(new Error(`Avatar backfill ${p} timed out`)),
+              PER_PLATFORM_TIMEOUT
+            )
           ),
         ])
-        const subData = await subRes.json() as AvatarResult
+        const subData = (await subRes.json()) as AvatarResult
         results.push(subData)
       } catch (_err) {
         results.push({ platform: p, total: 0, updated: 0, errors: 1 })
@@ -427,15 +454,24 @@ export async function GET(request: Request) {
   // Skip single dead platform
   if (platform && DEAD_PLATFORMS.has(platform)) {
     await plog.success(0)
-    return NextResponse.json({ platform, total: 0, updated: 0, errors: 0, message: 'Platform skipped (dead/blocked)' })
+    return NextResponse.json({
+      platform,
+      total: 0,
+      updated: 0,
+      errors: 0,
+      message: 'Platform skipped (dead/blocked)',
+    })
   }
 
   if (!platform) {
     await plog.error(new Error('platform parameter required'))
-    return NextResponse.json({
-      error: 'platform parameter required',
-      available: Object.keys(INDIVIDUAL_FETCHERS),
-    }, { status: 400 })
+    return NextResponse.json(
+      {
+        error: 'platform parameter required',
+        available: Object.keys(INDIVIDUAL_FETCHERS),
+      },
+      { status: 400 }
+    )
   }
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -463,7 +499,7 @@ export async function GET(request: Request) {
     from += 1000
     if (data.length < 1000) break
   }
-  
+
   result.total = traders.length
   if (!traders.length) {
     await plog.success(0)
@@ -478,7 +514,7 @@ export async function GET(request: Request) {
         setTimeout(() => resolve(new Map()), BULK_DEADLINE_MS)
       ),
     ])
-    
+
     for (const t of traders) {
       const avatar = bulkMap.get(t.source_trader_id) || bulkMap.get(t.handle)
       if (avatar && !avatar.includes('default') && !avatar.includes('blockie')) {
@@ -490,7 +526,7 @@ export async function GET(request: Request) {
         else result.errors++
       }
     }
-    
+
     // If bulk got most of them, return
     if (result.updated > traders.length * 0.5 || mode === 'bulk') {
       await plog.success(result.updated, { total: result.total, errors: result.errors })
@@ -502,7 +538,7 @@ export async function GET(request: Request) {
   // Safety: stop 30s before maxDuration to ensure plog.success() runs
   const functionDeadline = Date.now() + 250_000 // ~4m10s of 5m budget
   if (mode !== 'bulk' && INDIVIDUAL_FETCHERS[platform]) {
-    const remaining = traders.filter(_t => {
+    const remaining = traders.filter((_t) => {
       // Skip already updated
       return true // We'll check via a simpler approach
     })
@@ -521,11 +557,15 @@ export async function GET(request: Request) {
             .from('trader_sources')
             .update({ avatar_url: avatar })
             .eq('id', t.id)
-          if (!error) { result.updated++; individualUpdated++ }
-          else result.errors++
+          if (!error) {
+            result.updated++
+            individualUpdated++
+          } else result.errors++
         }
       } catch (err) {
-        log.warn(`Individual fetch failed for ${platform}/${t.source_trader_id}`, { error: err instanceof Error ? err.message : String(err) })
+        log.warn(`Individual fetch failed for ${platform}/${t.source_trader_id}`, {
+          error: err instanceof Error ? err.message : String(err),
+        })
         result.errors++
       }
 

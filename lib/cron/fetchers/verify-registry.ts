@@ -21,7 +21,7 @@ import { logger } from '@/lib/logger'
 // ── Types ──
 
 /** Loose JSON response type for API validation callbacks (replaces `any`) */
- 
+
 type ApiResponse = Record<string, any>
 
 export interface VerifyResult {
@@ -207,8 +207,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
           statisticsType: 'ROI',
           tradeType: 'PERPETUAL',
         },
-        validateResponse: (d: ApiResponse) =>
-          Array.isArray(d?.data) && d.data.length > 0,
+        validateResponse: (d: ApiResponse) => Array.isArray(d?.data) && d.data.length > 0,
       }
     ),
 
@@ -293,14 +292,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       }
     ),
 
-  btse: () =>
-    verifyEndpoint(
-      'btse',
-      'https://api.btse.com/spot/api/v3.2/market_summary',
-      {
-        validateResponse: (d: ApiResponse) => Array.isArray(d) && d.length > 0,
-      }
-    ),
+  // btse: REMOVED — permanently dead (SPA page 200 but zero API calls intercepted, no real data)
 
   // =============================================
   // CEX — Auth required (need API keys or broker credentials)
@@ -311,7 +303,11 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   // Requires BITGET_API_KEY, BITGET_SECRET, BITGET_PASSPHRASE env vars.
   bitget_futures: () => {
     if (!process.env.BITGET_API_KEY) {
-      return skipResult('bitget_futures', 'auth_required', 'BITGET_API_KEY not set — public endpoints return 404, broker API required')
+      return skipResult(
+        'bitget_futures',
+        'auth_required',
+        'BITGET_API_KEY not set — public endpoints return 404, broker API required'
+      )
     }
     return verifyEndpoint(
       'bitget_futures',
@@ -327,23 +323,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     )
   },
 
-  bitget_spot: () => {
-    if (!process.env.BITGET_API_KEY) {
-      return skipResult('bitget_spot', 'auth_required', 'BITGET_API_KEY not set — public endpoints return 404, broker API required')
-    }
-    return verifyEndpoint(
-      'bitget_spot',
-      'https://api.bitget.com/api/v2/copy/spot-broker/query-traders?pageNo=1&pageSize=1&period=THIRTY_DAYS',
-      {
-        headers: {
-          Referer: 'https://www.bitget.com/',
-          Origin: 'https://www.bitget.com',
-        },
-        validateResponse: (d: ApiResponse) =>
-          d?.code === '00000' || d?.code === 0 || d?.code === '0' || !!d?.data,
-      }
-    )
-  },
+  // bitget_spot: REMOVED — permanently dead (no leaderboard API)
 
   // BloFin openapi returns 401 Unauthorized without API credentials
   blofin: () =>
@@ -351,13 +331,9 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
 
   // Drift public Data API (no auth required)
   drift: () =>
-    verifyEndpoint(
-      'drift',
-      'https://data.api.drift.trade/stats/leaderboard?limit=1&sort=pnl',
-      {
-        validateResponse: (d: ApiResponse) => !!d?.success && !!d?.data?.leaderboard,
-      }
-    ),
+    verifyEndpoint('drift', 'https://data.api.drift.trade/stats/leaderboard?limit=1&sort=pnl', {
+      validateResponse: (d: ApiResponse) => !!d?.success && !!d?.data?.leaderboard,
+    }),
 
   // =============================================
   // CEX — Cloudflare WAF / endpoint changes
@@ -439,14 +415,16 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
 
   // Crypto.com: no public API — requires stealth browser (CF challenge + session cookies)
   cryptocom: () =>
-    skipResult('cryptocom', 'endpoint_gone', 'No public API — requires stealth browser (CF challenge + session cookies)'),
+    skipResult(
+      'cryptocom',
+      'endpoint_gone',
+      'No public API — requires stealth browser (CF challenge + session cookies)'
+    ),
 
   // Toobit: re-enabled via VPS Playwright scraper (2026-03-09)
   // toobit: now handled by inline fetcher with VPS scraper strategy
 
-  // LBank: no public API — all endpoints return HTML (CF challenge)
-  lbank: () =>
-    skipResult('lbank', 'endpoint_gone', 'No public API — all endpoints return HTML (CF challenge)'),
+  // lbank: REMOVED — permanently dead (copy-trading API 404 since 2026-04)
 
   // =============================================
   // CEX — Discontinued
@@ -468,30 +446,22 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
   // =============================================
 
   hyperliquid: () =>
-    verifyEndpoint(
-      'hyperliquid',
-      'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard',
-      {
-        timeoutMs: 15000,
-        validateResponse: (d: ApiResponse) =>
-          Array.isArray(d?.leaderboardRows) && d.leaderboardRows.length > 0,
-      }
-    ),
+    verifyEndpoint('hyperliquid', 'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard', {
+      timeoutMs: 15000,
+      validateResponse: (d: ApiResponse) =>
+        Array.isArray(d?.leaderboardRows) && d.leaderboardRows.length > 0,
+    }),
 
   gmx: () =>
-    verifyEndpoint(
-      'gmx',
-      'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          query: '{ accountStats(limit: 1, orderBy: realizedPnl_DESC) { id } }',
-        },
-        validateResponse: (d: ApiResponse) =>
-          Array.isArray(d?.data?.accountStats) && d.data.accountStats.length > 0,
-      }
-    ),
+    verifyEndpoint('gmx', 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: {
+        query: '{ accountStats(limit: 1, orderBy: realizedPnl_DESC) { id } }',
+      },
+      validateResponse: (d: ApiResponse) =>
+        Array.isArray(d?.data?.accountStats) && d.data.accountStats.length > 0,
+    }),
 
   // dYdX v4 indexer: /v4/leaderboard/pnl endpoint was removed.
   // Fetcher uses proxy fallback. Test the base indexer health.
@@ -505,38 +475,17 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
     ),
 
   gains: () =>
-    verifyEndpoint(
-      'gains',
-      'https://backend-arbitrum.gains.trade/leaderboard',
-      {
-        timeoutMs: 15000,
-        validateResponse: (d: ApiResponse) => Array.isArray(d) && d.length > 0,
-      }
-    ),
+    verifyEndpoint('gains', 'https://backend-arbitrum.gains.trade/leaderboard', {
+      timeoutMs: 15000,
+      validateResponse: (d: ApiResponse) => Array.isArray(d) && d.length > 0,
+    }),
 
   aevo: () =>
-    verifyEndpoint(
-      'aevo',
-      'https://api.aevo.xyz/leaderboard?asset=ETH&period=weekly&limit=1',
-      {
-        validateResponse: (d: ApiResponse) => !!d,
-      }
-    ),
+    verifyEndpoint('aevo', 'https://api.aevo.xyz/leaderboard?asset=ETH&period=weekly&limit=1', {
+      validateResponse: (d: ApiResponse) => !!d,
+    }),
 
-  perpetual_protocol: () =>
-    verifyEndpoint(
-      'perpetual_protocol',
-      'https://api.studio.thegraph.com/query/58978/perpetual-v2-optimism/version/latest',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: {
-          query: '{ traderDayDatas(first: 1, orderBy: tradingVolume, orderDirection: desc) { trader { id } } }',
-        },
-        validateResponse: (d: ApiResponse) =>
-          Array.isArray(d?.data?.traderDayDatas) && d.data.traderDayDatas.length > 0,
-      }
-    ),
+  // perpetual_protocol: REMOVED — permanently dead (domain 404, Binance delisted PERP)
 
   // Jupiter Perps: now requires marketMint parameter
   jupiter_perps: () =>
@@ -545,8 +494,7 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
       'https://perps-api.jup.ag/v1/top-traders?marketMint=So11111111111111111111111111111111111111112&year=2026&week=current',
       {
         timeoutMs: 15000,
-        validateResponse: (d: ApiResponse) =>
-          !!d?.topTradersByPnl || !!d?.topTradersByVolume,
+        validateResponse: (d: ApiResponse) => !!d?.topTradersByPnl || !!d?.topTradersByVolume,
       }
     ),
 
@@ -566,7 +514,8 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: {
-          query: '{ swaps(first: 1, orderBy: amountUSD, orderDirection: desc) { origin amountUSD } }',
+          query:
+            '{ swaps(first: 1, orderBy: amountUSD, orderDirection: desc) { origin amountUSD } }',
         },
         validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.swaps) && d.data.swaps.length > 0,
@@ -586,7 +535,8 @@ const VERIFY_REGISTRY: Record<string, VerifyFn> = {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: {
-          query: '{ swaps(first: 1, orderBy: amountUSD, orderDirection: desc) { origin amountUSD } }',
+          query:
+            '{ swaps(first: 1, orderBy: amountUSD, orderDirection: desc) { origin amountUSD } }',
         },
         validateResponse: (d: ApiResponse) =>
           Array.isArray(d?.data?.swaps) && d.data.swaps.length > 0,
@@ -672,7 +622,7 @@ export async function verifyAll(): Promise<VerifyResult[]> {
   // Dynamically import to avoid circular dependency
   const { DEAD_BLOCKED_PLATFORMS } = await import('@/lib/constants/exchanges')
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-  const platforms = getAllVerifiablePlatforms().filter(p => !deadSet.has(p))
+  const platforms = getAllVerifiablePlatforms().filter((p) => !deadSet.has(p))
   const results: VerifyResult[] = []
   const BATCH_SIZE = 5
 
@@ -697,6 +647,8 @@ export async function verifyAll(): Promise<VerifyResult[]> {
     results.push(...batchResults)
   }
 
-  logger.info(`[verify-registry] Verified ${results.length} platforms: ${results.filter((r: VerifyResult) => r.healthy).length} healthy`)
+  logger.info(
+    `[verify-registry] Verified ${results.length} platforms: ${results.filter((r: VerifyResult) => r.healthy).length} healthy`
+  )
   return results
 }

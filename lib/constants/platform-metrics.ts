@@ -1,6 +1,6 @@
 /**
  * Platform Metric Availability
- * 
+ *
  * Documents which metrics each platform's API provides.
  * Used to display N/A with appropriate tooltips in the UI.
  */
@@ -16,7 +16,7 @@ export interface PlatformMetrics {
 
 /**
  * Platform metric availability based on API capabilities.
- * 
+ *
  * Data quality categories:
  * - full: API provides WR and DD (Binance, OKX, HTX, etc.)
  * - partial: API provides WR but not DD, or vice versa
@@ -39,7 +39,7 @@ export const PLATFORM_METRICS: Record<string, PlatformMetrics> = {
   phemex: { hasWinRate: false, hasMaxDrawdown: false, note: 'Phemex API不提供胜率/回撤' },
   bingx: { hasWinRate: false, hasMaxDrawdown: false, note: 'BingX API不提供胜率/回撤' },
   blofin: { hasWinRate: false, hasMaxDrawdown: false, note: 'BloFin API数据有限' },
-  lbank: { hasWinRate: false, hasMaxDrawdown: true, note: 'LBank API不提供胜率' },
+  // lbank: REMOVED — permanently dead
 
   // CEX Spot
   binance_spot: { hasWinRate: true, hasMaxDrawdown: true },
@@ -59,7 +59,7 @@ export const PLATFORM_METRICS: Record<string, PlatformMetrics> = {
   aevo: { hasWinRate: false, hasMaxDrawdown: false, note: 'Aevo是链上DEX，API数据有限' },
   kwenta: { hasWinRate: false, hasMaxDrawdown: false, note: 'Kwenta是链上DEX' },
   mux: { hasWinRate: false, hasMaxDrawdown: false, note: 'MUX是链上聚合器' },
-  vertex: { hasWinRate: false, hasMaxDrawdown: false, note: 'Vertex是链上DEX' },
+  // vertex: REMOVED — permanently dead
   drift: { hasWinRate: false, hasMaxDrawdown: false, note: 'Drift是Solana上DEX' },
   jupiter_perps: { hasWinRate: false, hasMaxDrawdown: false, note: 'Jupiter Perps是Solana上DEX' },
   synthetix: { hasWinRate: false, hasMaxDrawdown: false, note: 'Synthetix是链上衍生品' },

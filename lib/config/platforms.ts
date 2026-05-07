@@ -16,8 +16,19 @@
 // 2026-03-31: Re-enabled weex (VPS scraper works, server back from 521) and okx_web3 (v5 API confirmed working).
 // kucoin: RE-ENABLED 2026-04-02 — POST /_api/ct-copy-trade/ works (822 traders)
 // dydx enrichment disabled separately in NO_ENRICHMENT_PLATFORMS.
-export const DISABLED_PLATFORMS = ['bitget_spot', 'lbank'] as const
-export type DisabledPlatform = typeof DISABLED_PLATFORMS[number]
+export const DISABLED_PLATFORMS = [
+  'bitget_spot',
+  'lbank',
+  'bitmart',
+  'web3_bot',
+  'perpetual_protocol',
+  'whitebit',
+  'btse',
+  'vertex',
+  'apex_pro',
+  'rabbitx',
+] as const
+export type DisabledPlatform = (typeof DISABLED_PLATFORMS)[number]
 
 export function isPlatformDisabled(platform: string): boolean {
   return DISABLED_PLATFORMS.includes(platform as DisabledPlatform)
@@ -25,6 +36,8 @@ export function isPlatformDisabled(platform: string): boolean {
 
 export function validatePlatform(platform: string): void {
   if (isPlatformDisabled(platform)) {
-    throw new Error(`❌ Platform ${platform} is permanently disabled (see DISABLED_PLATFORMS blacklist)`)
+    throw new Error(
+      `❌ Platform ${platform} is permanently disabled (see DISABLED_PLATFORMS blacklist)`
+    )
   }
 }

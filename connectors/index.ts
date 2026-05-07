@@ -3,26 +3,31 @@
  * Central registry for all platform connectors
  */
 
-import type { IConnector, Platform, MarketType } from './base/types';
-import { BinanceFuturesConnector, BinanceSpotConnector, BinanceWeb3Connector } from './binance';
-import { BybitConnector } from './bybit';
-import { MexcConnector } from './mexc';
-import { CoinexConnector } from './coinex';
-import { OkxConnector, OkxWalletConnector } from './okx';
-import { KucoinConnector } from './kucoin';
-import { BitmartConnector } from './bitmart';
-import { PhemexConnector } from './phemex';
-import { HtxConnector } from './htx';
-import { WeexConnector } from './weex';
-import { GmxConnector } from './gmx';
-import { DydxConnector } from './dydx';
-import { HyperliquidConnector } from './hyperliquid';
-import { GateioConnector } from './gateio';
-import { BlofinConnector } from './blofin';
-import { NansenConnector } from './nansen';
-import { DuneConnector, DuneGmxConnector, DuneHyperliquidConnector, DuneUniswapConnector, DuneDefiConnector } from './dune';
+import type { IConnector, Platform, MarketType } from './base/types'
+import { BinanceFuturesConnector, BinanceSpotConnector, BinanceWeb3Connector } from './binance'
+import { BybitConnector } from './bybit'
+import { MexcConnector } from './mexc'
+import { CoinexConnector } from './coinex'
+import { OkxConnector, OkxWalletConnector } from './okx'
+import { KucoinConnector } from './kucoin'
+import { PhemexConnector } from './phemex'
+import { HtxConnector } from './htx'
+import { WeexConnector } from './weex'
+import { GmxConnector } from './gmx'
+import { DydxConnector } from './dydx'
+import { HyperliquidConnector } from './hyperliquid'
+import { GateioConnector } from './gateio'
+import { BlofinConnector } from './blofin'
+import { NansenConnector } from './nansen'
+import {
+  DuneConnector,
+  DuneGmxConnector,
+  DuneHyperliquidConnector,
+  DuneUniswapConnector,
+  DuneDefiConnector,
+} from './dune'
 
-export type ConnectorKey = `${Platform}:${MarketType}`;
+export type ConnectorKey = `${Platform}:${MarketType}`
 
 const CONNECTOR_MAP: Record<string, () => IConnector> = {
   'binance:futures': () => new BinanceFuturesConnector(),
@@ -36,7 +41,7 @@ const CONNECTOR_MAP: Record<string, () => IConnector> = {
   'okx:futures': () => new OkxConnector(),
   'okx_wallet:web3': () => new OkxWalletConnector(),
   'kucoin:futures': () => new KucoinConnector(),
-  'bitmart:futures': () => new BitmartConnector(),
+  // bitmart: REMOVED — permanently dead (CF 403, zero API calls intercepted)
   'phemex:futures': () => new PhemexConnector(),
   'htx:futures': () => new HtxConnector(),
   'weex:futures': () => new WeexConnector(),
@@ -52,29 +57,29 @@ const CONNECTOR_MAP: Record<string, () => IConnector> = {
   'dune_hyperliquid:perp': () => new DuneHyperliquidConnector(),
   'dune_uniswap:spot': () => new DuneUniswapConnector(),
   'dune_defi:web3': () => new DuneDefiConnector(),
-};
+}
 
 /**
  * Get a connector instance for a platform/market_type combination
  */
 export function getConnector(platform: Platform, market_type: MarketType): IConnector | null {
-  const key = `${platform}:${market_type}`;
-  const factory = CONNECTOR_MAP[key];
-  return factory ? factory() : null;
+  const key = `${platform}:${market_type}`
+  const factory = CONNECTOR_MAP[key]
+  return factory ? factory() : null
 }
 
 /**
  * Get all available connector keys
  */
 export function getAllConnectorKeys(): ConnectorKey[] {
-  return Object.keys(CONNECTOR_MAP) as ConnectorKey[];
+  return Object.keys(CONNECTOR_MAP) as ConnectorKey[]
 }
 
 /**
  * Get all ranking-capable connectors (excludes enrichment sources)
  */
 export function getRankingConnectorKeys(): ConnectorKey[] {
-  return getAllConnectorKeys().filter(key => !key.endsWith(':enrichment'));
+  return getAllConnectorKeys().filter((key) => !key.endsWith(':enrichment'))
 }
 
 /**
@@ -82,14 +87,14 @@ export function getRankingConnectorKeys(): ConnectorKey[] {
  */
 export function getConnectorsForPlatform(platform: Platform): IConnector[] {
   return getAllConnectorKeys()
-    .filter(key => key.startsWith(`${platform}:`))
-    .map(key => {
-      const [p, m] = key.split(':') as [Platform, MarketType];
-      return getConnector(p, m)!;
+    .filter((key) => key.startsWith(`${platform}:`))
+    .map((key) => {
+      const [p, m] = key.split(':') as [Platform, MarketType]
+      return getConnector(p, m)!
     })
-    .filter(Boolean);
+    .filter(Boolean)
 }
 
 // Re-export types
-export type { IConnector, Platform, MarketType, Window } from './base/types';
-export * from './base/types';
+export type { IConnector, Platform, MarketType, Window } from './base/types'
+export * from './base/types'

@@ -16,18 +16,41 @@
  */
 const ACTIVE_PLATFORMS = [
   // CEX futures — matches batch-fetch-traders GROUPS (a1, a2, b1, b2, c, d1, d2, e, f, g)
-  'binance_futures', 'binance_spot', 'okx_futures', 'okx_spot',
-  'bybit', 'bybit_spot', 'bitget_futures', 'bitget_spot',
-  'htx_futures', 'mexc', 'coinex', 'gateio', 'xt',
-  'btcc', 'bitfinex', 'bitunix', 'toobit', 'lbank',
+  'binance_futures',
+  'binance_spot',
+  'okx_futures',
+  'okx_spot',
+  'bybit',
+  'bybit_spot',
+  'bitget_futures',
+  'htx_futures',
+  'mexc',
+  'coinex',
+  'gateio',
+  'xt',
+  'btcc',
+  'bitfinex',
+  'bitunix',
+  'toobit',
   // Web3 / DEX
-  'binance_web3', 'okx_web3', 'hyperliquid', 'gmx',
-  'drift', 'jupiter_perps', 'aevo', 'dydx',
-  'gains', 'web3_bot', 'etoro', 'weex',
+  'binance_web3',
+  'okx_web3',
+  'hyperliquid',
+  'gmx',
+  'drift',
+  'jupiter_perps',
+  'aevo',
+  'dydx',
+  'gains',
+  'etoro',
+  'weex',
   // New platforms (Wave 2)
-  'woox', 'polymarket', 'copin',
+  'woox',
+  'polymarket',
+  'copin',
   // Mac Mini / VPS only (not in Vercel cron but actively fetching)
   // blofin: Mac Mini crontab, phemex: VPS scraper-cron
+  // REMOVED: bitget_spot, lbank, web3_bot (permanently dead)
 ]
 
 /** Returns list of all known active platforms (for monitoring). */
@@ -39,7 +62,10 @@ export function getSupportedPlatforms(): string[] {
 export const getSupportedInlinePlatforms = getSupportedPlatforms
 
 /** Inline fetcher function signature (for type compatibility) */
-type InlineFetcherFn = (supabase: unknown, periods: string[]) => Promise<{
+type InlineFetcherFn = (
+  supabase: unknown,
+  periods: string[]
+) => Promise<{
   source: string
   duration: number
   periods: Record<string, { total: number; saved: number; error?: string }>
