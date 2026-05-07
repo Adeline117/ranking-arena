@@ -678,6 +678,15 @@ const nextConfig = {
       // /pro and /account redirects (2026-03)
       { source: '/pro', destination: '/pricing', permanent: true },
       { source: '/account', destination: '/settings', permanent: true },
+      // Auth aliases → /login
+      { source: '/signup', destination: '/login', permanent: true },
+      { source: '/register', destination: '/login', permanent: true },
+      { source: '/sign-up', destination: '/login', permanent: true },
+      // Renamed pages
+      { source: '/posts', destination: '/feed', permanent: true },
+      { source: '/profile', destination: '/settings', permanent: true },
+      { source: '/events', destination: '/market', permanent: true },
+      { source: '/market/events', destination: '/market', permanent: true },
       // /rankings (bare) → / (homepage has the main ranking table)
       { source: '/rankings', destination: '/', permanent: true },
       // /rankings/traders → / (legacy). The :exchange wildcard below now
