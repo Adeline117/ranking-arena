@@ -7,11 +7,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
+export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 interface SparklineEntry {
   id: string
-  prices: number[]   // 7-day hourly prices (~168 values)
+  prices: number[] // 7-day hourly prices (~168 values)
   change7d: number | null
 }
 
@@ -61,9 +62,6 @@ export async function GET(request: NextRequest) {
       headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=7200' },
     })
   } catch (e: unknown) {
-    return NextResponse.json(
-      { error: e instanceof Error ? e.message : String(e) },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 500 })
   }
 }
