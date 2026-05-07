@@ -2,6 +2,75 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## 6-Domain Root-Root Cause Audit (2026-05-07)
+
+**Trigger**: User requested 全部根源的根源修复 — deep systemic fix across all layers.
+
+**Process**:
+
+1. Phase 1: 6 parallel Explore agents audited: data pipeline, frontend, API security, performance, type safety, DB schema
+2. Phase 2: Identified 5 systemic root causes (silent failures, concurrency safety, hardcoded config, lifecycle cleanup, boundary validation)
+3. Phase 3: Fixed all root causes + remaining known issues from backlog
+4. Phase 4: Verified false positives (cron monitoring was 55% → actually 98%, chart height already responsive, batch-enrich already has 4 timeout layers)
+
+**Shipped (13 commits, 2 prod migrations)**:
+
+### Silent Failures + Concurrency (5 fixes)
+
+- `57de764` smoke-test: PipelineLogger (failures now visible in monitoring)
+- `57de764` enrichment-runner: log empty fallback results (gains/kwenta silent data loss)
+- `57de764` enrichment-db: return error when v2 sync fully rejected by sanitizeRow
+- `57de764` compute-leaderboard: fail-safe when Redis unavailable (was: proceed without lock → double-compute)
+- `57de764` NetworkStatusBanner: ref-based timer cleanup (was: unbounded setTimeout accumulation)
+
+### Design Token Consolidation (3 commits)
+
+- `6303db0` VerifiedBadge + RankPercentileBadge: 11 hardcoded hex → tokens.colors.medal/verified.badge
+- `e9fd23d` DailyReturnsChart: 6 hardcoded hex → tokens.colors.sentiment.bear/bull + color-mix()
+- `9a1303e` MessageButton + UserFollowButton + ContactSupportButton: extracted shared button-styles.tsx
+
+### Performance (1 migration)
+
+- `76bc0c2` 2 missing DB indexes applied to prod:
+  - `idx_posts_author_id_created_at` (author feed composite)
+  - `idx_user_profiles_handle_btree` (exact handle lookup)
+
+### Pipeline Reliability (1 commit)
+
+- `daf9160` batch-enrich: pass timeBudgetMs to runEnrichment (graceful bail vs killed mid-write)
+- `daf9160` enrichment-runner: dead-letter tracking for failed trader IDs in PipelineState
+
+### UX + i18n (3 commits)
+
+- `26692fb` Compare checkbox: `@media (hover: none)` shows at 50% opacity on touch devices
+- `c91bec1` SSR Hero: getServerTranslation() for 6 strings (zh/en/ja/ko) — no more all-English first paint
+- `b89cb85` SwipeableView: Overview tab always mounted, Posts uses visitedTabs — no skeleton flash on swipe-back
+
+### DB Cleanup (1 migration)
+
+- `fd093bd` Dropped 6 verified-unused RPC functions: compute_leaderboard_snapshot, migrate_position_history_batch, recalculate_all_user_weights, expire_trader_flags, fix_snapshot_violations, get_latest_timestamps_by_source
+
+### React Query Migration (1 commit)
+
+- `55ae3e4` useServerSearch: manual fetch+AbortController+debounce → useQuery
+- `55ae3e4` useSavedFilters: manual fetch callbacks → useMutation with optimistic delete
+
+### False Positives Corrected
+
+- "25 crons missing monitoring" → actually 24/25 use withCron() which wraps PipelineLogger (55% → 98%)
+- "Chart height fixed 400px" → SVG viewBox is responsive (width: 100%, height: auto)
+- "Batch-enrich no enforcement" → already 4 layers (route→batch→period→hard deadline)
+- "Parallel snapshot race" → ON CONFLICT DO UPDATE + truncateToHour converges safely
+- "/api/v3 CORS wildcard" → intentional (public API, no credentials)
+- "user_profiles.referred_by FK" → column doesn't exist in prod
+
+### Remaining (backlog, not blocking)
+
+- 37 files doing direct fetch() without React Query (gradual migration, useTraderData/PostFeed need dedicated sessions)
+- TypeScript quality verified excellent: 0 `any`, 0 `console.log`, 0 TODO across 1,697 files
+
+---
+
 ## Enterprise Agent Team Review + Root-Root Cause Fix (2026-05-05)
 
 **Trigger**: User invoked `功能企业级agent team 测试` — full conductor.json review cycle.
