@@ -1520,6 +1520,8 @@ const zh = {
   owner: '组长',
   admin: '管理员',
   joinedGroups: '加入的小组',
+  groupsLoginCta: '登录后加入小组，查看社区动态',
+  groupsPopularTitle: '热门小组',
 
   // ChatSettingsDrawer
   updateFailed: '更新失败',

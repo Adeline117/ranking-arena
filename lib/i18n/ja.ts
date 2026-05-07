@@ -1421,6 +1421,8 @@ const ja = {
   owner: 'オーナー',
   admin: '管理者',
   joinedGroups: '参加中のグループ',
+  groupsLoginCta: 'ログインしてグループに参加し、コミュニティの投稿を見ましょう',
+  groupsPopularTitle: '人気グループ',
 
   updateFailed: '更新に失敗しました',
   muted: 'ミュート済み',
