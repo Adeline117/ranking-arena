@@ -80,7 +80,11 @@ export function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
 /**
  * Get ranked traders for leaderboard display.
  * Used by: homepage, /rankings/[exchange], sidebar widgets
- * Source: leaderboard_ranks (precomputed, fast)
+ * Source: Redis sorted set (fast path) → leaderboard_ranks (fallback)
+ *
+ * Redis-first optimization: Default queries (no platform filter, no minScore,
+ * sorted by rank, top 200) read directly from Redis sorted set + hash (~1ms)
+ * instead of Supabase PostgREST (~200ms). Falls back to DB transparently.
  */
 export async function getLeaderboard(
   supabase: SupabaseClient,
@@ -107,13 +111,31 @@ export async function getLeaderboard(
   } = params
   const opts = params
 
-  // Build query against leaderboard_ranks (uses v1 column names: source, source_trader_id, season_id)
-  // See LR constants and LEADERBOARD_RANKS_FIELDS in schema-mapping.ts for column→field mapping
+  // Redis-first path: default queries (no filters, sorted by rank/score, within top 200)
+  // These cover ~90% of homepage and ranking page loads
+  const isDefaultQuery =
+    !platform &&
+    !minScore &&
+    excludeOutliers &&
+    (sortBy === 'rank' || sortBy === 'arena_score') &&
+    offset + limit <= 200
+  if (isDefaultQuery) {
+    try {
+      const { getTopTradersWithDetails } = await import('@/lib/realtime/ranking-store')
+      const cached = await getTopTradersWithDetails(period, limit, offset)
+      if (cached.length > 0) {
+        const traders = cached.map((row) => mapLeaderboardRow(row))
+        return { traders, total: traders.length }
+      }
+    } catch {
+      // Redis failed, fall through to DB
+    }
+  }
+
+  // DB fallback path (filtered queries, deep pagination, or Redis miss)
   // NOTE: Do NOT use { count: 'exact' } here. leaderboard_ranks has ~314k rows
-  // and an exact COUNT(*) can take 3-25s, which can cause homepage SSR to blank
-  // out when this function is hit via the fallback path. Callers that need a
-  // total should use /api/rankings (which returns estimated counts) or query
-  // leaderboard_count_cache directly.
+  // and an exact COUNT(*) can take 3-25s. Callers that need a total should use
+  // /api/rankings (returns estimated counts) or query leaderboard_count_cache.
   let query = supabase
     .from('leaderboard_ranks')
     .select(
@@ -139,13 +161,10 @@ export async function getLeaderboard(
 
   // Graceful freshness: prefer data <6h old, but fall back to <24h rather than
   // showing empty rankings. The UI should indicate staleness for >6h data.
-  // ROOT-ROOT CAUSE FIX: Previously a hard 6h cutoff could empty the entire
-  // rankings page during extended compute-leaderboard failures.
   const FRESH_HOURS = 6
   const STALE_FALLBACK_HOURS = 24
   const freshCutoff = new Date(Date.now() - FRESH_HOURS * 3600_000).toISOString()
   const staleCutoff = new Date(Date.now() - STALE_FALLBACK_HOURS * 3600_000).toISOString()
-  // Use fresh cutoff by default; caller can set opts.allowStale to widen
   const effectiveCutoff = opts?.allowStale ? staleCutoff : freshCutoff
   query = query.gte('computed_at', effectiveCutoff)
 
@@ -159,13 +178,11 @@ export async function getLeaderboard(
           ? 'pnl'
           : 'rank'
 
-  const ascending = sortBy === 'rank' // rank sorts ascending, others descending
+  const ascending = sortBy === 'rank'
   query = query.order(sortColumn, { ascending, nullsFirst: false })
 
   query = query.range(offset, offset + limit - 1)
 
-  // AbortSignal.timeout cancels the PostgREST HTTP request on timeout
-  // (vs Promise.race/withTimeout which abandons the query in the background)
   const { data, error } = await Promise.resolve(
     query.abortSignal(AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS))
   ).catch(() => ({
@@ -180,8 +197,6 @@ export async function getLeaderboard(
 
   const traders = (data || []).map((row: Record<string, unknown>) => mapLeaderboardRow(row))
 
-  // Return traders.length as the "total" — callers that need an accurate total
-  // should not use this function. See note above about exact count cost.
   return { traders, total: traders.length }
 }
 

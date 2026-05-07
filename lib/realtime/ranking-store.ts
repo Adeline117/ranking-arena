@@ -21,8 +21,8 @@ const REDIS_KEY_PREFIX = 'ranking:live'
 const TTL_SECONDS = 2 * 60 * 60 // 2 hours
 
 // Write buffer configuration
-const BUFFER_FLUSH_MS = 1000  // flush every 1s
-const BUFFER_MAX_SIZE = 100   // or when buffer hits 100 items per key
+const BUFFER_FLUSH_MS = 1000 // flush every 1s
+const BUFFER_MAX_SIZE = 100 // or when buffer hits 100 items per key
 const BUFFER_MAX_TOTAL_ITEMS = 50000 // hard cap: prevent OOM during Redis outage
 
 function redisKey(period: string): string {
@@ -52,7 +52,7 @@ function scheduleFlush() {
   if (flushTimer) return
   flushTimer = setTimeout(() => {
     flushTimer = null
-    flushBuffer().catch(err => logger.warn('[ranking-store] flushBuffer failed:', err))
+    flushBuffer().catch((err) => logger.warn('[ranking-store] flushBuffer failed:', err))
   }, BUFFER_FLUSH_MS)
 }
 
@@ -208,9 +208,50 @@ export async function getSortedSetSize(period: string): Promise<number> {
   }
 }
 
+// Redis Hash key for trader display data (used by Redis-first leaderboard reads)
+const DETAIL_HASH_PREFIX = 'ranking:detail'
+const DETAIL_HASH_TTL = 2 * 60 * 60 // 2 hours (same as sorted set)
+
+function detailHashKey(period: string): string {
+  return `${DETAIL_HASH_PREFIX}:${period.toUpperCase()}`
+}
+
+/** Fields fetched from leaderboard_ranks for Redis-first reads */
+const SYNC_SELECT_FIELDS = [
+  'source',
+  'source_trader_id',
+  'arena_score',
+  'roi',
+  'pnl',
+  'win_rate',
+  'max_drawdown',
+  'trades_count',
+  'followers',
+  'copiers',
+  'handle',
+  'avatar_url',
+  'rank',
+  'computed_at',
+  'source_type',
+  'profitability_score',
+  'risk_control_score',
+  'execution_score',
+  'score_completeness',
+  'trading_style',
+  'avg_holding_hours',
+  'sharpe_ratio',
+  'sortino_ratio',
+  'profit_factor',
+  'calmar_ratio',
+  'trader_type',
+  'is_outlier',
+  'season_id',
+].join(', ')
+
 /**
  * Sync sorted set from leaderboard_ranks table.
  * Called after compute-leaderboard finishes to ensure full consistency.
+ * Also stores trader display details in a Redis Hash for Redis-first reads.
  * Returns the number of traders synced.
  */
 export async function syncSortedSetFromLeaderboard(
@@ -222,16 +263,17 @@ export async function syncSortedSetFromLeaderboard(
 
   try {
     const key = redisKey(period)
+    const hashKey = detailHashKey(period)
 
-    // Fetch all ranked traders with scores
-    let allTraders: Array<{ source: string; source_trader_id: string; arena_score: number }> = []
+    // Fetch all ranked traders with display fields
+    let allTraders: Array<Record<string, unknown>> = []
     let offset = 0
     const PAGE_SIZE = 1000
 
     while (true) {
       const { data, error } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, arena_score')
+        .select(SYNC_SELECT_FIELDS)
         .eq('season_id', period.toUpperCase())
         .gt('arena_score', 0)
         .or('is_outlier.is.null,is_outlier.eq.false')
@@ -239,7 +281,7 @@ export async function syncSortedSetFromLeaderboard(
         .range(offset, offset + PAGE_SIZE - 1)
 
       if (error || !data?.length) break
-      allTraders = allTraders.concat(data as Array<{ source: string; source_trader_id: string; arena_score: number }>)
+      allTraders = allTraders.concat(data)
       if (data.length < PAGE_SIZE) break
       offset += PAGE_SIZE
     }
@@ -249,26 +291,98 @@ export async function syncSortedSetFromLeaderboard(
       return 0
     }
 
-    // Delete old key and rebuild — pipeline for atomicity
+    // Pipeline 1: Sorted set (ZADD) for ranking
     const pipeline = redis.pipeline()
     pipeline.del(key)
 
-    // Batch ZADD in chunks of 500 to avoid oversized pipeline commands
     const CHUNK_SIZE = 500
     for (let i = 0; i < allTraders.length; i += CHUNK_SIZE) {
       const chunk = allTraders.slice(i, i + CHUNK_SIZE)
       for (const t of chunk) {
-        pipeline.zadd(key, { score: t.arena_score, member: memberKey(t.source, t.source_trader_id) })
+        const source = String(t.source)
+        const traderId = String(t.source_trader_id)
+        pipeline.zadd(key, { score: Number(t.arena_score), member: memberKey(source, traderId) })
       }
     }
-
     pipeline.expire(key, TTL_SECONDS)
     await pipeline.exec()
 
-    logger.info(`[ranking-store] Synced ${allTraders.length} traders to ${key}`)
+    // Pipeline 2: Hash map for trader details (top 200 only to limit memory)
+    // Beyond top 200, fallback to DB is acceptable (low traffic)
+    const TOP_N_CACHED = 200
+    const topTraders = allTraders.slice(0, TOP_N_CACHED)
+    const hashPipeline = redis.pipeline()
+    hashPipeline.del(hashKey)
+    for (const t of topTraders) {
+      const member = memberKey(String(t.source), String(t.source_trader_id))
+      hashPipeline.hset(hashKey, { [member]: JSON.stringify(t) })
+    }
+    hashPipeline.expire(hashKey, DETAIL_HASH_TTL)
+    await hashPipeline.exec()
+
+    logger.info(
+      `[ranking-store] Synced ${allTraders.length} traders to ${key}, ${topTraders.length} details to ${hashKey}`
+    )
     return allTraders.length
   } catch (error) {
     logger.error('[ranking-store] syncSortedSetFromLeaderboard failed:', error)
     return 0
+  }
+}
+
+/**
+ * Get top traders with full display details from Redis (sorted set + hash).
+ * Returns UnifiedTrader-compatible records for direct rendering.
+ * Falls back to empty array if Redis unavailable (caller should query DB).
+ */
+export async function getTopTradersWithDetails(
+  period: string,
+  limit: number,
+  offset: number = 0
+): Promise<Array<Record<string, unknown>>> {
+  const redis = await getSharedRedis()
+  if (!redis) return []
+
+  try {
+    const key = redisKey(period)
+    const hashKey = detailHashKey(period)
+
+    // Get member keys from sorted set
+    const results = await redis.zrange<string[]>(key, offset, offset + limit - 1, {
+      rev: true,
+      withScores: true,
+    })
+
+    if (!results || results.length === 0) return []
+
+    // Extract member keys (every other element is a score)
+    const memberKeys: string[] = []
+    for (let i = 0; i < results.length; i += 2) {
+      memberKeys.push(results[i])
+    }
+
+    // Batch fetch details from hash
+    const detailPipeline = redis.pipeline()
+    for (const mk of memberKeys) {
+      detailPipeline.hget(hashKey, mk)
+    }
+    const detailResults = await detailPipeline.exec()
+
+    const traders: Array<Record<string, unknown>> = []
+    for (let i = 0; i < memberKeys.length; i++) {
+      const raw = detailResults[i] as string | null
+      if (raw) {
+        try {
+          traders.push(JSON.parse(raw) as Record<string, unknown>)
+        } catch {
+          // Corrupted entry, skip
+        }
+      }
+    }
+
+    return traders
+  } catch (error) {
+    logger.warn('[ranking-store] getTopTradersWithDetails failed:', error)
+    return []
   }
 }
