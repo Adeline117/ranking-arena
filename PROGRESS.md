@@ -2,6 +2,41 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Product Completion Sprint (2026-05-07)
+
+**Trigger**: Deep analysis of why Arena feels like 半成品 → 5 root causes identified → 10-item fix plan.
+
+**Root Causes Identified**:
+
+1. Feature sprawl (83 pages, only ~5 at product quality)
+2. No "Definition of Done" (features shipped at 60% completion)
+3. AI development trap (tests pass ≠ product is good)
+4. Maintenance > Building ratio (69 crons, constant pipeline fixes)
+5. No user feedback loop (zero analytics)
+
+**Shipped (6 commits, 10 tasks)**:
+
+| Commit    | Fix                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| `227b725` | Nav cleanup: remove skeleton pages, add PostHog analytics, simplify to Rankings/Market/Library |
+| `9e324f2` | Social features properly gated: "Coming Soon" page when disabled, onboarding verified complete |
+| `3af9847` | Remove 10 dead platform connectors + crons (-289 lines, -30% maintenance)                      |
+| `a38b7ae` | 7-day Pro free trial on pricing page (Stripe trial_period_days)                                |
+| `0bc6b35` | Welcome email for new users via Resend (fire-and-forget, replay-protected)                     |
+| `236dbc3` | Replace console.log with logger across 90+ files                                               |
+
+**Also shipped (performance optimization agents)**:
+
+| Commit    | Fix                                                                                      |
+| --------- | ---------------------------------------------------------------------------------------- |
+| `11ee1e4` | API response caching (Cache-Control s-maxage=300) + edge runtime for high-traffic routes |
+| `7e2e19b` | DB: TPH PK refactor (-5GB storage), UNLOGGED leaderboard, auto-partitions                |
+| `8660ca9` | BRIN index on snapshots, leaderboard LIST partition, enrichment dashboard                |
+
+**Product strategy decision**: Focus on Leaderboard + Research Tool (core strength). Social features gated behind feature flag until ready. Dead platforms removed.
+
+---
+
 ## Full User Journey QA + Fix (2026-05-07)
 
 **Trigger**: Deep end-to-end QA — user discovery → registration → interaction flow.
