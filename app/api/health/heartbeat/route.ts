@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
     await dbQuery(
       `INSERT INTO platform_heartbeats (platform, source_host, status, trader_count, error_message, metadata)
        VALUES ($1, $2, $3, $4, $5, $6)
-       ON CONFLICT (platform, date_trunc('hour', created_at)) DO UPDATE
+       ON CONFLICT (platform, immutable_date_trunc_hour(created_at)) DO UPDATE
        SET status = EXCLUDED.status,
            trader_count = EXCLUDED.trader_count,
            error_message = EXCLUDED.error_message,
