@@ -4853,6 +4853,18 @@ const ja = {
   // SSR ranking table empty state
   ssrLoadingRanking: 'ランキングデータを読み込み中...',
   ssrDataRefreshHint: 'データは自動更新されます。しばらくしてからリフレッシュしてください。',
+
+  // Library browse page
+  libraryPageTitle: 'ライブラリ',
+  libraryPageTagline: '{count} 件の暗号資産トレーディングリソース — 書籍、研究論文、ガイドなど。',
+  librarySearchPlaceholder: 'リソースを検索...',
+  libraryCategories: 'カテゴリ',
+  libraryMostPopular: '人気',
+  libraryRecentlyAdded: '最近追加',
+  libraryEmptyState: 'ライブラリは空です。リソースは近日追加予定です。',
+  libraryFreeLabel: '無料',
+  libraryByAuthor: '著者：{author}',
+  libraryViewCount: '{count} 回閲覧',
 } as const
 
 export default ja
