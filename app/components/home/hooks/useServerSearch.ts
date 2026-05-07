@@ -5,9 +5,11 @@
  *
  * When client-side search returns 0 results, this hook makes an API call
  * to search across all traders in the database.
+ *
+ * Uses React Query for automatic deduplication, caching, and abort handling.
  */
 
-import { useState, useEffect, useRef } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import type { Trader } from '../../ranking/RankingTable'
 import type { TimeRange } from '../hooks/useTraderData'
 
@@ -17,56 +19,37 @@ interface UseServerSearchOptions {
   clientHasResults: boolean
 }
 
-export function useServerSearch({ searchQuery, activeTimeRange, clientHasResults }: UseServerSearchOptions) {
-  const [serverSearchResults, setServerSearchResults] = useState<Trader[]>([])
-  const serverSearchAbortRef = useRef<AbortController | null>(null)
-  const lastServerQueryRef = useRef('')
+async function fetchServerSearch(
+  query: string,
+  period: string,
+  signal: AbortSignal
+): Promise<Trader[]> {
+  const res = await fetch(
+    `/api/search?q=${encodeURIComponent(query)}&period=${period || '90D'}&limit=20`,
+    { signal }
+  )
+  if (!res.ok) return []
+  const json = await res.json()
+  return json.success && Array.isArray(json.data) ? json.data : []
+}
 
-  useEffect(() => {
-    const q = searchQuery.trim().toLowerCase()
-    if (q.length < 2) {
-      setServerSearchResults([])
-      lastServerQueryRef.current = ''
-      return
-    }
+export function useServerSearch({
+  searchQuery,
+  activeTimeRange,
+  clientHasResults,
+}: UseServerSearchOptions) {
+  const q = searchQuery.trim().toLowerCase()
+  const enabled = q.length >= 2 && !clientHasResults
 
-    // Skip server search if client already has results
-    if (clientHasResults) {
-      setServerSearchResults([])
-      return
-    }
+  const { data: serverSearchResults = [] } = useQuery<Trader[]>({
+    queryKey: ['server-search', q, activeTimeRange],
+    queryFn: ({ signal }) => fetchServerSearch(q, activeTimeRange, signal),
+    enabled,
+    staleTime: 30_000, // 30s — search results don't change fast
+    gcTime: 60_000, // 1min cache
+    placeholderData: (prev) => prev ?? [], // Keep previous results during refetch
+    retry: false,
+  })
 
-    // Debounce server search
-    if (q === lastServerQueryRef.current) return
-
-    const timeout = setTimeout(async () => {
-      if (serverSearchAbortRef.current) serverSearchAbortRef.current.abort()
-      const controller = new AbortController()
-      serverSearchAbortRef.current = controller
-
-      try {
-        lastServerQueryRef.current = q
-        const res = await fetch(
-          `/api/search?q=${encodeURIComponent(q)}&period=${activeTimeRange || '90D'}&limit=20`,
-          { signal: controller.signal }
-        )
-        if (!res.ok) return
-        const json = await res.json()
-        if (json.success && Array.isArray(json.data)) {
-          setServerSearchResults(json.data)
-        }
-      } catch (err) {
-        if (err instanceof Error && err.name !== 'AbortError') {
-          console.warn('[ServerSearch] failed:', err.message)
-        }
-      }
-    }, 500)
-
-    return () => {
-      clearTimeout(timeout)
-      if (serverSearchAbortRef.current) serverSearchAbortRef.current.abort()
-    }
-  }, [searchQuery, activeTimeRange, clientHasResults])
-
-  return { serverSearchResults }
+  return { serverSearchResults: enabled ? serverSearchResults : [] }
 }
