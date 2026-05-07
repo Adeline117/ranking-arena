@@ -10,7 +10,10 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import Avatar from '@/app/components/ui/Avatar'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import CreateGroupModal from '@/app/components/features/CreateGroupModal'
+import dynamic from 'next/dynamic'
+
+// Lazy load: modal only opens on user action
+const CreateGroupModal = dynamic(() => import('@/app/components/features/CreateGroupModal'), { ssr: false })
 import { logger } from '@/lib/logger'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { Skeleton, SkeletonAvatar } from '@/app/components/ui/Skeleton'

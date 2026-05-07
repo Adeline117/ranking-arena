@@ -17,7 +17,10 @@ import { useDialog } from '@/app/components/ui/Dialog'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
-import PostDetailModal from './components/PostDetailModal'
+import dynamic from 'next/dynamic'
+
+// Lazy load: modal only opens when user clicks a post
+const PostDetailModal = dynamic(() => import('./components/PostDetailModal'), { ssr: false })
 
 interface BookmarkFolder {
   id: string

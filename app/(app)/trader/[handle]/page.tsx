@@ -290,9 +290,11 @@ export async function generateMetadata({
     rank != null ? `Ranked ${rank}` : null,
   ].filter(Boolean)
 
-  const title = `${name} (${exchange}) | Crypto Trader Rankings`
+  const pnl = typeof lr?.pnl === 'number' ? lr.pnl : null
+
+  const title = `${name} — Performance & Stats | Arena`
   const rawDescription = parts.length
-    ? `${name} is a ${exchange} trader with ${parts.join(', ')}. Track performance history, analytics, and rankings on Arena.`
+    ? `${name} is a ${exchange} trader with ${parts.join(', ')}${pnl != null ? `. PnL: $${pnl >= 0 ? '+' : ''}${pnl >= 1000 || pnl <= -1000 ? (pnl / 1000).toFixed(1) + 'K' : pnl.toFixed(0)}` : ''}. Track performance history, analytics, and rankings on Arena.`
     : `${name} is a ${exchange} crypto trader. View performance analytics, trading history, risk metrics, and rankings on Arena.`
   const description =
     rawDescription.length > 160 ? rawDescription.substring(0, 157) + '...' : rawDescription

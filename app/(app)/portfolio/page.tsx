@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
+import dynamic from 'next/dynamic'
 import PortfolioOverview from '@/app/components/portfolio/PortfolioOverview'
 import PositionList from '@/app/components/portfolio/PositionList'
-import AddExchangeModal from '@/app/components/portfolio/AddExchangeModal'
-import PortfolioAnalytics from '@/app/components/portfolio/PortfolioAnalytics'
+
+// Lazy load: modal only opens on user action; analytics is below-the-fold
+const AddExchangeModal = dynamic(() => import('@/app/components/portfolio/AddExchangeModal'), { ssr: false })
+const PortfolioAnalytics = dynamic(() => import('@/app/components/portfolio/PortfolioAnalytics'), { ssr: false })
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'

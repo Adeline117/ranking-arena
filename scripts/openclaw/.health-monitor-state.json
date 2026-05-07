@@ -1,7 +1,1 @@
-{
-  "pipeline:critical": 1776875412108,
-  "pipeline:critical|system:unhealthy": 1776841239762,
-  "pipeline:degraded|system:unhealthy": 1776823219503,
-  "pipeline:degraded": 1776861016222,
-  "pipeline:critical|system:unreachable": 1776839448415
-}
+{"pipeline:critical":1778180414518,"data:zero-traders|pipeline:critical":1778194808741}

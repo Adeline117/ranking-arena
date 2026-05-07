@@ -4,12 +4,15 @@ export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
+import nextDynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
-import TraderComparison from '@/app/components/premium/TraderComparison'
+
+// Lazy load: TraderComparison includes charts (RadarChart, EquityCurveOverlay) — heavy below-the-fold content
+const TraderComparison = nextDynamic(() => import('@/app/components/premium/TraderComparison'), { ssr: false })
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'

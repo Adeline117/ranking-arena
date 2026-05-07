@@ -6,10 +6,13 @@ import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
+import dynamic from 'next/dynamic'
 import PortfolioTableHeader from './PortfolioTableHeader'
 import PortfolioCurrentView from './PortfolioCurrentView'
 import PositionHistoryView from './PositionHistoryView'
-import MarketDetailDrawer from './MarketDetailDrawer'
+
+// Lazy load: drawer only opens when user clicks a market row
+const MarketDetailDrawer = dynamic(() => import('./MarketDetailDrawer'), { ssr: false })
 
 interface PortfolioTableProps {
   items: PortfolioItem[]
