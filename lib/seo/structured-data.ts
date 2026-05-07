@@ -392,6 +392,67 @@ export function generateBreadcrumbSchema(items: BreadcrumbInput[]): BreadcrumbLi
 }
 
 // ============================================
+// 交易所 Schema
+// ============================================
+
+export interface ExchangeSchemaInput {
+  name: string
+  slug: string
+  sourceType: string
+  traderCount: number
+  topTraders?: Array<{
+    handle: string
+    arenaScore?: number | null
+    roi?: number | null
+  }>
+}
+
+/**
+ * Generate an ItemList Schema for exchange ranking pages.
+ * Google uses ItemList for carousel results in search.
+ */
+export function generateExchangeItemListSchema(input: ExchangeSchemaInput): object {
+  const items = (input.topTraders ?? []).map((trader, index) => ({
+    '@type': 'ListItem',
+    position: index + 1,
+    name: trader.handle,
+    url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
+    ...(trader.arenaScore != null
+      ? { description: `Arena Score: ${Math.round(trader.arenaScore)}${trader.roi != null ? ` | ROI: ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(1)}%` : ''}` }
+      : {}),
+  }))
+
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: `Top ${input.name} Traders`,
+    description: `Ranked crypto traders on ${input.name} — ${input.traderCount.toLocaleString()} traders tracked by Arena.`,
+    numberOfItems: input.traderCount,
+    url: `${BASE_URL}/exchange/${input.slug}`,
+    itemListElement: items,
+  }
+}
+
+/**
+ * Generate a CollectionPage Schema for exchange landing pages.
+ */
+export function generateExchangeCollectionPageSchema(input: ExchangeSchemaInput): object {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'CollectionPage',
+    name: `${input.name} Top Traders & Rankings`,
+    description: `Explore the top-performing crypto traders on ${input.name}. ${input.traderCount.toLocaleString()} traders ranked by Arena Score, ROI, and PnL.`,
+    url: `${BASE_URL}/exchange/${input.slug}`,
+    mainEntity: generateExchangeItemListSchema(input),
+    isPartOf: {
+      '@type': 'WebSite',
+      name: SITE_NAME,
+      url: BASE_URL,
+    },
+  }
+}
+
+// ============================================
 // 辅助函数
 // ============================================
 

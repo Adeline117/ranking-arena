@@ -2,15 +2,32 @@
 
 import React, { useState, useRef } from 'react'
 import Link from 'next/link'
+import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
 import { useLanguage } from '../Providers/LanguageProvider'
-import RadarChart from './RadarChart'
-import EquityCurveOverlay, { CHART_COLORS } from './EquityCurveOverlay'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
 import { formatPnL, formatRatio } from '@/lib/utils/format'
+
+// Lazy load chart components — only rendered when user switches to radar/equity tabs
+const RadarChart = dynamic(() => import('./RadarChart'), { ssr: false })
+const EquityCurveOverlay = dynamic(() => import('./EquityCurveOverlay'), { ssr: false })
+
+/** Chart colors used for trader comparison overlays (duplicated from EquityCurveOverlay to avoid eager import). */
+const CHART_COLORS = [
+  tokens.colors.accent.brand,
+  'var(--color-enterprise-gradient-start)',
+  'var(--color-score-average)',
+  'var(--color-score-great)',
+  'var(--color-accent-error)',
+  '#8b5cf6', // purple
+  '#ec4899', // pink
+  '#14b8a6', // teal
+  '#f97316', // orange
+  '#84cc16', // lime
+]
 
 interface TraderCompareData {
   id: string

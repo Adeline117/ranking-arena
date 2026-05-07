@@ -215,12 +215,14 @@ export default async function sitemap({
   const id = Number(rawId)
   const now = new Date().toISOString()
 
-  // ── Sitemap 0: static pages ───────────────────────────────────────────────
+  // ── Sitemap 0: static pages + exchange landing pages ─────────────────────
   // NOTE: /rankings/{exchange} URLs are deliberately EXCLUDED — they all
   // 301-redirect to /?exchange=... (see next.config.ts redirects). Including
   // redirect URLs in a sitemap is treated as low-quality by Google.
   // Similarly /rankings (→ /), /rankings/traders (→ /), and /library (→ /learn)
   // are all 301 redirects and must NOT appear here.
+  // Exchange landing pages at /exchange/{slug} ARE included — they are proper
+  // pages with unique content, metadata, and JSON-LD structured data.
   // eslint-disable-next-line no-console
   console.log(`[sitemap] id=${id} (type=${typeof id}, raw=${rawId}, rawType=${typeof rawId})`)
 
@@ -278,7 +280,22 @@ export default async function sitemap({
       },
     ]
 
-    return staticPages
+    // Exchange landing pages — proper pages with unique content and JSON-LD.
+    // Uses hyphenated slugs (binance-futures) as canonical URL format.
+    const exchangeSlugs = [
+      'binance-futures', 'hyperliquid', 'okx-futures', 'bybit', 'bitget-futures',
+      'gmx', 'dydx', 'mexc', 'drift', 'htx-futures', 'gateio', 'jupiter-perps',
+      'aevo', 'coinex', 'etoro', 'bingx', 'blofin', 'btcc', 'bitunix', 'bitfinex',
+      'toobit', 'weex', 'kucoin', 'phemex',
+    ]
+    const exchangePages: MetadataRoute.Sitemap = exchangeSlugs.map((slug) => ({
+      url: `${BASE_URL}/exchange/${slug}`,
+      lastModified: now,
+      changeFrequency: 'daily' as const,
+      priority: 0.85,
+    }))
+
+    return [...staticPages, ...exchangePages]
   }
 
   // ── Sitemap EXTRA_SITEMAP_ID: posts, groups, user profiles ─────────────────

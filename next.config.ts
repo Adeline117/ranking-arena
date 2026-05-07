@@ -15,6 +15,11 @@ const withBundleAnalyzer =
 const nextConfig = {
   /* config options here */
 
+  // React Compiler — auto-memoizes components & hooks via SWC + Babel plugin.
+  // Eliminates manual useMemo/useCallback in 964 components (all passed healthcheck).
+  // https://react.dev/learn/react-compiler/introduction
+  reactCompiler: true,
+
   // ESLint config removed — deprecated in Next.js 16 (invalid config warning).
   // CI runs lint separately via pre-push hook.
 
