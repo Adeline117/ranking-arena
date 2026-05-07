@@ -100,18 +100,24 @@ export async function GET(request: NextRequest) {
       })
       lockAcquired = result === 'OK'
     } else {
-      const cached = await tieredGet(IDEMPOTENCY_KEY, 'hot')
-      if (!cached.data) {
-        await tieredSet(IDEMPOTENCY_KEY, { startedAt: new Date().toISOString() }, 'hot', [])
-        lockAcquired = true
-      }
+      // Redis unavailable: fail safe. Previously used tieredGet/tieredSet which
+      // is NOT atomic — two concurrent requests could both see !cached.data as true
+      // and both acquire the "lock", causing double-compute with data inconsistency.
+      // The next cron invocation (1h) will retry when Redis is back.
+      logger.warn(
+        '[compute-leaderboard] Redis unavailable, skipping run (fail-safe to prevent double-compute)'
+      )
+      lockAcquired = false
     }
   } catch (err) {
+    // Redis threw — fail safe instead of proceeding unprotected.
+    // ROOT CAUSE FIX: Previously set lockAcquired=true here, allowing unprotected
+    // concurrent runs that could produce inconsistent leaderboard data.
     logger.warn(
-      '[compute-leaderboard] Redis lock failed, proceeding without lock:',
+      '[compute-leaderboard] Redis lock failed, skipping run (fail-safe):',
       err instanceof Error ? err.message : String(err)
     )
-    lockAcquired = true
+    lockAcquired = false
   }
   if (!lockAcquired) {
     return NextResponse.json({

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -8,19 +8,35 @@ export default function NetworkStatusBanner() {
   const [isOffline, setIsOffline] = useState(false)
   const [show, setShow] = useState(false)
   const { t } = useLanguage()
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
-    const handleOffline = () => { setIsOffline(true); setShow(true) }
+    const clearHideTimer = () => {
+      if (hideTimerRef.current) {
+        clearTimeout(hideTimerRef.current)
+        hideTimerRef.current = null
+      }
+    }
+    const handleOffline = () => {
+      clearHideTimer()
+      setIsOffline(true)
+      setShow(true)
+    }
     const handleOnline = () => {
       setIsOffline(false)
-      setTimeout(() => setShow(false), 2000)
+      clearHideTimer()
+      hideTimerRef.current = setTimeout(() => setShow(false), 2000)
     }
 
-    if (!navigator.onLine) { setIsOffline(true); setShow(true) }
+    if (!navigator.onLine) {
+      setIsOffline(true)
+      setShow(true)
+    }
 
     window.addEventListener('offline', handleOffline)
     window.addEventListener('online', handleOnline)
     return () => {
+      clearHideTimer()
       window.removeEventListener('offline', handleOffline)
       window.removeEventListener('online', handleOnline)
     }
@@ -29,7 +45,8 @@ export default function NetworkStatusBanner() {
   const handleRetry = useCallback(() => {
     if (navigator.onLine) {
       setIsOffline(false)
-      setTimeout(() => setShow(false), 1000)
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current)
+      hideTimerRef.current = setTimeout(() => setShow(false), 1000)
       window.location.reload()
     }
   }, [])
@@ -55,16 +72,23 @@ export default function NetworkStatusBanner() {
         alignItems: 'center',
         justifyContent: 'center',
         gap: tokens.spacing[2],
-        background: isOffline
-          ? tokens.colors.accent.error
-          : tokens.colors.accent.success,
+        background: isOffline ? tokens.colors.accent.error : tokens.colors.accent.success,
         color: tokens.colors.white,
         transition: `all ${tokens.transition.slow}`,
       }}
     >
       {isOffline ? (
         <>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <line x1="1" y1="1" x2="23" y2="23" />
             <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
             <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
@@ -92,7 +116,16 @@ export default function NetworkStatusBanner() {
         </>
       ) : (
         <>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="20 6 9 17 4 12" />
           </svg>
           {t('networkReconnected')}

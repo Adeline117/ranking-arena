@@ -3,7 +3,13 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { EquityCurvePoint, PositionHistoryItem, StatsDetail, AssetBreakdown, PortfolioPosition } from './enrichment-types'
+import type {
+  EquityCurvePoint,
+  PositionHistoryItem,
+  StatsDetail,
+  AssetBreakdown,
+  PortfolioPosition,
+} from './enrichment-types'
 import { createLogger } from '@/lib/utils/logger'
 import { VALIDATION_BOUNDS } from '@/lib/pipeline/types'
 import { sanitizeRow, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
@@ -48,31 +54,36 @@ export async function upsertEquityCurve(
   const capturedAt = new Date().toISOString()
 
   const B = VALIDATION_BOUNDS
-  const records = curve
-    .map((point) => ({
-      source,
-      source_trader_id: traderId,
-      period,
-      data_date: point.date,
-      roi_pct: point.roi != null && (point.roi < B.roi_pct.min || point.roi > B.roi_pct.max) ? null : point.roi,
-      pnl_usd: point.pnl != null && (point.pnl < B.pnl_usd.min || point.pnl > B.pnl_usd.max) ? null : point.pnl,
-      captured_at: capturedAt,
-    }))
+  const records = curve.map((point) => ({
+    source,
+    source_trader_id: traderId,
+    period,
+    data_date: point.date,
+    roi_pct:
+      point.roi != null && (point.roi < B.roi_pct.min || point.roi > B.roi_pct.max)
+        ? null
+        : point.roi,
+    pnl_usd:
+      point.pnl != null && (point.pnl < B.pnl_usd.min || point.pnl > B.pnl_usd.max)
+        ? null
+        : point.pnl,
+    captured_at: capturedAt,
+  }))
 
   // Use batch upsert instead of DELETE+INSERT
   const BATCH_SIZE = 25
   let saved = 0
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const batch = records.slice(i, i + BATCH_SIZE)
-    const { error } = await supabase
-      .from('trader_equity_curve')
-      .upsert(batch, {
-        onConflict: 'source,source_trader_id,period,data_date',
-        ignoreDuplicates: false
-      })
+    const { error } = await supabase.from('trader_equity_curve').upsert(batch, {
+      onConflict: 'source,source_trader_id,period,data_date',
+      ignoreDuplicates: false,
+    })
 
     if (error) {
-      log.error(`Batch ${i} failed`, { error: error instanceof Error ? error.message : String(error) })
+      log.error(`Batch ${i} failed`, {
+        error: error instanceof Error ? error.message : String(error),
+      })
       return { saved, error: error.message }
     }
     saved += batch.length
@@ -89,7 +100,12 @@ export async function upsertEquityCurve(
 
     if (periodRoi != null) {
       // Validate through centralized gatekeeper before syncing to v2
-      const v2Candidate = { platform: source, trader_key: traderId, roi_pct: periodRoi, pnl_usd: periodPnl }
+      const v2Candidate = {
+        platform: source,
+        trader_key: traderId,
+        roi_pct: periodRoi,
+        pnl_usd: periodPnl,
+      }
       const { row: sanitized, rejected } = sanitizeRow(v2Candidate, 'trader_snapshots_v2')
       if (rejected.length > 0) {
         logRejectedWrites(rejected, supabase)
@@ -97,13 +113,26 @@ export async function upsertEquityCurve(
       const v2Update: Record<string, unknown> = {}
       if (sanitized.roi_pct != null) v2Update.roi_pct = sanitized.roi_pct
       if (sanitized.pnl_usd != null) v2Update.pnl_usd = sanitized.pnl_usd
-      if (Object.keys(v2Update).length === 0) return { saved } // all fields rejected
+      if (Object.keys(v2Update).length === 0) {
+        // All v2 fields rejected — equity curve saved but v2 NOT synced.
+        // Log explicitly so this isn't a silent failure.
+        log.warn(
+          `v2 sync fully rejected for ${source}/${traderId}/${period}: ${rejected.map((r) => `${r.field}=${r.value}`).join(', ')}`
+        )
+        return { saved, error: `v2 sync rejected: ${rejected.map((r) => r.field).join(',')}` }
+      }
 
       // Map enrichment period names to v2 window column values
       const windowMap: Record<string, string> = {
-        '7D': '7D', '30D': '30D', '90D': '90D',
-        'WEEKLY': '7D', 'MONTHLY': '30D', 'QUARTERLY': '90D',
-        '7d': '7D', '30d': '30D', '90d': '90D',
+        '7D': '7D',
+        '30D': '30D',
+        '90D': '90D',
+        WEEKLY: '7D',
+        MONTHLY: '30D',
+        QUARTERLY: '90D',
+        '7d': '7D',
+        '30d': '30D',
+        '90d': '90D',
       }
       const v2Window = windowMap[period]
 
@@ -135,9 +164,13 @@ export async function upsertEquityCurve(
           .limit(1)
 
         if (v2Err) {
-          log.warn(`equity ROI sync failed for ${source}/${traderId}/${v2Window}`, { error: v2Err.message })
+          log.warn(`equity ROI sync failed for ${source}/${traderId}/${v2Window}`, {
+            error: v2Err.message,
+          })
         } else if (v2Count === 0) {
-          log.warn(`equity ROI sync matched 0 rows for ${source}/${traderId}/${v2Window} (4h lookback from ${fourHoursAgo} — no snapshot found)`)
+          log.warn(
+            `equity ROI sync matched 0 rows for ${source}/${traderId}/${v2Window} (4h lookback from ${fourHoursAgo} — no snapshot found)`
+          )
         }
       }
     }
@@ -221,11 +254,9 @@ export async function upsertStatsDetail(
     captured_at: capturedAt,
   }
 
-  const { error } = await supabase
-    .from('trader_stats_detail')
-    .upsert(record, {
-      onConflict: 'source,source_trader_id,period,captured_at',
-    })
+  const { error } = await supabase.from('trader_stats_detail').upsert(record, {
+    onConflict: 'source,source_trader_id,period,captured_at',
+  })
 
   if (error) {
     return { saved: false, error: error.message }
@@ -236,9 +267,14 @@ export async function upsertStatsDetail(
   // Boundary validation: only sync values within valid ranges
   if (stats.profitableTradesPct != null || stats.maxDrawdown != null) {
     const v2Update: Record<string, unknown> = {}
-    if (stats.profitableTradesPct != null && stats.profitableTradesPct >= 0 && stats.profitableTradesPct <= 100) {
+    if (
+      stats.profitableTradesPct != null &&
+      stats.profitableTradesPct >= 0 &&
+      stats.profitableTradesPct <= 100
+    ) {
       // Normalize: if value <= 1, treat as decimal and convert to percentage
-      v2Update.win_rate = stats.profitableTradesPct <= 1 ? stats.profitableTradesPct * 100 : stats.profitableTradesPct
+      v2Update.win_rate =
+        stats.profitableTradesPct <= 1 ? stats.profitableTradesPct * 100 : stats.profitableTradesPct
     }
     if (stats.maxDrawdown != null && stats.maxDrawdown >= 0 && stats.maxDrawdown <= 100) {
       // Normalize: enrichment fetchers may return MDD as decimal (0-1) or percentage (0-100).
@@ -258,7 +294,7 @@ export async function upsertStatsDetail(
     // Final safety net: run through centralized gatekeeper to catch ROI≈PnL, sign mismatches, etc.
     const { row: sanitizedStats, rejected: statsRejected } = sanitizeRow(
       { platform: source, trader_key: traderId, ...v2Update },
-      'trader_snapshots_v2',
+      'trader_snapshots_v2'
     )
     if (statsRejected.length > 0) {
       logRejectedWrites(statsRejected, supabase)
@@ -278,9 +314,15 @@ export async function upsertStatsDetail(
       if (options?.skipV2Sync) {
         // Map enrichment period names to v2 window column values
         const windowMap: Record<string, string> = {
-          '7D': '7D', '30D': '30D', '90D': '90D',
-          'WEEKLY': '7D', 'MONTHLY': '30D', 'QUARTERLY': '90D',
-          '7d': '7D', '30d': '30D', '90d': '90D',
+          '7D': '7D',
+          '30D': '30D',
+          '90D': '90D',
+          WEEKLY: '7D',
+          MONTHLY: '30D',
+          QUARTERLY: '90D',
+          '7d': '7D',
+          '30d': '30D',
+          '90d': '90D',
         }
         return {
           saved: true,
@@ -311,7 +353,9 @@ export async function upsertStatsDetail(
       if (v2Err) {
         log.warn(`v2 stats sync failed for ${source}/${traderId}`, { error: v2Err.message })
       } else if (v2Count === 0) {
-        log.warn(`v2 stats sync matched 0 rows for ${source}/${traderId} (4h lookback from ${fourHoursAgo})`)
+        log.warn(
+          `v2 stats sync matched 0 rows for ${source}/${traderId} (4h lookback from ${fourHoursAgo})`
+        )
       }
     }
   }
@@ -344,15 +388,15 @@ export async function upsertAssetBreakdown(
   let saved = 0
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const batch = records.slice(i, i + BATCH_SIZE)
-    const { error } = await supabase
-      .from('trader_asset_breakdown')
-      .upsert(batch, { 
-        onConflict: 'source,source_trader_id,period,symbol',
-        ignoreDuplicates: false 
-      })
-    
+    const { error } = await supabase.from('trader_asset_breakdown').upsert(batch, {
+      onConflict: 'source,source_trader_id,period,symbol',
+      ignoreDuplicates: false,
+    })
+
     if (error) {
-      log.error(`Asset breakdown batch ${i} failed`, { error: error instanceof Error ? error.message : String(error) })
+      log.error(`Asset breakdown batch ${i} failed`, {
+        error: error instanceof Error ? error.message : String(error),
+      })
       // Continue inserting remaining batches instead of losing data
       continue
     }
@@ -408,7 +452,9 @@ export async function upsertPortfolio(
     .eq('source_trader_id', traderId)
 
   if (delError) {
-    log.error(`Portfolio delete failed for ${source}/${traderId}`, { error: delError instanceof Error ? delError.message : String(delError) })
+    log.error(`Portfolio delete failed for ${source}/${traderId}`, {
+      error: delError instanceof Error ? delError.message : String(delError),
+    })
     return { saved: 0, error: delError.message }
   }
 
@@ -416,12 +462,12 @@ export async function upsertPortfolio(
   let saved = 0
   for (let i = 0; i < records.length; i += BATCH_SIZE) {
     const batch = records.slice(i, i + BATCH_SIZE)
-    const { error } = await supabase
-      .from('trader_portfolio')
-      .insert(batch)
+    const { error } = await supabase.from('trader_portfolio').insert(batch)
 
     if (error) {
-      log.error(`Portfolio batch ${i} failed for ${source}/${traderId}`, { error: error instanceof Error ? error.message : String(error) })
+      log.error(`Portfolio batch ${i} failed for ${source}/${traderId}`, {
+        error: error instanceof Error ? error.message : String(error),
+      })
       // Continue inserting remaining batches instead of losing data
       continue
     }
