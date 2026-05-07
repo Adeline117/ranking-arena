@@ -281,7 +281,7 @@ export async function syncSortedSetFromLeaderboard(
         .range(offset, offset + PAGE_SIZE - 1)
 
       if (error || !data?.length) break
-      allTraders = allTraders.concat(data)
+      allTraders = allTraders.concat(data as unknown as Array<Record<string, unknown>>)
       if (data.length < PAGE_SIZE) break
       offset += PAGE_SIZE
     }

@@ -9,10 +9,15 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
+
+async function getDb() {
+  // Use raw query to bypass generated types (platform_heartbeats is new, not in types yet)
+  const { query } = await import('@/lib/db')
+  return query
+}
 
 export async function POST(request: NextRequest) {
   if (!verifyCronSecret(request)) {
@@ -24,34 +29,29 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Missing required field: platform' }, { status: 400 })
   }
 
-  const supabase = getSupabaseAdmin()
+  const dbQuery = await getDb()
 
-  const { error } = await supabase.from('platform_heartbeats').upsert(
-    {
-      platform: body.platform,
-      source_host: body.source_host || 'unknown',
-      status: body.status || 'ok',
-      trader_count: body.trader_count || 0,
-      error_message: body.error_message || null,
-      metadata: body.metadata || {},
-      created_at: new Date().toISOString(),
-    },
-    { onConflict: "platform,date_trunc('hour',created_at)" }
-  )
-
-  if (error) {
-    // Fallback: insert without upsert (unique constraint may not match exact syntax)
-    const { error: insertErr } = await supabase.from('platform_heartbeats').insert({
-      platform: body.platform,
-      source_host: body.source_host || 'unknown',
-      status: body.status || 'ok',
-      trader_count: body.trader_count || 0,
-      error_message: body.error_message || null,
-      metadata: body.metadata || {},
-    })
-    if (insertErr) {
-      return NextResponse.json({ error: insertErr.message }, { status: 500 })
-    }
+  try {
+    await dbQuery(
+      `INSERT INTO platform_heartbeats (platform, source_host, status, trader_count, error_message, metadata)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (platform, date_trunc('hour', created_at)) DO UPDATE
+       SET status = EXCLUDED.status,
+           trader_count = EXCLUDED.trader_count,
+           error_message = EXCLUDED.error_message,
+           metadata = EXCLUDED.metadata`,
+      [
+        body.platform,
+        body.source_host || 'unknown',
+        body.status || 'ok',
+        body.trader_count || 0,
+        body.error_message || null,
+        JSON.stringify(body.metadata || {}),
+      ]
+    )
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 
   return NextResponse.json({ ok: true })
@@ -63,23 +63,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const supabase = getSupabaseAdmin()
+  const dbQuery = await getDb()
 
-  const { data, error } = await supabase
-    .from('v_platform_health')
-    .select('*')
-    .order('hours_since_heartbeat', { ascending: true })
+  try {
+    const result = await dbQuery(
+      `SELECT DISTINCT ON (platform)
+         platform, source_host, status, trader_count, error_message, created_at,
+         ROUND(EXTRACT(EPOCH FROM (NOW() - created_at)) / 3600, 1) AS hours_since
+       FROM platform_heartbeats
+       ORDER BY platform, created_at DESC`,
+      []
+    )
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    const platforms = (result.rows || []).map((row: Record<string, unknown>) => ({
+      ...row,
+      is_stale: Number(row.hours_since) > 6,
+      is_critical: Number(row.hours_since) > 24,
+    }))
+
+    return NextResponse.json({ ok: true, platforms })
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
-
-  // Flag stale platforms (no heartbeat in >6h)
-  const platforms = (data || []).map((p: Record<string, unknown>) => ({
-    ...p,
-    is_stale: Number(p.hours_since_heartbeat) > 6,
-    is_critical: Number(p.hours_since_heartbeat) > 24,
-  }))
-
-  return NextResponse.json({ ok: true, platforms })
 }
