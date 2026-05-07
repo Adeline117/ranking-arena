@@ -1412,6 +1412,34 @@ export async function runEnrichment(params: {
   const totalEnriched = Object.values(results).reduce((sum, r) => sum + r.enriched, 0)
   const totalFailed = Object.values(results).reduce((sum, r) => sum + r.failed, 0)
 
+  // Dead-letter tracking: record failed trader IDs in PipelineState for retry with backoff.
+  // Key: enrich:dead:<platform>:<period>, Value: { traderIds, failCount, lastFailedAt }
+  // Next enrichment run can check this and prioritize retrying these traders.
+  if (totalFailed > 0) {
+    for (const [platform, res] of Object.entries(results)) {
+      if (res.failed > 0 && res.errors.length > 0) {
+        const failedTraderIds = res.errors
+          .map((e) => e.split(':')[0]?.trim())
+          .filter((id) => id && id.length > 0 && !id.includes(' '))
+          .slice(0, 50) // Cap at 50 to avoid oversized Redis values
+        if (failedTraderIds.length > 0) {
+          try {
+            const deadLetterKey = `enrich:dead:${platform}:${period}`
+            const existing = await PipelineState.get<{ failCount: number }>(deadLetterKey)
+            const failCount = (existing?.failCount ?? 0) + 1
+            await PipelineState.set(deadLetterKey, {
+              traderIds: failedTraderIds,
+              failCount,
+              lastFailedAt: new Date().toISOString(),
+            })
+          } catch {
+            // Non-blocking: dead-letter tracking is best-effort
+          }
+        }
+      }
+    }
+  }
+
   logger.warn(
     `[enrich] Completed in ${duration}ms: ${totalEnriched} enriched, ${totalFailed} failed, ${totalSuppressedErrors} API errors suppressed`
   )
