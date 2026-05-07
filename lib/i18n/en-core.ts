@@ -286,6 +286,7 @@ const enCore = {
   heroStatTraders: 'Traders',
   heroStatExchanges: 'Exchanges',
   heroStatUpdated: 'Update Freq',
+  heroProBadge: 'Go Pro — Unlock All Traders & Advanced Filters',
 
   // ── Footer ──────────────────────────────────────────────────────────
   footerProduct: 'Product',
