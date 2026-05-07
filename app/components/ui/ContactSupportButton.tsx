@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from './Toast'
 import { tokens } from '@/lib/design-tokens'
+import { BUTTON_SIZE_STYLES, MessageIcon } from './button-styles'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
@@ -37,8 +38,9 @@ export default function ContactSupportButton({
 
   useEffect(() => {
     const init = async () => {
-       
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       setCurrentUserId(user?.id || null)
 
       const { data: supportUser } = await supabase
@@ -91,14 +93,15 @@ export default function ContactSupportButton({
 
     setLoading(true)
     try {
-       
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
 
       const response = await fetch('/api/messages/start', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': session?.access_token ? `Bearer ${session.access_token}` : '',
+          Authorization: session?.access_token ? `Bearer ${session.access_token}` : '',
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
@@ -112,7 +115,10 @@ export default function ContactSupportButton({
       if (response.ok) {
         router.push(`/messages/${data.conversation_id}`)
       } else {
-        if (data.error === '该用户已关闭私信功能' || data.error === 'User has disabled direct messages') {
+        if (
+          data.error === '该用户已关闭私信功能' ||
+          data.error === 'User has disabled direct messages'
+        ) {
           showToast(t('supportCannotReceiveMessages'), 'warning')
         } else {
           showToast(data.error || t('cannotContactSupport'), 'error')
@@ -129,11 +135,7 @@ export default function ContactSupportButton({
 
   const defaultLabel = label || t('contactSupport')
 
-  const sizeStyles = {
-    sm: { padding: `${tokens.spacing[2.5]} ${tokens.spacing[4]}`, fontSize: tokens.typography.fontSize.sm, borderRadius: tokens.radius.md, minHeight: '44px' },
-    md: { padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`, fontSize: tokens.typography.fontSize.base, borderRadius: tokens.radius.lg, minHeight: '44px' },
-    lg: { padding: `${tokens.spacing[3.5]} ${tokens.spacing[6]}`, fontSize: tokens.typography.fontSize.md, borderRadius: tokens.radius.lg, minHeight: '48px' },
-  }
+  const sizeStyles = BUTTON_SIZE_STYLES
 
   if (variant === 'link') {
     return (
@@ -179,8 +181,12 @@ export default function ContactSupportButton({
           width: fullWidth ? '100%' : 'auto',
           textAlign: 'left',
         }}
-        onMouseEnter={(e) => { if (!loading) e.currentTarget.style.borderColor = 'var(--color-accent-primary)' }}
-        onMouseLeave={(e) => { if (!loading) e.currentTarget.style.borderColor = 'var(--color-border-primary)' }}
+        onMouseEnter={(e) => {
+          if (!loading) e.currentTarget.style.borderColor = 'var(--color-accent-primary)'
+        }}
+        onMouseLeave={(e) => {
+          if (!loading) e.currentTarget.style.borderColor = 'var(--color-border-primary)'
+        }}
       >
         <div
           style={{
@@ -197,18 +203,22 @@ export default function ContactSupportButton({
           <MessageIcon size={22} />
         </div>
         <div>
-          <div style={{
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: 700,
-            color: 'var(--color-text-secondary)',
-          }}>
+          <div
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 700,
+              color: 'var(--color-text-secondary)',
+            }}
+          >
             {loading ? t('redirecting') : defaultLabel}
           </div>
-          <div style={{
-            fontSize: tokens.typography.fontSize.xs,
-            color: 'var(--color-text-tertiary)',
-            marginTop: 2,
-          }}>
+          <div
+            style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: 'var(--color-text-tertiary)',
+              marginTop: 2,
+            }}
+          >
             {t('sendMessageToContactUs')}
           </div>
         </div>
@@ -236,19 +246,16 @@ export default function ContactSupportButton({
         justifyContent: 'center',
         gap: tokens.spacing[1.5],
       }}
-      onMouseEnter={(e) => { if (!loading) e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))' }}
-      onMouseLeave={(e) => { if (!loading) e.currentTarget.style.background = 'var(--glass-bg-light)' }}
+      onMouseEnter={(e) => {
+        if (!loading)
+          e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))'
+      }}
+      onMouseLeave={(e) => {
+        if (!loading) e.currentTarget.style.background = 'var(--glass-bg-light)'
+      }}
     >
       <MessageIcon size={size === 'sm' ? 14 : 16} />
       {loading ? '...' : defaultLabel}
     </button>
-  )
-}
-
-function MessageIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-    </svg>
   )
 }
