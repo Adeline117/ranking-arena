@@ -4843,7 +4843,7 @@ const en = {
   pricingFaqPaymentA: 'We accept all major credit cards, Apple Pay, and Google Pay via Stripe.',
   pricingFaqTrialQ: 'Is there a free trial?',
   pricingFaqTrialA:
-    'The free tier gives you access to basic rankings and community features. Upgrade anytime to unlock Pro.',
+    'Yes! We offer a 7-day free trial with full Pro access. No charge until the trial ends. Cancel anytime.',
   pricingFaqSwitchQ: 'Can I switch plans?',
   pricingFaqSwitchA:
     'Yes, you can switch between monthly and yearly anytime. We will prorate the difference.',
@@ -4854,6 +4854,8 @@ const en = {
   pricingStatExchangesTracked: 'Exchanges Tracked',
   pricingStatUpdateFrequency: 'Update Frequency',
   pricingAllFeaturesFree: 'All features are free for a limited time',
+  startFreeTrial: 'Start 7-Day Free Trial',
+  freeTrialDesc: 'Try all Pro features free for 7 days. Cancel anytime.',
   pricingFoundingMemberBadge: 'FOUNDING MEMBER \u00b7 FIRST 200 ONLY',
   pricingLifetimePro: 'Lifetime Pro',
   pricingLifetimeDesc:
@@ -5723,6 +5725,12 @@ const en = {
   libraryFreeLabel: 'FREE',
   libraryByAuthor: 'by {author}',
   libraryViewCount: '{count} views',
+
+  // Social Coming Soon
+  socialComingSoonTitle: 'Community Features Coming Soon',
+  socialComingSoonDescription:
+    'We are building a community for crypto traders. Groups, posts, and discussions will be available soon.',
+  socialComingSoonCta: 'Explore Rankings',
 } as const
 
 export default en

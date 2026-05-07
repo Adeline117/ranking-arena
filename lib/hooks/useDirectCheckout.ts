@@ -25,7 +25,7 @@ export function useDirectCheckout() {
   const [alreadySubscribed, setAlreadySubscribed] = useState(false)
 
   const checkout = useCallback(
-    async (plan: Plan, options?: { promotionCode?: string }) => {
+    async (plan: Plan, options?: { promotionCode?: string; trial?: boolean }) => {
       setIsLoading(true)
       setError(null)
       setAlreadySubscribed(false)
@@ -37,6 +37,7 @@ export function useDirectCheckout() {
           body: JSON.stringify({
             plan,
             promotionCode: options?.promotionCode,
+            trial: options?.trial,
           }),
         })
 

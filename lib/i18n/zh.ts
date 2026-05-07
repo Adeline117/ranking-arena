@@ -4742,7 +4742,7 @@ const zh = {
   pricingFaqPaymentQ: '支持哪些支付方式？',
   pricingFaqPaymentA: '我们通过 Stripe 支持所有主流信用卡、Apple Pay 和 Google Pay。',
   pricingFaqTrialQ: '有免费试用吗？',
-  pricingFaqTrialA: '免费版可以访问基础排行榜和社区功能。随时升级即可解锁 Pro 全部功能。',
+  pricingFaqTrialA: '有！我们提供 7 天免费试用，可体验 Pro 全部功能。试用期内不收费，随时可取消。',
   pricingFaqSwitchQ: '可以切换套餐吗？',
   pricingFaqSwitchA: '可以，你可以随时在月付和年付之间切换，我们会按比例计算差额。',
   pricingFaqApiQ: 'Pro 包含 API 访问吗？',
@@ -4752,6 +4752,8 @@ const zh = {
   pricingStatExchangesTracked: '交易所覆盖',
   pricingStatUpdateFrequency: '数据更新频率',
   pricingAllFeaturesFree: '所有功能限时免费',
+  startFreeTrial: '开始 7 天免费试用',
+  freeTrialDesc: '免费体验 Pro 全部功能 7 天，随时可取消。',
   pricingFoundingMemberBadge: '创始会员 \u00b7 仅限前200名',
   pricingLifetimePro: '终身会员',
   pricingLifetimeDesc: '一次付款，永久享有所有 Pro 功能。价格以后不会再有，早期用户专属。',
@@ -5594,6 +5596,11 @@ const zh = {
   libraryFreeLabel: '免费',
   libraryByAuthor: '作者：{author}',
   libraryViewCount: '{count} 次浏览',
+
+  // Social Coming Soon
+  socialComingSoonTitle: '社区功能即将上线',
+  socialComingSoonDescription: '我们正在为加密货币交易者打造社区。小组、帖子和讨论功能即将推出。',
+  socialComingSoonCta: '浏览排行榜',
 } as const
 
 export default zh

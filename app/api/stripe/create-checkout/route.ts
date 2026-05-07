@@ -30,13 +30,15 @@ export async function POST(request: NextRequest) {
     let plan: string,
       successUrl: string | undefined,
       cancelUrl: string | undefined,
-      promotionCode: string | undefined
+      promotionCode: string | undefined,
+      trial: boolean | undefined
     try {
       const body = await request.json()
       plan = body.plan
       successUrl = body.successUrl
       cancelUrl = body.cancelUrl
       promotionCode = body.promotionCode
+      trial = body.trial === true
     } catch {
       return NextResponse.json(
         { error: 'Invalid JSON in request body', code: 'INVALID_JSON' },
@@ -189,6 +191,11 @@ export async function POST(request: NextRequest) {
       // Add promotion code if provided
       if (promotionCode) {
         checkoutOptions.promotionCode = promotionCode
+      }
+
+      // Add 7-day free trial if requested (only for new subscribers, not lifetime)
+      if (trial) {
+        checkoutOptions.trialDays = 7
       }
 
       checkoutSession = await createCheckoutSession(checkoutOptions)
