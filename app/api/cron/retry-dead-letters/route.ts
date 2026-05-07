@@ -21,7 +21,7 @@ export const maxDuration = 120
 const MAX_RETRY_ATTEMPTS = 5
 const MAX_REQUEUE_PER_RUN = 200
 
-export const GET = withCron('retry-dead-letters', async (_request, { supabase }) => {
+export const GET = withCron('retry-dead-letters', async (_request, { supabase: _supabase }) => {
   let retried = 0
   let permanentlyFailed = 0
   let cleaned = 0

@@ -57,7 +57,6 @@ import {
   fetchJupiterEquityCurve,
   fetchJupiterStatsDetail,
   fetchGainsOnchainEquityCurve,
-  fetchGainsOnchainStatsDetail,
   fetchGainsOnchainPositionHistory,
   fetchKwentaOnchainEquityCurve,
   fetchKwentaOnchainStatsDetail,
@@ -132,7 +131,7 @@ import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getOrSet } from '@/lib/cache'
 import { PipelineState } from '@/lib/services/pipeline-state'
-import { LR, V2 } from '@/lib/types/schema-mapping'
+import { LR } from '@/lib/types/schema-mapping'
 
 // Retry config: 3 attempts with shared AbortSignal from per-trader timeout.
 // The withRetry function checks signal.aborted before each attempt, so total
