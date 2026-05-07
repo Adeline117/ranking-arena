@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { chromium } from 'playwright'
 
 const BASE = 'https://www.arenafi.org'
@@ -32,7 +33,12 @@ async function clickFirstOption(page) {
     const isVisible = await card.isVisible().catch(() => false)
     const box = await card.boundingBox().catch(() => null)
     if (isVisible && text && text.trim().length > 5 && box && box.height > 30 && box.width > 150) {
-      if (!text.includes('/') && !text.includes('Next') && !text.includes('Back') && text.length < 200) {
+      if (
+        !text.includes('/') &&
+        !text.includes('Next') &&
+        !text.includes('Back') &&
+        text.length < 200
+      ) {
         await card.click()
         return `card: "${text.trim().substring(0, 40)}"`
       }
@@ -48,25 +54,26 @@ async function main() {
   const context = await browser.newContext({
     viewport: VIEWPORT,
     deviceScaleFactor: 3,
-    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
     isMobile: true,
     hasTouch: true,
   })
   const page = await context.newPage()
 
   await page.goto(`${BASE}/quiz`, { waitUntil: 'networkidle', timeout: 30000 })
-  await new Promise(r => setTimeout(r, 2000))
+  await new Promise((r) => setTimeout(r, 2000))
 
   // Click Start Test
   const startBtn = await page.$('text=Start Test')
   if (startBtn) await startBtn.click()
-  await new Promise(r => setTimeout(r, 3000))
+  await new Promise((r) => setTimeout(r, 3000))
 
   // Answer Q1
   console.log('=== Q1 ===')
   let result = await clickFirstOption(page)
   console.log(`  Clicked: ${result}`)
-  await new Promise(r => setTimeout(r, 2000))
+  await new Promise((r) => setTimeout(r, 2000))
 
   let bodyText = await page.textContent('body')
   let indicator = bodyText.match(/(\d+)\s*\/\s*30/)
@@ -78,7 +85,7 @@ async function main() {
   console.log('\n=== Q2 ===')
   result = await clickFirstOption(page)
   console.log(`  Clicked: ${result}`)
-  await new Promise(r => setTimeout(r, 2000))
+  await new Promise((r) => setTimeout(r, 2000))
 
   bodyText = await page.textContent('body')
   indicator = bodyText.match(/(\d+)\s*\/\s*30/)
@@ -89,7 +96,7 @@ async function main() {
   console.log('\n=== Q3 ===')
   result = await clickFirstOption(page)
   console.log(`  Clicked: ${result}`)
-  await new Promise(r => setTimeout(r, 2000))
+  await new Promise((r) => setTimeout(r, 2000))
 
   bodyText = await page.textContent('body')
   indicator = bodyText.match(/(\d+)\s*\/\s*30/)
@@ -108,15 +115,19 @@ async function main() {
       const text = (await btn.textContent().catch(() => '')).trim()
       const ariaLabel = (await btn.getAttribute('aria-label').catch(() => '')) || ''
       const isVisible = await btn.isVisible().catch(() => false)
-      if (isVisible && (
-        text === 'Back' || text === 'Prev' || text === '<' ||
-        ariaLabel.toLowerCase().includes('back') || ariaLabel.toLowerCase().includes('prev') ||
-        ariaLabel.toLowerCase().includes('previous')
-      )) {
+      if (
+        isVisible &&
+        (text === 'Back' ||
+          text === 'Prev' ||
+          text === '<' ||
+          ariaLabel.toLowerCase().includes('back') ||
+          ariaLabel.toLowerCase().includes('prev') ||
+          ariaLabel.toLowerCase().includes('previous'))
+      ) {
         await btn.click()
         backClickCount++
         console.log(`  Clicked back (${backClickCount}): "${text || ariaLabel}"`)
-        await new Promise(r => setTimeout(r, 800))
+        await new Promise((r) => setTimeout(r, 800))
         break
       }
     }
@@ -132,7 +143,7 @@ async function main() {
     }
   }
 
-  await new Promise(r => setTimeout(r, 1500))
+  await new Promise((r) => setTimeout(r, 1500))
   await page.screenshot({ path: '/tmp/arena-qa-quiz-back-q1-proper.png', fullPage: false })
 
   bodyText = await page.textContent('body')
@@ -152,9 +163,11 @@ async function main() {
     html.includes('answered'),
     html.includes('check'),
   ]
-  const anyGreen = greenIndicators.some(v => v)
+  const anyGreen = greenIndicators.some((v) => v)
   console.log(`  Answer preserved indicator: ${anyGreen}`)
-  console.log(`  Specific: green-color=${greenIndicators[0]||greenIndicators[1]}, bg-green=${greenIndicators[2]}, selected=${greenIndicators[5]}, answered=${greenIndicators[6]}, check=${greenIndicators[7]}`)
+  console.log(
+    `  Specific: green-color=${greenIndicators[0] || greenIndicators[1]}, bg-green=${greenIndicators[2]}, selected=${greenIndicators[5]}, answered=${greenIndicators[6]}, check=${greenIndicators[7]}`
+  )
 
   // Navigate to last question area
   console.log('\n=== Navigate to Last Question ===')
@@ -166,11 +179,13 @@ async function main() {
       const text = (await btn.textContent().catch(() => '')).trim()
       const ariaLabel = (await btn.getAttribute('aria-label').catch(() => '')) || ''
       const isVisible = await btn.isVisible().catch(() => false)
-      if (isVisible && (
-        text === 'Next' || text.includes('Next') ||
-        ariaLabel.toLowerCase().includes('next') ||
-        text === '>'
-      )) {
+      if (
+        isVisible &&
+        (text === 'Next' ||
+          text.includes('Next') ||
+          ariaLabel.toLowerCase().includes('next') ||
+          text === '>')
+      ) {
         await btn.click()
         clicked = true
         navCount++
@@ -181,10 +196,10 @@ async function main() {
       console.log(`  Could not find Next at iteration ${i + 1}`)
       break
     }
-    await new Promise(r => setTimeout(r, 300))
+    await new Promise((r) => setTimeout(r, 300))
   }
   console.log(`  Navigated ${navCount} times`)
-  await new Promise(r => setTimeout(r, 1000))
+  await new Promise((r) => setTimeout(r, 1000))
   await page.screenshot({ path: '/tmp/arena-qa-quiz-last-area.png', fullPage: false })
 
   bodyText = await page.textContent('body')
@@ -194,4 +209,7 @@ async function main() {
   await browser.close()
 }
 
-main().catch(e => { console.error('FATAL:', e); process.exit(1) })
+main().catch((e) => {
+  console.error('FATAL:', e)
+  process.exit(1)
+})
