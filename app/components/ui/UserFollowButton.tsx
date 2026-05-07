@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { ButtonSpinner } from './LoadingSpinner'
 import { tokens } from '@/lib/design-tokens'
+import { BUTTON_SIZE_STYLES } from './button-styles'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
@@ -33,7 +34,7 @@ export default function UserFollowButton({
   initialFollowing = false,
   size = 'md',
   fullWidth = false,
-  onFollowChange
+  onFollowChange,
 }: UserFollowButtonProps) {
   const _router = useRouter()
   const { showToast } = useToast()
@@ -66,13 +67,10 @@ export default function UserFollowButton({
     ;(async () => {
       try {
         const authHeaders = await getAuthHeadersAsync()
-        const response = await fetch(
-          `/api/users/follow?followingId=${targetUserId}`,
-          {
-            signal: abortController.signal,
-            headers: authHeaders,
-          }
-        )
+        const response = await fetch(`/api/users/follow?followingId=${targetUserId}`, {
+          signal: abortController.signal,
+          headers: authHeaders,
+        })
         if (response.ok) {
           const data = await response.json()
           setFollowing(data.following)
@@ -184,19 +182,31 @@ export default function UserFollowButton({
       }
 
       // #22: Show retry hint on network error
-      const isNetworkError = error instanceof TypeError && (error as TypeError).message.includes('fetch')
-      showToast(isNetworkError ? `${t('operationFailedRetry')} — ${t('tapToRetry') || 'Tap to retry'}` : t('operationFailedRetry'), 'error')
+      const isNetworkError =
+        error instanceof TypeError && (error as TypeError).message.includes('fetch')
+      showToast(
+        isNetworkError
+          ? `${t('operationFailedRetry')} — ${t('tapToRetry') || 'Tap to retry'}`
+          : t('operationFailedRetry'),
+        'error'
+      )
     } finally {
       setLoading(false)
       pendingRef.current = false
     }
-  }, [currentUserId, targetUserId, following, loading, getAuthHeadersAsync, showToast, t, onFollowChange, openLoginModal])
+  }, [
+    currentUserId,
+    targetUserId,
+    following,
+    loading,
+    getAuthHeadersAsync,
+    showToast,
+    t,
+    onFollowChange,
+    openLoginModal,
+  ])
 
-  const sizeStyles = {
-    sm: { padding: `${tokens.spacing[2.5]} ${tokens.spacing[4]}`, fontSize: tokens.typography.fontSize.sm, borderRadius: tokens.radius.md, minHeight: '44px' },
-    md: { padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`, fontSize: tokens.typography.fontSize.base, borderRadius: tokens.radius.lg, minHeight: '44px' },
-    lg: { padding: `${tokens.spacing[3.5]} ${tokens.spacing[6]}`, fontSize: tokens.typography.fontSize.md, borderRadius: tokens.radius.lg, minHeight: '48px' },
-  }
+  const sizeStyles = BUTTON_SIZE_STYLES
 
   const isMutual = following && followedBy
 
@@ -273,14 +283,25 @@ export default function UserFollowButton({
         justifyContent: 'center',
         gap: tokens.spacing[1.5],
       }}
-      onMouseEnter={(e) => { if (!loading) e.currentTarget.style.opacity = '0.85' }}
-      onMouseLeave={(e) => { if (!loading) e.currentTarget.style.opacity = '1' }}
+      onMouseEnter={(e) => {
+        if (!loading) e.currentTarget.style.opacity = '0.85'
+      }}
+      onMouseLeave={(e) => {
+        if (!loading) e.currentTarget.style.opacity = '1'
+      }}
     >
       {loading && <ButtonSpinner size="xs" />}
       {loading
-        ? (following ? t('unfollowingAction') : t('followingAction'))
-        : (following ? (isMutual ? t('mutualFollow') : t('unfollow')) : (followedBy ? t('followBack') : t('follow')))
-      }
+        ? following
+          ? t('unfollowingAction')
+          : t('followingAction')
+        : following
+          ? isMutual
+            ? t('mutualFollow')
+            : t('unfollow')
+          : followedBy
+            ? t('followBack')
+            : t('follow')}
     </button>
   )
 }

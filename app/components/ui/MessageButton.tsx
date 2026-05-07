@@ -9,6 +9,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
+import { BUTTON_SIZE_STYLES, MessageIcon } from './button-styles'
 
 type MessageButtonProps = {
   targetUserId: string
@@ -32,7 +33,7 @@ export default function MessageButton({
   targetUserId,
   currentUserId,
   size = 'md',
-  fullWidth = false
+  fullWidth = false,
 }: MessageButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
@@ -47,10 +48,13 @@ export default function MessageButton({
         // Session expired — return structured error so onError can handle it
         return {
           success: false,
-          error: { code: 'UNAUTHORIZED', message: t('loginExpiredPleaseRelogin') || '登录已过期，请重新登录' },
+          error: {
+            code: 'UNAUTHORIZED',
+            message: t('loginExpiredPleaseRelogin') || '登录已过期，请重新登录',
+          },
         }
       }
-      const headers: Record<string, string> = { 'Authorization': `Bearer ${token}` }
+      const headers: Record<string, string> = { Authorization: `Bearer ${token}` }
 
       return apiRequest<StartMessageResponse>('/api/messages/start', {
         method: 'POST',
@@ -73,7 +77,10 @@ export default function MessageButton({
         if (error.code === 'UNAUTHORIZED') {
           showToast(t('loginExpiredPleaseRelogin') || '登录已过期，请重新登录', 'error')
           openLoginModal(t('pleaseLogin'))
-        } else if (error.message?.includes('disabled direct messages') || error.message?.includes('关闭私信')) {
+        } else if (
+          error.message?.includes('disabled direct messages') ||
+          error.message?.includes('关闭私信')
+        ) {
           showToast(t('userDmDisabled'), 'warning')
         } else if (error.limitReached || error.code === 'PERMISSION_DENIED') {
           showToast(t('msgLimitReached'), 'warning')
@@ -105,11 +112,7 @@ export default function MessageButton({
     }
   }
 
-  const sizeStyles = {
-    sm: { padding: `${tokens.spacing[2.5]} ${tokens.spacing[4]}`, fontSize: tokens.typography.fontSize.sm, borderRadius: tokens.radius.md, minHeight: '44px' },
-    md: { padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`, fontSize: tokens.typography.fontSize.base, borderRadius: tokens.radius.lg, minHeight: '44px' },
-    lg: { padding: `${tokens.spacing[3.5]} ${tokens.spacing[6]}`, fontSize: tokens.typography.fontSize.md, borderRadius: tokens.radius.lg, minHeight: '48px' },
-  }
+  const sizeStyles = BUTTON_SIZE_STYLES
 
   if (!currentUserId) {
     return (
@@ -130,8 +133,12 @@ export default function MessageButton({
           gap: tokens.spacing[1.5],
           transition: 'all 200ms ease',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))' }}
-        onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--glass-bg-light)' }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'var(--glass-bg-light)'
+        }}
       >
         <MessageIcon size={size === 'sm' ? 14 : 16} />
         {t('directMessage')}
@@ -164,23 +171,16 @@ export default function MessageButton({
         justifyContent: 'center',
         gap: tokens.spacing[1.5],
       }}
-      onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))' }}
-      onMouseLeave={(e) => { if (!isLoading) e.currentTarget.style.background = 'var(--glass-bg-light)' }}
+      onMouseEnter={(e) => {
+        if (!isLoading)
+          e.currentTarget.style.background = 'var(--glass-bg-medium, rgba(255,255,255,0.08))'
+      }}
+      onMouseLeave={(e) => {
+        if (!isLoading) e.currentTarget.style.background = 'var(--glass-bg-light)'
+      }}
     >
-      {isLoading ? (
-        <ButtonSpinner size="xs" />
-      ) : (
-        <MessageIcon size={size === 'sm' ? 14 : 16} />
-      )}
+      {isLoading ? <ButtonSpinner size="xs" /> : <MessageIcon size={size === 'sm' ? 14 : 16} />}
       {isLoading ? '...' : t('directMessage')}
     </button>
-  )
-}
-
-function MessageIcon({ size = 16 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
-      <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
-    </svg>
   )
 }
