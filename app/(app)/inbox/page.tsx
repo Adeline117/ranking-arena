@@ -1,7 +1,7 @@
 'use client'
 
 import { features } from '@/lib/features'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -14,9 +14,8 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type TabKey = 'notifications' | 'messages'
 
-
 export default function InboxPage() {
-  if (!features.social) notFound()
+  if (!features.social) redirect('/')
 
   const router = useRouter()
   const { email, authChecked, accessToken } = useAuthSession()
@@ -35,10 +34,23 @@ export default function InboxPage() {
   ]
 
   return (
-    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <TopNav email={email} />
 
-      <div style={{ maxWidth: 600, margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`, paddingBottom: 80 }}>
+      <div
+        style={{
+          maxWidth: 600,
+          margin: '0 auto',
+          padding: `${tokens.spacing[4]} ${tokens.spacing[3]}`,
+          paddingBottom: 80,
+        }}
+      >
         {/* Page header */}
         <div
           style={{
@@ -70,7 +82,9 @@ export default function InboxPage() {
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   background: 'transparent',
                   border: 'none',
-                  borderBottom: isActive ? `2px solid ${tokens.colors.accent.brand}` : '2px solid transparent',
+                  borderBottom: isActive
+                    ? `2px solid ${tokens.colors.accent.brand}`
+                    : '2px solid transparent',
                   color: isActive ? tokens.colors.text.primary : tokens.colors.text.secondary,
                   fontWeight: isActive ? 800 : 600,
                   fontSize: tokens.typography.fontSize.sm,

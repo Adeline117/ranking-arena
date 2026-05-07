@@ -5107,6 +5107,12 @@ const ko = {
   libraryFreeLabel: '무료',
   libraryByAuthor: '저자: {author}',
   libraryViewCount: '{count}회 조회',
+
+  // Social Coming Soon
+  socialComingSoonTitle: '커뮤니티 기능 출시 예정',
+  socialComingSoonDescription:
+    '암호화폐 트레이더를 위한 커뮤니티를 구축 중입니다. 그룹, 게시물, 토론 기능이 곧 출시됩니다.',
+  socialComingSoonCta: '랭킹 둘러보기',
 } as const
 
 export default ko

@@ -1,29 +1,32 @@
 import type { Metadata } from 'next'
 import { features } from '@/lib/features'
-import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { unstable_cache } from 'next/cache'
 import GroupsFeedPage from '@/app/components/groups/GroupsFeedPage'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import SocialComingSoonPage from '@/app/components/ui/SocialComingSoonPage'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Trading Groups & Community',
-  description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders on Arena.',
+  description:
+    'Join crypto trading groups, share insights, and discuss strategies with ranked traders on Arena.',
   alternates: { canonical: `${BASE_URL}/groups` },
   openGraph: {
     title: 'Trading Groups & Community',
-    description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders.',
+    description:
+      'Join crypto trading groups, share insights, and discuss strategies with ranked traders.',
     url: `${BASE_URL}/groups`,
     images: [{ url: `${BASE_URL}/api/og`, width: 1200, height: 630 }],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Trading Groups & Community',
-    description: 'Join crypto trading groups, share insights, and discuss strategies with ranked traders.',
+    description:
+      'Join crypto trading groups, share insights, and discuss strategies with ranked traders.',
     creator: '@arenafi',
   },
 }
@@ -37,7 +40,9 @@ const getRecommendedPosts = unstable_cache(
       const supabase = getSupabaseAdmin()
       const { data } = await supabase
         .from('posts')
-        .select('id, title, content, created_at, author_id, group_id, like_count, comment_count, hot_score, user_profiles:author_id(handle, avatar_url, display_name)')
+        .select(
+          'id, title, content, created_at, author_id, group_id, like_count, comment_count, hot_score, user_profiles:author_id(handle, avatar_url, display_name)'
+        )
         .order('hot_score', { ascending: false })
         .limit(10)
       return data || []
@@ -68,7 +73,7 @@ const getRecommendedGroups = unstable_cache(
 )
 
 export default async function GroupsPage() {
-  if (!features.social) notFound()
+  if (!features.social) return <SocialComingSoonPage />
 
   // Parallel server-side data fetching
   const [initialPosts, recommendedGroups] = await Promise.all([
@@ -77,17 +82,16 @@ export default async function GroupsPage() {
   ])
 
   return (
-    <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
-        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <RankingSkeleton />
+    <Suspense
+      fallback={
+        <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
+          <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+            <RankingSkeleton />
+          </Box>
         </Box>
-      </Box>
-    }>
-      <GroupsFeedPage
-        initialPosts={initialPosts}
-        initialGroups={recommendedGroups}
-      />
+      }
+    >
+      <GroupsFeedPage initialPosts={initialPosts} initialGroups={recommendedGroups} />
     </Suspense>
   )
 }
