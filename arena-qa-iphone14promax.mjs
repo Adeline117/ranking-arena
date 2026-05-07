@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 import { chromium } from 'playwright'
 
 const BASE = 'https://www.arenafi.org'
@@ -9,7 +10,9 @@ const consoleErrors = []
 const networkErrors = []
 const http429Count = { count: 0 }
 
-async function sleep(ms) { return new Promise(r => setTimeout(r, ms)) }
+async function sleep(ms) {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
 async function screenshot(page, name) {
   const path = `/tmp/arena-qa-${name}.png`
@@ -30,24 +33,25 @@ async function main() {
   const context = await browser.newContext({
     viewport: VIEWPORT,
     deviceScaleFactor: DEVICE_SCALE,
-    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+    userAgent:
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
     isMobile: true,
     hasTouch: true,
   })
   const page = await context.newPage()
 
   // Track console errors and 429s
-  page.on('console', msg => {
+  page.on('console', (msg) => {
     if (msg.type() === 'error') {
       consoleErrors.push(msg.text().substring(0, 200))
     }
   })
-  page.on('response', resp => {
+  page.on('response', (resp) => {
     if (resp.status() === 429) {
       http429Count.count++
     }
   })
-  page.on('requestfailed', req => {
+  page.on('requestfailed', (req) => {
     networkErrors.push(`${req.url().substring(0, 100)} - ${req.failure()?.errorText}`)
   })
 
@@ -63,10 +67,13 @@ async function main() {
     // Check for Start Test button
     const startBtn = await page.$('button, a, [role="button"]')
     const pageText = await page.textContent('body')
-    const hasStartButton = pageText.toLowerCase().includes('start') || pageText.toLowerCase().includes('begin') || pageText.toLowerCase().includes('test')
+    const hasStartButton =
+      pageText.toLowerCase().includes('start') ||
+      pageText.toLowerCase().includes('begin') ||
+      pageText.toLowerCase().includes('test')
     console.log(`  Start/Begin/Test button text found: ${hasStartButton}`)
     console.log(`  Page title area: ${pageText.substring(0, 300).replace(/\n/g, ' ')}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -99,7 +106,7 @@ async function main() {
     const bodyText = await page.textContent('body')
     const hasQ1 = bodyText.includes('1') || bodyText.includes('Q1') || bodyText.includes('Question')
     console.log(`  Card-by-card visible: question indicators present = ${hasQ1}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -116,18 +123,30 @@ async function main() {
       for (const opt of options) {
         const text = await opt.textContent()
         const isVisible = await opt.isVisible()
-        if (isVisible && text && text.length > 1 && text.length < 200 && !text.toLowerCase().includes('next') && !text.toLowerCase().includes('back') && !text.toLowerCase().includes('prev')) {
+        if (
+          isVisible &&
+          text &&
+          text.length > 1 &&
+          text.length < 200 &&
+          !text.toLowerCase().includes('next') &&
+          !text.toLowerCase().includes('back') &&
+          !text.toLowerCase().includes('prev')
+        ) {
           try {
             await opt.click()
             answered = true
             console.log(`  Q${q}: Clicked option "${text.trim().substring(0, 60)}"`)
             break
-          } catch(e) { continue }
+          } catch (e) {
+            continue
+          }
         }
       }
       if (!answered) {
         // Try finding any clickable elements that look like answers
-        const allClickable = await page.$$('label, .option, [class*="option"], [class*="answer"], [class*="choice"]')
+        const allClickable = await page.$$(
+          'label, .option, [class*="option"], [class*="answer"], [class*="choice"]'
+        )
         for (const el of allClickable) {
           const isVisible = await el.isVisible()
           if (isVisible) {
@@ -137,7 +156,9 @@ async function main() {
               const text = await el.textContent()
               console.log(`  Q${q}: Clicked answer "${text?.trim().substring(0, 60)}"`)
               break
-            } catch(e) { continue }
+            } catch (e) {
+              continue
+            }
           }
         }
       }
@@ -149,9 +170,12 @@ async function main() {
     await screenshot(page, '03-quiz-after-q3')
 
     const bodyText = await page.textContent('body')
-    const currentQ = bodyText.match(/(\d+)\s*\/\s*\d+/) || bodyText.match(/Q(\d+)/) || bodyText.match(/question\s*(\d+)/i)
+    const currentQ =
+      bodyText.match(/(\d+)\s*\/\s*\d+/) ||
+      bodyText.match(/Q(\d+)/) ||
+      bodyText.match(/question\s*(\d+)/i)
     console.log(`  Current question indicator: ${currentQ ? currentQ[0] : 'not found'}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -167,35 +191,54 @@ async function main() {
         const text = await btn.textContent()
         const ariaLabel = await btn.getAttribute('aria-label')
         const isVisible = await btn.isVisible()
-        if (isVisible && ((text && (text.toLowerCase().includes('back') || text.toLowerCase().includes('prev') || text.includes('<'))) ||
-            (ariaLabel && (ariaLabel.toLowerCase().includes('back') || ariaLabel.toLowerCase().includes('prev'))))) {
+        if (
+          isVisible &&
+          ((text &&
+            (text.toLowerCase().includes('back') ||
+              text.toLowerCase().includes('prev') ||
+              text.includes('<'))) ||
+            (ariaLabel &&
+              (ariaLabel.toLowerCase().includes('back') ||
+                ariaLabel.toLowerCase().includes('prev'))))
+        ) {
           try {
             await btn.click()
             console.log(`  Clicked back: "${(text || ariaLabel || '').trim().substring(0, 40)}"`)
             await sleep(1000)
             break
-          } catch(e) { continue }
+          } catch (e) {
+            continue
+          }
         }
       }
     }
 
     // Try clicking dot 1 / first dot
-    const dots = await page.$$('[class*="dot"], [class*="progress"] button, [class*="indicator"] button, [data-index="0"]')
+    const dots = await page.$$(
+      '[class*="dot"], [class*="progress"] button, [class*="indicator"] button, [data-index="0"]'
+    )
     if (dots.length > 0) {
       try {
         await dots[0].click()
         console.log('  Clicked first dot/indicator')
         await sleep(1000)
-      } catch(e) {}
+      } catch (e) {}
     }
 
     await screenshot(page, '04-quiz-back-to-q1')
 
     // Check for green check or selected state
     const html = await page.content()
-    const hasCheck = html.includes('check') || html.includes('selected') || html.includes('answered') || html.includes('completed') || html.includes('#22c55e') || html.includes('#10b981') || html.includes('green')
+    const hasCheck =
+      html.includes('check') ||
+      html.includes('selected') ||
+      html.includes('answered') ||
+      html.includes('completed') ||
+      html.includes('#22c55e') ||
+      html.includes('#10b981') ||
+      html.includes('green')
     console.log(`  Green check/answered indicator found in HTML: ${hasCheck}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -212,13 +255,18 @@ async function main() {
         const text = await btn.textContent()
         const ariaLabel = await btn.getAttribute('aria-label')
         const isVisible = await btn.isVisible()
-        if (isVisible && ((text && (text.toLowerCase().includes('next') || text.includes('>'))) ||
-            (ariaLabel && ariaLabel.toLowerCase().includes('next')))) {
+        if (
+          isVisible &&
+          ((text && (text.toLowerCase().includes('next') || text.includes('>'))) ||
+            (ariaLabel && ariaLabel.toLowerCase().includes('next')))
+        ) {
           try {
             await btn.click()
             clickedNext = true
             break
-          } catch(e) { continue }
+          } catch (e) {
+            continue
+          }
         }
       }
       if (!clickedNext) break
@@ -229,7 +277,7 @@ async function main() {
     const bodyText = await page.textContent('body')
     const questionNum = bodyText.match(/(\d+)\s*\/\s*(\d+)/)
     console.log(`  Last question area: ${questionNum ? questionNum[0] : 'indicator not found'}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -261,7 +309,7 @@ async function main() {
       return document.documentElement.scrollWidth > document.documentElement.clientWidth
     })
     console.log(`  Horizontal overflow: ${hasHorizontalOverflow}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -288,12 +336,13 @@ async function main() {
     // Check what sections render
     const bodyText = await page.textContent('body')
     const sections = {
-      'ROI': bodyText.includes('ROI'),
-      'PnL': bodyText.includes('PnL') || bodyText.includes('P&L'),
+      ROI: bodyText.includes('ROI'),
+      PnL: bodyText.includes('PnL') || bodyText.includes('P&L'),
       'Arena Score': bodyText.includes('Arena Score') || bodyText.includes('Score'),
       'Win Rate': bodyText.includes('Win Rate') || bodyText.includes('Win'),
-      'Chart': await page.$('canvas, [class*="chart"], [class*="Chart"]') !== null,
-      'Period tabs': bodyText.includes('7D') || bodyText.includes('30D') || bodyText.includes('90D'),
+      Chart: (await page.$('canvas, [class*="chart"], [class*="Chart"]')) !== null,
+      'Period tabs':
+        bodyText.includes('7D') || bodyText.includes('30D') || bodyText.includes('90D'),
     }
     for (const [name, present] of Object.entries(sections)) {
       console.log(`  ${present ? 'OK' : 'MISSING'}: ${name}`)
@@ -304,7 +353,7 @@ async function main() {
       return document.documentElement.scrollWidth > document.documentElement.clientWidth
     })
     console.log(`  Horizontal overflow: ${hasOverflow}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -328,7 +377,7 @@ async function main() {
         }
       }
     }
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -343,7 +392,9 @@ async function main() {
 
     const bodyText = await page.textContent('body')
     // Count result items
-    const resultElements = await page.$$('[class*="result"], [class*="trader"], [class*="row"], a[href*="/trader/"]')
+    const resultElements = await page.$$(
+      '[class*="result"], [class*="trader"], [class*="row"], a[href*="/trader/"]'
+    )
     console.log(`  Result elements found: ${resultElements.length}`)
 
     // Check for avatars
@@ -355,7 +406,7 @@ async function main() {
       return document.documentElement.scrollWidth > document.documentElement.clientWidth
     })
     console.log(`  Horizontal overflow: ${hasOverflow}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -373,11 +424,14 @@ async function main() {
     console.log(`  Post links found: ${postLinks.length}`)
 
     // Check for real titles (not empty)
-    const headings = await page.$$eval('h2, h3, [class*="title"], [class*="post"]', els =>
-      els.map(e => e.textContent?.trim()).filter(t => t && t.length > 5).slice(0, 5)
+    const headings = await page.$$eval('h2, h3, [class*="title"], [class*="post"]', (els) =>
+      els
+        .map((e) => e.textContent?.trim())
+        .filter((t) => t && t.length > 5)
+        .slice(0, 5)
     )
     console.log(`  Post titles (sample): ${JSON.stringify(headings.slice(0, 3))}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -393,7 +447,7 @@ async function main() {
     const bodyText = await page.textContent('body')
     const groupCards = await page.$$('a[href*="/groups/"], [class*="group"]')
     console.log(`  Group elements found: ${groupCards.length}`)
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -413,11 +467,13 @@ async function main() {
         return {
           scrollWidth: document.documentElement.scrollWidth,
           clientWidth: document.documentElement.clientWidth,
-          hasOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth
+          hasOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth,
         }
       })
-      console.log(`  ${path}: scrollWidth=${overflow.scrollWidth}, clientWidth=${overflow.clientWidth}, overflow=${overflow.hasOverflow}`)
-    } catch(e) {
+      console.log(
+        `  ${path}: scrollWidth=${overflow.scrollWidth}, clientWidth=${overflow.clientWidth}, overflow=${overflow.hasOverflow}`
+      )
+    } catch (e) {
       console.log(`  ${path}: ERROR - ${e.message.substring(0, 100)}`)
     }
   }
@@ -426,7 +482,9 @@ async function main() {
   try {
     await page.goto(`${BASE}/`, { waitUntil: 'networkidle', timeout: 15000 })
     await sleep(2000)
-    const cookieBanner = await page.$('[class*="cookie"], [class*="consent"], [id*="cookie"], [id*="consent"]')
+    const cookieBanner = await page.$(
+      '[class*="cookie"], [class*="consent"], [id*="cookie"], [id*="consent"]'
+    )
     if (cookieBanner) {
       const box = await cookieBanner.boundingBox()
       console.log(`  Cookie banner found: height=${box?.height}px`)
@@ -434,7 +492,7 @@ async function main() {
     } else {
       console.log('  No cookie banner found')
     }
-  } catch(e) {
+  } catch (e) {
     console.log(`  ERROR: ${e.message}`)
   }
 
@@ -445,18 +503,18 @@ async function main() {
   console.log(`Console errors total: ${consoleErrors.length}`)
   if (consoleErrors.length > 0) {
     console.log('Sample console errors:')
-    consoleErrors.slice(0, 5).forEach(e => console.log(`  - ${e}`))
+    consoleErrors.slice(0, 5).forEach((e) => console.log(`  - ${e}`))
   }
   console.log(`Network failures: ${networkErrors.length}`)
   if (networkErrors.length > 0) {
-    networkErrors.slice(0, 5).forEach(e => console.log(`  - ${e}`))
+    networkErrors.slice(0, 5).forEach((e) => console.log(`  - ${e}`))
   }
   console.log(`HTTP 429 responses: ${http429Count.count}`)
 
   await browser.close()
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error('FATAL:', e)
   process.exit(1)
 })
