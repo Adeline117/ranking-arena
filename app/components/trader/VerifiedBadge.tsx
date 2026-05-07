@@ -34,21 +34,22 @@ export default function VerifiedBadge({
   const { t } = useLanguage()
   const s = SIZES[size]
 
-  // Variant-specific styles
+  // Variant-specific styles — use design token for verified badge color
+  const badgeColor = tokens.colors.verified.badge
   const variantStyles: Record<string, React.CSSProperties> = {
     default: {
-      color: '#22d3ee',
-      background: 'rgba(34, 211, 238, 0.12)',
-      border: '1px solid rgba(34, 211, 238, 0.25)',
+      color: badgeColor,
+      background: `color-mix(in srgb, ${badgeColor} 12%, transparent)`,
+      border: `1px solid color-mix(in srgb, ${badgeColor} 25%, transparent)`,
     },
     prominent: {
-      color: '#fff',
-      background: 'linear-gradient(135deg, rgba(34, 211, 238, 0.25), rgba(99, 102, 241, 0.25))',
-      border: '1px solid rgba(34, 211, 238, 0.4)',
-      boxShadow: '0 0 8px rgba(34, 211, 238, 0.15)',
+      color: tokens.colors.white,
+      background: `linear-gradient(135deg, color-mix(in srgb, ${badgeColor} 25%, transparent), rgba(99, 102, 241, 0.25))`,
+      border: `1px solid color-mix(in srgb, ${badgeColor} 40%, transparent)`,
+      boxShadow: `0 0 8px color-mix(in srgb, ${badgeColor} 15%, transparent)`,
     },
     subtle: {
-      color: '#22d3ee',
+      color: badgeColor,
       background: 'transparent',
       border: 'none',
       padding: '0',
