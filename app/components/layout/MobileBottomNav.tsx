@@ -4,7 +4,6 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { features } from '@/lib/features'
 import { useLanguage } from '../Providers/LanguageProvider'
 // Supabase: dynamic import to avoid pulling ~50KB into initial client bundle.
 // Only needed for auth state (getSession + onAuthStateChange).
@@ -18,7 +17,6 @@ const getSb = () =>
         return _sb
       })
 import { useCapacitorHaptics } from '@/lib/hooks/useCapacitor'
-import { useInboxStore } from '@/lib/stores/inboxStore'
 
 interface IconProps {
   active: boolean
@@ -402,31 +400,23 @@ export default function MobileBottomNav(): React.ReactElement {
   const userHandle = useUserHandle()
   const isVisible = useScrollVisibility()
   const keyboardOpen = useKeyboardOpen()
-  const unreadCount = useInboxStore((s) => s.unreadNotifications + s.unreadMessages)
 
   const handleNavClick = useCallback(() => {
     impact('light')
   }, [impact])
 
   const navItems: NavItem[] = useMemo(() => {
-    const items: NavItem[] = [{ href: '/', labelKey: 'rankings', Icon: RankingsIcon }]
-    if (features.social) {
-      items.push({
-        href: '/hot',
-        labelKey: 'hot',
-        Icon: FireIcon,
-        badge: unreadCount > 0 ? unreadCount : undefined,
-      })
-      items.push({ href: '/groups', labelKey: 'groups', Icon: GroupsIcon })
-    }
-    items.push({ href: '/market', labelKey: 'market', Icon: MarketIcon })
-    items.push({
-      href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
-      labelKey: 'me',
-      Icon: UserIcon,
-    })
+    const items: NavItem[] = [
+      { href: '/', labelKey: 'rankings', Icon: RankingsIcon },
+      { href: '/market', labelKey: 'market', Icon: MarketIcon },
+      {
+        href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
+        labelKey: 'me',
+        Icon: UserIcon,
+      },
+    ]
     return items
-  }, [userHandle, unreadCount])
+  }, [userHandle])
 
   // Compute active index for sliding indicator
   const activeIndex = useMemo(() => {

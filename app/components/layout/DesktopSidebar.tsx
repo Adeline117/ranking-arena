@@ -9,7 +9,16 @@ import { supabase } from '@/lib/supabase/client'
 
 function HomeIcon({ active }: { active: boolean }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill={active ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
       <polyline points="9 22 9 12 15 12 15 22" />
     </svg>
@@ -18,7 +27,16 @@ function HomeIcon({ active }: { active: boolean }) {
 
 function TrophyIcon({ active }: { active: boolean }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill={active ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6" />
       <path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18" />
       <path d="M4 22h16" />
@@ -31,7 +49,16 @@ function TrophyIcon({ active }: { active: boolean }) {
 
 function GroupIcon({ active }: { active: boolean }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill={active ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -42,7 +69,16 @@ function GroupIcon({ active }: { active: boolean }) {
 
 function MarketIcon({ active }: { active: boolean }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill={active ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
     </svg>
   )
@@ -50,7 +86,16 @@ function MarketIcon({ active }: { active: boolean }) {
 
 function UserIcon({ active }: { active: boolean }) {
   return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill={active ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <circle cx="12" cy="8" r="5" />
       <path d="M20 21a8 8 0 1 0-16 0" />
     </svg>
@@ -86,7 +131,9 @@ export default function DesktopSidebar() {
     })
 
     // Listen for auth changes (login/logout)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!alive) return
       if (session?.user?.id) {
         loadHandle(session.user.id, session.user.email ?? undefined)
@@ -95,15 +142,21 @@ export default function DesktopSidebar() {
       }
     })
 
-    return () => { alive = false; subscription.unsubscribe() }
+    return () => {
+      alive = false
+      subscription.unsubscribe()
+    }
   }, [])
 
   const navItems = [
     { href: '/', labelKey: 'home' as const, icon: HomeIcon },
     { href: '/rankings', labelKey: 'rankings' as const, icon: TrophyIcon },
     { href: '/market', labelKey: 'market' as const, icon: MarketIcon },
-    { href: '/groups', labelKey: 'groups' as const, icon: GroupIcon },
-    { href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings', labelKey: 'me' as const, icon: UserIcon },
+    {
+      href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
+      labelKey: 'me' as const,
+      icon: UserIcon,
+    },
   ]
 
   const isActive = (href: string) => {
