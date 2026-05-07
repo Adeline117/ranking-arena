@@ -4,6 +4,8 @@ import { fetchSectorPerformance } from '@/lib/utils/coingecko'
 import { getOrSetWithLock } from '@/lib/cache'
 import { logger } from '@/lib/utils/logger'
 
+export const runtime = 'edge'
+
 export async function GET(request: NextRequest) {
   try {
     const rl = await checkRateLimit(request, RateLimitPresets.read)
@@ -19,10 +21,11 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'public, s-maxage=1800, stale-while-revalidate=900',
       },
     })
-  } catch (error) { logger.error('[market/sectors] Failed:', error instanceof Error ? error : new Error(String(error)));
-    return NextResponse.json(
-      { error: 'Failed to fetch sector performance' },
-      { status: 500 }
+  } catch (error) {
+    logger.error(
+      '[market/sectors] Failed:',
+      error instanceof Error ? error : new Error(String(error))
     )
+    return NextResponse.json({ error: 'Failed to fetch sector performance' }, { status: 500 })
   }
 }

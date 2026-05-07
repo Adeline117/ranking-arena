@@ -4,15 +4,16 @@ import { fetchDefiOverview } from '@/lib/utils/defillama'
 import { getOrSetWithLock } from '@/lib/cache'
 import { logger } from '@/lib/utils/logger'
 
+export const runtime = 'edge'
+
 export async function GET(request: NextRequest) {
   try {
     const rl = await checkRateLimit(request, RateLimitPresets.read)
     if (rl) return rl
-    const data = await getOrSetWithLock(
-      'api:market:defi',
-      async () => fetchDefiOverview(),
-      { ttl: 1800, lockTtl: 10 }
-    )
+    const data = await getOrSetWithLock('api:market:defi', async () => fetchDefiOverview(), {
+      ttl: 1800,
+      lockTtl: 10,
+    })
 
     return NextResponse.json(data, {
       headers: {
@@ -21,9 +22,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     logger.error('[market/defi] Failed:', error instanceof Error ? error : new Error(String(error)))
-    return NextResponse.json(
-      { error: 'Failed to fetch DeFi overview' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Failed to fetch DeFi overview' }, { status: 500 })
   }
 }

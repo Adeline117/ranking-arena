@@ -4,6 +4,8 @@ import { fetchFearGreedIndex } from '@/lib/utils/fear-greed'
 import { getOrSetWithLock } from '@/lib/cache'
 import { logger } from '@/lib/utils/logger'
 
+export const runtime = 'edge'
+
 export async function GET(request: NextRequest) {
   try {
     const rl = await checkRateLimit(request, RateLimitPresets.read)
@@ -22,10 +24,11 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800',
       },
     })
-  } catch (error) { logger.error('[market/fear-greed] Failed:', error instanceof Error ? error : new Error(String(error)));
-    return NextResponse.json(
-      { error: 'Failed to fetch Fear & Greed Index' },
-      { status: 500 }
+  } catch (error) {
+    logger.error(
+      '[market/fear-greed] Failed:',
+      error instanceof Error ? error : new Error(String(error))
     )
+    return NextResponse.json({ error: 'Failed to fetch Fear & Greed Index' }, { status: 500 })
   }
 }

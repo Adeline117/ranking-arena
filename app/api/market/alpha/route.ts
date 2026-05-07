@@ -7,26 +7,51 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getOrSetWithLock } from '@/lib/cache'
 import { logger } from '@/lib/utils/logger'
 
+export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const result = await getOrSetWithLock(
-      'api:market:alpha',
-      async () => fetchAlphaData(),
-      { ttl: 120, lockTtl: 10 }
-    )
+    const result = await getOrSetWithLock('api:market:alpha', async () => fetchAlphaData(), {
+      ttl: 120,
+      lockTtl: 10,
+    })
 
     const response = NextResponse.json(result)
     response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
     return response
-  } catch (error) { logger.error('[market/alpha] Failed:', error instanceof Error ? error : new Error(String(error)));
+  } catch (error) {
+    logger.error(
+      '[market/alpha] Failed:',
+      error instanceof Error ? error : new Error(String(error))
+    )
     return NextResponse.json({ error: 'Failed to fetch market alpha data' }, { status: 500 })
   }
 }
 
-interface TrendingToken { id: string; symbol: string; name: string; image: string; rank: number | null; price: number | null; change24h: number | null; volume24h: number | null; marketCap: number | null; score: number }
-interface VolumeToken { id: string; symbol: string; name: string; image: string; price: number; change24h: number | null; volume24h: number; marketCap: number; rank: number }
+interface TrendingToken {
+  id: string
+  symbol: string
+  name: string
+  image: string
+  rank: number | null
+  price: number | null
+  change24h: number | null
+  volume24h: number | null
+  marketCap: number | null
+  score: number
+}
+interface VolumeToken {
+  id: string
+  symbol: string
+  name: string
+  image: string
+  price: number
+  change24h: number | null
+  volume24h: number
+  marketCap: number
+  rank: number
+}
 
 async function fetchAlphaData() {
   const [trendingRes, volumeRes] = await Promise.all([
@@ -43,23 +68,50 @@ async function fetchAlphaData() {
   let trending: TrendingToken[] = []
   if (trendingRes.ok) {
     const tData = await trendingRes.json()
-    trending = (tData.coins || []).map((c: { item: { id: string; symbol?: string; name: string; thumb: string; market_cap_rank: number | null; data?: { price?: number; price_change_percentage_24h?: { usd?: number }; total_volume?: number; market_cap?: number }; score: number } }) => ({
-      id: c.item.id,
-      symbol: c.item.symbol?.toUpperCase(),
-      name: c.item.name,
-      image: c.item.thumb,
-      rank: c.item.market_cap_rank,
-      price: c.item.data?.price,
-      change24h: c.item.data?.price_change_percentage_24h?.usd,
-      volume24h: c.item.data?.total_volume,
-      marketCap: c.item.data?.market_cap,
-      score: c.item.score,
-    }))
+    trending = (tData.coins || []).map(
+      (c: {
+        item: {
+          id: string
+          symbol?: string
+          name: string
+          thumb: string
+          market_cap_rank: number | null
+          data?: {
+            price?: number
+            price_change_percentage_24h?: { usd?: number }
+            total_volume?: number
+            market_cap?: number
+          }
+          score: number
+        }
+      }) => ({
+        id: c.item.id,
+        symbol: c.item.symbol?.toUpperCase(),
+        name: c.item.name,
+        image: c.item.thumb,
+        rank: c.item.market_cap_rank,
+        price: c.item.data?.price,
+        change24h: c.item.data?.price_change_percentage_24h?.usd,
+        volume24h: c.item.data?.total_volume,
+        marketCap: c.item.data?.market_cap,
+        score: c.item.score,
+      })
+    )
   }
 
   let volumeMovers: VolumeToken[] = []
   if (volumeRes.ok) {
-    const vData: Array<{ id: string; symbol: string; name: string; image: string; current_price: number; price_change_percentage_24h: number | null; total_volume: number; market_cap: number; market_cap_rank: number }> = await volumeRes.json()
+    const vData: Array<{
+      id: string
+      symbol: string
+      name: string
+      image: string
+      current_price: number
+      price_change_percentage_24h: number | null
+      total_volume: number
+      market_cap: number
+      market_cap_rank: number
+    }> = await volumeRes.json()
     volumeMovers = vData.map((c) => ({
       id: c.id,
       symbol: (c.symbol as string).toUpperCase(),
