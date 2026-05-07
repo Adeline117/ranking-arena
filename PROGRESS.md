@@ -2,6 +2,33 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Full User Journey QA + Fix (2026-05-07)
+
+**Trigger**: Deep end-to-end QA — user discovery → registration → interaction flow.
+
+**Process**: 5 parallel QA agents tested 32 URLs across 5 phases → found 12 issues → 6 parallel fix agents.
+
+**Results**: 27/32 tests PASS, 5 WARN (all fixed), 0 critical FAIL. Post-deploy 5/5 healthy.
+
+### Fixes Shipped (6 commits)
+
+| Commit    | Fix                                                                              | Files                            |
+| --------- | -------------------------------------------------------------------------------- | -------------------------------- |
+| `d4ee081` | Add "Sign Up Free" CTA to homepage hero (was: only "Go Pro")                     | HomeHeroSSR.tsx, HomeHero.tsx    |
+| `a66e6a1` | Show 8 popular groups on /groups for unauth users (was: empty page)              | GroupsFeedPage.tsx + 4 i18n      |
+| `74ec687` | Show "Trader not found" for invalid trader IDs (was: infinite skeleton)          | TraderProfileClient.tsx          |
+| `e9500ca` | Add redirects: /signup→/login, /posts→/feed, /profile→/settings, /events→/market | next.config.ts                   |
+| `2509b16` | API v3 returns empty array when limit=0 (was: default 50)                        | api/v3/route.ts                  |
+| `d782ea2` | Library page i18n — all UI chrome translated to zh/ja/ko (was: English-only)     | LibraryBrowseClient.tsx + 4 i18n |
+
+### Verified Non-Issues (3)
+
+- **Exchange filter SSR**: Intentional — reading searchParams server-side breaks edge caching
+- **Search client-only**: Already has generateMetadata in layout.tsx for SEO
+- **VPS health "skip"**: Intentionally demoted — Vultr blocks Vercel Tokyo IPs intermittently
+
+---
+
 ## Systematic DB + Leaderboard + Data Optimization (2026-05-07)
 
 **Trigger**: User requested 数据库系统性优化 + 排行榜数据优化 + 数据缺失修复.
