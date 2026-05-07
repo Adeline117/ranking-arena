@@ -208,7 +208,11 @@ export default function TraderProfileClient({
         : 5 * 60 * 1000,
     refetchIntervalInBackground: false,
     staleTime: 5000,
-    retry: 2,
+    // Don't retry 404s — trader definitively doesn't exist. Retry transient errors.
+    retry: (failureCount, error) => {
+      if ((error as Error & { status?: number }).status === 404) return false
+      return failureCount < 2
+    },
     initialData: isPrimaryAccount
       ? ((serverTraderData as TraderDataWithExtras) ?? undefined)
       : undefined,
@@ -314,6 +318,94 @@ export default function TraderProfileClient({
       >
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <RankingSkeleton />
+        </Box>
+      </Box>
+    )
+  }
+
+  // Not found state: API returned 404 (trader definitively does not exist).
+  // Distinct from transient errors — only shows when the server confirms the trader is missing.
+  const isNotFound =
+    traderError && !traderData && (traderError as Error & { status?: number }).status === 404
+  if (isNotFound) {
+    return (
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
+        <Box
+          style={{
+            maxWidth: 500,
+            margin: '0 auto',
+            padding: tokens.spacing[6],
+            paddingTop: tokens.spacing[8],
+            textAlign: 'center',
+          }}
+        >
+          <div
+            style={{
+              fontSize: 64,
+              fontWeight: 900,
+              lineHeight: 1.2,
+              background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.text.tertiary} 100%)`,
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              marginBottom: tokens.spacing[4],
+            }}
+          >
+            404
+          </div>
+          <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+            {t('traderNotFoundTitle')}
+          </Text>
+          <Text
+            size="sm"
+            color="tertiary"
+            style={{ marginBottom: tokens.spacing[6], lineHeight: 1.6 }}
+          >
+            {t('traderNotFoundDesc')}
+          </Text>
+          <Box
+            style={{
+              display: 'flex',
+              gap: tokens.spacing[3],
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+            }}
+          >
+            <Link
+              href="/rankings"
+              style={{
+                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.lg,
+                border: 'none',
+                background: tokens.colors.accent.brand,
+                color: tokens.colors.white,
+                fontWeight: 700,
+                textDecoration: 'none',
+                fontSize: 14,
+              }}
+            >
+              {t('leaderboardBreadcrumb')}
+            </Link>
+            <Link
+              href="/search"
+              style={{
+                padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                color: tokens.colors.text.secondary,
+                textDecoration: 'none',
+                fontWeight: 600,
+                fontSize: 14,
+              }}
+            >
+              {t('search')}
+            </Link>
+          </Box>
         </Box>
       </Box>
     )
