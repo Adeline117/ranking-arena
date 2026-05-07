@@ -21,12 +21,18 @@ function AuthCallbackContent() {
       const errorDescription = searchParams.get('error_description')
       if (providerError) {
         const errorMsg = errorDescription || providerError
-        logger.warn('OAuth provider error:', { error: providerError, description: errorDescription })
+        logger.warn('OAuth provider error:', {
+          error: providerError,
+          description: errorDescription,
+        })
         router.replace(`/login?error=${encodeURIComponent(errorMsg)}`)
         return
       }
 
-      const { data: { session }, error } = await supabase.auth.getSession()
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession()
 
       if (error) {
         logger.error('Auth callback error:', error)
@@ -34,18 +40,29 @@ function AuthCallbackContent() {
         return
       }
 
-      const isAddAccount = searchParams.get('addAccount') === 'true' || (typeof window !== 'undefined' && (() => { try { return localStorage.getItem('arena_adding_account') === 'true' } catch { return false } })())
+      const isAddAccount =
+        searchParams.get('addAccount') === 'true' ||
+        (typeof window !== 'undefined' &&
+          (() => {
+            try {
+              return localStorage.getItem('arena_adding_account') === 'true'
+            } catch {
+              return false
+            }
+          })())
       // Don't clear flag yet — wait until saveToStore succeeds
 
       const returnUrl = searchParams.get('returnUrl')
       // Validate returnUrl: must start with / but NOT // (prevents protocol-relative open redirect)
       const isSafeReturn = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
-      const defaultRedirect = isAddAccount ? '/' : (isSafeReturn ? returnUrl : '/')
+      const defaultRedirect = isAddAccount ? '/' : isSafeReturn ? returnUrl : '/'
 
       // Save new account to multi-account store
       const saveToStore = async (sess: typeof session) => {
         if (!isAddAccount || !sess) return
-        const { data: { user } } = await supabase.auth.getUser()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
         if (!user) return
         const { data: profile } = await supabase
           .from('user_profiles')
@@ -88,14 +105,15 @@ function AuthCallbackContent() {
             } else if (!profile) {
               // No profile yet — create one with avatar
               const emailHandle = session.user.email?.split('@')[0] || session.user.id.slice(0, 8)
-              await supabase
-                .from('user_profiles')
-                .upsert({
+              await supabase.from('user_profiles').upsert(
+                {
                   id: session.user.id,
                   email: session.user.email || '',
                   handle: emailHandle,
                   avatar_url: oauthAvatar,
-                }, { onConflict: 'id' })
+                },
+                { onConflict: 'id' }
+              )
             }
           }
         } catch (err) {
@@ -103,11 +121,26 @@ function AuthCallbackContent() {
         }
 
         await saveToStore(session)
-        if (isAddAccount) try { localStorage.removeItem('arena_adding_account') } catch { /* intentional */ }
+        if (isAddAccount)
+          try {
+            localStorage.removeItem('arena_adding_account')
+          } catch {
+            /* intentional */
+          }
         // Check if this is a new user (created within the last 30 seconds)
         const createdAt = new Date(session.user.created_at).getTime()
         const now = Date.now()
         const isNewUser = now - createdAt < 30_000
+
+        // Fire-and-forget: send welcome email for new users
+        if (isNewUser) {
+          fetch('/api/email/welcome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+          }).catch(() => {
+            /* intentional: fire-and-forget */
+          })
+        }
 
         // New users → preserve returnUrl with welcome banner (skip complex onboarding)
         if (isAddAccount) {
@@ -120,8 +153,10 @@ function AuthCallbackContent() {
         }
       } else {
         // Retry with backoff: supabase may need time to process the hash fragment
-        const tryGetSession = async (retries = 0): Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']> => {
-          await new Promise(r => setTimeout(r, 1000))
+        const tryGetSession = async (
+          retries = 0
+        ): Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']> => {
+          await new Promise((r) => setTimeout(r, 1000))
           const { data } = await supabase.auth.getSession()
           if (data.session) return data.session
           if (retries < 2) return tryGetSession(retries + 1)
@@ -131,10 +166,26 @@ function AuthCallbackContent() {
         const retrySession = await tryGetSession()
         if (retrySession) {
           await saveToStore(retrySession)
-          if (isAddAccount) try { localStorage.removeItem('arena_adding_account') } catch { /* intentional */ }
+          if (isAddAccount)
+            try {
+              localStorage.removeItem('arena_adding_account')
+            } catch {
+              /* intentional */
+            }
           const createdAt = new Date(retrySession.user.created_at).getTime()
           const now = Date.now()
           const isNewUser = now - createdAt < 30_000
+
+          // Fire-and-forget: send welcome email for new users
+          if (isNewUser) {
+            fetch('/api/email/welcome', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+            }).catch(() => {
+              /* intentional: fire-and-forget */
+            })
+          }
+
           // New users → preserve returnUrl with welcome banner (consistent with immediate-session path)
           if (isAddAccount) {
             router.replace('/')
@@ -154,26 +205,29 @@ function AuthCallbackContent() {
   }, [router, searchParams])
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      background: tokens.colors.bg.primary,
-      color: tokens.colors.text.primary,
-    }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <div style={{ textAlign: 'center' }}>
-        <div style={{
-          width: 32, height: 32,
-          border: `3px solid ${tokens.colors.accent.primary}`,
-          borderTopColor: 'transparent',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-          margin: '0 auto 16px',
-        }} />
-        <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>
-          {t('signingIn')}
-        </p>
+        <div
+          style={{
+            width: 32,
+            height: 32,
+            border: `3px solid ${tokens.colors.accent.primary}`,
+            borderTopColor: 'transparent',
+            borderRadius: '50%',
+            animation: 'spin 0.8s linear infinite',
+            margin: '0 auto 16px',
+          }}
+        />
+        <p style={{ color: tokens.colors.text.secondary, fontSize: 14 }}>{t('signingIn')}</p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     </div>
@@ -182,23 +236,30 @@ function AuthCallbackContent() {
 
 export default function AuthCallbackPage() {
   return (
-    <Suspense fallback={
-      <div style={{
-        minHeight: '100vh',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        background: tokens.colors.bg.primary,
-      }}>
-        <div style={{
-          width: 32, height: 32,
-          border: `3px solid ${tokens.colors.accent.primary}`,
-          borderTopColor: 'transparent',
-          borderRadius: '50%',
-          animation: 'spin 0.8s linear infinite',
-        }} />
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            background: tokens.colors.bg.primary,
+          }}
+        >
+          <div
+            style={{
+              width: 32,
+              height: 32,
+              border: `3px solid ${tokens.colors.accent.primary}`,
+              borderTopColor: 'transparent',
+              borderRadius: '50%',
+              animation: 'spin 0.8s linear infinite',
+            }}
+          />
+        </div>
+      }
+    >
       <AuthCallbackContent />
     </Suspense>
   )
