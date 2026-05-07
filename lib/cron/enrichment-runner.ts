@@ -774,11 +774,36 @@ export async function runEnrichment(params: {
         (async () => {
           // Get trader keys: either provided directly (inline from batch-fetch) or read from DB
           let traders: Array<{ source_trader_id: string }>
+
+          // Check for retry-priority traders (set by retry-dead-letters cron)
+          let retryTraderIds: string[] = []
+          try {
+            const retryKey = `enrich:retry:${platformKey}:${period}`
+            const retryEntry = await PipelineState.get<{ traderIds?: string[] }>(retryKey)
+            if (retryEntry?.traderIds?.length) {
+              retryTraderIds = retryEntry.traderIds
+              await PipelineState.del(retryKey) // Consume the retry queue
+              logger.info(
+                `[enrich] ${platformKey}/${period}: ${retryTraderIds.length} priority retry traders`
+              )
+            }
+          } catch {
+            // Non-blocking
+          }
+
           if (providedKeys && providedKeys.length > 0) {
             // Inline enrichment: trader keys provided by batch-fetch, skip DB read
             traders = providedKeys
               .slice(offset, offset + limit)
               .map((k) => ({ source_trader_id: k }))
+            // Prepend retry traders (deduped)
+            if (retryTraderIds.length > 0) {
+              const existingKeys = new Set(traders.map((t) => t.source_trader_id))
+              const extraRetry = retryTraderIds
+                .filter((k) => !existingKeys.has(k))
+                .map((k) => ({ source_trader_id: k }))
+              traders = [...extraRetry, ...traders].slice(0, limit)
+            }
             logger.info(
               `[enrich] ${platformKey}/${period}: using ${traders.length} provided trader keys (inline)`
             )
@@ -826,6 +851,20 @@ export async function runEnrichment(params: {
             } catch (err) {
               results[platformKey].errors.push(err instanceof Error ? err.message : String(err))
               return
+            }
+          }
+
+          // Prepend retry-priority traders to DB-fetched list (deduped)
+          if (retryTraderIds.length > 0 && !(providedKeys && providedKeys.length > 0)) {
+            const existingKeys = new Set(traders.map((t) => t.source_trader_id))
+            const extraRetry = retryTraderIds
+              .filter((k) => !existingKeys.has(k))
+              .map((k) => ({ source_trader_id: k }))
+            if (extraRetry.length > 0) {
+              traders = [...extraRetry, ...traders].slice(0, limit)
+              logger.info(
+                `[enrich] ${platformKey}/${period}: prepended ${extraRetry.length} retry traders`
+              )
             }
           }
 
