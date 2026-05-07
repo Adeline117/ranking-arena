@@ -255,7 +255,7 @@
       "schedule": "24 */4 * * *"
     },
     {
-      "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,etoro,web3_bot,gains&limit=400",
+      "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,etoro,gains&limit=400",
       "schedule": "35 2 * * *"
     },
     {

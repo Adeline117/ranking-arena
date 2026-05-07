@@ -12,7 +12,12 @@
  * - Legacy getConnector (singleton by GranularPlatform)
  */
 
-import type { LeaderboardPlatform, MarketType, PlatformCapabilities, GranularPlatform } from '../types/leaderboard'
+import type {
+  LeaderboardPlatform,
+  MarketType,
+  PlatformCapabilities,
+  GranularPlatform,
+} from '../types/leaderboard'
 import type { PlatformConnector } from './types'
 import { logger } from '@/lib/logger'
 
@@ -20,7 +25,6 @@ import { logger } from '@/lib/logger'
  * Uses any to support both BaseConnector and BaseConnectorLegacy subclasses
  * without requiring type assertions at every call site in job-runner.ts. */
 
- 
 type AnyConnector = any
 import { RedisRateLimiter } from './redis-rate-limiter'
 
@@ -94,7 +98,10 @@ class ConnectorRegistry {
    * Get a connector, initializing it lazily if needed.
    * Thread-safe: concurrent first-access calls share the same init promise.
    */
-  async getOrInit(platform: LeaderboardPlatform, marketType: MarketType): Promise<PlatformConnector | null> {
+  async getOrInit(
+    platform: LeaderboardPlatform,
+    marketType: MarketType
+  ): Promise<PlatformConnector | null> {
     const key: RegistryKey = `${platform}:${marketType}`
 
     // Fast path: already initialized
@@ -137,14 +144,14 @@ class ConnectorRegistry {
    * Get all registered (already initialized) connectors.
    */
   getAll(): PlatformConnector[] {
-    return Array.from(this.connectors.values()).map(e => e.connector)
+    return Array.from(this.connectors.values()).map((e) => e.connector)
   }
 
   /**
    * Get all registered platform capabilities.
    */
   getCapabilities(): PlatformCapabilities[] {
-    return this.getAll().map(c => c.capabilities)
+    return this.getAll().map((c) => c.capabilities)
   }
 
   /**
@@ -167,11 +174,8 @@ class ConnectorRegistry {
    * Get all platforms that have registered connectors (including pending lazy factories).
    */
   getRegisteredPlatforms(): Array<{ platform: LeaderboardPlatform; marketType: MarketType }> {
-    const keys = new Set<RegistryKey>([
-      ...this.connectors.keys(),
-      ...this.factories.keys(),
-    ])
-    return Array.from(keys).map(key => {
+    const keys = new Set<RegistryKey>([...this.connectors.keys(), ...this.factories.keys()])
+    return Array.from(keys).map((key) => {
       const [platform, marketType] = key.split(':') as [LeaderboardPlatform, MarketType]
       return { platform, marketType }
     })
@@ -196,11 +200,16 @@ export async function initializeConnectors(): Promise<void> {
   const proxyUrl = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || undefined
 
   // Helper: pass proxyUrl only if the platform requires it (geo-blocked / WAF)
-  const proxyFor = (platform: string) => requiresProxy(platform) ? { proxyUrl } : {}
+  const proxyFor = (platform: string) => (requiresProxy(platform) ? { proxyUrl } : {})
 
   // Helper: register a lazy factory for a standard connector
-   
-  const lazy = (key: string, importFn: () => Promise<Record<string, any>>, connectorName: string, platform: string) => {
+
+  const lazy = (
+    key: string,
+    importFn: () => Promise<Record<string, any>>,
+    connectorName: string,
+    platform: string
+  ) => {
     connectorRegistry.registerLazy(key as RegistryKey, async () => {
       const mod = await importFn()
       const ConnectorClass = mod[connectorName]
@@ -209,59 +218,146 @@ export async function initializeConnectors(): Promise<void> {
   }
 
   // CEX Connectors
-  lazy('binance_futures:futures', () => import('./platforms/binance-futures'), 'BinanceFuturesConnector', 'binance_futures')
+  lazy(
+    'binance_futures:futures',
+    () => import('./platforms/binance-futures'),
+    'BinanceFuturesConnector',
+    'binance_futures'
+  )
   lazy('bybit:futures', () => import('./platforms/bybit-futures'), 'BybitFuturesConnector', 'bybit')
-  lazy('bybit_spot:spot', () => import('./platforms/bybit-spot'), 'BybitSpotConnector', 'bybit_spot')
-  lazy('bitget_futures:futures', () => import('./platforms/bitget-futures'), 'BitgetFuturesConnector', 'bitget_futures')
+  lazy(
+    'bybit_spot:spot',
+    () => import('./platforms/bybit-spot'),
+    'BybitSpotConnector',
+    'bybit_spot'
+  )
+  lazy(
+    'bitget_futures:futures',
+    () => import('./platforms/bitget-futures'),
+    'BitgetFuturesConnector',
+    'bitget_futures'
+  )
   lazy('mexc:futures', () => import('./platforms/mexc-futures'), 'MexcFuturesConnector', 'mexc')
-  lazy('coinex:futures', () => import('./platforms/coinex-futures'), 'CoinexFuturesConnector', 'coinex')
-  lazy('okx_futures:futures', () => import('./platforms/okx-futures'), 'OkxFuturesConnector', 'okx_futures')
+  lazy(
+    'coinex:futures',
+    () => import('./platforms/coinex-futures'),
+    'CoinexFuturesConnector',
+    'coinex'
+  )
+  lazy(
+    'okx_futures:futures',
+    () => import('./platforms/okx-futures'),
+    'OkxFuturesConnector',
+    'okx_futures'
+  )
   lazy('okx_spot:spot', () => import('./platforms/okx-spot'), 'OkxSpotConnector', 'okx_spot')
-  lazy('kucoin:futures', () => import('./platforms/kucoin-futures'), 'KucoinFuturesConnector', 'kucoin')
+  lazy(
+    'kucoin:futures',
+    () => import('./platforms/kucoin-futures'),
+    'KucoinFuturesConnector',
+    'kucoin'
+  )
   // bitmart — DEAD
-  lazy('phemex:futures', () => import('./platforms/phemex-futures'), 'PhemexFuturesConnector', 'phemex')
-  lazy('htx_futures:futures', () => import('./platforms/htx-futures'), 'HtxFuturesConnector', 'htx_futures')
+  lazy(
+    'phemex:futures',
+    () => import('./platforms/phemex-futures'),
+    'PhemexFuturesConnector',
+    'phemex'
+  )
+  lazy(
+    'htx_futures:futures',
+    () => import('./platforms/htx-futures'),
+    'HtxFuturesConnector',
+    'htx_futures'
+  )
   lazy('weex:futures', () => import('./platforms/weex-futures'), 'WeexFuturesConnector', 'weex')
   lazy('bingx:futures', () => import('./platforms/bingx-futures'), 'BingxFuturesConnector', 'bingx')
-  lazy('gateio:futures', () => import('./platforms/gateio-futures'), 'GateioFuturesConnector', 'gateio')
+  lazy(
+    'gateio:futures',
+    () => import('./platforms/gateio-futures'),
+    'GateioFuturesConnector',
+    'gateio'
+  )
   lazy('xt:futures', () => import('./platforms/xt-futures'), 'XtFuturesConnector', 'xt')
   // lbank: DEAD (API 404 since 2026-04) — connector removed 2026-04-13
-  lazy('blofin:futures', () => import('./platforms/blofin-futures'), 'BlofinFuturesConnector', 'blofin')
+  lazy(
+    'blofin:futures',
+    () => import('./platforms/blofin-futures'),
+    'BlofinFuturesConnector',
+    'blofin'
+  )
 
   // New CEX Connectors
   lazy('btcc:futures', () => import('./platforms/btcc-futures'), 'BtccFuturesConnector', 'btcc')
-  lazy('bitunix:futures', () => import('./platforms/bitunix-futures'), 'BitunixFuturesConnector', 'bitunix')
-  lazy('bitfinex:futures', () => import('./platforms/bitfinex-futures'), 'BitfinexFuturesConnector', 'bitfinex')
-  lazy('toobit:futures', () => import('./platforms/toobit-futures'), 'ToobitFuturesConnector', 'toobit')
+  lazy(
+    'bitunix:futures',
+    () => import('./platforms/bitunix-futures'),
+    'BitunixFuturesConnector',
+    'bitunix'
+  )
+  lazy(
+    'bitfinex:futures',
+    () => import('./platforms/bitfinex-futures'),
+    'BitfinexFuturesConnector',
+    'bitfinex'
+  )
+  lazy(
+    'toobit:futures',
+    () => import('./platforms/toobit-futures'),
+    'ToobitFuturesConnector',
+    'toobit'
+  )
   // crypto_com: DELETED — no copy trading feature on web (2026-03-19)
   lazy('etoro:spot', () => import('./platforms/etoro-spot'), 'EtoroSpotConnector', 'etoro')
   // bitget_spot: DEAD (no leaderboard API) — connector removed 2026-04-13
-  lazy('binance_spot:spot', () => import('./platforms/binance-spot'), 'BinanceSpotConnector', 'binance_spot')
+  lazy(
+    'binance_spot:spot',
+    () => import('./platforms/binance-spot'),
+    'BinanceSpotConnector',
+    'binance_spot'
+  )
 
   // DEX Connectors
-  lazy('hyperliquid:perp', () => import('./platforms/hyperliquid-perp'), 'HyperliquidPerpConnector', 'hyperliquid')
+  lazy(
+    'hyperliquid:perp',
+    () => import('./platforms/hyperliquid-perp'),
+    'HyperliquidPerpConnector',
+    'hyperliquid'
+  )
   lazy('dydx:perp', () => import('./platforms/dydx-perp'), 'DydxPerpConnector', 'dydx')
   lazy('gmx:perp', () => import('./platforms/gmx-perp'), 'GmxPerpConnector', 'gmx')
   lazy('gains:perp', () => import('./platforms/gains-perp'), 'GainsPerpConnector', 'gains')
   // kwenta: DEAD (needs TheGraph API key, suspended) — connector removed 2026-04-13
   // mux: DEAD (needs TheGraph API key) — connector removed 2026-04-13
   lazy('aevo:perp', () => import('./platforms/aevo-perp'), 'AevoPerpConnector', 'aevo')
-  lazy('jupiter_perps:perp', () => import('./platforms/jupiter-perps-perp'), 'JupiterPerpsPerpConnector', 'jupiter_perps')
+  lazy(
+    'jupiter_perps:perp',
+    () => import('./platforms/jupiter-perps-perp'),
+    'JupiterPerpsPerpConnector',
+    'jupiter_perps'
+  )
   lazy('drift:perp', () => import('./platforms/drift-perp'), 'DriftPerpConnector', 'drift')
   // DEAD (2026-04): vertex (no public leaderboard API), apex_pro (geo-blocked, no API), rabbitx (DNS dead)
 
   // New platforms (Wave 2)
   lazy('woox:copy', () => import('./platforms/woox-copy'), 'WooxCopyConnector', 'woox')
-  lazy('polymarket:copy', () => import('./platforms/polymarket-prediction'), 'PolymarketPredictionConnector', 'polymarket')
+  lazy(
+    'polymarket:copy',
+    () => import('./platforms/polymarket-prediction'),
+    'PolymarketPredictionConnector',
+    'polymarket'
+  )
   lazy('copin:perp', () => import('./platforms/copin-perp'), 'CopinPerpConnector', 'copin')
 
   // Web3 Connectors
   lazy('okx_web3:web3', () => import('./platforms/okx-web3'), 'OkxWeb3Connector', 'okx_web3')
-  lazy('binance_web3:web3', () => import('./platforms/binance-web3'), 'BinanceWeb3Connector', 'binance_web3')
-  connectorRegistry.registerLazy('web3_bot:spot' as RegistryKey, async () => {
-    const { Web3BotConnector } = await import('./platforms/web3-bot')
-    return new Web3BotConnector()
-  })
+  lazy(
+    'binance_web3:web3',
+    () => import('./platforms/binance-web3'),
+    'BinanceWeb3Connector',
+    'binance_web3'
+  )
+  // web3_bot: REMOVED — permanently dead, excluded from scoring (commit 51d8de5fc)
 }
 
 // ============================================
@@ -277,7 +373,6 @@ const IMPLEMENTED_PLATFORMS: GranularPlatform[] = [
   'binance_spot', // RE-ENABLED 2026-03-19: added 30s per-page + 4min total timeout
   'bybit',
   'bitget_futures',
-  'bitget_spot',
   'okx',
   'mexc',
   // 'kucoin', — DEAD: APIs 404 since 2026-03
@@ -288,7 +383,6 @@ const IMPLEMENTED_PLATFORMS: GranularPlatform[] = [
   // 'okx_wallet',
   // 'gmx',
   // 'dydx',
-  // 'bitmart',
   // 'phemex',
   // 'htx',
   // 'weex',

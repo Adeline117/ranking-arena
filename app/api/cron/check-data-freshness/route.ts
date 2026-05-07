@@ -44,7 +44,6 @@ const PLATFORM_NAMES: Record<string, string> = {
   binance_web3: 'Binance Web3',
   bybit: 'Bybit',
   bitget_futures: 'Bitget 合约',
-  bitget_spot: 'Bitget 现货',
   mexc: 'MEXC',
   coinex: 'CoinEx',
   okx_web3: 'OKX Web3',
@@ -59,15 +58,12 @@ const PLATFORM_NAMES: Record<string, string> = {
   gateio: 'Gate.io',
   xt: 'XT',
   gains: 'Gains Network',
-  lbank: 'LBank',
   blofin: 'BloFin',
   drift: 'Drift',
   bitunix: 'Bitunix',
   btcc: 'BTCC',
-  bitmart: 'BitMart',
   paradex: 'Paradex',
   bitfinex: 'Bitfinex',
-  web3_bot: 'Web3 Bot',
   toobit: 'Toobit',
   jupiter_perps: 'Jupiter Perps',
   hyperliquid: 'Hyperliquid',
@@ -111,7 +107,7 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
 
   const allPlatforms = getSupportedInlinePlatforms()
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-  const platforms = allPlatforms.filter(p => !deadSet.has(p))
+  const platforms = allPlatforms.filter((p) => !deadSet.has(p))
   const results: PlatformFreshnessStatus[] = []
   const stalePlatforms: string[] = []
   const criticalPlatforms: string[] = []
@@ -177,7 +173,9 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
             if (typeof recentCount === 'number' && recentCount < 5) {
               status = 'stale'
               stalePlatforms.push(platform)
-              logger.warn(`[freshness] ${platform}: latest row is recent but only ${recentCount} rows in window — marking stale`)
+              logger.warn(
+                `[freshness] ${platform}: latest row is recent but only ${recentCount} rows in window — marking stale`
+              )
             }
           } catch {
             // Non-blocking: if the recent count query fails, trust the timestamp check
@@ -195,7 +193,11 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         recordCount: count || 0,
       })
     } catch (error: unknown) {
-      logger.error('Error processing platform freshness', { platform }, error instanceof Error ? error : new Error(String(error)))
+      logger.error(
+        'Error processing platform freshness',
+        { platform },
+        error instanceof Error ? error : new Error(String(error))
+      )
       results.push({
         platform,
         displayName: PLATFORM_NAMES[platform] || platform,
@@ -249,32 +251,28 @@ export async function GET(req: Request) {
     // ── Sentry 告警 ──────────────────────────────────────────
     if (criticalPlatforms.length > 0) {
       const names = criticalPlatforms.map((p) => p.displayName).join(', ')
-      await captureMessage(
-        `[DataFreshness] CRITICAL: ${names} 超过 24 小时未更新`,
-        'error',
+      await captureMessage(`[DataFreshness] CRITICAL: ${names} 超过 24 小时未更新`, 'error', {
+        level: 'critical',
+        stalePlatforms: stalePlatforms.map((p) => p.platform),
+        criticalPlatforms: criticalPlatforms.map((p) => p.platform),
+        summary: report.summary,
+      })
+      logger.error(
+        `Data severely stale: ${names} - not updated in 24h`,
         {
-          level: 'critical',
-          stalePlatforms: stalePlatforms.map((p) => p.platform),
           criticalPlatforms: criticalPlatforms.map((p) => p.platform),
-          summary: report.summary,
-        }
+        },
+        new Error('Data severely stale')
       )
-      logger.error(`Data severely stale: ${names} - not updated in 24h`, {
-        criticalPlatforms: criticalPlatforms.map((p) => p.platform)
-      }, new Error('Data severely stale'))
     } else if (stalePlatforms.length > 0) {
       const names = stalePlatforms.map((p) => p.displayName).join(', ')
-      await captureMessage(
-        `[DataFreshness] STALE: ${names} 超过 8 小时未更新`,
-        'warning',
-        {
-          level: 'stale',
-          stalePlatforms: stalePlatforms.map((p) => p.platform),
-          summary: report.summary,
-        }
-      )
+      await captureMessage(`[DataFreshness] STALE: ${names} 超过 8 小时未更新`, 'warning', {
+        level: 'stale',
+        stalePlatforms: stalePlatforms.map((p) => p.platform),
+        summary: report.summary,
+      })
       logger.warn(`Data stale: ${names} - not updated in 8h`, {
-        stalePlatforms: stalePlatforms.map((p) => p.platform)
+        stalePlatforms: stalePlatforms.map((p) => p.platform),
       })
     }
 
@@ -296,16 +294,23 @@ export async function GET(req: Request) {
       }
       lines.push(`\n✅ ${report.summary.fresh} fresh / ${report.summary.total} total`)
 
-      const platformKey = [...criticalPlatforms, ...stalePlatforms].map(p => p.platform).sort().join(',')
-      await sendRateLimitedAlert({
-        title: '数据新鲜度告警',
-        message: lines.join('\n'),
-        level: isCritical ? 'critical' : 'warning',
-        details: {
-          critical_count: criticalPlatforms.length,
-          stale_count: stalePlatforms.length,
+      const platformKey = [...criticalPlatforms, ...stalePlatforms]
+        .map((p) => p.platform)
+        .sort()
+        .join(',')
+      await sendRateLimitedAlert(
+        {
+          title: '数据新鲜度告警',
+          message: lines.join('\n'),
+          level: isCritical ? 'critical' : 'warning',
+          details: {
+            critical_count: criticalPlatforms.length,
+            stale_count: stalePlatforms.length,
+          },
         },
-      }, `data-freshness:${platformKey}`, 6 * 60 * 60 * 1000)
+        `data-freshness:${platformKey}`,
+        6 * 60 * 60 * 1000
+      )
     }
 
     // ── 外部告警通知（Slack / 飞书等）────────────────────────
@@ -320,22 +325,29 @@ export async function GET(req: Request) {
           // Alert sent successfully
         }
       } catch (error: unknown) {
-        logger.error('Failed to send freshness alert', {}, error instanceof Error ? error : new Error(String(error)))
+        logger.error(
+          'Failed to send freshness alert',
+          {},
+          error instanceof Error ? error : new Error(String(error))
+        )
       }
     }
 
     // ── Self-heal evaluation (Redis-backed consecutive failure tracking) ──
     try {
-      const platformStatuses = report.platforms.map(p => ({
+      const platformStatuses = report.platforms.map((p) => ({
         platform: p.platform,
         ageHours: p.ageHours,
         recordCount: p.recordCount,
       }))
       const selfHealAlerts = await evaluateAndAlert(platformStatuses)
       if (selfHealAlerts.length > 0) {
-        logger.warn(`[DataFreshness] Self-heal triggered alerts for ${selfHealAlerts.length} platforms`, {
-          platforms: selfHealAlerts.map(a => a.platform),
-        })
+        logger.warn(
+          `[DataFreshness] Self-heal triggered alerts for ${selfHealAlerts.length} platforms`,
+          {
+            platforms: selfHealAlerts.map((a) => a.platform),
+          }
+        )
       }
     } catch (shErr) {
       logger.error('[DataFreshness] Self-heal evaluation error:', shErr)
@@ -352,8 +364,7 @@ export async function GET(req: Request) {
     return NextResponse.json(report)
   } catch (error: unknown) {
     await plog.error(error)
-    const message =
-      error instanceof Error ? error.message : 'Unknown error'
+    const message = error instanceof Error ? error.message : 'Unknown error'
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }

@@ -20,56 +20,116 @@
 /** All supported platforms (CEX + DEX + Data Sources) */
 export const PLATFORMS = [
   // CEX
-  'binance', 'bybit', 'bitget', 'mexc', 'coinex', 'okx', 'kucoin',
-  'bitmart', 'phemex', 'htx', 'weex', 'bingx', 'gateio', 'xt',
-  'lbank', 'blofin',
+  'binance',
+  'bybit',
+  'bitget',
+  'mexc',
+  'coinex',
+  'okx',
+  'kucoin',
+  'bitmart',
+  'phemex',
+  'htx',
+  'weex',
+  'bingx',
+  'gateio',
+  'xt',
+  'lbank',
+  'blofin',
   // DEX / On-chain / Perp
-  'gmx', 'dydx', 'hyperliquid', 'gains',
+  'gmx',
+  'dydx',
+  'hyperliquid',
+  'gains',
   // Data/Intelligence (enrichment only)
-  'nansen', 'dune',
+  'nansen',
+  'dune',
   // Dune on-chain leaderboards
-  'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
+  'dune_gmx',
+  'dune_hyperliquid',
+  'dune_uniswap',
+  'dune_defi',
   // Wallet (mapped/degraded)
   'okx_wallet',
 ] as const
 
-export type Platform = typeof PLATFORMS[number]
+export type Platform = (typeof PLATFORMS)[number]
 
 /** Platforms that provide leaderboard data — must match `source` column in DB */
 export const LEADERBOARD_PLATFORMS = [
   // CEX futures
-  'binance_futures', 'bybit', 'bitget_futures', 'okx_futures',
-  'mexc', 'coinex', 'htx_futures', 'bingx', 'gateio', 'xt',
-  'bitmart', 'btcc', 'bitunix', 'bitfinex',
+  'binance_futures',
+  'bybit',
+  'bitget_futures',
+  'okx_futures',
+  'mexc',
+  'coinex',
+  'htx_futures',
+  'bingx',
+  'gateio',
+  'xt',
+  'btcc',
+  'bitunix',
+  'bitfinex',
   // CEX spot
-  'binance_spot', 'bybit_spot', 'okx_spot',
+  'binance_spot',
+  'bybit_spot',
+  'okx_spot',
   // Web3 / DEX
-  'binance_web3', 'okx_web3',
-  'hyperliquid', 'gmx', 'dydx', 'gains', 'jupiter_perps', 'aevo',
-  'drift', 'paradex', 'vertex', 'apex_pro', 'rabbitx',
+  'binance_web3',
+  'okx_web3',
+  'hyperliquid',
+  'gmx',
+  'dydx',
+  'gains',
+  'jupiter_perps',
+  'aevo',
+  'drift',
+  'paradex',
   // Social trading
   'etoro',
-  // Bots
-  'web3_bot',
   // Crypto.com (Cloudflare protected, VPS scraper)
   'crypto_com',
-  // Dead/blocked but may have historical data or connectors
-  'kucoin', 'phemex', 'lbank', 'blofin', 'weex', 'toobit',
-  'kwenta', 'synthetix', 'mux', 'perpetual_protocol', 'pionex',
-  'bitget_spot', 'okx_wallet',
+  // Dead/blocked but kept for historical data queries (type union must include them)
+  'kucoin',
+  'phemex',
+  'lbank',
+  'blofin',
+  'weex',
+  'toobit',
+  'kwenta',
+  'synthetix',
+  'mux',
+  'perpetual_protocol',
+  'pionex',
+  'bitget_spot',
+  'bitmart',
+  'okx_wallet',
+  'web3_bot',
+  'vertex',
+  'apex_pro',
+  'rabbitx',
   // Dune on-chain leaderboards
-  'dune_gmx', 'dune_hyperliquid', 'dune_uniswap', 'dune_defi',
+  'dune_gmx',
+  'dune_hyperliquid',
+  'dune_uniswap',
+  'dune_defi',
   // New platforms (Wave 2)
-  'woox', 'polymarket', 'copin',
+  'woox',
+  'polymarket',
+  'copin',
   // Legacy short names (backward compat for v2 API callers)
-  'binance', 'bitget', 'okx', 'htx',
+  'binance',
+  'bitget',
+  'okx',
+  'htx',
 ] as const
 
-export type LeaderboardPlatform = typeof LEADERBOARD_PLATFORMS[number]
+export type LeaderboardPlatform = (typeof LEADERBOARD_PLATFORMS)[number]
 
 /** Enrichment-only platforms (not leaderboards) */
 export const ENRICHMENT_PLATFORMS = ['nansen', 'dune', 'okx_wallet'] as const
-export type EnrichmentPlatform = typeof ENRICHMENT_PLATFORMS[number]
+export type EnrichmentPlatform = (typeof ENRICHMENT_PLATFORMS)[number]
 
 /** Data supplement sources */
 export const DATA_SOURCES = ['nansen', 'dune'] as const
@@ -77,14 +137,14 @@ export type DataSource = (typeof DATA_SOURCES)[number]
 
 /** Market types within a platform */
 export const MARKET_TYPES = ['futures', 'spot', 'perp', 'web3', 'copy'] as const
-export type MarketType = typeof MARKET_TYPES[number]
+export type MarketType = (typeof MARKET_TYPES)[number]
 
 /** Trading category */
 export type TradingCategory = 'futures' | 'spot' | 'onchain'
 
 /** Time windows for snapshots */
 export const WINDOWS = ['7d', '30d', '90d'] as const
-export type Window = typeof WINDOWS[number]
+export type Window = (typeof WINDOWS)[number]
 
 /** Ranking window (alias for Window for backward compatibility) */
 export type RankingWindow = Window
@@ -401,7 +461,7 @@ export const SERIES_TYPES = [
   'drawdown_curve',
   'aum_history',
 ] as const
-export type SeriesType = typeof SERIES_TYPES[number]
+export type SeriesType = (typeof SERIES_TYPES)[number]
 
 /** Legacy timeseries type */
 export type TimeseriesType = 'equity_curve' | 'drawdown' | 'daily_pnl' | 'position_count'
@@ -444,13 +504,13 @@ export const JOB_TYPES = [
   'PROFILE_ENRICH',
   'TIMESERIES_REFRESH',
 ] as const
-export type JobType = typeof JOB_TYPES[number]
+export type JobType = (typeof JOB_TYPES)[number]
 
 /** Legacy job types */
 export type LegacyJobType = 'discovery' | 'snapshot' | 'profile' | 'timeseries' | 'full_refresh'
 
 export const JOB_STATUSES = ['pending', 'running', 'completed', 'failed', 'cancelled'] as const
-export type JobStatus = typeof JOB_STATUSES[number]
+export type JobStatus = (typeof JOB_STATUSES)[number]
 
 export const JOB_PRIORITIES = {
   USER_TRIGGERED: 10,
@@ -459,7 +519,7 @@ export const JOB_PRIORITIES = {
   SCHEDULED_LONG_TAIL: 40,
   BACKGROUND: 50,
 } as const
-export type JobPriority = typeof JOB_PRIORITIES[keyof typeof JOB_PRIORITIES]
+export type JobPriority = (typeof JOB_PRIORITIES)[keyof typeof JOB_PRIORITIES]
 
 export interface RefreshJob {
   id: string
@@ -509,65 +569,401 @@ export interface RateLimiterConfig {
 
 /** Per-platform rate limit defaults (granular platform IDs) */
 export const PLATFORM_RATE_LIMITS: Record<GranularPlatform, RateLimiterConfig> = {
-  binance_futures: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
-  binance_spot: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
-  binance_web3: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  bybit: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
-  bitget_futures: { max_requests: 20, window_ms: 60_000, min_delay_ms: 2500, max_delay_ms: 5000, max_concurrent: 2 },
-  bitget_spot: { max_requests: 20, window_ms: 60_000, min_delay_ms: 2500, max_delay_ms: 5000, max_concurrent: 2 },
-  mexc: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  coinex: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  okx: { max_requests: 20, window_ms: 60_000, min_delay_ms: 2500, max_delay_ms: 5000, max_concurrent: 2 },
-  okx_futures: { max_requests: 20, window_ms: 60_000, min_delay_ms: 2500, max_delay_ms: 5000, max_concurrent: 2 },
-  okx_web3: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  okx_wallet: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  kucoin: { max_requests: 20, window_ms: 60_000, min_delay_ms: 2500, max_delay_ms: 5000, max_concurrent: 2 },
-  gmx: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
-  dydx: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
-  hyperliquid: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
-  bitmart: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  phemex: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  htx: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  htx_futures: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  weex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 1 },
-  bingx: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  gateio: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  xt: { max_requests: 15, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  pionex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 1 },
-  kwenta: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
-  gains: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
-  mux: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
-  lbank: { max_requests: 20, window_ms: 60_000, min_delay_ms: 3000, max_delay_ms: 6000, max_concurrent: 2 },
-  blofin: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
-  bybit_spot: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
-  jupiter_perps: { max_requests: 30, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
-  aevo: { max_requests: 20, window_ms: 60_000, min_delay_ms: 2500, max_delay_ms: 5000, max_concurrent: 2 },
+  binance_futures: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 2000,
+    max_delay_ms: 5000,
+    max_concurrent: 3,
+  },
+  binance_spot: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 2000,
+    max_delay_ms: 5000,
+    max_concurrent: 3,
+  },
+  binance_web3: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  bybit: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 2000,
+    max_delay_ms: 5000,
+    max_concurrent: 3,
+  },
+  bitget_futures: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 2500,
+    max_delay_ms: 5000,
+    max_concurrent: 2,
+  },
+  bitget_spot: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 2500,
+    max_delay_ms: 5000,
+    max_concurrent: 2,
+  },
+  mexc: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  coinex: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  okx: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 2500,
+    max_delay_ms: 5000,
+    max_concurrent: 2,
+  },
+  okx_futures: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 2500,
+    max_delay_ms: 5000,
+    max_concurrent: 2,
+  },
+  okx_web3: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  okx_wallet: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  kucoin: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 2500,
+    max_delay_ms: 5000,
+    max_concurrent: 2,
+  },
+  gmx: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 5,
+  },
+  dydx: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 5,
+  },
+  hyperliquid: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 5,
+  },
+  bitmart: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  phemex: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  htx: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  htx_futures: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  weex: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 4000,
+    max_delay_ms: 8000,
+    max_concurrent: 1,
+  },
+  bingx: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  gateio: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  xt: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  pionex: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 4000,
+    max_delay_ms: 8000,
+    max_concurrent: 1,
+  },
+  kwenta: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 5,
+  },
+  gains: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 5,
+  },
+  mux: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 5,
+  },
+  lbank: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 3000,
+    max_delay_ms: 6000,
+    max_concurrent: 2,
+  },
+  blofin: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 2000,
+    max_delay_ms: 5000,
+    max_concurrent: 3,
+  },
+  bybit_spot: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 2000,
+    max_delay_ms: 5000,
+    max_concurrent: 3,
+  },
+  jupiter_perps: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 5,
+  },
+  aevo: {
+    max_requests: 20,
+    window_ms: 60_000,
+    min_delay_ms: 2500,
+    max_delay_ms: 5000,
+    max_concurrent: 2,
+  },
   // Dune API rate limits (Free tier: 10 queries/day, Plus tier: 1000 queries/month)
-  etoro: { max_requests: 10, window_ms: 60_000, min_delay_ms: 6000, max_delay_ms: 10000, max_concurrent: 2 },
-  drift: { max_requests: 15, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 2 },
-  bitunix: { max_requests: 15, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 2 },
-  btcc: { max_requests: 15, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 2 },
-  bitfinex: { max_requests: 15, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 2 },
-  toobit: { max_requests: 15, window_ms: 60_000, min_delay_ms: 4000, max_delay_ms: 8000, max_concurrent: 2 },
-  web3_bot: { max_requests: 10, window_ms: 60_000, min_delay_ms: 6000, max_delay_ms: 10000, max_concurrent: 1 },
-  crypto_com: { max_requests: 10, window_ms: 60_000, min_delay_ms: 6000, max_delay_ms: 10000, max_concurrent: 2 },
-  dune_gmx: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
-  dune_hyperliquid: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
-  dune_uniswap: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
-  dune_defi: { max_requests: 5, window_ms: 60_000, min_delay_ms: 12000, max_delay_ms: 20000, max_concurrent: 1 },
+  etoro: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 6000,
+    max_delay_ms: 10000,
+    max_concurrent: 2,
+  },
+  drift: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 4000,
+    max_delay_ms: 8000,
+    max_concurrent: 2,
+  },
+  bitunix: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 4000,
+    max_delay_ms: 8000,
+    max_concurrent: 2,
+  },
+  btcc: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 4000,
+    max_delay_ms: 8000,
+    max_concurrent: 2,
+  },
+  bitfinex: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 4000,
+    max_delay_ms: 8000,
+    max_concurrent: 2,
+  },
+  toobit: {
+    max_requests: 15,
+    window_ms: 60_000,
+    min_delay_ms: 4000,
+    max_delay_ms: 8000,
+    max_concurrent: 2,
+  },
+  web3_bot: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 6000,
+    max_delay_ms: 10000,
+    max_concurrent: 1,
+  },
+  crypto_com: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 6000,
+    max_delay_ms: 10000,
+    max_concurrent: 2,
+  },
+  dune_gmx: {
+    max_requests: 5,
+    window_ms: 60_000,
+    min_delay_ms: 12000,
+    max_delay_ms: 20000,
+    max_concurrent: 1,
+  },
+  dune_hyperliquid: {
+    max_requests: 5,
+    window_ms: 60_000,
+    min_delay_ms: 12000,
+    max_delay_ms: 20000,
+    max_concurrent: 1,
+  },
+  dune_uniswap: {
+    max_requests: 5,
+    window_ms: 60_000,
+    min_delay_ms: 12000,
+    max_delay_ms: 20000,
+    max_concurrent: 1,
+  },
+  dune_defi: {
+    max_requests: 5,
+    window_ms: 60_000,
+    min_delay_ms: 12000,
+    max_delay_ms: 20000,
+    max_concurrent: 1,
+  },
   // New platforms (Wave 2)
-  woox: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 3 },
-  polymarket: { max_requests: 60, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 5 },
-  copin: { max_requests: 30, window_ms: 60_000, min_delay_ms: 2000, max_delay_ms: 5000, max_concurrent: 2 },
+  woox: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 2000,
+    max_delay_ms: 5000,
+    max_concurrent: 3,
+  },
+  polymarket: {
+    max_requests: 60,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 5,
+  },
+  copin: {
+    max_requests: 30,
+    window_ms: 60_000,
+    min_delay_ms: 2000,
+    max_delay_ms: 5000,
+    max_concurrent: 2,
+  },
   // Dead/pending platforms (minimal config for type completeness)
-  okx_spot: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
-  bingx_spot: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
-  paradex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
-  vertex: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
-  apex_pro: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
-  rabbitx: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
-  synthetix: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
-  perpetual_protocol: { max_requests: 10, window_ms: 60_000, min_delay_ms: 1000, max_delay_ms: 3000, max_concurrent: 2 },
+  okx_spot: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 2,
+  },
+  bingx_spot: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 2,
+  },
+  paradex: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 2,
+  },
+  vertex: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 2,
+  },
+  apex_pro: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 2,
+  },
+  rabbitx: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 2,
+  },
+  synthetix: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 2,
+  },
+  perpetual_protocol: {
+    max_requests: 10,
+    window_ms: 60_000,
+    min_delay_ms: 1000,
+    max_delay_ms: 3000,
+    max_concurrent: 2,
+  },
 }
 
 // ============================================
@@ -599,7 +995,15 @@ export interface RankingsQuery {
   platform?: Platform
   limit?: number
   offset?: number
-  sort_by?: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers' | 'win_rate' | 'sharpe_ratio' | 'trades_count'
+  sort_by?:
+    | 'arena_score'
+    | 'roi'
+    | 'pnl'
+    | 'drawdown'
+    | 'copiers'
+    | 'win_rate'
+    | 'sharpe_ratio'
+    | 'trades_count'
   sort_dir?: 'asc' | 'desc'
   min_pnl?: number
   min_trades?: number
@@ -812,7 +1216,10 @@ export const FIELD_DEGRADATIONS: Record<string, FieldDegradation> = {
 }
 
 /** Fields and their simple degradation behavior (legacy format) */
-export const FIELD_DEGRADATION: Record<keyof SnapshotMetricsLegacy, { label: string; fallback: string }> = {
+export const FIELD_DEGRADATION: Record<
+  keyof SnapshotMetricsLegacy,
+  { label: string; fallback: string }
+> = {
   roi_pct: { label: 'ROI', fallback: '—' },
   pnl_usd: { label: 'PnL', fallback: '—' },
   win_rate_pct: { label: 'Win Rate', fallback: 'N/A' },

@@ -579,24 +579,23 @@ export interface EnrichmentResult {
 // 2. Leaderboard normalize() → connector-db-adapter writes copiers/metrics
 // 3. Daily snapshot accumulation → computed equity curve
 export const NO_ENRICHMENT_PLATFORMS = new Set([
-  // Dead platforms — 0 traders or API 404, no data to enrich
+  // Permanently dead platforms — 0 traders or API 404, no data to enrich
   'bitmart',
-  'paradex',
   'lbank',
-  'phemex',
+  'web3_bot',
+  'vertex',
+  'apex_pro',
+  'rabbitx',
+  'perpetual_protocol',
+  'bitget_spot',
+  // Credential-blocked — no data accessible
+  'paradex',
   // Leaderboard-only platforms — all metrics already from normalize(), no separate detail API
-  // Equity curves auto-generated from daily snapshots by aggregate-daily-snapshots cron
-  // bybit_spot: REMOVED — now has enrichment config (2026-04-01), VPS trader-detail reuses same leaderMark format
+  'phemex',
   'binance_web3', // wallet-based, no per-trader detail API, all metrics from leaderboard
-  'web3_bot', // small platform (19 traders), all metrics from leaderboard
-  'vertex', // DEAD: No public leaderboard API — competition backend DNS dead, SDK has 0 leaderboard endpoints (2026-04-01)
-  'apex_pro', // DEAD: No public leaderboard API — tested 8+ endpoint patterns all 404, docs have 0 leaderboard endpoints (2026-04-01)
-  'rabbitx', // DEAD: All domains DNS dead — platform shut down, all infrastructure offline (2026-04-01)
   // 2026-03-31: dydx re-enabled — rewritten to use Copin API with AbortSignal.timeout(8s).
-  // Original indexer (TCP hang) removed. All fetch calls use hardFetch() with runtime-level timeouts.
   // kucoin: REMOVED — now has dedicated enrichment module (2026-03-19)
   // weex: RE-ENABLED — ndaysReturnRates from VPS scraper leaderboard = equity curve
-  // bingx_spot: REMOVED — now uses daily snapshot fallback for equity curves (2026-03-19)
 ])
 
 // Per-platform timeout: prevents any single platform from burning the entire batch budget

@@ -1107,11 +1107,9 @@ async function computeSeason(
             'hyperliquid',
             'gmx',
             'dydx',
-            'vertex',
             'drift',
             'aevo',
             'gains',
-            'kwenta',
             'jupiter_perps',
             'polymarket',
           ].includes(r.source as string)

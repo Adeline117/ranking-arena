@@ -31,28 +31,53 @@ export const maxDuration = 300
 
 const ALL_PLATFORMS = [
   // CEX futures
-  'binance_futures', /* 'binance_spot' REMOVED 2026-03-14 */ 'bybit', 'bitget_futures',
-  'okx_futures', 'mexc', 'coinex', 'htx_futures', 'bingx',
-  'gateio', 'xt', 'bitmart', 'btcc', 'bitunix', 'bitfinex',
+  'binance_futures',
+  /* 'binance_spot' REMOVED 2026-03-14 */ 'bybit',
+  'bitget_futures',
+  'okx_futures',
+  'mexc',
+  'coinex',
+  'htx_futures',
+  'bingx',
+  'gateio',
+  'xt',
+  'btcc',
+  'bitunix',
+  'bitfinex',
   // CEX spot
-  'bybit_spot', 'okx_spot',
+  'bybit_spot',
+  'okx_spot',
   // Web3/DEX
-  'binance_web3', 'okx_web3', 'hyperliquid', 'gmx', 'dydx',
-  'gains', 'jupiter_perps', 'aevo', 'drift', 'paradex',
-  // Bots
-  'web3_bot',
+  'binance_web3',
+  'okx_web3',
+  'hyperliquid',
+  'gmx',
+  'dydx',
+  'gains',
+  'jupiter_perps',
+  'aevo',
+  'drift',
+  'paradex',
 ]
 
 // Platforms that don't support enrichment (wallet-based, CF-protected, or no enrichment API)
 const NO_ENRICHMENT_PLATFORMS = new Set([
   // Wallet-based platforms (no equity curve API)
-  'binance_web3', 'okx_web3', 'web3_bot',
+  'binance_web3',
+  'okx_web3',
   // CF-protected (enrichment not feasible)
   'bingx',
   // API removed/unavailable (2026-03-10)
-  'bybit', 'bybit_spot',
+  'bybit',
+  'bybit_spot',
   // No enrichment API available
-  'bitfinex', 'coinex', 'xt', 'bitmart', 'btcc', 'bitunix', 'paradex', 'okx_spot',
+  'bitfinex',
+  'coinex',
+  'xt',
+  'btcc',
+  'bitunix',
+  'paradex',
+  'okx_spot',
 ])
 
 const TIME_PERIODS = ['7D', '30D', '90D']
@@ -266,12 +291,13 @@ export async function GET(req: NextRequest) {
     ? [platformParam].filter((p) => ALL_PLATFORMS.includes(p))
     : ALL_PLATFORMS
 
-  const periods = periodParam
-    ? [periodParam].filter((p) => TIME_PERIODS.includes(p))
-    : TIME_PERIODS
+  const periods = periodParam ? [periodParam].filter((p) => TIME_PERIODS.includes(p)) : TIME_PERIODS
 
   // Pipeline logging — start early so timeout still gets logged
-  const plog = await PipelineLogger.start(`backfill-data-${type}`, { platforms: platformParam, period: periodParam })
+  const plog = await PipelineLogger.start(`backfill-data-${type}`, {
+    platforms: platformParam,
+    period: periodParam,
+  })
 
   // Time budget: stop after 240s (leave 60s buffer for maxDuration=300)
   // Hard deadline: a single slow connector call can ignore the soft budget
@@ -285,14 +311,18 @@ export async function GET(req: NextRequest) {
   let watchdogFired = false
   const watchdog = setTimeout(async () => {
     watchdogFired = true
-    logger.error(`[backfill] HARD DEADLINE hit at ${Math.round(elapsed() / 1000)}s — finalizing plog as partialSuccess`)
+    logger.error(
+      `[backfill] HARD DEADLINE hit at ${Math.round(elapsed() / 1000)}s — finalizing plog as partialSuccess`
+    )
     try {
       await plog.partialSuccess(0, ['hard_deadline_exceeded'], {
         elapsedMs: elapsed(),
         reason: 'hard_deadline_watchdog',
       })
     } catch (e) {
-      logger.warn(`[backfill] watchdog plog finalize failed: ${e instanceof Error ? e.message : String(e)}`)
+      logger.warn(
+        `[backfill] watchdog plog finalize failed: ${e instanceof Error ? e.message : String(e)}`
+      )
     }
   }, HARD_DEADLINE_MS)
 
@@ -303,7 +333,10 @@ export async function GET(req: NextRequest) {
     clearTimeout(watchdog)
     logger.warn(`[backfill] Connector initialization failed: ${err}`)
     await plog.error(err instanceof Error ? err : new Error(String(err)))
-    return NextResponse.json({ ok: false, error: 'Connector initialization failed' }, { status: 500 })
+    return NextResponse.json(
+      { ok: false, error: 'Connector initialization failed' },
+      { status: 500 }
+    )
   }
 
   const results: BackfillResult[] = []
@@ -322,7 +355,9 @@ export async function GET(req: NextRequest) {
       const remaining = platforms.slice(platforms.indexOf(platform))
       skippedPlatforms.push(...remaining)
       timedOut = true
-      logger.warn(`[backfill] Time budget exceeded at ${Math.round(elapsed() / 1000)}s, processed ${results.length} results, skipping ${remaining.length} platforms`)
+      logger.warn(
+        `[backfill] Time budget exceeded at ${Math.round(elapsed() / 1000)}s, processed ${results.length} results, skipping ${remaining.length} platforms`
+      )
       break
     }
 
@@ -331,20 +366,34 @@ export async function GET(req: NextRequest) {
         // Time budget check before each period
         if (!hasTimeBudget()) {
           timedOut = true
-          logger.warn(`[backfill] Time budget exceeded during ${platform}/${period} at ${Math.round(elapsed() / 1000)}s`)
+          logger.warn(
+            `[backfill] Time budget exceeded during ${platform}/${period} at ${Math.round(elapsed() / 1000)}s`
+          )
           break
         }
 
         // Find and backfill snapshot gaps
         if (type === 'all' || type === 'snapshots') {
           try {
-            const missingSnapshotTraders = await findMissingSnapshotTraders(supabase, platform, period, limit)
+            const missingSnapshotTraders = await findMissingSnapshotTraders(
+              supabase,
+              platform,
+              period,
+              limit
+            )
 
             if (missingSnapshotTraders.length > 0) {
               gapsFound += missingSnapshotTraders.length
-              logger.warn(`[backfill] Found ${missingSnapshotTraders.length} traders missing ${period} snapshots for ${platform}`)
+              logger.warn(
+                `[backfill] Found ${missingSnapshotTraders.length} traders missing ${period} snapshots for ${platform}`
+              )
 
-              const snapshotResult = await backfillSnapshots(supabase, platform, period, missingSnapshotTraders)
+              const snapshotResult = await backfillSnapshots(
+                supabase,
+                platform,
+                period,
+                missingSnapshotTraders
+              )
               results.push(snapshotResult)
               totalProcessed += snapshotResult.tradersProcessed
               totalSuccess += snapshotResult.success
@@ -373,13 +422,25 @@ export async function GET(req: NextRequest) {
           }
 
           try {
-            const missingEnrichmentTraders = await findMissingEnrichmentTraders(supabase, platform, period, limit)
+            const missingEnrichmentTraders = await findMissingEnrichmentTraders(
+              supabase,
+              platform,
+              period,
+              limit
+            )
 
             if (missingEnrichmentTraders.length > 0) {
               gapsFound += missingEnrichmentTraders.length
-              logger.warn(`[backfill] Found ${missingEnrichmentTraders.length} traders missing ${period} enrichment for ${platform}`)
+              logger.warn(
+                `[backfill] Found ${missingEnrichmentTraders.length} traders missing ${period} enrichment for ${platform}`
+              )
 
-              const enrichResult = await backfillEnrichment(supabase, platform, period, missingEnrichmentTraders)
+              const enrichResult = await backfillEnrichment(
+                supabase,
+                platform,
+                period,
+                missingEnrichmentTraders
+              )
               results.push(enrichResult)
               totalProcessed += enrichResult.tradersProcessed
               totalSuccess += enrichResult.success
@@ -425,11 +486,15 @@ export async function GET(req: NextRequest) {
   const hasPartialResults = timedOut || failedPlatforms.length > 0
   if (hasPartialResults) {
     const failedItems = [
-      ...skippedPlatforms.map(p => `skipped:${p}`),
-      ...failedPlatforms.map(p => `failed:${p}`),
+      ...skippedPlatforms.map((p) => `skipped:${p}`),
+      ...failedPlatforms.map((p) => `failed:${p}`),
     ]
     await plog.partialSuccess(totalSuccess, failedItems, {
-      totalFailed, gapsFound, timedOut, skippedPlatforms, failedPlatforms,
+      totalFailed,
+      gapsFound,
+      timedOut,
+      skippedPlatforms,
+      failedPlatforms,
       elapsedMs: duration,
     })
   } else if (totalFailed > 0) {
@@ -455,9 +520,10 @@ export async function GET(req: NextRequest) {
       failed: totalFailed,
     },
     results,
-    nextAction: hasMoreGaps || timedOut
-      ? 'Call this endpoint again to continue backfilling'
-      : 'All gaps have been filled or no gaps found',
+    nextAction:
+      hasMoreGaps || timedOut
+        ? 'Call this endpoint again to continue backfilling'
+        : 'All gaps have been filled or no gaps found',
   })
 }
 

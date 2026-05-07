@@ -11,25 +11,50 @@
 
 export const SUPPORTED_PLATFORMS = [
   // CEX futures
-  'binance_futures', 'bybit', 'bitget_futures', 'okx_futures',
-  'mexc', 'htx_futures', 'coinex', 'bingx', 'gateio', 'xt',
-  'blofin', 'btcc', 'bitfinex', 'bitunix', 'toobit', 'lbank',
-  'weex', 'phemex', 'kucoin',
+  'binance_futures',
+  'bybit',
+  'bitget_futures',
+  'okx_futures',
+  'mexc',
+  'htx_futures',
+  'coinex',
+  'bingx',
+  'gateio',
+  'xt',
+  'blofin',
+  'btcc',
+  'bitfinex',
+  'bitunix',
+  'toobit',
+  'weex',
+  'phemex',
+  'kucoin',
   // CEX spot
-  'binance_spot', 'bybit_spot', 'okx_spot', 'bitget_spot',
+  'binance_spot',
+  'bybit_spot',
+  'okx_spot',
   // Web3 / DEX
-  'binance_web3', 'okx_web3', 'hyperliquid', 'gmx', 'dydx',
-  'gains', 'jupiter_perps', 'aevo', 'drift', 'web3_bot',
+  'binance_web3',
+  'okx_web3',
+  'hyperliquid',
+  'gmx',
+  'dydx',
+  'gains',
+  'jupiter_perps',
+  'aevo',
+  'drift',
   // Social trading
   'etoro',
   // New platforms (Wave 2)
-  'woox', 'polymarket', 'copin',
+  'woox',
+  'polymarket',
+  'copin',
 ] as const
 
-export type Platform = typeof SUPPORTED_PLATFORMS[number]
+export type Platform = (typeof SUPPORTED_PLATFORMS)[number]
 
 export const SNAPSHOT_WINDOWS = ['7D', '30D', '90D'] as const
-export type SnapshotWindow = typeof SNAPSHOT_WINDOWS[number]
+export type SnapshotWindow = (typeof SNAPSHOT_WINDOWS)[number]
 
 export const JOB_TYPES = [
   'full_refresh',
@@ -37,23 +62,13 @@ export const JOB_TYPES = [
   'snapshot_only',
   'timeseries_only',
 ] as const
-export type JobType = typeof JOB_TYPES[number]
+export type JobType = (typeof JOB_TYPES)[number]
 
-export const JOB_STATUSES = [
-  'pending',
-  'running',
-  'success',
-  'failed',
-  'cancelled',
-] as const
-export type JobStatus = typeof JOB_STATUSES[number]
+export const JOB_STATUSES = ['pending', 'running', 'success', 'failed', 'cancelled'] as const
+export type JobStatus = (typeof JOB_STATUSES)[number]
 
-export const SERIES_TYPES = [
-  'equity_curve',
-  'daily_pnl',
-  'asset_breakdown',
-] as const
-export type SeriesType = typeof SERIES_TYPES[number]
+export const SERIES_TYPES = ['equity_curve', 'daily_pnl', 'asset_breakdown'] as const
+export type SeriesType = (typeof SERIES_TYPES)[number]
 
 // ============================================
 // Database Row Types (snake_case, matches DB)
@@ -132,7 +147,7 @@ export interface SnapshotMetrics {
 export interface QualityFlags {
   is_suspicious: boolean
   suspicion_reasons: string[]
-  data_completeness: number  // 0-1
+  data_completeness: number // 0-1
 }
 
 /** DB row type */
@@ -184,7 +199,7 @@ export interface RefreshJobRow {
 // ============================================
 
 export interface EquityCurvePoint {
-  date: string  // ISO date
+  date: string // ISO date
   roi: number
   pnl: number
   equity?: number
@@ -272,7 +287,7 @@ export interface RefreshJobSummary {
 
 export interface RefreshResponse {
   job: RefreshJobSummary
-  created: boolean  // true if new job was created, false if existing job returned
+  created: boolean // true if new job was created, false if existing job returned
 }
 
 // ============================================
@@ -324,14 +339,17 @@ export interface LeaderboardEntry {
 
 /** Data staleness thresholds in seconds */
 export const STALENESS_THRESHOLDS = {
-  FRESH: 3600,        // < 1 hour = fresh
-  ACCEPTABLE: 14400,  // < 4 hours = acceptable
-  STALE: 86400,       // < 24 hours = stale
-  EXPIRED: 259200,    // < 3 days = expired (still show, but warn)
+  FRESH: 3600, // < 1 hour = fresh
+  ACCEPTABLE: 14400, // < 4 hours = acceptable
+  STALE: 86400, // < 24 hours = stale
+  EXPIRED: 259200, // < 3 days = expired (still show, but warn)
 } as const
 
 /** Check if data is stale based on updated_at timestamp */
-export function isDataStale(updatedAt: string, thresholdKey: keyof typeof STALENESS_THRESHOLDS = 'STALE'): boolean {
+export function isDataStale(
+  updatedAt: string,
+  thresholdKey: keyof typeof STALENESS_THRESHOLDS = 'STALE'
+): boolean {
   const ageSeconds = (Date.now() - new Date(updatedAt).getTime()) / 1000
   return ageSeconds > STALENESS_THRESHOLDS[thresholdKey]
 }
