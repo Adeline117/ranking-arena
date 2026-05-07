@@ -399,13 +399,23 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     fetchEquityCurve: async (traderId: string, days: number) => {
       const onchain = await fetchGainsOnchainEquityCurve(traderId, days)
       if (onchain.length > 0) return onchain
-      return fetchGainsEquityCurve(traderId, days)
+      logger.warn(`[gains] onchain equity curve empty for ${traderId}, falling back to Copin`)
+      const fallback = await fetchGainsEquityCurve(traderId, days)
+      if (fallback.length === 0) {
+        logger.warn(`[gains] Copin fallback also empty for ${traderId} — silent data loss`)
+      }
+      return fallback
     },
     fetchStatsDetail: fetchGainsStatsDetail,
     fetchPositionHistory: async (traderId: string) => {
       const onchain = await fetchGainsOnchainPositionHistory(traderId)
       if (onchain.length > 0) return onchain
-      return fetchGainsPositionHistory(traderId)
+      logger.warn(`[gains] onchain positions empty for ${traderId}, falling back to Copin`)
+      const fallback = await fetchGainsPositionHistory(traderId)
+      if (fallback.length === 0) {
+        logger.warn(`[gains] Copin fallback also empty for ${traderId} — silent data loss`)
+      }
+      return fallback
     },
     concurrency: 2,
     delayMs: 1500, // Etherscan rate limits
@@ -416,21 +426,30 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
       // Primary: on-chain via Blockscout Base (free, no API key)
       const onchain = await fetchKwentaOnchainEquityCurve(traderId, days)
       if (onchain.length > 0) return onchain
-      // Fallback: Copin (returns [])
-      return fetchKwentaEquityCurve(traderId, days)
+      logger.warn(`[kwenta] onchain equity curve empty for ${traderId}, falling back to Copin`)
+      const fallback = await fetchKwentaEquityCurve(traderId, days)
+      if (fallback.length === 0) {
+        logger.warn(`[kwenta] Copin fallback also empty for ${traderId} — silent data loss`)
+      }
+      return fallback
     },
     fetchStatsDetail: async (traderId: string) => {
       // Primary: on-chain OrderSettled events
       const onchain = await fetchKwentaOnchainStatsDetail(traderId)
       if (onchain) return onchain
-      // Fallback: Copin leaderboard stats
+      logger.warn(`[kwenta] onchain stats empty for ${traderId}, falling back to Copin`)
       return fetchKwentaStatsDetail(traderId)
     },
     fetchPositionHistory: async (traderId: string) => {
       // Primary: on-chain OrderSettled events
       const onchain = await fetchKwentaOnchainPositionHistory(traderId)
       if (onchain.length > 0) return onchain
-      return fetchKwentaPositionHistory(traderId)
+      logger.warn(`[kwenta] onchain positions empty for ${traderId}, falling back to Copin`)
+      const fallback = await fetchKwentaPositionHistory(traderId)
+      if (fallback.length === 0) {
+        logger.warn(`[kwenta] Copin fallback also empty for ${traderId} — silent data loss`)
+      }
+      return fallback
     },
     concurrency: 2,
     delayMs: 1500, // Slower due to Blockscout rate limits

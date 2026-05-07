@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
+import { PipelineLogger } from '@/lib/services/pipeline-logger'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -21,6 +22,8 @@ export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
+
+  const plog = await PipelineLogger.start('smoke-test')
 
   const base =
     process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL || 'https://www.arenafi.org'
@@ -57,6 +60,13 @@ export async function GET(request: NextRequest) {
       'smoke-test-failure',
       1800000 // 30 min rate limit
     )
+    await plog.partialSuccess(
+      results.length - failures.length,
+      failures.map((f) => `${f.path}:${f.status}`),
+      { results }
+    )
+  } else {
+    await plog.success(results.length, { results })
   }
 
   return NextResponse.json({
