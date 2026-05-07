@@ -384,8 +384,17 @@ export async function GET(request: NextRequest) {
               try {
                 // Route-level timeout wraps runEnrichment to guarantee bail-out
                 const timeoutMs = getRoutePlatformTimeout(platform)
+                // Pass timeBudgetMs so runEnrichment can bail gracefully between
+                // trader batches instead of being killed mid-operation by Promise.race.
+                // This prevents partial DB writes from abandoned enrichment runs.
                 const result: EnrichmentResult = await Promise.race([
-                  runEnrichment({ platform, period, limit, offset }),
+                  runEnrichment({
+                    platform,
+                    period,
+                    limit,
+                    offset,
+                    timeBudgetMs: timeoutMs - 2000,
+                  }),
                   new Promise<never>((_, reject) =>
                     setTimeout(
                       () =>
