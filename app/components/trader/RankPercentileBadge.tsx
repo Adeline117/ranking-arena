@@ -26,30 +26,33 @@ const fetcher = (url: string) =>
     return r.json()
   })
 
-// Badge color tiers
+// Badge color tiers — use design tokens for medal colors
 function getBadgeStyle(percentile: number): { bg: string; color: string; border: string } {
   if (percentile >= 99) {
     // Top 1% — gold
+    const gold = tokens.colors.medal.gold
     return {
-      bg: 'rgba(255, 215, 0, 0.12)',
-      color: '#FFD700',
-      border: 'rgba(255, 215, 0, 0.3)',
+      bg: `color-mix(in srgb, ${gold} 12%, transparent)`,
+      color: gold,
+      border: `color-mix(in srgb, ${gold} 30%, transparent)`,
     }
   }
   if (percentile >= 95) {
     // Top 5% — silver
+    const silver = tokens.colors.medal.silver
     return {
-      bg: 'rgba(192, 192, 192, 0.12)',
-      color: '#C0C0C0',
-      border: 'rgba(192, 192, 192, 0.3)',
+      bg: `color-mix(in srgb, ${silver} 12%, transparent)`,
+      color: silver,
+      border: `color-mix(in srgb, ${silver} 30%, transparent)`,
     }
   }
   if (percentile >= 90) {
     // Top 10% — bronze
+    const bronze = tokens.colors.medal.bronze
     return {
-      bg: 'rgba(205, 127, 50, 0.12)',
-      color: '#CD7F32',
-      border: 'rgba(205, 127, 50, 0.3)',
+      bg: `color-mix(in srgb, ${bronze} 12%, transparent)`,
+      color: bronze,
+      border: `color-mix(in srgb, ${bronze} 30%, transparent)`,
     }
   }
   // Default

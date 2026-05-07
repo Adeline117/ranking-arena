@@ -80,6 +80,7 @@ function getCssVarColors() {
     verified: {
       onchain: 'var(--color-verified-onchain)',
       web3: 'var(--color-verified-web3)',
+      badge: fallback.verified.badge,
     },
     overlay: fallback.overlay,
   }
@@ -93,42 +94,53 @@ export const tokens = {
   get colors() {
     return getCssVarColors()
   },
-  
+
   // Spacing scale (8px base unit)
   spacing: {
     0: '0',
-    0.5: '2px',  // 0.125rem — borders/accents
-    1: '4px',    // 0.25rem
-    1.5: '6px',  // 0.375rem
-    2: '8px',    // 0.5rem
+    0.5: '2px', // 0.125rem — borders/accents
+    1: '4px', // 0.25rem
+    1.5: '6px', // 0.375rem
+    2: '8px', // 0.5rem
     2.5: '10px', // 0.625rem
-    3: '12px',   // 0.75rem
+    3: '12px', // 0.75rem
     3.5: '14px', // 0.875rem
-    4: '16px',   // 1rem
-    5: '20px',   // 1.25rem
-    6: '24px',   // 1.5rem
-    8: '32px',   // 2rem
-    10: '40px',  // 2.5rem
-    12: '48px',  // 3rem
-    16: '64px',  // 4rem
-    20: '80px',  // 5rem
+    4: '16px', // 1rem
+    5: '20px', // 1.25rem
+    6: '24px', // 1.5rem
+    8: '32px', // 2rem
+    10: '40px', // 2.5rem
+    12: '48px', // 3rem
+    16: '64px', // 4rem
+    20: '80px', // 5rem
   },
-  
+
   // Typography
   typography: {
     fontFamily: {
-      sans: ['-apple-system', 'BlinkMacSystemFont', '"Segoe UI"', 'Roboto', '"Helvetica Neue"', 'Arial', '"PingFang SC"', '"Microsoft YaHei"', '"Noto Sans CJK SC"', 'sans-serif'],
+      sans: [
+        '-apple-system',
+        'BlinkMacSystemFont',
+        '"Segoe UI"',
+        'Roboto',
+        '"Helvetica Neue"',
+        'Arial',
+        '"PingFang SC"',
+        '"Microsoft YaHei"',
+        '"Noto Sans CJK SC"',
+        'sans-serif',
+      ],
       mono: ['Menlo', 'Monaco', '"Courier New"', 'monospace'],
     },
     fontSize: {
-      xs: '12px',    // 0.75rem — smallest readable size (note: iOS auto-zooms inputs < 16px, use .no-ios-zoom class)
-      sm: '13px',    // 0.8125rem
-      base: '14px',  // 0.875rem
-      md: '16px',    // 1rem
-      lg: '18px',    // 1.125rem
-      xl: '20px',    // 1.25rem
+      xs: '12px', // 0.75rem — smallest readable size (note: iOS auto-zooms inputs < 16px, use .no-ios-zoom class)
+      sm: '13px', // 0.8125rem
+      base: '14px', // 0.875rem
+      md: '16px', // 1rem
+      lg: '18px', // 1.125rem
+      xl: '20px', // 1.25rem
       '2xl': '24px', // 1.5rem
-      hero: '28px',  // 1.75rem — hero metrics (ROI/PnL)
+      hero: '28px', // 1.75rem — hero metrics (ROI/PnL)
       '3xl': '32px', // 2rem
       '4xl': '40px', // 2.5rem
       '5xl': '48px', // 3rem
@@ -148,7 +160,7 @@ export const tokens = {
       relaxed: 1.75,
     },
   },
-  
+
   // Border radius
   radius: {
     none: '0',
@@ -160,7 +172,7 @@ export const tokens = {
     '3xl': '24px',
     full: '9999px',
   },
-  
+
   // Shadows (enhanced for better depth)
   shadow: {
     none: 'none',
@@ -180,7 +192,7 @@ export const tokens = {
     // Card hover shadow
     cardHover: '0 20px 40px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(139, 111, 168, 0.1)',
   },
-  
+
   // Glassmorphism effects - Using CSS variables for theme-awareness
   glass: {
     // Background colors with transparency - these use CSS variables defined in globals.css
@@ -213,46 +225,53 @@ export const tokens = {
       accent: '1px solid rgba(139, 111, 168, 0.3)',
     },
   },
-  
+
   // Gradient presets
   gradient: {
     // Brand gradients
     primary: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
     primaryHover: 'linear-gradient(135deg, #9d84b5 0%, #8b6fa8 100%)',
-    primarySubtle: 'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.05) 100%)',
-    
+    primarySubtle:
+      'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.05) 100%)',
+
     // Accent gradients
     purple: 'linear-gradient(135deg, #9B7EC8 0%, #7B5EA7 50%, #5E4580 100%)',
-    purpleSubtle: 'linear-gradient(135deg, rgba(155, 126, 200, 0.15) 0%, rgba(94, 69, 128, 0.05) 100%)',
-    
+    purpleSubtle:
+      'linear-gradient(135deg, rgba(155, 126, 200, 0.15) 0%, rgba(94, 69, 128, 0.05) 100%)',
+
     // Status gradients
     success: 'linear-gradient(135deg, #2fe57d 0%, #22c55e 100%)',
-    successSubtle: 'linear-gradient(135deg, rgba(47, 229, 125, 0.2) 0%, rgba(34, 197, 94, 0.05) 100%)',
+    successSubtle:
+      'linear-gradient(135deg, rgba(47, 229, 125, 0.2) 0%, rgba(34, 197, 94, 0.05) 100%)',
     error: 'linear-gradient(135deg, #ff7c7c 0%, #ef4444 100%)',
-    errorSubtle: 'linear-gradient(135deg, rgba(255, 124, 124, 0.2) 0%, rgba(239, 68, 68, 0.05) 100%)',
+    errorSubtle:
+      'linear-gradient(135deg, rgba(255, 124, 124, 0.2) 0%, rgba(239, 68, 68, 0.05) 100%)',
     warning: 'linear-gradient(135deg, #ffc107 0%, #f59e0b 100%)',
-    warningSubtle: 'linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%)',
-    
+    warningSubtle:
+      'linear-gradient(135deg, rgba(255, 193, 7, 0.2) 0%, rgba(245, 158, 11, 0.05) 100%)',
+
     // Background gradients
     dark: 'linear-gradient(180deg, #0B0A10 0%, #14121C 100%)',
     darkRadial: 'radial-gradient(ellipse at top, #1C1926 0%, #0B0A10 100%)',
     mesh: 'radial-gradient(at 40% 20%, rgba(139, 111, 168, 0.15) 0px, transparent 50%), radial-gradient(at 80% 0%, rgba(124, 58, 237, 0.1) 0px, transparent 50%), radial-gradient(at 0% 50%, rgba(167, 139, 250, 0.1) 0px, transparent 50%)',
-    
+
     // Card gradients
     card: 'linear-gradient(145deg, rgba(20, 18, 28, 0.95) 0%, rgba(11, 10, 16, 0.9) 100%)',
     cardHover: 'linear-gradient(145deg, rgba(28, 25, 38, 0.98) 0%, rgba(20, 18, 28, 0.95) 100%)',
     cardGlass: 'linear-gradient(165deg, rgba(28, 25, 38, 0.85) 0%, rgba(11, 10, 16, 0.75) 100%)',
-    
+
     // Shimmer effect for loading states
-    shimmer: 'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 50%, transparent 100%)',
-    
+    shimmer:
+      'linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.08) 50%, transparent 100%)',
+
     // Border gradients (for pseudo-elements)
-    borderGlow: 'linear-gradient(135deg, rgba(139, 111, 168, 0.5) 0%, rgba(124, 58, 237, 0.3) 100%)',
-    
+    borderGlow:
+      'linear-gradient(135deg, rgba(139, 111, 168, 0.5) 0%, rgba(124, 58, 237, 0.3) 100%)',
+
     // Special
     purpleGold: 'linear-gradient(135deg, #8B5CF6 0%, #D4AF37 100%)',
   },
-  
+
   // Animation timing functions
   easing: {
     // Standard easings
@@ -261,18 +280,18 @@ export const tokens = {
     easeIn: 'ease-in',
     easeOut: 'ease-out',
     easeInOut: 'ease-in-out',
-    
+
     // Custom cubic-bezier curves
-    standard: 'cubic-bezier(0.4, 0, 0.2, 1)',     // Material Design standard
-    decelerate: 'cubic-bezier(0, 0, 0.2, 1)',    // Entering elements
-    accelerate: 'cubic-bezier(0.4, 0, 1, 1)',    // Leaving elements
-    sharp: 'cubic-bezier(0.4, 0, 0.6, 1)',       // Quick, sharp movements
-    bounce: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)',  // Bouncy effect
-    elastic: 'cubic-bezier(0.68, -0.6, 0.32, 1.6)',    // More elastic
-    smooth: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)',    // Very smooth
+    standard: 'cubic-bezier(0.4, 0, 0.2, 1)', // Material Design standard
+    decelerate: 'cubic-bezier(0, 0, 0.2, 1)', // Entering elements
+    accelerate: 'cubic-bezier(0.4, 0, 1, 1)', // Leaving elements
+    sharp: 'cubic-bezier(0.4, 0, 0.6, 1)', // Quick, sharp movements
+    bounce: 'cubic-bezier(0.68, -0.55, 0.265, 1.55)', // Bouncy effect
+    elastic: 'cubic-bezier(0.68, -0.6, 0.32, 1.6)', // More elastic
+    smooth: 'cubic-bezier(0.25, 0.46, 0.45, 0.94)', // Very smooth
     spring: 'cubic-bezier(0.175, 0.885, 0.32, 1.275)', // Spring-like
   },
-  
+
   // Animation durations
   duration: {
     instant: '0ms',
@@ -288,7 +307,7 @@ export const tokens = {
     collapse: '250ms',
     page: '400ms',
   },
-  
+
   // Transitions (enhanced for smoother animations)
   transition: {
     fast: '150ms cubic-bezier(0.4, 0, 0.2, 1)',
@@ -304,7 +323,7 @@ export const tokens = {
     shadow: 'box-shadow 300ms cubic-bezier(0.4, 0, 0.2, 1)',
     all: 'all 300ms cubic-bezier(0.4, 0, 0.2, 1)',
   },
-  
+
   // Z-index scale
   zIndex: {
     base: 0,
@@ -317,7 +336,7 @@ export const tokens = {
     toast: 700,
     max: 9999,
   },
-  
+
   // Breakpoints
   breakpoint: {
     xs: '480px',
@@ -340,7 +359,7 @@ export const tokens = {
 
   // Touch targets (minimum sizes for accessibility)
   touchTarget: {
-    min: 44,       // Minimum touch target size (Apple HIG)
+    min: 44, // Minimum touch target size (Apple HIG)
     comfortable: 48,
     large: 56,
   },
@@ -352,7 +371,7 @@ export const tokens = {
     color: 'var(--focus-ring-color, rgba(139, 111, 168, 0.5))',
     style: '2px solid var(--focus-ring-color, rgba(139, 111, 168, 0.5))',
   },
-  
+
   // Animation keyframe names (reference for CSS)
   keyframes: {
     fadeIn: 'fadeIn',
@@ -444,14 +463,14 @@ export const RANK_COLORS_ARRAY = [rankColors.gold, rankColors.silver, rankColors
 
 // News category color map
 export const newsCategories = {
-  crypto:     { color: '#f59e0b' },
-  macro:      { color: '#3b82f6' },
-  defi:       { color: '#10b981' },
+  crypto: { color: '#f59e0b' },
+  macro: { color: '#3b82f6' },
+  defi: { color: '#10b981' },
   regulation: { color: '#8b5cf6' },
-  market:     { color: '#06b6d4' },
+  market: { color: '#06b6d4' },
   // Extended category colors for news display
-  btcEth:     { color: '#f7931a' },
-  exchange:   { color: '#f59e0b' },
+  btcEth: { color: '#f7931a' },
+  exchange: { color: '#f59e0b' },
 } as const
 
 // News importance color map
