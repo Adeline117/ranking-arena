@@ -13,6 +13,7 @@ import SchedulerMetrics from './components/SchedulerMetrics'
 import AnomalyMetrics from './components/AnomalyMetrics'
 import SystemMetrics from './components/SystemMetrics'
 import MetricsTrends from './components/MetricsTrends'
+import EnrichmentCompleteness from './components/EnrichmentCompleteness'
 
 interface SchedulerData {
   enabled: boolean
@@ -247,6 +248,9 @@ export default function MonitoringPage() {
 
             {/* Scheduler Metrics */}
             <SchedulerMetrics data={data.scheduler} />
+
+            {/* Enrichment Completeness */}
+            <EnrichmentCompleteness accessToken={accessToken!} />
 
             {/* Anomaly Detection Metrics */}
             <AnomalyMetrics data={data.anomalyDetection} />
