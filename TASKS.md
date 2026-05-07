@@ -96,12 +96,12 @@ _None currently — see Retired below_
 
 ## ⚪ Backlog
 
-- [ ] snapshots_v2 monthly partitioning (migration prepared, needs maintenance window)
+- [x] snapshots_v2 partitions extended (Jul-Sep 2026) + pg_cron auto-create monthly
 - [ ] US/EU VPS for BloFin + other geo-restricted platforms
-- [ ] leaderboard_ranks UNLOGGED + dual-table swap (reduce WAL writes 3-5x)
-- [x] leaderboard_ranks LIST partition by season_id (migration prepared, apply during low-traffic)
+- [x] leaderboard_ranks UNLOGGED (WAL writes reduced 3-5x, safe: rebuilt hourly)
+- [x] leaderboard_ranks LIST partition by season_id (applied, pruning verified)
 - [x] trader_snapshots v1 BRIN index (replaces 500MB B-tree with 100KB BRIN)
-- [ ] trader_position_history PK refactor (drop unused UUID PK, save 2GB)
+- [x] trader_position_history PK refactor (dropped UUID PK + id column, saved 5GB)
 - [x] ~~Multi-source aggregation: Gains/Kwenta~~ — already done (onchain primary + Copin fallback)
 - [x] Enrichment completeness dashboard in /admin/monitoring
 - [x] ~~Cursor-based pagination~~ — already in /api/rankings (cursor param)
