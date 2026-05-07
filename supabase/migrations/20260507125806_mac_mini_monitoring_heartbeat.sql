@@ -14,9 +14,16 @@ CREATE TABLE IF NOT EXISTS platform_heartbeats (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Immutable wrapper for date_trunc (required for index expressions)
+CREATE OR REPLACE FUNCTION immutable_date_trunc_hour(ts TIMESTAMPTZ)
+RETURNS TIMESTAMPTZ AS $$
+  SELECT date_trunc('hour', ts);
+$$ LANGUAGE sql IMMUTABLE PARALLEL SAFE
+SET search_path = public;
+
 -- One heartbeat per platform per hour (prevent spam)
 CREATE UNIQUE INDEX IF NOT EXISTS idx_heartbeats_platform_hourly
-  ON platform_heartbeats (platform, date_trunc('hour', created_at));
+  ON platform_heartbeats (platform, immutable_date_trunc_hour(created_at));
 
 -- Latest heartbeat per platform
 CREATE INDEX IF NOT EXISTS idx_heartbeats_platform_latest
