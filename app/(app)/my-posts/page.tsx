@@ -1,7 +1,7 @@
 'use client'
 
 import { features } from '@/lib/features'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -13,7 +13,7 @@ import { supabase } from '@/lib/supabase/client'
  * Original code preserved in git history.
  */
 export default function MyPostsPage() {
-  if (!features.social) notFound()
+  if (!features.social) redirect('/')
 
   const router = useRouter()
   const { userId } = useAuthSession()

@@ -4865,6 +4865,12 @@ const ja = {
   libraryFreeLabel: '無料',
   libraryByAuthor: '著者：{author}',
   libraryViewCount: '{count} 回閲覧',
+
+  // Social Coming Soon
+  socialComingSoonTitle: 'コミュニティ機能は近日公開',
+  socialComingSoonDescription:
+    '暗号資産トレーダーのためのコミュニティを構築中です。グループ、投稿、ディスカッション機能が間もなく利用可能になります。',
+  socialComingSoonCta: 'ランキングを見る',
 } as const
 
 export default ja

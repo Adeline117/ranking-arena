@@ -1,7 +1,7 @@
 'use client'
 
 import { features } from '@/lib/features'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
@@ -91,7 +91,7 @@ function PageWrapper({ email, children }: PageWrapperProps): React.ReactElement 
 }
 
 export default function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  if (!features.social) notFound()
+  if (!features.social) redirect('/')
 
   const [groupId, setGroupId] = useState<string>('')
   const abortControllerRef = useRef<AbortController | null>(null)
@@ -104,7 +104,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         })
         .catch(() => {
           /* Intentionally swallowed: params resolution should not fail */
-        }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+        })
     } else {
       setGroupId(String((params as { id: string })?.id ?? ''))
     }
@@ -528,7 +528,6 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       } finally {
         setJoining(false)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; getCsrfHeaders is a pure utility
     },
     [userId, group, isPro, groupId, accessToken, showToast]
   )

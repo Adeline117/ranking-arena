@@ -1,7 +1,7 @@
 'use client'
 
 import { features } from '@/lib/features'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import Image from 'next/image'
@@ -34,12 +34,18 @@ function renderContentWithControls(
   t: (key: string) => string
 ) {
   if (!text) return null
-  
+
   const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  
+
   // 先找出所有图片
-  const imageMatches: { start: number; end: number; alt: string; url: string; imageIndex: number }[] = []
+  const imageMatches: {
+    start: number
+    end: number
+    alt: string
+    url: string
+    imageIndex: number
+  }[] = []
   let match
   let imgIdx = 0
   while ((match = imageRegex.exec(text)) !== null) {
@@ -51,7 +57,7 @@ function renderContentWithControls(
       imageIndex: imgIdx++,
     })
   }
-  
+
   // 如果没有图片，直接处理链接
   if (imageMatches.length === 0) {
     const linkParts = text.split(urlRegex)
@@ -78,11 +84,16 @@ function renderContentWithControls(
       return part
     })
   }
-  
+
   // 构建内容片段
-  const parts: { type: 'text' | 'image' | 'link'; content: string; url?: string; imageIndex?: number }[] = []
+  const parts: {
+    type: 'text' | 'image' | 'link'
+    content: string
+    url?: string
+    imageIndex?: number
+  }[] = []
   let currentIndex = 0
-  
+
   for (const img of imageMatches) {
     if (img.start > currentIndex) {
       const beforeText = text.slice(currentIndex, img.start)
@@ -99,7 +110,7 @@ function renderContentWithControls(
     parts.push({ type: 'image', content: img.alt, url: img.url, imageIndex: img.imageIndex })
     currentIndex = img.end
   }
-  
+
   if (currentIndex < text.length) {
     const afterText = text.slice(currentIndex)
     const linkParts = afterText.split(urlRegex)
@@ -112,13 +123,16 @@ function renderContentWithControls(
       }
     })
   }
-  
+
   return parts.map((part, index) => {
     if (part.type === 'image') {
       const isFirst = part.imageIndex === 0
       const isLast = part.imageIndex === imageCount - 1
       return (
-        <span key={index} style={{ position: 'relative', display: 'inline-block', margin: '4px 6px' }}>
+        <span
+          key={index}
+          style={{ position: 'relative', display: 'inline-block', margin: '4px 6px' }}
+        >
           <Image
             src={part.url || ''}
             alt={part.content || 'image'}
@@ -139,18 +153,23 @@ function renderContentWithControls(
             unoptimized
           />
           {/* 图片控制栏 */}
-          <div style={{
-            position: 'absolute',
-            top: 4,
-            right: 4,
-            display: 'flex',
-            gap: 4,
-            background: 'var(--color-backdrop-medium)',
-            borderRadius: 6,
-            padding: '2px 4px',
-          }}>
+          <div
+            style={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              display: 'flex',
+              gap: 4,
+              background: 'var(--color-backdrop-medium)',
+              borderRadius: 6,
+              padding: '2px 4px',
+            }}
+          >
             <button
-              onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'up') }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveImage(part.url!, 'up')
+              }}
               disabled={isFirst}
               title={t('moveUp')}
               style={{
@@ -170,7 +189,10 @@ function renderContentWithControls(
               ↑
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'down') }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveImage(part.url!, 'down')
+              }}
               disabled={isLast}
               title={t('moveDown')}
               style={{
@@ -189,8 +211,12 @@ function renderContentWithControls(
             >
               ↓
             </button>
-            <button aria-label="Close"
-              onClick={(e) => { e.stopPropagation(); onRemoveImage(part.url!) }}
+            <button
+              aria-label="Close"
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemoveImage(part.url!)
+              }}
               title={t('remove')}
               style={{
                 width: 24,
@@ -235,7 +261,7 @@ function renderContentWithControls(
 }
 
 export default function EditPostPage() {
-  if (!features.social) notFound()
+  if (!features.social) redirect('/')
 
   const params = useParams<{ id: string }>()
   const postId = params.id as string
@@ -260,11 +286,15 @@ export default function EditPostPage() {
 
   // 获取用户信息
   useEffect(() => {
-     
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setUserId(data.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for edit page init */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setEmail(data.user?.email ?? null)
+        setUserId(data.user?.id ?? null)
+      })
+      .catch(() => {
+        /* Intentionally swallowed: auth check non-critical for edit page init */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   // 加载帖子数据
@@ -276,7 +306,9 @@ export default function EditPostPage() {
       try {
         const { data: post, error } = await supabase
           .from('posts')
-          .select('id, title, content, author_handle, author_id, image_url, images, image_urls, link_url, link_title, link_description, link_image, poll_options, poll_votes, poll_end_at, group_id, tags, visibility, created_at, updated_at')
+          .select(
+            'id, title, content, author_handle, author_id, image_url, images, image_urls, link_url, link_title, link_description, link_image, poll_options, poll_votes, poll_end_at, group_id, tags, visibility, created_at, updated_at'
+          )
           .eq('id', postId)
           .single()
 
@@ -309,7 +341,7 @@ export default function EditPostPage() {
     }
 
     loadPost()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; loadPost defined inside effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; loadPost defined inside effect
   }, [postId, userId, router, showToast])
 
   // 处理图片上传
@@ -350,7 +382,7 @@ export default function EditPostPage() {
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
           headers: {
-            ...getCsrfHeaders()
+            ...getCsrfHeaders(),
           },
           body: formData,
         })
@@ -373,7 +405,7 @@ export default function EditPostPage() {
     }
 
     if (newImages.length > 0) {
-      setImages(prev => [...prev, ...newImages])
+      setImages((prev) => [...prev, ...newImages])
       showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
     }
 
@@ -385,22 +417,22 @@ export default function EditPostPage() {
 
   // 移除图片
   const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index))
+    setImages((prev) => prev.filter((_, i) => i !== index))
   }
 
   // 插入图片到内容（在光标位置）
   const insertImageToContent = (url: string) => {
     const imageMarkdown = `\n![image](${url})\n`
-    
+
     if (cursorPosition !== null) {
-      setContent(prev => {
+      setContent((prev) => {
         const before = prev.slice(0, cursorPosition)
         const after = prev.slice(cursorPosition)
         return before + imageMarkdown + after
       })
       setCursorPosition(cursorPosition + imageMarkdown.length)
     } else {
-      setContent(prev => prev + imageMarkdown)
+      setContent((prev) => prev + imageMarkdown)
     }
     showToast(t('imageInserted'), 'info')
   }
@@ -414,7 +446,7 @@ export default function EditPostPage() {
       matches.push({ match: m[0], start: m.index, end: m.index + m[0].length })
     }
 
-    const currentIndex = matches.findIndex(m => m.match.includes(url))
+    const currentIndex = matches.findIndex((m) => m.match.includes(url))
     if (currentIndex === -1) return
 
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
@@ -431,15 +463,21 @@ export default function EditPostPage() {
     const placeholder2 = `__PLACEHOLDER_2__`
 
     if (direction === 'up') {
-      newContent = newContent.slice(0, target.start) + placeholder1 + 
-                   newContent.slice(target.end, current.start) + placeholder2 + 
-                   newContent.slice(current.end)
+      newContent =
+        newContent.slice(0, target.start) +
+        placeholder1 +
+        newContent.slice(target.end, current.start) +
+        placeholder2 +
+        newContent.slice(current.end)
       newContent = newContent.replace(placeholder1, current.match)
       newContent = newContent.replace(placeholder2, target.match)
     } else {
-      newContent = newContent.slice(0, current.start) + placeholder1 + 
-                   newContent.slice(current.end, target.start) + placeholder2 + 
-                   newContent.slice(target.end)
+      newContent =
+        newContent.slice(0, current.start) +
+        placeholder1 +
+        newContent.slice(current.end, target.start) +
+        placeholder2 +
+        newContent.slice(target.end)
       newContent = newContent.replace(placeholder1, target.match)
       newContent = newContent.replace(placeholder2, current.match)
     }
@@ -450,8 +488,16 @@ export default function EditPostPage() {
 
   // 从内容中移除图片
   const removeImageFromContent = (url: string) => {
-    const imagePattern = new RegExp(`\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`, 'g')
-    setContent(prev => prev.replace(imagePattern, '\n').replace(/\n{3,}/g, '\n\n').trim())
+    const imagePattern = new RegExp(
+      `\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`,
+      'g'
+    )
+    setContent((prev) =>
+      prev
+        .replace(imagePattern, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    )
     showToast(t('imageRemovedFromContent'), 'info')
   }
 
@@ -475,8 +521,8 @@ export default function EditPostPage() {
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault()
     if (draggedImageIndex === null || draggedImageIndex === index) return
-    
-    setImages(prev => {
+
+    setImages((prev) => {
       const newImages = [...prev]
       const draggedImage = newImages[draggedImageIndex]
       newImages.splice(draggedImageIndex, 1)
@@ -514,9 +560,9 @@ export default function EditPostPage() {
       // 如果有图片但没有插入到内容中，自动附加到内容末尾
       let finalContent = content
       if (images.length > 0) {
-        const unincludedImages = images.filter(img => !content.includes(img.url))
+        const unincludedImages = images.filter((img) => !content.includes(img.url))
         if (unincludedImages.length > 0) {
-          finalContent += '\n\n' + unincludedImages.map(img => `![image](${img.url})`).join('\n')
+          finalContent += '\n\n' + unincludedImages.map((img) => `![image](${img.url})`).join('\n')
         }
       }
 
@@ -525,7 +571,7 @@ export default function EditPostPage() {
         .update({
           title,
           content: finalContent,
-          images: images.map(img => img.url),
+          images: images.map((img) => img.url),
           updated_at: new Date().toISOString(),
         })
         .eq('id', postId)
@@ -549,7 +595,13 @@ export default function EditPostPage() {
 
   if (loading) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <TopNav email={email} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
           <RankingSkeleton />
@@ -560,17 +612,38 @@ export default function EditPostPage() {
 
   if (!originalPost) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <TopNav email={email} />
-        <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text size="lg" color="secondary">{t('postNotFoundOrNoPermission')}</Text>
+        <Box
+          style={{
+            maxWidth: 800,
+            margin: '0 auto',
+            padding: tokens.spacing[6],
+            textAlign: 'center',
+          }}
+        >
+          <Text size="lg" color="secondary">
+            {t('postNotFoundOrNoPermission')}
+          </Text>
         </Box>
       </Box>
     )
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <TopNav email={email} />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
@@ -583,13 +656,25 @@ export default function EditPostPage() {
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
           {/* 标题 */}
           <Box>
-            <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
+            <Box
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: tokens.spacing[2],
+              }}
+            >
               <Text size="sm" weight="bold">
                 {t('titleLabel')}
               </Text>
-              <Text 
-                size="xs" 
-                style={{ color: title.length > TITLE_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.text.tertiary }}
+              <Text
+                size="xs"
+                style={{
+                  color:
+                    title.length > TITLE_MAX_LENGTH
+                      ? tokens.colors.accent.error
+                      : tokens.colors.text.tertiary,
+                }}
               >
                 {title.length}/{TITLE_MAX_LENGTH}
               </Text>
@@ -611,7 +696,11 @@ export default function EditPostPage() {
                 width: '100%',
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.md,
-                border: '1px solid ' + (title.length > TITLE_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary),
+                border:
+                  '1px solid ' +
+                  (title.length > TITLE_MAX_LENGTH
+                    ? tokens.colors.accent.error
+                    : tokens.colors.border.primary),
                 background: tokens.colors.bg.secondary,
                 color: tokens.colors.text.primary,
                 fontSize: tokens.typography.fontSize.base,
@@ -623,12 +712,26 @@ export default function EditPostPage() {
 
           {/* 内容 */}
           <Box>
-            <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[2] }}>
+            <Box
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                marginBottom: tokens.spacing[2],
+              }}
+            >
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                 <Text size="sm" weight="bold">
                   {t('contentLabel')}
                 </Text>
-                <Box style={{ display: 'flex', borderRadius: tokens.radius.md, overflow: 'hidden', border: ('1px solid ' + tokens.colors.border.primary) }}>
+                <Box
+                  style={{
+                    display: 'flex',
+                    borderRadius: tokens.radius.md,
+                    overflow: 'hidden',
+                    border: '1px solid ' + tokens.colors.border.primary,
+                  }}
+                >
                   <button
                     type="button"
                     onClick={() => setShowPreview(false)}
@@ -653,7 +756,7 @@ export default function EditPostPage() {
                     style={{
                       padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                       border: 'none',
-                      borderLeft: ('1px solid ' + tokens.colors.border.primary),
+                      borderLeft: '1px solid ' + tokens.colors.border.primary,
                       background: showPreview ? tokens.colors.accent.brand : 'transparent',
                       color: showPreview ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                       fontSize: tokens.typography.fontSize.xs,
@@ -668,14 +771,19 @@ export default function EditPostPage() {
                   </button>
                 </Box>
               </Box>
-              <Text 
-                size="xs" 
-                style={{ color: content.length > CONTENT_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.text.tertiary }}
+              <Text
+                size="xs"
+                style={{
+                  color:
+                    content.length > CONTENT_MAX_LENGTH
+                      ? tokens.colors.accent.error
+                      : tokens.colors.text.tertiary,
+                }}
               >
                 {content.length}/{CONTENT_MAX_LENGTH}
               </Text>
             </Box>
-            
+
             {showPreview ? (
               <Box
                 style={{
@@ -683,7 +791,7 @@ export default function EditPostPage() {
                   minHeight: 288,
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: ('2px solid ' + tokens.colors.accent.brand),
+                  border: '2px solid ' + tokens.colors.accent.brand,
                   background: `linear-gradient(135deg, var(--color-accent-primary-08) 0%, var(--color-accent-primary-10) 100%)`,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
@@ -709,13 +817,17 @@ export default function EditPostPage() {
                 >
                   {t('previewMode')}
                 </Box>
-                {content ? renderContentWithControls(
-                  content,
-                  moveImageInContent,
-                  removeImageFromContent,
-                  (content.match(/!\[image\]\([^)]+\)/g) || []).length,
-                  t
-                ) : <Text color="tertiary">{t('previewPlaceholder')}</Text>}
+                {content ? (
+                  renderContentWithControls(
+                    content,
+                    moveImageInContent,
+                    removeImageFromContent,
+                    (content.match(/!\[image\]\([^)]+\)/g) || []).length,
+                    t
+                  )
+                ) : (
+                  <Text color="tertiary">{t('previewPlaceholder')}</Text>
+                )}
               </Box>
             ) : (
               <textarea
@@ -741,7 +853,11 @@ export default function EditPostPage() {
                   width: '100%',
                   padding: tokens.spacing[4],
                   borderRadius: tokens.radius.md,
-                  border: '1px solid ' + (content.length > CONTENT_MAX_LENGTH ? tokens.colors.accent.error : tokens.colors.border.primary),
+                  border:
+                    '1px solid ' +
+                    (content.length > CONTENT_MAX_LENGTH
+                      ? tokens.colors.accent.error
+                      : tokens.colors.border.primary),
                   background: tokens.colors.bg.secondary,
                   color: tokens.colors.text.primary,
                   fontSize: tokens.typography.fontSize.base,
@@ -756,10 +872,14 @@ export default function EditPostPage() {
 
           {/* 图片上传区域 */}
           <Box>
-            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+            <Text
+              size="sm"
+              weight="bold"
+              style={{ marginBottom: tokens.spacing[2], display: 'block' }}
+            >
               {t('imagesOptional')}
             </Text>
-            
+
             <input
               ref={fileInputRef}
               type="file"
@@ -768,133 +888,160 @@ export default function EditPostPage() {
               onChange={handleImageUpload}
               style={{ display: 'none' }}
             />
-            
+
             {/* 操作提示 */}
-            <Box 
-              style={{ 
+            <Box
+              style={{
                 padding: tokens.spacing[3],
                 marginBottom: tokens.spacing[3],
                 background: 'var(--color-accent-primary-10)',
                 borderRadius: tokens.radius.md,
-                border: ('1px dashed ' + tokens.colors.accent.brand),
+                border: '1px dashed ' + tokens.colors.accent.brand,
               }}
             >
               <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
                 <strong>{t('imageInsertGuideTitle')}</strong>
               </Text>
               <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
-                {t('imageInsertStep1')}<br />
-                {t('imageInsertStep2')} <span style={{ background: tokens.colors.accent.brand, color: tokens.colors.white, padding: '0 4px', borderRadius: 3 }}>↵</span> {t('imageInsertStep2Suffix')}<br />
+                {t('imageInsertStep1')}
+                <br />
+                {t('imageInsertStep2')}{' '}
+                <span
+                  style={{
+                    background: tokens.colors.accent.brand,
+                    color: tokens.colors.white,
+                    padding: '0 4px',
+                    borderRadius: 3,
+                  }}
+                >
+                  ↵
+                </span>{' '}
+                {t('imageInsertStep2Suffix')}
+                <br />
                 {t('imageInsertStep3')}
               </Text>
             </Box>
-            
-            <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+
+            <Box
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: tokens.spacing[2],
+                marginBottom: tokens.spacing[3],
+              }}
+            >
               {images.map((img, index) => {
                 const inContent = isImageInContent(img.url)
                 return (
-                <Box
-                  key={img.url}
-                  draggable
-                  onDragStart={() => handleDragStart(index)}
-                  onDragOver={(e) => handleDragOver(e, index)}
-                  onDragEnd={handleDragEnd}
-                  style={{
-                    position: 'relative',
-                    width: 100,
-                    height: 100,
-                    borderRadius: tokens.radius.md,
-                    overflow: 'hidden',
-                    border: inContent 
-                      ? ('2px solid ' + tokens.colors.accent.brand)
-                      : draggedImageIndex === index 
-                        ? ('2px solid ' + tokens.colors.accent.brand) 
-                        : ('1px solid ' + tokens.colors.border.primary),
-                    cursor: 'grab',
-                    opacity: draggedImageIndex === index ? 0.7 : 1,
-                    transition: `all ${tokens.transition.base}`,
-                  }}
-                >
-                  <Image
-                    src={img.url}
-                    alt={img.fileName}
-                    width={120}
-                    height={120}
-                    draggable={false}
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', pointerEvents: 'none' }}
-                    unoptimized
-                  />
-                  {/* 已插入标记 */}
-                  {inContent && (
+                  <Box
+                    key={img.url}
+                    draggable
+                    onDragStart={() => handleDragStart(index)}
+                    onDragOver={(e) => handleDragOver(e, index)}
+                    onDragEnd={handleDragEnd}
+                    style={{
+                      position: 'relative',
+                      width: 100,
+                      height: 100,
+                      borderRadius: tokens.radius.md,
+                      overflow: 'hidden',
+                      border: inContent
+                        ? '2px solid ' + tokens.colors.accent.brand
+                        : draggedImageIndex === index
+                          ? '2px solid ' + tokens.colors.accent.brand
+                          : '1px solid ' + tokens.colors.border.primary,
+                      cursor: 'grab',
+                      opacity: draggedImageIndex === index ? 0.7 : 1,
+                      transition: `all ${tokens.transition.base}`,
+                    }}
+                  >
+                    <Image
+                      src={img.url}
+                      alt={img.fileName}
+                      width={120}
+                      height={120}
+                      draggable={false}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        pointerEvents: 'none',
+                      }}
+                      unoptimized
+                    />
+                    {/* 已插入标记 */}
+                    {inContent && (
+                      <Box
+                        style={{
+                          position: 'absolute',
+                          bottom: 0,
+                          left: 0,
+                          right: 0,
+                          background: 'var(--color-accent-primary)',
+                          color: tokens.colors.white,
+                          fontSize: 10,
+                          textAlign: 'center',
+                          padding: '2px 0',
+                        }}
+                      >
+                        {t('inserted')}
+                      </Box>
+                    )}
                     <Box
                       style={{
                         position: 'absolute',
-                        bottom: 0,
-                        left: 0,
-                        right: 0,
-                        background: 'var(--color-accent-primary)',
-                        color: tokens.colors.white,
-                        fontSize: 10,
-                        textAlign: 'center',
-                        padding: '2px 0',
+                        top: 4,
+                        right: 4,
+                        display: 'flex',
+                        gap: 4,
                       }}
                     >
-                      {t('inserted')}
+                      <button
+                        type="button"
+                        onClick={() => insertImageToContent(img.url)}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          border: 'none',
+                          background: 'var(--color-accent-primary)',
+                          color: tokens.colors.white,
+                          fontSize: 12,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}
+                      >
+                        ↵
+                      </button>
+                      <button
+                        aria-label="Close"
+                        type="button"
+                        onClick={() => removeImage(index)}
+                        style={{
+                          width: 24,
+                          height: 24,
+                          borderRadius: '50%',
+                          border: 'none',
+                          background: 'var(--color-accent-error)',
+                          color: tokens.colors.white,
+                          fontSize: 12,
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                        title={t('deleteImage')}
+                      >
+                        ×
+                      </button>
                     </Box>
-                  )}
-                  <Box
-                    style={{
-                      position: 'absolute',
-                      top: 4,
-                      right: 4,
-                      display: 'flex',
-                      gap: 4,
-                    }}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => insertImageToContent(img.url)}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: '50%',
-                        border: 'none',
-                        background: 'var(--color-accent-primary)',
-                        color: tokens.colors.white,
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                      title={inContent ? t('reinsertAtCursor') : t('insertAtCursor')}
-                    >
-                      ↵
-                    </button>
-                    <button aria-label="Close"
-                      type="button"
-                      onClick={() => removeImage(index)}
-                      style={{
-                        width: 24,
-                        height: 24,
-                        borderRadius: '50%',
-                        border: 'none',
-                        background: 'var(--color-accent-error)',
-                        color: tokens.colors.white,
-                        fontSize: 12,
-                        cursor: 'pointer',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                      title={t('deleteImage')}
-                    >
-                      ×
-                    </button>
                   </Box>
-                </Box>
-              )})}
-              
+                )
+              })}
+
               {images.length < 9 && (
                 <button
                   type="button"
@@ -904,7 +1051,7 @@ export default function EditPostPage() {
                     width: 100,
                     height: 100,
                     borderRadius: tokens.radius.md,
-                    border: ('2px dashed ' + tokens.colors.border.primary),
+                    border: '2px dashed ' + tokens.colors.border.primary,
                     background: 'transparent',
                     color: tokens.colors.text.tertiary,
                     fontSize: 32,
@@ -922,19 +1069,18 @@ export default function EditPostPage() {
           </Box>
 
           {/* 操作按钮 */}
-          <Box style={{ display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[3], marginTop: tokens.spacing[4] }}>
-            <Button
-              variant="secondary"
-              onClick={() => router.push('/my-posts')}
-              disabled={saving}
-            >
+          <Box
+            style={{
+              display: 'flex',
+              justifyContent: 'flex-end',
+              gap: tokens.spacing[3],
+              marginTop: tokens.spacing[4],
+            }}
+          >
+            <Button variant="secondary" onClick={() => router.push('/my-posts')} disabled={saving}>
               {t('cancel')}
             </Button>
-            <Button
-              variant="primary"
-              onClick={handleSubmit}
-              disabled={saving || !title.trim()}
-            >
+            <Button variant="primary" onClick={handleSubmit} disabled={saving || !title.trim()}>
               {saving ? t('savingChanges') : t('saveChanges')}
             </Button>
           </Box>
@@ -943,4 +1089,3 @@ export default function EditPostPage() {
     </Box>
   )
 }
-

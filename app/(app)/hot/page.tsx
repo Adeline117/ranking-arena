@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { features } from '@/lib/features'
-import { notFound } from 'next/navigation'
 import { Suspense } from 'react'
 import { unstable_cache } from 'next/cache'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
@@ -8,16 +7,19 @@ import { tokens } from '@/lib/design-tokens'
 import TopNav from '@/app/components/layout/TopNav'
 import { Box } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
+import SocialComingSoonPage from '@/app/components/ui/SocialComingSoonPage'
 import HotContent from './HotContent'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
   title: 'Hot Posts & Trending Discussions',
-  description: 'Trending crypto trading discussions, market insights, and top posts from the Arena community.',
+  description:
+    'Trending crypto trading discussions, market insights, and top posts from the Arena community.',
   alternates: { canonical: `${BASE_URL}/hot` },
   openGraph: {
     title: 'Hot Posts & Trending Discussions',
-    description: 'Trending crypto trading discussions, market insights, and top posts from the Arena community.',
+    description:
+      'Trending crypto trading discussions, market insights, and top posts from the Arena community.',
     url: `${BASE_URL}/hot`,
     images: [{ url: `${BASE_URL}/api/og`, width: 1200, height: 630 }],
   },
@@ -38,13 +40,15 @@ const getHotPosts = unstable_cache(
       const supabase = getSupabaseAdmin()
       const { data } = await supabase
         .from('posts')
-        .select(`
+        .select(
+          `
           id, title, content, created_at,
           like_count, comment_count, view_count, hot_score, dislike_count,
           group_id,
           groups:group_id(name, name_en),
           user_profiles:author_id(handle, avatar_url, display_name)
-        `)
+        `
+        )
         .order('hot_score', { ascending: false })
         .limit(30)
 
@@ -67,7 +71,10 @@ const getHotPosts = unstable_cache(
           group: (groups?.name as string) || '',
           group_en: (groups?.name_en as string) || undefined,
           group_id: (post.group_id as string) || undefined,
-          title: ((post.title as string) && (post.title as string) !== 'Untitled') ? (post.title as string) : '',
+          title:
+            (post.title as string) && (post.title as string) !== 'Untitled'
+              ? (post.title as string)
+              : '',
           author: (author?.handle as string) || 'user',
           author_handle: (author?.handle as string) || undefined,
           time: timeStr,
@@ -90,19 +97,27 @@ const getHotPosts = unstable_cache(
 )
 
 export default async function HotPage() {
-  if (!features.social) notFound()
+  if (!features.social) return <SocialComingSoonPage />
 
   const initialPosts = await getHotPosts()
 
   return (
-    <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
-        <TopNav email={null} />
-        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <RankingSkeleton />
+    <Suspense
+      fallback={
+        <Box
+          style={{
+            minHeight: '100vh',
+            background: 'var(--color-bg-primary)',
+            color: 'var(--color-text-primary)',
+          }}
+        >
+          <TopNav email={null} />
+          <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
+            <RankingSkeleton />
+          </Box>
         </Box>
-      </Box>
-    }>
+      }
+    >
       <HotContent initialPosts={initialPosts} />
     </Suspense>
   )

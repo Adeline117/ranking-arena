@@ -1,7 +1,7 @@
 'use client'
 
 import { features } from '@/lib/features'
-import { notFound } from 'next/navigation'
+import { redirect } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
@@ -22,7 +22,7 @@ import { RoleNameSettings } from './components/RoleNameSettings'
 import type { RoleNames, Rule } from './types'
 
 export default function ApplyGroupPage() {
-  if (!features.social) notFound()
+  if (!features.social) redirect('/')
 
   const _router = useRouter()
   const { t, language } = useLanguage()
@@ -44,11 +44,11 @@ export default function ApplyGroupPage() {
   // 表单状态 - 中文
   const [nameZh, setNameZh] = useState('')
   const [descriptionZh, setDescriptionZh] = useState('')
-  
+
   // 表单状态 - 英文
   const [nameEn, setNameEn] = useState('')
   const [descriptionEn, setDescriptionEn] = useState('')
-  
+
   // 小组规则（支持多条，中英文）
   const [rules, setRules] = useState<Rule[]>([])
   const [newRuleZh, setNewRuleZh] = useState('')
@@ -58,9 +58,9 @@ export default function ApplyGroupPage() {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [roleNames, setRoleNames] = useState<RoleNames>({
     admin: { zh: '管理员', en: 'Admin' },
-    member: { zh: '成员', en: 'Member' }
+    member: { zh: '成员', en: 'Member' },
   })
-  
+
   // Pro 专属小组选项
   const [isPremiumOnly, setIsPremiumOnly] = useState(false)
 
@@ -91,14 +91,14 @@ export default function ApplyGroupPage() {
   const fetchMyApplications = async (token: string) => {
     try {
       const res = await fetch('/api/groups/apply', {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
-      
+
       if (!res.ok) {
         logger.warn('Failed to fetch applications:', res.status)
         return
       }
-      
+
       const data = await res.json()
       if (data.applications) {
         setExistingApplications(data.applications)
@@ -111,9 +111,9 @@ export default function ApplyGroupPage() {
   const addRule = () => {
     const zhText = newRuleZh.trim()
     const enText = newRuleEn.trim()
-    
+
     if (!zhText && !enText) return
-    
+
     setRules([...rules, { zh: zhText, en: enText }])
     setNewRuleZh('')
     setNewRuleEn('')
@@ -218,7 +218,7 @@ export default function ApplyGroupPage() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({
           name: nameZh.trim() || nameEn.trim(),
@@ -228,14 +228,18 @@ export default function ApplyGroupPage() {
           avatar_url: avatarUrl.trim() || null,
           role_names: roleNames,
           rules_json: rules.length > 0 ? rules : null,
-          rules: rules.map(r => r.zh).filter(Boolean).join('\n') || null,
+          rules:
+            rules
+              .map((r) => r.zh)
+              .filter(Boolean)
+              .join('\n') || null,
           is_premium_only: isPro && isPremiumOnly,
-        })
+        }),
       })
 
       if (!res.ok) {
         let errorMessage = t('submissionFailed')
-        
+
         try {
           const data = await res.json()
           if (data.error) {
@@ -254,7 +258,7 @@ export default function ApplyGroupPage() {
             errorMessage = t('serverError')
           }
         }
-        
+
         setError(errorMessage)
         return
       }
@@ -268,11 +272,11 @@ export default function ApplyGroupPage() {
     } catch (err) {
       logger.error('Submit error:', err)
       let errorMessage = t('networkErrorCheckConnection')
-      
+
       if (err instanceof TypeError && err.message.includes('fetch')) {
         errorMessage = t('cannotConnectToServer')
       }
-      
+
       setError(errorMessage)
     } finally {
       setLoading(false)
@@ -283,7 +287,7 @@ export default function ApplyGroupPage() {
     width: '100%',
     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
     borderRadius: tokens.radius.lg,
-    border: ('1px solid ' + tokens.colors.border.primary),
+    border: '1px solid ' + tokens.colors.border.primary,
     background: tokens.colors.bg.primary,
     color: tokens.colors.text.primary,
     fontSize: tokens.typography.fontSize.base,
@@ -313,9 +317,21 @@ export default function ApplyGroupPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, { bg: string; color: string; key: string }> = {
-      pending: { bg: 'var(--color-orange-bg-light)', color: 'var(--color-accent-warning)', key: 'pendingReview' },
-      approved: { bg: 'var(--color-accent-success-20)', color: 'var(--color-accent-success)', key: 'approved' },
-      rejected: { bg: 'var(--color-red-bg-light)', color: 'var(--color-accent-error)', key: 'rejected' }
+      pending: {
+        bg: 'var(--color-orange-bg-light)',
+        color: 'var(--color-accent-warning)',
+        key: 'pendingReview',
+      },
+      approved: {
+        bg: 'var(--color-accent-success-20)',
+        color: 'var(--color-accent-success)',
+        key: 'approved',
+      },
+      rejected: {
+        bg: 'var(--color-red-bg-light)',
+        color: 'var(--color-accent-error)',
+        key: 'rejected',
+      },
     }
     const style = styles[status] || styles.pending
     return (
@@ -338,7 +354,13 @@ export default function ApplyGroupPage() {
 
   if (!accessToken) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <TopNav email={email} />
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Card title={t('applyCreateGroup')}>
@@ -347,9 +369,7 @@ export default function ApplyGroupPage() {
                 {t('groupApplyLoginRequired')}
               </Text>
               <Link href="/login?redirect=/groups/apply">
-                <Button variant="primary">
-                  {t('goToLogin')}
-                </Button>
+                <Button variant="primary">{t('goToLogin')}</Button>
               </Link>
             </Box>
           </Card>
@@ -360,23 +380,40 @@ export default function ApplyGroupPage() {
 
   if (success) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <TopNav email={email} />
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Card title={t('groupApplyCreated')}>
             <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
-              <Box style={{ 
-                width: 64, 
-                height: 64,
-                borderRadius: '50%',
-                background: 'var(--color-accent-primary-20)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto',
-                marginBottom: tokens.spacing[4],
-              }}>
-                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <Box
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: '50%',
+                  background: 'var(--color-accent-primary-20)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  margin: '0 auto',
+                  marginBottom: tokens.spacing[4],
+                }}
+              >
+                <svg
+                  width="32"
+                  height="32"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={tokens.colors.accent.brand}
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </Box>
@@ -391,9 +428,7 @@ export default function ApplyGroupPage() {
                   {t('applyAnother')}
                 </Button>
                 <Link href="/groups">
-                  <Button variant="primary">
-                    {t('backToGroups')}
-                  </Button>
+                  <Button variant="primary">{t('backToGroups')}</Button>
                 </Link>
               </Box>
             </Box>
@@ -404,7 +439,13 @@ export default function ApplyGroupPage() {
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <TopNav email={email} />
 
       <Box as="main" style={{ maxWidth: 700, margin: '0 auto', padding: tokens.spacing[6] }}>
@@ -438,7 +479,7 @@ export default function ApplyGroupPage() {
                     padding: tokens.spacing[3],
                     background: tokens.colors.bg.secondary,
                     borderRadius: tokens.radius.lg,
-                    border: ('1px solid ' + tokens.colors.border.primary),
+                    border: '1px solid ' + tokens.colors.border.primary,
                   }}
                 >
                   <Box>
@@ -458,10 +499,14 @@ export default function ApplyGroupPage() {
         <Card title={t('applyCreateGroup')}>
           <form onSubmit={handleSubmit}>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[5] }}>
-              
               {/* 语言标签页 */}
               <Box>
-                <Box style={{ display: 'flex', borderBottom: ('1px solid ' + tokens.colors.border.primary) }}>
+                <Box
+                  style={{
+                    display: 'flex',
+                    borderBottom: '1px solid ' + tokens.colors.border.primary,
+                  }}
+                >
                   <button
                     type="button"
                     style={tabStyle(activeTab === 'zh')}
@@ -497,22 +542,20 @@ export default function ApplyGroupPage() {
                 </Box>
 
                 {/* 中文表单 */}
-                <Box 
-                  style={{ 
+                <Box
+                  style={{
                     display: activeTab === 'zh' ? 'flex' : 'none',
                     flexDirection: 'column',
                     gap: tokens.spacing[4],
                     padding: tokens.spacing[4],
                     background: tokens.colors.bg.secondary,
-                    borderRadius: ('0 0 ' + tokens.radius.lg + ' ' + tokens.radius.lg),
-                    border: ('1px solid ' + tokens.colors.border.primary),
+                    borderRadius: '0 0 ' + tokens.radius.lg + ' ' + tokens.radius.lg,
+                    border: '1px solid ' + tokens.colors.border.primary,
                     borderTop: 'none',
                   }}
                 >
                   <Box>
-                    <label style={labelStyle}>
-                      {t('groupNameRequired')}
-                    </label>
+                    <label style={labelStyle}>{t('groupNameRequired')}</label>
                     <input
                       type="text"
                       value={nameZh}
@@ -528,24 +571,33 @@ export default function ApplyGroupPage() {
                       placeholder={t('groupNameZhPlaceholder')}
                       style={{
                         ...inputStyle,
-                        borderColor: fieldErrors.name ? tokens.colors.accent.error : tokens.colors.border.primary
+                        borderColor: fieldErrors.name
+                          ? tokens.colors.accent.error
+                          : tokens.colors.border.primary,
                       }}
                       aria-invalid={!!fieldErrors.name}
                       maxLength={50}
                       autoFocus
                     />
                     {fieldErrors.name && (
-                      <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
+                      <Text
+                        size="xs"
+                        style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}
+                      >
                         {fieldErrors.name}
                       </Text>
                     )}
                   </Box>
 
                   <Box>
-                    <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label style={labelStyle}>
-                        {t('groupDescription')}
-                      </label>
+                    <Box
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <label style={labelStyle}>{t('groupDescription')}</label>
                     </Box>
                     <textarea
                       value={descriptionZh}
@@ -554,11 +606,17 @@ export default function ApplyGroupPage() {
                       style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
                       maxLength={500}
                     />
-                    <Text size="xs" style={{
-                      textAlign: 'right',
-                      marginTop: tokens.spacing[1],
-                      color: descriptionZh.length > 450 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
-                    }}>
+                    <Text
+                      size="xs"
+                      style={{
+                        textAlign: 'right',
+                        marginTop: tokens.spacing[1],
+                        color:
+                          descriptionZh.length > 450
+                            ? tokens.colors.accent.warning
+                            : tokens.colors.text.tertiary,
+                      }}
+                    >
                       {descriptionZh.length}/500
                     </Text>
                   </Box>
@@ -566,20 +624,28 @@ export default function ApplyGroupPage() {
 
                 {/* 英文表单 */}
                 {showMultiLang && (
-                  <Box 
-                    style={{ 
+                  <Box
+                    style={{
                       display: activeTab === 'en' ? 'flex' : 'none',
                       flexDirection: 'column',
                       gap: tokens.spacing[4],
                       padding: tokens.spacing[4],
                       background: tokens.colors.bg.secondary,
-                      borderRadius: ('0 0 ' + tokens.radius.lg + ' ' + tokens.radius.lg),
-                      border: ('1px solid ' + tokens.colors.border.primary),
+                      borderRadius: '0 0 ' + tokens.radius.lg + ' ' + tokens.radius.lg,
+                      border: '1px solid ' + tokens.colors.border.primary,
                       borderTop: 'none',
                     }}
                   >
-                    <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <Text size="sm" color="tertiary">English Version</Text>
+                    <Box
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <Text size="sm" color="tertiary">
+                        English Version
+                      </Text>
                       <Button
                         type="button"
                         variant="text"
@@ -597,9 +663,7 @@ export default function ApplyGroupPage() {
                     </Box>
 
                     <Box>
-                      <label style={labelStyle}>
-                        Group Name
-                      </label>
+                      <label style={labelStyle}>Group Name</label>
                       <input
                         type="text"
                         value={nameEn}
@@ -615,22 +679,28 @@ export default function ApplyGroupPage() {
                         placeholder="e.g., BTC Trading Discussion"
                         style={{
                           ...inputStyle,
-                          borderColor: fieldErrors.name ? tokens.colors.accent.error : tokens.colors.border.primary
+                          borderColor: fieldErrors.name
+                            ? tokens.colors.accent.error
+                            : tokens.colors.border.primary,
                         }}
                         aria-invalid={!!fieldErrors.name}
                         maxLength={50}
                       />
                       {fieldErrors.name && (
-                        <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
+                        <Text
+                          size="xs"
+                          style={{
+                            color: tokens.colors.accent.error,
+                            marginTop: tokens.spacing[1],
+                          }}
+                        >
                           {fieldErrors.name}
                         </Text>
                       )}
                     </Box>
 
                     <Box>
-                      <label style={labelStyle}>
-                        Group Description
-                      </label>
+                      <label style={labelStyle}>Group Description</label>
                       <textarea
                         value={descriptionEn}
                         onChange={(e) => setDescriptionEn(e.target.value)}
@@ -638,11 +708,17 @@ export default function ApplyGroupPage() {
                         style={{ ...inputStyle, minHeight: 100, resize: 'vertical' }}
                         maxLength={500}
                       />
-                      <Text size="xs" style={{
-                        textAlign: 'right',
-                        marginTop: tokens.spacing[1],
-                        color: descriptionEn.length > 450 ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
-                      }}>
+                      <Text
+                        size="xs"
+                        style={{
+                          textAlign: 'right',
+                          marginTop: tokens.spacing[1],
+                          color:
+                            descriptionEn.length > 450
+                              ? tokens.colors.accent.warning
+                              : tokens.colors.text.tertiary,
+                        }}
+                      >
                         {descriptionEn.length}/500
                       </Text>
                     </Box>
@@ -660,7 +736,14 @@ export default function ApplyGroupPage() {
                 </Text>
 
                 {rules.length > 0 && (
-                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+                  <Box
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: tokens.spacing[2],
+                      marginBottom: tokens.spacing[3],
+                    }}
+                  >
                     {rules.map((rule, index) => (
                       <Box
                         key={index}
@@ -668,10 +751,17 @@ export default function ApplyGroupPage() {
                           padding: tokens.spacing[3],
                           background: tokens.colors.bg.secondary,
                           borderRadius: tokens.radius.lg,
-                          border: ('1px solid ' + tokens.colors.border.primary),
+                          border: '1px solid ' + tokens.colors.border.primary,
                         }}
                       >
-                        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
+                        <Box
+                          style={{
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'flex-start',
+                            marginBottom: tokens.spacing[2],
+                          }}
+                        >
                           <Text size="sm" weight="bold" color="secondary">
                             {t('ruleNumber').replace('{n}', String(index + 1))}
                           </Text>
@@ -680,31 +770,53 @@ export default function ApplyGroupPage() {
                             variant="text"
                             size="sm"
                             onClick={() => removeRule(index)}
-                            style={{ padding: 0, color: 'var(--color-accent-error)', fontSize: tokens.typography.fontSize.xs }}
+                            style={{
+                              padding: 0,
+                              color: 'var(--color-accent-error)',
+                              fontSize: tokens.typography.fontSize.xs,
+                            }}
                           >
                             {t('delete')}
                           </Button>
                         </Box>
-                        
-                        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
+
+                        <Box
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: tokens.spacing[2],
+                          }}
+                        >
                           <Box>
-                            <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>{t('chinese')}</Text>
+                            <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>
+                              {t('chinese')}
+                            </Text>
                             <input
                               type="text"
                               value={rule.zh}
                               onChange={(e) => updateRule(index, 'zh', e.target.value)}
-                              style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                              style={{
+                                ...inputStyle,
+                                padding: tokens.spacing[2],
+                                fontSize: tokens.typography.fontSize.sm,
+                              }}
                               placeholder={t('ruleContentZhPlaceholder')}
                             />
                           </Box>
                           {showMultiLang && (
                             <Box>
-                              <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>English</Text>
+                              <Text size="xs" color="tertiary" style={{ marginBottom: 4 }}>
+                                English
+                              </Text>
                               <input
                                 type="text"
                                 value={rule.en}
                                 onChange={(e) => updateRule(index, 'en', e.target.value)}
-                                style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                                style={{
+                                  ...inputStyle,
+                                  padding: tokens.spacing[2],
+                                  fontSize: tokens.typography.fontSize.sm,
+                                }}
                                 placeholder={t('ruleContentEnPlaceholder')}
                               />
                             </Box>
@@ -720,7 +832,7 @@ export default function ApplyGroupPage() {
                     padding: tokens.spacing[3],
                     background: tokens.colors.bg.secondary,
                     borderRadius: tokens.radius.lg,
-                    border: ('1px dashed ' + tokens.colors.border.primary),
+                    border: '1px dashed ' + tokens.colors.border.primary,
                   }}
                 >
                   <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
@@ -731,7 +843,11 @@ export default function ApplyGroupPage() {
                       type="text"
                       value={newRuleZh}
                       onChange={(e) => setNewRuleZh(e.target.value)}
-                      style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                      style={{
+                        ...inputStyle,
+                        padding: tokens.spacing[2],
+                        fontSize: tokens.typography.fontSize.sm,
+                      }}
                       placeholder={t('ruleInputZhPlaceholder')}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
@@ -745,7 +861,11 @@ export default function ApplyGroupPage() {
                         type="text"
                         value={newRuleEn}
                         onChange={(e) => setNewRuleEn(e.target.value)}
-                        style={{ ...inputStyle, padding: tokens.spacing[2], fontSize: tokens.typography.fontSize.sm }}
+                        style={{
+                          ...inputStyle,
+                          padding: tokens.spacing[2],
+                          fontSize: tokens.typography.fontSize.sm,
+                        }}
                         placeholder={t('ruleInputEnPlaceholder')}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
@@ -786,10 +906,7 @@ export default function ApplyGroupPage() {
               />
 
               {/* 角色称呼设置 */}
-              <RoleNameSettings
-                roleNames={roleNames}
-                setRoleNames={setRoleNames}
-              />
+              <RoleNameSettings roleNames={roleNames} setRoleNames={setRoleNames} />
 
               {error && (
                 <Box
