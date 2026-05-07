@@ -27,7 +27,10 @@ const log = createLogger('api:v3')
 // ---------------------------------------------------------------------------
 
 const VALID_API_KEYS = new Set(
-  (process.env.API_V3_KEYS || '').split(',').map(k => k.trim()).filter(Boolean)
+  (process.env.API_V3_KEYS || '')
+    .split(',')
+    .map((k) => k.trim())
+    .filter(Boolean)
 )
 
 async function validateApiKey(key: string): Promise<boolean> {
@@ -107,7 +110,11 @@ function errorResponse(message: string, status: number) {
 
 const v3RankingsSchema = z.object({
   platform: z.string().max(50).optional(),
-  period: z.string().toUpperCase().pipe(z.enum(['7D', '30D', '90D'])).catch('90D'),
+  period: z
+    .string()
+    .toUpperCase()
+    .pipe(z.enum(['7D', '30D', '90D']))
+    .catch('90D'),
   limit: z.coerce.number().int().min(1).max(200).catch(50),
   offset: z.coerce.number().int().min(0).catch(0),
 })
@@ -118,7 +125,10 @@ const v3TraderSchema = z.object({
 })
 
 const v3SearchSchema = z.object({
-  q: z.string({ error: "Missing required query parameter 'q'" }).min(2, 'Query param "q" must be at least 2 characters').max(200),
+  q: z
+    .string({ error: "Missing required query parameter 'q'" })
+    .min(2, 'Query param "q" must be at least 2 characters')
+    .max(200),
   limit: z.coerce.number().int().min(1).max(100).catch(20),
   platform: z.string().max(50).optional(),
 })
@@ -132,6 +142,13 @@ const v3MainSchema = z.object({
 // ---------------------------------------------------------------------------
 
 async function handleRankings(params: URLSearchParams) {
+  // If limit is explicitly 0 or negative, return empty result immediately
+  // (Zod .catch(50) would silently fall back to 50 — that's misleading)
+  const rawLimit = params.get('limit')
+  if (rawLimit != null && Number(rawLimit) <= 0) {
+    return { data: [], total: 0 }
+  }
+
   const parsed = v3RankingsSchema.safeParse(Object.fromEntries(params))
   if (!parsed.success) {
     return { error: 'Invalid parameters', status: 400 }
@@ -139,7 +156,12 @@ async function handleRankings(params: URLSearchParams) {
 
   const supabase = getSupabaseAdmin() as SupabaseClient
   const { platform, period, limit, offset } = parsed.data
-  const result = await getLeaderboard(supabase, { platform, period: period as TradingPeriod, limit, offset })
+  const result = await getLeaderboard(supabase, {
+    platform,
+    period: period as TradingPeriod,
+    limit,
+    offset,
+  })
   return { data: result.traders, total: result.total }
 }
 
@@ -150,7 +172,10 @@ async function handleTrader(params: URLSearchParams) {
   }
 
   const supabase = getSupabaseAdmin() as SupabaseClient
-  const detail = await getTraderDetail(supabase, { platform: parsed.data.platform, traderKey: parsed.data.trader_key })
+  const detail = await getTraderDetail(supabase, {
+    platform: parsed.data.platform,
+    traderKey: parsed.data.trader_key,
+  })
   if (!detail) {
     return { error: 'Trader not found', status: 404 }
   }
@@ -158,6 +183,12 @@ async function handleTrader(params: URLSearchParams) {
 }
 
 async function handleSearch(params: URLSearchParams) {
+  // If limit is explicitly 0 or negative, return empty result immediately
+  const rawLimit = params.get('limit')
+  if (rawLimit != null && Number(rawLimit) <= 0) {
+    return { data: [], total: 0 }
+  }
+
   const parsed = v3SearchSchema.safeParse(Object.fromEntries(params))
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message || 'Invalid search parameters', status: 400 }
@@ -178,7 +209,10 @@ export async function GET(request: NextRequest) {
   const endpointParsed = v3MainSchema.safeParse(Object.fromEntries(params))
 
   if (!endpointParsed.success) {
-    return errorResponse('Missing or invalid "endpoint" param. Valid values: rankings, trader, search', 400)
+    return errorResponse(
+      'Missing or invalid "endpoint" param. Valid values: rankings, trader, search',
+      400
+    )
   }
 
   const endpoint = endpointParsed.data.endpoint
@@ -205,7 +239,8 @@ export async function GET(request: NextRequest) {
         {
           data: null,
           meta: {
-            error: 'Daily rate limit exceeded (100 requests/day). Get an API key for unlimited access.',
+            error:
+              'Daily rate limit exceeded (100 requests/day). Get an API key for unlimited access.',
             credits_remaining: 0,
             rate_limit: { daily_limit: FREE_DAILY_LIMIT, remaining: 0 },
             docs: '/api-docs',
@@ -224,7 +259,10 @@ export async function GET(request: NextRequest) {
 
   const rateLimitMeta = isAuthenticated
     ? { rate_limit: { plan: 'api_key', unlimited: true } }
-    : { credits_remaining: creditsRemaining, rate_limit: { daily_limit: FREE_DAILY_LIMIT, remaining: creditsRemaining } }
+    : {
+        credits_remaining: creditsRemaining,
+        rate_limit: { daily_limit: FREE_DAILY_LIMIT, remaining: creditsRemaining },
+      }
 
   // --- Route to handler ---
   try {
@@ -241,7 +279,10 @@ export async function GET(request: NextRequest) {
         result = await handleSearch(params)
         break
       default:
-        return errorResponse(`Unknown endpoint "${endpoint}". Valid values: rankings, trader, search`, 400)
+        return errorResponse(
+          `Unknown endpoint "${endpoint}". Valid values: rankings, trader, search`,
+          400
+        )
     }
 
     if (result.error) {
