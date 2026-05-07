@@ -1494,6 +1494,8 @@ const ko = {
   owner: '소유자',
   admin: '관리자',
   joinedGroups: '가입한 그룹',
+  groupsLoginCta: '로그인하여 그룹에 가입하고 커뮤니티 게시글을 확인하세요',
+  groupsPopularTitle: '인기 그룹',
 
   // ChatSettingsDrawer
   updateFailed: '업데이트에 실패했습니다',

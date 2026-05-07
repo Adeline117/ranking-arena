@@ -1546,6 +1546,8 @@ const en = {
   owner: 'Owner',
   admin: 'Admin',
   joinedGroups: 'Joined Groups',
+  groupsLoginCta: 'Log in to join groups and see posts from your community',
+  groupsPopularTitle: 'Popular Groups',
 
   // ChatSettingsDrawer
   updateFailed: 'Update failed',
