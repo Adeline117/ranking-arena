@@ -34,8 +34,11 @@ export default function FloatingActionButton() {
   }, [menuOpen])
 
   // Only show on feed and groups pages when social is enabled
-  const showOnPages = features.social ? ['/', '/hot', '/groups'] : []
-  const shouldShow = isAuthenticated && features.social && showOnPages.some(p => pathname === p || pathname.startsWith('/groups/'))
+  const showOnPages = features.social ? ['/', '/groups'] : []
+  const shouldShow =
+    isAuthenticated &&
+    features.social &&
+    showOnPages.some((p) => pathname === p || pathname.startsWith('/groups/'))
 
   if (!shouldShow) return null
 
@@ -75,19 +78,23 @@ export default function FloatingActionButton() {
             onClick={() => {
               setMenuOpen(false)
               // Try last-used group, otherwise go to first available group
-              const lastGroup = typeof window !== 'undefined' ? localStorage.getItem('last_post_group_id') : null
+              const lastGroup =
+                typeof window !== 'undefined' ? localStorage.getItem('last_post_group_id') : null
               if (lastGroup) {
                 router.push(`/groups/${lastGroup}/new`)
               } else {
                 // Fetch user's first group and navigate
-                fetch('/api/groups?limit=1').then(r => r.json()).then(data => {
-                  const groups = data.groups || data
-                  if (Array.isArray(groups) && groups.length > 0) {
-                    router.push(`/groups/${groups[0].id}/new`)
-                  } else {
-                    router.push('/groups')
-                  }
-                }).catch(() => router.push('/groups'))
+                fetch('/api/groups?limit=1')
+                  .then((r) => r.json())
+                  .then((data) => {
+                    const groups = data.groups || data
+                    if (Array.isArray(groups) && groups.length > 0) {
+                      router.push(`/groups/${groups[0].id}/new`)
+                    } else {
+                      router.push('/groups')
+                    }
+                  })
+                  .catch(() => router.push('/groups'))
               }
             }}
             style={{
@@ -106,10 +113,23 @@ export default function FloatingActionButton() {
               textAlign: 'left',
               transition: `background ${tokens.transition.fast}`,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = tokens.colors.bg.secondary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 20h9" />
               <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" />
             </svg>
@@ -136,10 +156,23 @@ export default function FloatingActionButton() {
               textAlign: 'left',
               transition: `background ${tokens.transition.fast}`,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.secondary }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = tokens.colors.bg.secondary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'transparent'
+            }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
               <circle cx="9" cy="7" r="4" />
               <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
@@ -180,7 +213,16 @@ export default function FloatingActionButton() {
           e.currentTarget.style.boxShadow = `0 4px 16px ${tokens.colors.accent.primary}50`
         }}
       >
-        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="24"
+          height="24"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>

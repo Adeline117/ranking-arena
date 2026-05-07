@@ -24,10 +24,7 @@ export default function Footer() {
     },
     {
       title: t('footerCommunity'),
-      links: [
-        { href: '/groups', label: t('footerGroups') },
-        { href: '/hot', label: t('footerHot') },
-      ],
+      links: [{ href: '/library', label: t('library') }],
     },
     {
       title: t('footerLegal'),
@@ -84,7 +81,16 @@ export default function Footer() {
             >
               {col.title}
             </p>
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <ul
+              style={{
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 8,
+              }}
+            >
               {col.links.map((link) => (
                 <li key={link.href}>
                   {link.external ? (
@@ -185,12 +191,20 @@ export default function Footer() {
             minHeight: 44,
           }}
         >
-          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width={14}
+            height={14}
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
           </svg>
           {t('helpAndFeedback')}
         </a>
-
       </div>
 
       {/* Disclaimer */}
