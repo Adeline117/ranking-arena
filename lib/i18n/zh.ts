@@ -5582,6 +5582,18 @@ const zh = {
   // SSR ranking table empty state
   ssrLoadingRanking: '正在加载排名数据...',
   ssrDataRefreshHint: '数据会自动刷新，请稍后再试。',
+
+  // Library browse page
+  libraryPageTitle: '书库',
+  libraryPageTagline: '{count} 个加密交易资源 — 书籍、研究报告、指南等。',
+  librarySearchPlaceholder: '搜索资源...',
+  libraryCategories: '分类',
+  libraryMostPopular: '最受欢迎',
+  libraryRecentlyAdded: '最新添加',
+  libraryEmptyState: '书库暂无内容，资源即将上线。',
+  libraryFreeLabel: '免费',
+  libraryByAuthor: '作者：{author}',
+  libraryViewCount: '{count} 次浏览',
 } as const
 
 export default zh

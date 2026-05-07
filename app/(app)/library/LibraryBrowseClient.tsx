@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
 interface LibraryItem {
@@ -36,7 +37,7 @@ const CATEGORY_ICONS: Record<string, string> = {
   video: '\uD83C\uDFA5',
 }
 
-function ItemCard({ item }: { item: LibraryItem }) {
+function ItemCard({ item, t }: { item: LibraryItem; t: (key: string) => string }) {
   return (
     <Link href={`/library/${item.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
       <div
@@ -106,7 +107,7 @@ function ItemCard({ item }: { item: LibraryItem }) {
                 fontSize: 10,
               }}
             >
-              FREE
+              {t('libraryFreeLabel')}
             </span>
           )}
         </div>
@@ -136,7 +137,7 @@ function ItemCard({ item }: { item: LibraryItem }) {
               marginBottom: 8,
             }}
           >
-            by {item.author}
+            {t('libraryByAuthor').replace('{author}', item.author)}
           </div>
         )}
 
@@ -174,7 +175,11 @@ function ItemCard({ item }: { item: LibraryItem }) {
               {item.rating.toFixed(1)} ({item.rating_count})
             </span>
           )}
-          {item.view_count > 0 && <span>{item.view_count.toLocaleString('en-US')} views</span>}
+          {item.view_count > 0 && (
+            <span>
+              {t('libraryViewCount').replace('{count}', item.view_count.toLocaleString())}
+            </span>
+          )}
         </div>
       </div>
     </Link>
@@ -192,6 +197,7 @@ export default function LibraryBrowseClient({
   categories: CategoryCount[]
   totalCount: number
 }) {
+  const { t } = useLanguage()
   const [searchQuery, setSearchQuery] = useState('')
 
   return (
@@ -208,11 +214,10 @@ export default function LibraryBrowseClient({
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
           <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>
-            Library
+            {t('libraryPageTitle')}
           </h1>
           <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginTop: 6 }}>
-            {totalCount.toLocaleString('en-US')} resources for crypto traders &mdash; books,
-            research papers, guides, and more.
+            {t('libraryPageTagline').replace('{count}', totalCount.toLocaleString())}
           </p>
         </div>
 
@@ -244,7 +249,7 @@ export default function LibraryBrowseClient({
             </svg>
             <input
               type="text"
-              placeholder="Search resources..."
+              placeholder={t('librarySearchPlaceholder')}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -267,7 +272,9 @@ export default function LibraryBrowseClient({
         {/* Categories */}
         {categories.length > 0 && (
           <section style={{ marginBottom: 32 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>Categories</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>
+              {t('libraryCategories')}
+            </h2>
             <div
               style={{
                 display: 'flex',
@@ -306,7 +313,9 @@ export default function LibraryBrowseClient({
         {/* Popular items */}
         {popular.length > 0 && (
           <section style={{ marginBottom: 32 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>Most Popular</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>
+              {t('libraryMostPopular')}
+            </h2>
             <div
               style={{
                 display: 'grid',
@@ -315,7 +324,7 @@ export default function LibraryBrowseClient({
               }}
             >
               {popular.slice(0, 8).map((item) => (
-                <ItemCard key={item.id} item={item} />
+                <ItemCard key={item.id} item={item} t={t} />
               ))}
             </div>
           </section>
@@ -324,7 +333,9 @@ export default function LibraryBrowseClient({
         {/* Recent additions */}
         {recent.length > 0 && (
           <section style={{ marginBottom: 32 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>Recently Added</h2>
+            <h2 style={{ fontSize: 18, fontWeight: 600, margin: '0 0 12px' }}>
+              {t('libraryRecentlyAdded')}
+            </h2>
             <div
               style={{
                 display: 'grid',
@@ -333,7 +344,7 @@ export default function LibraryBrowseClient({
               }}
             >
               {recent.slice(0, 8).map((item) => (
-                <ItemCard key={item.id} item={item} />
+                <ItemCard key={item.id} item={item} t={t} />
               ))}
             </div>
           </section>
@@ -349,7 +360,7 @@ export default function LibraryBrowseClient({
               fontSize: 14,
             }}
           >
-            Library is empty. Resources will be added soon.
+            {t('libraryEmptyState')}
           </div>
         )}
       </div>

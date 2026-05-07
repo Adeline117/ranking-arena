@@ -5710,6 +5710,19 @@ const en = {
   // SSR ranking table empty state
   ssrLoadingRanking: 'Loading ranking data...',
   ssrDataRefreshHint: 'Data refreshes automatically. Try refreshing in a moment.',
+
+  // Library browse page
+  libraryPageTitle: 'Library',
+  libraryPageTagline:
+    '{count} resources for crypto traders — books, research papers, guides, and more.',
+  librarySearchPlaceholder: 'Search resources...',
+  libraryCategories: 'Categories',
+  libraryMostPopular: 'Most Popular',
+  libraryRecentlyAdded: 'Recently Added',
+  libraryEmptyState: 'Library is empty. Resources will be added soon.',
+  libraryFreeLabel: 'FREE',
+  libraryByAuthor: 'by {author}',
+  libraryViewCount: '{count} views',
 } as const
 
 export default en

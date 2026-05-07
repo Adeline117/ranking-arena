@@ -5095,6 +5095,18 @@ const ko = {
   // SSR ranking table empty state
   ssrLoadingRanking: '랭킹 데이터를 불러오는 중...',
   ssrDataRefreshHint: '데이터가 자동으로 갱신됩니다. 잠시 후 새로고침해 주세요.',
+
+  // Library browse page
+  libraryPageTitle: '라이브러리',
+  libraryPageTagline: '{count}개의 암호화폐 트레이딩 리소스 — 도서, 연구 논문, 가이드 등.',
+  librarySearchPlaceholder: '리소스 검색...',
+  libraryCategories: '카테고리',
+  libraryMostPopular: '인기',
+  libraryRecentlyAdded: '최근 추가',
+  libraryEmptyState: '라이브러리가 비어 있습니다. 곧 리소스가 추가됩니다.',
+  libraryFreeLabel: '무료',
+  libraryByAuthor: '저자: {author}',
+  libraryViewCount: '{count}회 조회',
 } as const
 
 export default ko
