@@ -1516,6 +1516,12 @@ select:focus-visible {
 .trader-card-contained:hover .compare-checkbox-cell {
   opacity: 1 !important;
 }
+/* Touch devices: always show compare checkbox (no hover available) */
+@media (hover: none) {
+  .compare-checkbox-cell {
+    opacity: 0.5 !important;
+  }
+}
 
 /* Responsive utility classes */
 @media (max-width: 1023px) {
