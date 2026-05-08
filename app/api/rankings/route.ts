@@ -22,13 +22,18 @@
  * Caching: s-maxage=60, stale-while-revalidate=300
  */
 
-import type { RankingWindow, TradingCategory, Platform, GranularPlatform, RankingsQuery } from '@/lib/types/leaderboard';
-import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard';
-import { getSupabaseAdmin } from '@/lib/supabase/server';
-import type { TradingPeriod } from '@/lib/types/unified-trader';
-import { tieredGetOrSet, tieredGet } from '@/lib/cache/redis-layer';
-import { ApiError } from '@/lib/api/errors';
-import { success as apiSuccess, withCache } from '@/lib/api/response';
+import type {
+  RankingWindow,
+  TradingCategory,
+  Platform,
+  GranularPlatform,
+  RankingsQuery,
+} from '@/lib/types/leaderboard'
+import { GRANULAR_PLATFORMS, PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
+import type { TradingPeriod } from '@/lib/types/unified-trader'
+import { tieredGetOrSet, tieredGet } from '@/lib/cache/redis-layer'
+import { ApiError } from '@/lib/api/errors'
+import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { withPublic } from '@/lib/api/middleware'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
@@ -49,7 +54,7 @@ const logger = createLogger('rankings-api')
 // at the end of compute-leaderboard cron, so it's always fresh.
 async function getAvailableSources(
   supabase: ReturnType<typeof import('@/lib/supabase/server').getSupabaseAdmin>,
-  seasonId: string,
+  seasonId: string
 ): Promise<string[]> {
   return tieredGetOrSet<string[]>(
     `rankings:available-sources:${seasonId}`,
@@ -60,76 +65,102 @@ async function getAvailableSources(
         .eq('season_id', seasonId)
         .gt('total_count', 0)
         .not('source', 'eq', '_all')
-        .not('source', 'like', '%_gt0');
+        .not('source', 'like', '%_gt0')
       return [
-        ...new Set((sourceRows || [])
-          .map((r: { source: string }) => r.source)
-          .filter((s): s is string => typeof s === 'string' && !!s)),
-      ].sort();
+        ...new Set(
+          (sourceRows || [])
+            .map((r: { source: string }) => r.source)
+            .filter((s): s is string => typeof s === 'string' && !!s)
+        ),
+      ].sort()
     },
     'warm', // 2min memory / 15min Redis — shared across instances
-    ['rankings', 'available-sources'],
-  );
+    ['rankings', 'available-sources']
+  )
 }
 
-const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite'];
-const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain'];
-const VALID_SORT_BY = ['arena_score', 'roi', 'pnl', 'drawdown', 'copiers', 'win_rate', 'sharpe_ratio', 'trades_count'] as const;
+const VALID_WINDOWS: (RankingWindow | 'composite')[] = ['7d', '30d', '90d', 'composite']
+const VALID_CATEGORIES: TradingCategory[] = ['futures', 'spot', 'onchain']
+const VALID_SORT_BY = [
+  'arena_score',
+  'roi',
+  'pnl',
+  'drawdown',
+  'copiers',
+  'win_rate',
+  'sharpe_ratio',
+  'trades_count',
+] as const
 
 // Data quality: ROI values above this threshold are considered anomalous
-const ROI_ANOMALY_THRESHOLD = 50000; // 50000% = 500x — only filter extreme data errors, not legitimate high performers
+const ROI_ANOMALY_THRESHOLD = 50000 // 50000% = 500x — only filter extreme data errors, not legitimate high performers
 
-export const GET = withPublic(async ({ request }) => {
-    const { searchParams } = new URL(request.url);
+export const GET = withPublic(
+  async ({ request }) => {
+    const { searchParams } = new URL(request.url)
 
     // Parse & validate window (required)
-    const window = searchParams.get('window') as RankingWindow | 'composite' | null;
-    const normalizedWindow = window?.toLowerCase() as RankingWindow | 'composite';
+    const window = searchParams.get('window') as RankingWindow | 'composite' | null
+    const normalizedWindow = window?.toLowerCase() as RankingWindow | 'composite'
     if (!normalizedWindow || !VALID_WINDOWS.includes(normalizedWindow)) {
-      throw ApiError.validation('Invalid or missing window parameter. Must be one of: 7d, 30d, 90d, composite');
+      throw ApiError.validation(
+        'Invalid or missing window parameter. Must be one of: 7d, 30d, 90d, composite'
+      )
     }
 
     // Parse optional params
-    const category = searchParams.get('category') as TradingCategory | null;
+    const category = searchParams.get('category') as TradingCategory | null
     if (category && !VALID_CATEGORIES.includes(category)) {
-      throw ApiError.validation('Invalid category. Must be one of: futures, spot, onchain');
+      throw ApiError.validation('Invalid category. Must be one of: futures, spot, onchain')
     }
 
-    const platform = searchParams.get('platform') as GranularPlatform | null;
+    const platform = searchParams.get('platform') as GranularPlatform | null
     if (platform && !(GRANULAR_PLATFORMS as readonly string[]).includes(platform)) {
-      throw ApiError.validation(`Invalid platform: ${platform}`);
+      throw ApiError.validation(`Invalid platform: ${platform}`)
     }
 
-    const sortBy = (searchParams.get('sort_by') || 'arena_score') as typeof VALID_SORT_BY[number];
+    const sortBy = (searchParams.get('sort_by') || 'arena_score') as (typeof VALID_SORT_BY)[number]
     if (!VALID_SORT_BY.includes(sortBy)) {
-      throw ApiError.validation(`Invalid sort_by. Must be one of: ${VALID_SORT_BY.join(', ')}`);
+      throw ApiError.validation(`Invalid sort_by. Must be one of: ${VALID_SORT_BY.join(', ')}`)
     }
 
-    const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc';
+    const sortDir = (searchParams.get('sort_dir') || 'desc') as 'asc' | 'desc'
 
-    const limit = parseLimit(searchParams.get('limit'), 100, 500);
-    const offset = parseOffset(searchParams.get('offset'));
-    const cursor = searchParams.get('cursor') || undefined; // format: "score:id" for keyset pagination
-    const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined;
-    const minTrades = searchParams.get('min_trades') ? Number(searchParams.get('min_trades')) : undefined;
-    const traderType = searchParams.get('trader_type') as 'human' | 'bot' | null;
+    const limit = parseLimit(searchParams.get('limit'), 100, 500)
+    const offset = parseOffset(searchParams.get('offset'))
+    const cursor = searchParams.get('cursor') || undefined // format: "score:id" for keyset pagination
+    const minPnl = searchParams.get('min_pnl') ? Number(searchParams.get('min_pnl')) : undefined
+    const minTrades = searchParams.get('min_trades')
+      ? Number(searchParams.get('min_trades'))
+      : undefined
+    const traderType = searchParams.get('trader_type') as 'human' | 'bot' | null
 
     // Only cache "hot" default queries (no filters, default sort, first page)
     // Filtered/paginated queries skip cache to avoid key explosion (thousands of permutations)
-    const isDefaultQuery = sortBy === 'arena_score' && sortDir === 'desc'
-      && !platform && !minPnl && !minTrades && !traderType && !cursor && offset === 0
+    const isDefaultQuery =
+      sortBy === 'arena_score' &&
+      sortDir === 'desc' &&
+      !platform &&
+      !minPnl &&
+      !minTrades &&
+      !traderType &&
+      !cursor &&
+      offset === 0
     const cacheKey = isDefaultQuery
       ? `api:rankings:${normalizedWindow}:${category || 'all'}:${limit}`
       : null // skip cache for filtered queries
 
-
-    let result: unknown;
+    let result: unknown
 
     try {
       if (normalizedWindow === 'composite') {
         // Try precomputed composite first (written by /api/cron/precompute-composite)
-        const precomputedKey = category ? `precomputed:composite:${category}` : 'precomputed:composite:all'
-        const { data: precomputed } = await (await import('@/lib/cache/redis-layer')).tieredGet<{
+        const precomputedKey = category
+          ? `precomputed:composite:${category}`
+          : 'precomputed:composite:all'
+        const { data: precomputed } = await (
+          await import('@/lib/cache/redis-layer')
+        ).tieredGet<{
           traders: unknown[]
           totalcount: number
           total_count: number
@@ -138,7 +169,14 @@ export const GET = withPublic(async ({ request }) => {
           availableSources: string[]
         }>(precomputedKey, 'hot')
 
-        if (precomputed && !platform && !minPnl && !minTrades && sortBy === 'arena_score' && sortDir === 'desc') {
+        if (
+          precomputed &&
+          !platform &&
+          !minPnl &&
+          !minTrades &&
+          sortBy === 'arena_score' &&
+          sortDir === 'desc'
+        ) {
           // Serve from precomputed cache — slice for pagination
           const traders = precomputed.traders.slice(offset, offset + limit)
           result = {
@@ -148,16 +186,17 @@ export const GET = withPublic(async ({ request }) => {
           }
         } else {
           // Fall back to real-time compute for filtered/sorted queries
-          const compositeFetcher = () => getCompositeRankings({
-            category: category || undefined,
-            platform: (platform || undefined) as Platform | undefined,
-            limit,
-            offset,
-            sort_by: sortBy,
-            sort_dir: sortDir,
-            min_pnl: minPnl,
-            min_trades: minTrades,
-          })
+          const compositeFetcher = () =>
+            getCompositeRankings({
+              category: category || undefined,
+              platform: (platform || undefined) as Platform | undefined,
+              limit,
+              offset,
+              sort_by: sortBy,
+              sort_dir: sortDir,
+              min_pnl: minPnl,
+              min_trades: minTrades,
+            })
           result = cacheKey
             ? await tieredGetOrSet(cacheKey, compositeFetcher, 'hot', ['rankings'])
             : await compositeFetcher()
@@ -174,7 +213,7 @@ export const GET = withPublic(async ({ request }) => {
           min_pnl: minPnl,
           min_trades: minTrades,
           trader_type: traderType || undefined,
-        };
+        }
         const rankingsFetcher = () => getRankingsFallback(query, cursor)
         result = cacheKey
           ? await tieredGetOrSet(cacheKey, rankingsFetcher, 'hot', ['rankings'])
@@ -186,7 +225,10 @@ export const GET = withPublic(async ({ request }) => {
       if (cacheKey) {
         const { data: staleData } = await tieredGet(cacheKey, 'hot')
         if (staleData) {
-          logger.warn(`Rankings DB query failed, serving stale cache for ${cacheKey}:`, fetchError instanceof Error ? fetchError.message : String(fetchError))
+          logger.warn(
+            `Rankings DB query failed, serving stale cache for ${cacheKey}:`,
+            fetchError instanceof Error ? fetchError.message : String(fetchError)
+          )
           result = staleData
         } else {
           // No cache either — re-throw to let the error handler respond
@@ -197,9 +239,11 @@ export const GET = withPublic(async ({ request }) => {
       }
     }
 
-    const response = apiSuccess(result);
-    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 });
-}, { name: 'rankings', rateLimit: { requests: 30, window: 60, prefix: 'rankings' } })
+    const response = apiSuccess(result)
+    return withCache(response, { maxAge: 60, staleWhileRevalidate: 300 })
+  },
+  { name: 'rankings', rateLimit: { requests: 30, window: 60, prefix: 'rankings' } }
+)
 
 /**
  * Fetch rankings via unified data layer (leaderboard_ranks).
@@ -217,17 +261,17 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     min_pnl,
     min_trades,
     trader_type,
-  } = rankingsQuery;
+  } = rankingsQuery
 
   // Use read replica for ranking reads (falls back to primary if no replica configured)
   const { getReadReplica } = await import('@/lib/supabase/read-replica')
-  const supabase = getReadReplica();
+  const supabase = getReadReplica()
   // Cap at 1000: limit=5000 triggers 5 parallel chunk queries on a 314k-row
   // table under the CHUNK_SIZE pagination logic, saturating the Supabase
   // connection pool with little user benefit. Nobody actually needs 5000
   // traders in one request — pagination is already cursor-friendly.
-  const safeLimit = Math.min(limit, 1000);
-  const seasonId = window.toUpperCase() as TradingPeriod;
+  const safeLimit = Math.min(limit, 1000)
+  const seasonId = window.toUpperCase() as TradingPeriod
 
   // Map sort_by to unified sortBy parameter
   const sortByMap: Record<string, string> = {
@@ -239,21 +283,21 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     win_rate: 'win_rate',
     sharpe_ratio: 'sharpe_ratio',
     trades_count: 'trades_count',
-  };
-  const unifiedSortBy = sortByMap[sort_by] || 'arena_score';
+  }
+  const unifiedSortBy = sortByMap[sort_by] || 'arena_score'
 
   // Determine platform filter based on category
-  const platformFilter: string | undefined = platform || undefined;
-  let platformsInCategory: string[] | undefined;
+  const platformFilter: string | undefined = platform || undefined
+  let platformsInCategory: string[] | undefined
   if (!platformFilter && category) {
     platformsInCategory = Object.entries(PLATFORM_CATEGORY)
       .filter(([, cat]) => cat === category)
-      .map(([p]) => p);
+      .map(([p]) => p)
   }
 
   // Sorting
-  const sortColumn = unifiedSortBy === 'rank' ? 'rank' : unifiedSortBy;
-  const ascending = sort_dir === 'asc';
+  const sortColumn = unifiedSortBy === 'rank' ? 'rank' : unifiedSortBy
+  const ascending = sort_dir === 'asc'
 
   // Helper: build base query with all filters applied (reusable for chunked fetches)
   const SELECT_COLS = `source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown,
@@ -272,35 +316,35 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
 
     if (platformFilter) {
-      q = q.eq('source', platformFilter);
+      q = q.eq('source', platformFilter)
     } else if (platformsInCategory && platformsInCategory.length > 0) {
-      q = q.in('source', platformsInCategory);
+      q = q.in('source', platformsInCategory)
     }
 
     if (min_pnl != null) {
-      q = q.gte('pnl', min_pnl);
+      q = q.gte('pnl', min_pnl)
     }
     if (min_trades != null) {
-      q = q.gte('trades_count', min_trades);
+      q = q.gte('trades_count', min_trades)
     }
 
     // Filter by trader type (human/bot)
     if (trader_type === 'bot') {
-      q = q.or('trader_type.eq.bot,source.eq.web3_bot');
+      q = q.or('trader_type.eq.bot,source.eq.web3_bot')
     } else if (trader_type === 'human') {
-      q = q.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.neq.bot');
+      q = q.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.neq.bot')
     }
 
-    q = q.order(sortColumn, { ascending, nullsFirst: false });
-    return q;
+    q = q.order(sortColumn, { ascending, nullsFirst: false })
+    return q
   }
 
   // Supabase PostgREST has a max_rows limit (typically 1000) per request.
   // Paginate in 1000-row chunks when safeLimit > 1000 to get complete data.
-  const CHUNK_SIZE = 1000;
-  let rows: Record<string, unknown>[] = [];
-  let totalCount: number | null = null;
-  let error: { message: string } | null = null;
+  const CHUNK_SIZE = 1000
+  let rows: Record<string, unknown>[] = []
+  let totalCount: number | null = null
+  let error: { message: string } | null = null
 
   if (safeLimit <= CHUNK_SIZE) {
     // Single request — NO count (exact count takes 25s+ on 314k rows with OR filters)
@@ -315,61 +359,59 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
         .eq('season_id', seasonId)
         .eq('source', cacheCountKey)
         .maybeSingle(),
-    ]);
-    rows = (result.data || []) as Record<string, unknown>[];
-    error = result.error;
+    ])
+    rows = (result.data || []) as Record<string, unknown>[]
+    error = result.error
     // Use cached total. Fallback to offset + rows.length if cache is empty
     // (first deploy / cron hasn't run yet).
-    totalCount = countResult.data?.total_count ?? (offset + rows.length);
+    totalCount = countResult.data?.total_count ?? offset + rows.length
   } else {
     // Chunked fetch: first chunk, no count
-    const firstResult = await buildBaseQuery()
-      .range(offset, offset + CHUNK_SIZE - 1);
+    const firstResult = await buildBaseQuery().range(offset, offset + CHUNK_SIZE - 1)
     if (firstResult.error) {
-      error = firstResult.error;
+      error = firstResult.error
     } else {
-      rows = (firstResult.data || []) as Record<string, unknown>[];
-      totalCount = null; // Will be set after all chunks
+      rows = (firstResult.data || []) as Record<string, unknown>[]
+      totalCount = null // Will be set after all chunks
 
       // Calculate remaining chunks needed
-      const remaining = safeLimit - CHUNK_SIZE;
+      const remaining = safeLimit - CHUNK_SIZE
       if (remaining > 0 && rows.length === CHUNK_SIZE) {
-        const chunkCount = Math.ceil(remaining / CHUNK_SIZE);
+        const chunkCount = Math.ceil(remaining / CHUNK_SIZE)
         const chunkPromises = Array.from({ length: chunkCount }, (_, i) => {
-          const chunkOffset = offset + CHUNK_SIZE * (i + 1);
-          const chunkEnd = Math.min(chunkOffset + CHUNK_SIZE - 1, offset + safeLimit - 1);
-          return buildBaseQuery()
-            .range(chunkOffset, chunkEnd);
-        });
-        const chunkResults = await Promise.all(chunkPromises);
+          const chunkOffset = offset + CHUNK_SIZE * (i + 1)
+          const chunkEnd = Math.min(chunkOffset + CHUNK_SIZE - 1, offset + safeLimit - 1)
+          return buildBaseQuery().range(chunkOffset, chunkEnd)
+        })
+        const chunkResults = await Promise.all(chunkPromises)
         for (const cr of chunkResults) {
           if (cr.error) {
-            error = cr.error;
-            break;
+            error = cr.error
+            break
           }
-          if (cr.data) rows = rows.concat(cr.data as Record<string, unknown>[]);
+          if (cr.data) rows = rows.concat(cr.data as Record<string, unknown>[])
         }
       }
     }
   }
 
   if (error) {
-    throw new Error(`Leaderboard query failed: ${error.message}`);
+    throw new Error(`Leaderboard query failed: ${error.message}`)
   }
 
   // Deduplicate by source:source_trader_id (case-insensitive for 0x addresses)
-  const seenRowKeys = new Set<string>();
+  const seenRowKeys = new Set<string>()
   const paginatedRows = (rows || []).filter((r: Record<string, unknown>) => {
-    const tid = String(r.source_trader_id || '');
-    const normalizedTid = tid.startsWith('0x') ? tid.toLowerCase() : tid;
-    const key = `${r.source}:${normalizedTid}`;
-    if (seenRowKeys.has(key)) return false;
-    seenRowKeys.add(key);
-    return true;
-  });
+    const tid = String(r.source_trader_id || '')
+    const normalizedTid = tid.startsWith('0x') ? tid.toLowerCase() : tid
+    const key = `${r.source}:${normalizedTid}`
+    if (seenRowKeys.has(key)) return false
+    seenRowKeys.add(key)
+    return true
+  })
 
   // Fetch available sources + freshness check in PARALLEL (was serial, ~100-200ms saved)
-  const seasonIdUpper = seasonId;
+  const seasonIdUpper = seasonId
   const [availableSources, lastRun] = await Promise.all([
     getAvailableSources(supabase, seasonIdUpper),
     supabase
@@ -380,25 +422,34 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       .order('ended_at', { ascending: false })
       .limit(1)
       .maybeSingle()
-      .then(r => r.data),
-  ]);
+      .then((r) => r.data),
+  ])
 
   // Freshness check: use most recent pipeline run, not displayed rows' computed_at.
-  let latestCapturedAt: number;
+  let latestCapturedAt: number
   if (lastRun?.ended_at) {
-    latestCapturedAt = new Date(lastRun.ended_at).getTime();
+    latestCapturedAt = new Date(lastRun.ended_at).getTime()
   } else if (paginatedRows.length > 0) {
     latestCapturedAt = Math.max(
-      ...paginatedRows.map((r: Record<string, unknown>) => new Date(r.computed_at as string).getTime()).filter(t => t > 0)
-    );
+      ...paginatedRows
+        .map((r: Record<string, unknown>) => new Date(r.computed_at as string).getTime())
+        .filter((t) => t > 0)
+    )
   } else {
-    latestCapturedAt = Date.now();
+    latestCapturedAt = Date.now()
   }
-  const stalenessMs = Date.now() - latestCapturedAt;
-  const isStale = stalenessMs > 3600 * 1000;
+  const stalenessMs = Date.now() - latestCapturedAt
+  const isStale = stalenessMs > 3600 * 1000
 
   // Transform to response format
-  const PLACEHOLDER_NAMES = new Set(['Enter Name', 'enter name', 'Unknown', 'null', 'undefined', ''])
+  const PLACEHOLDER_NAMES = new Set([
+    'Enter Name',
+    'enter name',
+    'Unknown',
+    'null',
+    'undefined',
+    '',
+  ])
   const formatDisplayName = (handle: string | null, traderId: string): string => {
     if (handle && !PLACEHOLDER_NAMES.has(handle)) return handle
     // Format 0x addresses as "0x1234...5678"
@@ -408,7 +459,8 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     // Copin format: "protocol:0xAddr" → show the address part
     if (traderId?.includes(':')) {
       const addr = traderId.split(':')[1]
-      if (addr?.startsWith('0x') && addr.length >= 10) return `${addr.slice(0, 6)}...${addr.slice(-4)}`
+      if (addr?.startsWith('0x') && addr.length >= 10)
+        return `${addr.slice(0, 6)}...${addr.slice(-4)}`
     }
     return traderId || 'Anonymous'
   }
@@ -462,8 +514,8 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       style_confidence: null,
       is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
       trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
-    };
-  });
+    }
+  })
 
   return {
     traders,
@@ -478,7 +530,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     is_stale: isStale,
     availableSources,
     next_cursor: null,
-  };
+  }
 }
 
 /**
@@ -490,14 +542,14 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
  * This reduces DB load from 3 queries to 1 and eliminates in-memory merge.
  */
 async function getCompositeRankings(params: {
-  category?: TradingCategory;
-  platform?: Platform;
-  limit: number;
-  offset: number;
-  sort_by: string;
-  sort_dir: 'asc' | 'desc';
-  min_pnl?: number;
-  min_trades?: number;
+  category?: TradingCategory
+  platform?: Platform
+  limit: number
+  offset: number
+  sort_by: string
+  sort_dir: 'asc' | 'desc'
+  min_pnl?: number
+  min_trades?: number
 }) {
   // Composite = 90D (which already contains the weighted composite arena_score)
   // Delegate to getRankingsFallback with window='90d' and relabel as COMPOSITE
@@ -507,7 +559,15 @@ async function getCompositeRankings(params: {
     platform: params.platform,
     limit: params.limit,
     offset: params.offset,
-    sort_by: params.sort_by as 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers' | 'win_rate' | 'sharpe_ratio' | 'trades_count',
+    sort_by: params.sort_by as
+      | 'arena_score'
+      | 'roi'
+      | 'pnl'
+      | 'drawdown'
+      | 'copiers'
+      | 'win_rate'
+      | 'sharpe_ratio'
+      | 'trades_count',
     sort_dir: params.sort_dir,
     min_pnl: params.min_pnl,
     min_trades: params.min_trades,

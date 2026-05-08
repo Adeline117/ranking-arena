@@ -65,7 +65,7 @@ async function main() {
     await screenshot(page, '01-quiz-landing')
 
     // Check for Start Test button
-    const startBtn = await page.$('button, a, [role="button"]')
+    const _startBtn = await page.$('button, a, [role="button"]')
     const pageText = await page.textContent('body')
     const hasStartButton =
       pageText.toLowerCase().includes('start') ||
@@ -137,7 +137,7 @@ async function main() {
             answered = true
             console.log(`  Q${q}: Clicked option "${text.trim().substring(0, 60)}"`)
             break
-          } catch (e) {
+          } catch (_e) {
             continue
           }
         }
@@ -156,7 +156,7 @@ async function main() {
               const text = await el.textContent()
               console.log(`  Q${q}: Clicked answer "${text?.trim().substring(0, 60)}"`)
               break
-            } catch (e) {
+            } catch (_e) {
               continue
             }
           }
@@ -206,7 +206,7 @@ async function main() {
             console.log(`  Clicked back: "${(text || ariaLabel || '').trim().substring(0, 40)}"`)
             await sleep(1000)
             break
-          } catch (e) {
+          } catch (_e) {
             continue
           }
         }
@@ -222,7 +222,9 @@ async function main() {
         await dots[0].click()
         console.log('  Clicked first dot/indicator')
         await sleep(1000)
-      } catch (e) {}
+      } catch (_e) {
+        /* ignore */
+      }
     }
 
     await screenshot(page, '04-quiz-back-to-q1')
@@ -264,7 +266,7 @@ async function main() {
             await btn.click()
             clickedNext = true
             break
-          } catch (e) {
+          } catch (_e) {
             continue
           }
         }
@@ -390,7 +392,6 @@ async function main() {
     await sleep(3000)
     await screenshot(page, '09-search-eth')
 
-    const bodyText = await page.textContent('body')
     // Count result items
     const resultElements = await page.$$(
       '[class*="result"], [class*="trader"], [class*="row"], a[href*="/trader/"]'
@@ -419,7 +420,6 @@ async function main() {
     await sleep(3000)
     await screenshot(page, '10-hot')
 
-    const bodyText = await page.textContent('body')
     const postLinks = await page.$$('a[href*="/post/"]')
     console.log(`  Post links found: ${postLinks.length}`)
 
@@ -444,7 +444,6 @@ async function main() {
     await sleep(3000)
     await screenshot(page, '11-groups')
 
-    const bodyText = await page.textContent('body')
     const groupCards = await page.$$('a[href*="/groups/"], [class*="group"]')
     console.log(`  Group elements found: ${groupCards.length}`)
   } catch (e) {

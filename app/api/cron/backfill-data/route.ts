@@ -23,7 +23,6 @@ import { connectorRegistry, initializeConnectors } from '@/lib/connectors/regist
 import { runConnectorBatch } from '@/lib/pipeline/connector-db-adapter'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
 import { safeParseInt } from '@/lib/utils/safe-parse'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'

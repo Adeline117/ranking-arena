@@ -1,4 +1,3 @@
-import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import type { Exchange } from '@/lib/exchange'
@@ -57,36 +56,54 @@ const EXCHANGES: { name: string; key: Exchange }[] = [
 const DOUBLED_EXCHANGES = [...EXCHANGES, ...EXCHANGES]
 
 export default function ExchangePartners() {
-
   return (
-    <div style={{
-      overflow: 'hidden',
-      padding: '10px 0',
-      borderBottom: `1px solid var(--color-border-primary)`,
-      position: 'relative',
-      contain: 'layout style paint',  // Prevent internal animation from causing external CLS
-      height: 47,  // Fixed height prevents CLS when component lazy-loads
-    }}>
+    <div
+      style={{
+        overflow: 'hidden',
+        padding: '10px 0',
+        borderBottom: `1px solid var(--color-border-primary)`,
+        position: 'relative',
+        contain: 'layout style paint', // Prevent internal animation from causing external CLS
+        height: 47, // Fixed height prevents CLS when component lazy-loads
+      }}
+    >
       {/* Fade edges */}
-      <div style={{
-        position: 'absolute', left: 0, top: 0, bottom: 0, width: 40,
-        background: `linear-gradient(to right, var(--color-bg-primary), transparent)`,
-        zIndex: 1, pointerEvents: 'none',
-      }} />
-      <div style={{
-        position: 'absolute', right: 0, top: 0, bottom: 0, width: 40,
-        background: `linear-gradient(to left, var(--color-bg-primary), transparent)`,
-        zIndex: 1, pointerEvents: 'none',
-      }} />
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: 40,
+          background: `linear-gradient(to right, var(--color-bg-primary), transparent)`,
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      />
+      <div
+        style={{
+          position: 'absolute',
+          right: 0,
+          top: 0,
+          bottom: 0,
+          width: 40,
+          background: `linear-gradient(to left, var(--color-bg-primary), transparent)`,
+          zIndex: 1,
+          pointerEvents: 'none',
+        }}
+      />
 
-      <div className="exchange-scroll-track" style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 20,
-        animation: 'exchange-scroll 35s linear infinite',
-        width: 'max-content',
-        willChange: 'transform',  // Promote to compositor layer — prevents layout recalc during animation
-      }}>
+      <div
+        className="exchange-scroll-track"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 20,
+          animation: 'exchange-scroll 35s linear infinite',
+          width: 'max-content',
+          willChange: 'transform', // Promote to compositor layer — prevents layout recalc during animation
+        }}
+      >
         {DOUBLED_EXCHANGES.map((ex, i) => {
           const source = EXCHANGE_SOURCE_MAP[ex.key] || ''
           const content = (
@@ -117,9 +134,13 @@ export default function ExchangePartners() {
               onClick={(e) => {
                 e.preventDefault()
                 // Scroll to ranking table and trigger exchange filter
-                const event = new CustomEvent('arena:filter-exchange', { detail: { exchange: source } })
+                const event = new CustomEvent('arena:filter-exchange', {
+                  detail: { exchange: source },
+                })
                 window.dispatchEvent(event)
-                document.querySelector('.home-ranking-section')?.scrollIntoView({ behavior: 'smooth' })
+                document
+                  .querySelector('.home-ranking-section')
+                  ?.scrollIntoView({ behavior: 'smooth' })
               }}
               className="exchange-item"
               style={{ ...sharedStyle, cursor: 'pointer' }}
@@ -127,11 +148,7 @@ export default function ExchangePartners() {
               {content}
             </a>
           ) : (
-            <span
-              key={`${ex.key}-${i}`}
-              className="exchange-item"
-              style={sharedStyle}
-            >
+            <span key={`${ex.key}-${i}`} className="exchange-item" style={sharedStyle}>
               {content}
             </span>
           )

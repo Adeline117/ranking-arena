@@ -17,7 +17,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
@@ -91,23 +90,27 @@ async function analyzePlatform(
   // Get snapshot counts per period — run in parallel (safe now that we use
   // estimated counts which don't lock large portions of the table).
   const periodCounts: Record<string, number> = {}
-  const periodResults = await Promise.all(TIME_PERIODS.map(async (period) => {
-    try {
-      const { count, error } = await supabase
-        .from('trader_snapshots_v2')
-        .select('*', { count: 'estimated', head: true })
-        .eq('platform', platform)
-        .eq('window', period)
-      if (error) {
-        logger.warn(`[check-data-gaps] ${platform} ${period} snapshot count error: ${error.message}`)
+  const periodResults = await Promise.all(
+    TIME_PERIODS.map(async (period) => {
+      try {
+        const { count, error } = await supabase
+          .from('trader_snapshots_v2')
+          .select('*', { count: 'estimated', head: true })
+          .eq('platform', platform)
+          .eq('window', period)
+        if (error) {
+          logger.warn(
+            `[check-data-gaps] ${platform} ${period} snapshot count error: ${error.message}`
+          )
+          return [period, 0] as const
+        }
+        return [period, count || 0] as const
+      } catch (err) {
+        logger.warn(`[check-data-gaps] ${platform} ${period} snapshot count failed: ${err}`)
         return [period, 0] as const
       }
-      return [period, count || 0] as const
-    } catch (err) {
-      logger.warn(`[check-data-gaps] ${platform} ${period} snapshot count failed: ${err}`)
-      return [period, 0] as const
-    }
-  }))
+    })
+  )
   for (const [period, c] of periodResults) periodCounts[period] = c
 
   // Get enrichment counts for 90D only (most important) + position history
@@ -115,8 +118,11 @@ async function analyzePlatform(
   const [equityCurve90D, statsDetail90D, positionHistory] = await Promise.all([
     (async () => {
       try {
-        const r = await supabase.from('trader_equity_curve').select('*', { count: 'estimated', head: true })
-          .eq('source', platform).eq('period', '90D')
+        const r = await supabase
+          .from('trader_equity_curve')
+          .select('*', { count: 'estimated', head: true })
+          .eq('source', platform)
+          .eq('period', '90D')
         return r.count || 0
       } catch (err) {
         logger.warn(`[check-data-gaps] ${platform} equity_curve count failed: ${err}`)
@@ -125,8 +131,11 @@ async function analyzePlatform(
     })(),
     (async () => {
       try {
-        const r = await supabase.from('trader_stats_detail').select('*', { count: 'estimated', head: true })
-          .eq('source', platform).eq('period', '90D')
+        const r = await supabase
+          .from('trader_stats_detail')
+          .select('*', { count: 'estimated', head: true })
+          .eq('source', platform)
+          .eq('period', '90D')
         return r.count || 0
       } catch (err) {
         logger.warn(`[check-data-gaps] ${platform} stats_detail count failed: ${err}`)
@@ -135,7 +144,9 @@ async function analyzePlatform(
     })(),
     (async () => {
       try {
-        const r = await supabase.from('trader_position_history').select('*', { count: 'estimated', head: true })
+        const r = await supabase
+          .from('trader_position_history')
+          .select('*', { count: 'estimated', head: true })
           .eq('source', platform)
         return r.count || 0
       } catch (err) {
@@ -198,16 +209,18 @@ export async function GET(req: NextRequest) {
   for (let i = 0; i < platforms.length; i += BATCH_SIZE) {
     const elapsed = Date.now() - startTime
     if (elapsed > TIME_BUDGET_MS) {
-      const remaining = platforms.slice(i).map(p => p)
+      const remaining = platforms.slice(i).map((p) => p)
       skippedPlatforms.push(...remaining)
       timedOut = true
-      logger.warn(`[check-data-gaps] Time budget exceeded at ${Math.round(elapsed / 1000)}s, skipping ${remaining.length} platforms: ${remaining.join(', ')}`)
+      logger.warn(
+        `[check-data-gaps] Time budget exceeded at ${Math.round(elapsed / 1000)}s, skipping ${remaining.length} platforms: ${remaining.join(', ')}`
+      )
       break
     }
 
     const batch = platforms.slice(i, i + BATCH_SIZE)
     const batchResults = await Promise.allSettled(
-      batch.map(platform => analyzePlatform(supabase, platform))
+      batch.map((platform) => analyzePlatform(supabase, platform))
     )
 
     for (let j = 0; j < batchResults.length; j++) {
@@ -216,7 +229,10 @@ export async function GET(req: NextRequest) {
         const report = result.value
         reports.push(report)
         summary.totalTraders += report.totalTraders
-        summary.totalGaps += report.missingPeriods.missing7D + report.missingPeriods.missing30D + report.missingPeriods.missing90D
+        summary.totalGaps +=
+          report.missingPeriods.missing7D +
+          report.missingPeriods.missing30D +
+          report.missingPeriods.missing90D
 
         const expectedEnrichment = Math.min(report.totalTraders, 300)
         const hasIssues =
@@ -241,7 +257,10 @@ export async function GET(req: NextRequest) {
   if (hasPartialResults) {
     await plog.partialSuccess(
       reports.length,
-      [...skippedPlatforms.map(p => `skipped:${p}`), ...failedPlatforms.map(p => `failed:${p}`)],
+      [
+        ...skippedPlatforms.map((p) => `skipped:${p}`),
+        ...failedPlatforms.map((p) => `failed:${p}`),
+      ],
       { summary, timedOut, skippedPlatforms, failedPlatforms }
     )
   } else {

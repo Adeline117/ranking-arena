@@ -4,8 +4,8 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
-// 支持的视频格式
-const ALLOWED_VIDEO_TYPES = [
+// 支持的视频格式 (kept for documentation; validation uses magic-byte sniffing below)
+const _ALLOWED_VIDEO_TYPES = [
   'video/mp4',
   'video/webm',
   'video/quicktime', // .mov
@@ -18,7 +18,7 @@ const VIDEO_SIGNATURES: Array<{ offset: number; bytes: number[]; type: string; e
   // MP4 / MOV — ftyp box at offset 4
   { offset: 4, bytes: [0x66, 0x74, 0x79, 0x70], type: 'video/mp4', ext: 'mp4' },
   // WebM / MKV — EBML header
-  { offset: 0, bytes: [0x1A, 0x45, 0xDF, 0xA3], type: 'video/webm', ext: 'webm' },
+  { offset: 0, bytes: [0x1a, 0x45, 0xdf, 0xa3], type: 'video/webm', ext: 'webm' },
   // AVI — RIFF....AVI
   { offset: 0, bytes: [0x52, 0x49, 0x46, 0x46], type: 'video/x-msvideo', ext: 'avi' },
 ]
@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
         {
           error: `Video file too large. Maximum ${MAX_VIDEO_SIZE / 1024 / 1024}MB`,
           maxSize: MAX_VIDEO_SIZE,
-          currentSize: file.size
+          currentSize: file.size,
         },
         { status: 400 }
       )
@@ -78,8 +78,9 @@ export async function POST(request: NextRequest) {
       // Reject the file — magic bytes don't match any known video format
       return NextResponse.json(
         {
-          error: 'Unsupported video format. File content does not match any known video format. Supported formats: MP4, WebM, MOV, AVI, MKV',
-          supportedFormats: ['MP4', 'WebM', 'MOV', 'AVI', 'MKV']
+          error:
+            'Unsupported video format. File content does not match any known video format. Supported formats: MP4, WebM, MOV, AVI, MKV',
+          supportedFormats: ['MP4', 'WebM', 'MOV', 'AVI', 'MKV'],
         },
         { status: 400 }
       )
@@ -98,22 +99,18 @@ export async function POST(request: NextRequest) {
     const fileName = `${userId}/videos/${timestamp}-${randomStr}.${fileExt}`
 
     // 上传到 Supabase Storage — use sniffed content type
-    const { data, error } = await supabase.storage
-      .from('posts')
-      .upload(fileName, file, {
-        contentType,
-        upsert: false,
-      })
+    const { data, error } = await supabase.storage.from('posts').upload(fileName, file, {
+      contentType,
+      upsert: false,
+    })
 
     if (error) {
       logger.error('Video upload error:', error)
-      return NextResponse.json({ error: "Internal server error" }, { status: 500 })
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
     }
 
     // 获取公共 URL
-    const { data: urlData } = supabase.storage
-      .from('posts')
-      .getPublicUrl(fileName)
+    const { data: urlData } = supabase.storage.from('posts').getPublicUrl(fileName)
 
     return NextResponse.json({
       url: urlData.publicUrl,

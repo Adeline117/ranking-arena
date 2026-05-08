@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, lazy, useEffect } from 'react'
+import { Suspense, lazy } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const MobileBottomNav = lazy(() => import('../layout/MobileBottomNav'))
@@ -14,7 +14,7 @@ const GuestSignupPrompt = lazy(() => import('./GuestSignupPrompt'))
 import HomePageClient from './HomePageClient'
 import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import DeferredMount from '../utils/DeferredMount'
-import { RankingSkeleton } from '../ui/Skeleton'
+// RankingSkeleton removed from Phase 2 — see SSR comment above
 import { features } from '@/lib/features'
 // Lazy-load sidebar widgets
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
@@ -48,7 +48,7 @@ interface HomePageProps {
 export default function HomePage({
   initialTraders,
   initialLastUpdated,
-  heroStats,
+  heroStats: _heroStats,
   initialTotalCount,
   initialCategoryCounts,
 }: HomePageProps) {

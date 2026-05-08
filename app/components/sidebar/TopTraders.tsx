@@ -200,7 +200,7 @@ export default function TopTraders() {
                 : trader.handle
                   ? formatId(trader.handle)
                   : formatId(trader.source_trader_id)
-            const roiStr = trader.roi != null ? formatROI(trader.roi) : null
+            const _roiStr = trader.roi != null ? formatROI(trader.roi) : null
             return (
               <Link
                 prefetch={true}

@@ -31,7 +31,7 @@ export default function HomePageClient({
   initialCategoryCounts,
 }: HomePageClientProps) {
   const { isLoggedIn } = useAuthSession()
-  const { t } = useLanguage()
+  const { t: _t } = useLanguage()
   const router = useRouter()
 
   // Convert InitialTrader[] to Trader[] for compatibility

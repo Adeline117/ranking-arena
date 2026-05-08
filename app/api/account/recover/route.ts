@@ -8,7 +8,7 @@
  * credentials directly via Supabase Admin and unbans the user.
  */
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
 import { createClient } from '@supabase/supabase-js'

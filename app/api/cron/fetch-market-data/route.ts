@@ -14,13 +14,16 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { detectMarketCondition, detectVolatilityRegime, calculateTrendStrength } from '@/lib/utils/market-correlation'
+import {
+  detectMarketCondition,
+  detectVolatilityRegime,
+  calculateTrendStrength,
+} from '@/lib/utils/market-correlation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { logger } from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
@@ -54,7 +57,7 @@ export async function POST(request: NextRequest) {
         try {
           const response = await fetch(
             `${COINGECKO_API}/coins/${symbol}/market_chart?vs_currency=usd&days=1&interval=daily`,
-            { headers: { 'Accept': 'application/json' } }
+            { headers: { Accept: 'application/json' } }
           )
 
           if (!response.ok) {
@@ -76,7 +79,12 @@ export async function POST(request: NextRequest) {
             const { error } = await supabase
               .from('market_benchmarks')
               .upsert(
-                { symbol: symbolKey, date: today, close_price: latestPrice, daily_return_pct: dailyReturn },
+                {
+                  symbol: symbolKey,
+                  date: today,
+                  close_price: latestPrice,
+                  daily_return_pct: dailyReturn,
+                },
                 { onConflict: 'symbol,date' }
               )
 
@@ -87,7 +95,11 @@ export async function POST(request: NextRequest) {
             priceResults[symbolKey] = { price: latestPrice, dailyReturn }
           }
         } catch (err) {
-          logger.error(`Error fetching ${symbol} market data`, {}, err instanceof Error ? err : new Error(String(err)))
+          logger.error(
+            `Error fetching ${symbol} market data`,
+            {},
+            err instanceof Error ? err : new Error(String(err))
+          )
           priceResults[symbol] = { error: err instanceof Error ? err.message : 'Unknown error' }
         }
       }
@@ -110,7 +122,7 @@ export async function POST(request: NextRequest) {
           if (!returns || returns.length < 7) continue
 
           const dailyReturns = (returns as { daily_return_pct: number | string | null }[])
-            .map(r => parseFloat(String(r.daily_return_pct ?? 0)))
+            .map((r) => parseFloat(String(r.daily_return_pct ?? 0)))
             .reverse()
 
           const condition = detectMarketCondition(dailyReturns)
@@ -122,7 +134,13 @@ export async function POST(request: NextRequest) {
           const { error } = await supabase
             .from('market_conditions')
             .upsert(
-              { symbol, date: today, condition, volatility_regime: volatilityRegime, trend_strength: trendStrength },
+              {
+                symbol,
+                date: today,
+                condition,
+                volatility_regime: volatilityRegime,
+                trend_strength: trendStrength,
+              },
               { onConflict: 'symbol,date' }
             )
 
@@ -132,7 +150,11 @@ export async function POST(request: NextRequest) {
 
           conditionResults[symbol] = { condition, volatilityRegime, trendStrength }
         } catch (err) {
-          logger.error(`Error updating ${symbol} condition`, {}, err instanceof Error ? err : new Error(String(err)))
+          logger.error(
+            `Error updating ${symbol} condition`,
+            {},
+            err instanceof Error ? err : new Error(String(err))
+          )
         }
       }
       results.conditions = conditionResults
@@ -168,7 +190,9 @@ export async function POST(request: NextRequest) {
         recordCount: 0,
         error: err instanceof Error ? err.message : String(err),
       })
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
 
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },

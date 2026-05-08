@@ -21,7 +21,7 @@ import ActivityFeedItem from './ActivityFeedItem'
 // Filter options
 // ---------------------------------------------------------------------------
 
-const PLATFORM_OPTIONS: { label: string; value: string | null }[] = [
+const _PLATFORM_OPTIONS: { label: string; value: string | null }[] = [
   { label: 'All', value: null },
   { label: 'Binance', value: 'binance_futures' },
   { label: 'Bybit', value: 'bybit' },
@@ -31,7 +31,7 @@ const PLATFORM_OPTIONS: { label: string; value: string | null }[] = [
   { label: 'GMX', value: 'gmx' },
 ]
 
-const TYPE_OPTIONS: { label: string; value: ActivityType | null }[] = [
+const _TYPE_OPTIONS: { label: string; value: ActivityType | null }[] = [
   { label: 'All', value: null },
   ...Object.entries(ACTIVITY_META).map(([key, meta]) => ({
     label: meta.label,
@@ -71,23 +71,29 @@ export default function ActivityFeed({
   const { t } = useLanguage()
   const localTitle = title || t('activityFeedTitle')
 
-  const platformOptions = useMemo(() => [
-    { label: t('activityFilterAll'), value: null as string | null },
-    { label: 'Binance', value: 'binance_futures' },
-    { label: 'Bybit', value: 'bybit' },
-    { label: 'OKX', value: 'okx_futures' },
-    { label: 'Bitget', value: 'bitget_futures' },
-    { label: 'Hyperliquid', value: 'hyperliquid' },
-    { label: 'GMX', value: 'gmx' },
-  ], [t])
+  const platformOptions = useMemo(
+    () => [
+      { label: t('activityFilterAll'), value: null as string | null },
+      { label: 'Binance', value: 'binance_futures' },
+      { label: 'Bybit', value: 'bybit' },
+      { label: 'OKX', value: 'okx_futures' },
+      { label: 'Bitget', value: 'bitget_futures' },
+      { label: 'Hyperliquid', value: 'hyperliquid' },
+      { label: 'GMX', value: 'gmx' },
+    ],
+    [t]
+  )
 
-  const typeOptions = useMemo(() => [
-    { label: t('activityFilterAll'), value: null as ActivityType | null },
-    ...Object.entries(ACTIVITY_META).map(([key, meta]) => ({
-      label: meta.label,
-      value: key as ActivityType,
-    })),
-  ], [t])
+  const typeOptions = useMemo(
+    () => [
+      { label: t('activityFilterAll'), value: null as ActivityType | null },
+      ...Object.entries(ACTIVITY_META).map(([key, meta]) => ({
+        label: meta.label,
+        value: key as ActivityType,
+      })),
+    ],
+    [t]
+  )
 
   const [platform, setPlatform] = useState<string | null>(fixedPlatform ?? null)
   const [typeFilter, setTypeFilter] = useState<ActivityType | null>(null)
@@ -98,40 +104,43 @@ export default function ActivityFeed({
   const [error, setError] = useState<string | null>(null)
 
   // Platform filter changes — reload from scratch
-  const handlePlatformChange = useCallback(async (newPlatform: string | null) => {
-    if (fixedPlatform) return // locked
-    setPlatform(newPlatform)
-    setTypeFilter(null)
-    setActivities([])
-    setHasMore(false)
-    setCursor(null)
-    setLoading(true)
-    setError(null)
+  const handlePlatformChange = useCallback(
+    async (newPlatform: string | null) => {
+      if (fixedPlatform) return // locked
+      setPlatform(newPlatform)
+      setTypeFilter(null)
+      setActivities([])
+      setHasMore(false)
+      setCursor(null)
+      setLoading(true)
+      setError(null)
 
-    try {
-      const params = new URLSearchParams()
-      params.set('limit', '50')
-      if (newPlatform) params.set('platform', newPlatform)
-      if (fixedHandle) params.set('handle', fixedHandle)
+      try {
+        const params = new URLSearchParams()
+        params.set('limit', '50')
+        if (newPlatform) params.set('platform', newPlatform)
+        if (fixedHandle) params.set('handle', fixedHandle)
 
-      const res = await fetch(`/api/feed/activities?${params}`)
-      const json = await res.json()
+        const res = await fetch(`/api/feed/activities?${params}`)
+        const json = await res.json()
 
-      if (!res.ok) {
-        setError(t('loadFailed'))
-        return
+        if (!res.ok) {
+          setError(t('loadFailed'))
+          return
+        }
+
+        const data = json.data
+        setActivities(data.activities ?? [])
+        setHasMore(data.pagination.hasMore)
+        setCursor(data.pagination.nextCursor)
+      } catch {
+        setError(t('networkError'))
+      } finally {
+        setLoading(false)
       }
-
-      const data = json.data
-      setActivities(data.activities ?? [])
-      setHasMore(data.pagination.hasMore)
-      setCursor(data.pagination.nextCursor)
-    } catch {
-      setError(t('networkError'))
-    } finally {
-      setLoading(false)
-    }
-  }, [fixedPlatform, fixedHandle])
+    },
+    [fixedPlatform, fixedHandle]
+  )
 
   // Load more (cursor pagination)
   const handleLoadMore = useCallback(async () => {
@@ -409,7 +418,9 @@ function FilterChip({ label, active, onClick, small = false }: FilterChipProps) 
         background: active ? 'var(--color-accent-primary)20' : 'transparent',
         color: active ? 'var(--color-accent-primary)' : tokens.colors.text.tertiary,
         fontSize: small ? 11 : tokens.typography.fontSize.xs,
-        fontWeight: active ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+        fontWeight: active
+          ? tokens.typography.fontWeight.bold
+          : tokens.typography.fontWeight.normal,
         cursor: 'pointer',
         whiteSpace: 'nowrap',
         fontFamily: tokens.typography.fontFamily.sans.join(', '),

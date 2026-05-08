@@ -13,7 +13,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
@@ -48,12 +47,14 @@ const EXCHANGES: ExchangeConfig[] = [
       // Binance returns array of historical rates, take the most recent
       if (!Array.isArray(data) || data.length === 0) return []
       const latest = data[data.length - 1] as Record<string, string | number>
-      return [{
-        platform: 'binance',
-        symbol,
-        funding_rate: parseFloat(String(latest.fundingRate)),
-        funding_time: new Date(Number(latest.fundingTime)).toISOString(),
-      }]
+      return [
+        {
+          platform: 'binance',
+          symbol,
+          funding_rate: parseFloat(String(latest.fundingRate)),
+          funding_time: new Date(Number(latest.fundingTime)).toISOString(),
+        },
+      ]
     },
   },
   {
@@ -64,12 +65,14 @@ const EXCHANGES: ExchangeConfig[] = [
       const result = data.result as { list?: Array<Record<string, string>> } | undefined
       if (!result?.list || result.list.length === 0) return []
       const latest = result.list[0]
-      return [{
-        platform: 'bybit',
-        symbol: latest.symbol,
-        funding_rate: parseFloat(latest.fundingRate),
-        funding_time: new Date(parseInt(latest.fundingRateTimestamp)).toISOString(),
-      }]
+      return [
+        {
+          platform: 'bybit',
+          symbol: latest.symbol,
+          funding_rate: parseFloat(latest.fundingRate),
+          funding_time: new Date(parseInt(latest.fundingRateTimestamp)).toISOString(),
+        },
+      ]
     },
   },
   {
@@ -80,12 +83,14 @@ const EXCHANGES: ExchangeConfig[] = [
       const items = data.data as Array<Record<string, string>> | undefined
       if (!items || items.length === 0) return []
       const latest = items[0]
-      return [{
-        platform: 'okx',
-        symbol: latest.instId,
-        funding_rate: parseFloat(latest.fundingRate),
-        funding_time: new Date(parseInt(latest.fundingTime)).toISOString(),
-      }]
+      return [
+        {
+          platform: 'okx',
+          symbol: latest.instId,
+          funding_rate: parseFloat(latest.fundingRate),
+          funding_time: new Date(parseInt(latest.fundingTime)).toISOString(),
+        },
+      ]
     },
   },
   {
@@ -95,12 +100,14 @@ const EXCHANGES: ExchangeConfig[] = [
     responseMapper: (data: Record<string, unknown>, symbol: string) => {
       const d = data.data as Record<string, string> | undefined
       if (!d || !d.fundingRate) return []
-      return [{
-        platform: 'bitget',
-        symbol: d.symbol || symbol,
-        funding_rate: parseFloat(d.fundingRate),
-        funding_time: new Date(parseInt(d.fundingTime)).toISOString(),
-      }]
+      return [
+        {
+          platform: 'bitget',
+          symbol: d.symbol || symbol,
+          funding_rate: parseFloat(d.fundingRate),
+          funding_time: new Date(parseInt(d.fundingTime)).toISOString(),
+        },
+      ]
     },
   },
 ]
@@ -110,7 +117,7 @@ const EXCHANGES: ExchangeConfig[] = [
 // ============================================
 
 async function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function fetchFundingRate(
@@ -138,7 +145,7 @@ async function fetchFundingRate(
 
     const response = await fetch(url, {
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'User-Agent': 'RankingArena/1.0',
       },
     })
@@ -152,7 +159,9 @@ async function fetchFundingRate(
     const data = await response.json()
     return exchange.responseMapper(data, symbol)
   } catch (error) {
-    logger.warn(`[funding] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`)
+    logger.warn(
+      `[funding] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`
+    )
     return []
   }
 }
@@ -176,9 +185,7 @@ export async function POST(request: NextRequest) {
   const plog = await PipelineLogger.start('fetch-funding-rates')
 
   try {
-
     for (const exchange of EXCHANGES) {
-
       for (const symbol of exchange.symbols) {
         try {
           // Fetch funding rate
@@ -186,19 +193,17 @@ export async function POST(request: NextRequest) {
 
           // Insert into database
           for (const rate of rates) {
-            const { error } = await supabase
-              .from('funding_rates')
-              .upsert(
-                {
-                  platform: rate.platform,
-                  symbol: rate.symbol,
-                  funding_rate: rate.funding_rate,
-                  funding_time: rate.funding_time,
-                },
-                {
-                  onConflict: 'platform,symbol,funding_time',
-                }
-              )
+            const { error } = await supabase.from('funding_rates').upsert(
+              {
+                platform: rate.platform,
+                symbol: rate.symbol,
+                funding_rate: rate.funding_rate,
+                funding_time: rate.funding_time,
+              },
+              {
+                onConflict: 'platform,symbol,funding_time',
+              }
+            )
 
             if (error) {
               logger.dbError('insert-funding-rate', error, { rate })

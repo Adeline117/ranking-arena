@@ -23,12 +23,15 @@ export function useCountUp(target: number, duration = 500): number {
     // Skip if target hasn't changed
     if (prevTarget.current === target) return
 
-    const from = prevTarget.current ?? 0
     prevTarget.current = target
 
     // No animation — set value immediately (used for non-hero rows)
     // Also respect prefers-reduced-motion (WCAG 2.3.3)
-    if (duration === 0 || (typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)) {
+    if (
+      duration === 0 ||
+      (typeof window !== 'undefined' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    ) {
       setValue(target)
       currentValue.current = target
       return

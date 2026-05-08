@@ -52,7 +52,7 @@ export interface NotificationListOptions {
 }
 
 // 数据库返回的通知行类型
-interface NotificationRow {
+interface _NotificationRow {
   id: string
   user_id: string
   type: NotificationType

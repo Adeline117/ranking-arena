@@ -288,7 +288,7 @@ async function fetchViaDiverseRPC(
     ])
     data = rpcResult.data as Record<string, unknown>[] | null
     error = rpcResult.error
-  } catch (err) {
+  } catch (_err) {
     logger.warn('[getInitialTraders] Diverse RPC slow (>2s), falling back to covering-index query')
     return fetchLeaderboardLegacy(supabase, timeRange, limit)
   }

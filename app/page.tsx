@@ -60,7 +60,7 @@ const organizationJsonLd = {
 }
 
 const PER_PAGE = 50
-const VALID_RANGES = new Set(['7D', '30D', '90D'])
+const _VALID_RANGES = new Set(['7D', '30D', '90D'])
 
 /**
  * Homepage — Two-phase SSR + interactive rendering.

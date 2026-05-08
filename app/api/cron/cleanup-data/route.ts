@@ -19,7 +19,6 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { refreshComputedMetrics } from '@/lib/cron/metrics-backfill'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 

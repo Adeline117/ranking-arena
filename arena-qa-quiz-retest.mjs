@@ -107,7 +107,6 @@ async function main() {
   // Navigate back to Q1
   console.log('\n=== Navigate Back to Q1 ===')
   // Look for any back navigation
-  const allButtons = await page.$$('button')
   let backClickCount = 0
   for (let attempt = 0; attempt < 3; attempt++) {
     const btns = await page.$$('button, [role="button"]')

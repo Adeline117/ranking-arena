@@ -10,7 +10,7 @@ import { logger } from '@/lib/utils/logger'
 export const runtime = 'edge'
 export const dynamic = 'force-dynamic'
 
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const result = await getOrSetWithLock('api:market:alpha', async () => fetchAlphaData(), {
       ttl: 120,

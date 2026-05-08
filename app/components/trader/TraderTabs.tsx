@@ -20,7 +20,14 @@ interface TraderTabsProps {
 
 const useIsomorphicLayoutEffect = typeof window !== 'undefined' ? useLayoutEffect : useEffect
 
-export default function TraderTabs({ activeTab, onTabChange, isPro = false, onProRequired, extraTabs, hideTabs }: TraderTabsProps) {
+export default function TraderTabs({
+  activeTab,
+  onTabChange,
+  isPro = false,
+  onProRequired: _onProRequired,
+  extraTabs,
+  hideTabs,
+}: TraderTabsProps) {
   const { t } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
   const tabRefs = useRef<Map<TabKey, HTMLButtonElement>>(new Map())
@@ -83,19 +90,35 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
     <div style={{ position: 'relative', marginBottom: tokens.spacing[5] }}>
       {/* Left scroll fade indicator — 20px on mobile to save space */}
       {scrollState.canScrollLeft && (
-        <div aria-hidden="true" style={{
-          position: 'absolute', left: 0, top: 0, bottom: 0, width: 20, zIndex: 2,
-          background: 'linear-gradient(to right, var(--color-bg-primary), transparent)',
-          pointerEvents: 'none',
-        }} />
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: 20,
+            zIndex: 2,
+            background: 'linear-gradient(to right, var(--color-bg-primary), transparent)',
+            pointerEvents: 'none',
+          }}
+        />
       )}
       {/* Right scroll fade indicator */}
       {scrollState.canScrollRight && (
-        <div aria-hidden="true" style={{
-          position: 'absolute', right: 0, top: 0, bottom: 0, width: 20, zIndex: 2,
-          background: 'linear-gradient(to left, var(--color-bg-primary), transparent)',
-          pointerEvents: 'none',
-        }} />
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 20,
+            zIndex: 2,
+            background: 'linear-gradient(to left, var(--color-bg-primary), transparent)',
+            pointerEvents: 'none',
+          }}
+        />
       )}
       <Box
         ref={containerRef}
@@ -123,7 +146,8 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
             height: 3,
             background: `linear-gradient(90deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand})`,
             borderRadius: 1.5,
-            transition: 'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+            transition:
+              'left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
             boxShadow: `0 0 6px var(--color-accent-primary-30, ${tokens.colors.accent.primary}30)`,
             zIndex: 1,
           }}
@@ -135,7 +159,9 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
           return (
             <button
               key={tab.key}
-              ref={(el) => { if (el) tabRefs.current.set(tab.key, el) }}
+              ref={(el) => {
+                if (el) tabRefs.current.set(tab.key, el)
+              }}
               className="profile-tab-button interactive-scale"
               onClick={() => {
                 // Always allow tab switch — paywall overlay shown inside tab content
@@ -158,12 +184,14 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
               role="tab"
               tabIndex={activeTab === tab.key ? 0 : -1}
               style={{
-                background: activeTab === tab.key
-                  ? `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.primary}08)`
-                  : 'transparent',
-                border: activeTab === tab.key
-                  ? `1px solid ${tokens.colors.accent.primary}30`
-                  : '1px solid transparent',
+                background:
+                  activeTab === tab.key
+                    ? `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.primary}08)`
+                    : 'transparent',
+                border:
+                  activeTab === tab.key
+                    ? `1px solid ${tokens.colors.accent.primary}30`
+                    : '1px solid transparent',
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                 minHeight: 44,
                 cursor: 'pointer',
@@ -191,20 +219,29 @@ export default function TraderTabs({ activeTab, onTabChange, isPro = false, onPr
                 size="sm"
                 weight={activeTab === tab.key ? 'black' : 'medium'}
                 style={{
-                  color: activeTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                  color:
+                    activeTab === tab.key
+                      ? tokens.colors.text.primary
+                      : tokens.colors.text.secondary,
                   transition: 'color 0.3s ease',
                 }}
               >
                 {tab.label}
               </Text>
               {showProBadge && (
-                <Box style={{
-                  padding: '1px 6px',
-                  borderRadius: tokens.radius.sm,
-                  background: `linear-gradient(135deg, ${tokens.colors.accent.primary}25, ${tokens.colors.accent.brand}15)`,
-                  border: `1px solid ${tokens.colors.accent.primary}30`,
-                }}>
-                  <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, fontSize: 9 }}>
+                <Box
+                  style={{
+                    padding: '1px 6px',
+                    borderRadius: tokens.radius.sm,
+                    background: `linear-gradient(135deg, ${tokens.colors.accent.primary}25, ${tokens.colors.accent.brand}15)`,
+                    border: `1px solid ${tokens.colors.accent.primary}30`,
+                  }}
+                >
+                  <Text
+                    size="xs"
+                    weight="bold"
+                    style={{ color: tokens.colors.accent.primary, fontSize: 9 }}
+                  >
                     PRO
                   </Text>
                 </Box>

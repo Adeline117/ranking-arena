@@ -18,15 +18,12 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { env } from '@/lib/env'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
-
-const UPSERT_BATCH = 500
 
 export async function GET(request: NextRequest) {
   if (!verifyCronSecret(request)) {

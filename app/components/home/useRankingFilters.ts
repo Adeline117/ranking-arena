@@ -109,8 +109,8 @@ interface UseRankingFiltersOptions {
 export function useRankingFilters({
   traders,
   activeTimeRange,
-  totalCount,
-  categoryCounts,
+  totalCount: _totalCount,
+  categoryCounts: _categoryCounts,
   fetchPage,
 }: UseRankingFiltersOptions) {
   const router = useRouter()

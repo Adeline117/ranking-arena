@@ -13,7 +13,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
@@ -50,7 +49,8 @@ const EXCHANGES: ExchangeConfig[] = [
       return {
         platform: 'binance',
         symbol: (data.symbol as string) || symbol,
-        open_interest_usd: parseFloat(data.openInterest as string) * parseFloat((data.price as string) || '0'),
+        open_interest_usd:
+          parseFloat(data.openInterest as string) * parseFloat((data.price as string) || '0'),
         open_interest_qty: parseFloat(data.openInterest as string),
         timestamp: new Date().toISOString(),
       }
@@ -111,7 +111,7 @@ const EXCHANGES: ExchangeConfig[] = [
 // ============================================
 
 async function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function fetchOpenInterest(
@@ -139,7 +139,7 @@ async function fetchOpenInterest(
 
     const response = await fetch(url, {
       headers: {
-        'Accept': 'application/json',
+        Accept: 'application/json',
         'User-Agent': 'RankingArena/1.0',
       },
     })
@@ -153,7 +153,9 @@ async function fetchOpenInterest(
     const data = await response.json()
     return exchange.responseMapper(data, symbol)
   } catch (error) {
-    logger.warn(`[oi] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`)
+    logger.warn(
+      `[oi] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`
+    )
     return null
   }
 }
@@ -178,9 +180,7 @@ export async function POST(request: NextRequest) {
   const plog = await PipelineLogger.start('fetch-open-interest')
 
   try {
-
     for (const exchange of EXCHANGES) {
-
       for (const symbol of exchange.symbols) {
         try {
           // Fetch open interest
@@ -188,19 +188,22 @@ export async function POST(request: NextRequest) {
 
           if (oi) {
             // Insert into database
-            const { error } = await supabase
-              .from('open_interest')
-              .upsert({
+            const { error } = await supabase.from('open_interest').upsert(
+              {
                 platform: oi.platform,
                 symbol: oi.symbol,
                 open_interest_usd: oi.open_interest_usd,
                 open_interest_contracts: oi.open_interest_qty ?? null,
                 timestamp: oi.timestamp,
-              }, { onConflict: 'platform,symbol,timestamp' })
+              },
+              { onConflict: 'platform,symbol,timestamp' }
+            )
 
             if (error) {
               // Log locally but don't send to Sentry — these are expected DB conflicts
-              logger.warn(`[OI] DB error for ${oi.platform}/${oi.symbol}: ${error.message || JSON.stringify(error)}`)
+              logger.warn(
+                `[OI] DB error for ${oi.platform}/${oi.symbol}: ${error.message || JSON.stringify(error)}`
+              )
               errors++
             } else {
               inserted++

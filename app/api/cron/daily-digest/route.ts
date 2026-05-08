@@ -11,7 +11,6 @@
  */
 
 import { NextRequest } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { sendDailyDigest, type DailyDigestData } from '@/lib/notifications/telegram'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
@@ -22,7 +21,7 @@ export const maxDuration = 120
 
 export const GET = withCron('daily-digest', async (_request: NextRequest, { supabase }) => {
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-  const activePlatforms = getSupportedInlinePlatforms().filter(p => !deadSet.has(p))
+  const activePlatforms = getSupportedInlinePlatforms().filter((p) => !deadSet.has(p))
 
   // Pipeline success rate (24h)
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
@@ -32,9 +31,10 @@ export const GET = withCron('daily-digest', async (_request: NextRequest, { supa
     .gte('started_at', oneDayAgo)
 
   const totalRuns = logs?.length || 0
-  const successRuns = logs?.filter(l => l.status === 'success').length || 0
+  const successRuns = logs?.filter((l) => l.status === 'success').length || 0
   const pipelineSuccessRate = totalRuns > 0 ? (successRuns / totalRuns) * 100 : 0
-  const alertCount24h = logs?.filter(l => l.status === 'error' || l.status === 'timeout').length || 0
+  const alertCount24h =
+    logs?.filter((l) => l.status === 'error' || l.status === 'timeout').length || 0
 
   // Platform freshness — query latest updated_at per platform efficiently
   const latestByPlatform = new Map<string, string>()
@@ -61,7 +61,7 @@ export const GET = withCron('daily-digest', async (_request: NextRequest, { supa
   })
   await Promise.all(freshnessChecks)
 
-  const platformFreshness: DailyDigestData['platformFreshness'] = activePlatforms.map(p => {
+  const platformFreshness: DailyDigestData['platformFreshness'] = activePlatforms.map((p) => {
     const latest = latestByPlatform.get(p)
     const hoursAgo = latest
       ? Math.round(((Date.now() - new Date(latest).getTime()) / (60 * 60 * 1000)) * 10) / 10
@@ -69,7 +69,8 @@ export const GET = withCron('daily-digest', async (_request: NextRequest, { supa
     return {
       name: p,
       hoursAgo,
-      status: hoursAgo > 24 ? 'critical' as const : hoursAgo > 8 ? 'stale' as const : 'ok' as const,
+      status:
+        hoursAgo > 24 ? ('critical' as const) : hoursAgo > 8 ? ('stale' as const) : ('ok' as const),
     }
   })
 

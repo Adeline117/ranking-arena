@@ -17,7 +17,6 @@
  * main-loop split (TASKS.md "Open follow-ups").
  */
 
-import { getSupabaseAdmin } from '@/lib/api'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
@@ -33,10 +32,7 @@ const STALE_ROW_AGE_MS = 5 * 24 * 60 * 60 * 1000
  * code 42883 = "function does not exist"). Non-critical: any failure is
  * logged and swallowed so the cron returns success.
  */
-export async function rerankAllRows(
-  supabase: SupabaseClient,
-  season: Period,
-): Promise<void> {
+export async function rerankAllRows(supabase: SupabaseClient, season: Period): Promise<void> {
   try {
     const { error: rerankErr } = await supabase.rpc('rerank_leaderboard', { p_season_id: season })
     if (!rerankErr) return
@@ -49,11 +45,16 @@ export async function rerankAllRows(
         .eq('season_id', season)
         .order('arena_score', { ascending: false, nullsFirst: false })
       if (allRows?.length) {
-        const rerankUpdates = allRows.map((r: { id: string }, idx: number) => ({ id: r.id, rank: idx + 1 }))
+        const rerankUpdates = allRows.map((r: { id: string }, idx: number) => ({
+          id: r.id,
+          rank: idx + 1,
+        }))
         // Batch size 100 (down from 500) to reduce lock hold time — large upserts
         // hold row locks that block concurrent SSR SELECT queries on leaderboard_ranks.
         for (let i = 0; i < rerankUpdates.length; i += 100) {
-          await supabase.from('leaderboard_ranks').upsert(rerankUpdates.slice(i, i + 100), { onConflict: 'id' })
+          await supabase
+            .from('leaderboard_ranks')
+            .upsert(rerankUpdates.slice(i, i + 100), { onConflict: 'id' })
         }
         logger.info(`${season}: re-ranked ${rerankUpdates.length} rows (inline fallback)`)
       }
@@ -75,10 +76,7 @@ export async function rerankAllRows(
  * Limits to 5000 rows per cron cycle so a backlog can't blow the time
  * budget; the next cron picks up where this one left off.
  */
-export async function cleanupStaleRows(
-  supabase: SupabaseClient,
-  season: Period,
-): Promise<number> {
+export async function cleanupStaleRows(supabase: SupabaseClient, season: Period): Promise<number> {
   const cutoff = new Date(Date.now() - STALE_ROW_AGE_MS).toISOString()
   const { data: staleRows, error: staleErr } = await supabase
     .from('leaderboard_ranks')
@@ -91,7 +89,10 @@ export async function cleanupStaleRows(
 
   const staleIds = staleRows.map((r: { id: string }) => r.id)
   for (let i = 0; i < staleIds.length; i += 500) {
-    await supabase.from('leaderboard_ranks').delete().in('id', staleIds.slice(i, i + 500))
+    await supabase
+      .from('leaderboard_ranks')
+      .delete()
+      .in('id', staleIds.slice(i, i + 500))
   }
   return staleIds.length
 }

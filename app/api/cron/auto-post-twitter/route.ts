@@ -15,7 +15,7 @@ import { withCron } from '@/lib/api/with-cron'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
 
-export const GET = withCron('auto-post-twitter', async (_request: NextRequest, { plog }) => {
+export const GET = withCron('auto-post-twitter', async (_request: NextRequest, { plog: _plog }) => {
   const supabase = getSupabaseAdmin()
 
   // Fetch top 5 traders by arena_score in 7D window (recent top performers)

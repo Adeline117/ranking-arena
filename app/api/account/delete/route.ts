@@ -8,7 +8,7 @@
 
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import { success, badRequest, forbidden } from '@/lib/api/response'
+import { badRequest, forbidden } from '@/lib/api/response'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createClient } from '@supabase/supabase-js'
 import { env } from '@/lib/env'
@@ -20,27 +20,25 @@ const logger = createLogger('account-delete')
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export const POST = withAuth(async ({ user, supabase: sb, request }) => {
-  const supabase = sb as SupabaseClient
+export const POST = withAuth(
+  async ({ user, supabase: sb, request }) => {
+    const supabase = sb as SupabaseClient
 
-  let body: { password?: string; reason?: string }
-  try {
-    body = await request.json()
-  } catch {
-    return badRequest('Invalid JSON body')
-  }
+    let body: { password?: string; reason?: string }
+    try {
+      body = await request.json()
+    } catch {
+      return badRequest('Invalid JSON body')
+    }
 
-  const { password, reason } = body
+    const { password, reason } = body
 
-  if (!password) {
-    return badRequest('Password required')
-  }
+    if (!password) {
+      return badRequest('Password required')
+    }
 
-  // Verify password by attempting sign-in
-    const anonClient = createClient(
-      env.NEXT_PUBLIC_SUPABASE_URL,
-      env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-    )
+    // Verify password by attempting sign-in
+    const anonClient = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
     const { error: signInError } = await anonClient.auth.signInWithPassword({
       email: user.email!,
       password,
@@ -73,16 +71,10 @@ export const POST = withAuth(async ({ user, supabase: sb, request }) => {
       .eq('id', user.id)
 
     // Update author_handle on posts to indicate deleted user
-    await supabase
-      .from('posts')
-      .update({ author_handle: null })
-      .eq('author_id', user.id)
+    await supabase.from('posts').update({ author_handle: null }).eq('author_id', user.id)
 
     // Update author_handle on comments
-    await supabase
-      .from('comments')
-      .update({ author_handle: null })
-      .eq('user_id', user.id)
+    await supabase.from('comments').update({ author_handle: null }).eq('user_id', user.id)
 
     // Cleanup related data (GDPR compliant - 删除所有用户相关数据)
     const cleanupPromises = [
@@ -129,7 +121,7 @@ export const POST = withAuth(async ({ user, supabase: sb, request }) => {
     ]
 
     // Execute all cleanup in parallel, don't fail the deletion if some cleanup fails
-    await Promise.allSettled(cleanupPromises.map(p => Promise.resolve(p)))
+    await Promise.allSettled(cleanupPromises.map((p) => Promise.resolve(p)))
 
     // Cancel Stripe subscription if active (before banning/session invalidation)
     try {
@@ -180,4 +172,6 @@ export const POST = withAuth(async ({ user, supabase: sb, request }) => {
       deletion_scheduled_at: scheduledDeletion.toISOString(),
       message: 'Account marked for deletion, recoverable within 30 days',
     })
-}, { name: 'account-delete', rateLimit: 'sensitive' })
+  },
+  { name: 'account-delete', rateLimit: 'sensitive' }
+)

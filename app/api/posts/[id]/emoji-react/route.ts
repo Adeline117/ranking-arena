@@ -5,16 +5,26 @@
  */
 
 import { NextResponse } from 'next/server'
-import {
-  success,
-  handleError,
-} from '@/lib/api'
+import { success } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { socialFeatureGuard } from '@/lib/features'
 
 // Allowed emoji set (crypto-relevant, keep it focused)
-const ALLOWED_EMOJIS = new Set(['👍', '🔥', '💎', '🚀', '❤️', '👀', '🎯', '💰', '📈', '📉', '🤔', '😂'])
+const ALLOWED_EMOJIS = new Set([
+  '👍',
+  '🔥',
+  '💎',
+  '🚀',
+  '❤️',
+  '👀',
+  '🎯',
+  '💰',
+  '📈',
+  '📉',
+  '🤔',
+  '😂',
+])
 
 /** Extract post id from URL path */
 function extractPostId(url: string): string {
@@ -35,10 +45,7 @@ export const POST = withAuth(
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
     const emoji = body.emoji as string
 
@@ -118,7 +125,9 @@ export const GET = withPublic(
     const authHeader = request.headers.get('Authorization')
     if (authHeader?.startsWith('Bearer ')) {
       const token = authHeader.slice(7)
-      const { data: { user } } = await sb.auth.getUser(token)
+      const {
+        data: { user },
+      } = await sb.auth.getUser(token)
       if (user) {
         const { data: userReactions } = await sb
           .from('post_emoji_reactions')

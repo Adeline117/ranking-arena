@@ -205,9 +205,7 @@ export async function POST(request: NextRequest) {
           // For now, use simplified calculations without historical trade data
           // In production, these would be fetched from trade history
           const roi = parseFloat(snapshot.roi_pct || '0')
-          const pnl = parseFloat(snapshot.pnl_usd || '0')
           const maxDrawdown = parseFloat(snapshot.max_drawdown || '0')
-          const winRate = parseFloat(snapshot.win_rate || '0')
 
           // Resolve daily returns from the pre-fetched batch map
           // Now uses equity_curve data first (812K rows, 25 platforms)
