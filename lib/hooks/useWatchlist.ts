@@ -29,7 +29,11 @@ export function useWatchlist() {
     return data.watchlist || []
   }, [isLoggedIn, getAuthHeadersAsync])
 
-  const { data, error, isLoading: queryLoading } = useQuery<WatchlistItem[]>({
+  const {
+    data,
+    error,
+    isLoading: _queryLoading,
+  } = useQuery<WatchlistItem[]>({
     queryKey: WATCHLIST_QUERY_KEY,
     queryFn: fetchWatchlist,
     enabled: isLoggedIn,
@@ -44,8 +48,7 @@ export function useWatchlist() {
   )
 
   const isWatched = useCallback(
-    (source: string, sourceTraderID: string) =>
-      watchlistSet.has(`${source}:${sourceTraderID}`),
+    (source: string, sourceTraderID: string) => watchlistSet.has(`${source}:${sourceTraderID}`),
     [watchlistSet]
   )
 
@@ -53,7 +56,12 @@ export function useWatchlist() {
     async (source: string, sourceTraderID: string, handle?: string) => {
       if (!isLoggedIn) return
       const previousData = watchlist
-      const newItem: WatchlistItem = { source, source_trader_id: sourceTraderID, handle: handle || null, created_at: new Date().toISOString() }
+      const newItem: WatchlistItem = {
+        source,
+        source_trader_id: sourceTraderID,
+        handle: handle || null,
+        created_at: new Date().toISOString(),
+      }
       // Optimistic update
       queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, [...watchlist, newItem])
       try {

@@ -119,7 +119,7 @@ function RankingTableInner(props: {
     category = 'all',
     onCategoryChange,
     onProRequired,
-    onFilterToggle,
+    onFilterToggle: _onFilterToggle,
     hasActiveFilters,
     error,
     onRetry,

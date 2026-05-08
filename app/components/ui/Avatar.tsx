@@ -9,8 +9,6 @@ import {
   getAvatarInitial,
   getUserAvatarUrl,
   getTraderAvatarUrl,
-  isWalletAddress,
-  generateBlockieSvg,
   needsProxy,
   type AvatarProps,
 } from '@/lib/utils/avatar'
@@ -50,7 +48,7 @@ export default function Avatar({
   const finalAvatarUrl = resolveAvatarUrl(isTrader, avatarUrl, userId, name)
   // Data URIs (blockie/identicon SVGs) bypass Next.js Image Optimization — they're already tiny.
   // All other images go through /_next/image for resize + webp conversion (749KB → ~5KB).
-  const isDataUri = !!finalAvatarUrl?.startsWith('data:')
+  const _isDataUri = !!finalAvatarUrl?.startsWith('data:')
 
   const showDefault = imageError || !finalAvatarUrl
 

@@ -10,7 +10,7 @@ import { getPortfolio } from '@/lib/chains/evm-adapter'
 import * as cache from '@/lib/cache'
 import { createLogger } from '@/lib/utils/logger'
 
-const log = createLogger('api:portfolio')
+const _log = createLogger('api:portfolio')
 
 export const dynamic = 'force-dynamic'
 
@@ -30,16 +30,16 @@ export const GET = withPublic(
     const address = extractAddress(request.url)
 
     if (!isValidEvmAddress(address)) {
-      return NextResponse.json(
-        { error: 'Invalid EVM address' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid EVM address' }, { status: 400 })
     }
 
     const cacheKey = `portfolio:evm:${address.toLowerCase()}`
 
     // Try cache first
-    const cached = await cache.get<ReturnType<typeof getPortfolio> extends Promise<infer T> ? T : never>(cacheKey)
+    const cached =
+      await cache.get<ReturnType<typeof getPortfolio> extends Promise<infer T> ? T : never>(
+        cacheKey
+      )
     if (cached) {
       return NextResponse.json(cached, {
         headers: { 'X-Cache': 'HIT' },

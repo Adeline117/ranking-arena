@@ -7,10 +7,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
-import {
-  BybitFuturesDetailResponseSchema,
-  BybitFuturesTimeseriesResponseSchema,
-} from './schemas'
+import { BybitFuturesDetailResponseSchema, BybitFuturesTimeseriesResponseSchema } from './schemas'
 import type {
   DiscoverResult,
   ProfileResult,
@@ -54,7 +51,7 @@ export class BybitFuturesConnector extends BaseConnector {
   }
 
   async discoverLeaderboard(window: Window, limit = 2000, offset = 0): Promise<DiscoverResult> {
-    const timeRange = WINDOW_MAP[window]
+    const _timeRange = WINDOW_MAP[window]
     const pageSize = 100
     const maxPages = Math.ceil(Math.min(limit, 2000) / pageSize)
     const allTraders: TraderSource[] = []
@@ -69,11 +66,15 @@ export class BybitFuturesConnector extends BaseConnector {
       // the DB seed fallback could trigger. 30s is still generous for Playwright
       // (normal response is 5-15s for cached/warm pages, 15-30s for cold).
       // If VPS can't respond in 30s, it's likely down or overloaded.
-      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
-        dataDuration: SCRAPER_DURATION_MAP[window],
-        pageNo: String(page),
-        pageSize: String(pageSize),
-      }, 30000)
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>(
+        '/bybit/leaderboard',
+        {
+          dataDuration: SCRAPER_DURATION_MAP[window],
+          pageNo: String(page),
+          pageSize: String(pageSize),
+        },
+        30000
+      )
 
       let _rawLb: Record<string, unknown>
       if (vpsData) {
@@ -84,7 +85,9 @@ export class BybitFuturesConnector extends BaseConnector {
         // Discovery of NEW traders requires VPS scraper — when VPS is down, we gracefully
         // return existing traders from DB instead of throwing.
         if (page === 1 + Math.floor(offset / pageSize) && allTraders.length === 0) {
-          this.logger.warn('[bybit] VPS scraper unavailable — falling back to DB seed list (will refresh existing traders but no new ones)')
+          this.logger.warn(
+            '[bybit] VPS scraper unavailable — falling back to DB seed list (will refresh existing traders but no new ones)'
+          )
           try {
             const { getSupabaseAdmin } = await import('@/lib/supabase/server')
             const supabase = getSupabaseAdmin()
@@ -116,7 +119,9 @@ export class BybitFuturesConnector extends BaseConnector {
                   raw: { _source: 'db_seed' } as Record<string, unknown>,
                 }
               })
-              this.logger.info(`[bybit] DB seed list returned ${seedTraders.length} known traders for ${window}`)
+              this.logger.info(
+                `[bybit] DB seed list returned ${seedTraders.length} known traders for ${window}`
+              )
               return {
                 traders: seedTraders,
                 total_available: seedTraders.length,
@@ -125,20 +130,26 @@ export class BybitFuturesConnector extends BaseConnector {
               }
             }
           } catch (err) {
-            this.logger.warn('[bybit] DB seed fallback failed:', err instanceof Error ? err.message : String(err))
+            this.logger.warn(
+              '[bybit] DB seed fallback failed:',
+              err instanceof Error ? err.message : String(err)
+            )
           }
-          throw new Error(`Bybit: VPS scraper unavailable and no DB seed list available. Check VPS_SCRAPER_SG connectivity.`)
+          throw new Error(
+            `Bybit: VPS scraper unavailable and no DB seed list available. Check VPS_SCRAPER_SG connectivity.`
+          )
         }
         this.logger.debug('Bybit: VPS unavailable on later page, stopping pagination')
         break
       }
 
-      const resultObj = (_rawLb as Record<string, unknown>)?.result as Record<string, unknown> | undefined
+      const resultObj = (_rawLb as Record<string, unknown>)?.result as
+        | Record<string, unknown>
+        | undefined
       const leaderDetails = resultObj?.leaderDetails as unknown[] | undefined
       const dataArr = resultObj?.data as unknown[] | undefined
-      const rawList = (leaderDetails?.length ? leaderDetails : null)
-        || (dataArr?.length ? dataArr : null)
-        || []
+      const rawList =
+        (leaderDetails?.length ? leaderDetails : null) || (dataArr?.length ? dataArr : null) || []
       const list = (Array.isArray(rawList) ? rawList : []) as Record<string, unknown>[]
 
       if (totalAvailable == null && resultObj?.total) totalAvailable = Number(resultObj.total)
@@ -174,7 +185,11 @@ export class BybitFuturesConnector extends BaseConnector {
       `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-details?leaderMark=${traderKey}`,
       { method: 'GET' }
     )
-    const data = warnValidate(BybitFuturesDetailResponseSchema, _rawProfile, 'bybit-futures/profile')
+    const data = warnValidate(
+      BybitFuturesDetailResponseSchema,
+      _rawProfile,
+      'bybit-futures/profile'
+    )
 
     const info = data?.result
 
@@ -252,7 +267,11 @@ export class BybitFuturesConnector extends BaseConnector {
       `https://api2.bybit.com/fapi/beehive/public/v1/common/leader-history-pnl?leaderMark=${traderKey}`,
       { method: 'GET' }
     )
-    const data = warnValidate(BybitFuturesTimeseriesResponseSchema, _rawTs, 'bybit-futures/timeseries')
+    const data = warnValidate(
+      BybitFuturesTimeseriesResponseSchema,
+      _rawTs,
+      'bybit-futures/timeseries'
+    )
 
     const pnlList = data?.result?.pnlList || []
 
@@ -292,7 +311,7 @@ export class BybitFuturesConnector extends BaseConnector {
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     // Parse metricValues array from VPS scraper (bybitglobal.com format)
     // [0]=ROI, [1]=Drawdown, [2]=FollowerProfit, [3]=WinRate, [4]=ProfitLossRatio, [5]=SharpeRatio
-    const mv = Array.isArray(raw.metricValues) ? raw.metricValues as string[] : null
+    const mv = Array.isArray(raw.metricValues) ? (raw.metricValues as string[]) : null
 
     const roi = this.parseNumber(raw.roi) ?? this.parsePercent(mv?.[0])
     const maxDrawdown = this.parseNumber(raw.maxDrawdown) ?? this.parsePercent(mv?.[1])
@@ -304,7 +323,8 @@ export class BybitFuturesConnector extends BaseConnector {
       display_name: raw.nickName,
       avatar_url: raw.avatar ?? raw.avatarUrl ?? raw.headUrl ?? null,
       roi,
-      pnl: this.parseNumber(raw.pnl) ?? this.parseNumber(raw.totalPnl) ?? this.parseNumber(raw.profit),
+      pnl:
+        this.parseNumber(raw.pnl) ?? this.parseNumber(raw.totalPnl) ?? this.parseNumber(raw.profit),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       sharpe_ratio: sharpeRatio,

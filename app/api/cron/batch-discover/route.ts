@@ -17,7 +17,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import _logger from '@/lib/logger'
-import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
@@ -43,9 +42,7 @@ async function discoverRankingsInline(): Promise<BatchResult> {
     // platform_health table may not exist — skip gracefully
     let blockedPlatforms = new Set<string>()
     try {
-      const { data: healthData } = await supabase
-        .from('platform_health')
-        .select('platform, status')
+      const { data: healthData } = await supabase.from('platform_health').select('platform, status')
 
       blockedPlatforms = new Set(
         (healthData || [])
@@ -71,19 +68,22 @@ async function discoverRankingsInline(): Promise<BatchResult> {
       { platform: 'hyperliquid', market_type: 'perp', priority: 15 },
     ]
 
-    const jobs = RANKING_PLATFORMS
-      .filter(p => !blockedPlatforms.has(p.platform))
-      .map(p => ({
-        job_type: 'DISCOVER',
-        platform: p.platform,
-        market_type: p.market_type,
-        priority: p.priority,
-        status: 'pending',
-        next_run_at: new Date().toISOString(),
-      }))
+    const jobs = RANKING_PLATFORMS.filter((p) => !blockedPlatforms.has(p.platform)).map((p) => ({
+      job_type: 'DISCOVER',
+      platform: p.platform,
+      market_type: p.market_type,
+      priority: p.priority,
+      status: 'pending',
+      next_run_at: new Date().toISOString(),
+    }))
 
     if (jobs.length === 0) {
-      return { name, status: 'success', durationMs: Date.now() - start, detail: { message: 'All platforms circuit-open' } }
+      return {
+        name,
+        status: 'success',
+        durationMs: Date.now() - start,
+        detail: { message: 'All platforms circuit-open' },
+      }
     }
 
     // Insert jobs — ignore errors if refresh_jobs table doesn't exist (v2 not deployed)
@@ -91,9 +91,19 @@ async function discoverRankingsInline(): Promise<BatchResult> {
     if (error) {
       // If refresh_jobs table doesn't exist, skip gracefully
       if (error.message.includes('does not exist') || error.message.includes('relation')) {
-        return { name, status: 'success', durationMs: Date.now() - start, detail: { skipped: true, reason: 'refresh_jobs table not available' } }
+        return {
+          name,
+          status: 'success',
+          durationMs: Date.now() - start,
+          detail: { skipped: true, reason: 'refresh_jobs table not available' },
+        }
       }
-      return { name, status: 'error', durationMs: Date.now() - start, error: 'Database insert failed' }
+      return {
+        name,
+        status: 'error',
+        durationMs: Date.now() - start,
+        error: 'Database insert failed',
+      }
     }
 
     // Release stale locks if RPC exists
@@ -103,10 +113,20 @@ async function discoverRankingsInline(): Promise<BatchResult> {
       // Intentionally swallowed: release_stale_locks RPC not deployed, stale locks will expire naturally
     }
 
-    return { name, status: 'success', durationMs: Date.now() - start, detail: { jobs_created: jobs.length, blocked: Array.from(blockedPlatforms) } }
+    return {
+      name,
+      status: 'success',
+      durationMs: Date.now() - start,
+      detail: { jobs_created: jobs.length, blocked: Array.from(blockedPlatforms) },
+    }
   } catch (_err) {
     const errMsg = _err instanceof Error ? _err.message : String(_err)
-    return { name, status: 'error', durationMs: Date.now() - start, error: `Discovery task failed: ${errMsg}` }
+    return {
+      name,
+      status: 'error',
+      durationMs: Date.now() - start,
+      error: `Discovery task failed: ${errMsg}`,
+    }
   }
 }
 
@@ -118,27 +138,30 @@ export async function GET(request: NextRequest) {
   const startTime = Date.now()
 
   // Run inline — no HTTP sub-calls
-  const results: BatchResult[] = await Promise.all([
-    discoverRankingsInline(),
-  ])
+  const results: BatchResult[] = await Promise.all([discoverRankingsInline()])
 
   const totalDuration = Date.now() - startTime
-  const hasErrors = results.some(r => r.status === 'error')
+  const hasErrors = results.some((r) => r.status === 'error')
 
   const plog = await PipelineLogger.start('batch-discover')
-  const succeeded = results.filter(r => r.status === 'success').length
+  const succeeded = results.filter((r) => r.status === 'success').length
   if (hasErrors) {
-    await plog.error(new Error(`${results.length - succeeded}/${results.length} failed`), { results })
+    await plog.error(new Error(`${results.length - succeeded}/${results.length} failed`), {
+      results,
+    })
   } else {
     await plog.success(succeeded, { results })
   }
 
-  return NextResponse.json({
-    batch: 'batch-discover',
-    status: hasErrors ? 'partial' : 'success',
-    totalDurationMs: totalDuration,
-    results,
-  }, {
-    status: hasErrors ? 207 : 200,
-  })
+  return NextResponse.json(
+    {
+      batch: 'batch-discover',
+      status: hasErrors ? 'partial' : 'success',
+      totalDurationMs: totalDuration,
+      results,
+    },
+    {
+      status: hasErrors ? 207 : 200,
+    }
+  )
 }

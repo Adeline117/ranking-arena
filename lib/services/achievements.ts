@@ -87,7 +87,7 @@ export function getUnlockedAchievements(userId: string): Record<string, { unlock
     const raw = localStorage.getItem(getStorageKey(userId))
     if (!raw) return {}
     return JSON.parse(raw) as Record<string, { unlockedAt: string }>
-  } catch (err) {
+  } catch (_err) {
     /* localStorage read failed — non-critical */
     return {}
   }
@@ -111,7 +111,7 @@ export function checkAndUnlock(userId: string, achievementKey: AchievementKey): 
   unlocked[achievementKey] = { unlockedAt: new Date().toISOString() }
   try {
     localStorage.setItem(getStorageKey(userId), JSON.stringify(unlocked))
-  } catch (err) {
+  } catch (_err) {
     /* localStorage write failed — non-critical */
     return null
   }
@@ -131,7 +131,7 @@ export function trackTraderView(userId: string, traderId: string): Achievement |
   try {
     const raw = localStorage.getItem(viewKey)
     if (raw) views = JSON.parse(raw) as string[]
-  } catch (err) {
+  } catch (_err) {
     /* localStorage parse failed — non-critical */
     views = []
   }
@@ -140,7 +140,7 @@ export function trackTraderView(userId: string, traderId: string): Achievement |
     views.push(traderId)
     try {
       localStorage.setItem(viewKey, JSON.stringify(views))
-    } catch (err) {
+    } catch (_err) {
       /* localStorage write failed — non-critical */
     }
   }

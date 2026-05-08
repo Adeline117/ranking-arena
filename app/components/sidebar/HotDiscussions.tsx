@@ -183,7 +183,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
   const { language, t } = useLanguage()
 
   const targetLang = language
-  const queryClient = useQueryClient()
+  const _queryClient = useQueryClient()
   // Defer query activation until after LCP — prevents simultaneous sidebar fetches from blocking main thread
   const deferredReady = useDeferredKey(true, 1400)
 

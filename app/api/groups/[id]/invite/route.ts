@@ -1,12 +1,11 @@
 import { NextResponse } from 'next/server'
 import crypto from 'crypto'
-import { logger } from '@/lib/logger'
 import { createLogger } from '@/lib/utils/logger'
 import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
-const log = createLogger('api:group-invite')
+const _log = createLogger('api:group-invite')
 
 // SECURITY (2026-04-09, audit P0-SEC-3):
 // 1. Removed static fallback 'default-invite-secret-for-build' which would
@@ -46,14 +45,19 @@ function getInviteSecret(): string {
   if (!root || root.length < 32) {
     throw new Error(
       'INVITE_SECRET (or SUPABASE_SERVICE_ROLE_KEY as fallback) must be set ' +
-      'to a strong (>=32 char) random value. Generate INVITE_SECRET with: ' +
-      'openssl rand -hex 32',
+        'to a strong (>=32 char) random value. Generate INVITE_SECRET with: ' +
+        'openssl rand -hex 32'
     )
   }
   // Salt should be high-entropy and stable across deploys. Empty string is
   // acceptable for HKDF when info is non-empty (RFC 5869 §3.1).
-  const derived = crypto
-    .hkdfSync('sha256', Buffer.from(root, 'utf8'), Buffer.alloc(0), Buffer.from('arena-invite-token-v1', 'utf8'), 32)
+  const derived = crypto.hkdfSync(
+    'sha256',
+    Buffer.from(root, 'utf8'),
+    Buffer.alloc(0),
+    Buffer.from('arena-invite-token-v1', 'utf8'),
+    32
+  )
   _cachedInviteSecret = Buffer.from(derived).toString('hex')
   return _cachedInviteSecret
 }
@@ -61,10 +65,7 @@ function getInviteSecret(): string {
 function generateInviteToken(groupId: string, expiresAt: number): string {
   const payload = `${groupId}:${expiresAt}`
   // Full 64-char hex HMAC-SHA256 (was truncated to 16 hex / 64 bits)
-  const signature = crypto
-    .createHmac('sha256', getInviteSecret())
-    .update(payload)
-    .digest('hex')
+  const signature = crypto.createHmac('sha256', getInviteSecret()).update(payload).digest('hex')
   return Buffer.from(`${payload}:${signature}`).toString('base64url')
 }
 
@@ -82,10 +83,7 @@ export function verifyInviteToken(token: string): { groupId: string; valid: bool
 
     // Verify signature with timing-safe compare
     const payload = `${groupId}:${expiresAtStr}`
-    const expectedSig = crypto
-      .createHmac('sha256', getInviteSecret())
-      .update(payload)
-      .digest('hex')
+    const expectedSig = crypto.createHmac('sha256', getInviteSecret()).update(payload).digest('hex')
 
     // timingSafeEqual requires equal-length buffers. Hex output is fixed
     // 64 chars; if attacker supplies a different length, fail fast.
@@ -109,7 +107,7 @@ function extractGroupId(url: string): string {
 
 // GET: Verify invite token (auth required — see security note below)
 export const GET = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user: _user, supabase, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
 

@@ -12,11 +12,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
-import {
-  DydxLeaderboardResponseSchema,
-  DydxSubaccountResponseSchema,
-  DydxHistoricalPnlResponseSchema,
-} from './schemas'
+import { DydxSubaccountResponseSchema, DydxHistoricalPnlResponseSchema } from './schemas'
 import type {
   DiscoverResult,
   ProfileResult,
@@ -31,7 +27,7 @@ import type {
   Window,
 } from '../../types/leaderboard'
 
-const WINDOW_MAP: Record<Window, string> = {
+const _WINDOW_MAP: Record<Window, string> = {
   '7d': 'PERIOD_7D',
   '30d': 'PERIOD_30D',
   '90d': 'PERIOD_90D',

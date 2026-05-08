@@ -47,8 +47,10 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       setError(null)
 
       // 检查用户是否已登录
-       
-      const { data: { user } } = await supabase.auth.getUser()
+
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         setError(t('pleaseLogin'))
         setConnections([])
@@ -63,14 +65,17 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
       const { data, error: fetchError } = await supabase
         .from('user_exchange_connections')
-        .select('id, exchange, status, is_active, label, created_at, last_synced_at, updated_at, user_id')
+        .select(
+          'id, exchange, status, is_active, label, created_at, last_synced_at, updated_at, user_id'
+        )
         .eq('user_id', actualUserId)
         .order('created_at', { ascending: false })
 
       if (fetchError) {
-        const errorMsg = fetchError.code === 'PGRST301'
-          ? t('serviceTemporarilyUnavailable')
-          : t('loadConnectionsFailed')
+        const errorMsg =
+          fetchError.code === 'PGRST301'
+            ? t('serviceTemporarilyUnavailable')
+            : t('loadConnectionsFailed')
         setError(errorMsg)
         setConnections([])
         showToast(errorMsg, 'error')
@@ -79,7 +84,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
       setConnections(data || [])
       setError(null)
-    } catch (err) {
+    } catch (_err) {
       setError(t('loadConnectionsFailed'))
       setConnections([])
       showToast(t('loadConnectionsFailed'), 'error')
@@ -93,13 +98,13 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     window.location.href = `/exchange/auth?exchange=${exchange}`
   }
 
-
   const handleSync = async (exchange: string) => {
     setSyncing(exchange)
 
     try {
-       
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLogin'), 'warning')
         return
@@ -109,8 +114,8 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          ...getCsrfHeaders()
+          Authorization: `Bearer ${session.access_token}`,
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({ exchange }),
       })
@@ -132,14 +137,18 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   }
 
   const handleDisconnect = async (exchange: string) => {
-    const confirmed = await showConfirm(t('disconnect'), t('confirmDisconnect').replace('{exchange}', exchange))
+    const confirmed = await showConfirm(
+      t('disconnect'),
+      t('confirmDisconnect').replace('{exchange}', exchange)
+    )
     if (!confirmed) {
       return
     }
 
     try {
-       
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLogin'), 'warning')
         return
@@ -149,8 +158,8 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
-          ...getCsrfHeaders()
+          Authorization: `Bearer ${session.access_token}`,
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({ exchange }),
       })
@@ -180,13 +189,17 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
   if (error) {
     return (
-      <Box style={{ padding: tokens.spacing[4], display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], alignItems: 'center' }}>
+      <Box
+        style={{
+          padding: tokens.spacing[4],
+          display: 'flex',
+          flexDirection: 'column',
+          gap: tokens.spacing[3],
+          alignItems: 'center',
+        }}
+      >
         <Text style={{ textAlign: 'center', color: tokens.colors.accent.error }}>{error}</Text>
-        <Button
-          onClick={loadConnections}
-          size="sm"
-          style={{ marginTop: tokens.spacing[2] }}
-        >
+        <Button onClick={loadConnections} size="sm" style={{ marginTop: tokens.spacing[2] }}>
           {t('retry')}
         </Button>
       </Box>
@@ -203,50 +216,96 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       </Text>
 
       {EXCHANGES.map((exchange) => {
-        const connection = connections.find(c => c.exchange === exchange.id && c.is_active)
+        const connection = connections.find((c) => c.exchange === exchange.id && c.is_active)
         const isSyncing = syncing === exchange.id
 
         return (
-          <Box
-            key={exchange.id}
-            bg="secondary"
-            p={6}
-            radius="xl"
-            border="primary"
-          >
-            <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+          <Box key={exchange.id} bg="secondary" p={6} radius="xl" border="primary">
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginBottom: tokens.spacing[4],
+              }}
+            >
               <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                <ExchangeLogo exchange={exchange.id as 'binance' | 'bybit' | 'bitget' | 'mexc' | 'coinex'} size={32} />
-                <Text size="lg" weight="bold">{exchange.name}</Text>
+                <ExchangeLogo
+                  exchange={exchange.id as 'binance' | 'bybit' | 'bitget' | 'mexc' | 'coinex'}
+                  size={32}
+                />
+                <Text size="lg" weight="bold">
+                  {exchange.name}
+                </Text>
                 {connection && (
                   <Box
                     style={{
                       padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                       borderRadius: tokens.radius.sm,
-                      background: connection.last_sync_status === 'success' ? `${tokens.colors.accent.success}15` :
-                                  connection.last_sync_status === 'error' ? `${tokens.colors.accent.error}15` :
-                                  tokens.colors.bg.tertiary,
+                      background:
+                        connection.last_sync_status === 'success'
+                          ? `${tokens.colors.accent.success}15`
+                          : connection.last_sync_status === 'error'
+                            ? `${tokens.colors.accent.error}15`
+                            : tokens.colors.bg.tertiary,
                       fontSize: tokens.typography.fontSize.xs,
-                      color: connection.last_sync_status === 'success' ? tokens.colors.accent.success :
-                             connection.last_sync_status === 'error' ? tokens.colors.accent.error :
-                             tokens.colors.text.secondary,
+                      color:
+                        connection.last_sync_status === 'success'
+                          ? tokens.colors.accent.success
+                          : connection.last_sync_status === 'error'
+                            ? tokens.colors.accent.error
+                            : tokens.colors.text.secondary,
                       display: 'flex',
                       alignItems: 'center',
                       gap: 4,
                     }}
                   >
                     {connection.last_sync_status === 'success' && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="20 6 9 17 4 12"/></svg>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
                     )}
                     {connection.last_sync_status === 'error' && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <line x1="15" y1="9" x2="9" y2="15" />
+                        <line x1="9" y1="9" x2="15" y2="15" />
+                      </svg>
                     )}
                     {connection.last_sync_status === 'pending' && (
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      >
+                        <circle cx="12" cy="12" r="10" />
+                        <polyline points="12 6 12 12 16 14" />
+                      </svg>
                     )}
-                    {connection.last_sync_status === 'success' ? t('connected') :
-                     connection.last_sync_status === 'error' ? t('syncFailed') :
-                     connection.last_sync_status === 'pending' ? t('syncing') : t('connected')}
+                    {connection.last_sync_status === 'success'
+                      ? t('connected')
+                      : connection.last_sync_status === 'error'
+                        ? t('syncFailed')
+                        : connection.last_sync_status === 'pending'
+                          ? t('syncing')
+                          : t('connected')}
                   </Box>
                 )}
               </Box>
@@ -289,7 +348,8 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
             {connection && connection.last_sync_at && (
               <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('lastSync')}{new Date(connection.last_sync_at).toLocaleString()}
+                {t('lastSync')}
+                {new Date(connection.last_sync_at).toLocaleString()}
               </Text>
             )}
 
@@ -304,7 +364,8 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                 }}
               >
                 <Text size="xs" style={{ color: tokens.colors.accent.error }}>
-                  {t('syncErrorMsg')}{connection.last_sync_error}
+                  {t('syncErrorMsg')}
+                  {connection.last_sync_error}
                 </Text>
               </Box>
             )}
@@ -330,4 +391,3 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
     </Box>
   )
 }
-

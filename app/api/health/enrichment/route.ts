@@ -11,14 +11,10 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { env } from '@/lib/env'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { getSupportedPlatforms } from '@/lib/cron/fetchers'
-import {
-  ENRICHMENT_PLATFORM_CONFIGS,
-  NO_ENRICHMENT_PLATFORMS,
-} from '@/lib/cron/enrichment-runner'
+import { ENRICHMENT_PLATFORM_CONFIGS, NO_ENRICHMENT_PLATFORMS } from '@/lib/cron/enrichment-runner'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 
 export const dynamic = 'force-dynamic'
@@ -41,7 +37,7 @@ export async function GET(req: NextRequest) {
 
   const supabase = getSupabaseAdmin()
   const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
-  const activePlatforms = getSupportedPlatforms().filter(p => !deadSet.has(p))
+  const activePlatforms = getSupportedPlatforms().filter((p) => !deadSet.has(p))
 
   const period = req.nextUrl.searchParams.get('period') || '90D'
 
@@ -83,11 +79,14 @@ export async function GET(req: NextRequest) {
       ])
 
       // Check for query errors — don't let null count masquerade as "0 traders"
-      if (totalRes.error) throw new Error(`leaderboard_ranks count failed: ${totalRes.error.message}`)
-      if (enrichedRes.error) throw new Error(`trader_equity_curve count failed: ${enrichedRes.error.message}`)
+      if (totalRes.error)
+        throw new Error(`leaderboard_ranks count failed: ${totalRes.error.message}`)
+      if (enrichedRes.error)
+        throw new Error(`trader_equity_curve count failed: ${enrichedRes.error.message}`)
       const totalTraders = totalRes.count ?? 0
       const enrichedTraders = enrichedRes.count ?? 0
-      const coveragePct = totalTraders > 0 ? Math.round((enrichedTraders / totalTraders) * 1000) / 10 : 0
+      const coveragePct =
+        totalTraders > 0 ? Math.round((enrichedTraders / totalTraders) * 1000) / 10 : 0
       const lastEnrichmentAt = lastEnrichRes.data?.captured_at || null
 
       return {
@@ -119,29 +118,34 @@ export async function GET(req: NextRequest) {
   // Calculate overall stats
   const totalTraders = platformStats.reduce((sum, p) => sum + p.totalTraders, 0)
   const totalEnriched = platformStats.reduce((sum, p) => sum + p.enrichedTraders, 0)
-  const overallCoverage = totalTraders > 0 ? Math.round((totalEnriched / totalTraders) * 1000) / 10 : 0
+  const overallCoverage =
+    totalTraders > 0 ? Math.round((totalEnriched / totalTraders) * 1000) / 10 : 0
 
   // Enrichable platforms only (have config, not in NO_ENRICHMENT list)
-  const enrichable = platformStats.filter(p => p.hasEnrichmentConfig && !p.isNoEnrichment)
+  const enrichable = platformStats.filter((p) => p.hasEnrichmentConfig && !p.isNoEnrichment)
   const enrichableTotal = enrichable.reduce((sum, p) => sum + p.totalTraders, 0)
   const enrichableEnriched = enrichable.reduce((sum, p) => sum + p.enrichedTraders, 0)
-  const enrichableCoverage = enrichableTotal > 0 ? Math.round((enrichableEnriched / enrichableTotal) * 1000) / 10 : 0
+  const enrichableCoverage =
+    enrichableTotal > 0 ? Math.round((enrichableEnriched / enrichableTotal) * 1000) / 10 : 0
 
-  return NextResponse.json({
-    ok: true,
-    timestamp: new Date().toISOString(),
-    period,
-    summary: {
-      totalPlatforms: platformStats.length,
-      enrichablePlatforms: enrichable.length,
-      noEnrichmentPlatforms: platformStats.filter(p => p.isNoEnrichment).length,
-      totalTraders,
-      totalEnriched,
-      overallCoveragePct: overallCoverage,
-      enrichableCoveragePct: enrichableCoverage,
+  return NextResponse.json(
+    {
+      ok: true,
+      timestamp: new Date().toISOString(),
+      period,
+      summary: {
+        totalPlatforms: platformStats.length,
+        enrichablePlatforms: enrichable.length,
+        noEnrichmentPlatforms: platformStats.filter((p) => p.isNoEnrichment).length,
+        totalTraders,
+        totalEnriched,
+        overallCoveragePct: overallCoverage,
+        enrichableCoveragePct: enrichableCoverage,
+      },
+      platforms: platformStats,
     },
-    platforms: platformStats,
-  }, {
-    headers: { 'Cache-Control': 'no-store' },
-  })
+    {
+      headers: { 'Cache-Control': 'no-store' },
+    }
+  )
 }

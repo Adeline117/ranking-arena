@@ -23,7 +23,6 @@ import {
   getUserPostReaction,
   getUserPostVote,
 } from '@/lib/data/posts'
-import logger from '@/lib/logger'
 import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 

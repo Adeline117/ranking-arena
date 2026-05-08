@@ -58,7 +58,7 @@ export function useTableKeyboardNav({
 }: UseTableKeyboardNavOptions): UseTableKeyboardNavReturn {
   const [focusedIndex, setFocusedIndex] = useState(-1)
   const router = useRouter()
-  const containerRef = useRef<HTMLElement | null>(null)
+  const _containerRef = useRef<HTMLElement | null>(null)
 
   // Reset focus when row count changes (pagination, filter, sort)
   useEffect(() => {
@@ -134,27 +134,23 @@ export function useTableKeyboardNav({
     [enabled, rowCount, focusedIndex, getRowHref, router]
   )
 
-  const handleBlur = useCallback(
-    (e: React.FocusEvent) => {
-      // If focus leaves the container entirely, clear keyboard focus
-      const container = e.currentTarget
-      const relatedTarget = e.relatedTarget as Node | null
-      if (relatedTarget && container.contains(relatedTarget)) {
-        // Focus is still inside the container (e.g., clicked a child link) — do nothing
-        return
-      }
-      setFocusedIndex(-1)
-    },
-    []
-  )
+  const handleBlur = useCallback((e: React.FocusEvent) => {
+    // If focus leaves the container entirely, clear keyboard focus
+    const container = e.currentTarget
+    const relatedTarget = e.relatedTarget as Node | null
+    if (relatedTarget && container.contains(relatedTarget)) {
+      // Focus is still inside the container (e.g., clicked a child link) — do nothing
+      return
+    }
+    setFocusedIndex(-1)
+  }, [])
 
   const containerProps = {
     role: 'grid' as const,
     tabIndex: 0 as const,
     onKeyDown: handleKeyDown,
     onBlur: handleBlur,
-    'aria-activedescendant':
-      focusedIndex >= 0 ? `ranking-row-${focusedIndex}` : undefined,
+    'aria-activedescendant': focusedIndex >= 0 ? `ranking-row-${focusedIndex}` : undefined,
     'aria-rowcount': rowCount,
   }
 
@@ -170,14 +166,16 @@ export function useTableKeyboardNav({
   )
 
   return {
-    containerProps: enabled ? containerProps : {
-      role: 'grid' as const,
-      tabIndex: 0 as const,
-      onKeyDown: () => {},
-      onBlur: () => {},
-      'aria-activedescendant': undefined,
-      'aria-rowcount': rowCount,
-    },
+    containerProps: enabled
+      ? containerProps
+      : {
+          role: 'grid' as const,
+          tabIndex: 0 as const,
+          onKeyDown: () => {},
+          onBlur: () => {},
+          'aria-activedescendant': undefined,
+          'aria-rowcount': rowCount,
+        },
     getRowProps,
     focusedIndex,
     setFocusedIndex,

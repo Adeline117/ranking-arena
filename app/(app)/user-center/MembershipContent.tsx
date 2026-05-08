@@ -11,7 +11,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
 import { supabase } from '@/lib/supabase/client'
-import { getCsrfHeaders, apiRequest } from '@/lib/api/client'
+import { apiRequest } from '@/lib/api/client'
 import { type MembershipInfo, type PlanType } from './membership-config'
 import CurrentPlanCard from './CurrentPlanCard'
 import UpgradeSection from './UpgradeSection'
@@ -38,7 +38,9 @@ export default function MembershipContent() {
   useEffect(() => {
     const controller = new AbortController()
     fetchMembershipInfo(controller.signal)
-    return () => { controller.abort() }
+    return () => {
+      controller.abort()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; fetchMembershipInfo is defined after hook
   }, [])
 
@@ -57,7 +59,9 @@ export default function MembershipContent() {
 
       const subData = subRes.ok ? await subRes.json() : null
       const nftData = nftRes.ok ? await nftRes.json() : null
-      const usageData = usageRes.ok ? await usageRes.json() : { followedTraders: 0, apiCallsToday: 0 }
+      const usageData = usageRes.ok
+        ? await usageRes.json()
+        : { followedTraders: 0, apiCallsToday: 0 }
 
       if (signal?.aborted) return
 
@@ -65,13 +69,16 @@ export default function MembershipContent() {
       // The API returns both UserSubscription fields (endDate, autoRenew) and
       // extended fields (currentPeriodEnd, cancelAtPeriodEnd, plan) for the UI.
       const rawSub = subData?.subscription
-      const mappedSub = rawSub ? {
-        tier: rawSub.tier,
-        status: rawSub.status,
-        plan: rawSub.plan || undefined,
-        currentPeriodEnd: rawSub.currentPeriodEnd || rawSub.endDate || undefined,
-        cancelAtPeriodEnd: rawSub.cancelAtPeriodEnd ?? (rawSub.autoRenew === false && rawSub.tier === 'pro'),
-      } : null
+      const mappedSub = rawSub
+        ? {
+            tier: rawSub.tier,
+            status: rawSub.status,
+            plan: rawSub.plan || undefined,
+            currentPeriodEnd: rawSub.currentPeriodEnd || rawSub.endDate || undefined,
+            cancelAtPeriodEnd:
+              rawSub.cancelAtPeriodEnd ?? (rawSub.autoRenew === false && rawSub.tier === 'pro'),
+          }
+        : null
 
       setInfo({
         subscription: mappedSub,
@@ -98,7 +105,9 @@ export default function MembershipContent() {
     // pro_subscribe (the success page) — start_checkout closes that gap.
     trackEvent('start_checkout', { plan: selectedPlan })
     try {
-      let { data: { session } } = await supabase.auth.getSession()
+      let {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session?.access_token) {
         const { data: refreshed } = await supabase.auth.refreshSession()
         session = refreshed.session
@@ -109,21 +118,25 @@ export default function MembershipContent() {
         return
       }
 
-      const result = await apiRequest<{ url?: string; error?: string }>('/api/stripe/create-checkout', {
-        method: 'POST',
-        headers: { 'Authorization': `Bearer ${session.access_token}` },
-        body: {
-          plan: selectedPlan,
-          successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
-          cancelUrl: `${window.location.origin}/user-center?tab=membership`,
-        },
-        timeoutMs: 20_000,
-      })
+      const result = await apiRequest<{ url?: string; error?: string }>(
+        '/api/stripe/create-checkout',
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          body: {
+            plan: selectedPlan,
+            successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
+            cancelUrl: `${window.location.origin}/user-center?tab=membership`,
+          },
+          timeoutMs: 20_000,
+        }
+      )
 
       if (!result.success) {
-        const errorMsg = result.error?.code === 'TIMEOUT'
-          ? t('requestTimeout')
-          : result.error?.message || t('createCheckoutFailed')
+        const errorMsg =
+          result.error?.code === 'TIMEOUT'
+            ? t('requestTimeout')
+            : result.error?.message || t('createCheckoutFailed')
         showToast(errorMsg, 'error')
         return
       }
@@ -149,19 +162,23 @@ export default function MembershipContent() {
 
   if (loading) {
     return (
-      <div style={{
-        minHeight: 200,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
+      <div
+        style={{
+          minHeight: 200,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
         <ButtonSpinner size="md" />
       </div>
     )
   }
 
   const cardStyle: React.CSSProperties = {
-    background: tokens.glass.bg.light, backdropFilter: tokens.glass.blur.xs, WebkitBackdropFilter: tokens.glass.blur.xs,
+    background: tokens.glass.bg.light,
+    backdropFilter: tokens.glass.blur.xs,
+    WebkitBackdropFilter: tokens.glass.blur.xs,
     border: tokens.glass.border.light,
     borderRadius: tokens.radius.xl,
     padding: tokens.spacing[6],
@@ -171,13 +188,7 @@ export default function MembershipContent() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
       {/* Current Plan Status */}
-      <CurrentPlanCard
-        isPro={isPro}
-        info={info}
-        language={language}
-        cardStyle={cardStyle}
-        t={t}
-      />
+      <CurrentPlanCard isPro={isPro} info={info} language={language} cardStyle={cardStyle} t={t} />
 
       {/* Upgrade to Pro — only shown for free users */}
       {!isPro && (
@@ -192,18 +203,11 @@ export default function MembershipContent() {
       )}
 
       {/* Pro Features (for free users) */}
-      {!isPro && (
-        <ProFeaturesList cardStyle={cardStyle} t={t} />
-      )}
+      {!isPro && <ProFeaturesList cardStyle={cardStyle} t={t} />}
 
       {/* NFT Membership */}
       {(info?.nft?.hasNft || isPro) && (
-        <NftMembershipCard
-          info={info}
-          language={language}
-          cardStyle={cardStyle}
-          t={t}
-        />
+        <NftMembershipCard info={info} language={language} cardStyle={cardStyle} t={t} />
       )}
 
       {/* Free vs Pro Comparison */}
@@ -218,9 +222,7 @@ export default function MembershipContent() {
       />
 
       {/* FAQ (for free users) */}
-      {!isPro && (
-        <FaqSection cardStyle={cardStyle} t={t} />
-      )}
+      {!isPro && <FaqSection cardStyle={cardStyle} t={t} />}
 
       {/* Subscription Management */}
       {isPro && (

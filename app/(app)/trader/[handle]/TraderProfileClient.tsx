@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useRouter, useSearchParams, usePathname } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
@@ -75,8 +75,7 @@ export interface UnregisteredTraderData {
   is_platform_dead?: boolean
 }
 
-// TraderTabKey moved to ./hooks/useTraderTabs (re-imported below for compat)
-import type { TraderTabKey } from './hooks/useTraderTabs'
+// TraderTabKey moved to ./hooks/useTraderTabs
 import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
@@ -110,7 +109,6 @@ export default function TraderProfileClient({
 }: TraderProfileClientProps) {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const pathname = usePathname()
   const { t, language: _language } = useLanguage()
   const { isPro } = useSubscription()
   const { userId: currentUserId } = useAuthSession()

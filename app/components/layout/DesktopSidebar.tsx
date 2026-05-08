@@ -47,7 +47,7 @@ function TrophyIcon({ active }: { active: boolean }) {
   )
 }
 
-function GroupIcon({ active }: { active: boolean }) {
+function _GroupIcon({ active }: { active: boolean }) {
   return (
     <svg
       width="20"

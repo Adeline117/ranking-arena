@@ -14,7 +14,6 @@ import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
 import { connectorRegistry, initializeConnectors } from '@/lib/connectors/registry'
 import { runConnectorBatch } from '@/lib/pipeline/connector-db-adapter'
 import { SOURCE_TO_CONNECTOR_MAP } from '@/lib/constants/exchanges'
-import { env } from '@/lib/env'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'

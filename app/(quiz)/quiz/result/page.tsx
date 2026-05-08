@@ -96,7 +96,7 @@ export async function generateMetadata({ searchParams }: Props): Promise<Metadat
   const lang = params.lang || 'en'
 
   const validType = PERSONALITY_TYPE_MAP[typeId] ? typeId : 'sniper'
-  const pType = PERSONALITY_TYPE_MAP[validType] || PERSONALITY_TYPES[0]
+  const _pType = PERSONALITY_TYPE_MAP[validType] || PERSONALITY_TYPES[0]
   // Use proper English name for OG metadata (i18n is client-only)
   const typeLabel =
     TYPE_ENGLISH_NAMES[validType as PersonalityTypeId] ||

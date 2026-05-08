@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
-import { badRequest, handleError } from '@/lib/api/response'
+import { badRequest } from '@/lib/api/response'
 import { validateExchangeCredentials, SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
 import { encrypt } from '@/lib/exchange/encryption'
 import { createLogger } from '@/lib/utils/logger'
@@ -15,10 +15,11 @@ const logger = createLogger('exchange-connect')
 
 // Zod schema for POST /api/exchange/connect
 const ConnectExchangeSchema = z.object({
-  exchange: z.string().refine(
-    (val) => SUPPORTED_EXCHANGES.includes(val as Exchange),
-    { message: `exchange must be one of: ${SUPPORTED_EXCHANGES.join(', ')}` }
-  ),
+  exchange: z
+    .string()
+    .refine((val) => SUPPORTED_EXCHANGES.includes(val as Exchange), {
+      message: `exchange must be one of: ${SUPPORTED_EXCHANGES.join(', ')}`,
+    }),
   apiKey: z.string().min(10, 'API Key must be at least 10 characters'),
   apiSecret: z.string().min(10, 'API Secret must be at least 10 characters'),
   passphrase: z.string().optional().nullable(),
@@ -98,13 +99,11 @@ export const POST = withAuth(
         throw new Error('Failed to update connection')
       }
     } else {
-      const { error: insertError } = await supabase
-        .from('user_exchange_connections')
-        .insert({
-          user_id: user.id,
-          exchange,
-          ...connectionData,
-        })
+      const { error: insertError } = await supabase.from('user_exchange_connections').insert({
+        user_id: user.id,
+        exchange,
+        ...connectionData,
+      })
 
       if (insertError) {
         throw new Error('Failed to create connection')

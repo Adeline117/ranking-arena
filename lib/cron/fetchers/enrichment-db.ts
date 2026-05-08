@@ -13,7 +13,6 @@ import type {
 import { createLogger } from '@/lib/utils/logger'
 import { VALIDATION_BOUNDS } from '@/lib/pipeline/types'
 import { sanitizeRow, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
-import { truncateToHour } from '@/lib/utils/date'
 
 const log = createLogger('enrichment-db')
 
@@ -34,7 +33,7 @@ export interface V2EnrichUpdate {
 }
 
 /** Start of the next hour — used as exclusive upper bound for hour-range queries */
-function nextHour(): string {
+function _nextHour(): string {
   const d = new Date()
   d.setUTCMinutes(0, 0, 0)
   d.setUTCHours(d.getUTCHours() + 1)
@@ -292,7 +291,7 @@ export async function upsertStatsDetail(
     // Exchange copy-trade counts flow via compute-leaderboard → leaderboard_ranks.copiers.
 
     // Final safety net: run through centralized gatekeeper to catch ROI≈PnL, sign mismatches, etc.
-    const { row: sanitizedStats, rejected: statsRejected } = sanitizeRow(
+    const { row: _sanitizedStats, rejected: statsRejected } = sanitizeRow(
       { platform: source, trader_key: traderId, ...v2Update },
       'trader_snapshots_v2'
     )

@@ -28,7 +28,7 @@ const PERIOD_DAYS: Record<string, number> = {
 }
 
 // Normalize a raw symbol to a base token (e.g. BTCUSDT -> BTC, ETH/USD -> ETH)
-function extractBaseToken(symbol: string): string {
+function _extractBaseToken(symbol: string): string {
   const s = symbol.toUpperCase()
   // Remove common suffixes
   for (const suffix of ['USDT.P', 'USDT', 'BUSD', 'USD', '-PERP', '-USD']) {
@@ -81,7 +81,14 @@ async function handlePopularTokens(): Promise<NextResponse> {
           if (error) throw new Error(error.message)
           if (!data || data.length === 0) return []
 
-          return (data as Array<{ token: string; trade_count: number; trader_count: number; total_pnl: number }>).map(row => ({
+          return (
+            data as Array<{
+              token: string
+              trade_count: number
+              trader_count: number
+              total_pnl: number
+            }>
+          ).map((row) => ({
             token: row.token,
             trade_count: Number(row.trade_count),
             trader_count: Number(row.trader_count),
@@ -107,8 +114,16 @@ async function handlePopularTokens(): Promise<NextResponse> {
 
 // ── Token Rankings Handler ──────────────────────────────────────────────────
 const querySchema = z.object({
-  token: z.string().min(1).max(20).transform(s => s.toUpperCase()),
-  period: z.string().toUpperCase().pipe(z.enum(['7D', '30D', '90D'])).catch('90D'),
+  token: z
+    .string()
+    .min(1)
+    .max(20)
+    .transform((s) => s.toUpperCase()),
+  period: z
+    .string()
+    .toUpperCase()
+    .pipe(z.enum(['7D', '30D', '90D']))
+    .catch('90D'),
   limit: z.coerce.number().int().min(1).max(200).catch(50),
   offset: z.coerce.number().int().min(0).catch(0),
 })
@@ -138,7 +153,12 @@ export async function GET(request: NextRequest) {
   try {
     const CACHE_KEY = `rankings:by-token:${token}:${period}:${limit}:${offset}`
 
-    const result = await tieredGetOrSet<{ traders: TokenTrader[]; token: string; period: string; total: number }>(
+    const result = await tieredGetOrSet<{
+      traders: TokenTrader[]
+      token: string
+      period: string
+      total: number
+    }>(
       CACHE_KEY,
       async () => {
         const supabase = getSupabaseAdmin() as SupabaseClient
@@ -158,13 +178,17 @@ export async function GET(request: NextRequest) {
         // Query each common symbol format individually with .eq() (indexed, fast)
         // ilike('symbol', 'BTC%') causes statement timeout on large tables
         const symbolVariants = [
-          `${token}USDT`, `${token}USDT.P`, `${token}USD`,
-          `${token}/USDT`, `${token}/USD`, `${token}-PERP`,
+          `${token}USDT`,
+          `${token}USDT.P`,
+          `${token}USD`,
+          `${token}/USDT`,
+          `${token}/USD`,
+          `${token}-PERP`,
         ]
 
         // Run queries in parallel, each with .eq() for index usage
         const results = await Promise.allSettled(
-          symbolVariants.map(sym =>
+          symbolVariants.map((sym) =>
             supabase
               .from('trader_position_history')
               .select('source, source_trader_id, pnl_usd, pnl_pct')
@@ -186,14 +210,17 @@ export async function GET(request: NextRequest) {
         }
 
         // Aggregate by (source, source_trader_id)
-        const traderMap = new Map<string, {
-          source: string
-          source_trader_id: string
-          totalPnl: number
-          tradeCount: number
-          winCount: number
-          pnlPcts: number[]
-        }>()
+        const traderMap = new Map<
+          string,
+          {
+            source: string
+            source_trader_id: string
+            totalPnl: number
+            tradeCount: number
+            winCount: number
+            pnlPcts: number[]
+          }
+        >()
 
         for (const row of allRows) {
           const key = `${row.source}:${row.source_trader_id}`
@@ -225,20 +252,23 @@ export async function GET(request: NextRequest) {
         }
 
         // Enrich with leaderboard_ranks data
-        const traderIds = page.map(t => t.source_trader_id)
+        const traderIds = page.map((t) => t.source_trader_id)
         const { data: lrData } = await supabase
           .from('leaderboard_ranks')
           .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl')
           .eq('season_id', period)
           .in('source_trader_id', traderIds)
 
-        const lrMap = new Map<string, {
-          handle: string | null
-          avatar_url: string | null
-          arena_score: number | null
-          roi: number | null
-          pnl: number | null
-        }>()
+        const lrMap = new Map<
+          string,
+          {
+            handle: string | null
+            avatar_url: string | null
+            arena_score: number | null
+            roi: number | null
+            pnl: number | null
+          }
+        >()
 
         if (lrData) {
           for (const row of lrData as Array<Record<string, unknown>>) {
@@ -253,12 +283,11 @@ export async function GET(request: NextRequest) {
           }
         }
 
-        const traders: TokenTrader[] = page.map(t => {
+        const traders: TokenTrader[] = page.map((t) => {
           const key = `${t.source}:${t.source_trader_id}`
           const lr = lrMap.get(key)
-          const avgPnlPct = t.pnlPcts.length > 0
-            ? t.pnlPcts.reduce((s, v) => s + v, 0) / t.pnlPcts.length
-            : null
+          const avgPnlPct =
+            t.pnlPcts.length > 0 ? t.pnlPcts.reduce((s, v) => s + v, 0) / t.pnlPcts.length : null
 
           return {
             source: t.source,
@@ -270,9 +299,8 @@ export async function GET(request: NextRequest) {
             total_pnl: lr?.pnl != null ? Number(lr.pnl) : 0,
             token_pnl: Math.round(t.totalPnl * 100) / 100,
             token_trade_count: t.tradeCount,
-            token_win_rate: t.tradeCount > 0
-              ? Math.round((t.winCount / t.tradeCount) * 10000) / 100
-              : null,
+            token_win_rate:
+              t.tradeCount > 0 ? Math.round((t.winCount / t.tradeCount) * 10000) / 100 : null,
             token_avg_pnl_pct: avgPnlPct != null ? Math.round(avgPnlPct * 100) / 100 : null,
           }
         })
@@ -290,9 +318,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err) {
     logger.error('[by-token]', err instanceof Error ? err.message : String(err))
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

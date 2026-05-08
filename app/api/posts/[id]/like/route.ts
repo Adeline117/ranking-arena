@@ -5,7 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import { validateEnum, success, handleError } from '@/lib/api'
+import { validateEnum, success } from '@/lib/api'
 import { togglePostReaction, getPostById } from '@/lib/data/posts'
 import { sendNotification } from '@/lib/data/notifications'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'

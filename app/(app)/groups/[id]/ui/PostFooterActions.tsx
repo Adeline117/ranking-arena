@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
 import { useToast } from '@/app/components/ui/Toast'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
