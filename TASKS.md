@@ -14,35 +14,53 @@
 
 ## 🔴 P0 - Critical
 
-### Commercial Go/No-Go (deadline was 2026-05-09)
+### Hybrid Pivot: B2B Data API + Leaderboard as Showcase
 
-- [ ] **Decision needed**: paying subs ≥ 20? Check `/admin/pro-metrics`.
-      If YES → accelerate core path (live signals, copy flow).
-      If NO → pivot to B2B data API or execute scope kill list
-      (`docs/reviews/scope-audit-2026-04-09.md`).
+**Decision (2026-05-12)**: 2 paying subs after 30 days → B2C alone isn't working.
+Pivot to B2B data API as primary revenue, keep leaderboard as showcase/SEO funnel.
+
+**Existing foundation**: `/api/v3` — rankings, trader, search endpoints with
+API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
+
+#### API Product (build)
+
+- [ ] **API docs page** (`/api-docs`) — interactive docs, example requests/responses, pricing info
+- [ ] **Self-service API keys** — sign up → generate key → view usage dashboard
+- [ ] **Usage tracking** — log API calls per key (for billing visibility + analytics)
+- [ ] **Pricing tiers** — Free (100/day) / Starter $49/mo (10k/day) / Pro $199/mo (unlimited + webhooks)
+- [ ] **Stripe integration** — API tier checkout + subscription management
+
+#### New Endpoints (build)
+
+- [ ] `platforms` — list all exchanges with metadata (name, type, trader count, last updated)
+- [ ] `history` — trader performance time series (daily snapshots)
+- [ ] `bulk` — export top N traders across all platforms in one call
+
+#### Go-to-Market (do)
+
+- [ ] Landing section on homepage or dedicated `/api` page
+- [ ] Reach out to copy-trading platforms, analytics tools, hedge funds
+- [ ] Add API link to README + socials
 
 ---
 
 ## 🟠 P1 - High Priority
 
-### Data Quality
+### Data Quality (feeds directly into API product value)
 
 - [ ] Verify overall Sharpe lifts from 29% → 45%+ (root causes fixed in 064989ff4, ee81aa2f4)
 - [ ] Verify okx_futures staleness (occasionally 10h, should be ≤6h)
 - [ ] Gains enrichment: native API dead, Etherscan rate-limited — needs alternative data source
 
-### Infrastructure (external dependencies)
+### Infrastructure
 
-- [ ] BloFin Sharpe: now Mac Mini only (geo-blocked from VPS + CF). Watch
-      `scripts/openclaw/fetch-blofin.mjs` success rate
+- [ ] BloFin Sharpe: Mac Mini only (geo-blocked from VPS + CF). Watch success rate
 - [ ] eToro CopySim: retry after 24h IP cooldown
 
 ### Code Quality
 
-- [~] computeSeason main loop split: currently 972 lines (-45% from 1775).
-  Next target ~600. Higher-risk extractions remain: scoring loop,
-  degradation check, upsert, zero-out, re-rank, stale cleanup.
-- [ ] TraderHeader 40-prop interface trim (requires data-flow changes)
+- [~] computeSeason main loop split: 972 lines → ~600 target
+- [ ] TraderHeader 40-prop interface trim
 
 ---
 
