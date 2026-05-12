@@ -32,9 +32,9 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 #### New Endpoints (build)
 
-- [ ] `platforms` — list all exchanges with metadata (name, type, trader count, last updated)
-- [ ] `history` — trader performance time series (daily snapshots)
-- [ ] `bulk` — export top N traders across all platforms in one call
+- [x] `platforms` — list active exchanges with name, type, trader count
+- [x] `history` — daily performance time series (ROI, PnL, win rate, up to 90 days)
+- [x] `bulk` — export top N traders across all platforms (up to 500)
 
 #### Go-to-Market (do)
 
