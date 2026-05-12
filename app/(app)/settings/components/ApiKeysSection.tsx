@@ -212,6 +212,9 @@ export function ApiKeysSection() {
         </>
       )}
 
+      {/* Usage chart */}
+      {activeKeys.length > 0 && <UsageChart />}
+
       {/* Link to docs */}
       <div
         style={{
@@ -232,6 +235,147 @@ export function ApiKeysSection() {
         </a>
       </div>
     </SectionCard>
+  )
+}
+
+function UsageChart() {
+  const [usage, setUsage] = useState<{
+    keys: { id: string; name: string }[]
+    daily: { api_key_id: string; date: string; request_count: number }[]
+    totals: Record<string, number>
+  } | null>(null)
+
+  useEffect(() => {
+    fetch('/api/user/api-keys/usage?days=30')
+      .then((r) => r.json())
+      .then((json) => setUsage(json.data ?? null))
+      .catch(() => {})
+  }, [])
+
+  if (!usage || usage.daily.length === 0) {
+    return (
+      <div
+        style={{
+          marginTop: tokens.spacing[4],
+          paddingTop: tokens.spacing[3],
+          borderTop: '1px solid var(--color-border-primary)',
+        }}
+      >
+        <Text
+          size="xs"
+          weight="bold"
+          style={{ color: 'var(--color-text-tertiary)', marginBottom: tokens.spacing[2] }}
+        >
+          Usage (30 days)
+        </Text>
+        <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
+          No usage data yet. Make your first API call to see stats here.
+        </Text>
+      </div>
+    )
+  }
+
+  // Aggregate daily totals across all keys
+  const dailyTotals: Record<string, number> = {}
+  for (const row of usage.daily) {
+    dailyTotals[row.date] = (dailyTotals[row.date] || 0) + row.request_count
+  }
+
+  // Fill in missing days with 0
+  const dates: string[] = []
+  const now = new Date()
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(now)
+    d.setDate(d.getDate() - i)
+    dates.push(d.toISOString().slice(0, 10))
+  }
+
+  const values = dates.map((d) => dailyTotals[d] || 0)
+  const maxVal = Math.max(...values, 1)
+  const totalRequests = values.reduce((a, b) => a + b, 0)
+
+  return (
+    <div
+      style={{
+        marginTop: tokens.spacing[4],
+        paddingTop: tokens.spacing[3],
+        borderTop: '1px solid var(--color-border-primary)',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'baseline',
+          marginBottom: tokens.spacing[3],
+        }}
+      >
+        <Text size="xs" weight="bold" style={{ color: 'var(--color-text-tertiary)' }}>
+          Usage (30 days)
+        </Text>
+        <Text size="xs" style={{ color: 'var(--color-text-secondary)' }}>
+          {totalRequests.toLocaleString()} total requests
+        </Text>
+      </div>
+
+      {/* Bar chart */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'flex-end',
+          gap: 2,
+          height: 60,
+          padding: `0 ${tokens.spacing[1]}`,
+        }}
+      >
+        {values.map((v, i) => (
+          <div
+            key={dates[i]}
+            title={`${dates[i]}: ${v} requests`}
+            style={{
+              flex: 1,
+              height: Math.max((v / maxVal) * 56, v > 0 ? 2 : 0),
+              background: v > 0 ? 'var(--color-brand)' : 'var(--color-bg-tertiary)',
+              borderRadius: 2,
+              transition: 'height 0.2s ease',
+            }}
+          />
+        ))}
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 4 }}>
+        <Text size="xs" style={{ color: 'var(--color-text-tertiary)', fontSize: 10 }}>
+          {dates[0]}
+        </Text>
+        <Text size="xs" style={{ color: 'var(--color-text-tertiary)', fontSize: 10 }}>
+          Today
+        </Text>
+      </div>
+
+      {/* Per-key breakdown */}
+      {usage.keys.length > 1 && (
+        <div style={{ marginTop: tokens.spacing[3] }}>
+          {usage.keys.map((k) => (
+            <div
+              key={k.id}
+              style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}
+            >
+              <Text size="xs" style={{ color: 'var(--color-text-secondary)' }}>
+                {k.name}
+              </Text>
+              <Text
+                size="xs"
+                style={{
+                  color: 'var(--color-text-tertiary)',
+                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                }}
+              >
+                {(usage.totals[k.id] || 0).toLocaleString()}
+              </Text>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
