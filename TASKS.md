@@ -14,26 +14,20 @@
 
 ## 🔴 P0 - Critical
 
-### 2026-05-09 Commercial Go/No-Go (30 days from paywall live)
+### Commercial Go/No-Go (deadline was 2026-05-09)
 
-- [ ] **Decision point: paying subs ≥ 20 by 2026-05-09?**
-      Current: 2 (per `/admin/pro-metrics` + weekly-metrics Telegram push).
-      If YES → accelerate product on core path (live signals, copy flow).
-      If NO → re-evaluate per CEO review 2026-04-09: pivot to B2B data API,
-      or execute scope kill list (`docs/reviews/scope-audit-2026-04-09.md`).
-      Source: `docs/reviews/2026-04-09-full-review.md` bottom line.
+- [ ] **Decision needed**: paying subs ≥ 20? Check `/admin/pro-metrics`.
+      If YES → accelerate core path (live signals, copy flow).
+      If NO → pivot to B2B data API or execute scope kill list
+      (`docs/reviews/scope-audit-2026-04-09.md`).
 
 ---
 
 ## 🟠 P1 - High Priority
 
-### Data Quality (ongoing, monitor over next few runs)
+### Data Quality
 
-- [x] Root cause fix: GMX 0.9% Sharpe → basePnlUsd filter dropped 70%+ trades (064989ff4)
-- [x] Root cause fix: MEXC 0.1% Sharpe → hardcoded null, now computed from profitList (064989ff4)
-- [x] Root cause fix: DEX trade-level Sharpe fallback for <3 day traders (064989ff4)
-- [x] Root cause fix: position-based equity curve + stats fallback for HL/dYdX (ee81aa2f4)
-- [ ] Verify overall Sharpe lifts from 29% → 45%+ after next enrichment cycle
+- [ ] Verify overall Sharpe lifts from 29% → 45%+ (root causes fixed in 064989ff4, ee81aa2f4)
 - [ ] Verify okx_futures staleness (occasionally 10h, should be ≤6h)
 - [ ] Gains enrichment: native API dead, Etherscan rate-limited — needs alternative data source
 
@@ -43,47 +37,18 @@
       `scripts/openclaw/fetch-blofin.mjs` success rate
 - [ ] eToro CopySim: retry after 24h IP cooldown
 
-### Follow-ups from 5-agent review 2026-04-09
+### Code Quality
 
-- [x] TraderHeader complete decomp: badge row → b11eeeea1; avatar +
-      actions blocks → b2ff1ff59 (581→370 lines). 40-prop interface
-      still big — defer trim until data-flow refactor.
-- [x] compute-leaderboard cleanup: 2033 → 1775 lines via post-processing.ts
-      (fc9142bee), warmupLeaderboardCache extract (f7f7645c6), and helpers.ts
-      dedupe (1a0f6b7a2). computeSeason main loop (~1400 lines) still
-      monolithic — defer to dedicated session.
-- [x] Scope audit P0 deletions: /frame and /kol deleted (a0535f99e,
-      c123bf429, 68e421aba). /tip and /channels CANNOT delete — both
-      have live consumers the audit missed (Stripe success_url, group
-      chat). proxy.ts has the redirect for /frame and /kol.
-- [x] Plausible instrumentation on pricing funnel: click_upgrade_cta +
-      start_checkout events shipped via b2ff1ff59. Combined funnel:
-      view_pricing → click_upgrade_cta → start_checkout → pro_subscribe.
-- [x] Trust ratio RPC: get_top_trust_ratio() shipped in
-      20260409173653_get_top_trust_ratio_rpc.sql. Both
-      scripts/openclaw/weekly-metrics.mjs and /api/cron/weekly-metrics
-      now call it (no more 30s timeouts).
-
-### Open follow-ups
-
-- [~] computeSeason main loop split: 1775 → 972 lines in route.ts (-45%)
-  via 9 extractions in 2026-04-09 session. New files:
-  trader-row.ts (TraderRow + sanitize/merge), scoring-helpers.ts
-  (calmar/style/outliers/arena-followers), freshness-check.ts,
-  fetch-handles.ts, enrich-stats-detail.ts, enrich-equity-curve.ts
-  (Phase 4 + 4b), enrich-daily-snapshots.ts (Phase 4b2), fetch-phase1.ts.
-  Remaining in route.ts: scoring loop, degradation check, upsert,
-  zero-out, re-rank, stale cleanup — all higher-risk and explicitly
-  deferred. Next session can target ~972 → ~600.
+- [~] computeSeason main loop split: currently 972 lines (-45% from 1775).
+  Next target ~600. Higher-risk extractions remain: scoring loop,
+  degradation check, upsert, zero-out, re-rank, stale cleanup.
 - [ ] TraderHeader 40-prop interface trim (requires data-flow changes)
-- [x] paywall_blocked tracking shipped in 8f1da3fbf — wired into
-      home filter, trader-detail tab gate, and claimed-profile tab gate
 
 ---
 
 ## 🟡 P2 - Should Do Soon
 
-_None currently — see Retired below_
+_None currently_
 
 ---
 
@@ -96,50 +61,7 @@ _None currently — see Retired below_
 
 ## ⚪ Backlog
 
-- [x] snapshots_v2 partitions extended (Jul-Sep 2026) + pg_cron auto-create monthly
 - [ ] US/EU VPS for BloFin + other geo-restricted platforms
-- [x] leaderboard_ranks UNLOGGED (WAL writes reduced 3-5x, safe: rebuilt hourly)
-- [x] leaderboard_ranks LIST partition by season_id (applied, pruning verified)
-- [x] trader_snapshots v1 BRIN index (replaces 500MB B-tree with 100KB BRIN)
-- [x] trader_position_history PK refactor (dropped UUID PK + id column, saved 5GB)
-- [x] ~~Multi-source aggregation: Gains/Kwenta~~ — already done (onchain primary + Copin fallback)
-- [x] Enrichment completeness dashboard in /admin/monitoring
-- [x] ~~Cursor-based pagination~~ — already in /api/rankings (cursor param)
-
----
-
-## Completed (April 2026)
-
-- [x] Lower sharpe/sortino/calmar threshold 5→4 curve points (enrichment-metrics.ts)
-- [x] Fix 5 stale test suites → 135/135 green (check-trader-alerts,
-      bybit-futures, gains-perp, feed/personalized, batch-enrich)
-- [x] Add hreflang language alternates (en/zh-CN/ja/ko/x-default)
-- [x] Remove 30 stale MDs from root + docs + specs (-5,863 lines)
-- [x] Update CLAUDE.md metrics (34,000+ traders, 32+ exchanges, 62 crons)
-- [x] Clean up /tmp scripts (push-sharpe-raw.mjs, compute-sharpe-daily.mjs)
-- [x] Remove 59 AI-generated slop docs (-16,494 lines)
-- [x] Update README metrics (migrations 184, API routes 292, crons 53, i18n 4,800+)
-- [x] Condense PROGRESS.md 621→142 lines
-- [x] Fix PostDetailActions React compiler lint error
-- [x] Inline enrichment architecture (5 commits)
-- [x] 10x enrichment batch limits for low-sharpe platforms
-- [x] Monitor inline enrichment architecture (stable, no regressions)
-
-## Retired (no longer actionable)
-
-- ~~Vertex/Apex/RabbitX DEX connectors~~ — all 3 confirmed dead 2026-04:
-  vertex (no public API), apex_pro (geo-blocked + no API), rabbitx (DNS dead).
-  See `lib/connectors/registry.ts:253`.
-- ~~Increase bybit/weex enrichment concurrency from 1~~ — bybit already
-  runs at concurrency 2 (`enrichment-runner.ts:338`); weex disabled entirely
-  2026-04-01 (75% timeout rate).
-- ~~Trading signal alerts refinement~~ — `lib/services/trading-signals.ts`
-  was completely orphaned dead code (zero importers). Deleted in 578a909a0.
-  Re-add only when there's a UX decision to actually ship the feature.
-
-## Completed (March 2026)
-
-_See PROGRESS.md archive section for full list_
 
 ---
 
