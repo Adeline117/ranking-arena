@@ -1,0 +1,306 @@
+'use client'
+
+import React, { useCallback, useEffect, useState } from 'react'
+import { tokens } from '@/lib/design-tokens'
+import { Box, Text, Button } from '@/app/components/base'
+import { useToast } from '@/app/components/ui/Toast'
+import { SectionCard, getInputStyle } from './shared'
+
+interface ApiKey {
+  id: string
+  name: string
+  key: string
+  tier: string
+  daily_limit: number
+  request_count_today: number
+  active: boolean
+  last_used_at: string | null
+  created_at: string
+  revoked_at: string | null
+}
+
+export function ApiKeysSection() {
+  const { showToast } = useToast()
+  const [keys, setKeys] = useState<ApiKey[]>([])
+  const [loading, setLoading] = useState(true)
+  const [creating, setCreating] = useState(false)
+  const [newKeyName, setNewKeyName] = useState('')
+  const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null)
+
+  const fetchKeys = useCallback(async () => {
+    try {
+      const res = await fetch('/api/user/api-keys')
+      if (!res.ok) return
+      const json = await res.json()
+      setKeys(json.data ?? [])
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    fetchKeys()
+  }, [fetchKeys])
+
+  const createKey = async () => {
+    setCreating(true)
+    try {
+      const res = await fetch('/api/user/api-keys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newKeyName || 'Default' }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        showToast(json.error || 'Failed to create key', 'error')
+        return
+      }
+      setJustCreatedKey(json.data.key)
+      setNewKeyName('')
+      await fetchKeys()
+      showToast('API key created', 'success')
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const revokeKey = async (id: string) => {
+    const res = await fetch('/api/user/api-keys', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    if (!res.ok) {
+      showToast('Failed to revoke key', 'error')
+      return
+    }
+    setKeys((prev) =>
+      prev.map((k) =>
+        k.id === id ? { ...k, active: false, revoked_at: new Date().toISOString() } : k
+      )
+    )
+    showToast('API key revoked', 'success')
+  }
+
+  const copyKey = (key: string) => {
+    navigator.clipboard.writeText(key)
+    showToast('Copied to clipboard', 'success')
+  }
+
+  const activeKeys = keys.filter((k) => k.active)
+  const revokedKeys = keys.filter((k) => !k.active)
+
+  return (
+    <SectionCard
+      id="api-keys"
+      title="API Keys"
+      description="Create and manage API keys for the Arena Data API."
+    >
+      {/* Just-created key banner */}
+      {justCreatedKey && (
+        <Box
+          style={{
+            padding: tokens.spacing[4],
+            borderRadius: tokens.radius.md,
+            background: 'rgba(47, 229, 125, 0.1)',
+            border: '1px solid rgba(47, 229, 125, 0.3)',
+            marginBottom: tokens.spacing[4],
+          }}
+        >
+          <Text
+            size="sm"
+            weight="bold"
+            style={{ marginBottom: tokens.spacing[1], color: 'var(--color-accent-success)' }}
+          >
+            Copy your API key now — it won{"'"}t be shown again
+          </Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+            <code
+              style={{
+                flex: 1,
+                padding: tokens.spacing[2],
+                borderRadius: tokens.radius.sm,
+                background: 'var(--color-bg-tertiary)',
+                fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                fontSize: 13,
+                wordBreak: 'break-all',
+              }}
+            >
+              {justCreatedKey}
+            </code>
+            <Button size="sm" onClick={() => copyKey(justCreatedKey)}>
+              Copy
+            </Button>
+          </div>
+          <button
+            onClick={() => setJustCreatedKey(null)}
+            style={{
+              marginTop: tokens.spacing[2],
+              background: 'none',
+              border: 'none',
+              color: 'var(--color-text-tertiary)',
+              cursor: 'pointer',
+              fontSize: 12,
+              padding: 0,
+            }}
+          >
+            Dismiss
+          </button>
+        </Box>
+      )}
+
+      {/* Create new key */}
+      <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
+        <input
+          type="text"
+          placeholder="Key name (optional)"
+          value={newKeyName}
+          onChange={(e) => setNewKeyName(e.target.value)}
+          maxLength={50}
+          style={{
+            ...getInputStyle(),
+            flex: 1,
+          }}
+        />
+        <Button
+          onClick={createKey}
+          disabled={creating || activeKeys.length >= 5}
+          size="sm"
+          variant="primary"
+        >
+          {creating ? 'Creating...' : 'Create Key'}
+        </Button>
+      </Box>
+
+      {activeKeys.length >= 5 && (
+        <Text
+          size="xs"
+          style={{ color: 'var(--color-accent-warning)', marginBottom: tokens.spacing[3] }}
+        >
+          Maximum 5 active keys. Revoke one to create a new key.
+        </Text>
+      )}
+
+      {/* Key list */}
+      {loading ? (
+        <Text size="sm" style={{ color: 'var(--color-text-tertiary)' }}>
+          Loading...
+        </Text>
+      ) : activeKeys.length === 0 && revokedKeys.length === 0 ? (
+        <Text size="sm" style={{ color: 'var(--color-text-tertiary)' }}>
+          No API keys yet. Create one to get started.
+        </Text>
+      ) : (
+        <>
+          {activeKeys.map((k) => (
+            <KeyRow key={k.id} apiKey={k} onRevoke={revokeKey} onCopy={copyKey} />
+          ))}
+          {revokedKeys.length > 0 && (
+            <div style={{ marginTop: tokens.spacing[4] }}>
+              <Text
+                size="xs"
+                weight="bold"
+                style={{ color: 'var(--color-text-tertiary)', marginBottom: tokens.spacing[2] }}
+              >
+                Revoked
+              </Text>
+              {revokedKeys.map((k) => (
+                <KeyRow key={k.id} apiKey={k} onRevoke={revokeKey} onCopy={copyKey} />
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Link to docs */}
+      <div
+        style={{
+          marginTop: tokens.spacing[4],
+          paddingTop: tokens.spacing[3],
+          borderTop: '1px solid var(--color-border-primary)',
+        }}
+      >
+        <a
+          href="/api-docs"
+          style={{
+            fontSize: 13,
+            color: 'var(--color-brand)',
+            textDecoration: 'none',
+          }}
+        >
+          View API documentation →
+        </a>
+      </div>
+    </SectionCard>
+  )
+}
+
+function KeyRow({
+  apiKey,
+  onRevoke,
+  onCopy,
+}: {
+  apiKey: ApiKey
+  onRevoke: (id: string) => void
+  onCopy: (key: string) => void
+}) {
+  const created = new Date(apiKey.created_at).toLocaleDateString()
+  const lastUsed = apiKey.last_used_at
+    ? new Date(apiKey.last_used_at).toLocaleDateString()
+    : 'Never'
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[3],
+        padding: `${tokens.spacing[3]} 0`,
+        borderBottom: '1px solid var(--color-border-primary)',
+        opacity: apiKey.active ? 1 : 0.5,
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <Text size="sm" weight="bold" style={{ whiteSpace: 'nowrap' }}>
+            {apiKey.name}
+          </Text>
+          <code
+            style={{
+              fontSize: 12,
+              fontFamily: tokens.typography.fontFamily.mono.join(', '),
+              color: 'var(--color-text-tertiary)',
+            }}
+          >
+            {apiKey.key}
+          </code>
+        </div>
+        <div style={{ display: 'flex', gap: tokens.spacing[3], marginTop: 2 }}>
+          <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
+            Created {created}
+          </Text>
+          <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
+            Last used: {lastUsed}
+          </Text>
+          {apiKey.active && (
+            <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
+              {apiKey.request_count_today}/{apiKey.daily_limit === 0 ? '∞' : apiKey.daily_limit}{' '}
+              today
+            </Text>
+          )}
+        </div>
+      </div>
+
+      {apiKey.active && (
+        <div style={{ display: 'flex', gap: tokens.spacing[2], flexShrink: 0 }}>
+          <Button size="sm" variant="ghost" onClick={() => onCopy(apiKey.key)}>
+            Copy
+          </Button>
+          <Button size="sm" variant="danger" onClick={() => onRevoke(apiKey.id)}>
+            Revoke
+          </Button>
+        </div>
+      )}
+    </div>
+  )
+}

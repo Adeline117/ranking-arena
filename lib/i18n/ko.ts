@@ -827,6 +827,7 @@ const ko = {
   walletSection: '지갑',
   walletDescription: 'Web3 지갑을 연결하고 관리합니다. NFT 멤버십 상태를 확인합니다.',
   exchangesSection: '거래소 연결',
+  apiKeysSection: 'API 키',
   alertsSection: '트레이더 알림',
   notificationsSection: '알림',
   privacySection: '개인정보',
