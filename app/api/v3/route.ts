@@ -16,6 +16,7 @@ import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
+import { EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS, ALL_SOURCES } from '@/lib/constants/exchanges'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { checkRateLimitFull } from '@/lib/utils/rate-limit'
 import { apiSuccess, apiError } from '@/lib/api/response'
@@ -114,6 +115,9 @@ const CACHE_POLICY: Record<string, string> = {
   rankings: 'public, s-maxage=300, stale-while-revalidate=600',
   trader: 'public, s-maxage=300, stale-while-revalidate=600',
   search: 'public, s-maxage=60, stale-while-revalidate=300',
+  platforms: 'public, s-maxage=3600, stale-while-revalidate=7200',
+  history: 'public, s-maxage=300, stale-while-revalidate=600',
+  bulk: 'public, s-maxage=300, stale-while-revalidate=600',
 }
 
 function jsonResponse(data: unknown, meta: Record<string, unknown>, status = 200) {
@@ -164,8 +168,23 @@ const v3SearchSchema = z.object({
   platform: z.string().max(50).optional(),
 })
 
+const v3HistorySchema = z.object({
+  platform: z.string().min(1).max(50),
+  trader_key: z.string().min(1).max(200),
+  days: z.coerce.number().int().min(1).max(90).catch(30),
+})
+
+const v3BulkSchema = z.object({
+  period: z
+    .string()
+    .toUpperCase()
+    .pipe(z.enum(['7D', '30D', '90D']))
+    .catch('90D'),
+  limit: z.coerce.number().int().min(1).max(500).catch(100),
+})
+
 const v3MainSchema = z.object({
-  endpoint: z.enum(['rankings', 'trader', 'search']),
+  endpoint: z.enum(['rankings', 'trader', 'search', 'platforms', 'history', 'bulk']),
 })
 
 // ---------------------------------------------------------------------------
@@ -231,6 +250,82 @@ async function handleSearch(params: URLSearchParams) {
   return { data: traders, total: traders.length }
 }
 
+async function handlePlatforms() {
+  const activeSources = ALL_SOURCES.filter((s) => !DEAD_BLOCKED_PLATFORMS.includes(s))
+
+  const supabase = getSupabaseAdmin() as SupabaseClient
+
+  // Get trader counts and last updated per platform
+  const { data: counts } = await supabase.from('leaderboard_ranks').select('source')
+
+  const countMap: Record<string, number> = {}
+  for (const row of counts ?? []) {
+    countMap[row.source] = (countMap[row.source] || 0) + 1
+  }
+
+  const platforms = activeSources
+    .map((source) => {
+      const config = EXCHANGE_CONFIG[source]
+      return {
+        key: source,
+        name: config?.name ?? source,
+        type: config?.sourceType ?? 'unknown',
+        traderCount: countMap[source] ?? 0,
+      }
+    })
+    .filter((p) => p.traderCount > 0)
+
+  return { data: platforms, total: platforms.length }
+}
+
+async function handleHistory(params: URLSearchParams) {
+  const parsed = v3HistorySchema.safeParse(Object.fromEntries(params))
+  if (!parsed.success) {
+    return { error: 'Missing required params: platform, trader_key', status: 400 }
+  }
+
+  const { platform, trader_key, days } = parsed.data
+  const since = new Date()
+  since.setDate(since.getDate() - days)
+
+  const supabase = getSupabaseAdmin() as SupabaseClient
+  const { data, error } = await supabase
+    .from('trader_daily_snapshots')
+    .select('date, roi, pnl, daily_return_pct, win_rate, max_drawdown, followers, trades_count')
+    .eq('platform', platform)
+    .eq('trader_key', trader_key)
+    .gte('date', since.toISOString().slice(0, 10))
+    .order('date', { ascending: true })
+    .limit(days)
+
+  if (error) {
+    return { error: 'Failed to fetch history', status: 500 }
+  }
+
+  if (!data || data.length === 0) {
+    return { error: 'No history found for this trader', status: 404 }
+  }
+
+  return { data, total: data.length }
+}
+
+async function handleBulk(params: URLSearchParams) {
+  const parsed = v3BulkSchema.safeParse(Object.fromEntries(params))
+  if (!parsed.success) {
+    return { error: 'Invalid parameters', status: 400 }
+  }
+
+  const { period, limit } = parsed.data
+  const supabase = getSupabaseAdmin() as SupabaseClient
+  const result = await getLeaderboard(supabase, {
+    period: period as TradingPeriod,
+    limit,
+    offset: 0,
+  })
+
+  return { data: result.traders, total: result.total }
+}
+
 // ---------------------------------------------------------------------------
 // Main handler
 // ---------------------------------------------------------------------------
@@ -241,7 +336,7 @@ export async function GET(request: NextRequest) {
 
   if (!endpointParsed.success) {
     return errorResponse(
-      'Missing or invalid "endpoint" param. Valid values: rankings, trader, search',
+      'Missing or invalid "endpoint" param. Valid values: rankings, trader, search, platforms, history, bulk',
       400
     )
   }
@@ -326,6 +421,15 @@ export async function GET(request: NextRequest) {
         break
       case 'search':
         result = await handleSearch(params)
+        break
+      case 'platforms':
+        result = await handlePlatforms()
+        break
+      case 'history':
+        result = await handleHistory(params)
+        break
+      case 'bulk':
+        result = await handleBulk(params)
         break
       default:
         return errorResponse(

@@ -168,6 +168,95 @@ const ENDPOINTS = [
 }`,
     },
   },
+  {
+    name: 'Platforms',
+    method: 'GET',
+    path: '/api/v3?endpoint=platforms',
+    description: 'List all active exchanges with metadata including trader count.',
+    params: [],
+    example: {
+      curl: `curl "https://www.arenafi.org/api/v3?endpoint=platforms"`,
+      response: `{
+  "success": true,
+  "data": [
+    {
+      "key": "binance_futures",
+      "name": "Binance",
+      "type": "futures",
+      "traderCount": 4200
+    },
+    {
+      "key": "hyperliquid",
+      "name": "Hyperliquid",
+      "type": "web3",
+      "traderCount": 3100
+    }
+  ],
+  "meta": { "total": 28, "endpoint": "platforms", "version": "v3" }
+}`,
+    },
+  },
+  {
+    name: 'History',
+    method: 'GET',
+    path: '/api/v3?endpoint=history',
+    description:
+      'Get daily performance time series for a specific trader. Returns ROI, PnL, win rate, and more.',
+    params: [
+      { name: 'platform', required: true, description: 'Exchange platform key' },
+      { name: 'trader_key', required: true, description: 'Trader identifier on the platform' },
+      { name: 'days', required: false, description: '1-90 (default: 30)' },
+    ],
+    example: {
+      curl: `curl "https://www.arenafi.org/api/v3?endpoint=history&platform=binance_futures&trader_key=abc123&days=7"`,
+      response: `{
+  "success": true,
+  "data": [
+    {
+      "date": "2026-05-05",
+      "roi": 12.5,
+      "pnl": 1250,
+      "daily_return_pct": 1.2,
+      "win_rate": 72.0,
+      "max_drawdown": -5.3,
+      "followers": 840,
+      "trades_count": 15
+    }
+  ],
+  "meta": { "total": 7, "endpoint": "history", "version": "v3" }
+}`,
+    },
+  },
+  {
+    name: 'Bulk',
+    method: 'GET',
+    path: '/api/v3?endpoint=bulk',
+    description:
+      'Export top traders across all platforms in a single call. Useful for batch analysis.',
+    params: [
+      { name: 'period', required: false, description: '7D, 30D, or 90D (default: 90D)' },
+      { name: 'limit', required: false, description: '1-500 (default: 100)' },
+    ],
+    example: {
+      curl: `curl -H "X-API-Key: your_api_key" \\
+  "https://www.arenafi.org/api/v3?endpoint=bulk&period=90D&limit=200"`,
+      response: `{
+  "success": true,
+  "data": [
+    {
+      "traderKey": "abc123",
+      "handle": "TopTrader",
+      "platform": "binance_futures",
+      "roi": 245.5,
+      "pnl": 89000,
+      "arenaScore": 87.3,
+      "rank": 1
+    }
+  ],
+  "meta": { "total": 34000, "endpoint": "bulk", "version": "v3" }
+}`,
+    },
+  },
 ]
 
 const CODE_EXAMPLES = {
