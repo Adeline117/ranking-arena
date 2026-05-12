@@ -2,6 +2,22 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Codebase Lint Cleanup (2026-05-12)
+
+**Trigger**: 302 lint problems (141 errors + 161 warnings) accumulated across codebase.
+
+**Process**: 6 parallel agents fixed all categories: no-console, unused-vars, empty .catch, exhaustive-deps, isZh ternary, require-imports, prefer-const, stale eslint-disable directives.
+
+**Result**: 302 → 2 (unfixable React Compiler info warnings). Build + type-check + post-deploy all green.
+
+| Commit      | Fix                                                                                                                                          |
+| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| `18071315f` | Remove/prefix unused variables across codebase                                                                                               |
+| `675fb0590` | Replace console.log with eslint-disable in QA test scripts                                                                                   |
+| `3a978a0e0` | Resolve all remaining lint warnings (36 files): empty .catch, exhaustive-deps, isZh ternary, prefer-const, require-imports, stale directives |
+
+---
+
 ## Product Completion Sprint (2026-05-07)
 
 **Trigger**: Deep analysis of why Arena feels like 半成品 → 5 root causes identified → 10-item fix plan.
