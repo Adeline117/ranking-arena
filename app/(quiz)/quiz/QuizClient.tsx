@@ -142,9 +142,11 @@ export default function QuizClient() {
           scores: result.scores,
           answers,
         }),
-      }).catch(() => {
-        /* non-critical analytics */
       })
+        // eslint-disable-next-line no-restricted-syntax
+        .catch(() => {
+          /* non-critical analytics */
+        })
     } catch {
       // ignore
     }

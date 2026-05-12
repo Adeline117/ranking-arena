@@ -137,9 +137,11 @@ function AuthCallbackContent() {
           fetch('/api/email/welcome', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-          }).catch(() => {
-            /* intentional: fire-and-forget */
           })
+            // eslint-disable-next-line no-restricted-syntax
+            .catch(() => {
+              /* intentional: fire-and-forget */
+            })
         }
 
         // New users → preserve returnUrl with welcome banner (skip complex onboarding)
@@ -181,9 +183,11 @@ function AuthCallbackContent() {
             fetch('/api/email/welcome', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-            }).catch(() => {
-              /* intentional: fire-and-forget */
             })
+              // eslint-disable-next-line no-restricted-syntax
+              .catch(() => {
+                /* intentional: fire-and-forget */
+              })
           }
 
           // New users → preserve returnUrl with welcome banner (consistent with immediate-session path)

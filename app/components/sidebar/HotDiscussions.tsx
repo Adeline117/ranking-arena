@@ -171,7 +171,9 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
             method: 'POST',
             headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
             body: JSON.stringify({ items: needsTranslation.slice(0, 20), targetLang }),
-          }).catch(() => {}) // Silently fail — translation is non-critical
+          })
+            // eslint-disable-next-line no-restricted-syntax
+            .catch(() => {}) // Silently fail — translation is non-critical
         })
     }
   }

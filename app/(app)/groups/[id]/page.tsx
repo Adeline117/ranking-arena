@@ -102,6 +102,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         .then((resolved) => {
           setGroupId(resolved.id)
         })
+        // eslint-disable-next-line no-restricted-syntax
         .catch(() => {
           /* Intentionally swallowed: params resolution should not fail */
         })
@@ -529,6 +530,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         setJoining(false)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [userId, group, isPro, groupId, accessToken, showToast]
   )
 

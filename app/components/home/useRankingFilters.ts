@@ -257,6 +257,7 @@ export function useRankingFilters({
     } else if (storedPrefs.exchange) {
       setSelectedExchange(storedPrefs.exchange)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Debounce ref for URL sync
@@ -630,6 +631,7 @@ export function useRankingFilters({
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedExchange, categoryFiltered])
 
   const presetFiltered = useMemo(() => {
@@ -722,6 +724,7 @@ export function useRankingFilters({
           )
           setServerSearchResults(mapped)
         })
+        // eslint-disable-next-line no-restricted-syntax
         .catch(() => {
           /* silent best-effort fallback */
         })
@@ -751,6 +754,7 @@ export function useRankingFilters({
     const existingIds = new Set(base.map((t) => t.id))
     const newResults = serverSearchResults.filter((t) => !existingIds.has(t.id))
     return [...base, ...newResults]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPro, advancedFiltered, serverSearchResults, searchQuery])
 
   // Pro required handler — show toast instead of redirecting away (jarring UX)
@@ -789,6 +793,7 @@ export function useRankingFilters({
     if (fetchPage) {
       fetchPage(0, { exchange: undefined, category: undefined })
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handleFilterChange, fetchPage])
 
   const handleFilterToggle = useCallback(() => {

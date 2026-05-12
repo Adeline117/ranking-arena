@@ -73,7 +73,8 @@ async function initSentry() {
       const name = samplingContext.name
       if (name?.includes('/_next/static') || name?.includes('/favicon')) return 0
       if (name?.includes('/api/')) return process.env.NODE_ENV === 'production' ? 0.2 : 1.0
-      if (name?.includes('/trader/') || name?.includes('/post/')) return process.env.NODE_ENV === 'production' ? 0.15 : 1.0
+      if (name?.includes('/trader/') || name?.includes('/post/'))
+        return process.env.NODE_ENV === 'production' ? 0.15 : 1.0
       return process.env.NODE_ENV === 'production' ? 0.1 : 1.0
     },
 
@@ -89,15 +90,21 @@ async function initSentry() {
       if (/HeadlessChrome|Googlebot|bingbot|Bytespider/.test(ua)) return null
 
       // Drop DOM NotFoundError (browser extensions, hydration race)
-      if (msg.includes('not a child of this node') || msg.includes('removeChild') || msg.includes('insertBefore')) return null
+      if (
+        msg.includes('not a child of this node') ||
+        msg.includes('removeChild') ||
+        msg.includes('insertBefore')
+      )
+        return null
 
       return event
     },
 
     beforeSendTransaction(transaction) {
-      const duration = transaction.timestamp && transaction.start_timestamp
-        ? (transaction.timestamp - transaction.start_timestamp) * 1000
-        : 0
+      const duration =
+        transaction.timestamp && transaction.start_timestamp
+          ? (transaction.timestamp - transaction.start_timestamp) * 1000
+          : 0
       return duration < 10 ? null : transaction
     },
 
@@ -146,8 +153,9 @@ if (typeof window !== 'undefined') {
   const runOnce = () => {
     if (initialized) return
     initialized = true
+    // eslint-disable-next-line no-restricted-syntax
     initSentry().catch(() => {
-      // eslint-disable-next-line no-restricted-syntax -- non-critical: monitoring failure shouldn't crash the app
+      // non-critical: monitoring failure shouldn't crash the app
     })
   }
 
@@ -191,7 +199,11 @@ if (typeof window !== 'undefined') {
 // NOTE: This named export causes Next.js to call it on every route transition.
 // The dynamic import inside is fine — it only loads Sentry when a navigation occurs.
 export const onRouterTransitionStart = (...args: unknown[]) => {
-  import('@sentry/nextjs').then(Sentry => {
-    Sentry.captureRouterTransitionStart(...(args as Parameters<typeof Sentry.captureRouterTransitionStart>))
-  }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget, failure is non-critical
+  import('@sentry/nextjs')
+    .then((Sentry) => {
+      Sentry.captureRouterTransitionStart(
+        ...(args as Parameters<typeof Sentry.captureRouterTransitionStart>)
+      )
+    })
+    .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget, failure is non-critical
 }

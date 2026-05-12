@@ -324,6 +324,7 @@ async function main() {
     const traderLinks = await page.$$('a[href*="/trader/"]')
     if (traderLinks.length > 0) {
       await traderLinks[0].click()
+      // eslint-disable-next-line no-restricted-syntax
       await page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {})
       await sleep(3000)
     } else {

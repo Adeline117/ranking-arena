@@ -1,11 +1,11 @@
 /**
  * Redis 缓存分层优化模块
- * 
+ *
  * 设计缓存策略：
  * - 热数据 → Redis (高频访问，短TTL)
  * - 温数据 → Redis (中频访问，中等TTL)
  * - 冷数据 → CDN/Supabase (低频访问，长TTL或持久化)
- * 
+ *
  * 缓存层级：
  * - L1: 内存缓存 (单实例，最快)
  * - L2: Redis (分布式，快)
@@ -74,12 +74,12 @@ export const CACHE_TIERS = {
    * - 同时缓存到内存和 Redis
    */
   hot: {
-    memoryTtlSeconds: 60,       // 内存缓存 1 分钟
-    redisTtlSeconds: 300,       // Redis 缓存 5 分钟
-    staleWhileRevalidate: 30,   // 允许 30 秒过期数据
+    memoryTtlSeconds: 60, // 内存缓存 1 分钟
+    redisTtlSeconds: 300, // Redis 缓存 5 分钟
+    staleWhileRevalidate: 30, // 允许 30 秒过期数据
     priority: 1,
   },
-  
+
   /**
    * 温数据：交易员详情页、筛选结果
    * - 中频访问（10-100次/分钟）
@@ -87,12 +87,12 @@ export const CACHE_TIERS = {
    * - 主要缓存到 Redis
    */
   warm: {
-    memoryTtlSeconds: 120,      // 内存缓存 2 分钟
-    redisTtlSeconds: 900,       // Redis 缓存 15 分钟
-    staleWhileRevalidate: 60,   // 允许 1 分钟过期数据
+    memoryTtlSeconds: 120, // 内存缓存 2 分钟
+    redisTtlSeconds: 900, // Redis 缓存 15 分钟
+    staleWhileRevalidate: 60, // 允许 1 分钟过期数据
     priority: 2,
   },
-  
+
   /**
    * 冷数据：历史数据、统计聚合
    * - 低频访问（<10次/分钟）
@@ -100,9 +100,9 @@ export const CACHE_TIERS = {
    * - 优先从持久化层读取
    */
   cold: {
-    memoryTtlSeconds: 300,      // 内存缓存 5 分钟
-    redisTtlSeconds: 3600,      // Redis 缓存 1 小时
-    staleWhileRevalidate: 300,  // 允许 5 分钟过期数据
+    memoryTtlSeconds: 300, // 内存缓存 5 分钟
+    redisTtlSeconds: 3600, // Redis 缓存 1 小时
+    staleWhileRevalidate: 300, // 允许 5 分钟过期数据
     priority: 3,
   },
 } as const
@@ -115,40 +115,39 @@ export const CACHE_KEY_PATTERNS = {
   rankings: {
     pattern: 'rankings:*',
     tier: 'hot' as CacheTier,
-    keyBuilder: (seasonId: string, category?: string) => 
+    keyBuilder: (seasonId: string, category?: string) =>
       `rankings:${seasonId}${category ? `:${category}` : ''}`,
   },
-  
+
   // 排行榜汇总 - 热数据
   rankingsSummary: {
     pattern: 'rankings:summary:*',
     tier: 'hot' as CacheTier,
     keyBuilder: (seasonId: string) => `rankings:summary:${seasonId}`,
   },
-  
+
   // 交易员详情 - 温数据
   traderDetail: {
     pattern: 'trader:*',
     tier: 'warm' as CacheTier,
-    keyBuilder: (platform: string, traderId: string) => 
-      `trader:${platform}:${traderId}`,
+    keyBuilder: (platform: string, traderId: string) => `trader:${platform}:${traderId}`,
   },
-  
+
   // 交易员历史 - 冷数据
   traderHistory: {
     pattern: 'trader:history:*',
     tier: 'cold' as CacheTier,
-    keyBuilder: (platform: string, traderId: string, period: string) => 
+    keyBuilder: (platform: string, traderId: string, period: string) =>
       `trader:history:${platform}:${traderId}:${period}`,
   },
-  
+
   // 平台统计 - 温数据
   platformStats: {
     pattern: 'platform:stats:*',
     tier: 'warm' as CacheTier,
     keyBuilder: (platform: string) => `platform:stats:${platform}`,
   },
-  
+
   // 数据新鲜度 - 热数据
   dataFreshness: {
     pattern: 'freshness:*',
@@ -211,7 +210,7 @@ export async function tieredGet<T>(
 ): Promise<{ data: T | null; layer: CacheLayer | null }> {
   const memoryCache = getMemoryCache()
   const config = CACHE_TIERS[tier]
-  
+
   // L1: 内存缓存
   const memoryData = memoryCache.get<CacheEntry<T>>(key)
   if (memoryData?.data !== undefined) {
@@ -224,7 +223,7 @@ export async function tieredGet<T>(
     // Past soft expiry but still in memory (SWR window) — fall through to let tieredGetOrSet handle it
   }
   layerStats.memory.misses++
-  
+
   // L2: Redis 缓存
   const redis = await initRedis()
   if (redis) {
@@ -232,18 +231,22 @@ export async function tieredGet<T>(
       const redisData = await redis.get<CacheEntry<T>>(key)
       if (redisData?.data !== undefined) {
         layerStats.redis.hits++
-        
+
         // 回填到内存缓存
         memoryCache.set(key, redisData, config.memoryTtlSeconds)
-        
+
         return { data: redisData.data, layer: 'redis' }
       }
       layerStats.redis.misses++
     } catch (error) {
-      dataLogger.warn('[RedisLayer] Redis 读取失败:', { key, error, correlationId: correlationId() })
+      dataLogger.warn('[RedisLayer] Redis 读取失败:', {
+        key,
+        error,
+        correlationId: correlationId(),
+      })
     }
   }
-  
+
   return { data: null, layer: null }
 }
 
@@ -259,7 +262,7 @@ export async function tieredSet<T>(
   const memoryCache = getMemoryCache()
   const config = CACHE_TIERS[tier]
   const now = Date.now()
-  
+
   const entry: CacheEntry<T> = {
     data,
     tier,
@@ -272,7 +275,7 @@ export async function tieredSet<T>(
   // This eliminates the need for a separate swr: bucket entry
   const memoryTtl = config.memoryTtlSeconds + config.staleWhileRevalidate
   memoryCache.set(key, entry, memoryTtl)
-  
+
   // L2: 写入 Redis (single pipeline when tags present)
   const redis = await initRedis()
   if (redis) {
@@ -291,7 +294,11 @@ export async function tieredSet<T>(
 
       return true
     } catch (error) {
-      dataLogger.warn('[RedisLayer] Redis 写入失败 (memory-only):', { key, error: error instanceof Error ? error.message : String(error), correlationId: correlationId() })
+      dataLogger.warn('[RedisLayer] Redis 写入失败 (memory-only):', {
+        key,
+        error: error instanceof Error ? error.message : String(error),
+        correlationId: correlationId(),
+      })
       return false // Redis write failed — data is memory-only, not persisted cross-instance
     }
   }
@@ -304,10 +311,10 @@ export async function tieredSet<T>(
  */
 export async function tieredDel(key: string): Promise<void> {
   const memoryCache = getMemoryCache()
-  
+
   // 删除内存缓存
   memoryCache.delete(key)
-  
+
   // 删除 Redis 缓存
   const redis = await initRedis()
   if (redis) {
@@ -325,20 +332,20 @@ export async function tieredDel(key: string): Promise<void> {
 export async function tieredDelByTag(tag: string): Promise<number> {
   const redis = await initRedis()
   const memoryCache = getMemoryCache()
-  
+
   if (!redis) {
     return memoryCache.deleteByPrefix(`tag:${tag}`)
   }
-  
+
   try {
     const keys = await redis.smembers(`tag:${tag}`)
     if (keys.length === 0) return 0
-    
+
     // 删除内存和 Redis 缓存
     for (const key of keys) {
       memoryCache.delete(key)
     }
-    
+
     await redis.del(...keys, `tag:${tag}`)
     return keys.length
   } catch (error) {
@@ -392,11 +399,25 @@ export async function tieredGetOrSet<T>(
   if (config.staleWhileRevalidate > 0) {
     const memoryCache = getMemoryCache()
     const staleEntry = memoryCache.get<CacheEntry<T>>(key)
-    if (staleEntry?.data !== undefined && staleEntry.softExpiresAt && Date.now() >= staleEntry.softExpiresAt) {
+    if (
+      staleEntry?.data !== undefined &&
+      staleEntry.softExpiresAt &&
+      Date.now() >= staleEntry.softExpiresAt
+    ) {
       // Serve stale, refresh in background
-      fetcher().then(fresh => {
-        tieredSet(key, fresh, tier, tags).catch(err => dataLogger.warn(`[redis-layer] SWR set failed for ${key}:`, { error: err instanceof Error ? err.message : String(err) }))
-      }).catch(err => dataLogger.warn(`[redis-layer] SWR fetch failed for ${key}:`, { error: err instanceof Error ? err.message : String(err) }))
+      fetcher()
+        .then((fresh) => {
+          tieredSet(key, fresh, tier, tags).catch((err) =>
+            dataLogger.warn(`[redis-layer] SWR set failed for ${key}:`, {
+              error: err instanceof Error ? err.message : String(err),
+            })
+          )
+        })
+        .catch((err) =>
+          dataLogger.warn(`[redis-layer] SWR fetch failed for ${key}:`, {
+            error: err instanceof Error ? err.message : String(err),
+          })
+        )
       return staleEntry.data
     }
   }
@@ -417,13 +438,16 @@ export async function tieredGetOrSet<T>(
       const lockResult = await lockRedis.set(lockKey, '1', { nx: true, ex: LOCK_TTL_SECONDS })
       lockAcquired = lockResult === 'OK'
     } catch (err) {
-      dataLogger.warn('[redis-layer] lock acquire failed:', err instanceof Error ? err.message : String(err))
+      dataLogger.warn(
+        '[redis-layer] lock acquire failed:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
 
     if (!lockAcquired) {
       // Another instance is fetching — wait and retry cache reads
       for (let retry = 0; retry < LOCK_MAX_RETRIES; retry++) {
-        await new Promise(resolve => setTimeout(resolve, LOCK_RETRY_DELAY_MS))
+        await new Promise((resolve) => setTimeout(resolve, LOCK_RETRY_DELAY_MS))
         const { data: retryData } = await tieredGet<T>(key, tier)
         if (retryData !== null) {
           return retryData
@@ -440,7 +464,9 @@ export async function tieredGetOrSet<T>(
     // Evict stale entries from previous invocations (hung promises on warm reuse)
     if (Date.now() - existing.createdAt > IN_FLIGHT_MAX_AGE_MS) {
       inFlightRequests.delete(key)
-      dataLogger.warn(`[redis-layer] Evicted stale in-flight request: ${key} (age=${Date.now() - existing.createdAt}ms)`)
+      dataLogger.warn(
+        `[redis-layer] Evicted stale in-flight request: ${key} (age=${Date.now() - existing.createdAt}ms)`
+      )
     } else {
       return existing.promise as Promise<T>
     }
@@ -465,6 +491,7 @@ export async function tieredGetOrSet<T>(
     inFlightRequests.delete(key)
     // Release distributed lock (best-effort)
     if (lockRedis && lockAcquired) {
+      // eslint-disable-next-line no-restricted-syntax
       lockRedis.del(lockKey).catch(() => {})
     }
   }
@@ -502,7 +529,7 @@ export async function tieredMget<T>(
     const redis = await initRedis()
     if (redis) {
       try {
-        const missKeys = missIndices.map(i => keys[i])
+        const missKeys = missIndices.map((i) => keys[i])
         const redisResults = await redis.mget<(CacheEntry<T> | null)[]>(...missKeys)
         for (let j = 0; j < missIndices.length; j++) {
           const entry = redisResults[j]
@@ -532,10 +559,10 @@ export async function warmupCache<T>(
   entries: Array<{ key: string; data: T; tier?: CacheTier; tags?: string[] }>
 ): Promise<number> {
   let successCount = 0
-  
+
   const redis = await initRedis()
   const memoryCache = getMemoryCache()
-  
+
   const now = Date.now()
   const pipelineOps: Array<{ key: string; value: CacheEntry<T>; ttl: number }> = []
 
@@ -564,14 +591,14 @@ export async function warmupCache<T>(
         pipeline.set(op.key, op.value, { ex: op.ttl })
       }
       const results = await pipeline.exec()
-      successCount = results.filter(r => r !== null && r !== undefined).length
+      successCount = results.filter((r) => r !== null && r !== undefined).length
     } catch (error) {
       dataLogger.warn('[RedisLayer] 批量预热写入失败:', { error, count: pipelineOps.length })
     }
   } else {
     successCount = entries.length // 内存写入成功也算
   }
-  
+
   dataLogger.info(`[RedisLayer] 缓存预热完成: ${successCount}/${entries.length}`)
   return successCount
 }
@@ -595,10 +622,7 @@ export async function cacheRankings<T>(
 /**
  * 获取缓存的排行榜数据
  */
-export async function getCachedRankings<T>(
-  seasonId: string,
-  category?: string
-): Promise<T | null> {
+export async function getCachedRankings<T>(seasonId: string, category?: string): Promise<T | null> {
   const key = CACHE_KEY_PATTERNS.rankings.keyBuilder(seasonId, category)
   const { data } = await tieredGet<T>(key, 'hot')
   return data
@@ -679,7 +703,7 @@ export async function checkCacheHealth(): Promise<{
 }> {
   const memoryCache = getMemoryCache()
   let redisLatency: number | null = null
-  
+
   const redis = await initRedis()
   if (redis) {
     try {
@@ -687,7 +711,9 @@ export async function checkCacheHealth(): Promise<{
       await redis.ping()
       redisLatency = Date.now() - start
     } catch (err) {
-      dataLogger.warn('[Redis] Health check failed: ' + (err instanceof Error ? err.message : String(err)))
+      dataLogger.warn(
+        '[Redis] Health check failed: ' + (err instanceof Error ? err.message : String(err))
+      )
     }
   }
 

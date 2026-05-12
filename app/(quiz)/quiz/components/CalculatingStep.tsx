@@ -27,6 +27,7 @@ export default function CalculatingStep({ tr, onDone }: CalculatingStepProps) {
 
   // Determine language from the tr function
   const isZh = tr('quizCalculating').length > 0 && /[\u4e00-\u9fff]/.test(tr('quizCalculating'))
+  // eslint-disable-next-line no-restricted-syntax -- array selection based on locale, not a simple string translation
   const messages = isZh ? MESSAGES_ZH : MESSAGES_EN
 
   const prefersReducedMotion =

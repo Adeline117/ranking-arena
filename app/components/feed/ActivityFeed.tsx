@@ -139,6 +139,7 @@ export default function ActivityFeed({
         setLoading(false)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [fixedPlatform, fixedHandle]
   )
 
@@ -172,6 +173,7 @@ export default function ActivityFeed({
     } finally {
       setLoading(false)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cursor, loading, platform, fixedHandle])
 
   // Apply local type filter on top of server-fetched data

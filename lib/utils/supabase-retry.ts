@@ -1,9 +1,9 @@
 /**
  * Supabase Retry Utility
- * 
+ *
  * Handles transient Supabase errors (502 Bad Gateway from Cloudflare)
  * with exponential backoff retry logic.
- * 
+ *
  * Emergency fix 2026-04-01: Handle Supabase 502 errors during high load
  */
 
@@ -25,7 +25,7 @@ const DEFAULT_OPTIONS: Required<RetryOptions> = {
 }
 
 function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function isRetryableError(error: unknown): boolean {
@@ -64,11 +64,11 @@ function isRetryableError(error: unknown): boolean {
 
 /**
  * Retry a Supabase query operation with exponential backoff
- * 
+ *
  * @param operation Function that returns a Supabase query builder
  * @param options Retry configuration
  * @returns Query result
- * 
+ *
  * @example
  * const result = await retrySupabaseQuery(
  *   () => supabase.from('traders').upsert(data),
@@ -82,18 +82,21 @@ export async function retrySupabaseQuery<T>(
   const opts = { ...DEFAULT_OPTIONS, ...options }
   let lastError: unknown
   let delay = opts.initialDelayMs
-  
+
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
     try {
       const result = await operation()
-      
+
       // Check for error in response
       if (result.error) {
         if (isRetryableError(result.error) && attempt < opts.maxAttempts) {
-          dataLogger.warn(`[supabase-retry] Attempt ${attempt}/${opts.maxAttempts} failed with retryable error, retrying in ${delay}ms...`, {
-            error: result.error.message,
-            code: result.error.code,
-          })
+          dataLogger.warn(
+            `[supabase-retry] Attempt ${attempt}/${opts.maxAttempts} failed with retryable error, retrying in ${delay}ms...`,
+            {
+              error: result.error.message,
+              code: result.error.code,
+            }
+          )
           await sleep(delay)
           delay = Math.min(delay * opts.backoffFactor, opts.maxDelayMs)
           lastError = result.error
@@ -102,18 +105,20 @@ export async function retrySupabaseQuery<T>(
         // Non-retryable error or final attempt
         return result
       }
-      
+
       // Success
       if (attempt > 1) {
         dataLogger.info(`[supabase-retry] Succeeded on attempt ${attempt}/${opts.maxAttempts}`)
       }
       return result
-      
     } catch (error) {
       if (isRetryableError(error) && attempt < opts.maxAttempts) {
-        dataLogger.warn(`[supabase-retry] Attempt ${attempt}/${opts.maxAttempts} threw retryable error, retrying in ${delay}ms...`, {
-          error: error instanceof Error ? error.message : String(error),
-        })
+        dataLogger.warn(
+          `[supabase-retry] Attempt ${attempt}/${opts.maxAttempts} threw retryable error, retrying in ${delay}ms...`,
+          {
+            error: error instanceof Error ? error.message : String(error),
+          }
+        )
         await sleep(delay)
         delay = Math.min(delay * opts.backoffFactor, opts.maxDelayMs)
         lastError = error
@@ -123,7 +128,7 @@ export async function retrySupabaseQuery<T>(
       throw error
     }
   }
-  
+
   // All retries exhausted
   throw lastError || new Error('All retry attempts exhausted')
 }
@@ -138,8 +143,7 @@ export async function retryInsert<T>(
   options: RetryOptions = {}
 ): Promise<PostgrestResponse<T>> {
   return retrySupabaseQuery<T>(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PostgREST generic: table name is dynamic, insert payload type cannot be inferred
-    async () => await client.from(table).insert(data as any) as PostgrestResponse<T>,
+    async () => (await client.from(table).insert(data as any)) as PostgrestResponse<T>,
     options
   )
 }
@@ -155,8 +159,8 @@ export async function retryUpsert<T>(
   retryOptions: RetryOptions = {}
 ): Promise<PostgrestResponse<T>> {
   return retrySupabaseQuery<T>(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- PostgREST generic: table name is dynamic, upsert payload type cannot be inferred
-    async () => await client.from(table).upsert(data as any, upsertOptions) as PostgrestResponse<T>,
+    async () =>
+      (await client.from(table).upsert(data as any, upsertOptions)) as PostgrestResponse<T>,
     retryOptions
   )
 }

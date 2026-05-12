@@ -81,10 +81,14 @@ export function useMultiAccount() {
   const canAddAccount = accounts.length < maxAccounts
 
   const addCurrentAccount = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
     if (!session) return false
 
-    const { data: { user } } = await supabase.auth.getUser()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
     if (!user) return false
 
     // Fetch user profile for handle/avatar
@@ -115,58 +119,66 @@ export function useMultiAccount() {
     return true
   }, [accounts, addAccount])
 
-  const switchAccount = useCallback(async (userId: string) => {
-    const target = accounts.find((a) => a.userId === userId)
-    if (!target) return { success: false, error: 'Account not found' }
+  const switchAccount = useCallback(
+    async (userId: string) => {
+      const target = accounts.find((a) => a.userId === userId)
+      if (!target) return { success: false, error: 'Account not found' }
 
-    // Save current session's refresh token first
-    const { data: { session: currentSession } } = await supabase.auth.getSession()
-    if (currentSession) {
-      const currentActive = accounts.find((a) => a.isActive)
-      if (currentActive) {
-        addAccount({
-          ...currentActive,
-          refreshToken: currentSession.refresh_token,
-          isActive: false,
-        })
+      // Save current session's refresh token first
+      const {
+        data: { session: currentSession },
+      } = await supabase.auth.getSession()
+      if (currentSession) {
+        const currentActive = accounts.find((a) => a.isActive)
+        if (currentActive) {
+          addAccount({
+            ...currentActive,
+            refreshToken: currentSession.refresh_token,
+            isActive: false,
+          })
+        }
       }
-    }
 
-    // Restore target account session
-    const { data, error } = await supabase.auth.refreshSession({
-      refresh_token: target.refreshToken,
-    })
+      // Restore target account session
+      const { data, error } = await supabase.auth.refreshSession({
+        refresh_token: target.refreshToken,
+      })
 
-    if (error || !data.session) {
-      // Token expired — remove stale account from store so user isn't stuck
-      removeAccount(userId)
-      return { success: false, error: 'session_expired', userId }
-    }
+      if (error || !data.session) {
+        // Token expired — remove stale account from store so user isn't stuck
+        removeAccount(userId)
+        return { success: false, error: 'session_expired', userId }
+      }
 
-    // Update stored refresh token
-    addAccount({
-      ...target,
-      refreshToken: data.session.refresh_token,
-      isActive: true,
-      lastActiveAt: new Date().toISOString(),
-    })
-    setActiveAccount(userId)
+      // Update stored refresh token
+      addAccount({
+        ...target,
+        refreshToken: data.session.refresh_token,
+        isActive: true,
+        lastActiveAt: new Date().toISOString(),
+      })
+      setActiveAccount(userId)
 
-    return { success: true }
-  }, [accounts, addAccount, removeAccount, setActiveAccount])
+      return { success: true }
+    },
+    [accounts, addAccount, removeAccount, setActiveAccount]
+  )
 
   // Wrap removeAccount to revoke the stored refresh token server-side before
   // dropping it from local state. This narrows the blast radius of an XSS or
   // stolen-localStorage scenario: a leaked refresh token is long-lived and can
   // mint access tokens indefinitely, so "remove" must actually revoke it.
-  const removeAccountAndRevoke = useCallback(async (userId: string) => {
-    const target = accounts.find((a) => a.userId === userId)
-    if (target?.refreshToken) {
-      // Best-effort revocation — we still clear local state even if this fails.
-      await invalidateStoredRefreshToken(target.refreshToken)
-    }
-    removeAccount(userId)
-  }, [accounts, removeAccount])
+  const removeAccountAndRevoke = useCallback(
+    async (userId: string) => {
+      const target = accounts.find((a) => a.userId === userId)
+      if (target?.refreshToken) {
+        // Best-effort revocation — we still clear local state even if this fails.
+        await invalidateStoredRefreshToken(target.refreshToken)
+      }
+      removeAccount(userId)
+    },
+    [accounts, removeAccount]
+  )
 
   const signOutAll = useCallback(async () => {
     // Revoke every stored refresh token before clearing local state, so any
@@ -176,7 +188,6 @@ export function useMultiAccount() {
       if (account.refreshToken) {
         // Serial is fine here — this path is rarely hit and we want to avoid
         // racing session swaps inside invalidateStoredRefreshToken.
-        // eslint-disable-next-line no-await-in-loop
         await invalidateStoredRefreshToken(account.refreshToken)
       }
     }

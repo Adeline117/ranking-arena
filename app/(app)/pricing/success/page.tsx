@@ -93,9 +93,10 @@ function PaymentSuccessContent() {
       .then(({ data }) => {
         setEmail(data.user?.email ?? null)
       })
+      // eslint-disable-next-line no-restricted-syntax
       .catch(() => {
         /* Intentionally swallowed: auth check non-critical for success page */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [])
 
   // 直接查询订阅状态（避免 React 状态闭包问题）

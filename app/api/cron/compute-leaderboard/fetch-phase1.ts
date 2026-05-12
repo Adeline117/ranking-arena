@@ -48,7 +48,7 @@ function freshnessISOForSource(source: string): string {
 export async function fetchPhase1FromV2(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   season: Period,
-  addToTraderMap: (row: TraderRow) => void,
+  addToTraderMap: (row: TraderRow) => void
 ): Promise<Map<string, number>> {
   const v2CountBySource = new Map<string, number>()
   const v2Window = season
@@ -57,7 +57,9 @@ export async function fetchPhase1FromV2(
 
   for (let i = 0; i < SOURCES_WITH_DATA.length; i += batchSize) {
     if (Date.now() - phase1Start > PHASE1_TIME_BUDGET_MS) {
-      logger.warn(`[${season}] Phase 1 time budget exceeded at platform ${i}/${SOURCES_WITH_DATA.length}`)
+      logger.warn(
+        `[${season}] Phase 1 time budget exceeded at platform ${i}/${SOURCES_WITH_DATA.length}`
+      )
       break
     }
 
@@ -70,11 +72,12 @@ export async function fetchPhase1FromV2(
         const queryWithTimeout = async <T>(promise: PromiseLike<T>): Promise<T> => {
           return Promise.race([
             promise,
-            new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`${source} query timeout`)), PER_SOURCE_TIMEOUT_MS)),
+            new Promise<never>((_, reject) =>
+              setTimeout(() => reject(new Error(`${source} query timeout`)), PER_SOURCE_TIMEOUT_MS)
+            ),
           ])
         }
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Supabase .select() returns untyped rows; fields are accessed dynamically via col() helper below
         let data: any[] | null = null
         let error: { message: string; code?: string } | null = null
         try {
@@ -82,15 +85,19 @@ export async function fetchPhase1FromV2(
           // Postgres scans ALL monthly partitions (22.9s avg). With it, only
           // the current month's partition is scanned (~2-4s).
           const partitionPruneDate = new Date(Date.now() - 31 * 24 * 3600 * 1000).toISOString()
-          const result = await queryWithTimeout(supabase
-            .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
-            .eq('platform', source)
-            .eq('window', v2Window)
-            .gte('updated_at', freshnessISO)
-            .gte('as_of_ts', partitionPruneDate)
-            .order('updated_at', { ascending: false })
-            .limit(1000))
+          const result = await queryWithTimeout(
+            supabase
+              .from('trader_snapshots_v2')
+              .select(
+                'platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics'
+              )
+              .eq('platform', source)
+              .eq('window', v2Window)
+              .gte('updated_at', freshnessISO)
+              .gte('as_of_ts', partitionPruneDate)
+              .order('updated_at', { ascending: false })
+              .limit(1000)
+          )
           data = result.data as TraderRow[] | null
           error = result.error
         } catch {
@@ -102,14 +109,18 @@ export async function fetchPhase1FromV2(
         // (many platforms only fetch one window; 30D is the most common)
         if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
           try {
-            const fallback = await queryWithTimeout(supabase
-              .from('trader_snapshots_v2')
-              .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
-              .eq('platform', source)
-              .eq('window', '30D')
-              .gte('updated_at', freshnessISO)
-              .order('updated_at', { ascending: false })
-              .limit(1000))
+            const fallback = await queryWithTimeout(
+              supabase
+                .from('trader_snapshots_v2')
+                .select(
+                  'platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics'
+                )
+                .eq('platform', source)
+                .eq('window', '30D')
+                .gte('updated_at', freshnessISO)
+                .order('updated_at', { ascending: false })
+                .limit(1000)
+            )
             if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
               data = fallback.data
               error = fallback.error as typeof error
@@ -121,18 +132,25 @@ export async function fetchPhase1FromV2(
 
         if (error) {
           // Retry once after 2s with smaller limit to recover from transient statement_timeout.
-          logger.error(`[${season}] Query failed for ${source}: ${error.message} (code=${error.code}) — retrying with limit=1000`, { source, window: v2Window })
-          await new Promise(r => setTimeout(r, 2000))
+          logger.error(
+            `[${season}] Query failed for ${source}: ${error.message} (code=${error.code}) — retrying with limit=1000`,
+            { source, window: v2Window }
+          )
+          await new Promise((r) => setTimeout(r, 2000))
           const retry = await supabase
             .from('trader_snapshots_v2')
-            .select('platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics')
+            .select(
+              'platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics'
+            )
             .eq('platform', source)
             .eq('window', v2Window)
             .gte('updated_at', freshnessISO)
             .order('updated_at', { ascending: false })
             .limit(1000)
           if (retry.error) {
-            logger.error(`[${season}] Retry also failed for ${source}: ${retry.error.message} — data NOT loaded (will cause false "stale" downstream)`)
+            logger.error(
+              `[${season}] Retry also failed for ${source}: ${retry.error.message} — data NOT loaded (will cause false "stale" downstream)`
+            )
             return rows
           }
           data = retry.data
@@ -148,7 +166,10 @@ export async function fetchPhase1FromV2(
           let jsonbFallbackCount = 0
           const col = (key: string, jsonKey?: string) => {
             const v = d[key as keyof typeof d]
-            if (v != null) { const n = Number(v); return Number.isFinite(n) ? n : null }
+            if (v != null) {
+              const n = Number(v)
+              return Number.isFinite(n) ? n : null
+            }
             const jk = jsonKey || key
             const jv = m[jk]
             if (jv != null) {
@@ -189,10 +210,12 @@ export async function fetchPhase1FromV2(
           if (jsonbFallbackCount > 0) totalJsonbFallbacks++
         }
         if (totalJsonbFallbacks > 0) {
-          logger.warn(`[${source}] ${totalJsonbFallbacks}/${data.length} traders used JSONB metrics fallback`)
+          logger.warn(
+            `[${source}] ${totalJsonbFallbacks}/${data.length} traders used JSONB metrics fallback`
+          )
         }
         return rows
-      }),
+      })
     )
 
     results.forEach((rows, idx) => {
@@ -200,7 +223,9 @@ export async function fetchPhase1FromV2(
       if (rows.length > 0) {
         v2CountBySource.set(rows[0].source, rows.length)
       } else if (batchSource) {
-        logger.warn(`[${season}] ${batchSource}: 0 traders fetched from snapshots_v2 (window=${v2Window}, fallback checked)`)
+        logger.warn(
+          `[${season}] ${batchSource}: 0 traders fetched from snapshots_v2 (window=${v2Window}, fallback checked)`
+        )
       }
       rows.forEach(addToTraderMap)
     })

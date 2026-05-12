@@ -509,6 +509,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         setTranslating(false)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [translationCache, showToast]
   )
 

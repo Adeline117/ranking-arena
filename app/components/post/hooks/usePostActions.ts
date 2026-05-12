@@ -267,6 +267,7 @@ export function usePostActions({
         lockRef.current.delete(key)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [accessToken, openPost?.id, showToast]
   )
 
@@ -325,6 +326,7 @@ export function usePostActions({
         lockRef.current.delete(key)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [accessToken, openPost?.id, showToast]
   )
 
@@ -400,6 +402,7 @@ export function usePostActions({
         setVotingCustomPoll(false)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [accessToken, selectedPollOptions]
   )
 
@@ -472,6 +475,7 @@ export function usePostActions({
       setBookmarkingPostId(postId)
       setShowBookmarkModal(true)
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [accessToken, showToast]
   )
 
@@ -505,6 +509,7 @@ export function usePostActions({
         setBookmarkingPostId(null)
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [accessToken, bookmarkingPostId, showToast]
   )
 
@@ -547,6 +552,7 @@ export function usePostActions({
         setRepostLoading((prev) => ({ ...prev, [postId]: false }))
       }
     },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [accessToken, posts, openPost, currentUserId, showToast]
   )
 

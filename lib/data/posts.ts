@@ -12,6 +12,7 @@ const loadSanitize = () => import('@/lib/utils/sanitize').then((m) => m.sanitize
 
 /** Best-effort invalidation of all post list caches */
 async function invalidatePostListCache(): Promise<void> {
+  // eslint-disable-next-line no-restricted-syntax
   await delByPattern(CachePattern.allPosts()).catch(() => {})
 }
 

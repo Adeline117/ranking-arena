@@ -155,7 +155,9 @@ export default function QuizQuestionsClient() {
           scores: result.scores,
           answers,
         }),
-      }).catch(() => {})
+      })
+        // eslint-disable-next-line no-restricted-syntax
+        .catch(() => {})
     } catch {
       // ignore
     }
