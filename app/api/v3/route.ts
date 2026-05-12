@@ -1,3 +1,4 @@
+// service-layer-exempt: increment_api_key_usage is a custom RPC, not a counter service
 /**
  * Public API v3 — Developer-facing API with rate limiting and API key support.
  *
@@ -35,23 +36,37 @@ const VALID_API_KEYS = new Set(
     .filter(Boolean)
 )
 
-async function validateApiKey(key: string): Promise<boolean> {
-  // Check env-based keys first (fast path)
-  if (VALID_API_KEYS.has(key)) return true
+interface ApiKeyResult {
+  valid: boolean
+  allowed: boolean
+  remaining: number | null
+  dailyLimit: number
+}
 
-  // Check database api_keys table (if it exists)
+async function validateAndTrackApiKey(key: string): Promise<ApiKeyResult> {
+  // Check env-based keys first (fast path — no usage tracking)
+  if (VALID_API_KEYS.has(key)) {
+    return { valid: true, allowed: true, remaining: null, dailyLimit: 0 }
+  }
+
+  // Database keys: validate + increment usage atomically
   try {
     const supabase = getSupabaseAdmin() as SupabaseClient
-    const { data } = await supabase
-      .from('api_keys')
-      .select('id')
-      .eq('key', key)
-      .eq('active', true)
-      .maybeSingle()
-    return !!data
+    const { data, error } = await supabase.rpc('increment_api_key_usage', { p_key: key })
+
+    if (error || !data || data.length === 0) {
+      return { valid: false, allowed: false, remaining: 0, dailyLimit: 0 }
+    }
+
+    const row = data[0]
+    return {
+      valid: true,
+      allowed: row.allowed,
+      remaining: row.daily_limit === 0 ? null : row.remaining,
+      dailyLimit: row.daily_limit,
+    }
   } catch {
-    // Table may not exist yet — only env keys work
-    return false
+    return { valid: false, allowed: false, remaining: 0, dailyLimit: 0 }
   }
 }
 
@@ -237,14 +252,33 @@ export async function GET(request: NextRequest) {
   const apiKey = request.headers.get('x-api-key')
   let isAuthenticated = false
   let creditsRemaining: number | null = null
+  let keyDailyLimit = 0
 
   if (apiKey) {
-    isAuthenticated = await validateApiKey(apiKey)
-    if (!isAuthenticated) {
+    const keyResult = await validateAndTrackApiKey(apiKey)
+    if (!keyResult.valid) {
       return errorResponse('Invalid API key', 401)
     }
-    // Authenticated: unlimited
-    creditsRemaining = null
+    if (!keyResult.allowed) {
+      return NextResponse.json(
+        {
+          data: null,
+          meta: {
+            error: 'API key daily limit exceeded. Upgrade your plan for higher limits.',
+            credits_remaining: 0,
+            rate_limit: { daily_limit: keyResult.dailyLimit, remaining: 0 },
+            docs: '/api-docs',
+          },
+        },
+        {
+          status: 429,
+          headers: { 'Access-Control-Allow-Origin': '*', 'Retry-After': '86400' },
+        }
+      )
+    }
+    isAuthenticated = true
+    creditsRemaining = keyResult.remaining
+    keyDailyLimit = keyResult.dailyLimit
   } else {
     // Free tier: 100/day per IP — backed by Redis (survives cold starts)
     const { allowed, remaining } = await checkDailyLimit(request)
@@ -264,17 +298,16 @@ export async function GET(request: NextRequest) {
         },
         {
           status: 429,
-          headers: {
-            'Access-Control-Allow-Origin': '*',
-            'Retry-After': '86400',
-          },
+          headers: { 'Access-Control-Allow-Origin': '*', 'Retry-After': '86400' },
         }
       )
     }
   }
 
   const rateLimitMeta = isAuthenticated
-    ? { rate_limit: { plan: 'api_key', unlimited: true } }
+    ? keyDailyLimit === 0
+      ? { rate_limit: { plan: 'api_key', unlimited: true } }
+      : { rate_limit: { plan: 'api_key', daily_limit: keyDailyLimit, remaining: creditsRemaining } }
     : {
         credits_remaining: creditsRemaining,
         rate_limit: { daily_limit: FREE_DAILY_LIMIT, remaining: creditsRemaining },
