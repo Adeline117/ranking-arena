@@ -24,7 +24,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 #### API Product (build)
 
-- [ ] **API docs page** (`/api-docs`) — interactive docs, example requests/responses, pricing info
+- [x] **API docs page** (`/api-docs`) — pricing tiers, code examples (curl/Python/JS), endpoint docs
 - [ ] **Self-service API keys** — sign up → generate key → view usage dashboard
 - [ ] **Usage tracking** — log API calls per key (for billing visibility + analytics)
 - [ ] **Pricing tiers** — Free (100/day) / Starter $49/mo (10k/day) / Pro $199/mo (unlimited + webhooks)
