@@ -788,6 +788,7 @@ const ja = {
   walletDescription:
     'Web3ウォレットを接続・管理します。NFTメンバーシップのステータスを確認できます。',
   exchangesSection: '取引所連携',
+  apiKeysSection: 'APIキー',
   alertsSection: 'トレーダーアラート',
   notificationsSection: '通知',
   privacySection: 'プライバシー',

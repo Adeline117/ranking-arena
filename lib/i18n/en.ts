@@ -867,6 +867,7 @@ const en = {
   walletSection: 'Wallet',
   walletDescription: 'Connect and manage your Web3 wallet. View NFT membership status.',
   exchangesSection: 'Exchange Binding',
+  apiKeysSection: 'API Keys',
   alertsSection: 'Trader Alerts',
   notificationsSection: 'Notifications',
   privacySection: 'Privacy',

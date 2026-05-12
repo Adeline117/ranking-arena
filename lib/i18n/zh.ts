@@ -856,6 +856,7 @@ const zh = {
   walletSection: '钱包管理',
   walletDescription: '连接和管理你的 Web3 钱包，查看 NFT 会员状态。',
   exchangesSection: '交易所绑定',
+  apiKeysSection: 'API 密钥',
   alertsSection: '交易员警报',
   notificationsSection: '通知偏好',
   privacySection: '隐私设置',
