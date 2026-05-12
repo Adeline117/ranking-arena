@@ -20,7 +20,9 @@ const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
 const ProUpgradeCTA = dynamic(() => import('./ProUpgradeCTA'), { ssr: false })
 const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
-const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), { ssr: false })
+const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), {
+  ssr: false,
+})
 
 interface RankingSectionProps {
   traders: Trader[]
@@ -35,7 +37,10 @@ interface RankingSectionProps {
   availableSources?: string[]
   totalCount?: number
   categoryCounts?: CategoryCounts
-  fetchPage?: (page: number, opts?: { category?: string; sortBy?: string; sortDir?: string }) => Promise<void>
+  fetchPage?: (
+    page: number,
+    opts?: { category?: string; sortBy?: string; sortDir?: string }
+  ) => Promise<void>
   lastRefreshFailed?: boolean
 }
 
@@ -91,12 +96,39 @@ export default function RankingSection({
   } = useRankingFilters({ traders, activeTimeRange, totalCount, categoryCounts, fetchPage })
 
   // Leaderboard movers
-  const [movers, setMovers] = useState<{ risers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; roiDelta: number; handle: string | null; avatar_url: string | null }>; fallers: Array<{ platform: string; trader_key: string; rank: number; arena_score: number | null; roiDelta: number; handle: string | null; avatar_url: string | null }> }>({ risers: [], fallers: [] })
+  const [movers, setMovers] = useState<{
+    risers: Array<{
+      platform: string
+      trader_key: string
+      rank: number
+      arena_score: number | null
+      roiDelta: number
+      handle: string | null
+      avatar_url: string | null
+    }>
+    fallers: Array<{
+      platform: string
+      trader_key: string
+      rank: number
+      arena_score: number | null
+      roiDelta: number
+      handle: string | null
+      avatar_url: string | null
+    }>
+  }>({ risers: [], fallers: [] })
   useEffect(() => {
     const doFetch = () => {
-      apiFetch<{ risers?: typeof movers.risers; fallers?: typeof movers.fallers }>('/api/rankings/movers')
-        .then(data => { if (data?.risers || data?.fallers) setMovers({ risers: data.risers || [], fallers: data.fallers || [] }) })
-        .catch((err) => { if (err instanceof Error && err.name === 'AbortError') return; console.warn('[RankingSection] movers fetch failed:', err) })
+      apiFetch<{ risers?: typeof movers.risers; fallers?: typeof movers.fallers }>(
+        '/api/rankings/movers'
+      )
+        .then((data) => {
+          if (data?.risers || data?.fallers)
+            setMovers({ risers: data.risers || [], fallers: data.fallers || [] })
+        })
+        .catch((err) => {
+          if (err instanceof Error && err.name === 'AbortError') return
+          console.warn('[RankingSection] movers fetch failed:', err)
+        })
     }
     if ('requestIdleCallback' in window) {
       const id = requestIdleCallback(doFetch, { timeout: 5000 })
@@ -105,21 +137,27 @@ export default function RankingSection({
       const id = setTimeout(doFetch, 2000)
       return () => clearTimeout(id)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   return (
     <section className="home-ranking-section contain-layout-style" style={{ minWidth: 0 }}>
       {/* Period + Category tabs in one row */}
-      <div className="ranking-controls-bar" style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 8,
-        minHeight: 48,
-        flexWrap: 'wrap',
-      }}>
+      <div
+        className="ranking-controls-bar"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          marginBottom: 8,
+          minHeight: 48,
+          flexWrap: 'wrap',
+        }}
+      >
         <TimeRangeSelector activeRange={activeTimeRange} onChange={onTimeRangeChange} />
-        <div style={{ width: 1, height: 24, background: 'var(--color-border-primary)', flexShrink: 0 }} />
+        <div
+          style={{ width: 1, height: 24, background: 'var(--color-border-primary)', flexShrink: 0 }}
+        />
         <CategoryRankingTabs
           currentCategory={category}
           onCategoryChange={setCategory}
@@ -186,13 +224,31 @@ export default function RankingSection({
         )}
       </div>
 
-      <div className="contain-layout-style" style={{ minHeight: !isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT ? undefined : 0 }}>
+      <div
+        className="contain-layout-style"
+        style={{
+          minHeight:
+            !isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT ? undefined : 0,
+        }}
+      >
         {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
-          <ProUpgradeCTA language={language} t={t} freeLimit={FREE_LEADERBOARD_LIMIT} onUpgrade={() => router.push('/pricing')} />
+          <ProUpgradeCTA
+            language={language}
+            t={t}
+            freeLimit={FREE_LEADERBOARD_LIMIT}
+            onUpgrade={() => router.push('/pricing')}
+          />
         )}
       </div>
 
-      <RankingFooter loading={loading} lastUpdated={lastUpdated} formatLastUpdated={formatLastUpdated} t={t} onRefresh={onRefresh} lastRefreshFailed={lastRefreshFailed} />
+      <RankingFooter
+        loading={loading}
+        lastUpdated={lastUpdated}
+        formatLastUpdated={formatLastUpdated}
+        t={t}
+        onRefresh={onRefresh}
+        lastRefreshFailed={lastRefreshFailed}
+      />
     </section>
   )
 }

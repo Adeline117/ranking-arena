@@ -8,7 +8,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
-const VALID_TYPES = new Set(['sniper', 'scalper', 'whale', 'analyst', 'contrarian', 'hodler', 'degen', 'strategist', 'copycat', 'tourist', 'paperhands', 'narrator'])
+const VALID_TYPES = new Set([
+  'sniper',
+  'scalper',
+  'whale',
+  'analyst',
+  'contrarian',
+  'hodler',
+  'degen',
+  'strategist',
+  'copycat',
+  'tourist',
+  'paperhands',
+  'narrator',
+])
 
 export async function POST(request: NextRequest) {
   try {
@@ -62,7 +75,6 @@ export async function POST(request: NextRequest) {
     }
 
     // quiz_results table may not be in generated types yet (migration pending)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await (supabase as any).from('quiz_results').insert({
       session_id: sessionId,
       user_id: userId,

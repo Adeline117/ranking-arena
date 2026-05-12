@@ -133,6 +133,7 @@ async function loadLang(lang: Language): Promise<void> {
 if (typeof window !== 'undefined') {
   // Client: load after a microtask so it doesn't compete with hydration
   Promise.resolve().then(() => {
+    // eslint-disable-next-line no-restricted-syntax
     loadLang('en').catch(() => {
       // Silent fail — core keys are still available
     })

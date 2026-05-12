@@ -50,6 +50,7 @@ export function ServiceWorkerRegistration() {
         )
         registration.addEventListener('updatefound', onUpdateFound)
       })
+      // eslint-disable-next-line no-restricted-syntax
       .catch(() => {
         /* Registration failed silently */
       })

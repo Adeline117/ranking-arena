@@ -238,10 +238,15 @@ export async function GET(request: NextRequest) {
 
   const t = TYPES[typeId] || TYPES.sniper
   const isZh = lang === 'zh'
+  // eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage()
   const typeName = isZh ? t.nameZh : t.name
+  // eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage()
   const masterName = isZh ? t.masterZh : t.master
+  // eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage()
   const tagline = isZh ? t.taglineZh : t.tagline
+  // eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage()
   const styleName = isZh ? t.styleZh : t.style
+  // eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage()
   const horizonName = isZh ? t.horizonZh : t.horizon
   const matchClamped = Math.min(99, Math.max(60, match))
 
@@ -318,6 +323,7 @@ export async function GET(request: NextRequest) {
                 letterSpacing: '0.5px',
               }}
             >
+              {/* eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage() */}
               {isZh ? '\u4EA4\u6613\u4EBA\u683C\u6D4B\u8BD5' : 'Trading Personality Quiz'}
             </span>
           </div>
@@ -438,6 +444,7 @@ export async function GET(request: NextRequest) {
                 display: 'flex',
               }}
             >
+              {/* eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage() */}
               {isZh ? 'LEGENDARY MATCH' : 'LEGENDARY MATCH'}
             </span>
             <span
@@ -458,6 +465,7 @@ export async function GET(request: NextRequest) {
                 display: 'flex',
               }}
             >
+              {/* eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage() */}
               {isZh
                 ? '\u4F60\u7684\u4EA4\u6613\u98CE\u683C\u5339\u914D'
                 : 'Your trading style match'}
@@ -479,6 +487,7 @@ export async function GET(request: NextRequest) {
                 color: '#9CA3AF',
               }}
             >
+              {/* eslint-disable-next-line no-restricted-syntax -- server-side OG route, cannot use useLanguage() */}
               {isZh ? '\u6D4B\u6D4B\u4F60\u662F\u4EC0\u4E48\u7C7B\u578B' : 'Take the quiz'}
             </span>
             <span

@@ -103,6 +103,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
         /* cancelled */
       }
     } else {
+      // eslint-disable-next-line no-restricted-syntax
       await navigator.clipboard.writeText(challengeText).catch(() => {})
       showToast(tr('quizCopied'), 'success')
     }

@@ -51,9 +51,9 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
     .order('roi_pct', { ascending: false })
     .limit(10)
 
-  const topMovers = (movers || []).map(m => ({
+  const topMovers = (movers || []).map((m) => ({
     name: m.display_name || m.source_trader_id,
-    change: `${(m.roi_pct ?? 0) > 0 ? '+' : ''}${((m.roi_pct ?? 0)).toFixed(1)}% ROI`,
+    change: `${(m.roi_pct ?? 0) > 0 ? '+' : ''}${(m.roi_pct ?? 0).toFixed(1)}% ROI`,
     link: `/trader/${encodeURIComponent(m.display_name || m.source_trader_id)}?platform=${m.platform}`,
   }))
 
@@ -73,13 +73,15 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   const weekRange = `${weekAgo.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
   // 6. Batch-fetch emails via paginated listUsers (replaces N+1 getUserById)
-  const subscriberIds = new Set(subscribers.map(s => s.id))
+  const subscriberIds = new Set(subscribers.map((s) => s.id))
   const emailMap = new Map<string, string>()
   let page = 1
   const perPage = 1000
-  // eslint-disable-next-line no-constant-condition
   while (true) {
-    const { data: { users }, error: listErr } = await supabase.auth.admin.listUsers({ page, perPage })
+    const {
+      data: { users },
+      error: listErr,
+    } = await supabase.auth.admin.listUsers({ page, perPage })
     if (listErr || !users || users.length === 0) break
     for (const u of users) {
       if (subscriberIds.has(u.id) && u.email) {
@@ -94,7 +96,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   let sentCount = 0
   let failCount = 0
   const CONCURRENCY = 10
-  const sendOne = async (sub: typeof subscribers[number]) => {
+  const sendOne = async (sub: (typeof subscribers)[number]) => {
     try {
       const email = emailMap.get(sub.id)
       if (!email) {
@@ -106,12 +108,14 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
       const unsubToken = generateUnsubscribeToken(sub.id, 'digest')
       const unsubLink = `${BASE_URL}/api/email/unsubscribe?token=${unsubToken}`
 
-      const html = buildWeeklyDigestEmail({
-        topMovers,
-        newTraders: newTraders ?? 0,
-        totalTracked: totalTracked ?? 0,
-        weekRange,
-      }) + `
+      const html =
+        buildWeeklyDigestEmail({
+          topMovers,
+          newTraders: newTraders ?? 0,
+          totalTracked: totalTracked ?? 0,
+          weekRange,
+        }) +
+        `
         <div style="max-width: 600px; margin: 0 auto; padding: 0 24px 24px;">
           <p style="font-size: 11px; color: #64748b; text-align: center;">
             <a href="${unsubLink}" style="color: #6366f1;">Unsubscribe from digest</a> &middot;
@@ -146,7 +150,11 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
     await Promise.all(batch.map(sendOne))
   }
 
-  logger.info('Weekly digest complete', { sent: sentCount, failed: failCount, subscribers: subscribers.length })
+  logger.info('Weekly digest complete', {
+    sent: sentCount,
+    failed: failCount,
+    subscribers: subscribers.length,
+  })
   return {
     count: sentCount,
     failed: failCount,

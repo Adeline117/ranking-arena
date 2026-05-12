@@ -292,9 +292,10 @@ export default function EditPostPage() {
         setEmail(data.user?.email ?? null)
         setUserId(data.user?.id ?? null)
       })
+      // eslint-disable-next-line no-restricted-syntax
       .catch(() => {
         /* Intentionally swallowed: auth check non-critical for edit page init */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [])
 
   // 加载帖子数据

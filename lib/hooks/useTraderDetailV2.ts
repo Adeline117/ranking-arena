@@ -6,12 +6,8 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useState, useCallback, useRef, useEffect } from 'react'
-import type {
-  TraderDetailResponse,
-  RefreshResponse,
-  Platform,
-} from '@/lib/types/trading-platform'
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import type { TraderDetailResponse, RefreshResponse, Platform } from '@/lib/types/trading-platform'
 
 const FETCH_TIMEOUT_MS = 15_000
 
@@ -65,9 +61,14 @@ export function useTraderDetailV2({
   const pollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const queryClient = useQueryClient()
 
-  const queryKey = ['trader-detail-v2', platform, traderKey]
+  const queryKey = useMemo(() => ['trader-detail-v2', platform, traderKey], [platform, traderKey])
 
-  const { data, error, isLoading, isFetching: isValidating } = useQuery<TraderDetailResponse>({
+  const {
+    data,
+    error,
+    isLoading,
+    isFetching: isValidating,
+  } = useQuery<TraderDetailResponse>({
     queryKey,
     queryFn: () => fetcher(`/api/trader/${platform}/${traderKey}`),
     enabled: !!traderKey,

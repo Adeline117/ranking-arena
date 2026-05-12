@@ -48,11 +48,10 @@ export const SSR_HEAVY_QUERY_TIMEOUT_MS = 5_000
  * @param timeoutMs  Timeout in milliseconds (default: SSR_QUERY_TIMEOUT_MS)
  * @param fallback   Value to return on timeout/error (default: null)
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function ssrRace<T, F = any>(
   queryFn: (signal: AbortSignal) => PromiseLike<T>,
   timeoutMs: number = SSR_QUERY_TIMEOUT_MS,
-  fallback?: F,
+  fallback?: F
 ): Promise<T | F | null> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)

@@ -35,11 +35,14 @@ export default function RouteError({
   useEffect(() => {
     logger.error(`[${contextLabel || 'RouteError'}]`, error)
     // Report route errors to Sentry for observability
-    import('@sentry/nextjs').then(Sentry => {
-      Sentry.captureException(error, {
-        tags: { source: 'route-error', context: contextLabel || 'unknown' },
+    import('@sentry/nextjs')
+      .then((Sentry) => {
+        Sentry.captureException(error, {
+          tags: { source: 'route-error', context: contextLabel || 'unknown' },
+        })
       })
-    }).catch(() => {})
+      // eslint-disable-next-line no-restricted-syntax
+      .catch(() => {})
   }, [error, contextLabel])
 
   const handleRetry = () => {
@@ -48,27 +51,40 @@ export default function RouteError({
   }
 
   return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '60vh',
-      padding: tokens.spacing[6],
-      textAlign: 'center',
-    }}>
-      {/* 错误图标 */}
-      <div style={{
-        width: 72,
-        height: 72,
-        borderRadius: '50%',
-        background: 'var(--color-bg-error-subtle, var(--color-accent-error-10))',
+    <div
+      style={{
         display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        marginBottom: tokens.spacing[5],
-      }}>
-        <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-error, #ff7c7c)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        minHeight: '60vh',
+        padding: tokens.spacing[6],
+        textAlign: 'center',
+      }}
+    >
+      {/* 错误图标 */}
+      <div
+        style={{
+          width: 72,
+          height: 72,
+          borderRadius: '50%',
+          background: 'var(--color-bg-error-subtle, var(--color-accent-error-10))',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          marginBottom: tokens.spacing[5],
+        }}
+      >
+        <svg
+          width="36"
+          height="36"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="var(--color-accent-error, #ff7c7c)"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <circle cx="12" cy="12" r="10" />
           <line x1="12" y1="8" x2="12" y2="12" />
           <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -76,40 +92,44 @@ export default function RouteError({
       </div>
 
       {/* 标题 */}
-      <h2 style={{
-        fontSize: 20,
-        fontWeight: 600,
-        marginBottom: tokens.spacing[2],
-        color: 'var(--color-text-primary)',
-      }}>
+      <h2
+        style={{
+          fontSize: 20,
+          fontWeight: 600,
+          marginBottom: tokens.spacing[2],
+          color: 'var(--color-text-primary)',
+        }}
+      >
         {t('errorTitle') || '出了点问题'}
       </h2>
 
       {/* 用户友好消息 */}
-      <p style={{
-        color: 'var(--color-text-secondary)',
-        marginBottom: tokens.spacing[4],
-        maxWidth: 400,
-        fontSize: 14,
-        lineHeight: 1.6,
-      }}>
-        {parsed.retryable
-          ? (t('errorRefresh') || '请刷新页面或稍后再试')
-          : (parsed.message)}
+      <p
+        style={{
+          color: 'var(--color-text-secondary)',
+          marginBottom: tokens.spacing[4],
+          maxWidth: 400,
+          fontSize: 14,
+          lineHeight: 1.6,
+        }}
+      >
+        {parsed.retryable ? t('errorRefresh') || '请刷新页面或稍后再试' : parsed.message}
       </p>
 
       {/* 错误代码 */}
       {error.digest && (
-        <p style={{
-          color: 'var(--color-text-tertiary)',
-          fontSize: 12,
-          marginBottom: tokens.spacing[4],
-          fontFamily: '"SF Mono", Consolas, monospace',
-          padding: `${tokens.spacing[1]} ${tokens.spacing[2.5]}`,
-          background: 'var(--color-accent-error-08)',
-          borderRadius: tokens.radius.sm,
-          border: '1px solid var(--color-accent-error-12)',
-        }}>
+        <p
+          style={{
+            color: 'var(--color-text-tertiary)',
+            fontSize: 12,
+            marginBottom: tokens.spacing[4],
+            fontFamily: '"SF Mono", Consolas, monospace',
+            padding: `${tokens.spacing[1]} ${tokens.spacing[2.5]}`,
+            background: 'var(--color-accent-error-08)',
+            borderRadius: tokens.radius.sm,
+            border: '1px solid var(--color-accent-error-12)',
+          }}
+        >
           {t('errorCode') || '错误代码'}: {error.digest}
         </p>
       )}
@@ -132,20 +152,22 @@ export default function RouteError({
             {showDetails ? t('collapse') : t('errorDetails')}
           </button>
           {showDetails && (
-            <pre style={{
-              marginTop: tokens.spacing[2],
-              padding: tokens.spacing[3],
-              background: 'var(--color-bg-tertiary, var(--color-overlay-medium))',
-              borderRadius: tokens.radius.md,
-              border: '1px solid var(--color-border-primary)',
-              fontSize: 11,
-              color: 'var(--color-text-secondary)',
-              textAlign: 'left',
-              overflow: 'auto',
-              maxHeight: 200,
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-            }}>
+            <pre
+              style={{
+                marginTop: tokens.spacing[2],
+                padding: tokens.spacing[3],
+                background: 'var(--color-bg-tertiary, var(--color-overlay-medium))',
+                borderRadius: tokens.radius.md,
+                border: '1px solid var(--color-border-primary)',
+                fontSize: 11,
+                color: 'var(--color-text-secondary)',
+                textAlign: 'left',
+                overflow: 'auto',
+                maxHeight: 200,
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+              }}
+            >
               {`Type: ${parsed.type}\nRetryable: ${parsed.retryable}\nStatus: ${parsed.statusCode ?? 'N/A'}\n\n${error.stack || error.message}`}
             </pre>
           )}
@@ -153,7 +175,14 @@ export default function RouteError({
       )}
 
       {/* 操作按钮 */}
-      <div style={{ display: 'flex', gap: tokens.spacing[3], flexWrap: 'wrap', justifyContent: 'center' }}>
+      <div
+        style={{
+          display: 'flex',
+          gap: tokens.spacing[3],
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+        }}
+      >
         <button
           onClick={handleRetry}
           disabled={isRetrying}
@@ -173,7 +202,16 @@ export default function RouteError({
             transition: 'opacity 0.2s',
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="23 4 23 10 17 10" />
             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
           </svg>

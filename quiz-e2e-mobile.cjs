@@ -1,4 +1,5 @@
 /* eslint-disable no-console */
+// eslint-disable-next-line @typescript-eslint/no-require-imports
 const { chromium } = require('@playwright/test')
 ;(async () => {
   const browser = await chromium.launch({ headless: true })

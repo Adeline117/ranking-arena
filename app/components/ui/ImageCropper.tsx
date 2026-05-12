@@ -47,8 +47,8 @@ async function getCroppedImg(
   // Calculate output dimensions maintaining aspect ratio
   // Avatars (1:1): 400px, covers (wide): 1200px, others: maxWidth
   const effectiveMax = aspectRatio === 1 ? 400 : aspectRatio > 2 ? 1200 : maxWidth
-  let outputWidth = Math.min(pixelCrop.width, effectiveMax)
-  let outputHeight = outputWidth / aspectRatio
+  const outputWidth = Math.min(pixelCrop.width, effectiveMax)
+  const outputHeight = outputWidth / aspectRatio
 
   // Set canvas size
   canvas.width = outputWidth
@@ -75,11 +75,7 @@ async function getCroppedImg(
           if (blob) {
             // If blob is still > 500KB, re-encode at lower quality
             if (blob.size > 512_000 && quality > 0.6) {
-              canvas.toBlob(
-                (compressed) => resolve(compressed || blob),
-                format,
-                quality - 0.15
-              )
+              canvas.toBlob((compressed) => resolve(compressed || blob), format, quality - 0.15)
             } else {
               resolve(blob)
             }
@@ -113,12 +109,9 @@ export function ImageCropper({
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null)
   const [processing, setProcessing] = useState(false)
 
-  const onCropAreaComplete = useCallback(
-    (_croppedArea: Area, croppedAreaPixels: Area) => {
-      setCroppedAreaPixels(croppedAreaPixels)
-    },
-    []
-  )
+  const onCropAreaComplete = useCallback((_croppedArea: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels)
+  }, [])
 
   const handleConfirm = async () => {
     if (!croppedAreaPixels) {
@@ -132,7 +125,8 @@ export function ImageCropper({
       onCropComplete(croppedBlob)
     } catch (error) {
       logger.error('Error cropping image:', error)
-      const errorMessage = error instanceof Error ? error.message : t('cropFailed') || 'Failed to crop image'
+      const errorMessage =
+        error instanceof Error ? error.message : t('cropFailed') || 'Failed to crop image'
       onError?.(errorMessage)
     } finally {
       setProcessing(false)

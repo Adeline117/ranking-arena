@@ -153,11 +153,11 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     if (params && typeof params === 'object' && 'then' in params) {
       ;(params as Promise<{ id: string }>)
         .then((resolved) => setGroupId(resolved.id))
+        // eslint-disable-next-line no-restricted-syntax
         .catch(() => {
           /* Intentionally swallowed: params resolution should not fail */
         })
-    } // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-    else {
+    } else {
       setGroupId(String((params as { id: string })?.id ?? ''))
     }
   }, [params])

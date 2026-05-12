@@ -1,71 +1,72 @@
-'use client';
+'use client'
 
 /**
  * Privy One-Click Login Button
- * 
+ *
  * Opens the Privy modal for Google/Email/Wallet login.
  * After success, syncs user to Supabase and redirects.
  */
 
-import { useEffect, useRef, useCallback } from 'react';
-import { usePrivy } from '@privy-io/react-auth';
-import { useRouter } from 'next/navigation';
-import { syncPrivyUserToSupabase } from '@/lib/privy/sync-user';
-import { useLanguage } from '@/app/components/Providers/LanguageProvider';
-import { logger } from '@/lib/logger';
+import { useEffect, useRef, useCallback } from 'react'
+import { usePrivy } from '@privy-io/react-auth'
+import { useRouter } from 'next/navigation'
+import { syncPrivyUserToSupabase } from '@/lib/privy/sync-user'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { logger } from '@/lib/logger'
 
 interface PrivyLoginButtonProps {
-  redirectUrl?: string;
-  onError?: (msg: string) => void;
+  redirectUrl?: string
+  onError?: (msg: string) => void
 }
 
 export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginButtonProps) {
-  const { login, authenticated, user, ready } = usePrivy();
-  const router = useRouter();
-  const { language: lang } = useLanguage();
-  const hasRedirected = useRef(false);
+  const { login, authenticated, user, ready } = usePrivy()
+  const router = useRouter()
+  const { language: lang } = useLanguage()
+  const hasRedirected = useRef(false)
 
   // When user becomes authenticated via Privy, sync and redirect
   useEffect(() => {
-    if (!authenticated || !user || hasRedirected.current) return;
-    hasRedirected.current = true;
+    if (!authenticated || !user || hasRedirected.current) return
+    hasRedirected.current = true
 
     const doSync = async () => {
       try {
-        const email = user.email?.address || user.google?.email || null;
-        const wallet = user.wallet?.address || null;
+        const email = user.email?.address || user.google?.email || null
+        const wallet = user.wallet?.address || null
         const result = await syncPrivyUserToSupabase({
           privyId: user.id,
           email,
           walletAddress: wallet,
-        });
+        })
 
         if (result.isNew) {
-          router.push('/?welcome=1');
+          router.push('/?welcome=1')
         } else {
-          router.push(redirectUrl || '/');
+          router.push(redirectUrl || '/')
         }
       } catch (err) {
-        logger.error('Privy sync error:', err);
-        hasRedirected.current = false;
-        onError?.(lang === 'zh' ? '账户同步失败，请重试' : 'Account sync failed, please try again');
+        logger.error('Privy sync error:', err)
+        hasRedirected.current = false
+        onError?.(lang === 'zh' ? '账户同步失败，请重试' : 'Account sync failed, please try again')
       }
-    };
+    }
 
-    doSync();
-  }, [authenticated, user, router, redirectUrl]);
+    doSync()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, user, router, redirectUrl])
 
   const handleClick = useCallback(() => {
-    if (authenticated) return; // Already logged in, effect will handle redirect
+    if (authenticated) return // Already logged in, effect will handle redirect
     try {
-      login();
+      login()
     } catch (err) {
-      logger.error('Privy login exception:', err);
-      onError?.(lang === 'zh' ? '登录失败，请重试' : 'Login failed, please try again');
+      logger.error('Privy login exception:', err)
+      onError?.(lang === 'zh' ? '登录失败，请重试' : 'Login failed, please try again')
     }
-  }, [authenticated, login, onError, lang]);
+  }, [authenticated, login, onError, lang])
 
-  if (!ready) return null;
+  if (!ready) return null
 
   return (
     <button
@@ -87,11 +88,20 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
         gap: 12,
       }}
     >
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="20"
+        height="20"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         <path d="M9 12l2 2 4-4" />
       </svg>
       {lang === 'zh' ? '一键登录（Google / 邮箱 / 钱包）' : 'Quick Login (Google / Email / Wallet)'}
     </button>
-  );
+  )
 }

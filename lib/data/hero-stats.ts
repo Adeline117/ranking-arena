@@ -63,9 +63,12 @@ export async function getHeroStats(): Promise<HeroStats> {
     const result = await ssrRace(
       (signal) => supabase.rpc('get_hero_stats').abortSignal(signal).single(),
       SSR_QUERY_TIMEOUT_MS,
-      { data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } as const },
+      { data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } as const }
     )
-    const { data, error } = result ?? { data: null, error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } as const }
+    const { data, error } = result ?? {
+      data: null,
+      error: { code: 'TIMEOUT', message: 'SSR hero stats timeout' } as const,
+    }
 
     if (error) {
       if (error.code === 'TIMEOUT' || error.code === 'PGRST202') {
@@ -75,7 +78,11 @@ export async function getHeroStats(): Promise<HeroStats> {
       }
       // Write ONLY the marker — leave CACHE_KEY untouched so the last
       // known-good value is preserved for the next request.
-      void tieredSet(FALLBACK_MARKER_KEY, { failedAt: Date.now() }, 'hot', ['hero-stats', 'fallback']).catch(() => {})
+      // eslint-disable-next-line no-restricted-syntax
+      void tieredSet(FALLBACK_MARKER_KEY, { failedAt: Date.now() }, 'hot', [
+        'hero-stats',
+        'fallback',
+      ]).catch(() => {})
       // Prefer stale real data if available, otherwise defaults.
       if (cached) return cached
       return { ...DEFAULT_STATS, isDefault: true }

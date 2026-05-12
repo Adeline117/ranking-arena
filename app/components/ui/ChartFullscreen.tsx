@@ -21,6 +21,7 @@ export default function ChartFullscreen({ open, onClose, children, title }: Char
   const handleFullscreen = useCallback(() => {
     const el = document.documentElement
     if (el.requestFullscreen) {
+      // eslint-disable-next-line no-restricted-syntax
       el.requestFullscreen().catch(() => {
         /* ignore */
       })
