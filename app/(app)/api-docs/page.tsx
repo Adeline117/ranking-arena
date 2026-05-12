@@ -2,25 +2,89 @@ import type { Metadata } from 'next'
 import { tokens } from '@/lib/design-tokens'
 
 export const metadata: Metadata = {
-  title: 'API Documentation',
-  description: 'Arena public API for crypto trader rankings, trader details, and search. Free tier: 100 requests/day.',
+  title: 'API Documentation — Arena Data API',
+  description:
+    'Access crypto trader rankings, performance data, and search across 32+ exchanges and 34,000+ traders. Free tier: 100 requests/day.',
 }
+
+// ---------------------------------------------------------------------------
+// Data
+// ---------------------------------------------------------------------------
+
+const PLANS = [
+  {
+    name: 'Free',
+    price: '$0',
+    period: '',
+    description: 'Explore the API with no commitment.',
+    limits: '100 requests/day',
+    features: [
+      'Rankings endpoint',
+      'Trader detail endpoint',
+      'Search endpoint',
+      'IP-based rate limiting',
+    ],
+    cta: 'Start Free',
+    ctaHref: '#endpoints',
+    highlighted: false,
+  },
+  {
+    name: 'Starter',
+    price: '$49',
+    period: '/mo',
+    description: 'For indie builders and small teams.',
+    limits: '10,000 requests/day',
+    features: [
+      'Everything in Free',
+      'API key authentication',
+      'Usage dashboard',
+      'Platforms metadata endpoint',
+      'Email support',
+    ],
+    cta: 'Get Started',
+    ctaHref: 'mailto:api@arenafi.org?subject=Arena API Starter',
+    highlighted: true,
+  },
+  {
+    name: 'Pro',
+    price: '$199',
+    period: '/mo',
+    description: 'For trading platforms and hedge funds.',
+    limits: 'Unlimited requests',
+    features: [
+      'Everything in Starter',
+      'Historical time series',
+      'Bulk export endpoint',
+      'Webhook notifications',
+      'Priority support + SLA',
+    ],
+    cta: 'Contact Us',
+    ctaHref: 'mailto:api@arenafi.org?subject=Arena API Pro',
+    highlighted: false,
+  },
+]
 
 const ENDPOINTS = [
   {
     name: 'Rankings',
     method: 'GET',
     path: '/api/v3?endpoint=rankings',
-    description: 'Get ranked traders from the leaderboard, optionally filtered by platform and period.',
+    description:
+      'Get ranked traders from the leaderboard, optionally filtered by platform and period.',
     params: [
-      { name: 'platform', type: 'string', required: false, description: 'Exchange platform key (e.g. binance_futures, bybit, hyperliquid)' },
-      { name: 'period', type: 'string', required: false, description: 'Trading period: 7D, 30D, or 90D (default: 90D)' },
-      { name: 'limit', type: 'number', required: false, description: 'Number of results (1-200, default: 50)' },
-      { name: 'offset', type: 'number', required: false, description: 'Pagination offset (default: 0)' },
+      {
+        name: 'platform',
+        required: false,
+        description: 'Exchange key (e.g. binance_futures, bybit, hyperliquid)',
+      },
+      { name: 'period', required: false, description: '7D, 30D, or 90D (default: 90D)' },
+      { name: 'limit', required: false, description: '1-200 (default: 50)' },
+      { name: 'offset', required: false, description: 'Pagination offset (default: 0)' },
     ],
     example: {
-      request: 'GET /api/v3?endpoint=rankings&platform=binance_futures&period=90D&limit=10',
+      curl: `curl "https://www.arenafi.org/api/v3?endpoint=rankings&platform=binance_futures&period=90D&limit=3"`,
       response: `{
+  "success": true,
   "data": [
     {
       "traderKey": "abc123",
@@ -38,7 +102,6 @@ const ENDPOINTS = [
     "total": 500,
     "endpoint": "rankings",
     "version": "v3",
-    "credits_remaining": 99,
     "rate_limit": { "daily_limit": 100, "remaining": 99 }
   }
 }`,
@@ -48,18 +111,31 @@ const ENDPOINTS = [
     name: 'Trader Detail',
     method: 'GET',
     path: '/api/v3?endpoint=trader',
-    description: 'Get full details for a specific trader including performance across periods, equity curve, and positions.',
+    description:
+      'Get full details for a specific trader including performance across periods, equity curve, and positions.',
     params: [
-      { name: 'platform', type: 'string', required: true, description: 'Exchange platform key' },
-      { name: 'trader_key', type: 'string', required: true, description: 'Trader unique identifier on the platform' },
+      { name: 'platform', required: true, description: 'Exchange platform key' },
+      { name: 'trader_key', required: true, description: 'Trader identifier on the platform' },
     ],
     example: {
-      request: 'GET /api/v3?endpoint=trader&platform=binance_futures&trader_key=abc123',
+      curl: `curl "https://www.arenafi.org/api/v3?endpoint=trader&platform=binance_futures&trader_key=abc123"`,
       response: `{
+  "success": true,
   "data": {
-    "profile": { "handle": "TopTrader", "platform": "binance_futures", "avatarUrl": "..." },
-    "performance": { "roi_90d": 245.5, "pnl": 89000, "arena_score": 87.3, "rank": 1 },
-    "equityCurve": { "90D": [{ "date": "2026-01-01", "roi": 10.5, "pnl": 1050 }] }
+    "profile": {
+      "handle": "TopTrader",
+      "platform": "binance_futures",
+      "avatarUrl": "..."
+    },
+    "performance": {
+      "roi_90d": 245.5,
+      "pnl": 89000,
+      "arena_score": 87.3,
+      "rank": 1
+    },
+    "equityCurve": {
+      "90D": [{ "date": "2026-01-01", "roi": 10.5, "pnl": 1050 }]
+    }
   },
   "meta": { "endpoint": "trader", "version": "v3" }
 }`,
@@ -71,13 +147,14 @@ const ENDPOINTS = [
     path: '/api/v3?endpoint=search',
     description: 'Search for traders by name or handle. Supports fuzzy matching.',
     params: [
-      { name: 'q', type: 'string', required: true, description: 'Search query (min 2 characters)' },
-      { name: 'limit', type: 'number', required: false, description: 'Number of results (1-100, default: 20)' },
-      { name: 'platform', type: 'string', required: false, description: 'Filter by platform' },
+      { name: 'q', required: true, description: 'Search query (min 2 characters)' },
+      { name: 'limit', required: false, description: '1-100 (default: 20)' },
+      { name: 'platform', required: false, description: 'Filter by platform' },
     ],
     example: {
-      request: 'GET /api/v3?endpoint=search&q=whale&limit=5',
+      curl: `curl "https://www.arenafi.org/api/v3?endpoint=search&q=whale&limit=5"`,
       response: `{
+  "success": true,
   "data": [
     {
       "traderKey": "whale_master",
@@ -93,201 +170,548 @@ const ENDPOINTS = [
   },
 ]
 
+const CODE_EXAMPLES = {
+  curl: `curl -H "X-API-Key: your_api_key" \\
+  "https://www.arenafi.org/api/v3?endpoint=rankings&limit=10"`,
+  python: `import requests
+
+resp = requests.get(
+    "https://www.arenafi.org/api/v3",
+    params={"endpoint": "rankings", "limit": 10},
+    headers={"X-API-Key": "your_api_key"},
+)
+traders = resp.json()["data"]`,
+  javascript: `const res = await fetch(
+  "https://www.arenafi.org/api/v3?endpoint=rankings&limit=10",
+  { headers: { "X-API-Key": "your_api_key" } }
+);
+const { data: traders } = await res.json();`,
+}
+
+// ---------------------------------------------------------------------------
+// Styles (shared)
+// ---------------------------------------------------------------------------
+
+const card = {
+  padding: tokens.spacing[5],
+  borderRadius: tokens.radius.lg,
+  background: 'var(--color-bg-secondary)',
+  border: '1px solid var(--color-border-primary)',
+} as const
+
+const mono = tokens.typography.fontFamily.mono.join(', ')
+const sans = tokens.typography.fontFamily.sans.join(', ')
+
+const codeBadge = {
+  padding: '2px 8px',
+  borderRadius: 4,
+  background: 'var(--color-bg-tertiary)',
+  fontFamily: mono,
+  fontSize: 12,
+} as const
+
+const preBlock = {
+  padding: tokens.spacing[4],
+  borderRadius: tokens.radius.md,
+  background: 'var(--color-bg-tertiary)',
+  fontFamily: mono,
+  fontSize: 13,
+  overflow: 'auto' as const,
+  lineHeight: 1.6,
+} as const
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
+
 export default function ApiDocsPage() {
   return (
-    <div style={{
-      maxWidth: 900,
-      margin: '0 auto',
-      padding: `${tokens.spacing[8]} ${tokens.spacing[5]}`,
-      color: 'var(--color-text-primary)',
-      fontFamily: tokens.typography.fontFamily.sans.join(', '),
-    }}>
-      <h1 style={{ fontSize: tokens.typography.fontSize['3xl'], fontWeight: 800, marginBottom: tokens.spacing[2] }}>
-        Arena API
-      </h1>
-      <p style={{ fontSize: tokens.typography.fontSize.md, color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[8], lineHeight: 1.6 }}>
-        Access crypto trader rankings, performance data, and search across 28+ exchanges and 34,000+ traders.
-      </p>
-
-      {/* Rate Limit Info */}
-      <div style={{
-        padding: tokens.spacing[5],
-        borderRadius: tokens.radius.lg,
-        background: 'var(--color-bg-secondary)',
-        border: '1px solid var(--color-border-primary)',
-        marginBottom: tokens.spacing[8],
-      }}>
-        <h2 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: 700, marginBottom: tokens.spacing[3] }}>
-          Rate Limits
-        </h2>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: tokens.spacing[4] }}>
-          <div>
-            <div style={{ fontSize: tokens.typography.fontSize.sm, fontWeight: 600, marginBottom: tokens.spacing[1] }}>
-              Free Tier
-            </div>
-            <div style={{ fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-secondary)' }}>
-              100 requests/day per IP. No authentication required.
-            </div>
-          </div>
-          <div>
-            <div style={{ fontSize: tokens.typography.fontSize.sm, fontWeight: 600, marginBottom: tokens.spacing[1] }}>
-              API Key
-            </div>
-            <div style={{ fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-secondary)' }}>
-              Unlimited requests. Pass <code style={{ padding: '2px 6px', borderRadius: 4, background: 'var(--color-bg-tertiary)', fontSize: 11 }}>X-API-Key</code> header.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Authentication */}
-      <div style={{
-        padding: tokens.spacing[5],
-        borderRadius: tokens.radius.lg,
-        background: 'var(--color-bg-secondary)',
-        border: '1px solid var(--color-border-primary)',
-        marginBottom: tokens.spacing[8],
-      }}>
-        <h2 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: 700, marginBottom: tokens.spacing[3] }}>
-          Authentication
-        </h2>
-        <p style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3], lineHeight: 1.6 }}>
-          For authenticated access, include your API key in the request header:
+    <div
+      style={{
+        maxWidth: 960,
+        margin: '0 auto',
+        padding: `${tokens.spacing[8]} ${tokens.spacing[5]}`,
+        color: 'var(--color-text-primary)',
+        fontFamily: sans,
+      }}
+    >
+      {/* Hero */}
+      <div style={{ marginBottom: tokens.spacing[10], textAlign: 'center' }}>
+        <h1
+          style={{
+            fontSize: tokens.typography.fontSize['3xl'],
+            fontWeight: 800,
+            marginBottom: tokens.spacing[3],
+          }}
+        >
+          Arena Data API
+        </h1>
+        <p
+          style={{
+            fontSize: tokens.typography.fontSize.lg,
+            color: 'var(--color-text-secondary)',
+            lineHeight: 1.6,
+            maxWidth: 640,
+            margin: '0 auto',
+          }}
+        >
+          Crypto trader rankings across 32+ exchanges and 34,000+ traders. Risk-adjusted scores,
+          equity curves, and performance data — updated every 30 minutes.
         </p>
-        <pre style={{
-          padding: tokens.spacing[4],
-          borderRadius: tokens.radius.md,
-          background: 'var(--color-bg-tertiary)',
-          fontSize: 13,
-          fontFamily: tokens.typography.fontFamily.mono.join(', '),
-          overflow: 'auto',
-          lineHeight: 1.6,
-        }}>
-{`curl -H "X-API-Key: your_api_key" \\
-  "https://www.arenafi.org/api/v3?endpoint=rankings&limit=10"`}
-        </pre>
       </div>
 
-      {/* Endpoints */}
-      <h2 style={{ fontSize: tokens.typography.fontSize.xl, fontWeight: 700, marginBottom: tokens.spacing[5] }}>
-        Endpoints
-      </h2>
+      {/* Pricing tiers */}
+      <section style={{ marginBottom: tokens.spacing[10] }}>
+        <h2
+          style={{
+            fontSize: tokens.typography.fontSize.xl,
+            fontWeight: 700,
+            marginBottom: tokens.spacing[5],
+            textAlign: 'center',
+          }}
+        >
+          Pricing
+        </h2>
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: tokens.spacing[4],
+          }}
+        >
+          {PLANS.map((plan) => (
+            <div
+              key={plan.name}
+              style={{
+                ...card,
+                display: 'flex',
+                flexDirection: 'column',
+                border: plan.highlighted
+                  ? '2px solid var(--color-brand)'
+                  : '1px solid var(--color-border-primary)',
+              }}
+            >
+              <div style={{ marginBottom: tokens.spacing[4] }}>
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: 600,
+                    color: plan.highlighted ? 'var(--color-brand)' : 'var(--color-text-secondary)',
+                    marginBottom: tokens.spacing[1],
+                  }}
+                >
+                  {plan.name}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: 2 }}>
+                  <span style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 800 }}>
+                    {plan.price}
+                  </span>
+                  {plan.period && (
+                    <span
+                      style={{
+                        fontSize: tokens.typography.fontSize.sm,
+                        color: 'var(--color-text-tertiary)',
+                      }}
+                    >
+                      {plan.period}
+                    </span>
+                  )}
+                </div>
+                <p
+                  style={{
+                    fontSize: tokens.typography.fontSize.xs,
+                    color: 'var(--color-text-secondary)',
+                    marginTop: tokens.spacing[1],
+                  }}
+                >
+                  {plan.description}
+                </p>
+              </div>
 
-      {ENDPOINTS.map((ep) => (
-        <div key={ep.name} style={{
-          marginBottom: tokens.spacing[8],
-          padding: tokens.spacing[5],
-          borderRadius: tokens.radius.lg,
-          background: 'var(--color-bg-secondary)',
-          border: '1px solid var(--color-border-primary)',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[3] }}>
-            <span style={{
-              padding: '2px 10px',
-              borderRadius: tokens.radius.sm,
-              background: 'rgba(47, 229, 125, 0.15)',
-              color: 'var(--color-accent-success)',
-              fontSize: 12,
-              fontWeight: 700,
-              fontFamily: tokens.typography.fontFamily.mono.join(', '),
-            }}>
-              {ep.method}
-            </span>
-            <code style={{ fontSize: 14, fontWeight: 600, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-              {ep.path}
-            </code>
-          </div>
-          <p style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[4], lineHeight: 1.6 }}>
-            {ep.description}
+              <div
+                style={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--color-text-secondary)',
+                  marginBottom: tokens.spacing[2],
+                }}
+              >
+                {plan.limits}
+              </div>
+
+              <ul
+                style={{
+                  listStyle: 'none',
+                  padding: 0,
+                  margin: 0,
+                  flex: 1,
+                  marginBottom: tokens.spacing[4],
+                }}
+              >
+                {plan.features.map((f) => (
+                  <li
+                    key={f}
+                    style={{
+                      fontSize: 13,
+                      color: 'var(--color-text-secondary)',
+                      padding: '4px 0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <span style={{ color: 'var(--color-accent-success)', fontSize: 14 }}>
+                      &#10003;
+                    </span>
+                    {f}
+                  </li>
+                ))}
+              </ul>
+
+              <a
+                href={plan.ctaHref}
+                style={{
+                  display: 'block',
+                  textAlign: 'center',
+                  padding: '10px 0',
+                  borderRadius: tokens.radius.md,
+                  background: plan.highlighted ? 'var(--color-brand)' : 'var(--color-bg-tertiary)',
+                  color: plan.highlighted ? '#fff' : 'var(--color-text-primary)',
+                  fontSize: 14,
+                  fontWeight: 600,
+                  textDecoration: 'none',
+                  border: plan.highlighted ? 'none' : '1px solid var(--color-border-primary)',
+                }}
+              >
+                {plan.cta}
+              </a>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Quick start */}
+      <section style={{ marginBottom: tokens.spacing[10] }}>
+        <h2
+          style={{
+            fontSize: tokens.typography.fontSize.xl,
+            fontWeight: 700,
+            marginBottom: tokens.spacing[5],
+          }}
+        >
+          Quick Start
+        </h2>
+
+        <div style={{ ...card, marginBottom: tokens.spacing[4] }}>
+          <h3
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              marginBottom: tokens.spacing[2],
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            Authentication
+          </h3>
+          <p
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: 'var(--color-text-secondary)',
+              marginBottom: tokens.spacing[3],
+              lineHeight: 1.6,
+            }}
+          >
+            Free tier requires no authentication — just call the endpoint. For higher limits, pass
+            your API key via the <code style={codeBadge}>X-API-Key</code> header.
           </p>
 
-          {/* Parameters */}
-          <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: tokens.spacing[2], color: 'var(--color-text-secondary)' }}>
-            Parameters
-          </h4>
-          <div style={{
-            borderRadius: tokens.radius.md,
-            border: '1px solid var(--color-border-primary)',
-            overflow: 'hidden',
-            marginBottom: tokens.spacing[4],
-          }}>
-            {ep.params.map((p, i) => (
-              <div key={p.name} style={{
-                display: 'grid',
-                gridTemplateColumns: '120px 70px 1fr',
+          {Object.entries(CODE_EXAMPLES).map(([lang, code]) => (
+            <div key={lang} style={{ marginBottom: tokens.spacing[3] }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  textTransform: 'uppercase' as const,
+                  color: 'var(--color-text-tertiary)',
+                  marginBottom: tokens.spacing[1],
+                  letterSpacing: '0.05em',
+                }}
+              >
+                {lang}
+              </div>
+              <pre style={preBlock}>{code}</pre>
+            </div>
+          ))}
+        </div>
+
+        <div style={card}>
+          <h3
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              marginBottom: tokens.spacing[2],
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            Base URL
+          </h3>
+          <pre style={{ ...preBlock, fontSize: 14 }}>https://www.arenafi.org/api/v3</pre>
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--color-text-tertiary)',
+              marginTop: tokens.spacing[2],
+            }}
+          >
+            All endpoints use the <code style={codeBadge}>endpoint</code> query parameter to select
+            the resource.
+          </p>
+        </div>
+      </section>
+
+      {/* Endpoints */}
+      <section id="endpoints" style={{ marginBottom: tokens.spacing[10] }}>
+        <h2
+          style={{
+            fontSize: tokens.typography.fontSize.xl,
+            fontWeight: 700,
+            marginBottom: tokens.spacing[5],
+          }}
+        >
+          Endpoints
+        </h2>
+
+        {ENDPOINTS.map((ep) => (
+          <div key={ep.name} style={{ ...card, marginBottom: tokens.spacing[5] }}>
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
                 gap: tokens.spacing[3],
-                padding: '8px 12px',
+                marginBottom: tokens.spacing[3],
+              }}
+            >
+              <span
+                style={{
+                  padding: '2px 10px',
+                  borderRadius: tokens.radius.sm,
+                  background: 'rgba(47, 229, 125, 0.15)',
+                  color: 'var(--color-accent-success)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  fontFamily: mono,
+                }}
+              >
+                {ep.method}
+              </span>
+              <code style={{ fontSize: 14, fontWeight: 600, fontFamily: mono }}>{ep.path}</code>
+            </div>
+            <p
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: 'var(--color-text-secondary)',
+                marginBottom: tokens.spacing[4],
+                lineHeight: 1.6,
+              }}
+            >
+              {ep.description}
+            </p>
+
+            {/* Parameters */}
+            <h4
+              style={{
                 fontSize: 13,
-                borderBottom: i < ep.params.length - 1 ? '1px solid var(--color-border-primary)' : undefined,
-                background: i % 2 === 0 ? 'var(--color-bg-tertiary)' : 'transparent',
-              }}>
-                <code style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontWeight: 600 }}>{p.name}</code>
-                <span style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
-                  {p.required ? 'required' : 'optional'}
-                </span>
-                <span style={{ color: 'var(--color-text-secondary)' }}>{p.description}</span>
+                fontWeight: 600,
+                marginBottom: tokens.spacing[2],
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              Parameters
+            </h4>
+            <div
+              style={{
+                borderRadius: tokens.radius.md,
+                border: '1px solid var(--color-border-primary)',
+                overflow: 'hidden',
+                marginBottom: tokens.spacing[4],
+              }}
+            >
+              {ep.params.map((p, i) => (
+                <div
+                  key={p.name}
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: '120px 70px 1fr',
+                    gap: tokens.spacing[3],
+                    padding: '8px 12px',
+                    fontSize: 13,
+                    borderBottom:
+                      i < ep.params.length - 1
+                        ? '1px solid var(--color-border-primary)'
+                        : undefined,
+                    background: i % 2 === 0 ? 'var(--color-bg-tertiary)' : 'transparent',
+                  }}
+                >
+                  <code style={{ fontFamily: mono, fontWeight: 600 }}>{p.name}</code>
+                  <span style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+                    {p.required ? 'required' : 'optional'}
+                  </span>
+                  <span style={{ color: 'var(--color-text-secondary)' }}>{p.description}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Example */}
+            <h4
+              style={{
+                fontSize: 13,
+                fontWeight: 600,
+                marginBottom: tokens.spacing[2],
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              Example
+            </h4>
+            <pre
+              style={{
+                ...preBlock,
+                fontSize: 12,
+                marginBottom: tokens.spacing[2],
+                color: 'var(--color-accent-success)',
+              }}
+            >
+              {ep.example.curl}
+            </pre>
+            <pre style={{ ...preBlock, fontSize: 11, maxHeight: 320 }}>{ep.example.response}</pre>
+          </div>
+        ))}
+      </section>
+
+      {/* Rate limits */}
+      <section style={{ marginBottom: tokens.spacing[10] }}>
+        <h2
+          style={{
+            fontSize: tokens.typography.fontSize.xl,
+            fontWeight: 700,
+            marginBottom: tokens.spacing[5],
+          }}
+        >
+          Rate Limits
+        </h2>
+        <div style={card}>
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: tokens.spacing[4],
+            }}
+          >
+            {[
+              { tier: 'Free', limit: '100 req/day', auth: 'None (IP-based)' },
+              { tier: 'Starter', limit: '10,000 req/day', auth: 'X-API-Key header' },
+              { tier: 'Pro', limit: 'Unlimited', auth: 'X-API-Key header' },
+            ].map((r) => (
+              <div key={r.tier}>
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: 600,
+                    marginBottom: tokens.spacing[1],
+                  }}
+                >
+                  {r.tier}
+                </div>
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize.xs,
+                    color: 'var(--color-text-secondary)',
+                    marginBottom: 2,
+                  }}
+                >
+                  {r.limit}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>{r.auth}</div>
               </div>
             ))}
           </div>
-
-          {/* Example */}
-          <h4 style={{ fontSize: 13, fontWeight: 600, marginBottom: tokens.spacing[2], color: 'var(--color-text-secondary)' }}>
-            Example
-          </h4>
-          <pre style={{
-            padding: tokens.spacing[3],
-            borderRadius: tokens.radius.md,
-            background: 'var(--color-bg-tertiary)',
-            fontSize: 12,
-            fontFamily: tokens.typography.fontFamily.mono.join(', '),
-            overflow: 'auto',
-            marginBottom: tokens.spacing[2],
-            lineHeight: 1.5,
-            color: 'var(--color-accent-success)',
-          }}>
-            {ep.example.request}
-          </pre>
-          <pre style={{
-            padding: tokens.spacing[3],
-            borderRadius: tokens.radius.md,
-            background: 'var(--color-bg-tertiary)',
-            fontSize: 11,
-            fontFamily: tokens.typography.fontFamily.mono.join(', '),
-            overflow: 'auto',
-            lineHeight: 1.5,
-            maxHeight: 300,
-          }}>
-            {ep.example.response}
-          </pre>
+          <p
+            style={{
+              fontSize: 12,
+              color: 'var(--color-text-tertiary)',
+              marginTop: tokens.spacing[4],
+              lineHeight: 1.6,
+            }}
+          >
+            Rate limit status is included in every response under{' '}
+            <code style={codeBadge}>meta.rate_limit</code>. When exceeded, the API returns{' '}
+            <code style={codeBadge}>429</code> with a <code style={codeBadge}>Retry-After</code>{' '}
+            header.
+          </p>
         </div>
-      ))}
+      </section>
 
-      {/* Footer */}
-      <div style={{
-        padding: tokens.spacing[5],
-        borderRadius: tokens.radius.lg,
-        background: 'var(--color-bg-secondary)',
-        border: '1px solid var(--color-border-primary)',
-        textAlign: 'center',
-      }}>
-        <p style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[2] }}>
-          Need an API key for unlimited access?
-        </p>
-        <a
-          href="/settings"
+      {/* CTA */}
+      <div
+        style={{
+          ...card,
+          textAlign: 'center',
+          padding: tokens.spacing[8],
+        }}
+      >
+        <h2
           style={{
-            display: 'inline-block',
-            padding: '8px 24px',
-            borderRadius: tokens.radius.md,
-            background: 'var(--color-brand)',
-            color: '#fff',
-            fontSize: 14,
-            fontWeight: 600,
-            textDecoration: 'none',
+            fontSize: tokens.typography.fontSize.lg,
+            fontWeight: 700,
+            marginBottom: tokens.spacing[2],
           }}
         >
-          Get API Key
-        </a>
+          Ready to get started?
+        </h2>
+        <p
+          style={{
+            fontSize: tokens.typography.fontSize.sm,
+            color: 'var(--color-text-secondary)',
+            marginBottom: tokens.spacing[5],
+          }}
+        >
+          Start with 100 free requests/day — no sign-up required.
+          <br />
+          Need more? Contact us for an API key.
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: tokens.spacing[3] }}>
+          <a
+            href="#endpoints"
+            style={{
+              display: 'inline-block',
+              padding: '10px 28px',
+              borderRadius: tokens.radius.md,
+              background: 'var(--color-brand)',
+              color: '#fff',
+              fontSize: 14,
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+          >
+            Try the API
+          </a>
+          <a
+            href="mailto:api@arenafi.org?subject=Arena API Key Request"
+            style={{
+              display: 'inline-block',
+              padding: '10px 28px',
+              borderRadius: tokens.radius.md,
+              background: 'var(--color-bg-tertiary)',
+              color: 'var(--color-text-primary)',
+              fontSize: 14,
+              fontWeight: 600,
+              textDecoration: 'none',
+              border: '1px solid var(--color-border-primary)',
+            }}
+          >
+            Get API Key
+          </a>
+        </div>
       </div>
     </div>
   )
