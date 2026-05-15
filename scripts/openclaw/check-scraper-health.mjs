@@ -42,13 +42,7 @@ const MAC_MINI_PLATFORMS = [
     url: 'lbank.com/copy-trading (browser intercept via uuapi.rerrkvifj.com)',
     target: 200,
   },
-  {
-    source: 'phemex',
-    script: 'fetch-phemex.mjs',
-    cron: 'Every 6h at :00 (0 0,6,12,18 * * *)',
-    url: 'api10.phemex.com/phemex-lb/public/data/user/leaders (browser intercept)',
-    target: 200,
-  },
+  // phemex removed 2026-05 — API 404 since 2026-04, marked dead in health-monitor.mjs
 ]
 
 const STALE_THRESHOLD_HOURS = 12
@@ -84,9 +78,12 @@ async function checkPlatform(platform) {
 
   const v1Latest = v1Data?.[0]?.captured_at || null
   const v2Latest = v2Data?.[0]?.updated_at || null
-  const latestTs = v1Latest && v2Latest
-    ? (new Date(v1Latest) > new Date(v2Latest) ? v1Latest : v2Latest)
-    : v1Latest || v2Latest
+  const latestTs =
+    v1Latest && v2Latest
+      ? new Date(v1Latest) > new Date(v2Latest)
+        ? v1Latest
+        : v2Latest
+      : v1Latest || v2Latest
 
   let hoursAgo = null
   let isStale = true
@@ -128,9 +125,7 @@ function formatReport(results) {
   ]
 
   for (const r of results) {
-    const status = r.hasData
-      ? (r.isStale ? 'STALE' : 'OK')
-      : 'NO DATA'
+    const status = r.hasData ? (r.isStale ? 'STALE' : 'OK') : 'NO DATA'
     const icon = status === 'OK' ? '[OK]' : status === 'STALE' ? '[STALE]' : '[EMPTY]'
 
     lines.push(`${icon} ${r.source}`)
@@ -150,21 +145,23 @@ function formatReport(results) {
     lines.push('')
   }
 
-  const stale = results.filter(r => r.isStale)
-  const ok = results.filter(r => !r.isStale && r.hasData)
-  const empty = results.filter(r => !r.hasData)
+  const stale = results.filter((r) => r.isStale)
+  const ok = results.filter((r) => !r.isStale && r.hasData)
+  const empty = results.filter((r) => !r.hasData)
 
   lines.push('--- Summary ---')
-  lines.push(`OK:      ${ok.length} (${ok.map(r => r.source).join(', ') || 'none'})`)
-  lines.push(`Stale:   ${stale.length} (${stale.map(r => r.source).join(', ') || 'none'})`)
-  lines.push(`No data: ${empty.length} (${empty.map(r => r.source).join(', ') || 'none'})`)
+  lines.push(`OK:      ${ok.length} (${ok.map((r) => r.source).join(', ') || 'none'})`)
+  lines.push(`Stale:   ${stale.length} (${stale.map((r) => r.source).join(', ') || 'none'})`)
+  lines.push(`No data: ${empty.length} (${empty.map((r) => r.source).join(', ') || 'none'})`)
 
   return lines.join('\n')
 }
 
 async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
-    console.log('\n[skip] Telegram alert not sent (missing TELEGRAM_BOT_TOKEN or TELEGRAM_ALERT_CHAT_ID)')
+    console.log(
+      '\n[skip] Telegram alert not sent (missing TELEGRAM_BOT_TOKEN or TELEGRAM_ALERT_CHAT_ID)'
+    )
     return
   }
   try {
@@ -188,26 +185,26 @@ async function main() {
   const report = formatReport(results)
   console.log('\n' + report)
 
-  const stale = results.filter(r => r.isStale)
+  const stale = results.filter((r) => r.isStale)
 
   if (shouldAlert && stale.length > 0) {
-    const alertLines = stale.map(r => {
+    const alertLines = stale.map((r) => {
       const age = r.hoursAgo ? `${r.hoursAgo}h ago` : 'never'
       const count = r.v1.count + r.v2.count
       return `  <b>${r.source}</b>: last update ${age}, ${count} snapshots`
     })
     await sendTelegram(
       `<b>Mac Mini Scraper Alert</b>\n` +
-      `${stale.length}/${MAC_MINI_PLATFORMS.length} platforms stale (>${STALE_THRESHOLD_HOURS}h):\n` +
-      alertLines.join('\n') +
-      `\n\nCheck crontab on Mac Mini.`
+        `${stale.length}/${MAC_MINI_PLATFORMS.length} platforms stale (>${STALE_THRESHOLD_HOURS}h):\n` +
+        alertLines.join('\n') +
+        `\n\nCheck crontab on Mac Mini.`
     )
   } else if (shouldAlert && stale.length === 0) {
     console.log('\n[ok] All platforms fresh, no alert needed')
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal:', err)
   process.exit(1)
 })

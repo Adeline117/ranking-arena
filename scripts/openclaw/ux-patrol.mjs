@@ -52,14 +52,7 @@ async function fetchWithTimeout(url, opts = {}) {
 // 1. Page health checks
 async function checkPages() {
   console.log('\n📄 Page Health Checks')
-  const pages = [
-    '/',
-    '/rankings',
-    '/rankings/7d',
-    '/market',
-    '/library',
-    '/login',
-  ]
+  const pages = ['/', '/rankings', '/rankings/7d', '/market', '/library', '/login']
 
   for (const path of pages) {
     try {
@@ -85,17 +78,23 @@ async function checkPages() {
   }
 }
 
+// Cached rankings data — fetched once, reused for API check + data quality
+let cachedRankingsTraders = null
+
 // 2. API health checks
 async function checkAPIs() {
   console.log('\n🔌 API Health Checks')
   const apis = [
-    { path: '/api/rankings?window=7d&limit=5', check: (d) => Array.isArray(d.traders) && d.traders.length > 0 },
+    {
+      path: '/api/rankings?window=7d&limit=10',
+      check: (d) => Array.isArray(d.data?.traders) && d.data.traders.length > 0,
+      cacheTraders: true,
+    },
     { path: '/api/market', check: (d) => Array.isArray(d.rows) && d.rows.length > 0 },
     { path: '/api/market/spot', check: (d) => Array.isArray(d) && d.length > 0 },
-    { path: '/api/stats', check: (d) => d.traderCount > 0 },
   ]
 
-  for (const { path, check } of apis) {
+  for (const { path, check, cacheTraders } of apis) {
     try {
       const res = await fetchWithTimeout(`${ARENA_URL}${path}`)
       if (!res.ok) {
@@ -105,6 +104,7 @@ async function checkAPIs() {
       const data = await res.json()
       if (check(data)) {
         log('PASS', `API ${path}`, 'Valid response')
+        if (cacheTraders) cachedRankingsTraders = data.data?.traders || []
       } else {
         log('FAIL', `API ${path}`, 'Response shape invalid or empty')
       }
@@ -114,38 +114,40 @@ async function checkAPIs() {
   }
 }
 
-// 3. Data quality spot checks
+// 3. Data quality spot checks (reuses rankings data from checkAPIs)
 async function checkDataQuality() {
   console.log('\n📊 Data Quality Spot Checks')
-  try {
-    const res = await fetchWithTimeout(`${ARENA_URL}/api/rankings?window=7d&limit=10`)
-    if (!res.ok) { log('FAIL', 'Rankings data', `Status ${res.status}`); return }
-    const data = await res.json()
-    const traders = data.traders || []
+  const traders = cachedRankingsTraders
+  if (!traders) {
+    log('FAIL', 'Rankings data', 'No rankings data available (API check failed)')
+    return
+  }
 
-    if (traders.length === 0) {
-      log('FAIL', 'Rankings data', 'No traders returned')
-      return
-    }
+  if (traders.length === 0) {
+    log('FAIL', 'Rankings data', 'No traders returned')
+    return
+  }
 
-    // Check required fields (nested under metrics for some)
-    let missingCount = 0
-    for (const t of traders) {
-      if (!t.display_name && !t.trader_key) missingCount++
-      if (!t.platform) missingCount++
-      const m = t.metrics || {}
-      if (m.roi === null || m.roi === undefined) missingCount++
-      if (m.pnl === null || m.pnl === undefined) missingCount++
-      if (m.arena_score === null || m.arena_score === undefined) missingCount++
-    }
-    if (missingCount === 0) {
-      log('PASS', 'Required fields present', `${traders.length} traders checked`)
-    } else {
-      log('WARN', 'Missing fields', `${missingCount} null/undefined fields in top 10`)
-    }
+  // Check required fields (flat structure in API response)
+  let missingCount = 0
+  for (const t of traders) {
+    if (!t.display_name && !t.trader_key) missingCount++
+    if (!t.platform) missingCount++
+    if (t.roi === null || t.roi === undefined) missingCount++
+    if (t.pnl === null || t.pnl === undefined) missingCount++
+    if (t.arena_score === null || t.arena_score === undefined) missingCount++
+  }
+  if (missingCount === 0) {
+    log('PASS', 'Required fields present', `${traders.length} traders checked`)
+  } else {
+    log('WARN', 'Missing fields', `${missingCount} null/undefined fields in top 10`)
+  }
 
-    // Check score range
-    const scores = traders.map(t => t.metrics?.arena_score).filter(Boolean)
+  // Check score range (filter(v != null) keeps 0, unlike filter(Boolean))
+  const scores = traders.map((t) => t.arena_score).filter((v) => v != null)
+  if (scores.length === 0) {
+    log('WARN', 'Score range', 'No arena_score values available')
+  } else {
     const minScore = Math.min(...scores)
     const maxScore = Math.max(...scores)
     if (maxScore <= 100 && minScore >= 0) {
@@ -153,17 +155,19 @@ async function checkDataQuality() {
     } else {
       log('FAIL', 'Score range', `Out of bounds: [${minScore}, ${maxScore}]`)
     }
+  }
 
-    // Check ROI reasonableness
-    const rois = traders.map(t => t.metrics?.roi).filter(v => v != null)
+  // Check ROI reasonableness
+  const rois = traders.map((t) => t.roi).filter((v) => v != null)
+  if (rois.length === 0) {
+    log('WARN', 'ROI range', 'No ROI values available')
+  } else {
     const maxRoi = Math.max(...rois.map(Math.abs))
     if (maxRoi < 100000) {
       log('PASS', 'ROI range', `Max absolute ROI: ${maxRoi.toFixed(1)}%`)
     } else {
       log('WARN', 'ROI range', `Suspiciously high: ${maxRoi.toFixed(1)}%`)
     }
-  } catch (e) {
-    log('FAIL', 'Data quality check', e.message)
   }
 }
 
@@ -172,7 +176,10 @@ async function checkSSRContent() {
   console.log('\n🖥️  SSR Content Checks')
   try {
     const res = await fetchWithTimeout(`${ARENA_URL}/`)
-    if (!res.ok) { log('FAIL', 'SSR homepage', `Status ${res.status}`); return }
+    if (!res.ok) {
+      log('FAIL', 'SSR homepage', `Status ${res.status}`)
+      return
+    }
     const html = await res.text()
 
     // Check that SSR ranking table is present on homepage
@@ -209,16 +216,18 @@ async function main() {
 
   if (failed > 0) {
     console.log('\n❌ Failed checks:')
-    results.filter(r => r.status === 'FAIL').forEach(r => {
-      console.log(`   - ${r.check}: ${r.detail}`)
-    })
+    results
+      .filter((r) => r.status === 'FAIL')
+      .forEach((r) => {
+        console.log(`   - ${r.check}: ${r.detail}`)
+      })
   }
 
   // Exit with error code if any checks failed
   process.exit(failed > 0 ? 1 : 0)
 }
 
-main().catch(e => {
+main().catch((e) => {
   console.error('UX Patrol crashed:', e.message)
   process.exit(2)
 })

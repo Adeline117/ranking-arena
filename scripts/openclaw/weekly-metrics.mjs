@@ -86,7 +86,7 @@ async function fetchWAU() {
   // dedupe client-side. For <10k active users this is <100kb of payload.
   const { data } = await supabase(
     `user_activity?select=user_id&created_at=gte.${encodeURIComponent(since)}&limit=50000`,
-    { prefer: 'count=none' },
+    { prefer: 'count=none' }
   )
   const unique = new Set((data || []).map((r) => r.user_id))
   return unique.size
@@ -96,7 +96,7 @@ async function fetchWAU() {
 async function fetchPayingSubscribers() {
   const { res } = await supabase(
     `subscriptions?select=id&status=in.(active,trialing)&tier=in.(pro,lifetime)&limit=1`,
-    { prefer: 'count=exact,head=true', method: 'HEAD' },
+    { prefer: 'count=exact,head=true', method: 'HEAD' }
   )
   return getCountHeader(res)
 }
@@ -112,14 +112,11 @@ async function fetchPayingSubscribers() {
  * Returns { fullCount, totalCount, ratio }.
  */
 async function fetchTop10TrustRatio() {
-  const { data } = await supabase(
-    `rpc/get_top_trust_ratio`,
-    {
-      method: 'POST',
-      body: JSON.stringify({ p_season_id: '90D', p_top_n: 10 }),
-      prefer: 'count=none',
-    },
-  )
+  const { data } = await supabase(`rpc/get_top_trust_ratio`, {
+    method: 'POST',
+    body: JSON.stringify({ p_season_id: '90D', p_top_n: 10 }),
+    prefer: 'count=none',
+  })
 
   // RPC returns an array of rows; we expect exactly one.
   const row = Array.isArray(data) ? data[0] : data
@@ -142,18 +139,22 @@ async function sendTelegram(text) {
     console.log(text)
     return
   }
-  const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      chat_id: TELEGRAM_CHAT_ID,
-      text,
-      parse_mode: 'HTML',
-      disable_web_page_preview: true,
-    }),
-  })
-  if (!res.ok) {
-    throw new Error(`Telegram ${res.status}: ${await res.text().catch(() => '')}`)
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: TELEGRAM_CHAT_ID,
+        text,
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
+    })
+    if (!res.ok) {
+      console.error(`Telegram send failed: ${res.status} ${await res.text().catch(() => '')}`)
+    }
+  } catch (err) {
+    console.error('Telegram send error:', err.message)
   }
 }
 
@@ -186,8 +187,10 @@ async function main() {
 
   // Failure notes so they land in logs even on success send
   if (wau.status === 'rejected') console.error('WAU failed:', wau.reason?.message || wau.reason)
-  if (paying.status === 'rejected') console.error('paying subs failed:', paying.reason?.message || paying.reason)
-  if (trust.status === 'rejected') console.error('trust ratio failed:', trust.reason?.message || trust.reason)
+  if (paying.status === 'rejected')
+    console.error('paying subs failed:', paying.reason?.message || paying.reason)
+  if (trust.status === 'rejected')
+    console.error('trust ratio failed:', trust.reason?.message || trust.reason)
 
   const report = lines.join('\n')
   if (isDryRun) {
