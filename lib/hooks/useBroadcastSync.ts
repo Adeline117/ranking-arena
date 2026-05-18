@@ -39,9 +39,10 @@ export interface SyncEvent<T = unknown> {
 }
 
 // 生成唯一的 Tab ID
-const TAB_ID = typeof window !== 'undefined'
-  ? `tab-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
-  : 'server'
+const TAB_ID =
+  typeof window !== 'undefined'
+    ? `tab-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`
+    : 'server'
 
 /**
  * 多窗口同步 Hook
@@ -51,57 +52,72 @@ export function useBroadcastSync<T = unknown>(channelName: string) {
   const channelRef = useRef<BroadcastChannel | null>(null)
   const listenersRef = useRef<Set<(event: SyncEvent<T>) => void>>(new Set())
 
-  // 初始化 BroadcastChannel
+  // 初始化 BroadcastChannel (or localStorage fallback for Safari < 15.4)
   useEffect(() => {
-    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) {
-      return
-    }
+    if (typeof window === 'undefined') return
 
-    const channel = new BroadcastChannel(`ranking-arena:${channelName}`)
-    channelRef.current = channel
-
-    // 处理收到的消息
-    channel.onmessage = (event: MessageEvent<SyncEvent<T>>) => {
-      // 忽略来自自己的消息
-      if (event.data.sourceTabId === TAB_ID) {
-        return
-      }
-
-      // 通知所有监听器
-      listenersRef.current.forEach(listener => {
+    const dispatchToListeners = (data: SyncEvent<T>) => {
+      if (data.sourceTabId === TAB_ID) return
+      listenersRef.current.forEach((listener) => {
         try {
-          listener(event.data)
+          listener(data)
         } catch (error) {
           logger.error('[BroadcastSync] Listener error:', error)
         }
       })
     }
 
-    return () => {
-      channel.close()
-      channelRef.current = null
+    // Prefer BroadcastChannel; fall back to localStorage storage events
+    if ('BroadcastChannel' in window) {
+      const channel = new BroadcastChannel(`ranking-arena:${channelName}`)
+      channelRef.current = channel
+      channel.onmessage = (event: MessageEvent<SyncEvent<T>>) => dispatchToListeners(event.data)
+      return () => {
+        channel.close()
+        channelRef.current = null
+      }
     }
+
+    // localStorage fallback: storage events fire in OTHER tabs when a key changes
+    const storageKey = `ranking-arena:sync:${channelName}`
+    const handler = (e: StorageEvent) => {
+      if (e.key !== storageKey || !e.newValue) return
+      try {
+        dispatchToListeners(JSON.parse(e.newValue) as SyncEvent<T>)
+      } catch {
+        // Malformed JSON — ignore
+      }
+    }
+    const win = globalThis as unknown as Window
+    win.addEventListener('storage', handler)
+    return () => win.removeEventListener('storage', handler)
   }, [channelName])
 
   // 广播消息到其他窗口
-  const broadcast = useCallback((type: SyncEventType, payload: T) => {
-    if (!channelRef.current) {
-      return
-    }
+  const broadcast = useCallback(
+    (type: SyncEventType, payload: T) => {
+      const event: SyncEvent<T> = {
+        type,
+        payload,
+        timestamp: Date.now(),
+        sourceTabId: TAB_ID,
+      }
 
-    const event: SyncEvent<T> = {
-      type,
-      payload,
-      timestamp: Date.now(),
-      sourceTabId: TAB_ID,
-    }
-
-    try {
-      channelRef.current.postMessage(event)
-    } catch (error) {
-      logger.error('[BroadcastSync] Broadcast error:', error)
-    }
-  }, [])
+      try {
+        if (channelRef.current) {
+          channelRef.current.postMessage(event)
+        } else if (typeof window !== 'undefined') {
+          // localStorage fallback: write then immediately remove to trigger storage event
+          const storageKey = `ranking-arena:sync:${channelName}`
+          localStorage.setItem(storageKey, JSON.stringify(event))
+          localStorage.removeItem(storageKey)
+        }
+      } catch (error) {
+        logger.error('[BroadcastSync] Broadcast error:', error)
+      }
+    },
+    [channelName]
+  )
 
   // 订阅消息
   const subscribe = useCallback((listener: (event: SyncEvent<T>) => void) => {
@@ -114,18 +130,18 @@ export function useBroadcastSync<T = unknown>(channelName: string) {
   }, [])
 
   // 便捷方法：订阅特定类型的事件
-  const on = useCallback((
-    eventType: SyncEventType,
-    handler: (payload: T) => void
-  ) => {
-    const listener = (event: SyncEvent<T>) => {
-      if (event.type === eventType) {
-        handler(event.payload)
+  const on = useCallback(
+    (eventType: SyncEventType, handler: (payload: T) => void) => {
+      const listener = (event: SyncEvent<T>) => {
+        if (event.type === eventType) {
+          handler(event.payload)
+        }
       }
-    }
 
-    return subscribe(listener)
-  }, [subscribe])
+      return subscribe(listener)
+    },
+    [subscribe]
+  )
 
   return {
     broadcast,
