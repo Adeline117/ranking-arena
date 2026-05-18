@@ -15,10 +15,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import type { User, Session } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
-import {
-  tokenRefreshCoordinator,
-  registerAuthStateSetter,
-} from '@/lib/auth/token-refresh'
+import { t } from '@/lib/i18n'
+import { tokenRefreshCoordinator, registerAuthStateSetter } from '@/lib/auth/token-refresh'
 
 // Lazy-load Supabase client to avoid pulling ~50KB into the initial client bundle.
 // The actual import happens on first use (initializeAuth), which is deferred.
@@ -29,7 +27,7 @@ let _supabasePromise: Promise<LazySupabaseClient> | null = null
 function getSupabase(): Promise<LazySupabaseClient> {
   if (_supabase) return Promise.resolve(_supabase)
   if (!_supabasePromise) {
-    _supabasePromise = import('@/lib/supabase/client').then(m => {
+    _supabasePromise = import('@/lib/supabase/client').then((m) => {
       _supabase = m.supabase
       return _supabase
     })
@@ -61,7 +59,10 @@ export type AuthSessionReturn = AuthState & {
   /** Get headers asynchronously, refreshing token if needed */
   getAuthHeadersAsync: () => Promise<Record<string, string>>
   /** Guard a write operation: returns auth headers or shows login prompt and returns null */
-  requireAuth: (options?: { redirectToLogin?: boolean; showToast?: (msg: string, type: string) => void }) => Record<string, string> | null
+  requireAuth: (options?: {
+    redirectToLogin?: boolean
+    showToast?: (msg: string, type: string) => void
+  }) => Record<string, string> | null
   /** Refresh the current session token */
   refreshSession: () => Promise<boolean>
   /** Categorize an HTTP error response into an AuthError */
@@ -85,7 +86,7 @@ const listeners = new Set<(state: AuthState) => void>()
 
 function setGlobalAuthState(newState: Partial<AuthState>) {
   globalAuthState = { ...globalAuthState, ...newState }
-  listeners.forEach(listener => listener(globalAuthState))
+  listeners.forEach((listener) => listener(globalAuthState))
 }
 
 // Initialize auth state once
@@ -104,93 +105,114 @@ function initializeAuth() {
   if (typeof window !== 'undefined') {
     window.addEventListener('arena:auth-lost', () => {
       // Lazy-import to avoid circular dependency
-      Promise.all([
-        import('@/lib/hooks/useApiMutation'),
-        import('@/lib/i18n'),
-      ]).then(([{ getGlobalToast }, { t }]) => {
-        const toast = getGlobalToast()
-        if (toast) {
-          toast(t('sessionExpired'), 'warning')
-        }
-      }).catch(() => {
-        logger.warn('[useAuthSession] Could not show auth-lost toast')
-      })
+      Promise.all([import('@/lib/hooks/useApiMutation'), import('@/lib/i18n')])
+        .then(([{ getGlobalToast }, { t }]) => {
+          const toast = getGlobalToast()
+          if (toast) {
+            toast(t('sessionExpired'), 'warning')
+          }
+        })
+        .catch(() => {
+          logger.warn('[useAuthSession] Could not show auth-lost toast')
+        })
     })
   }
 
   // Lazy-load Supabase then initialize auth
-  getSupabase().then((sb) => {
-    // Get initial session
-    sb.auth.getSession().then(({ data }) => {
-      updateFromSession(data.session)
-      setGlobalAuthState({ loading: false, authChecked: true })
-    }).catch((err) => {
-      logger.error('[useAuthSession] Failed to get initial session:', err)
-      setGlobalAuthState({ loading: false, authChecked: true })
-    })
-
-    // Listen for cross-tab auth broadcasts via BroadcastChannel.
-    // Supabase's storage-event listener can miss events when tabs are inactive.
-    if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-      try {
-        const authChannel = new BroadcastChannel('ranking-arena:auth-state')
-        authChannel.onmessage = (event: MessageEvent) => {
-          if (event.data?.type === 'USER_LOGGED_OUT') {
-            setGlobalAuthState({
-              user: null,
-              userId: null,
-              email: null,
-              accessToken: null,
-              isLoggedIn: false,
-              authChecked: true,
-              loading: false,
-            })
-          } else if (event.data?.type === 'TOKEN_REFRESHED') {
-            // Another tab refreshed the token — re-read session from shared cookie store
-            // so this tab picks up the fresh token without an independent refresh request.
-            sb.auth.getSession().then(({ data }) => {
-              if (data.session) {
-                updateFromSession(data.session)
-                setGlobalAuthState({ loading: false, authChecked: true })
-              }
-            }).catch(() => {
-              logger.warn('[useAuthSession] Failed to re-read session after cross-tab token refresh')
-            })
-          }
-        }
-      } catch { /* BroadcastChannel not supported — storage events are fallback */ }
-    }
-
-    // Subscribe to auth state changes
-    sb.auth.onAuthStateChange((event, session) => {
-      if (event === 'SIGNED_OUT') {
-        setGlobalAuthState({
-          user: null,
-          userId: null,
-          email: null,
-          accessToken: null,
-          isLoggedIn: false,
-          authChecked: true,
-          loading: false,
+  getSupabase()
+    .then((sb) => {
+      // Get initial session
+      sb.auth
+        .getSession()
+        .then(({ data }) => {
+          updateFromSession(data.session)
+          setGlobalAuthState({ loading: false, authChecked: true })
         })
-      } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'INITIAL_SESSION') {
-        updateFromSession(session)
-        setGlobalAuthState({ loading: false, authChecked: true })
+        .catch((err) => {
+          logger.error('[useAuthSession] Failed to get initial session:', err)
+          setGlobalAuthState({ loading: false, authChecked: true })
+        })
 
-        // Broadcast token refresh to other tabs so they pick up the fresh session
-        if (event === 'TOKEN_REFRESHED' && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
-          try {
-            const ch = new BroadcastChannel('ranking-arena:auth-state')
-            ch.postMessage({ type: 'TOKEN_REFRESHED', timestamp: Date.now() })
-            ch.close()
-          } catch { /* BroadcastChannel not supported */ }
+      // Listen for cross-tab auth broadcasts via BroadcastChannel.
+      // Supabase's storage-event listener can miss events when tabs are inactive.
+      if (typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+        try {
+          const authChannel = new BroadcastChannel('ranking-arena:auth-state')
+          authChannel.onmessage = (event: MessageEvent) => {
+            if (event.data?.type === 'USER_LOGGED_OUT') {
+              setGlobalAuthState({
+                user: null,
+                userId: null,
+                email: null,
+                accessToken: null,
+                isLoggedIn: false,
+                authChecked: true,
+                loading: false,
+              })
+            } else if (event.data?.type === 'TOKEN_REFRESHED') {
+              // Another tab refreshed the token — re-read session from shared cookie store
+              // so this tab picks up the fresh token without an independent refresh request.
+              sb.auth
+                .getSession()
+                .then(({ data }) => {
+                  if (data.session) {
+                    updateFromSession(data.session)
+                    setGlobalAuthState({ loading: false, authChecked: true })
+                  }
+                })
+                .catch(() => {
+                  logger.warn(
+                    '[useAuthSession] Failed to re-read session after cross-tab token refresh'
+                  )
+                })
+            }
+          }
+        } catch {
+          /* BroadcastChannel not supported — storage events are fallback */
         }
       }
+
+      // Subscribe to auth state changes
+      sb.auth.onAuthStateChange((event, session) => {
+        if (event === 'SIGNED_OUT') {
+          setGlobalAuthState({
+            user: null,
+            userId: null,
+            email: null,
+            accessToken: null,
+            isLoggedIn: false,
+            authChecked: true,
+            loading: false,
+          })
+        } else if (
+          event === 'SIGNED_IN' ||
+          event === 'TOKEN_REFRESHED' ||
+          event === 'INITIAL_SESSION'
+        ) {
+          updateFromSession(session)
+          setGlobalAuthState({ loading: false, authChecked: true })
+
+          // Broadcast token refresh to other tabs so they pick up the fresh session
+          if (
+            event === 'TOKEN_REFRESHED' &&
+            typeof window !== 'undefined' &&
+            'BroadcastChannel' in window
+          ) {
+            try {
+              const ch = new BroadcastChannel('ranking-arena:auth-state')
+              ch.postMessage({ type: 'TOKEN_REFRESHED', timestamp: Date.now() })
+              ch.close()
+            } catch {
+              /* BroadcastChannel not supported */
+            }
+          }
+        }
+      })
     })
-  }).catch((err) => {
-    logger.error('[useAuthSession] Failed to load Supabase:', err)
-    setGlobalAuthState({ loading: false, authChecked: true })
-  })
+    .catch((err) => {
+      logger.error('[useAuthSession] Failed to load Supabase:', err)
+      setGlobalAuthState({ loading: false, authChecked: true })
+    })
 }
 
 function updateFromSession(session: Session | null) {
@@ -249,7 +271,7 @@ export function useAuthSession(): AuthSessionReturn {
   const getAuthHeaders = useCallback((): Record<string, string> | null => {
     const { accessToken } = stateRef.current
     if (!accessToken) return null
-    return { 'Authorization': `Bearer ${accessToken}` }
+    return { Authorization: `Bearer ${accessToken}` }
   }, [])
 
   // Async version that refreshes token if needed
@@ -262,26 +284,34 @@ export function useAuthSession(): AuthSessionReturn {
     return headers
   }, [getToken])
 
-  const requireAuth = useCallback((options?: { redirectToLogin?: boolean; showToast?: (msg: string, type: string) => void }): Record<string, string> | null => {
-    const { accessToken, isLoggedIn } = stateRef.current
-    if (!isLoggedIn || !accessToken) {
-      if (options?.showToast) {
-        options.showToast('请先登录', 'warning')
+  const requireAuth = useCallback(
+    (options?: {
+      redirectToLogin?: boolean
+      showToast?: (msg: string, type: string) => void
+    }): Record<string, string> | null => {
+      const { accessToken, isLoggedIn } = stateRef.current
+      if (!isLoggedIn || !accessToken) {
+        if (options?.showToast) {
+          options.showToast(t('pleaseLoginFirst'), 'warning')
+        }
+        if (options?.redirectToLogin !== false && typeof window !== 'undefined') {
+          // Open login modal instead of redirecting to /login page
+          import('@/lib/hooks/useLoginModal')
+            .then(({ useLoginModal }) => {
+              useLoginModal.getState().openLoginModal()
+            })
+            .catch(() => {
+              // Fallback to redirect if module unavailable
+              const returnUrl = window.location.pathname + window.location.search
+              window.location.href = `/login?returnUrl=${encodeURIComponent(returnUrl)}`
+            })
+        }
+        return null
       }
-      if (options?.redirectToLogin !== false && typeof window !== 'undefined') {
-        // Open login modal instead of redirecting to /login page
-        import('@/lib/hooks/useLoginModal').then(({ useLoginModal }) => {
-          useLoginModal.getState().openLoginModal()
-        }).catch(() => {
-          // Fallback to redirect if module unavailable
-          const returnUrl = window.location.pathname + window.location.search
-          window.location.href = `/login?returnUrl=${encodeURIComponent(returnUrl)}`
-        })
-      }
-      return null
-    }
-    return { 'Authorization': `Bearer ${accessToken}` }
-  }, [])
+      return { Authorization: `Bearer ${accessToken}` }
+    },
+    []
+  )
 
   // Force a token refresh via the centralized coordinator.
   // Returns true if refresh succeeded, false otherwise.
@@ -290,19 +320,22 @@ export function useAuthSession(): AuthSessionReturn {
     return token !== null
   }, [])
 
-  const categorizeError = useCallback((status: number, body?: { error?: string }): AuthError | null => {
-    if (status === 401) {
-      const msg = body?.error?.toLowerCase() ?? ''
-      if (msg.includes('expired') || msg.includes('refresh')) {
-        return { type: 'TOKEN_EXPIRED', message: '登录已过期，请重新登录' }
+  const categorizeError = useCallback(
+    (status: number, body?: { error?: string }): AuthError | null => {
+      if (status === 401) {
+        const msg = body?.error?.toLowerCase() ?? ''
+        if (msg.includes('expired') || msg.includes('refresh')) {
+          return { type: 'TOKEN_EXPIRED', message: '登录已过期，请重新登录' }
+        }
+        return { type: 'NOT_AUTHENTICATED', message: t('pleaseLoginFirst') }
       }
-      return { type: 'NOT_AUTHENTICATED', message: '请先登录' }
-    }
-    if (status === 403) {
-      return { type: 'FORBIDDEN', message: body?.error || '没有权限执行此操作' }
-    }
-    return null
-  }, [])
+      if (status === 403) {
+        return { type: 'FORBIDDEN', message: body?.error || '没有权限执行此操作' }
+      }
+      return null
+    },
+    []
+  )
 
   const signOut = useCallback(async () => {
     const sb = await getSupabase()
@@ -327,19 +360,33 @@ export function useAuthSession(): AuthSessionReturn {
         sourceTabId: `signout-${Date.now()}`,
       })
       channel.close()
-    } catch { /* BroadcastChannel not supported — storage events are fallback */ }
+    } catch {
+      /* BroadcastChannel not supported — storage events are fallback */
+    }
   }, [])
 
-  return useMemo(() => ({
-    ...state,
-    getToken,
-    getAuthHeaders,
-    getAuthHeadersAsync,
-    requireAuth,
-    refreshSession,
-    categorizeError,
-    signOut,
-  }), [state, getToken, getAuthHeaders, getAuthHeadersAsync, requireAuth, refreshSession, categorizeError, signOut])
+  return useMemo(
+    () => ({
+      ...state,
+      getToken,
+      getAuthHeaders,
+      getAuthHeadersAsync,
+      requireAuth,
+      refreshSession,
+      categorizeError,
+      signOut,
+    }),
+    [
+      state,
+      getToken,
+      getAuthHeaders,
+      getAuthHeadersAsync,
+      requireAuth,
+      refreshSession,
+      categorizeError,
+      signOut,
+    ]
+  )
 }
 
 /**
@@ -360,7 +407,9 @@ export async function authFetch(
   const token = await tokenRefreshCoordinator.getValidToken()
 
   if (needsAuth && !token) {
-    throw Object.assign(new Error('Not authenticated'), { authError: { type: 'NOT_AUTHENTICATED' as const, message: '请先登录' } })
+    throw Object.assign(new Error('Not authenticated'), {
+      authError: { type: 'NOT_AUTHENTICATED' as const, message: t('pleaseLoginFirst') },
+    })
   }
 
   const headers = new Headers(fetchOptions.headers)
