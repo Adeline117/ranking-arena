@@ -34,7 +34,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const releaseLock = await acquireCronLock('snapshot-positions', { ttlSeconds: 180 })
+  const releaseLock = await acquireCronLock('snapshot-positions', { ttlSeconds: 120 })
   if (!releaseLock) {
     return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
