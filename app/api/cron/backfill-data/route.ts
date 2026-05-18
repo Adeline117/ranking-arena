@@ -314,10 +314,16 @@ export async function GET(req: NextRequest) {
       `[backfill] HARD DEADLINE hit at ${Math.round(elapsed() / 1000)}s — finalizing plog as partialSuccess`
     )
     try {
-      await plog.partialSuccess(0, ['hard_deadline_exceeded'], {
-        elapsedMs: elapsed(),
-        reason: 'hard_deadline_watchdog',
-      })
+      // Race the plog write against a 20s timeout — if the DB connection pool is
+      // exhausted at 270s, the write hangs and the function gets killed at 300s
+      // with plog still "running" (the exact symptom we're fixing).
+      await Promise.race([
+        plog.partialSuccess(0, ['hard_deadline_exceeded'], {
+          elapsedMs: elapsed(),
+          reason: 'hard_deadline_watchdog',
+        }),
+        new Promise<void>((resolve) => setTimeout(resolve, 20_000)),
+      ])
     } catch (e) {
       logger.warn(
         `[backfill] watchdog plog finalize failed: ${e instanceof Error ? e.message : String(e)}`
