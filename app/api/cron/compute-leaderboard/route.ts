@@ -446,6 +446,25 @@ async function computeSeason(
     )
   }
 
+  // Log data freshness: when was the last batch-fetch-traders run?
+  // This makes it transparent what data this compute cycle is working with.
+  try {
+    const { data: latestFetch } = await supabase
+      .from('pipeline_logs')
+      .select('ended_at')
+      .like('job_name', 'batch-fetch-traders%')
+      .eq('status', 'success')
+      .order('ended_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+    if (latestFetch?.ended_at) {
+      const ageMin = Math.round((Date.now() - new Date(latestFetch.ended_at).getTime()) / 60_000)
+      logger.info(`[${season}] Using data as of ${latestFetch.ended_at} (${ageMin}min ago)`)
+    }
+  } catch {
+    // Non-critical — informational log only
+  }
+
   // Upsert abort flag (set inside the upsert loop when time runs out, consumed
   // by the zero-out phase below to skip its expensive N+1 cleanup path).
   let upsertAborted = false
@@ -1034,6 +1053,28 @@ async function computeSeason(
     if (current.rank != null) prevRankMap.set(key, current.rank)
   }
 
+  // Acquire DB-level advisory lock to prevent concurrent upserts for the same season.
+  // This is a second layer of protection (Redis lock is first) for cases where Redis
+  // lock expired but the previous function is still writing.
+  let dbLockAcquired = false
+  try {
+    const { data: lockResult } = await supabase.rpc(
+      'acquire_leaderboard_lock' as never,
+      { season } as never
+    )
+    dbLockAcquired = lockResult === true
+    if (!dbLockAcquired) {
+      logger.warn(
+        `[${season}] Could not acquire DB advisory lock — another compute may be writing. Proceeding anyway.`
+      )
+    }
+  } catch (lockErr) {
+    logger.warn(
+      `[${season}] Advisory lock RPC failed (non-critical):`,
+      lockErr instanceof Error ? lockErr.message : String(lockErr)
+    )
+  }
+
   // Upsert only changed rows in batches
   let upsertErrors = 0
   const batchUpsertSize = 50 // Reduced from 200 — DB pool exhaustion causes upsert timeouts; 50 rows fits within statement_timeout
@@ -1243,6 +1284,15 @@ async function computeSeason(
     logger.warn(
       `[${season}] Checkpoint write failed: ${e instanceof Error ? e.message : String(e)}`
     )
+  }
+
+  // Release DB advisory lock
+  if (dbLockAcquired) {
+    try {
+      await supabase.rpc('release_leaderboard_lock' as never, { season } as never)
+    } catch {
+      // Non-critical — session-level lock auto-releases when connection closes
+    }
   }
 
   const actualUpserted = scoredFiltered.length - upsertErrors
