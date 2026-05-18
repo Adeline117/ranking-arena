@@ -8,7 +8,9 @@ jest.mock('@/lib/supabase/client', () => ({
   supabase: {
     auth: {
       getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange: jest.fn().mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
+      onAuthStateChange: jest
+        .fn()
+        .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
       refreshSession: jest.fn().mockResolvedValue({ data: { session: null }, error: null }),
       signOut: jest.fn().mockResolvedValue({}),
     },
@@ -32,7 +34,7 @@ describe('useAuthSession', () => {
       const err = result.current.categorizeError(401)
       expect(err).toEqual({
         type: 'NOT_AUTHENTICATED',
-        message: '请先登录',
+        message: 'Please login first',
       })
     })
 
