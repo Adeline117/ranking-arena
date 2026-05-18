@@ -67,6 +67,18 @@ export async function GET(request: NextRequest) {
   const supabase = getReadReplica() as SupabaseClient
   const plog = await PipelineLogger.start('precompute-composite')
 
+  // Safety timeout: ensure plog gets closed before Vercel kills the function at maxDuration (120s).
+  let plogFinalized = false
+  const safetyTimer = setTimeout(async () => {
+    if (plogFinalized) return
+    plogFinalized = true
+    try {
+      await plog.error(new Error('Safety timeout: function approaching 120s limit'))
+    } catch {
+      /* best effort */
+    }
+  }, 100_000) // 100s safety margin for 120s maxDuration
+
   try {
     // Include data from the last 7 days — some platforms (Bybit VPS scraper) may
     // have intermittent failures; 72h was too aggressive and dropped platforms entirely
@@ -311,7 +323,11 @@ export async function GET(request: NextRequest) {
       `Composite precomputed: ${entries.length} total, ${traders.length} cached, ${elapsed}ms`
     )
 
-    await plog.success(traders.length, { total_entries: entries.length })
+    clearTimeout(safetyTimer)
+    if (!plogFinalized) {
+      plogFinalized = true
+      await plog.success(traders.length, { total_entries: entries.length, elapsed_ms: elapsed })
+    }
 
     return NextResponse.json({
       ok: true,
@@ -321,8 +337,12 @@ export async function GET(request: NextRequest) {
       categories_cached: categories.length,
     })
   } catch (error) {
+    clearTimeout(safetyTimer)
     logger.error('Precompute composite failed:', error)
-    await plog.error(error)
+    if (!plogFinalized) {
+      plogFinalized = true
+      await plog.error(error)
+    }
     return NextResponse.json({ error: 'Precompute failed', detail: String(error) }, { status: 500 })
   } finally {
     await releaseLock()
