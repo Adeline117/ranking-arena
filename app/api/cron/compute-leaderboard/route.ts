@@ -692,13 +692,17 @@ async function computeSeason(
       scoreResult.stabilityScore
     // Trust weight removed from score formula — same skill shouldn't get different
     // scores based on exchange. Trust weight used only as tie-breaker in sort below.
-    const finalScore =
+    const rawFinalScore =
       Math.round(
         Math.max(
           0,
           Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty * tradeCountPenalty)
         ) * 100
       ) / 100
+    // Score=0 means no meaningful signal (ROI≈0 + PnL≈0). Set null so rankings
+    // query (arena_score IS NOT NULL) excludes them — prevents "0-score" traders
+    // from appearing at the bottom of the leaderboard with no useful information.
+    const finalScore = rawFinalScore > 0 ? rawFinalScore : null
 
     const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || {
       handle: null,
@@ -774,12 +778,16 @@ async function computeSeason(
     )
   }
 
+  // Filter out traders with null arena_score (ROI≈0 + PnL≈0, no useful signal)
+  // before sorting/ranking. These are excluded from rankings queries anyway.
+  const scoredFiltered = scored.filter((t) => t.arena_score != null)
+
   // Sort by arena_score desc, then trust weight (higher trust = higher for ties),
   // then Sharpe ratio (better risk-adjusted), then stable id.
   // Trust weight removed from score formula (same skill ≠ different score per exchange)
   // but kept here as tie-breaker for equal-scoring traders.
-  scored.sort((a, b) => {
-    const diff = b.arena_score - a.arena_score
+  scoredFiltered.sort((a, b) => {
+    const diff = b.arena_score! - a.arena_score!
     if (Math.abs(diff) > 0.01) return diff
     const twA = SOURCE_TRUST_WEIGHT[a.source] ?? 0.5
     const twB = SOURCE_TRUST_WEIGHT[b.source] ?? 0.5
@@ -992,7 +1000,7 @@ async function computeSeason(
   }
 
   // Filter to only changed rows: new traders, score changed >0.5%, or rank changed
-  const changedTraders = scored.filter((t, idx) => {
+  const changedTraders = scoredFiltered.filter((t, idx) => {
     const current = currentScoreMap.get(`${t.source}:${t.source_trader_id}`)
     if (current == null) return true // new trader
     // Always update if handle/avatar changed (backfill)
@@ -1006,16 +1014,16 @@ async function computeSeason(
     if (t.calmar_ratio != null && !current.calmar_ratio) return true
     if (t.profit_factor != null && !current.profit_factor) return true
     if (t.trading_style != null && !current.trading_style) return true
-    return Math.abs(t.arena_score - current.arena_score) > current.arena_score * 0.005 // >0.5% score change
+    return Math.abs(t.arena_score! - current.arena_score) > current.arena_score * 0.005 // >0.5% score change
   })
 
   logger.info(
-    `[${season}] Incremental upsert: ${changedTraders.length}/${scored.length} changed (${((1 - changedTraders.length / scored.length) * 100).toFixed(1)}% skipped)`
+    `[${season}] Incremental upsert: ${changedTraders.length}/${scoredFiltered.length} changed (${((1 - changedTraders.length / Math.max(1, scoredFiltered.length)) * 100).toFixed(1)}% skipped)`
   )
 
-  // Build a rank lookup from the full sorted scored array
+  // Build a rank lookup from the full sorted scoredFiltered array
   const rankMap = new Map<string, number>()
-  scored.forEach((t, idx) => rankMap.set(`${t.source}:${t.source_trader_id}`, idx + 1))
+  scoredFiltered.forEach((t, idx) => rankMap.set(`${t.source}:${t.source_trader_id}`, idx + 1))
 
   // Build prev-rank lookup from currentScoreMap (already fetched above with rank column).
   // Previously this ran a second leaderboard_ranks query for just (source, source_trader_id, rank)
@@ -1237,8 +1245,10 @@ async function computeSeason(
     )
   }
 
-  const actualUpserted = scored.length - upsertErrors
-  logger.info(`${season}: ranked ${scored.length} traders (${upsertErrors} upsert errors)`)
+  const actualUpserted = scoredFiltered.length - upsertErrors
+  logger.info(
+    `${season}: ranked ${scoredFiltered.length} traders (${scored.length} total scored, ${scored.length - scoredFiltered.length} zero-score excluded, ${upsertErrors} upsert errors)`
+  )
   return actualUpserted
 }
 
