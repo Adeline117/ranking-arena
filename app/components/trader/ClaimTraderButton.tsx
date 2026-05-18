@@ -21,15 +21,27 @@ interface ClaimTraderButtonProps {
  * These use wallet signature verification instead of API key.
  */
 const DEX_WALLET_PLATFORMS = [
-  'hyperliquid', 'gmx', 'gains', 'aevo', 'kwenta', 'vertex', 'dydx',
-  'jupiter_perps', 'drift',
+  'hyperliquid',
+  'gmx',
+  'gains',
+  'aevo',
+  'kwenta',
+  'vertex',
+  'dydx',
+  'jupiter_perps',
+  'drift',
 ]
 
 function isDexPlatform(source: string): boolean {
-  return DEX_WALLET_PLATFORMS.some(p => source.toLowerCase().startsWith(p))
+  return DEX_WALLET_PLATFORMS.some((p) => source.toLowerCase().startsWith(p))
 }
 
-export default function ClaimTraderButton({ traderId, handle, userId, source = 'binance' }: ClaimTraderButtonProps) {
+export default function ClaimTraderButton({
+  traderId,
+  handle,
+  userId,
+  source = 'binance',
+}: ClaimTraderButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
@@ -45,7 +57,9 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
     async function checkClaimStatus(): Promise<void> {
       try {
-        const { data: { session } } = await supabase.auth.getSession()
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
         if (!alive || !session) return
 
         const res = await fetch('/api/traders/claim', {
@@ -85,20 +99,30 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     }
 
     checkClaimStatus()
-    // Auto-refresh every 30s (catches claim status changes from other tabs/devices)
-    const interval = setInterval(checkClaimStatus, 30000)
-    return () => { alive = false; clearInterval(interval) }
+    // Re-check when user returns to this tab (instead of polling every 30s)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && alive) {
+        checkClaimStatus()
+      }
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => {
+      alive = false
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [userId, source, traderId])
 
   const handleClaim = async () => {
     // For DEX platforms, redirect to the claim page with wallet flow
     if (isDexPlatform(source)) {
-      router.push(`/claim?trader=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}&handle=${encodeURIComponent(handle)}`)
+      router.push(
+        `/claim?trader=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}&handle=${encodeURIComponent(handle)}`
+      )
       return
     }
 
     const confirmTitle = hasVerifiedAccounts
-      ? (t('confirmLink') || 'Link Account')
+      ? t('confirmLink') || 'Link Account'
       : t('confirmClaim')
     const confirmDesc = hasVerifiedAccounts
       ? (t('confirmLinkDesc') || `Link ${handle} to your profile?`).replace('{handle}', handle)
@@ -108,14 +132,18 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
     if (!confirmed) return
 
     // Check session
-    const { data: { session } } = await supabase.auth.getSession()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
     if (!session) {
       showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
 
     // For CEX platforms, redirect to claim page with API key flow
-    router.push(`/claim?trader=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}&handle=${encodeURIComponent(handle)}&step=verify`)
+    router.push(
+      `/claim?trader=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}&handle=${encodeURIComponent(handle)}&step=verify`
+    )
   }
 
   if (thisTraderLinked || claimed || claimStatus === 'verified') {
@@ -136,16 +164,11 @@ export default function ClaimTraderButton({ traderId, handle, userId, source = '
 
   // If user already has verified accounts, show "Link to Profile" instead of "Claim"
   const buttonLabel = hasVerifiedAccounts
-    ? (t('linkToProfile') || 'Link to Profile')
+    ? t('linkToProfile') || 'Link to Profile'
     : t('claimTrader')
 
   return (
-    <Button
-      variant="primary"
-      size="sm"
-      onClick={handleClaim}
-      disabled={loading}
-    >
+    <Button variant="primary" size="sm" onClick={handleClaim} disabled={loading}>
       {loading ? t('claiming') : buttonLabel}
     </Button>
   )
