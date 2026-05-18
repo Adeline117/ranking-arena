@@ -271,13 +271,18 @@ export async function tieredSet<T>(
     softExpiresAt: now + config.redisTtlSeconds * 1000,
   }
 
-  // L1: 写入内存缓存 — TTL covers SWR window (primary + stale period)
-  // This eliminates the need for a separate swr: bucket entry
-  const memoryTtl = config.memoryTtlSeconds + config.staleWhileRevalidate
-  memoryCache.set(key, entry, memoryTtl)
-
   // L2: 写入 Redis (single pipeline when tags present)
   const redis = await initRedis()
+
+  // L1: 写入内存缓存 — TTL covers SWR window (primary + stale period).
+  // When Redis is unavailable, extend memory TTL to redisTtlSeconds so memory
+  // serves as the sole cache layer and data doesn't expire every 60-90s,
+  // which would cause every request to hit the DB (thundering herd).
+  const memoryTtl = redis
+    ? config.memoryTtlSeconds + config.staleWhileRevalidate
+    : config.redisTtlSeconds
+  memoryCache.set(key, entry, memoryTtl)
+
   if (redis) {
     try {
       if (tags && tags.length > 0) {
