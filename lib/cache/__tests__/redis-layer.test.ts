@@ -1,6 +1,6 @@
 /**
  * Redis 缓存分层模块测试
- * 
+ *
  * 使用 mock 测试 tieredGet, tieredSet, tieredGetOrSet 的逻辑
  */
 
@@ -80,17 +80,26 @@ describe('redis-layer', () => {
     })
 
     it('should build trader detail key', () => {
-      expect(CACHE_KEY_PATTERNS.traderDetail.keyBuilder('binance', '123')).toBe('trader:binance:123')
+      expect(CACHE_KEY_PATTERNS.traderDetail.keyBuilder('binance', '123')).toBe(
+        'trader:binance:123'
+      )
     })
 
     it('should build trader history key', () => {
-      expect(CACHE_KEY_PATTERNS.traderHistory.keyBuilder('binance', '123', '30D')).toBe('trader:history:binance:123:30D')
+      expect(CACHE_KEY_PATTERNS.traderHistory.keyBuilder('binance', '123', '30D')).toBe(
+        'trader:history:binance:123:30D'
+      )
     })
   })
 
   describe('tieredGet', () => {
     it('should return from memory cache on hit', async () => {
-      const cached = { data: { foo: 'bar' }, tier: 'warm', cachedAt: Date.now(), expiresAt: Date.now() + 60000 }
+      const cached = {
+        data: { foo: 'bar' },
+        tier: 'warm',
+        cachedAt: Date.now(),
+        expiresAt: Date.now() + 60000,
+      }
       mockMemoryCache.get.mockReturnValue(cached)
 
       const result = await tieredGet('test-key', 'warm')
@@ -106,7 +115,12 @@ describe('redis-layer', () => {
     })
 
     it('should track memory hits in stats', async () => {
-      const cached = { data: 'value', tier: 'hot', cachedAt: Date.now(), expiresAt: Date.now() + 60000 }
+      const cached = {
+        data: 'value',
+        tier: 'hot',
+        cachedAt: Date.now(),
+        expiresAt: Date.now() + 60000,
+      }
       mockMemoryCache.get.mockReturnValue(cached)
 
       await tieredGet('key1', 'hot')
@@ -120,7 +134,7 @@ describe('redis-layer', () => {
       mockMemoryCache.get.mockReturnValue(undefined)
 
       await tieredGet('miss1', 'warm')
-      
+
       const stats = getLayerStats()
       expect(stats.memory.misses).toBe(1)
     })
@@ -137,13 +151,16 @@ describe('redis-layer', () => {
       const result = await tieredSet('key', { value: 1 }, 'hot')
 
       expect(result).toBe(true)
+      // When Redis is unavailable (mock returns null), memory TTL is extended
+      // to redisTtlSeconds to prevent thundering herd. When Redis is available,
+      // it would be memoryTtlSeconds + staleWhileRevalidate.
       expect(mockMemoryCache.set).toHaveBeenCalledWith(
         'key',
         expect.objectContaining({
           data: { value: 1 },
           tier: 'hot',
         }),
-        CACHE_TIERS.hot.memoryTtlSeconds + CACHE_TIERS.hot.staleWhileRevalidate
+        CACHE_TIERS.hot.redisTtlSeconds
       )
     })
 
@@ -156,7 +173,10 @@ describe('redis-layer', () => {
       expect(entry.cachedAt).toBeGreaterThanOrEqual(before)
       expect(entry.cachedAt).toBeLessThanOrEqual(after)
       // expiresAt includes SWR window: (redisTtlSeconds + staleWhileRevalidate) * 1000
-      expect(entry.expiresAt).toBe(entry.cachedAt + (CACHE_TIERS.cold.redisTtlSeconds + CACHE_TIERS.cold.staleWhileRevalidate) * 1000)
+      expect(entry.expiresAt).toBe(
+        entry.cachedAt +
+          (CACHE_TIERS.cold.redisTtlSeconds + CACHE_TIERS.cold.staleWhileRevalidate) * 1000
+      )
     })
   })
 
@@ -169,7 +189,12 @@ describe('redis-layer', () => {
 
   describe('tieredGetOrSet', () => {
     it('should return cached data without calling fetcher', async () => {
-      const cached = { data: 'cached-value', tier: 'warm', cachedAt: Date.now(), expiresAt: Date.now() + 60000 }
+      const cached = {
+        data: 'cached-value',
+        tier: 'warm',
+        cachedAt: Date.now(),
+        expiresAt: Date.now() + 60000,
+      }
       mockMemoryCache.get.mockReturnValue(cached)
 
       const fetcher = jest.fn().mockResolvedValue('fresh-value')
@@ -188,7 +213,7 @@ describe('redis-layer', () => {
       expect(result).toEqual({ items: [1, 2, 3] })
       expect(fetcher).toHaveBeenCalledTimes(1)
       // tieredSet is called async, wait a tick
-      await new Promise(r => setTimeout(r, 10))
+      await new Promise((r) => setTimeout(r, 10))
       expect(mockMemoryCache.set).toHaveBeenCalled()
     })
 
