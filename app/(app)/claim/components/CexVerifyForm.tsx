@@ -24,50 +24,57 @@ export function CexVerifyForm({
   const [apiSecret, setApiSecret] = useState('')
   const [passphrase, setPassphrase] = useState('')
   const [loading, setLoading] = useState(false)
+  const [verifiedUid, setVerifiedUid] = useState<string | null>(null)
 
-  const platform = CEX_PLATFORMS.find(p =>
-    trader.source.startsWith(p.value.split('_')[0])
-  )
+  const platform = CEX_PLATFORMS.find((p) => trader.source.startsWith(p.value.split('_')[0]))
   const needsPassphrase = platform?.requiresPassphrase ?? false
 
   const handleVerify = async () => {
     if (loading) return // Guard against double-click race condition
-    if (!apiKey.trim() || !apiSecret.trim()) {
+    if (!verifiedUid && (!apiKey.trim() || !apiSecret.trim())) {
       showToast(t('fillApiKeySecret'), 'warning')
       return
     }
 
     setLoading(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLoginFirst'), 'warning')
         return
       }
 
-      // Step 1: Verify ownership (matches UID with trader)
-      const verifyRes = await fetch('/api/exchange/verify-ownership', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
-          exchange: trader.source,
-          traderId: trader.source_trader_id,
-          source: trader.source,
-          apiKey: apiKey.trim(),
-          apiSecret: apiSecret.trim(),
-          passphrase: passphrase.trim() || undefined,
-        }),
-      })
+      // Step 1: Verify ownership (skip if already verified)
+      let uid = verifiedUid
+      if (!uid) {
+        const verifyRes = await fetch('/api/exchange/verify-ownership', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({
+            exchange: trader.source,
+            traderId: trader.source_trader_id,
+            source: trader.source,
+            apiKey: apiKey.trim(),
+            apiSecret: apiSecret.trim(),
+            passphrase: passphrase.trim() || undefined,
+          }),
+        })
 
-      const verifyData = await verifyRes.json()
+        const verifyData = await verifyRes.json()
 
-      if (!verifyRes.ok || !verifyData.verified) {
-        showToast(verifyData.message || t('claimApiKeyMismatch'), 'error')
-        return
+        if (!verifyRes.ok || !verifyData.verified) {
+          showToast(verifyData.message || t('claimApiKeyMismatch'), 'error')
+          return
+        }
+
+        uid = verifyData.uid
+        setVerifiedUid(uid)
       }
 
       // Step 2: Submit claim (auto-approved after verification)
@@ -83,7 +90,7 @@ export function CexVerifyForm({
           source: trader.source,
           verification_method: 'api_key',
           verification_data: {
-            verified_uid: verifyData.uid,
+            verified_uid: uid,
           },
         }),
       })
@@ -108,24 +115,46 @@ export function CexVerifyForm({
   return (
     <Box style={{ maxWidth: '500px', margin: '0 auto' }}>
       <h3 style={{ marginBottom: tokens.spacing[3] }}>{t('claimApiKeyVerifyTitle')}</h3>
-      <p style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4], fontSize: tokens.typography.fontSize.sm }}>
+      <p
+        style={{
+          color: tokens.colors.text.secondary,
+          marginBottom: tokens.spacing[4],
+          fontSize: tokens.typography.fontSize.sm,
+        }}
+      >
         {t('claimApiKeyVerifyDesc')}
       </p>
 
-      <Box style={{
-        padding: tokens.spacing[3],
-        backgroundColor: tokens.colors.accent.primary + '15',
-        border: `1px solid ${tokens.colors.accent.primary}40`,
-        borderRadius: tokens.radius.md,
-        marginBottom: tokens.spacing[4],
-      }}>
-        <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, lineHeight: 1.5, fontWeight: 600 }}>
+      <Box
+        style={{
+          padding: tokens.spacing[3],
+          backgroundColor: tokens.colors.accent.primary + '15',
+          border: `1px solid ${tokens.colors.accent.primary}40`,
+          borderRadius: tokens.radius.md,
+          marginBottom: tokens.spacing[4],
+        }}
+      >
+        <Text
+          style={{
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.secondary,
+            lineHeight: 1.5,
+            fontWeight: 600,
+          }}
+        >
           {t('claimReadOnlyWarning')}
         </Text>
       </Box>
 
       <Box style={{ marginBottom: tokens.spacing[3] }}>
-        <label style={{ display: 'block', marginBottom: tokens.spacing[1], fontWeight: 500, fontSize: tokens.typography.fontSize.sm }}>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: tokens.spacing[1],
+            fontWeight: 500,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
           API Key
         </label>
         <input
@@ -145,7 +174,14 @@ export function CexVerifyForm({
       </Box>
 
       <Box style={{ marginBottom: tokens.spacing[3] }}>
-        <label style={{ display: 'block', marginBottom: tokens.spacing[1], fontWeight: 500, fontSize: tokens.typography.fontSize.sm }}>
+        <label
+          style={{
+            display: 'block',
+            marginBottom: tokens.spacing[1],
+            fontWeight: 500,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
           API Secret
         </label>
         <PasswordInput
@@ -165,7 +201,14 @@ export function CexVerifyForm({
 
       {needsPassphrase && (
         <Box style={{ marginBottom: tokens.spacing[3] }}>
-          <label style={{ display: 'block', marginBottom: tokens.spacing[1], fontWeight: 500, fontSize: tokens.typography.fontSize.sm }}>
+          <label
+            style={{
+              display: 'block',
+              marginBottom: tokens.spacing[1],
+              fontWeight: 500,
+              fontSize: tokens.typography.fontSize.sm,
+            }}
+          >
             Passphrase
           </label>
           <PasswordInput
@@ -184,14 +227,22 @@ export function CexVerifyForm({
         </Box>
       )}
 
-      <Box style={{
-        padding: tokens.spacing[3],
-        backgroundColor: tokens.colors.accent.warning + '15',
-        border: `1px solid ${tokens.colors.accent.warning}40`,
-        borderRadius: tokens.radius.md,
-        marginBottom: tokens.spacing[4],
-      }}>
-        <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.secondary, lineHeight: 1.5 }}>
+      <Box
+        style={{
+          padding: tokens.spacing[3],
+          backgroundColor: tokens.colors.accent.warning + '15',
+          border: `1px solid ${tokens.colors.accent.warning}40`,
+          borderRadius: tokens.radius.md,
+          marginBottom: tokens.spacing[4],
+        }}
+      >
+        <Text
+          style={{
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.secondary,
+            lineHeight: 1.5,
+          }}
+        >
           {t('claimPageFaqSafeAnswer')}
         </Text>
       </Box>

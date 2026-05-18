@@ -20,11 +20,8 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { ApiError } from '@/lib/api/errors'
-import {
-  getUserClaim,
-  getUserVerifiedTrader,
-  isTraderClaimed,
-} from '@/lib/data/trader-claims'
+import { getUserClaim, getUserVerifiedTrader, isTraderClaimed } from '@/lib/data/trader-claims'
+import { revalidatePath } from 'next/cache'
 import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
 import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
 import { logger } from '@/lib/logger'
@@ -46,7 +43,9 @@ export async function GET(request: NextRequest) {
       getUserVerifiedTrader(supabase, user.id),
       supabase
         .from('user_linked_traders')
-        .select('id, user_id, trader_id, source, label, is_primary, display_order, verified_at, verification_method, created_at, updated_at')
+        .select(
+          'id, user_id, trader_id, source, label, is_primary, display_order, verified_at, verification_method, created_at, updated_at'
+        )
         .eq('user_id', user.id)
         .order('display_order', { ascending: true }),
     ])
@@ -90,10 +89,10 @@ export async function POST(request: NextRequest) {
 
     const trader_id = validateString(body.trader_id, { required: true, fieldName: 'trader_id' })
     const source = validateString(body.source, { required: true, fieldName: 'source' })
-    const verification_method = validateEnum(
-      body.verification_method,
-      ['api_key', 'signature', 'video', 'social'] as const
-    )
+    const verification_method = validateEnum(body.verification_method, [
+      'api_key',
+      'signature',
+    ] as const)
 
     if (!trader_id || !source || !verification_method) {
       throw ApiError.validation('Missing required parameters')
@@ -117,7 +116,9 @@ export async function POST(request: NextRequest) {
       const verifiedUid = body.verification_data?.verified_uid
 
       if (!verifiedUid) {
-        throw ApiError.validation('API key verification required. Please complete the verification step first.')
+        throw ApiError.validation(
+          'API key verification required. Please complete the verification step first.'
+        )
       }
 
       // Double-check: the verified_uid in the exchange connection must match trader_id
@@ -134,7 +135,9 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           platform: source,
         })
-        throw ApiError.validation('Verification mismatch. Your verified account does not match this trader.')
+        throw ApiError.validation(
+          'Verification mismatch. Your verified account does not match this trader.'
+        )
       }
     }
 
@@ -143,7 +146,9 @@ export async function POST(request: NextRequest) {
       const { wallet_address, signature, message } = body.verification_data || {}
 
       if (!wallet_address || !signature || !message) {
-        throw ApiError.validation('Wallet signature verification requires wallet_address, signature, and message')
+        throw ApiError.validation(
+          'Wallet signature verification requires wallet_address, signature, and message'
+        )
       }
 
       // Verify that wallet_address matches trader_id
@@ -172,7 +177,8 @@ export async function POST(request: NextRequest) {
     // Hash sensitive UIDs before storing in verification_data
     let sanitizedVerificationData = body.verification_data || {}
     if (verification_method === 'api_key' && sanitizedVerificationData.verified_uid) {
-      const uidHash = crypto.createHash('sha256')
+      const uidHash = crypto
+        .createHash('sha256')
         .update(String(sanitizedVerificationData.verified_uid))
         .digest('hex')
         .slice(0, 16)
@@ -202,24 +208,21 @@ export async function POST(request: NextRequest) {
     }
 
     // Create verified_traders record
-    const { error: verifiedError } = await supabase
-      .from('verified_traders')
-      .insert({
-        user_id: user.id,
-        trader_id,
-        source,
-        verified_at: now,
-        verification_method,
-      })
+    const { error: verifiedError } = await supabase.from('verified_traders').insert({
+      user_id: user.id,
+      trader_id,
+      source,
+      verified_at: now,
+      verification_method,
+    })
 
     if (verifiedError && verifiedError.code !== '23505') {
       logger.error('[trader-claim] Failed to create verified_traders record', verifiedError)
     }
 
     // Create user_linked_traders record
-    const { error: linkError } = await supabase
-      .from('user_linked_traders')
-      .upsert({
+    const { error: linkError } = await supabase.from('user_linked_traders').upsert(
+      {
         user_id: user.id,
         trader_id,
         source,
@@ -227,9 +230,11 @@ export async function POST(request: NextRequest) {
         display_order: isFirstClaim ? 0 : (existingLinks?.length ?? 0),
         verified_at: now,
         verification_method,
-      }, {
+      },
+      {
         onConflict: 'user_id, trader_id, source',
-      })
+      }
+    )
 
     if (linkError) {
       logger.error('[trader-claim] Failed to create user_linked_traders record', linkError)
@@ -268,26 +273,31 @@ export async function POST(request: NextRequest) {
           .maybeSingle()
 
         if (conn?.api_key_encrypted) {
-          await supabase
-            .from('trader_authorizations')
-            .insert({
-              user_id: user.id,
-              platform: source,
-              trader_id,
-              encrypted_api_key: conn.api_key_encrypted,
-              encrypted_api_secret: conn.api_secret_encrypted,
-              encrypted_passphrase: conn.passphrase_encrypted,
-              permissions: ['read'],
-              status: 'active',
-              last_verified_at: now,
-              sync_frequency: 'realtime',
-            })
+          await supabase.from('trader_authorizations').insert({
+            user_id: user.id,
+            platform: source,
+            trader_id,
+            encrypted_api_key: conn.api_key_encrypted,
+            encrypted_api_secret: conn.api_secret_encrypted,
+            encrypted_passphrase: conn.passphrase_encrypted,
+            permissions: ['read'],
+            status: 'active',
+            last_verified_at: now,
+            sync_frequency: 'realtime',
+          })
         }
       }
     }
 
     // Notify
     notifyTraderClaim(user.email ?? null, trader_id, source)
+
+    // Invalidate ISR cache so trader detail page shows verified badge immediately
+    try {
+      revalidatePath(`/trader/${trader_id}`)
+    } catch {
+      // Non-critical — ISR cache will expire naturally within 5 minutes
+    }
 
     return success({
       claim,
