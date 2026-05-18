@@ -158,6 +158,7 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'lbank', // Copy-trading API 404 since 2026-04 — endpoint removed
   'bitget_spot' as TraderSource, // No leaderboard API — permanently disabled
   'web3_bot', // Not in leaderboard_ranks (compute-leaderboard doesn't process it)
+  'drift', // API returns empty leaderboard since $270M exploit (2026-04-01), 0 rows in leaderboard_ranks — confirmed 2026-05-18
   // 'bybit' — RECOVERED 2026-04-08: DB seed fallback keeps existing traders fresh via leader-details API (which is NOT WAF-blocked, only dynamic-leader-list is)
   // 'bybit_spot' — RECOVERED 2026-04-08: same DB seed pattern
   // 'dydx' — RECOVERED: Heroku + Copin API fallback, 3339 traders in leaderboard_ranks (2026-03-15)
@@ -305,6 +306,8 @@ export interface ExchangeConfig {
   trustWeight: number
   /** How ROI is calculated on this platform */
   roiType: RoiType
+  /** Whether API key verification requires a passphrase (e.g. OKX, Bitget) */
+  requiresPassphrase?: boolean
 }
 
 export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
@@ -329,6 +332,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
     reliability: 68,
     trustWeight: 0.85,
     roiType: 'mixed',
+    requiresPassphrase: true,
   },
   okx_futures: {
     name: 'OKX',
@@ -336,6 +340,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
     reliability: 95,
     trustWeight: 1.0,
     roiType: 'mixed',
+    requiresPassphrase: true,
   },
   mexc: {
     name: 'MEXC',
@@ -450,6 +455,7 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
     reliability: 90,
     trustWeight: 0.8,
     roiType: 'mixed',
+    requiresPassphrase: true,
   },
   bingx_spot: {
     name: 'BingX Spot',

@@ -26,27 +26,41 @@ export interface LinkedTrader {
   } | null
 }
 
-export const CEX_PLATFORMS = [
-  { value: 'binance_futures', label: 'Binance Futures', requiresPassphrase: false },
-  { value: 'binance', label: 'Binance', requiresPassphrase: false },
-  { value: 'bybit', label: 'Bybit', requiresPassphrase: false },
-  { value: 'okx', label: 'OKX', requiresPassphrase: true },
-  { value: 'bitget', label: 'Bitget', requiresPassphrase: true },
-  { value: 'gateio', label: 'Gate.io', requiresPassphrase: false },
-  { value: 'htx', label: 'HTX (Huobi)', requiresPassphrase: false },
-]
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+
+// Derive CEX platforms from EXCHANGE_CONFIG so adding a new exchange with
+// requiresPassphrase: true automatically shows the passphrase field in the claim form.
+export const CEX_PLATFORMS = (
+  Object.entries(EXCHANGE_CONFIG) as [
+    string,
+    (typeof EXCHANGE_CONFIG)[keyof typeof EXCHANGE_CONFIG],
+  ][]
+)
+  .filter(([, config]) => config.sourceType === 'futures' || config.sourceType === 'spot')
+  .map(([value, config]) => ({
+    value,
+    label: config.name,
+    requiresPassphrase: config.requiresPassphrase ?? false,
+  }))
 
 export const DEX_PLATFORMS = [
-  'hyperliquid', 'gmx', 'gains', 'aevo', 'kwenta', 'vertex', 'dydx',
-  'jupiter_perps', 'drift',
+  'hyperliquid',
+  'gmx',
+  'gains',
+  'aevo',
+  'kwenta',
+  'vertex',
+  'dydx',
+  'jupiter_perps',
+  'drift',
 ]
 
 export const SOLANA_PLATFORMS = ['jupiter_perps', 'drift']
 
 export function isDex(source: string): boolean {
-  return DEX_PLATFORMS.some(p => source.toLowerCase() === p)
+  return DEX_PLATFORMS.some((p) => source.toLowerCase() === p)
 }
 
 export function isSolanaDex(source: string): boolean {
-  return SOLANA_PLATFORMS.some(p => source.toLowerCase() === p)
+  return SOLANA_PLATFORMS.some((p) => source.toLowerCase() === p)
 }
