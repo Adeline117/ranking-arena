@@ -1535,8 +1535,12 @@ export async function runEnrichment(params: {
     })
   }
 
+  // ok = true when failure rate is acceptable (<20%). This aligns with the plog
+  // logic above (success if <50%) and prevents 2/25 individual trader failures
+  // (e.g. eToro private accounts) from marking the entire platform as errored.
+  const acceptableFailureRate = total > 0 ? totalFailed / total < 0.2 : true
   return {
-    ok: totalFailed === 0,
+    ok: totalFailed === 0 || acceptableFailureRate,
     duration,
     period,
     summary: {
