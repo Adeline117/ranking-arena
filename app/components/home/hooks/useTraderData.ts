@@ -342,6 +342,10 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
             availableSources: data.availableSources || [],
             totalCount: data.totalCount ?? totalCountRef.current,
           })
+          // Surface stale data warning when API serves from fallback cache
+          if (data.is_stale) {
+            dispatch({ type: 'SET_STALE_DATA_WARNING', warning: true })
+          }
         })
 
         // Broadcast for multi-tab sync
