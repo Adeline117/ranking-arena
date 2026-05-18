@@ -17,6 +17,7 @@ import { getPool } from '@/lib/db'
 import { tieredSet } from '@/lib/cache/redis-layer'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
 import type { GranularPlatform } from '@/lib/types/leaderboard'
+import { ARENA_CONFIG } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -27,8 +28,8 @@ export const maxDuration = 300 // Was 120 — consistently timing out since 2026
 
 const logger = createLogger('precompute-composite')
 
-// Unified with OVERALL_WEIGHTS in lib/utils/arena-score.ts — 90D-heavy
-const COMPOSITE_WEIGHTS = { '7D': 0.05, '30D': 0.25, '90D': 0.7 } as const
+// Single source of truth: lib/utils/arena-score.ts
+const COMPOSITE_WEIGHTS = ARENA_CONFIG.OVERALL_WEIGHTS
 const ROI_ANOMALY_THRESHOLD = 5000
 const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
 const _FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const releaseLock = await acquireCronLock('precompute-composite', { ttlSeconds: 360 })
+  const releaseLock = await acquireCronLock('precompute-composite', { ttlSeconds: 300 })
   if (!releaseLock) {
     return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }

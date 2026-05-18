@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Meilisearch not configured' }, { status: 503 })
   }
 
-  const releaseLock = await acquireCronLock('sync-meilisearch', { ttlSeconds: 180 })
+  const releaseLock = await acquireCronLock('sync-meilisearch', { ttlSeconds: 120 })
   if (!releaseLock) {
     return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
