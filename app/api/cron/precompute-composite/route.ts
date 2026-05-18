@@ -23,7 +23,7 @@ import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 120
+export const maxDuration = 300 // Was 120 — consistently timing out since 2026-05-17 as DB grew
 
 const logger = createLogger('precompute-composite')
 
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const releaseLock = await acquireCronLock('precompute-composite', { ttlSeconds: 180 })
+  const releaseLock = await acquireCronLock('precompute-composite', { ttlSeconds: 360 })
   if (!releaseLock) {
     return NextResponse.json({ status: 'skipped', reason: 'already running' })
   }
@@ -67,17 +67,17 @@ export async function GET(request: NextRequest) {
   const supabase = getReadReplica() as SupabaseClient
   const plog = await PipelineLogger.start('precompute-composite')
 
-  // Safety timeout: ensure plog gets closed before Vercel kills the function at maxDuration (120s).
+  // Safety timeout: ensure plog gets closed before Vercel kills the function at maxDuration (300s).
   let plogFinalized = false
   const safetyTimer = setTimeout(async () => {
     if (plogFinalized) return
     plogFinalized = true
     try {
-      await plog.error(new Error('Safety timeout: function approaching 120s limit'))
+      await plog.error(new Error('Safety timeout: function approaching 300s limit'))
     } catch {
       /* best effort */
     }
-  }, 100_000) // 100s safety margin for 120s maxDuration
+  }, 280_000) // 280s safety margin for 300s maxDuration
 
   try {
     // Include data from the last 7 days — some platforms (Bybit VPS scraper) may
