@@ -76,29 +76,14 @@ export const POST = withAuth(
       return badRequest('Cannot tip your own post')
     }
 
-    // 检查或创建 Stripe 客户 (reuse from previous tip sessions)
-    const { data: existingTip } = await supabase
-      .from('tips')
-      .select('stripe_checkout_session_id')
-      .eq('from_user_id', user.id)
-      .not('stripe_checkout_session_id', 'is', null)
-      .limit(1)
+    // Reuse existing Stripe customer ID from user_profiles (persists across session expirations)
+    const { data: profile } = await supabase
+      .from('user_profiles')
+      .select('stripe_customer_id')
+      .eq('id', user.id)
       .maybeSingle()
 
-    let customerId: string | undefined
-
-    if (existingTip?.stripe_checkout_session_id) {
-      try {
-        const session = await getStripeInstance().checkout.sessions.retrieve(
-          existingTip.stripe_checkout_session_id
-        )
-        if (session.customer && typeof session.customer === 'string') {
-          customerId = session.customer
-        }
-      } catch {
-        // Intentionally swallowed: existing Stripe session lookup failed, will create new customer below
-      }
-    }
+    const customerId: string | undefined = profile?.stripe_customer_id || undefined
 
     // 创建打赏记录（pending 状态）
     const { data: tip, error: tipError } = await supabase
