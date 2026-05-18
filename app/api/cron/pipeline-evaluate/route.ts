@@ -33,29 +33,48 @@ export async function GET(request: NextRequest) {
 
   const plog = await PipelineLogger.start('pipeline-evaluate', { trace_id: traceId })
 
+  // Safety timeout: ensure plog gets closed before Vercel kills the function at maxDuration (240s).
+  let plogFinalized = false
+  const safetyTimer = setTimeout(async () => {
+    if (plogFinalized) return
+    plogFinalized = true
+    try {
+      await plog.error(new Error('Safety timeout: function approaching 240s limit'))
+    } catch {
+      /* best effort */
+    }
+  }, 220_000) // 220s safety margin for 240s maxDuration
+
   try {
     const result = await PipelineEvaluator.evaluate(traceId, platformsHint)
 
-    if (result.passed) {
-      await plog.success(result.checks.length, {
-        score: result.overall_score,
-        issues: result.issues.length,
-        trace_id: traceId,
-      })
-    } else {
-      await plog.partialSuccess(
-        result.checks.filter(c => c.passed).length,
-        result.issues.map(i => `${i.platform}:${i.type}:${i.severity}`),
-        {
+    clearTimeout(safetyTimer)
+    if (!plogFinalized) {
+      plogFinalized = true
+      if (result.passed) {
+        await plog.success(result.checks.length, {
           score: result.overall_score,
+          issues: result.issues.length,
           trace_id: traceId,
-        }
-      )
+        })
+      } else {
+        await plog.partialSuccess(
+          result.checks.filter((c) => c.passed).length,
+          result.issues.map((i) => `${i.platform}:${i.type}:${i.severity}`),
+          {
+            score: result.overall_score,
+            trace_id: traceId,
+          }
+        )
+      }
     }
 
     // Read trend for response
     const trend = await PipelineState.get<{
-      recent_avg: number; previous_avg: number; delta: number; direction: string
+      recent_avg: number
+      previous_avg: number
+      delta: number
+      direction: string
     }>('evaluator:trend')
 
     return NextResponse.json({
@@ -63,14 +82,18 @@ export async function GET(request: NextRequest) {
       score: result.overall_score,
       checks: result.checks.length,
       issues: result.issues.length,
-      critical: result.issues.filter(i => i.severity === 'critical').length,
+      critical: result.issues.filter((i) => i.severity === 'critical').length,
       duration_ms: result.duration_ms,
       trace_id: traceId,
       trend: trend ? { delta: trend.delta, direction: trend.direction } : null,
       result,
     })
   } catch (error) {
-    await plog.error(error instanceof Error ? error : new Error(String(error)))
+    clearTimeout(safetyTimer)
+    if (!plogFinalized) {
+      plogFinalized = true
+      await plog.error(error instanceof Error ? error : new Error(String(error)))
+    }
     return NextResponse.json(
       { error: error instanceof Error ? error.message : String(error) },
       { status: 500 }
