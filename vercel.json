@@ -87,6 +87,10 @@
       "schedule": "9 0 * * 1"
     },
     {
+      "path": "/api/cron/reconcile-subscriptions",
+      "schedule": "15 3 * * *"
+    },
+    {
       "path": "/api/cron/fetch-market-data?type=prices",
       "schedule": "14 */4 * * *"
     },
