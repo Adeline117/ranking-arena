@@ -229,7 +229,14 @@ export const GET = withPublic(
             `Rankings DB query failed, serving stale cache for ${cacheKey}:`,
             fetchError instanceof Error ? fetchError.message : String(fetchError)
           )
-          result = staleData
+          result =
+            typeof staleData === 'object' && staleData !== null
+              ? {
+                  ...(staleData as Record<string, unknown>),
+                  is_stale: true,
+                  stale_reason: 'db_fallback',
+                }
+              : staleData
         } else {
           // No cache either — re-throw to let the error handler respond
           throw fetchError

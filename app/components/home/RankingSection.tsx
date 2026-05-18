@@ -42,6 +42,7 @@ interface RankingSectionProps {
     opts?: { category?: string; sortBy?: string; sortDir?: string }
   ) => Promise<void>
   lastRefreshFailed?: boolean
+  staleDataWarning?: boolean
 }
 
 export default function RankingSection({
@@ -58,6 +59,7 @@ export default function RankingSection({
   categoryCounts,
   fetchPage,
   lastRefreshFailed,
+  staleDataWarning,
 }: RankingSectionProps) {
   const {
     language,
@@ -190,6 +192,24 @@ export default function RankingSection({
         hasActiveFilters={hasActiveFilters}
         onResetFilters={handleResetFilters}
       />
+
+      {staleDataWarning && (
+        <div
+          style={{
+            padding: '8px 12px',
+            marginBottom: 8,
+            borderRadius: 6,
+            background: 'var(--color-warning-bg, rgba(255, 180, 0, 0.1))',
+            color: 'var(--color-warning-text, #b8860b)',
+            fontSize: 13,
+            lineHeight: 1.4,
+          }}
+        >
+          {language === 'zh'
+            ? '⚠ 数据可能有延迟，正在恢复中...'
+            : '⚠ Data may be delayed. Recovering...'}
+        </div>
+      )}
 
       <RankingTable
         traders={filteredTraders}

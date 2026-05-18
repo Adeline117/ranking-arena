@@ -69,6 +69,7 @@ export default function HomePageClient({
     categoryCounts,
     fetchPage,
     lastRefreshFailed,
+    staleDataWarning,
   } = useTraderData({
     initialTraders: convertedInitialTraders,
     initialLastUpdated,
@@ -146,6 +147,7 @@ export default function HomePageClient({
           categoryCounts={categoryCounts}
           fetchPage={fetchPage}
           lastRefreshFailed={lastRefreshFailed}
+          staleDataWarning={staleDataWarning}
         />
       </div>
     </PullToRefresh>
