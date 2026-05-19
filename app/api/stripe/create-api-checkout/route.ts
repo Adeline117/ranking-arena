@@ -51,8 +51,8 @@ export async function POST(request: NextRequest) {
 
     // Check if user already has an active API tier subscription
     const supabaseAdmin = getSupabaseAdmin()
-    const { data: profile } = (await supabaseAdmin
-      .from('user_profiles')
+    // api_tier column added in migration 20260519124947 — cast to bypass generated types
+    const { data: profile } = (await (supabaseAdmin.from('user_profiles') as any)
       .select('api_tier, api_stripe_subscription_id')
       .eq('id', user.id)
       .single()) as {
