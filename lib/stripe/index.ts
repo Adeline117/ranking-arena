@@ -67,6 +67,19 @@ export const STRIPE_PRICE_IDS = {
   lifetime: process.env.STRIPE_PRO_LIFETIME_PRICE_ID || '',
 }
 
+// B2B API tier price IDs — separate from Pro membership
+export const STRIPE_API_PRICE_IDS = {
+  starter: process.env.STRIPE_API_STARTER_PRICE_ID || '',
+  pro: process.env.STRIPE_API_PRO_PRICE_ID || '',
+}
+
+// API tier → daily request limit mapping
+export const API_TIER_LIMITS: Record<string, number> = {
+  free: 100,
+  starter: 10_000,
+  pro: 0, // 0 = unlimited
+}
+
 // 订阅计划配置 - prices sourced from PRICING (single source of truth)
 export const SUBSCRIPTION_PLANS = {
   monthly: {

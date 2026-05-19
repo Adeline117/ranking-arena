@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
+import { SUBSCRIPTION_STATUS_MAP, STRIPE_API_PRICE_IDS, API_TIER_LIMITS } from '@/lib/stripe'
 import { env } from '@/lib/env'
 import { leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
@@ -19,10 +19,37 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
   }
 
   const priceId = subscription.items.data[0]?.price.id
+
+  // Check if this is an API tier subscription
+  const apiPlan = getApiPlanFromPriceId(priceId)
+  if (apiPlan) {
+    if (subscription.status === 'active' || subscription.status === 'trialing') {
+      const dailyLimit = API_TIER_LIMITS[apiPlan] ?? 100
+      await withRetry(async () => {
+        const { error } = await getSupabase().rpc('update_user_api_tier', {
+          p_user_id: profile.id,
+          p_api_tier: apiPlan,
+          p_stripe_subscription_id: subscription.id,
+          p_daily_limit: dailyLimit,
+        })
+        if (error) throw new Error(`Failed to update API tier: ${error.message}`)
+      })
+      logger.info(`API tier updated for user ${profile.id}`, {
+        apiPlan,
+        status: subscription.status,
+      })
+    }
+    return
+  }
+
+  // Regular Pro membership subscription
   const lifetimePriceId = process.env.STRIPE_PRO_LIFETIME_PRICE_ID
-  const plan = priceId === env.STRIPE_PRO_YEARLY_PRICE_ID ? 'yearly'
-    : (lifetimePriceId && priceId === lifetimePriceId) ? 'lifetime'
-    : 'monthly'
+  const plan =
+    priceId === env.STRIPE_PRO_YEARLY_PRICE_ID
+      ? 'yearly'
+      : lifetimePriceId && priceId === lifetimePriceId
+        ? 'lifetime'
+        : 'monthly'
 
   await updateUserSubscription(profile.id, subscription, plan)
 }
@@ -41,6 +68,25 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
     return
   }
 
+  // Check if this is an API tier subscription cancellation
+  const priceId = subscription.items.data[0]?.price.id
+  const apiPlan = getApiPlanFromPriceId(priceId)
+  if (apiPlan) {
+    // Downgrade API tier back to free
+    await withRetry(async () => {
+      const { error } = await getSupabase().rpc('update_user_api_tier', {
+        p_user_id: profile.id,
+        p_api_tier: 'free',
+        p_stripe_subscription_id: null,
+        p_daily_limit: API_TIER_LIMITS.free,
+      })
+      if (error) throw new Error(`Failed to downgrade API tier: ${error.message}`)
+    })
+    logger.info(`API tier canceled for user ${profile.id}`, { previousPlan: apiPlan })
+    return
+  }
+
+  // Regular Pro membership cancellation
   const { error: subError } = await getSupabase()
     .from('subscriptions')
     .update({
@@ -52,7 +98,10 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
     .eq('stripe_subscription_id', subscription.id)
 
   if (subError) {
-    logger.error('Failed to update subscription status to canceled', { userId: profile.id, error: subError.message })
+    logger.error('Failed to update subscription status to canceled', {
+      userId: profile.id,
+      error: subError.message,
+    })
   }
 
   // Only downgrade if the cancelled subscription actually matched the user's active one
@@ -63,7 +112,9 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
     .eq('id', profile.id)
     .single()
   if (currentProfile?.pro_plan === 'lifetime') {
-    logger.info('Skipping downgrade for lifetime user on subscription cancel', { userId: profile.id })
+    logger.info('Skipping downgrade for lifetime user on subscription cancel', {
+      userId: profile.id,
+    })
   } else {
     const { error: profileError } = await getSupabase()
       .from('user_profiles')
@@ -73,7 +124,10 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
       })
       .eq('id', profile.id)
     if (profileError) {
-      logger.error('Failed to downgrade user tier to free', { userId: profile.id, error: profileError.message })
+      logger.error('Failed to downgrade user tier to free', {
+        userId: profile.id,
+        error: profileError.message,
+      })
     }
   }
 
@@ -132,14 +186,14 @@ export async function updateUserSubscription(
   const status = SUBSCRIPTION_STATUS_MAP[subscription.status] || subscription.status
   const sub = subscription as unknown as Record<string, unknown>
   const itemPeriod = subscription.items?.data?.[0] as unknown as Record<string, unknown> | undefined
-  const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as number | undefined
+  const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as
+    | number
+    | undefined
   const pEnd = (sub.current_period_end ?? itemPeriod?.current_period_end) as number | undefined
   const periodStart = pStart
     ? new Date(pStart * 1000).toISOString()
     : new Date(subscription.start_date * 1000).toISOString()
-  const periodEnd = pEnd
-    ? new Date(pEnd * 1000).toISOString()
-    : null
+  const periodEnd = pEnd ? new Date(pEnd * 1000).toISOString() : null
 
   logger.info(`updateUserSubscription`, { userId, status, plan, periodStart, periodEnd })
 
@@ -157,24 +211,29 @@ export async function updateUserSubscription(
     })
 
     if (rpcError) {
-      logger.warn('RPC update_subscription_and_profile failed, using fallback', { error: rpcError.message })
+      logger.warn('RPC update_subscription_and_profile failed, using fallback', {
+        error: rpcError.message,
+      })
 
       const { error: subscriptionError } = await getSupabase()
         .from('subscriptions')
-        .upsert({
-          user_id: userId,
-          stripe_subscription_id: subscription.id,
-          stripe_customer_id: subscription.customer as string,
-          status: status,
-          tier: 'pro',
-          plan: plan,
-          current_period_start: periodStart,
-          current_period_end: periodEnd,
-          cancel_at_period_end: subscription.cancel_at_period_end,
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id',
-        })
+        .upsert(
+          {
+            user_id: userId,
+            stripe_subscription_id: subscription.id,
+            stripe_customer_id: subscription.customer as string,
+            status: status,
+            tier: 'pro',
+            plan: plan,
+            current_period_start: periodStart,
+            current_period_end: periodEnd,
+            cancel_at_period_end: subscription.cancel_at_period_end,
+            updated_at: new Date().toISOString(),
+          },
+          {
+            onConflict: 'user_id',
+          }
+        )
 
       if (subscriptionError) {
         throw new Error(`Failed to upsert subscriptions: ${subscriptionError.message}`)
@@ -197,4 +256,15 @@ export async function updateUserSubscription(
 
     logger.info(`Subscription updated for user ${userId}`, { status, plan })
   })
+}
+
+/**
+ * Check if a Stripe price ID belongs to an API tier subscription.
+ * Returns the plan name ('starter' | 'pro') or null if not an API tier.
+ */
+function getApiPlanFromPriceId(priceId: string | undefined): string | null {
+  if (!priceId) return null
+  if (STRIPE_API_PRICE_IDS.starter && priceId === STRIPE_API_PRICE_IDS.starter) return 'starter'
+  if (STRIPE_API_PRICE_IDS.pro && priceId === STRIPE_API_PRICE_IDS.pro) return 'pro'
+  return null
 }
