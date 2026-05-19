@@ -38,11 +38,19 @@ export async function GET(request: NextRequest) {
     const result = await getOrSetWithLock(
       'api:rankings:movers',
       async () => computeMovers(),
-      { ttl: 600, lockTtl: 15 }
+      // 120s Redis TTL (was 600s). Movers computation is cheap (~100ms, 2 queries).
+      // Short TTL ensures empty results from leaderboard outages recover quickly.
+      { ttl: 120, lockTtl: 15 }
     )
 
+    // Don't CDN-cache empty results for long — they recover within minutes
+    const hasData = result.risers?.length > 0 || result.fallers?.length > 0
+    const cacheHeader = hasData
+      ? 'public, s-maxage=3600, stale-while-revalidate=1800'
+      : 'public, s-maxage=60, stale-while-revalidate=30'
+
     return NextResponse.json(result, {
-      headers: { 'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=1800' },
+      headers: { 'Cache-Control': cacheHeader },
     })
   } catch (err) {
     log.error('Error computing movers', { error: err instanceof Error ? err.message : String(err) })
@@ -121,7 +129,7 @@ async function computeMoversInner() {
 
   // Fetch current leaderboard data — single query instead of N per-platform queries.
   // The unique index (season_id, source, source_trader_id) makes this efficient.
-  const allTraderKeys = [...new Set(yesterdaySnaps.map(s => s.trader_key))]
+  const allTraderKeys = [...new Set(yesterdaySnaps.map((s) => s.trader_key))]
   const { data: allCurrentRanks } = await supabase
     .from('leaderboard_ranks')
     .select('source, source_trader_id, rank, arena_score, roi, handle, avatar_url')
