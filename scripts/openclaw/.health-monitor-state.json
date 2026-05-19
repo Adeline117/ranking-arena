@@ -1,1 +1,5 @@
-{ "data:zero-traders|pipeline:critical": 1779152413957 }
+{
+  "data:zero-traders|pipeline:critical": 1779152413957,
+  "pipeline:degraded": 1779210013213,
+  "pipeline:critical": 1779166814922
+}
