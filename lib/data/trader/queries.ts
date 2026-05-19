@@ -197,7 +197,25 @@ export async function getLeaderboard(
 
   const traders = (data || []).map((row: Record<string, unknown>) => mapLeaderboardRow(row))
 
-  return { traders, total: traders.length }
+  // Total count from pre-computed cache (instant) instead of traders.length
+  // which only reflects the current page size and breaks pagination.
+  let total = traders.length
+  try {
+    const source = platform || '_all'
+    const { data: cacheRow } = await supabase
+      .from('leaderboard_count_cache')
+      .select('total_count')
+      .eq('season_id', period)
+      .eq('source', source)
+      .maybeSingle()
+    if (cacheRow?.total_count && cacheRow.total_count > 0) {
+      total = cacheRow.total_count
+    }
+  } catch {
+    // Non-critical — fall back to data length
+  }
+
+  return { traders, total }
 }
 
 /**
@@ -831,7 +849,13 @@ async function searchTradersInner(
       return { source: t, scoreRow, relevance, textRelevance }
     })
     .filter((r) => r.textRelevance > 0)
-    .sort((a, b) => b.relevance - a.relevance)
+    // Deprioritize ghost traders (no leaderboard data) — push to end
+    .sort((a, b) => {
+      const aHasScore = a.scoreRow?.arena_score != null && Number(a.scoreRow.arena_score) > 0
+      const bHasScore = b.scoreRow?.arena_score != null && Number(b.scoreRow.arena_score) > 0
+      if (aHasScore !== bHasScore) return aHasScore ? -1 : 1
+      return b.relevance - a.relevance
+    })
 
   // Deduplicate by (handle, platform) — keep the highest-relevance entry.
   // Multiple trader_sources rows can share the same handle on the same platform
