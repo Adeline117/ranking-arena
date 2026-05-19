@@ -37,7 +37,7 @@ import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
 import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
 import { fetchPhase1FromV2 } from './fetch-phase1'
-import { rerankAllRows, cleanupStaleRows } from './rerank-cleanup'
+import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank-cleanup'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
@@ -199,6 +199,31 @@ export async function GET(request: NextRequest) {
         warnings.push(msg)
         rolledBack.push(season)
         stats.seasons[season] = previousCounts[season] // Keep old count in stats
+      }
+    }
+
+    // POST-COMPUTE ASSERTION: verify leaderboard_ranks is not empty.
+    // ROOT CAUSE FIX for 12-day empty homepage (2026-05-19): missing DEFAULT nextval()
+    // on partition id column caused silent upsert failures. This assertion catches any
+    // future scenario where compute "succeeds" but writes 0 rows.
+    const totalRankedAllSeasons = results.reduce((sum, r) => sum + Math.max(0, r.count), 0)
+    if (totalRankedAllSeasons === 0 && results.every((r) => !r.error)) {
+      const assertionMsg = `CRITICAL: compute-leaderboard completed but ranked 0 traders across all seasons. Likely silent upsert failure (check DB constraints, partition defaults).`
+      logger.error(assertionMsg)
+      warnings.push(assertionMsg)
+      try {
+        const { count: dbCount } = await supabase
+          .from('leaderboard_ranks')
+          .select('id', { count: 'exact', head: true })
+          .eq('season_id', targetSeasons[0])
+          .not('arena_score', 'is', null)
+        if (dbCount === 0) {
+          warnings.push(
+            `DB CONFIRM: leaderboard_ranks has 0 rows for ${targetSeasons[0]}. Data pipeline is broken.`
+          )
+        }
+      } catch {
+        // Non-critical — the assertion warning above is sufficient
       }
     }
 
