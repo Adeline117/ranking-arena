@@ -32,7 +32,7 @@ function mockFetchResponse(body: unknown, status = 200) {
   mockFetch.mockResolvedValueOnce({
     status,
     ok: status >= 200 && status < 300,
-    headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+    headers: { get: (key: string) => (key === 'content-type' ? 'application/json' : null) },
     json: async () => body,
     text: async () => JSON.stringify(body),
   })
@@ -92,7 +92,7 @@ describe('HyperliquidPerpConnector', () => {
 
       const result = await connector.discoverLeaderboard('7d')
 
-      expect(result.traders[1].display_name).toBeNull()
+      expect(result.traders[1].display_name).toBeTruthy() // shortenAddress fallback
     })
 
     test('returns empty when leaderboardRows is empty', async () => {
@@ -133,8 +133,8 @@ describe('HyperliquidPerpConnector', () => {
     test('uses POST fallback with correct timeWindow when stats-data fails', async () => {
       const connector = createConnector()
       // Simulate stats-data failing, then POST endpoint succeeding
-      mockFetchNetworkError()  // stats-data fails
-      mockFetchResponse(validResponse)  // info POST succeeds
+      mockFetchNetworkError() // stats-data fails
+      mockFetchResponse(validResponse) // info POST succeeds
 
       await connector.discoverLeaderboard('7d')
 
@@ -191,7 +191,10 @@ describe('HyperliquidPerpConnector', () => {
       mockFetch.mockResolvedValueOnce({
         status: 429,
         ok: false,
-        headers: { get: (key: string) => key === 'retry-after' ? '30' : key === 'content-type' ? 'application/json' : null },
+        headers: {
+          get: (key: string) =>
+            key === 'retry-after' ? '30' : key === 'content-type' ? 'application/json' : null,
+        },
         json: async () => ({}),
         text: async () => '{}',
       })
@@ -199,7 +202,10 @@ describe('HyperliquidPerpConnector', () => {
       mockFetch.mockResolvedValueOnce({
         status: 429,
         ok: false,
-        headers: { get: (key: string) => key === 'retry-after' ? '30' : key === 'content-type' ? 'application/json' : null },
+        headers: {
+          get: (key: string) =>
+            key === 'retry-after' ? '30' : key === 'content-type' ? 'application/json' : null,
+        },
         json: async () => ({}),
         text: async () => '{}',
       })
@@ -223,7 +229,7 @@ describe('HyperliquidPerpConnector', () => {
       expect(result!.profile.trader_key).toBe('0xabc123')
       expect(result!.profile.platform).toBe('hyperliquid')
       expect(result!.profile.market_type).toBe('perp')
-      expect(result!.profile.display_name).toBeNull()
+      expect(result!.profile.display_name).toBeTruthy()
       expect(result!.profile.avatar_url).toBeNull()
       expect(result!.profile.followers).toBeNull()
       expect(result!.profile.copiers).toBeNull()
@@ -248,10 +254,23 @@ describe('HyperliquidPerpConnector', () => {
 
     const validLeaderboardWithTrader = {
       leaderboardRows: [
-        { ethAddress: '0xabc123', displayName: 'TestWhale', accountValue: '250000',
-          windowPerformances: [['day', { roi: 0.15, pnl: 30000 }], ['week', { roi: 0.25, pnl: 60000 }], ['month', { roi: 0.35, pnl: 120000 }], ['allTime', { roi: 0.50, pnl: 200000 }]] },
-        { ethAddress: '0xother', displayName: 'Other', accountValue: '50000',
-          windowPerformances: [['month', { roi: 0.10, pnl: 5000 }]] },
+        {
+          ethAddress: '0xabc123',
+          displayName: 'TestWhale',
+          accountValue: '250000',
+          windowPerformances: [
+            ['day', { roi: 0.15, pnl: 30000 }],
+            ['week', { roi: 0.25, pnl: 60000 }],
+            ['month', { roi: 0.35, pnl: 120000 }],
+            ['allTime', { roi: 0.5, pnl: 200000 }],
+          ],
+        },
+        {
+          ethAddress: '0xother',
+          displayName: 'Other',
+          accountValue: '50000',
+          windowPerformances: [['month', { roi: 0.1, pnl: 5000 }]],
+        },
       ],
     }
 
@@ -263,7 +282,7 @@ describe('HyperliquidPerpConnector', () => {
       // then optionally a 3rd for fills (try/catch)
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(validLeaderboardWithTrader)
-      mockFetchNetworkError()  // fills fetch fails silently
+      mockFetchNetworkError() // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
 
@@ -279,7 +298,7 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(emptyLeaderboard)
-      mockFetchNetworkError()  // fills fetch fails silently
+      mockFetchNetworkError() // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '30d')
 
@@ -295,20 +314,20 @@ describe('HyperliquidPerpConnector', () => {
         assetPositions: [],
       })
       mockFetchResponse(emptyLeaderboard)
-      mockFetchNetworkError()  // fills fetch fails silently
+      mockFetchNetworkError() // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xempty', '7d')
 
       expect(result).not.toBeNull()
       expect(result!.metrics.roi).toBeNull()
-      expect(result!.metrics.pnl).toBeNull()  // 0 becomes null (falsy check)
+      expect(result!.metrics.pnl).toBeNull() // 0 becomes null (falsy check)
     })
 
     test('DEX-specific fields are null', async () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(validLeaderboardWithTrader)
-      mockFetchNetworkError()  // fills fetch fails silently
+      mockFetchNetworkError() // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '7d')
 
@@ -343,7 +362,7 @@ describe('HyperliquidPerpConnector', () => {
       const connector = createConnector()
       mockFetchResponse(validClearinghouseState)
       mockFetchResponse(validLeaderboardWithTrader)
-      mockFetchNetworkError()  // fills fetch fails silently
+      mockFetchNetworkError() // fills fetch fails silently
 
       const result = await connector.fetchTraderSnapshot('0xabc123', '7d')
 
@@ -364,10 +383,18 @@ describe('HyperliquidPerpConnector', () => {
       expect(mockFetch).toHaveBeenCalledTimes(3)
 
       // Verify clearinghouse call is a POST with correct body
-      const bodies = mockFetch.mock.calls.map((call: unknown[]) => {
-        try { return JSON.parse((call[1] as { body: string }).body) } catch { return null }
-      }).filter(Boolean)
-      const clearinghouseCall = bodies.find((b: Record<string, unknown>) => b.type === 'clearinghouseState')
+      const bodies = mockFetch.mock.calls
+        .map((call: unknown[]) => {
+          try {
+            return JSON.parse((call[1] as { body: string }).body)
+          } catch {
+            return null
+          }
+        })
+        .filter(Boolean)
+      const clearinghouseCall = bodies.find(
+        (b: Record<string, unknown>) => b.type === 'clearinghouseState'
+      )
       expect(clearinghouseCall).toEqual({ type: 'clearinghouseState', user: '0xabc123' })
 
       // Verify leaderboard call is a GET to stats-data endpoint (no POST body)
@@ -460,7 +487,7 @@ describe('HyperliquidPerpConnector', () => {
       const normalized = connector.normalize(raw)
 
       expect(normalized.trader_key).toBe('0xfallback_addr')
-      expect(normalized.display_name).toBeNull()
+      expect(normalized.display_name).toBeTruthy()
     })
 
     test('returns all 13 standardized fields', () => {
@@ -476,10 +503,19 @@ describe('HyperliquidPerpConnector', () => {
       const normalized = connector.normalize(raw)
 
       const expectedKeys = [
-        'trader_key', 'display_name', 'avatar_url',
-        'roi', 'pnl', 'win_rate', 'max_drawdown',
-        'trades_count', 'followers', 'copiers',
-        'aum', 'sharpe_ratio', 'platform_rank',
+        'trader_key',
+        'display_name',
+        'avatar_url',
+        'roi',
+        'pnl',
+        'win_rate',
+        'max_drawdown',
+        'trades_count',
+        'followers',
+        'copiers',
+        'aum',
+        'sharpe_ratio',
+        'platform_rank',
       ]
       for (const key of expectedKeys) {
         expect(normalized).toHaveProperty(key)
@@ -574,7 +610,7 @@ describe('HyperliquidPerpConnector', () => {
       mockFetch.mockResolvedValueOnce({
         status: 500,
         ok: false,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        headers: { get: (key: string) => (key === 'content-type' ? 'application/json' : null) },
         json: async () => ({}),
         text: async () => '{}',
       })
@@ -588,7 +624,7 @@ describe('HyperliquidPerpConnector', () => {
       mockFetch.mockResolvedValueOnce({
         status: 400,
         ok: false,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        headers: { get: (key: string) => (key === 'content-type' ? 'application/json' : null) },
         json: async () => ({ error: 'Bad request' }),
         text: async () => JSON.stringify({ error: 'Bad request' }),
       })
@@ -596,7 +632,7 @@ describe('HyperliquidPerpConnector', () => {
       mockFetch.mockResolvedValueOnce({
         status: 400,
         ok: false,
-        headers: { get: (key: string) => key === 'content-type' ? 'application/json' : null },
+        headers: { get: (key: string) => (key === 'content-type' ? 'application/json' : null) },
         json: async () => ({ error: 'Bad request' }),
         text: async () => JSON.stringify({ error: 'Bad request' }),
       })

@@ -83,7 +83,7 @@ describe('GmxPerpConnector', () => {
 
       const first = result.traders[0]
       expect(first.trader_key).toBe('0xgmx_trader_1')
-      expect(first.display_name).toBeNull()
+      expect(first.display_name).toBeTruthy()
       expect(first.platform).toBe('gmx')
       expect(first.market_type).toBe('perp')
       expect(first.is_active).toBe(true)
@@ -182,7 +182,7 @@ describe('GmxPerpConnector', () => {
       expect(result!.profile.trader_key).toBe('0xabc123')
       expect(result!.profile.platform).toBe('gmx')
       expect(result!.profile.market_type).toBe('perp')
-      expect(result!.profile.display_name).toBeNull()
+      expect(result!.profile.display_name).toBeTruthy()
       expect(result!.profile.avatar_url).toBeNull()
       expect(result!.profile.followers).toBeNull()
       expect(result!.profile.copiers).toBeNull()
@@ -628,7 +628,7 @@ describe('GmxPerpConnector', () => {
       }
 
       const normalized = connector.normalize(raw)
-      expect(normalized.display_name).toBeNull()
+      expect(normalized.display_name).toBeTruthy()
       expect(normalized.avatar_url).toBeNull()
       expect(normalized.max_drawdown).toBeNull()
       expect(normalized.followers).toBeNull()
