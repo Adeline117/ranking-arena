@@ -273,10 +273,20 @@ export async function GET(request: NextRequest) {
     // MUST be shorter than the enrichment-runner's internal timeout to ensure
     // the Promise.race here fires first, allowing us to mark the platform as
     // timed out and continue to the next one without the watchdog firing.
+    // Root cause fix: binance_futures (60 traders × VPS proxy) and hyperliquid
+    // (200 traders × API) consistently need >35s. They were timing out at the
+    // default 35s medium tier budget, causing 54+ alerts. Platform-specific
+    // overrides for known slow enrichments.
+    const ENRICH_PLATFORM_TIMEOUTS: Record<string, number> = {
+      binance_futures: 55_000,
+      okx_futures: 50_000,
+      hyperliquid: 55_000,
+    }
     function getRoutePlatformTimeout(platform: string): number {
-      if (tierFastSet.has(platform)) return 15_000 // was 8s — too tight, bitunix/bitfinex need 10-12s
-      if (tierSlowSet.has(platform)) return 45_000 // VPS/rate-limited: 45s (was 90s — 3 batches × 90s = 270s blew 300s limit)
-      return 35_000 // medium tier: 35s (was 25s — binance/hyperliquid need 30s via VPS)
+      if (ENRICH_PLATFORM_TIMEOUTS[platform]) return ENRICH_PLATFORM_TIMEOUTS[platform]
+      if (tierFastSet.has(platform)) return 15_000
+      if (tierSlowSet.has(platform)) return 45_000
+      return 35_000 // medium tier default
     }
 
     // Budget per period: divide 240s (leaving 60s buffer from 300s total) by number of periods
