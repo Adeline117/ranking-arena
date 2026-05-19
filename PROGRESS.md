@@ -22,13 +22,17 @@ Sharpe coverage lifted from 51% → 72% after atomic cleanup. Remaining gaps tra
 | Filter ghost traders from search         | No more all-null results for inactive traders   |
 | Fix Redis cache path (same total bug)    | Both Redis + DB paths return correct total      |
 
-### Verification
+### Verified Enrichment Results (after batch-enrich cycle)
 
-- Sharpe coverage: 51% → 72% (atomic cleanup removed 1000 zombie rows)
-- API total: 1299 (was 5) ✅
-- Search: ghost traders filtered ✅
-- Pipeline: 19/20 fresh, 5/5 deploy healthy
-- All pushes 100/100 code quality
+| Metric      | Before            | After                 | Delta  |
+| ----------- | ----------------- | --------------------- | ------ |
+| Sharpe      | 51% (1,770/3,444) | **74%** (1,820/2,443) | +23%   |
+| MDD         | ~65%              | **71%**               | +6%    |
+| WinRate     | ~78%              | **85%**               | +7%    |
+| Handle      | ~65%              | **79%**               | +14%   |
+| Zombie rows | 1,001             | **0** (cleaned)       | -1,001 |
+
+Pipeline: 16/17 fresh, 0 severe. API: total=1299, search clean, 5/5 deploy healthy. All pushes 100/100.
 
 ---
 
