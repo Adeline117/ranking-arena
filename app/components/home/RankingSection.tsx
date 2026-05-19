@@ -211,6 +211,39 @@ export default function RankingSection({
         </div>
       )}
 
+      {!loading && !premiumLoading && error && filteredTraders.length === 0 && (
+        <div
+          style={{
+            padding: '32px 16px',
+            textAlign: 'center',
+            color: 'var(--color-text-secondary)',
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          <div style={{ marginBottom: 8, color: 'var(--color-error, #e53935)' }}>
+            {language === 'zh' ? '加载失败' : 'Failed to load rankings'}
+          </div>
+          <div style={{ fontSize: 13, marginBottom: 12 }}>{error}</div>
+          {onRetry && (
+            <button
+              onClick={onRetry}
+              style={{
+                padding: '8px 20px',
+                borderRadius: 6,
+                border: '1px solid var(--color-border-primary)',
+                background: 'var(--color-accent-primary)',
+                color: '#fff',
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              {language === 'zh' ? '重试' : 'Retry'}
+            </button>
+          )}
+        </div>
+      )}
+
       {!loading && !premiumLoading && filteredTraders.length === 0 && !error && (
         <div
           style={{

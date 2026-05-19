@@ -537,7 +537,13 @@ export interface SpotCoinSSR {
   rank: number
 }
 
-export default function MarketPage({ initialSpotData }: { initialSpotData?: SpotCoinSSR[] }) {
+export default function MarketPage({
+  initialSpotData,
+  initialError,
+}: {
+  initialSpotData?: SpotCoinSSR[]
+  initialError?: boolean
+}) {
   return (
     <ErrorBoundary
       pageType="market"
@@ -545,7 +551,18 @@ export default function MarketPage({ initialSpotData }: { initialSpotData?: Spot
         // Market page error handled by ErrorBoundary
       }}
     >
-      <MarketPageContent initialSpotData={initialSpotData} />
+      {initialError && (!initialSpotData || initialSpotData.length === 0) ? (
+        <div style={{ padding: '48px 16px', textAlign: 'center' }}>
+          <TopNav />
+          <ErrorState
+            title="Market data temporarily unavailable"
+            description="We couldn't load market prices. Please try again in a moment."
+            retry={() => window.location.reload()}
+          />
+        </div>
+      ) : (
+        <MarketPageContent initialSpotData={initialSpotData} />
+      )}
     </ErrorBoundary>
   )
 }

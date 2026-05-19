@@ -18,7 +18,7 @@
 
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
-import { success } from '@/lib/api/response'
+import { success, badRequest } from '@/lib/api/response'
 import { get as cacheGet, set as cacheSet, getOrSetWithLock } from '@/lib/cache'
 import { fireAndForget, createLogger } from '@/lib/utils/logger'
 
@@ -365,12 +365,7 @@ export const GET = withPublic(
     const rawParams = Object.fromEntries(searchParams)
     const parsed = searchQuerySchema.safeParse(rawParams)
     if (!parsed.success) {
-      return success({
-        query: '',
-        results: { traders: [], posts: [], library: [], users: [], groups: [] },
-        total: 0,
-        error: 'Invalid parameters',
-      } as UnifiedSearchResponse & { error: string })
+      return badRequest('Invalid search parameters')
     }
 
     const searchType = parsed.data.type

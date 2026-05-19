@@ -7,27 +7,32 @@ export const revalidate = 60 // ISR: 1 min
 
 export const metadata: Metadata = {
   title: 'Crypto Market Overview | Live Prices, Gainers & Losers',
-  description: 'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap across 100+ tokens. Updated every minute.',
+  description:
+    'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap across 100+ tokens. Updated every minute.',
   alternates: {
     canonical: `${BASE_URL}/market`,
   },
   openGraph: {
     title: 'Crypto Market Overview',
-    description: 'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap across 100+ tokens.',
+    description:
+      'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap across 100+ tokens.',
     url: `${BASE_URL}/market`,
     siteName: 'Arena',
     type: 'website',
-    images: [{
-      url: `${BASE_URL}/og-image.png`,
-      width: 1200,
-      height: 630,
-      alt: 'Arena - Crypto Market Overview'
-    }],
+    images: [
+      {
+        url: `${BASE_URL}/og-image.png`,
+        width: 1200,
+        height: 630,
+        alt: 'Arena - Crypto Market Overview',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Crypto Market Overview',
-    description: 'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap.',
+    description:
+      'Real-time crypto market data. Track top gainers, losers, prices, volume, and market cap.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
@@ -51,7 +56,8 @@ interface SpotCoinSSR {
 const getSpotMarketData = unstable_cache(
   async (): Promise<SpotCoinSSR[]> => {
     try {
-      const url = 'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h'
+      const url =
+        'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h'
 
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 8000)
@@ -90,6 +96,7 @@ const getSpotMarketData = unstable_cache(
 
 export default async function MarketPage() {
   const initialSpotData = await getSpotMarketData()
+  const hasData = initialSpotData.length > 0
 
-  return <MarketPageClient initialSpotData={initialSpotData} />
+  return <MarketPageClient initialSpotData={initialSpotData} initialError={!hasData} />
 }
