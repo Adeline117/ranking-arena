@@ -231,7 +231,6 @@ export default function Footer() {
         }}
       >
         {t('footerLegalEntity')}
-        {/* TODO: Add ICP filing number when obtained from legal */}
       </p>
     </footer>
   )
