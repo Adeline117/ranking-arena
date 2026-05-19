@@ -21,7 +21,6 @@ export const CATEGORY_CONFIG = {
     labelEn: 'Posts',
     color: 'var(--color-score-profitability)',
   },
-  library: { icon: 'L', labelZh: '资料库', labelEn: 'Library', color: 'var(--color-score-great)' },
   users: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: 'var(--color-score-average)' },
   groups: { icon: 'G', labelZh: '小组', labelEn: 'Groups', color: 'var(--color-score-average)' },
 } as const

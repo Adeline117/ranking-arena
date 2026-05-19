@@ -55,7 +55,10 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     if (!open) return
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return }
+      if (e.key === 'Escape') {
+        onClose()
+        return
+      }
       if (flatResults.length === 0) return
 
       if (e.key === 'ArrowDown') {
@@ -91,14 +94,17 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const prefetchTimerRef = useRef<NodeJS.Timeout | null>(null)
   const prefetchedRef = useRef<Set<string>>(new Set())
 
-  const handleResultMouseEnter = useCallback((href: string) => {
-    if (prefetchedRef.current.has(href)) return
-    if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current)
-    prefetchTimerRef.current = setTimeout(() => {
-      router.prefetch(href)
-      prefetchedRef.current.add(href)
-    }, 100)
-  }, [router])
+  const handleResultMouseEnter = useCallback(
+    (href: string) => {
+      if (prefetchedRef.current.has(href)) return
+      if (prefetchTimerRef.current) clearTimeout(prefetchTimerRef.current)
+      prefetchTimerRef.current = setTimeout(() => {
+        router.prefetch(href)
+        prefetchedRef.current.add(href)
+      }, 100)
+    },
+    [router]
+  )
 
   const scrollItemIntoView = (index: number) => {
     if (!containerRef.current) return
@@ -110,8 +116,9 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const handleResultClick = (resultId?: string, resultType?: string) => {
     if (query.trim()) saveToHistory(query)
     if (resultId && query.trim()) {
-      fetch(`/api/search?type=click&q=${encodeURIComponent(query.trim())}&id=${encodeURIComponent(resultId)}&rtype=${resultType || ''}`)
-        .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget: click tracking is non-critical
+      fetch(
+        `/api/search?type=click&q=${encodeURIComponent(query.trim())}&id=${encodeURIComponent(resultId)}&rtype=${resultType || ''}`
+      ).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget: click tracking is non-critical
     }
     onClose()
   }
@@ -122,8 +129,8 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
   const getCategoryOffset = (category: CategoryKey): number => {
     if (!searchData) return 0
     const order: CategoryKey[] = features.social
-      ? ['traders', 'posts', 'library', 'users', 'groups']
-      : ['traders', 'library']
+      ? ['traders', 'posts', 'users', 'groups']
+      : ['traders']
     let offset = 0
     for (const key of order) {
       if (key === category) break
@@ -140,32 +147,52 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
       aria-label="Search results"
       className="dropdown-enter"
       style={{
-        position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0,
+        position: 'absolute',
+        top: 'calc(100% + 8px)',
+        left: 0,
+        right: 0,
         background: tokens.colors.bg.secondary,
         border: `1px solid ${tokens.colors.border.primary}`,
         borderRadius: tokens.radius.md,
-        maxHeight: 600, overflowY: 'auto',
+        maxHeight: 600,
+        overflowY: 'auto',
         zIndex: tokens.zIndex.dropdown,
         boxShadow: tokens.shadow.md,
       }}
     >
       {/* Offline hint when user tries to search without connectivity */}
       {isOffline && query.trim().length >= 2 && (
-        <Box style={{
-          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
-          display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
-        }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="1" y1="1" x2="23" y2="23"/>
-            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"/>
-            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"/>
-            <path d="M10.71 5.05A16 16 0 0 1 22.56 9"/>
-            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"/>
-            <path d="M8.53 16.11a6 6 0 0 1 6.95 0"/>
-            <line x1="12" y1="20" x2="12.01" y2="20"/>
+        <Box
+          style={{
+            padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.text.tertiary}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="1" y1="1" x2="23" y2="23" />
+            <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55" />
+            <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39" />
+            <path d="M10.71 5.05A16 16 0 0 1 22.56 9" />
+            <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88" />
+            <path d="M8.53 16.11a6 6 0 0 1 6.95 0" />
+            <line x1="12" y1="20" x2="12.01" y2="20" />
           </svg>
           <Text size="sm" color="tertiary">
-            {t('offlineSearchHint') || (language === 'zh' ? '当前处于离线状态，无法搜索' : "You're offline — search is unavailable")}
+            {t('offlineSearchHint') ||
+              (language === 'zh'
+                ? '当前处于离线状态，无法搜索'
+                : "You're offline — search is unavailable")}
           </Text>
         </Box>
       )}
@@ -176,49 +203,133 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
           {searching ? (
             <SearchSkeleton />
           ) : searchData && searchData.total === 0 ? (
-            <SearchEmptyState
-              suggestions={searchData.suggestions}
-              onClose={onClose}
-              t={t}
-            />
+            <SearchEmptyState suggestions={searchData.suggestions} onClose={onClose} t={t} />
           ) : !searchData && !searching ? (
-            <SearchEmptyState
-              onClose={onClose}
-              t={t}
-            />
+            <SearchEmptyState onClose={onClose} t={t} />
           ) : searchData ? (
             <>
               {searchData.matchedExchange && (
-                <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                <Box
+                  style={{
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                  }}
+                >
                   <Text size="xs" color="tertiary">
-                    {t('searchShowingTopTraders')} <span style={{ fontWeight: 700, color: tokens.colors.text.secondary }}>
-                      {EXCHANGE_CONFIG[searchData.matchedExchange as keyof typeof EXCHANGE_CONFIG]?.name || searchData.matchedExchange}
+                    {t('searchShowingTopTraders')}{' '}
+                    <span style={{ fontWeight: 700, color: tokens.colors.text.secondary }}>
+                      {EXCHANGE_CONFIG[searchData.matchedExchange as keyof typeof EXCHANGE_CONFIG]
+                        ?.name || searchData.matchedExchange}
                     </span>
                   </Text>
                 </Box>
               )}
-              <SearchResultGroup category="traders" items={searchData.results.traders} query={query} language={language} selectedIndex={selectedIndex} offset={getCategoryOffset('traders')} onResultClick={handleResultClick} onResultMouseEnter={handleResultMouseEnter} onSetSelectedIndex={setSelectedIndex} />
-              {features.social && <SearchResultGroup category="posts" items={searchData.results.posts} query={query} language={language} selectedIndex={selectedIndex} offset={getCategoryOffset('posts')} onResultClick={handleResultClick} onResultMouseEnter={handleResultMouseEnter} onSetSelectedIndex={setSelectedIndex} />}
-              <SearchResultGroup category="library" items={searchData.results.library} query={query} language={language} selectedIndex={selectedIndex} offset={getCategoryOffset('library')} onResultClick={handleResultClick} onResultMouseEnter={handleResultMouseEnter} onSetSelectedIndex={setSelectedIndex} />
-              {features.social && <SearchResultGroup category="users" items={searchData.results.users} query={query} language={language} selectedIndex={selectedIndex} offset={getCategoryOffset('users')} onResultClick={handleResultClick} onResultMouseEnter={handleResultMouseEnter} onSetSelectedIndex={setSelectedIndex} />}
-              {features.social && <SearchResultGroup category="groups" items={searchData.results.groups || []} query={query} language={language} selectedIndex={selectedIndex} offset={getCategoryOffset('groups')} onResultClick={handleResultClick} onResultMouseEnter={handleResultMouseEnter} onSetSelectedIndex={setSelectedIndex} />}
+              <SearchResultGroup
+                category="traders"
+                items={searchData.results.traders}
+                query={query}
+                language={language}
+                selectedIndex={selectedIndex}
+                offset={getCategoryOffset('traders')}
+                onResultClick={handleResultClick}
+                onResultMouseEnter={handleResultMouseEnter}
+                onSetSelectedIndex={setSelectedIndex}
+              />
+              {features.social && (
+                <SearchResultGroup
+                  category="posts"
+                  items={searchData.results.posts}
+                  query={query}
+                  language={language}
+                  selectedIndex={selectedIndex}
+                  offset={getCategoryOffset('posts')}
+                  onResultClick={handleResultClick}
+                  onResultMouseEnter={handleResultMouseEnter}
+                  onSetSelectedIndex={setSelectedIndex}
+                />
+              )}
+
+              {features.social && (
+                <SearchResultGroup
+                  category="users"
+                  items={searchData.results.users}
+                  query={query}
+                  language={language}
+                  selectedIndex={selectedIndex}
+                  offset={getCategoryOffset('users')}
+                  onResultClick={handleResultClick}
+                  onResultMouseEnter={handleResultMouseEnter}
+                  onSetSelectedIndex={setSelectedIndex}
+                />
+              )}
+              {features.social && (
+                <SearchResultGroup
+                  category="groups"
+                  items={searchData.results.groups || []}
+                  query={query}
+                  language={language}
+                  selectedIndex={selectedIndex}
+                  offset={getCategoryOffset('groups')}
+                  onResultClick={handleResultClick}
+                  onResultMouseEnter={handleResultMouseEnter}
+                  onSetSelectedIndex={setSelectedIndex}
+                />
+              )}
               {searchData.suggestions && searchData.suggestions.length > 0 && (
-                <Box style={{ padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`, borderBottom: `1px solid ${tokens.colors.border.primary}`, display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
-                  <Text size="xs" color="tertiary">{t('searchDidYouMean')}</Text>
+                <Box
+                  style={{
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                    borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Text size="xs" color="tertiary">
+                    {t('searchDidYouMean')}
+                  </Text>
                   {searchData.suggestions.map((suggestion) => (
-                    <Link key={suggestion} href={`/search?q=${encodeURIComponent(suggestion)}`} style={{ textDecoration: 'none' }} onClick={onClose}>
-                      <Text size="xs" style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}>{suggestion}</Text>
+                    <Link
+                      key={suggestion}
+                      href={`/search?q=${encodeURIComponent(suggestion)}`}
+                      style={{ textDecoration: 'none' }}
+                      onClick={onClose}
+                    >
+                      <Text
+                        size="xs"
+                        style={{ color: tokens.colors.accent.primary, fontWeight: 600 }}
+                      >
+                        {suggestion}
+                      </Text>
                     </Link>
                   ))}
                 </Box>
               )}
-              <Link href={`/search?q=${encodeURIComponent(query)}`} style={{ textDecoration: 'none' }} onClick={() => handleResultClick()}>
+              <Link
+                href={`/search?q=${encodeURIComponent(query)}`}
+                style={{ textDecoration: 'none' }}
+                onClick={() => handleResultClick()}
+              >
                 <Box
-                  style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, textAlign: 'center', cursor: 'pointer' }}
-                  onMouseEnter={e => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-                  onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+                  style={{
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    textAlign: 'center',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.background = tokens.colors.bg.tertiary
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.background = 'transparent'
+                  }}
                 >
-                  <Text size="xs" color="tertiary">{t('viewAllSearchResults')} →</Text>
+                  <Text size="xs" color="tertiary">
+                    {t('viewAllSearchResults')} →
+                  </Text>
                 </Box>
               </Link>
             </>

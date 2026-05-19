@@ -24,7 +24,7 @@ export default function Footer() {
     },
     {
       title: t('footerCommunity'),
-      links: [{ href: '/library', label: t('library') }],
+      links: [{ href: '/hot', label: t('hot') }],
     },
     {
       title: t('footerLegal'),

@@ -673,9 +673,7 @@ const nextConfig = {
       { source: '/legal/disclaimer', destination: '/disclaimer', permanent: true },
       { source: '/legal/dmca', destination: '/dmca', permanent: true },
       { source: '/community', destination: '/groups', permanent: true },
-      // /library was renamed to /learn (2026-03)
-      { source: '/library', destination: '/learn', permanent: true },
-      { source: '/library/:slug', destination: '/learn/:slug', permanent: true },
+      // /library removed (feature deprecated)
       // Dead pages removed in frontend simplification (2026-03)
       { source: '/pk/:a/:b', destination: '/compare', permanent: true },
       { source: '/membership', destination: '/pricing', permanent: true },
