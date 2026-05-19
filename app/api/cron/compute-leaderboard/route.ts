@@ -741,7 +741,7 @@ async function computeSeason(
       pnl: t.pnl,
       win_rate: normalizedWinRate,
       max_drawdown: t.max_drawdown,
-      followers: 0, // Will be replaced with Arena follower count below
+      followers: t.followers ?? 0, // Exchange follower count; overridden by Arena follower count if available
       copiers: t.copiers ?? null, // Exchange copy-trade count (from v2 or enrichment stats_detail)
       trades_count: t.trades_count,
       handle: displayHandle,
