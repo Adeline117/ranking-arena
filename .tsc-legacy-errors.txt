@@ -138,6 +138,10 @@ quiz/result/ResultPageClient\.tsx
 quiz/components/scoring\.ts
 quiz/result/page\.tsx
 
+# ── Search + Share (library category type mismatch — pre-existing) ──
+ShareButton\.tsx
+SearchDropdown\.tsx
+
 # ── Miscellaneous product surfaces ──
 FundingRatesClient
 WatchlistClient
