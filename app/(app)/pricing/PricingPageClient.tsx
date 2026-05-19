@@ -101,27 +101,29 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     alreadySubscribed,
   } = useDirectCheckout()
 
-  // Show toast when user is already subscribed
+  // Show toast when user is already subscribed — with link to manage
   useEffect(() => {
     if (alreadySubscribed) {
       showToast(
         resolved(
           t('alreadyProMember'),
           'alreadyProMember',
-          'You already have an active Pro subscription!'
+          'You already have an active Pro subscription! Go to Settings to manage it.'
         ),
         'success'
       )
     }
   }, [alreadySubscribed, showToast, t])
   // Logged-in users go directly to Stripe checkout; anonymous users go to login
-  const ctaHref = email ? undefined : '/login'
-  const handleCta = email
-    ? () => {
-        trackEvent('click_upgrade_cta', { plan: billing })
-        directCheckout(billing)
-      }
-    : undefined
+  // Already-subscribed users go to settings to manage their subscription
+  const ctaHref = email ? (alreadySubscribed ? '/settings' : undefined) : '/login'
+  const handleCta =
+    email && !alreadySubscribed
+      ? () => {
+          trackEvent('click_upgrade_cta', { plan: billing })
+          directCheckout(billing)
+        }
+      : undefined
 
   return (
     <div
