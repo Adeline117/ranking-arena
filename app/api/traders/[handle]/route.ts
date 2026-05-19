@@ -138,7 +138,7 @@ export async function GET(
       // query param). Returns deterministic mock data so Playwright tests
       // don't depend on prod data shape.
       const fixtureName = req.nextUrl.searchParams.get('e2e_fixture')
-      if (fixtureName && E2E_FIXTURES[fixtureName]) {
+      if (process.env.NODE_ENV !== 'production' && fixtureName && E2E_FIXTURES[fixtureName]) {
         return apiSuccess(E2E_FIXTURES[fixtureName]())
       }
 

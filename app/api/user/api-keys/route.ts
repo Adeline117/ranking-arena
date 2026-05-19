@@ -19,7 +19,7 @@ export const GET = withAuth(
       .order('created_at', { ascending: false })
 
     if (error) {
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to fetch API keys' }, { status: 500 })
     }
 
     // Mask keys in list view — only show prefix + last 4
@@ -28,7 +28,9 @@ export const GET = withAuth(
       key: k.key.slice(0, 7) + '...' + k.key.slice(-4),
     }))
 
-    return NextResponse.json({ data: masked })
+    const res = NextResponse.json({ data: masked })
+    res.headers.set('Cache-Control', 'private, no-store')
+    return res
   },
   { name: 'api-keys-list', rateLimit: 'authenticated' }
 )
@@ -74,7 +76,7 @@ export const POST = withAuth(
           { status: 409 }
         )
       }
-      return NextResponse.json({ error: error.message }, { status: 500 })
+      return NextResponse.json({ error: 'Failed to create API key' }, { status: 500 })
     }
 
     // Return the FULL key only on creation — user must copy it now

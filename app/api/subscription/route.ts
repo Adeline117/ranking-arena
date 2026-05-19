@@ -89,6 +89,7 @@ export const GET = withAuth(
       }
       const res = NextResponse.json({ subscription: defaultSubscription })
       res.headers.set('Set-Cookie', tierCookie)
+      res.headers.set('Cache-Control', 'private, no-store')
       return res
     }
 
@@ -121,6 +122,7 @@ export const GET = withAuth(
       },
     })
     res.headers.set('Set-Cookie', tierCookie)
+    res.headers.set('Cache-Control', 'private, no-store')
     return res
   },
   { name: 'subscription', rateLimit: 'authenticated' }
