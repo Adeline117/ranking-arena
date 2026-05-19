@@ -211,6 +211,44 @@ export default function RankingSection({
         </div>
       )}
 
+      {!loading && !premiumLoading && filteredTraders.length === 0 && !error && (
+        <div
+          style={{
+            padding: '32px 16px',
+            textAlign: 'center',
+            color: 'var(--color-text-secondary)',
+            fontSize: 14,
+            lineHeight: 1.6,
+          }}
+        >
+          {hasActiveFilters
+            ? language === 'zh'
+              ? '没有交易员匹配当前筛选条件'
+              : 'No traders match the current filters'
+            : language === 'zh'
+              ? '排名数据加载中，请稍后刷新...'
+              : 'Rankings loading, please refresh shortly...'}
+          {hasActiveFilters && (
+            <button
+              onClick={handleResetFilters}
+              style={{
+                display: 'block',
+                margin: '12px auto 0',
+                padding: '6px 16px',
+                borderRadius: 6,
+                border: '1px solid var(--color-border-primary)',
+                background: 'transparent',
+                color: 'var(--color-accent-primary)',
+                fontSize: 13,
+                cursor: 'pointer',
+              }}
+            >
+              {language === 'zh' ? '重置筛选' : 'Reset Filters'}
+            </button>
+          )}
+        </div>
+      )}
+
       <RankingTable
         traders={filteredTraders}
         loading={loading || premiumLoading}
