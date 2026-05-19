@@ -111,7 +111,11 @@ import {
   fetchOkxWeb3EquityCurve,
   fetchOkxWeb3StatsDetail,
 } from '@/lib/cron/fetchers/enrichment-okx-web3'
-// kucoin enrichment disabled — import removed
+import {
+  fetchKucoinEquityCurve,
+  fetchKucoinStatsDetail,
+} from '@/lib/cron/fetchers/enrichment-kucoin'
+import { fetchWeexStatsDetail } from '@/lib/cron/fetchers/enrichment-weex'
 import {
   fetchWooxEquityCurve,
   fetchWooxStatsDetail,
@@ -278,20 +282,20 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
     concurrency: 2,
     delayMs: 2000,
   },
-  // weex: DISABLED 2026-04-01 — 75% timeout rate, VPS scraper unreliable, platform removed from fetch groups
-  // weex: {
-  //   platform: 'weex',
-  //   fetchEquityCurve: fetchWeexEquityCurve,
-  //   fetchStatsDetail: fetchWeexStatsDetail,
-  //   concurrency: 1, delayMs: 3000,
-  // },
-  // kucoin: DISABLED 2026-04-01 — copy trading discontinued, removed from fetch groups
-  // kucoin: {
-  //   platform: 'kucoin',
-  //   fetchEquityCurve: fetchKucoinEquityCurve,
-  //   fetchStatsDetail: fetchKucoinStatsDetail,
-  //   concurrency: 1, delayMs: 3000,
-  // },
+  // Re-enabled 2026-05-20: data exists, enrichment was disabled too aggressively
+  weex: {
+    platform: 'weex',
+    fetchStatsDetail: fetchWeexStatsDetail,
+    concurrency: 1,
+    delayMs: 3000,
+  },
+  kucoin: {
+    platform: 'kucoin',
+    fetchEquityCurve: fetchKucoinEquityCurve,
+    fetchStatsDetail: fetchKucoinStatsDetail,
+    concurrency: 1,
+    delayMs: 3000,
+  },
   // bitget_futures: RE-ENABLED stats+positions (2026-03-19)
   // Root cause of 44min hang: fetchStatsDetail internally called fetchPositionHistory,
   // doubling request time (2x20s timeout). Fix: standalone stats, strict 10s timeouts.

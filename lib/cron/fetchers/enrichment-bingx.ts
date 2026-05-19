@@ -16,7 +16,8 @@ import { fetchJson } from './shared'
 import { logger } from '@/lib/logger'
 import type { EquityCurvePoint, StatsDetail, PortfolioPosition } from './enrichment-types'
 
-const PROXY_URL = process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
+const PROXY_URL =
+  process.env.CLOUDFLARE_PROXY_URL || 'https://ranking-arena-proxy.broosbook.workers.dev'
 
 // ============================================
 // Equity Curve
@@ -40,11 +41,11 @@ export async function fetchBingxEquityCurve(
 interface BingXStatResponse {
   code?: number | string
   data?: {
-    winRate?: number | string        // decimal 0-1
+    winRate?: number | string // decimal 0-1
     totalTrades?: number | string
     tradeCount?: number | string
     orderCount?: number | string
-    maxDrawdown?: number | string    // decimal 0-1
+    maxDrawdown?: number | string // decimal 0-1
     mdd?: number | string
     profitRate?: number | string
     roi?: number | string
@@ -83,9 +84,7 @@ function safeNum(val: unknown): number | null {
  * The proxy hits api-app.qq-os.com which is BingX's internal stats API.
  * timeType 3 = 90 day stats.
  */
-export async function fetchBingxStatsDetail(
-  traderId: string
-): Promise<StatsDetail | null> {
+export async function fetchBingxStatsDetail(traderId: string): Promise<StatsDetail | null> {
   try {
     // Use CF Worker proxy to bypass WAF
     const response = await fetchJson<BingXStatResponse>(
@@ -105,16 +104,23 @@ export async function fetchBingxStatsDetail(
     const rawMdd = safeNum(stat.maxDrawdown ?? stat.mdd ?? (data as Record<string, unknown>)?.mdd)
     const maxDrawdown = rawMdd != null ? Math.abs(rawMdd <= 1 ? rawMdd * 100 : rawMdd) : null
 
-    const totalTrades = safeNum(stat.totalTrades ?? stat.tradeCount ?? (data as Record<string, unknown>)?.orderCount)
+    const totalTrades = safeNum(
+      stat.totalTrades ?? stat.tradeCount ?? (data as Record<string, unknown>)?.orderCount
+    )
 
     // Sharpe ratio: try multiple field names from API response
     const rawSharpe = safeNum(
-      stat.sharpe30d ?? stat.sharpeRatio ?? stat.sharpe ?? stat.sharpRatio ??
-      (data as Record<string, unknown>)?.sharpe30d ?? (data as Record<string, unknown>)?.sharpeRatio ??
-      (data as Record<string, unknown>)?.sharpe ?? (data as Record<string, unknown>)?.sharpRatio
+      stat.sharpe30d ??
+        stat.sharpeRatio ??
+        stat.sharpe ??
+        stat.sharpRatio ??
+        (data as Record<string, unknown>)?.sharpe30d ??
+        (data as Record<string, unknown>)?.sharpeRatio ??
+        (data as Record<string, unknown>)?.sharpe ??
+        (data as Record<string, unknown>)?.sharpRatio
     )
-    // BingX sharpe values should be in reasonable range (-20 to 20)
-    const sharpeRatio = rawSharpe != null && rawSharpe >= -10 && rawSharpe <= 10 ? rawSharpe : null
+    // BingX sharpe values should be in reasonable range
+    const sharpeRatio = rawSharpe != null && rawSharpe >= -20 && rawSharpe <= 20 ? rawSharpe : null
 
     return {
       totalTrades: totalTrades != null ? Math.round(totalTrades) : null,
@@ -156,17 +162,16 @@ interface BingXPosition {
 /**
  * Fetch current open positions for a BingX trader via CF Worker proxy.
  */
-export async function fetchBingxCurrentPositions(
-  traderId: string
-): Promise<PortfolioPosition[]> {
+export async function fetchBingxCurrentPositions(traderId: string): Promise<PortfolioPosition[]> {
   try {
-    const response = await fetchJson<{ code?: number; data?: BingXPosition[] | { list?: BingXPosition[] } }>(
-      `${PROXY_URL}/bingx/trader-positions?uid=${traderId}`,
-      { timeoutMs: 15000 }
-    )
+    const response = await fetchJson<{
+      code?: number
+      data?: BingXPosition[] | { list?: BingXPosition[] }
+    }>(`${PROXY_URL}/bingx/trader-positions?uid=${traderId}`, { timeoutMs: 15000 })
 
-    const list = Array.isArray(response?.data) ? response.data :
-      (response?.data as { list?: BingXPosition[] })?.list || []
+    const list = Array.isArray(response?.data)
+      ? response.data
+      : (response?.data as { list?: BingXPosition[] })?.list || []
 
     if (!list.length) return []
 
@@ -174,7 +179,11 @@ export async function fetchBingxCurrentPositions(
       .filter((p): p is BingXPosition => !!p.symbol)
       .map((p) => ({
         symbol: String(p.symbol || ''),
-        direction: String(p.positionSide || '').toLowerCase().includes('short') ? 'short' as const : 'long' as const,
+        direction: String(p.positionSide || '')
+          .toLowerCase()
+          .includes('short')
+          ? ('short' as const)
+          : ('long' as const),
         investedPct: null,
         entryPrice: p.entryPrice != null ? Number(p.entryPrice) : null,
         pnl: p.unrealizedProfit != null ? Number(p.unrealizedProfit) : null,
