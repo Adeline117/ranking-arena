@@ -76,6 +76,10 @@
 - Code quality: 100/100 ✅
 - Subscription desync: 0/0 (2 users fixed via SQL) ✅
 
+### Retro 2026-05-18
+
+32 commits / 7 days, 53% fixes, 15.6% feat (doubled from 7.4%), 0 reverts (down from 7), 0 type errors, 0 test failures. compute-leaderboard hotspot down from 54→2 changes/week. Action items: npm audit fix (27 vulns), TODO cleanup (2→11), schedule weekly retro. Full report: `docs/retros/retro-2026-05-18.md`.
+
 ---
 
 ## Codebase Lint Cleanup (2026-05-12)
