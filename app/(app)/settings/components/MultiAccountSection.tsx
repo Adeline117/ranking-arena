@@ -37,29 +37,46 @@ export function MultiAccountSection() {
             border: `1px solid ${account.isActive ? tokens.colors.accent.primary + '30' : tokens.colors.border.primary}`,
           }}
         >
-          <Box style={{
-            width: 24, height: 24, borderRadius: '50%',
-            background: tokens.colors.accent.primary + '20',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: tokens.typography.fontSize.xs, fontWeight: 700, color: tokens.colors.accent.primary,
-          }}>
+          <Box
+            style={{
+              width: 24,
+              height: 24,
+              borderRadius: '50%',
+              background: tokens.colors.accent.primary + '20',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: 700,
+              color: tokens.colors.accent.primary,
+            }}
+          >
             {(account.handle?.[0] || account.email[0] || 'U').toUpperCase()}
           </Box>
           <Box style={{ flex: 1, minWidth: 0 }}>
-            <Text size="xs" weight={account.isActive ? 'bold' : 'normal'} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Text
+              size="xs"
+              weight={account.isActive ? 'bold' : 'normal'}
+              style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
               {account.handle || account.email}
             </Text>
           </Box>
           {account.isActive ? (
-            <Text size="xs" style={{ color: tokens.colors.accent.success }}>{t('current')}</Text>
+            <Text size="xs" style={{ color: tokens.colors.accent.success }}>
+              {t('current')}
+            </Text>
           ) : (
             <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
               <button
                 onClick={() => handleSwitch(account.userId)}
                 disabled={!!switchingId}
                 style={{
-                  border: 'none', background: 'transparent', cursor: 'pointer',
-                  fontSize: tokens.typography.fontSize.xs, color: tokens.colors.accent.primary,
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: tokens.colors.accent.primary,
                   opacity: switchingId ? 0.5 : 1,
                 }}
               >
@@ -68,8 +85,11 @@ export function MultiAccountSection() {
               <button
                 onClick={() => removeAccount(account.userId)}
                 style={{
-                  border: 'none', background: 'transparent', cursor: 'pointer',
-                  fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary,
+                  border: 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: tokens.colors.text.tertiary,
                 }}
               >
                 {t('removeAccount')}
@@ -87,7 +107,9 @@ export function MultiAccountSection() {
           }
         }}
         style={{
-          display: 'flex', alignItems: 'center', gap: tokens.spacing[2],
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
           padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
           borderRadius: tokens.radius.md,
           border: `1px dashed ${tokens.colors.border.secondary}`,
@@ -95,15 +117,21 @@ export function MultiAccountSection() {
           transition: `all ${tokens.transition.base}`,
         }}
       >
-        <Text size="xs" color="tertiary">+ {t('addAccount')}</Text>
+        <Text size="xs" color="tertiary">
+          + {t('addAccount')}
+        </Text>
         {!isPro && (
-          <Box style={{
-            marginLeft: 'auto',
-            padding: `1px ${tokens.spacing[1]}`,
-            borderRadius: tokens.radius.sm,
-            background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-accent))`,
-            color: tokens.colors.white, fontSize: tokens.typography.fontSize.xs /* TODO: add 10px token */, fontWeight: 700,
-          }}>
+          <Box
+            style={{
+              marginLeft: 'auto',
+              padding: `1px ${tokens.spacing[1]}`,
+              borderRadius: tokens.radius.sm,
+              background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-accent))`,
+              color: tokens.colors.white,
+              fontSize: tokens.typography.fontSize.xs,
+              fontWeight: 700,
+            }}
+          >
             Pro
           </Box>
         )}

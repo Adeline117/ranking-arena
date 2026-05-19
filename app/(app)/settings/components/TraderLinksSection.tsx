@@ -71,7 +71,7 @@ function getPlatformName(source: string): string {
     blofin: 'BloFin',
     etoro: 'eToro',
   }
-  return map[source] || source.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  return map[source] || source.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
 }
 
 function getExchangeKey(source: string): string {
@@ -131,7 +131,9 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   const { t } = useLanguage()
 
   const getAuthHeaders = useCallback(async () => {
-    const { data: { session } } = await supabase.auth.getSession()
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
     if (!session?.access_token) return null
     return { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }
   }, [])
@@ -179,7 +181,9 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         body: JSON.stringify({ id, label: editLabelValue.trim() || null }),
       })
       if (res.ok) {
-        setTraders(prev => prev.map(t => t.id === id ? { ...t, label: editLabelValue.trim() || null } : t))
+        setTraders((prev) =>
+          prev.map((t) => (t.id === id ? { ...t, label: editLabelValue.trim() || null } : t))
+        )
         showToast(t('labelSaved'), 'success')
       }
     } catch {
@@ -202,10 +206,12 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         body: JSON.stringify({ id, is_primary: true }),
       })
       if (res.ok) {
-        setTraders(prev => prev.map(t => ({
-          ...t,
-          is_primary: t.id === id,
-        })))
+        setTraders((prev) =>
+          prev.map((t) => ({
+            ...t,
+            is_primary: t.id === id,
+          }))
+        )
         showToast(t('primarySet'), 'success')
       }
     } catch {
@@ -239,8 +245,8 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       })
       if (res.ok) {
         const data = await res.json()
-        setTraders(prev => {
-          const remaining = prev.filter(t => t.id !== trader.id)
+        setTraders((prev) => {
+          const remaining = prev.filter((t) => t.id !== trader.id)
           // If the primary was deleted and there are remaining, the API auto-promotes
           if (trader.is_primary && remaining.length > 0) {
             remaining[0] = { ...remaining[0], is_primary: true }
@@ -267,7 +273,9 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   if (loading) {
     return (
       <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-        <Text size="sm" color="tertiary">{t('loadingText')}</Text>
+        <Text size="sm" color="tertiary">
+          {t('loadingText')}
+        </Text>
       </Box>
     )
   }
@@ -275,27 +283,46 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   // Empty state
   if (traders.length === 0) {
     return (
-      <Box style={{
-        padding: tokens.spacing[8],
-        textAlign: 'center',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        gap: tokens.spacing[3],
-      }}>
-        <Box style={{
-          width: 56, height: 56, borderRadius: tokens.radius.full,
-          background: `${tokens.colors.accent.primary}10`,
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-        }}>
-          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <Box
+        style={{
+          padding: tokens.spacing[8],
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+        }}
+      >
+        <Box
+          style={{
+            width: 56,
+            height: 56,
+            borderRadius: tokens.radius.full,
+            background: `${tokens.colors.accent.primary}10`,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <svg
+            width="28"
+            height="28"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.accent.primary}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
             <line x1="19" y1="8" x2="19" y2="14" />
             <line x1="22" y1="11" x2="16" y2="11" />
           </svg>
         </Box>
-        <Text size="sm" weight="medium">{t('noLinkedAccounts')}</Text>
+        <Text size="sm" weight="medium">
+          {t('noLinkedAccounts')}
+        </Text>
         <Text size="xs" color="tertiary" style={{ maxWidth: 300, lineHeight: 1.6 }}>
           {t('linkAccountDescription')}
         </Text>
@@ -313,36 +340,61 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
   // Aggregated stats
   const totalPnl = traders.reduce((sum, t) => sum + (t.stats?.pnl ?? 0), 0)
-  const bestRoi = Math.max(...traders.map(t => t.stats?.roi ?? -Infinity))
-  const avgScore = traders.filter(t => t.stats?.arena_score != null).length > 0
-    ? traders.reduce((sum, t) => sum + (t.stats?.arena_score ?? 0), 0) / traders.filter(t => t.stats?.arena_score != null).length
-    : null
+  const bestRoi = Math.max(...traders.map((t) => t.stats?.roi ?? -Infinity))
+  const avgScore =
+    traders.filter((t) => t.stats?.arena_score != null).length > 0
+      ? traders.reduce((sum, t) => sum + (t.stats?.arena_score ?? 0), 0) /
+        traders.filter((t) => t.stats?.arena_score != null).length
+      : null
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
       {/* Aggregated stats bar */}
       {traders.length > 1 && (
-        <Box style={{
-          display: 'flex', gap: tokens.spacing[4], padding: tokens.spacing[3],
-          borderRadius: tokens.radius.lg, background: `${tokens.colors.accent.primary}08`,
-          border: `1px solid ${tokens.colors.accent.primary}15`,
-          flexWrap: 'wrap',
-        }}>
+        <Box
+          style={{
+            display: 'flex',
+            gap: tokens.spacing[4],
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.lg,
+            background: `${tokens.colors.accent.primary}08`,
+            border: `1px solid ${tokens.colors.accent.primary}15`,
+            flexWrap: 'wrap',
+          }}
+        >
           <Box style={{ flex: 1, minWidth: 80 }}>
-            <Text size="xs" color="tertiary">{t('combinedPnl')}</Text>
-            <Text size="sm" weight="bold" style={{ color: totalPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+            <Text size="xs" color="tertiary">
+              {t('combinedPnl')}
+            </Text>
+            <Text
+              size="sm"
+              weight="bold"
+              style={{
+                color: totalPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+              }}
+            >
               {formatPnl(totalPnl)}
             </Text>
           </Box>
           <Box style={{ flex: 1, minWidth: 80 }}>
-            <Text size="xs" color="tertiary">{t('bestRoi')}</Text>
-            <Text size="sm" weight="bold" style={{ color: bestRoi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+            <Text size="xs" color="tertiary">
+              {t('bestRoi')}
+            </Text>
+            <Text
+              size="sm"
+              weight="bold"
+              style={{
+                color: bestRoi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+              }}
+            >
               {bestRoi > -Infinity ? formatRoi(bestRoi) : '-'}
             </Text>
           </Box>
           {avgScore != null && (
             <Box style={{ flex: 1, minWidth: 80 }}>
-              <Text size="xs" color="tertiary">{t('weightedScore')}</Text>
+              <Text size="xs" color="tertiary">
+                {t('weightedScore')}
+              </Text>
               <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
                 {avgScore.toFixed(1)}
               </Text>
@@ -365,37 +417,61 @@ export function TraderLinksSection({ userId }: { userId: string }) {
             }}
           >
             {/* Header row: logo + name + badges */}
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[3] }}>
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+                marginBottom: tokens.spacing[3],
+              }}
+            >
               <ExchangeLogo exchange={getExchangeKey(trader.source)} size={32} />
               <Box style={{ flex: 1, minWidth: 0 }}>
-                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
-                  <Text size="sm" weight="bold" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Text
+                    size="sm"
+                    weight="bold"
+                    style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                  >
                     {trader.label || trader.stats?.handle || trader.trader_id.slice(0, 12)}
                   </Text>
                   {trader.is_primary && (
-                    <span style={{
-                      padding: `1px ${tokens.spacing[2]}`,
-                      borderRadius: tokens.radius.sm,
-                      background: `${tokens.colors.accent.primary}20`,
-                      color: tokens.colors.accent.primary,
-                      fontSize: tokens.typography.fontSize.xs /* TODO: add 10px token */,
-                      fontWeight: 700,
-                      letterSpacing: '0.5px',
-                      textTransform: 'uppercase',
-                    }}>
+                    <span
+                      style={{
+                        padding: `1px ${tokens.spacing[2]}`,
+                        borderRadius: tokens.radius.sm,
+                        background: `${tokens.colors.accent.primary}20`,
+                        color: tokens.colors.accent.primary,
+                        fontSize: tokens.typography.fontSize.xs,
+                        fontWeight: 700,
+                        letterSpacing: '0.5px',
+                        textTransform: 'uppercase',
+                      }}
+                    >
                       {t('primaryAccount')}
                     </span>
                   )}
                 </Box>
                 <Text size="xs" color="tertiary">
-                  {getPlatformName(trader.source)} &middot; {formatVerificationMethod(trader.verification_method, t)} &middot; {t('verifiedOn')} {formatDate(trader.verified_at)}
+                  {getPlatformName(trader.source)} &middot;{' '}
+                  {formatVerificationMethod(trader.verification_method, t)} &middot;{' '}
+                  {t('verifiedOn')} {formatDate(trader.verified_at)}
                 </Text>
               </Box>
             </Box>
 
             {/* Label edit */}
             {editingLabelId === trader.id ? (
-              <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+              <Box
+                style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}
+              >
                 <input
                   ref={labelInputRef}
                   value={editLabelValue}
@@ -440,31 +516,60 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
             {/* Stats row */}
             {trader.stats && (
-              <Box style={{
-                display: 'flex', gap: tokens.spacing[4], marginBottom: tokens.spacing[3],
-                padding: tokens.spacing[2], borderRadius: tokens.radius.md,
-                background: tokens.colors.bg.secondary,
-                flexWrap: 'wrap',
-              }}>
+              <Box
+                style={{
+                  display: 'flex',
+                  gap: tokens.spacing[4],
+                  marginBottom: tokens.spacing[3],
+                  padding: tokens.spacing[2],
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.bg.secondary,
+                  flexWrap: 'wrap',
+                }}
+              >
                 {trader.stats.roi != null && (
                   <Box style={{ minWidth: 60 }}>
-                    <Text size="xs" color="tertiary">ROI</Text>
-                    <Text size="sm" weight="bold" style={{ color: trader.stats.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+                    <Text size="xs" color="tertiary">
+                      ROI
+                    </Text>
+                    <Text
+                      size="sm"
+                      weight="bold"
+                      style={{
+                        color:
+                          trader.stats.roi >= 0
+                            ? tokens.colors.accent.success
+                            : tokens.colors.accent.error,
+                      }}
+                    >
                       {formatRoi(trader.stats.roi)}
                     </Text>
                   </Box>
                 )}
                 {trader.stats.pnl != null && (
                   <Box style={{ minWidth: 60 }}>
-                    <Text size="xs" color="tertiary">PnL</Text>
-                    <Text size="sm" weight="bold" style={{ color: trader.stats.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error }}>
+                    <Text size="xs" color="tertiary">
+                      PnL
+                    </Text>
+                    <Text
+                      size="sm"
+                      weight="bold"
+                      style={{
+                        color:
+                          trader.stats.pnl >= 0
+                            ? tokens.colors.accent.success
+                            : tokens.colors.accent.error,
+                      }}
+                    >
                       {formatPnl(trader.stats.pnl)}
                     </Text>
                   </Box>
                 )}
                 {trader.stats.arena_score != null && (
                   <Box style={{ minWidth: 60 }}>
-                    <Text size="xs" color="tertiary">Score</Text>
+                    <Text size="xs" color="tertiary">
+                      Score
+                    </Text>
                     <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
                       {trader.stats.arena_score.toFixed(1)}
                     </Text>
@@ -472,17 +577,26 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                 )}
                 {trader.stats.rank != null && (
                   <Box style={{ minWidth: 40 }}>
-                    <Text size="xs" color="tertiary">Rank</Text>
-                    <Text size="sm" weight="bold">#{trader.stats.rank}</Text>
+                    <Text size="xs" color="tertiary">
+                      Rank
+                    </Text>
+                    <Text size="sm" weight="bold">
+                      #{trader.stats.rank}
+                    </Text>
                   </Box>
                 )}
               </Box>
             )}
 
             {/* Action buttons */}
-            <Box className="trader-link-actions" style={{
-              display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap',
-            }}>
+            <Box
+              className="trader-link-actions"
+              style={{
+                display: 'flex',
+                gap: tokens.spacing[2],
+                flexWrap: 'wrap',
+              }}
+            >
               {!trader.is_primary && (
                 <button
                   onClick={() => handleSetPrimary(trader.id)}
@@ -555,7 +669,10 @@ export function TraderLinksSection({ userId }: { userId: string }) {
           router.push('/claim')
         }}
         style={{
-          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing[2],
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: tokens.spacing[2],
           padding: tokens.spacing[3],
           borderRadius: tokens.radius.lg,
           border: `1px dashed ${tokens.colors.border.secondary}`,
@@ -564,11 +681,21 @@ export function TraderLinksSection({ userId }: { userId: string }) {
           minHeight: 44,
         }}
       >
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={tokens.colors.text.tertiary}
+          strokeWidth="2"
+          strokeLinecap="round"
+        >
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
         </svg>
-        <Text size="sm" color="tertiary">{t('linkNewAccount')}</Text>
+        <Text size="sm" color="tertiary">
+          {t('linkNewAccount')}
+        </Text>
       </Box>
 
       {/* Mobile-responsive styles */}
