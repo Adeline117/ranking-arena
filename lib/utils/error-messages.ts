@@ -1,7 +1,9 @@
 /**
- * 统一错误消息处理
- * 将各种错误转换为用户友好的消息
+ * Unified error message handling.
+ * Converts various errors into user-friendly messages via i18n.
  */
+
+import { t } from '@/lib/i18n'
 
 export type ErrorType =
   | 'network'
@@ -23,19 +25,22 @@ export interface ParsedError {
 }
 
 /**
- * 默认错误消息映射（中文）
+ * Default error messages — resolved at call time via i18n so they respect the current language.
  */
-const DEFAULT_ERROR_MESSAGES: Record<ErrorType, string> = {
-  network: '网络连接失败，请检查网络后重试',
-  timeout: '请求超时，请稍后重试',
-  unauthorized: '登录已过期，请重新登录',
-  forbidden: '没有权限执行此操作',
-  not_found: '请求的资源不存在',
-  validation: '输入数据格式不正确',
-  rate_limit: '操作太频繁，请稍后重试',
-  server_error: '服务器错误，请稍后重试',
-  service_unavailable: '服务暂时不可用，请稍后重试',
-  unknown: '操作失败，请稍后重试',
+function getDefaultErrorMessage(type: ErrorType): string {
+  const map: Record<ErrorType, () => string> = {
+    network: () => t('errorNetworkFailed'),
+    timeout: () => t('errorTimeout'),
+    unauthorized: () => t('errorUnauthorized'),
+    forbidden: () => t('errorForbidden'),
+    not_found: () => t('errorNotFound'),
+    validation: () => t('errorValidation'),
+    rate_limit: () => t('errorRateLimit'),
+    server_error: () => t('errorServerError'),
+    service_unavailable: () => t('errorServiceUnavailable'),
+    unknown: () => t('errorUnknown'),
+  }
+  return map[type]()
 }
 
 /**
@@ -62,7 +67,7 @@ export function parseError(error: unknown): ParsedError {
   if (error instanceof Error && error.name === 'AbortError') {
     return {
       type: 'timeout',
-      message: DEFAULT_ERROR_MESSAGES.timeout,
+      message: getDefaultErrorMessage('timeout'),
       retryable: true,
     }
   }
@@ -71,7 +76,7 @@ export function parseError(error: unknown): ParsedError {
   if (error instanceof TypeError && error.message.includes('fetch')) {
     return {
       type: 'network',
-      message: DEFAULT_ERROR_MESSAGES.network,
+      message: getDefaultErrorMessage('network'),
       retryable: true,
     }
   }
@@ -82,7 +87,7 @@ export function parseError(error: unknown): ParsedError {
     const type = STATUS_CODE_MAP[status] || 'unknown'
     return {
       type,
-      message: DEFAULT_ERROR_MESSAGES[type],
+      message: getDefaultErrorMessage(type),
       retryable: [408, 500, 502, 503, 504].includes(status),
       statusCode: status,
     }
@@ -101,7 +106,7 @@ export function parseError(error: unknown): ParsedError {
     ) {
       return {
         type: 'network',
-        message: DEFAULT_ERROR_MESSAGES.network,
+        message: getDefaultErrorMessage('network'),
         retryable: true,
       }
     }
@@ -110,7 +115,7 @@ export function parseError(error: unknown): ParsedError {
     if (message.includes('timeout') || message.includes('timed out')) {
       return {
         type: 'timeout',
-        message: DEFAULT_ERROR_MESSAGES.timeout,
+        message: getDefaultErrorMessage('timeout'),
         retryable: true,
       }
     }
@@ -120,7 +125,7 @@ export function parseError(error: unknown): ParsedError {
     if (message.includes('rate limit') || message.includes('too many')) {
       return {
         type: 'rate_limit',
-        message: DEFAULT_ERROR_MESSAGES.rate_limit,
+        message: getDefaultErrorMessage('rate_limit'),
         retryable: false,
       }
     }
@@ -129,7 +134,7 @@ export function parseError(error: unknown): ParsedError {
     if (message.includes('unauthorized') || message.includes('not logged in')) {
       return {
         type: 'unauthorized',
-        message: DEFAULT_ERROR_MESSAGES.unauthorized,
+        message: getDefaultErrorMessage('unauthorized'),
         retryable: false,
       }
     }
@@ -137,7 +142,7 @@ export function parseError(error: unknown): ParsedError {
     if (message.includes('forbidden') || message.includes('no permission')) {
       return {
         type: 'forbidden',
-        message: DEFAULT_ERROR_MESSAGES.forbidden,
+        message: getDefaultErrorMessage('forbidden'),
         retryable: false,
       }
     }
@@ -155,7 +160,7 @@ export function parseError(error: unknown): ParsedError {
   // 未知错误
   return {
     type: 'unknown',
-    message: DEFAULT_ERROR_MESSAGES.unknown,
+    message: getDefaultErrorMessage('unknown'),
     retryable: false,
   }
 }
@@ -224,7 +229,7 @@ export async function safeJsonFetch<T>(
           message:
             errorBody.error ||
             errorBody.message ||
-            DEFAULT_ERROR_MESSAGES[STATUS_CODE_MAP[response.status] || 'unknown'],
+            getDefaultErrorMessage(STATUS_CODE_MAP[response.status] || 'unknown'),
           retryable: [408, 500, 502, 503, 504].includes(response.status),
           statusCode: response.status,
         },
