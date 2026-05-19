@@ -7,6 +7,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { UnifiedTrader } from './types'
 import { mapLeaderboardRow } from './mappers'
 import { LR } from '@/lib/types/schema-mapping'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 
 export async function fetchSimilarTraders(
@@ -14,7 +15,35 @@ export async function fetchSimilarTraders(
   platform: string,
   traderKey: string,
   arenaScore: number | null,
-  roi: number | null,
+  roi: number | null
+): Promise<UnifiedTrader[]> {
+  // Cache key bucketed by score decile to reduce cardinality (3K traders → ~10 buckets per platform)
+  const scoreBucket =
+    arenaScore != null
+      ? Math.round(arenaScore / 10) * 10
+      : roi != null
+        ? `roi${Math.round(roi / 50) * 50}`
+        : 'none'
+  const cacheKey = `similar:${platform}:${scoreBucket}`
+  try {
+    return await tieredGetOrSet(
+      cacheKey,
+      () => fetchSimilarTradersUncached(supabase, platform, traderKey, arenaScore, roi),
+      'warm', // 15min TTL — similar traders change at most once per cron cycle
+      ['similar-traders']
+    )
+  } catch {
+    // Cache miss + fetch error — return empty
+    return []
+  }
+}
+
+async function fetchSimilarTradersUncached(
+  supabase: SupabaseClient,
+  platform: string,
+  traderKey: string,
+  arenaScore: number | null,
+  roi: number | null
 ): Promise<UnifiedTrader[]> {
   try {
     let data: Record<string, unknown>[] | null = null
@@ -24,7 +53,9 @@ export async function fetchSimilarTraders(
       const scoreRange = Math.max(arenaScore * 0.25, 10)
       const result = await supabase
         .from('leaderboard_ranks')
-        .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown, followers, ${LR.rank}, ${LR.season_id}, source_type, trader_type, computed_at`)
+        .select(
+          `${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown, followers, ${LR.rank}, ${LR.season_id}, source_type, trader_type, computed_at`
+        )
         .eq(LR.source, platform)
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
@@ -39,7 +70,9 @@ export async function fetchSimilarTraders(
       const roiRange = Math.max(Math.abs(roi) * 0.3, 20)
       const result = await supabase
         .from('leaderboard_ranks')
-        .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown, followers, ${LR.rank}, ${LR.season_id}, source_type, trader_type, computed_at`)
+        .select(
+          `${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown, followers, ${LR.rank}, ${LR.season_id}, source_type, trader_type, computed_at`
+        )
         .eq(LR.source, platform)
         .eq(LR.season_id, '90D')
         .neq(LR.source_trader_id, traderKey)
@@ -56,15 +89,18 @@ export async function fetchSimilarTraders(
     // Dedupe and map
     const seen = new Set<string>()
     return data
-      .filter(row => {
+      .filter((row) => {
         const id = String(row[LR.source_trader_id] || '')
         if (seen.has(id)) return false
         seen.add(id)
         return true
       })
-      .map(row => mapLeaderboardRow(row))
+      .map((row) => mapLeaderboardRow(row))
   } catch (err) {
-    logger.warn('[similar-traders] lookup failed:', err instanceof Error ? err.message : String(err))
+    logger.warn(
+      '[similar-traders] lookup failed:',
+      err instanceof Error ? err.message : String(err)
+    )
     return []
   }
 }
