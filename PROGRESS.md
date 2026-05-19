@@ -2,6 +2,44 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Library Removal + VPS Pre-flight Root Cause Fix (2026-05-19 night)
+
+### 1. Remove library feature, restore /hot in navigation
+
+Library feature was deleted but references remained across 17 files.
+
+| Change               | Files                                                                                   |
+| -------------------- | --------------------------------------------------------------------------------------- |
+| Nav /library -> /hot | NavLinks.tsx, Footer.tsx                                                                |
+| Delete library pages | app/(app)/library/ (4 files)                                                            |
+| Clean search system  | search API, SearchDropdown, SearchResultGroup, useSearchData, search page, search-types |
+| Clean misc           | ShareButton, admin stats, health route, next.config redirects, CLAUDE.md                |
+
+### 2. VPS Pre-flight Root Cause Fix (P0 -- Binance/Bitget offline)
+
+**Root cause**: `checkVpsProxy()` tested auth by proxying `httpbin.org`, but httpbin.org was never in the VPS host whitelist. VPS returned 403 "host not allowed", which pre-flight misread as "key mismatch" -> ALL group a1 (binance_futures, binance_spot) and b2 (bitget_futures) fetches blocked.
+
+**Impact**: 3 platforms had 0 traders in production. Single biggest source of 296 openclaw alerts.
+
+**Fix**: Use `/health` endpoint instead of `/proxy` with httpbin.org. Verified: binance_futures 100 traders, binance_spot 100 traders, copin 111 traders restored.
+
+### 3. Pipeline Alert Noise Reduction
+
+| Fix                             | Root Cause                                                        | Impact                                                   |
+| ------------------------------- | ----------------------------------------------------------------- | -------------------------------------------------------- |
+| Health threshold too sensitive  | `failedJobs > 0` = degraded (1 transient failure out of 60+ jobs) | Require >10% failed for degraded, >=3 stuck for critical |
+| Enrichment timeouts too short   | binance_futures/hyperliquid/okx_futures need VPS proxy (>35s)     | Platform-specific timeouts: 50-55s                       |
+| precompute-composite 7D timeout | 7D partition outgrew 90s statement_timeout                        | Increased to 150s                                        |
+
+### Verification
+
+- Post-deploy: 5/5 URLs healthy
+- Manual trigger a1: binance_futures 100 + binance_spot 100 saved
+- Manual trigger f2: copin 111 saved
+- Pipeline: 85/93 jobs healthy, 27/29 platforms healthy
+
+---
+
 ## Stripe API Tiers + Pipeline Root Cause + Exchange Data Fixes (2026-05-19 evening)
 
 **Three major workstreams completed in one session:**
