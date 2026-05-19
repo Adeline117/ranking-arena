@@ -23,8 +23,9 @@
 
 | `4673df1` | **SECURITY**: E2E fixtures gated to dev-only (was accessible in prod); API keys error sanitized (was leaking DB details); subscription + api-keys routes get `Cache-Control: private, no-store` |
 | `7a98c4a` | **UX**: homepage error retry UI (was infinite spinner); pricing already-subscribed → Settings redirect; market ErrorState on CoinGecko failure; search API returns 400 on invalid params (was 200) |
+| `6928aa5` | movers: reduce Redis TTL 600→120s + CDN TTL for empty results 3600→60s (empty results from outage now recover in 2min); rankings/live: add totalCount field |
 
-**Final verified state**: totalCount=1948/3013/3780, 28 platforms, all 3 seasons populated, post-deploy 5/5 healthy, code quality 100/100
+**Final verified state (2026-05-19 03:30 UTC)**: 90D=2015, 30D=3013, 7D=3780 traders; 27 platforms; search 10 traders; e2e fixtures BLOCKED; subscription private cache; all 7 pages 200; 0 type errors; 2625 tests pass; code quality 100/100
 
 ---
 
