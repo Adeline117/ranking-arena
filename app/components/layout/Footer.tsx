@@ -38,10 +38,10 @@ export default function Footer() {
     {
       title: t('footerAbout'),
       links: [
+        { href: '/about', label: t('aboutTitle') },
         { href: '/methodology', label: t('footerMethodology') },
         { href: '/u/adelinewen1107', label: t('footerContact') },
         { href: '/help', label: t('footerHelp') },
-        { href: '/status', label: t('footerStatus') },
       ],
     },
   ]
