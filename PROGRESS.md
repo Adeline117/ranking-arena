@@ -2,6 +2,33 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## CRITICAL: Empty Homepage Fix + Deep UX/Perf Audit (2026-05-19)
+
+**Trigger**: Deep production audit revealed homepage showing 0 traders for 12 days.
+
+**Root cause**: `leaderboard_ranks` partitioned table (lr_7d/lr_30d/lr_90d) was missing `DEFAULT nextval('leaderboard_ranks_id_seq')` on the `id` column. Every compute-leaderboard upsert silently failed with NOT NULL violation. The partition rebuild migration didn't carry over the DEFAULT.
+
+**Impact**: 12 days of empty rankings, broken pagination, empty search results, empty movers. Only `/api/rankings/live` (Redis-backed) continued working.
+
+**Shipped (3 commits, 1 critical migration)**:
+
+| Commit    | Fix                                                                                                                                                                        |
+| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c638713` | **CRITICAL**: restore `DEFAULT nextval()` on leaderboard_ranks + all partitions. Manually triggered compute-leaderboard to repopulate: 90D=2287, 30D=2718, 7D=2496 traders |
+| `3fa6acd` | Add empty state UI for rankings (filter 0 results → "No traders match" + Reset button; no data → "Rankings loading, please refresh")                                       |
+| `1e90e36` | Fix /api/traders available_sources query (was broken same as /api/rankings bug — LIMIT 500 from index page) + remove search suggestions force-dynamic for CDN caching      |
+
+**Also identified (from 3-agent parallel audit)**:
+
+- P2: search ILIKE on user_profiles.bio without trigram index (seq scan)
+- P2: resolveTrader sequential 3-step waterfall (parallelizable)
+- P2: search runs Meilisearch + Supabase in parallel wastefully
+- P2: TraderCard canAddMore causes 50 unnecessary re-renders
+- P2: pipeline_logs missing index for freshness query
+- P2: similar traders query not cached
+
+---
+
 ## Comprehensive Platform Audit + Optimization (2026-05-18)
 
 **Trigger**: Full audit of API interfaces, data accuracy, trader claim flow, and user experience.
