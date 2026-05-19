@@ -72,11 +72,12 @@ const PLATFORM_LIMITS: Record<string, { limit90: number; limit30: number; limit7
   // VPS scrapers (slow — ~18s/trader via Playwright, max 5 in 90s timeout)
   bybit: { limit90: 5, limit30: 5, limit7: 5 },
   bybit_spot: { limit90: 5, limit30: 5, limit7: 5 },
+  // Re-enabled 2026-05-19: data exists, enrichment was disabled too aggressively
+  bingx: { limit90: 30, limit30: 20, limit7: 15 },
+  weex: { limit90: 30, limit30: 20, limit7: 15 },
+  kucoin: { limit90: 40, limit30: 30, limit7: 20 },
   // DEAD/DISABLED:
   // phemex: DEAD (API 404 since 2026-04) — Mac Mini scraper only
-  // bingx: DEAD (empty data since 2026-04)
-  // weex: DISABLED (75% timeout)
-  // kucoin: DEAD (copy trading discontinued)
   // bingx_spot: REMOVED (no enrichment API)
   // blofin: REMOVED (401 auth + geo-block) — Mac Mini scraper only, see note above
   // lbank: Mac Mini scraper only (VPS scraper returns empty data)
@@ -121,6 +122,9 @@ const TIER_SLOW = [
   'etoro', // rate-limited CEX
   'bybit',
   'bybit_spot', // VPS scrapers
+  'bingx', // re-enabled 2026-05-19 — via CF proxy, rate-limited
+  'weex', // re-enabled 2026-05-19 — via VPS scraper
+  'kucoin', // re-enabled 2026-05-19 — enrichment from leaderboard cache
 ]
 // Concurrency per tier: fast can run all at once, medium in batches of 5, slow in batches of 3
 // ROOT CAUSE FIX (2026-04-23): slow was 2 → 5 slow platforms ÷ 2 = 3 batches × 100s = 300s

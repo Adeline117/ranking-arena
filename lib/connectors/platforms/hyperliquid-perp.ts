@@ -13,15 +13,24 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
+import { shortenAddress } from '@/lib/chains/wallet-utils'
 import {
   HyperliquidLeaderboardResponseSchema,
   HyperliquidClearinghouseResponseSchema,
   HyperliquidFillsResponseSchema,
 } from './schemas'
 import type {
-  DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
-  TraderSource, TraderProfile, SnapshotMetrics, QualityFlags, TraderTimeseries,
-  PlatformCapabilities, Window,
+  DiscoverResult,
+  ProfileResult,
+  SnapshotResult,
+  TimeseriesResult,
+  TraderSource,
+  TraderProfile,
+  SnapshotMetrics,
+  QualityFlags,
+  TraderTimeseries,
+  PlatformCapabilities,
+  Window,
 } from '../../types/leaderboard'
 
 export class HyperliquidPerpConnector extends BaseConnector {
@@ -33,10 +42,15 @@ export class HyperliquidPerpConnector extends BaseConnector {
     native_windows: ['7d', '30d', '90d'],
     available_fields: ['roi', 'pnl'],
     has_timeseries: true,
-    has_profiles: false,  // No user profiles on DEX
+    has_profiles: false, // No user profiles on DEX
     scraping_difficulty: 1,
     rate_limit: { rpm: 60, concurrency: 3 },
-    notes: ['Public REST API', 'No CF', 'trader_key = 0x address', 'No followers/copiers/win_rate natively'],
+    notes: [
+      'Public REST API',
+      'No CF',
+      'trader_key = 0x address',
+      'No followers/copiers/win_rate natively',
+    ],
   }
 
   async discoverLeaderboard(window: Window, limit = 500, _offset = 0): Promise<DiscoverResult> {
@@ -49,18 +63,22 @@ export class HyperliquidPerpConnector extends BaseConnector {
         { method: 'GET' }
       )
     } catch (err) {
-      this.logger.debug('Hyperliquid stats-data fallback:', err instanceof Error ? err.message : String(err))
-      const timeWindow = window === '7d' ? 'day' : window === '30d' ? 'month' : 'allTime'
-      _rawLb = await this.request<Record<string, unknown>>(
-        'https://api.hyperliquid.xyz/info',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'leaderboard', timeWindow }),
-        }
+      this.logger.debug(
+        'Hyperliquid stats-data fallback:',
+        err instanceof Error ? err.message : String(err)
       )
+      const timeWindow = window === '7d' ? 'day' : window === '30d' ? 'month' : 'allTime'
+      _rawLb = await this.request<Record<string, unknown>>('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'leaderboard', timeWindow }),
+      })
     }
-    const data = warnValidate(HyperliquidLeaderboardResponseSchema, _rawLb, 'hyperliquid-perp/leaderboard')
+    const data = warnValidate(
+      HyperliquidLeaderboardResponseSchema,
+      _rawLb,
+      'hyperliquid-perp/leaderboard'
+    )
     const leaderboard = data?.leaderboardRows || data || []
 
     // For 90d with allTime, we take top entries (platform doesn't have 90d natively, uses allTime)
@@ -98,34 +116,53 @@ export class HyperliquidPerpConnector extends BaseConnector {
       if (correctedRoi != null && correctedRoi < -10000) correctedRoi = -10000
 
       return {
-        platform: 'hyperliquid' as const, market_type: 'perp' as const,
+        platform: 'hyperliquid' as const,
+        market_type: 'perp' as const,
         trader_key: address,
-        display_name: (item.displayName as string) || null,
+        display_name: (item.displayName as string) || shortenAddress(address),
         profile_url: `https://app.hyperliquid.xyz/leaderboard/${address}`,
-        discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
+        discovered_at: new Date().toISOString(),
+        last_seen_at: new Date().toISOString(),
         is_active: true,
         raw: {
-          ...item as Record<string, unknown>,
+          ...(item as Record<string, unknown>),
           _computed_roi: correctedRoi,
           _computed_pnl: rawPnl,
         },
       }
     })
 
-    return { traders, total_available: entries.length, window, fetched_at: new Date().toISOString() }
+    return {
+      traders,
+      total_available: entries.length,
+      window,
+      fetched_at: new Date().toISOString(),
+    }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
     // Hyperliquid has no user profiles - only addresses
     const profile: TraderProfile = {
-      platform: 'hyperliquid', market_type: 'perp', trader_key: traderKey,
-      display_name: null,  // Anonymous wallet
+      platform: 'hyperliquid',
+      market_type: 'perp',
+      trader_key: traderKey,
+      display_name: shortenAddress(traderKey),
       avatar_url: null,
-      bio: null, tags: ['on-chain', 'perp-dex'],
+      bio: null,
+      tags: ['on-chain', 'perp-dex'],
       profile_url: `https://app.hyperliquid.xyz/leaderboard/${traderKey}`,
-      followers: null, copiers: null, aum: null,
-      updated_at: new Date().toISOString(), last_enriched_at: null,
-      provenance: { source_platform: 'hyperliquid', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
+      followers: null,
+      copiers: null,
+      aum: null,
+      updated_at: new Date().toISOString(),
+      last_enriched_at: null,
+      provenance: {
+        source_platform: 'hyperliquid',
+        acquisition_method: 'api',
+        fetched_at: new Date().toISOString(),
+        source_url: null,
+        scraper_version: '1.0.0',
+      },
     }
     return { profile, fetched_at: new Date().toISOString() }
   }
@@ -138,14 +175,11 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
     const [_rawState, _rawLb] = await Promise.all([
       // Get clearinghouse state for current equity / AUM
-      this.request<Record<string, unknown>>(
-        'https://api.hyperliquid.xyz/info',
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ type: 'clearinghouseState', user: traderKey }),
-        }
-      ),
+      this.request<Record<string, unknown>>('https://api.hyperliquid.xyz/info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'clearinghouseState', user: traderKey }),
+      }),
       // Get leaderboard from stats-data endpoint (reliable, handles 33K+ traders)
       this.request<Record<string, unknown>>(
         'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard',
@@ -153,8 +187,16 @@ export class HyperliquidPerpConnector extends BaseConnector {
       ),
     ])
 
-    const state = warnValidate(HyperliquidClearinghouseResponseSchema, _rawState, 'hyperliquid-perp/clearinghouse')
-    const lbData = warnValidate(HyperliquidLeaderboardResponseSchema, _rawLb, 'hyperliquid-perp/leaderboard-snapshot')
+    const state = warnValidate(
+      HyperliquidClearinghouseResponseSchema,
+      _rawState,
+      'hyperliquid-perp/clearinghouse'
+    )
+    const lbData = warnValidate(
+      HyperliquidLeaderboardResponseSchema,
+      _rawLb,
+      'hyperliquid-perp/leaderboard-snapshot'
+    )
 
     const accountValue = Number(state?.marginSummary?.accountValue) || 0
     const totalRawPnl = Number(state?.marginSummary?.totalRawPnl) || 0
@@ -177,7 +219,9 @@ export class HyperliquidPerpConnector extends BaseConnector {
       const wp = lbEntry.windowPerformances
       let perf: Record<string, unknown> | undefined
       if (Array.isArray(wp)) {
-        const entry = (wp as unknown[]).find((pair: unknown) => Array.isArray(pair) && (pair as unknown[])[0] === windowKey)
+        const entry = (wp as unknown[]).find(
+          (pair: unknown) => Array.isArray(pair) && (pair as unknown[])[0] === windowKey
+        )
         perf = entry ? (entry as [string, Record<string, unknown>])[1] : undefined
       } else if (wp && typeof wp === 'object') {
         perf = (wp as Record<string, Record<string, unknown>>)[windowKey]
@@ -215,7 +259,9 @@ export class HyperliquidPerpConnector extends BaseConnector {
       const fills = Array.isArray(_rawFills) ? _rawFills : []
       if (fills.length > 0) {
         const closedFills = fills.filter((f: Record<string, unknown>) => Number(f.closedPnl) !== 0)
-        const wins = closedFills.filter((f: Record<string, unknown>) => Number(f.closedPnl) > 0).length
+        const wins = closedFills.filter(
+          (f: Record<string, unknown>) => Number(f.closedPnl) > 0
+        ).length
         if (closedFills.length > 0) {
           winRate = (wins / closedFills.length) * 100
           tradesCount = closedFills.length
@@ -236,21 +282,28 @@ export class HyperliquidPerpConnector extends BaseConnector {
         if (maxDD > 0.01 && maxDD < 200) fillMDD = Math.round(maxDD * 100) / 100
       }
     } catch (err) {
-      this.logger.debug('Hyperliquid fills fetch fallback:', err instanceof Error ? err.message : String(err))
+      this.logger.debug(
+        'Hyperliquid fills fetch fallback:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
 
     const metrics: SnapshotMetrics = {
       roi,
-      pnl: pnlFromLb ?? (totalRawPnl || null),  // Prefer windowed PnL from leaderboard over all-time clearinghouse PnL
+      pnl: pnlFromLb ?? (totalRawPnl || null), // Prefer windowed PnL from leaderboard over all-time clearinghouse PnL
       win_rate: winRate,
-      max_drawdown: fillMDD,  // Computed from cumulative fills PnL
-      sharpe_ratio: null, sortino_ratio: null,
+      max_drawdown: fillMDD, // Computed from cumulative fills PnL
+      sharpe_ratio: null,
+      sortino_ratio: null,
       trades_count: tradesCount,
-      followers: null,  // DEX - no followers
-      copiers: null,    // DEX - no copiers
+      followers: null, // DEX - no followers
+      copiers: null, // DEX - no copiers
       aum: accountValue || null,
       platform_rank: null,
-      arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
+      arena_score: null,
+      return_score: null,
+      drawdown_score: null,
+      stability_score: null,
     }
 
     const quality_flags: QualityFlags = {
@@ -258,7 +311,7 @@ export class HyperliquidPerpConnector extends BaseConnector {
       non_standard_fields: {
         roi: 'Sourced from leaderboard endpoint (per-window). Falls back to clearinghouse approximation if trader not on leaderboard.',
       },
-      window_native: window === '30d',  // Only 'month' is truly native
+      window_native: window === '30d', // Only 'month' is truly native
       notes: [
         'Hyperliquid is a DEX - no copy trading features',
         'ROI sourced from leaderboard when available, falls back to clearinghouse approximation',
@@ -292,8 +345,11 @@ export class HyperliquidPerpConnector extends BaseConnector {
       }
 
       series.push({
-        platform: 'hyperliquid', market_type: 'perp', trader_key: traderKey,
-        series_type: 'daily_pnl', as_of_ts: new Date().toISOString(),
+        platform: 'hyperliquid',
+        market_type: 'perp',
+        trader_key: traderKey,
+        series_type: 'daily_pnl',
+        as_of_ts: new Date().toISOString(),
         data: Array.from(dailyPnl.entries())
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([date, value]) => ({ ts: `${date}T00:00:00Z`, value })),
@@ -321,16 +377,16 @@ export class HyperliquidPerpConnector extends BaseConnector {
 
     return {
       trader_key: raw.ethAddress ?? raw.user ?? null,
-      display_name: raw.displayName ?? null,
+      display_name: raw.displayName ?? shortenAddress(String(raw.ethAddress || raw.user || '')),
       avatar_url: null,
       roi,
       pnl,
-      win_rate: null,        // Requires fill-level analysis (enrichment)
-      max_drawdown: null,    // Requires portfolio endpoint (enrichment)
+      win_rate: null, // Requires fill-level analysis (enrichment)
+      max_drawdown: null, // Requires portfolio endpoint (enrichment)
       trades_count: null,
       followers: null,
       copiers: null,
-      aum: accountValue,     // accountValue is equity/AUM, NOT PnL
+      aum: accountValue, // accountValue is equity/AUM, NOT PnL
       sharpe_ratio: null,
       platform_rank: null,
     }

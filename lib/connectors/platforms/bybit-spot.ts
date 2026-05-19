@@ -30,7 +30,7 @@ export class BybitSpotConnector extends BaseConnector {
     platform: 'bybit_spot' as LeaderboardPlatform,
     market_types: ['spot'],
     native_windows: ['7d', '30d', '90d'],
-    available_fields: ['roi', 'win_rate', 'max_drawdown', 'followers', 'copiers'],
+    available_fields: ['roi', 'pnl', 'win_rate', 'max_drawdown', 'followers', 'copiers'],
     has_timeseries: false,
     has_profiles: false,
     scraping_difficulty: 3,
@@ -46,12 +46,16 @@ export class BybitSpotConnector extends BaseConnector {
     // bybit-futures: worst case = 2 × (30s + 30s) + 3s = 123s per VPS call.
     // Previously 90s meant 363s worst case (2 × 2 × 90s), far exceeding
     // 180s platform budget. If VPS can't respond in 30s, it's down.
-    const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bybit/leaderboard', {
-      dataDuration: SCRAPER_DURATION_MAP[window],
-      pageNo: String(page),
-      pageSize: String(limit),
-      leaderTag: 'LEADER_TAG_SPOT',
-    }, 30000)
+    const vpsData = await this.fetchViaVPS<Record<string, unknown>>(
+      '/bybit/leaderboard',
+      {
+        dataDuration: SCRAPER_DURATION_MAP[window],
+        pageNo: String(page),
+        pageSize: String(limit),
+        leaderTag: 'LEADER_TAG_SPOT',
+      },
+      30000
+    )
 
     if (Date.now() > totalDeadline) {
       return { traders: [], total_available: 0, window, fetched_at: new Date().toISOString() }
@@ -62,7 +66,10 @@ export class BybitSpotConnector extends BaseConnector {
       const resultObj = vpsData.result as Record<string, unknown> | undefined
       const leaderDetails = resultObj?.leaderDetails as unknown[] | undefined
       const dataArr = resultObj?.data as unknown[] | undefined
-      list = (leaderDetails?.length ? leaderDetails : dataArr?.length ? dataArr : []) as Record<string, unknown>[]
+      list = (leaderDetails?.length ? leaderDetails : dataArr?.length ? dataArr : []) as Record<
+        string,
+        unknown
+      >[]
     } else {
       // NEW 2026-04-08: fallback to DB seed list when VPS unavailable.
       // Enrichment endpoints are NOT WAF-blocked, so we can still refresh existing traders.
@@ -92,12 +99,22 @@ export class BybitSpotConnector extends BaseConnector {
             is_active: true,
             raw: { _source: 'db_seed' } as Record<string, unknown>,
           }))
-          return { traders: seedTraders, total_available: seedTraders.length, window, fetched_at: new Date().toISOString() }
+          return {
+            traders: seedTraders,
+            total_available: seedTraders.length,
+            window,
+            fetched_at: new Date().toISOString(),
+          }
         }
       } catch (err) {
-        this.logger.warn('[bybit_spot] DB seed fallback failed:', err instanceof Error ? err.message : String(err))
+        this.logger.warn(
+          '[bybit_spot] DB seed fallback failed:',
+          err instanceof Error ? err.message : String(err)
+        )
       }
-      throw new Error('Bybit Spot: VPS scraper unavailable and no DB seed list. Check VPS_SCRAPER_SG connectivity.')
+      throw new Error(
+        'Bybit Spot: VPS scraper unavailable and no DB seed list. Check VPS_SCRAPER_SG connectivity.'
+      )
     }
 
     const traders: TraderSource[] = list.map((item) => ({
@@ -114,7 +131,7 @@ export class BybitSpotConnector extends BaseConnector {
 
     return {
       traders,
-      total_available: (vpsData?.result as Record<string, unknown>)?.total as number || null,
+      total_available: ((vpsData?.result as Record<string, unknown>)?.total as number) || null,
       window,
       fetched_at: new Date().toISOString(),
     }
@@ -134,7 +151,7 @@ export class BybitSpotConnector extends BaseConnector {
 
   normalize(raw: unknown): Record<string, unknown> {
     const e = raw as Record<string, unknown>
-    const mv = Array.isArray(e.metricValues) ? e.metricValues as string[] : null
+    const mv = Array.isArray(e.metricValues) ? (e.metricValues as string[]) : null
 
     return {
       trader_key: e.leaderMark || e.leaderUserId,

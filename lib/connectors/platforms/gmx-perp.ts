@@ -17,6 +17,7 @@ import { BaseConnector } from '../base'
 import { safeNumber } from '../utils'
 import { warnValidate } from '../schemas'
 import { GmxSubgraphResponseSchema } from './schemas'
+import { shortenAddress } from '@/lib/chains/wallet-utils'
 import type {
   DiscoverResult,
   ProfileResult,
@@ -104,7 +105,7 @@ export class GmxPerpConnector extends BaseConnector {
           platform: 'gmx' as const,
           market_type: 'perp' as const,
           trader_key: address,
-          display_name: null,
+          display_name: shortenAddress(address),
           profile_url: `https://app.gmx.io/#/leaderboard?account=${address}`,
           discovered_at: new Date().toISOString(),
           last_seen_at: new Date().toISOString(),
@@ -127,7 +128,7 @@ export class GmxPerpConnector extends BaseConnector {
       platform: 'gmx',
       market_type: 'perp',
       trader_key: traderKey.toLowerCase(),
-      display_name: null,
+      display_name: shortenAddress(traderKey),
       avatar_url: null,
       bio: null,
       tags: ['on-chain', 'perp-dex', 'arbitrum'],
@@ -330,7 +331,7 @@ export class GmxPerpConnector extends BaseConnector {
 
     return {
       trader_key: String(raw.account || raw.id || '').toLowerCase(),
-      display_name: null,
+      display_name: shortenAddress(String(raw.account || raw.id || '')),
       avatar_url: null,
       roi,
       pnl,

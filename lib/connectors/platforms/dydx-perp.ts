@@ -13,6 +13,7 @@
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
 import { DydxSubaccountResponseSchema, DydxHistoricalPnlResponseSchema } from './schemas'
+import { shortenAddress } from '@/lib/chains/wallet-utils'
 import type {
   DiscoverResult,
   ProfileResult,
@@ -186,7 +187,7 @@ export class DydxPerpConnector extends BaseConnector {
               platform: 'dydx' as const,
               market_type: 'perp' as const,
               trader_key: address,
-              display_name: null,
+              display_name: shortenAddress(address),
               profile_url: `https://trade.dydx.exchange/portfolio/${address}`,
               discovered_at: new Date().toISOString(),
               last_seen_at: new Date().toISOString(),
@@ -256,7 +257,7 @@ export class DydxPerpConnector extends BaseConnector {
       platform: 'dydx',
       market_type: 'perp',
       trader_key: traderKey,
-      display_name: null,
+      display_name: shortenAddress(traderKey),
       avatar_url: null,
       bio: null,
       tags: ['on-chain', 'perp-dex'],
@@ -443,7 +444,7 @@ export class DydxPerpConnector extends BaseConnector {
 
     return {
       trader_key: String(raw.account || raw.address || ''),
-      display_name: null,
+      display_name: shortenAddress(String(raw.account || raw.address || '')),
       avatar_url: null,
       roi,
       pnl,
