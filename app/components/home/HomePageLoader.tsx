@@ -26,6 +26,8 @@ const HomePage = dynamic(() => import('./HomePage'), {
 
 // Web Vitals + SpeedInsights: homepage uses root layout (not (app)/layout.tsx
 // where these live), so we lazy-load them here when Phase 2 activates.
+const WelcomeBanner = dynamic(() => import('./WelcomeBanner'), { ssr: false })
+
 const WebVitals = dynamic(
   () => import('../Providers/WebVitals').then((m) => ({ default: m.WebVitals })),
   { ssr: false }
@@ -78,6 +80,7 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
   // Phase 2 needs ToastProvider, QueryClient, etc. — wrap here on client only.
   return (
     <Providers>
+      <WelcomeBanner />
       <HomePage {...props} />
       <WebVitals />
       <SpeedInsights />
