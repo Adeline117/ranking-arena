@@ -843,47 +843,59 @@ async function computeSeason(
     return a.source_trader_id.localeCompare(b.source_trader_id)
   })
 
-  // Pre-upsert degradation check: block if new count drops below DEGRADATION_THRESHOLD of previous
-  // BUG FIX 2026-03-31: previousCount was the total rows in leaderboard_ranks (including zombie rows
-  // from incremental upsert not deleting old entries). The table accumulated 14-17K rows but compute
-  // only produces ~8K, causing ratio=47% < 70% threshold on EVERY run. Fix: use the last scored count
-  // from Redis (i.e., what the compute actually produced last time) as the baseline.
+  // --- ROOT CAUSE FIX: Expected-state degradation check ---
+  // Instead of comparing against a drifting "last scored count" (inflated by zombie
+  // rows or deflated by partial runs), compute the EXPECTED output from per-platform
+  // known counts. This makes the threshold stable regardless of past history.
   const LAST_SCORED_KEY = `leaderboard:last-scored-count:${season}`
-  let baselineCount = previousCount || 0
-  let _baselineSource = 'table-count'
+  let expectedCount = 0
+  let expectedSource = 'per-platform'
   try {
-    const stored = await PipelineState.get<number>(LAST_SCORED_KEY)
-    if (stored && typeof stored === 'number' && stored > 0) {
-      baselineCount = stored
-      _baselineSource = 'pipeline-state'
-      logger.info(
-        `[${season}] Using DB baseline (last scored count): ${baselineCount} (table count: ${previousCount})`
-      )
-    } else if (previousCount && previousCount > 0) {
-      // Cold start: pipeline_state has no baseline yet (table may not exist or first run).
-      // The table count includes zombie rows from incremental upsert, so it's inflated.
-      // Use 60% of table count as conservative baseline to avoid false degradation alerts.
-      baselineCount = Math.round(previousCount * 0.6)
-      _baselineSource = 'table-count-discounted'
-      logger.info(
-        `[${season}] No pipeline_state baseline — using discounted table count: ${baselineCount} (raw: ${previousCount})`
-      )
+    const { data: platformCounts } = await (supabase as any).rpc('get_expected_platform_counts', {
+      p_season_id: season,
+    })
+    if (platformCounts && Array.isArray(platformCounts)) {
+      const freshSet = new Set(freshPlatforms)
+      for (const row of platformCounts) {
+        const src = row.source as string
+        const cnt = Number(row.expected_count) || 0
+        if (freshSet.has(src)) {
+          expectedCount += cnt
+        }
+      }
     }
   } catch (e) {
     logger.warn(
-      `[${season}] pipeline_state read failed: ${e instanceof Error ? e.message : String(e)}`
+      `[${season}] get_expected_platform_counts failed: ${e instanceof Error ? e.message : String(e)}`
     )
   }
 
-  const MAX_CONSECUTIVE_SKIPS = 1 // Force-compute on 2nd attempt to prevent stale data (was 2)
-  const ratio = baselineCount ? scored.length / baselineCount : 1
+  // Fallback: if RPC not available or returned 0, use pipeline_state baseline
+  if (expectedCount === 0) {
+    expectedSource = 'pipeline-state-fallback'
+    try {
+      const stored = await PipelineState.get<number>(LAST_SCORED_KEY)
+      if (stored && typeof stored === 'number' && stored > 0) {
+        expectedCount = stored
+      } else if (previousCount && previousCount > 0) {
+        expectedCount = Math.round(previousCount * 0.6)
+        expectedSource = 'table-count-discounted'
+      }
+    } catch (e) {
+      logger.warn(
+        `[${season}] pipeline_state fallback failed: ${e instanceof Error ? e.message : String(e)}`
+      )
+    }
+  }
+
+  const MAX_CONSECUTIVE_SKIPS = 1
+  const ratio = expectedCount ? scored.length / expectedCount : 1
   logger.info(
-    `[${season}] Degradation check: scored=${scored.length}, baseline=${baselineCount}, tableCount=${previousCount}, ratio=${(ratio * 100).toFixed(1)}%, threshold=${DEGRADATION_THRESHOLD * 100}%`
+    `[${season}] Degradation check: scored=${scored.length}, expected=${expectedCount} (${expectedSource}), freshPlatforms=${freshPlatforms.length}, ratio=${(ratio * 100).toFixed(1)}%, threshold=${DEGRADATION_THRESHOLD * 100}%`
   )
 
-  if (baselineCount && baselineCount > 500 && !forceWrite) {
+  if (expectedCount && expectedCount > 500 && !forceWrite) {
     if (scored.length < 500 || ratio < DEGRADATION_THRESHOLD) {
-      // Check consecutive skip counter from Redis — use 'cold' tier (TTL 1h) to survive 30min cron interval
       let consecutiveSkips = 0
       const skipKey = `leaderboard:degradation-skips:${season}`
       try {
@@ -898,29 +910,26 @@ async function computeSeason(
 
       if (consecutiveSkips >= MAX_CONSECUTIVE_SKIPS) {
         logger.warn(
-          `${season}: degradation detected (${scored.length}/${baselineCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips to prevent stale data`
+          `${season}: degradation detected (${scored.length}/${expectedCount}, ${(ratio * 100).toFixed(1)}%) but FORCE-COMPUTING after ${consecutiveSkips} consecutive skips`
         )
-        // Reset counter and fall through to upsert
         try {
           await PipelineState.del(skipKey)
-        } catch (e) {
-          logger.warn(
-            `[${season}] skip counter reset failed: ${e instanceof Error ? e.message : String(e)}`
-          )
+        } catch {
+          /* non-critical */
         }
       } else {
         logger.error(
-          `${season}: computed ${scored.length} traders (baseline: ${baselineCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`
+          `${season}: computed ${scored.length} traders (expected: ${expectedCount}, ratio: ${(ratio * 100).toFixed(1)}%). SKIPPING — below ${DEGRADATION_THRESHOLD * 100}% threshold (skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}).`
         )
         sendRateLimitedAlert(
           {
             title: `Leaderboard ${season} degradation skip ${consecutiveSkips}/${MAX_CONSECUTIVE_SKIPS}`,
-            message: `${season}: ${scored.length}/${baselineCount} traders (${(ratio * 100).toFixed(1)}%). Data preserved but stale. Force-compute at skip ${MAX_CONSECUTIVE_SKIPS}.`,
+            message: `${season}: ${scored.length}/${expectedCount} traders (${(ratio * 100).toFixed(1)}%). Data preserved but stale.`,
             level: consecutiveSkips >= 2 ? 'critical' : 'warning',
             details: {
               season,
               scored: scored.length,
-              baseline: baselineCount,
+              expected: expectedCount,
               ratio,
               skip: consecutiveSkips,
             },
@@ -933,35 +942,11 @@ async function computeSeason(
           )
         )
 
-        // ROOT CAUSE FIX: Run stale-row cleanup EVEN ON DEGRADATION SKIP.
-        // Previously, if degradation was detected, we returned immediately and
-        // the cleanup at line ~1707 was skipped. This meant stale high-score
-        // rows from weeks ago persisted at the top of rankings FOREVER, because
-        // compute-leaderboard never got past the degradation guard.
-        //
-        // Cleanup is independent of upsert success — it just removes rows that
-        // haven't been touched in 5 days (any upsert resets computed_at).
+        // Still run stale-row cleanup even on degradation skip
         try {
-          const cutoff = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString()
-          const { data: staleRows } = await supabase
-            .from('leaderboard_ranks')
-            .select('id')
-            .eq('season_id', season)
-            .lt('computed_at', cutoff)
-            .limit(1000)
-          if (staleRows && staleRows.length > 0) {
-            const staleIds = staleRows.map((r: { id: number }) => r.id)
-            // Batch size 200 (down from 500) to reduce lock hold time
-            for (let i = 0; i < staleIds.length; i += 200) {
-              await supabase
-                .from('leaderboard_ranks')
-                .delete()
-                .in('id', staleIds.slice(i, i + 200))
-            }
-            logger.info(
-              `${season}: cleaned ${staleIds.length} stale rows (>5d old) despite degradation skip`
-            )
-          }
+          const cleaned = await cleanupStaleRows(supabase as SupabaseClient, season)
+          if (cleaned > 0)
+            logger.info(`${season}: cleaned ${cleaned} stale rows despite degradation skip`)
         } catch (cleanupErr) {
           logger.warn(
             `${season}: cleanup-on-degradation failed: ${cleanupErr instanceof Error ? cleanupErr.message : String(cleanupErr)}`
@@ -973,16 +958,14 @@ async function computeSeason(
     }
   } else if (forceWrite) {
     logger.warn(
-      `${season}: force write enabled, skipping degradation check (scored: ${scored.length}, baseline: ${baselineCount})`
+      `${season}: force write enabled, skipping degradation check (scored: ${scored.length}, expected: ${expectedCount})`
     )
   }
-  // Reset consecutive skip counter on successful computation
+  // Reset skip counter on successful computation
   try {
     await PipelineState.del(`leaderboard:degradation-skips:${season}`)
-  } catch (e) {
-    logger.warn(
-      `[${season}] skip counter cleanup failed: ${e instanceof Error ? e.message : String(e)}`
-    )
+  } catch {
+    /* non-critical */
   }
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
@@ -1274,10 +1257,37 @@ async function computeSeason(
     await rerankAllRows(supabase, season)
   }
 
-  // Clean up rows not updated in 5 days. Excluded traders (negative ROI,
-  // <5 trades, etc.) never get re-computed, so their stale high-scores
-  // would persist at the top of rankings forever without this cleanup.
-  // Logic in rerank-cleanup.ts.
+  // --- ROOT CAUSE FIX: Atomic per-platform cleanup ---
+  // For each FRESH platform, delete all rows NOT in the new scored set.
+  // This eliminates zombie rows immediately instead of waiting 5 days.
+  // Stale/query-failed platforms are untouched (their data is preserved).
+  if (isOutOfTime(15_000)) {
+    logger.warn(
+      `[${season}] SKIPPING atomic cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`
+    )
+  } else if (!upsertAborted) {
+    // Build per-platform trader ID map from the scored result
+    const scoredTradersByPlatform = new Map<string, string[]>()
+    for (const t of scoredFiltered) {
+      const ids = scoredTradersByPlatform.get(t.source) || []
+      ids.push(t.source_trader_id)
+      scoredTradersByPlatform.set(t.source, ids)
+    }
+    const atomicCleaned = await atomicPlatformCleanup(
+      supabase as SupabaseClient,
+      season,
+      freshPlatforms,
+      scoredTradersByPlatform
+    )
+    if (atomicCleaned > 0) {
+      logger.info(
+        `${season}: atomic cleanup removed ${atomicCleaned} zombie rows from fresh platforms`
+      )
+    }
+  }
+
+  // Legacy stale-row cleanup as safety net (catches rows from platforms
+  // that were stale for >5 days and never got atomic-cleaned)
   if (isOutOfTime(10_000)) {
     logger.warn(
       `[${season}] SKIPPING stale-row cleanup — only ${Math.round(timeLeftMs() / 1000)}s left`

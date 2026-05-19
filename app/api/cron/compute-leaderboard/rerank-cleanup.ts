@@ -96,3 +96,75 @@ export async function cleanupStaleRows(supabase: SupabaseClient, season: Period)
   }
   return staleIds.length
 }
+
+/**
+ * ROOT CAUSE FIX: Atomic per-platform cleanup.
+ *
+ * After upsert, for each FRESH platform that was successfully computed,
+ * delete all rows for (season, source) that are NOT in the new scored set.
+ * This eliminates zombie rows immediately instead of waiting 5 days.
+ *
+ * Stale/query-failed platforms are untouched — their old data is preserved
+ * until they return to fresh state.
+ */
+export async function atomicPlatformCleanup(
+  supabase: SupabaseClient,
+  season: Period,
+  freshPlatforms: string[],
+  scoredTradersByPlatform: Map<string, string[]>
+): Promise<number> {
+  let totalDeleted = 0
+
+  for (const platform of freshPlatforms) {
+    const traderIds = scoredTradersByPlatform.get(platform)
+    if (!traderIds || traderIds.length === 0) continue
+
+    try {
+      const { data, error } = await supabase.rpc('cleanup_stale_platform_rows', {
+        p_season_id: season,
+        p_source: platform,
+        p_keep_trader_ids: traderIds,
+      })
+
+      if (error) {
+        // RPC not available yet — fall back to manual delete
+        if (error.code === '42883') {
+          const { data: existing } = await supabase
+            .from('leaderboard_ranks')
+            .select('id, source_trader_id')
+            .eq('season_id', season)
+            .eq('source', platform)
+
+          if (existing) {
+            const keepSet = new Set(traderIds)
+            const toDelete = existing
+              .filter((r: { source_trader_id: string }) => !keepSet.has(r.source_trader_id))
+              .map((r: { id: string }) => r.id)
+
+            for (let i = 0; i < toDelete.length; i += 500) {
+              await supabase
+                .from('leaderboard_ranks')
+                .delete()
+                .in('id', toDelete.slice(i, i + 500))
+            }
+            totalDeleted += toDelete.length
+          }
+        } else {
+          logger.warn(`${season}: cleanup RPC failed for ${platform}: ${error.message}`)
+        }
+      } else {
+        const deleted = typeof data === 'number' ? data : 0
+        if (deleted > 0) {
+          logger.info(`${season}: cleaned ${deleted} zombie rows from ${platform}`)
+        }
+        totalDeleted += deleted
+      }
+    } catch (e) {
+      logger.warn(
+        `${season}: atomicPlatformCleanup failed for ${platform}: ${e instanceof Error ? e.message : String(e)}`
+      )
+    }
+  }
+
+  return totalDeleted
+}
