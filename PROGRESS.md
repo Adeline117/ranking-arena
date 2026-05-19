@@ -33,12 +33,13 @@
 | `64dd2e1` | **ROOT CAUSE**: exchange follower counts (OKX max=17K, eToro max=32K) were never passed to leaderboard_ranks — compute-leaderboard hardcoded `followers: 0`. Changed to `t.followers ?? 0`. Next cron run populates real data.                                                                                          |
 | `6d2934d` | Footer: added full risk disclaimer (en+zh) — was completely missing (critical for crypto financial product). Ranking table: hide followers=0 as `—` (0 is always missing data, not real count). Improved disclaimer text.                                                                                               |
 | `13254cc` | **ROOT CAUSE**: 51% of traders (1,979/3,853) had identicon SVG avatars — DEX/Web3 traders where exchanges don't provide profile pictures. Replaced with exchange platform logos (Jupiter logo for Jupiter traders, Hyperliquid logo for HL traders, etc). Added `getExchangeLogoUrl()` with mapping for all 33 sources. |
+| `da3d086` | Footer: added /about link (page already existed with full content but was unreachable). Restored WelcomeBanner on homepage (was disconnected, only comment remained) — shows once after registration via `?welcome=1`.                                                                                                  |
 
-**UX deep audit confirmed NO issues with**: chart skeletons (ChartSkeleton exists), FearGreedGauge (Suspense+LoadingCard), login page (email/wallet/terms in SSR), mobile (card layout), period switching (skeleton loader), new user experience (hero+rankings visible), FAQ (renders correctly), trending search (client-fetch by design).
+**UX deep audit confirmed NO issues with**: chart skeletons (ChartSkeleton exists), FearGreedGauge (Suspense+LoadingCard), login page (email/wallet/terms in SSR), mobile (card layout), period switching (skeleton loader), FAQ (renders correctly), trending search (client-fetch by design).
 
-**Remaining product-level items (need product decisions, not code fixes)**: onboarding flow (needs design), about page (needs copy), mixed-language trader names (real data — Chinese traders use Chinese names).
+**Remaining product-level item**: mixed-language trader names (real data — Chinese traders use Chinese names on Chinese exchanges).
 
-**Final verified state (2026-05-19 20:00 UTC)**: all data root causes fixed (followers, avatars, disclaimer); next compute-leaderboard cron run will populate real exchange follower counts + platform logos for all 7K traders
+**Final verified state (2026-05-19 20:30 UTC)**: all data root causes fixed (followers, avatars, disclaimer); about page linked; onboarding banner restored; next compute-leaderboard cron will populate real exchange follower counts + platform logos for all 7K traders
 
 ---
 
