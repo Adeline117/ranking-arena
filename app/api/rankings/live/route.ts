@@ -24,7 +24,11 @@ const logger = createLogger('rankings-live')
 
 // ── Input validation schema ──────────────────────────────────────────────────
 const liveRankingsSchema = z.object({
-  period: z.string().toUpperCase().pipe(z.enum(['7D', '30D', '90D'])).catch('90D'),
+  period: z
+    .string()
+    .toUpperCase()
+    .pipe(z.enum(['7D', '30D', '90D']))
+    .catch('90D'),
   limit: z.coerce.number().int().min(1).max(200).catch(50),
   offset: z.coerce.number().int().min(0).catch(0),
 })
@@ -66,7 +70,7 @@ export async function GET(request: NextRequest) {
       if (traders.length > 0) {
         // Enrich with handles/avatars from the traders table
         const supabase = getSupabaseAdmin()
-        const traderKeys = traders.map(t => t.traderKey)
+        const traderKeys = traders.map((t) => t.traderKey)
 
         // Batch lookup enrichment data from leaderboard_ranks.
         // Chunks are independent — issue them in parallel instead of sequentially.
@@ -79,10 +83,12 @@ export async function GET(request: NextRequest) {
         }
 
         const chunkResults = await Promise.all(
-          chunks.map(chunk =>
+          chunks.map((chunk) =>
             supabase
               .from('leaderboard_ranks')
-              .select('source, source_trader_id, handle, avatar_url, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type')
+              .select(
+                'source, source_trader_id, handle, avatar_url, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type'
+              )
               .eq('season_id', period)
               .in('source_trader_id', chunk)
           )
@@ -91,13 +97,16 @@ export async function GET(request: NextRequest) {
         for (const { data } of chunkResults) {
           if (data) {
             for (const row of data) {
-              enrichMap.set(`${(row as Record<string, unknown>).source}:${(row as Record<string, unknown>).source_trader_id}`, row as Record<string, unknown>)
+              enrichMap.set(
+                `${(row as Record<string, unknown>).source}:${(row as Record<string, unknown>).source_trader_id}`,
+                row as Record<string, unknown>
+              )
             }
           }
         }
 
         // Build response matching /api/traders format
-        const enrichedTraders = traders.map(t => {
+        const enrichedTraders = traders.map((t) => {
           const enriched = enrichMap.get(`${t.platform}:${t.traderKey}`)
           return {
             id: t.traderKey,
@@ -113,9 +122,12 @@ export async function GET(request: NextRequest) {
             trades_count: enriched?.trades_count != null ? Number(enriched.trades_count) : null,
             followers: enriched?.followers != null ? Number(enriched.followers) : null,
             avatar_url: (enriched?.avatar_url as string) || null,
-            profitability_score: enriched?.profitability_score != null ? Number(enriched.profitability_score) : null,
-            risk_control_score: enriched?.risk_control_score != null ? Number(enriched.risk_control_score) : null,
-            execution_score: enriched?.execution_score != null ? Number(enriched.execution_score) : null,
+            profitability_score:
+              enriched?.profitability_score != null ? Number(enriched.profitability_score) : null,
+            risk_control_score:
+              enriched?.risk_control_score != null ? Number(enriched.risk_control_score) : null,
+            execution_score:
+              enriched?.execution_score != null ? Number(enriched.execution_score) : null,
             trading_style: (enriched?.trading_style as string) || null,
             sharpe_ratio: enriched?.sharpe_ratio != null ? Number(enriched.sharpe_ratio) : null,
             trader_type: (enriched?.trader_type as string) || null,
@@ -126,14 +138,18 @@ export async function GET(request: NextRequest) {
         const responseBody = {
           traders: enrichedTraders,
           total: sortedSetSize,
+          totalCount: sortedSetSize,
           period,
           source: 'redis',
           hasMore: offset + limit < sortedSetSize,
         }
 
         // Cache the response for subsequent requests (hot tier = 60s memory, 300s Redis)
-        tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch(err =>
-          logger.warn('[rankings/live] cache write failed:', err instanceof Error ? err.message : String(err))
+        tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch((err) =>
+          logger.warn(
+            '[rankings/live] cache write failed:',
+            err instanceof Error ? err.message : String(err)
+          )
         )
 
         const response = NextResponse.json(responseBody)
@@ -149,7 +165,10 @@ export async function GET(request: NextRequest) {
 
     const { data, count, error } = await supabase
       .from('leaderboard_ranks')
-      .select('source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type', { count: 'estimated' })
+      .select(
+        'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, trading_style, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type',
+        { count: 'estimated' }
+      )
       .eq('season_id', period)
       .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false')
@@ -188,6 +207,7 @@ export async function GET(request: NextRequest) {
     const responseBody = {
       traders,
       total: totalCount,
+      totalCount,
       period,
       source: 'database',
       hasMore: offset + limit < totalCount,
@@ -195,7 +215,10 @@ export async function GET(request: NextRequest) {
 
     // Cache the DB fallback response too
     tieredSet(cacheKey, responseBody, 'hot', ['rankings', `live:${period}`]).catch((err) => {
-      logger.warn('[rankings-live] Cache write failed:', err instanceof Error ? err.message : String(err))
+      logger.warn(
+        '[rankings-live] Cache write failed:',
+        err instanceof Error ? err.message : String(err)
+      )
     })
 
     const response = NextResponse.json(responseBody)
@@ -204,9 +227,6 @@ export async function GET(request: NextRequest) {
     return response
   } catch (error) {
     logger.error('[rankings-live] Unexpected error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
