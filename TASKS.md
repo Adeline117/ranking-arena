@@ -27,8 +27,8 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 - [x] **API docs page** (`/api-docs`) — pricing tiers, code examples (curl/Python/JS), endpoint docs
 - [x] **Self-service API keys** — create/revoke in /settings, usage stats, max 5 per user
 - [x] **Usage tracking** — atomic per-key counting, daily rollups, 30-day bar chart in settings
-- [ ] **Pricing tiers** — Free (100/day) / Starter $49/mo (10k/day) / Pro $199/mo (unlimited + webhooks)
-- [ ] **Stripe integration** — API tier checkout + subscription management
+- [x] **Pricing tiers** — Free (100/day) / Starter $49/mo (10k/day) / Pro $199/mo (unlimited + webhooks)
+- [x] **Stripe integration** — API tier checkout + subscription management (env: STRIPE_API_STARTER_PRICE_ID, STRIPE_API_PRO_PRICE_ID)
 
 #### New Endpoints (build)
 
