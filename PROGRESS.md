@@ -39,7 +39,11 @@
 
 **Remaining product-level item**: mixed-language trader names (real data — Chinese traders use Chinese names on Chinese exchanges).
 
-**Final verified state (2026-05-19 20:00 UTC)**: 48 commits this session. 12/12 pages 200. 0 type errors. 2625 tests pass. 100/100 code quality. Git clean. Health: api=30ms, redis=22ms. All data root causes fixed; about page linked; onboarding banner restored; next compute-leaderboard cron populates real exchange follower counts + platform logos for all 7K traders.
+**Final verified state (2026-05-19 20:00 UTC)**: 49 commits this session. 12/12 pages 200. 0 type errors. 2625 tests pass. 100/100 code quality. Git clean. Health: api=30ms, redis=22ms. All data root causes fixed; about page linked; onboarding banner restored; next compute-leaderboard cron populates real exchange follower counts + platform logos for all 7K traders.
+
+### Retro 2026-05-19
+
+53 commits / 7 days, 75% fixes (stabilization sprint), 0 type errors, 2 TODO (down from 11), 21 npm vulns (down from 27). P0 blocker found: 12-day empty homepage from missing DB DEFAULT. 3 data root causes fixed (followers, avatars, disclaimer). 3 security vulnerabilities patched. Full report: `docs/retros/retro-2026-05-19.md`.
 
 ---
 
