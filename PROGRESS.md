@@ -2,6 +2,36 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Enrichment Root Cause Fix + API Quality (2026-05-20)
+
+### Enrichment Pipeline Fixes
+
+Sharpe coverage lifted from 51% → 72% after atomic cleanup. Remaining gaps traced to three root causes:
+
+| Platform   | Root Cause                                                                     | Fix                                                                  |
+| ---------- | ------------------------------------------------------------------------------ | -------------------------------------------------------------------- |
+| **KuCoin** | Import + config commented out in enrichment-runner.ts; module fully functional | Uncommented import + config                                          |
+| **Weex**   | No enrichment module existed at all                                            | Created `enrichment-weex.ts` — calls WEEX public API for winRate/MDD |
+| **BingX**  | Sharpe filter -10 to 10 too tight                                              | Widened to -20 to 20                                                 |
+
+### API Output Quality (user-perspective QA)
+
+| Fix                                      | Impact                                          |
+| ---------------------------------------- | ----------------------------------------------- |
+| Total count from cache (was data.length) | Pagination works: total=1299 instead of total=5 |
+| Filter ghost traders from search         | No more all-null results for inactive traders   |
+| Fix Redis cache path (same total bug)    | Both Redis + DB paths return correct total      |
+
+### Verification
+
+- Sharpe coverage: 51% → 72% (atomic cleanup removed 1000 zombie rows)
+- API total: 1299 (was 5) ✅
+- Search: ghost traders filtered ✅
+- Pipeline: 19/20 fresh, 5/5 deploy healthy
+- All pushes 100/100 code quality
+
+---
+
 ## User-Facing Polish + Stripe Test Verified (2026-05-19 late night)
 
 **Continued from evening session — user-perspective QA pass.**
