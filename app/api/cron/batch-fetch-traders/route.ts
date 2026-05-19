@@ -61,16 +61,25 @@ async function checkVpsProxy(): Promise<{ ok: boolean; error?: string }> {
   const vpsKey = process.env.VPS_PROXY_KEY
   if (!vpsHost || !vpsKey) return { ok: true } // No VPS config = direct API (Mac Mini, local, test)
   try {
-    const res = await fetch(`${vpsHost.replace(':3457', ':3456')}/proxy`, {
-      method: 'POST',
-      headers: { 'X-Proxy-Key': vpsKey.trim(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url: 'https://httpbin.org/status/200', method: 'GET' }),
+    // Root cause fix: was using httpbin.org which isn't in VPS host whitelist,
+    // VPS returned 403 "host not allowed" which pre-flight misread as "auth failed",
+    // blocking ALL Binance/Bitget fetches (binance_futures, binance_spot, bitget_futures = 0 data).
+    // Fix: use /health endpoint (no proxy needed, just checks VPS is alive + key works).
+    const cleanHost = vpsHost.replace(':3457', ':3456')
+    const res = await fetch(`${cleanHost}/health`, {
+      headers: { 'X-Proxy-Key': vpsKey.trim() },
       signal: AbortSignal.timeout(8000),
     })
-    if (res.status === 401 || res.status === 403) {
+    if (res.status === 401) {
       return {
         ok: false,
         error: `VPS proxy auth failed (${res.status}) — key mismatch between Vercel and VPS`,
+      }
+    }
+    if (!res.ok) {
+      return {
+        ok: false,
+        error: `VPS proxy unhealthy (${res.status})`,
       }
     }
     return { ok: true }
