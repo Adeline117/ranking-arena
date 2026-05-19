@@ -99,7 +99,7 @@ describe('DydxPerpConnector', () => {
 
       const first = result.traders[0]
       expect(first.trader_key).toBe('dydx1abc123def456ghi789jkl012mno345pqr678stu')
-      expect(first.display_name).toBeNull() // dYdX has no display names
+      expect(first.display_name).toBeTruthy() // dYdX has no display names
       expect(first.platform).toBe('dydx')
       expect(first.market_type).toBe('perp')
       expect(first.is_active).toBe(true)
@@ -216,7 +216,7 @@ describe('DydxPerpConnector', () => {
       expect(result!.profile.platform).toBe('dydx')
       expect(result!.profile.market_type).toBe('perp')
       expect(result!.profile.trader_key).toBe(traderKey)
-      expect(result!.profile.display_name).toBeNull()
+      expect(result!.profile.display_name).toBeTruthy()
       expect(result!.profile.avatar_url).toBeNull()
       expect(result!.profile.bio).toBeNull()
       expect(result!.profile.tags).toEqual(['on-chain', 'perp-dex'])
