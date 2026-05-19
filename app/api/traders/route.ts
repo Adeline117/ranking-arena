@@ -226,17 +226,15 @@ async function fetchFromLeaderboard(
   }
 
   // Read totalCount from pre-computed cache (instant) instead of count: 'exact' (47s)
-  let totalCount = 0
-  if (useLegacyPaging) {
-    const countSource = exchangeFilter || '_all'
-    const { data: cacheRow } = await supabase
-      .from('leaderboard_count_cache')
-      .select('total_count')
-      .eq('season_id', timeRange)
-      .eq('source', countSource)
-      .maybeSingle()
-    totalCount = cacheRow?.total_count ?? 0
-  }
+  // Always read count — needed for pagination UI and API consumers
+  const countSource = exchangeFilter || '_all'
+  const { data: cacheRow } = await supabase
+    .from('leaderboard_count_cache')
+    .select('total_count')
+    .eq('season_id', timeRange)
+    .eq('source', countSource)
+    .maybeSingle()
+  const totalCount = cacheRow?.total_count ?? 0
 
   // Map to trader response format (compatible with existing frontend)
   const traders = (data || []).map((row: Record<string, unknown>) => ({
