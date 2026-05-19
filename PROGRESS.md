@@ -24,8 +24,11 @@
 | `4673df1` | **SECURITY**: E2E fixtures gated to dev-only (was accessible in prod); API keys error sanitized (was leaking DB details); subscription + api-keys routes get `Cache-Control: private, no-store` |
 | `7a98c4a` | **UX**: homepage error retry UI (was infinite spinner); pricing already-subscribed → Settings redirect; market ErrorState on CoinGecko failure; search API returns 400 on invalid params (was 200) |
 | `6928aa5` | movers: reduce Redis TTL 600→120s + CDN TTL for empty results 3600→60s (empty results from outage now recover in 2min); rankings/live: add totalCount field |
+| `3688c54` | **UX**: pricing page free trial badge moved above fold (was hidden inside plan card click flow); added pricingTrialBadge i18n key (en+zh) |
 
-**Final verified state (2026-05-19 03:30 UTC)**: 90D=2015, 30D=3013, 7D=3780 traders; 27 platforms; search 10 traders; e2e fixtures BLOCKED; subscription private cache; all 7 pages 200; 0 type errors; 2625 tests pass; code quality 100/100
+**UX deep audit confirmed NO issues with**: chart skeletons (ChartSkeleton exists), FearGreedGauge (Suspense+LoadingCard), login page (email/wallet/terms in SSR), mobile (card layout), period switching (skeleton loader), new user experience (hero+rankings visible), FAQ (renders correctly), trending search (client-fetch by design).
+
+**Final verified state (2026-05-19 04:30 UTC)**: 90D=2015, 30D=3013, 7D=3780 traders; 27 platforms; search 10 traders; e2e fixtures BLOCKED; subscription private cache; all 7 pages 200; 0 type errors; 2625 tests pass; code quality 100/100
 
 ---
 
