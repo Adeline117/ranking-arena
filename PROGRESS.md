@@ -2,6 +2,60 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Stripe API Tiers + Pipeline Root Cause + Exchange Data Fixes (2026-05-19 evening)
+
+**Three major workstreams completed in one session:**
+
+### 1. B2B API Stripe Integration (P0 — revenue)
+
+Full self-service checkout for API pricing tiers, independent from Pro membership.
+
+| Component | Detail                                                                                             |
+| --------- | -------------------------------------------------------------------------------------------------- |
+| Migration | `user_profiles.api_tier` + `api_stripe_subscription_id` + `update_user_api_tier()` RPC             |
+| Checkout  | `POST /api/stripe/create-api-checkout` — Starter ($49/mo) / Pro ($199/mo)                          |
+| Webhook   | Detects `type: 'api_tier'` in metadata → activates/updates/cancels tier + upgrades all active keys |
+| API docs  | Pricing CTA buttons → direct Stripe checkout (was mailto)                                          |
+| Settings  | API tier badge + upgrade buttons in ApiKeysSection                                                 |
+| Client    | `useApiCheckout` hook (mirrors `useDirectCheckout` pattern)                                        |
+
+**Env vars needed**: `STRIPE_API_STARTER_PRICE_ID`, `STRIPE_API_PRO_PRICE_ID` (create in Stripe Dashboard).
+
+### 2. Pipeline Degradation Root Cause Fix (P0 — data quality)
+
+**Root cause**: `compute-leaderboard` incremental upsert never deleted old rows → zombie rows accumulated (914K observed) → inflated baseline → false degradation triggers → computation skipped → stale data for days.
+
+| Surgery                          | Fix                                | Mechanism                                                                                                          |
+| -------------------------------- | ---------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Atomic per-platform cleanup      | Eliminates zombie rows immediately | After upsert, DELETE rows for each FRESH platform NOT in new scored set. Stale platforms untouched                 |
+| Expected-state degradation check | Stops baseline drift               | Compare against `∑(per-platform expected count)` from `leaderboard_count_cache` instead of drifting pipeline_state |
+| RPC functions                    | Performance                        | `cleanup_stale_platform_rows()` + `get_expected_platform_counts()`                                                 |
+
+### 3. Exchange Data Gap Fixes (8 platforms)
+
+**Root cause**: enrichment pipeline disabled platforms on transient failures ("DEAD"/"DISABLED") and never re-enabled.
+
+| Fix                   | Platforms              | Impact                                                    |
+| --------------------- | ---------------------- | --------------------------------------------------------- |
+| Re-enable enrichment  | bingx, weex, kucoin    | 150 traders get Sharpe/MDD/WinRate back                   |
+| bybit_spot PnL        | bybit_spot             | 26 traders — `available_fields` was missing 'pnl'         |
+| DEX handles           | dydx, hyperliquid, gmx | 537 traders — `shortenAddress()` fallback (0x1234...abcd) |
+| API v3 rank numbering | All                    | Rank starts at 1 (was showing DB global rank with gaps)   |
+| API v3 DEX followers  | All web3               | Returns null instead of misleading 0                      |
+
+### Migrations applied to prod
+
+- `20260519124947_api_tier_stripe_integration.sql` ✅
+- `20260519130926_atomic_leaderboard_cleanup.sql` ✅
+
+### Verification
+
+- Pipeline health: 19/20 fresh, 0 severe, 0 failed
+- Post-deploy: 5/5 URLs healthy
+- API v3: rank 1-N sequential, handles filled, followers correct
+
+---
+
 ## CRITICAL: Empty Homepage Fix + Deep UX/Perf Audit (2026-05-19)
 
 **Trigger**: Deep production audit revealed homepage showing 0 traders for 12 days.
