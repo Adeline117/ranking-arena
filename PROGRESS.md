@@ -10,20 +10,18 @@
 
 **Impact**: 12 days of empty rankings, broken pagination, empty search results, empty movers. Only `/api/rankings/live` (Redis-backed) continued working.
 
-**Shipped (3 commits, 1 critical migration)**:
+**Shipped (7 commits, 2 migrations, 1 prod index)**:
 
-| Commit    | Fix                                                                                                                                                                        |
-| --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `c638713` | **CRITICAL**: restore `DEFAULT nextval()` on leaderboard_ranks + all partitions. Manually triggered compute-leaderboard to repopulate: 90D=2287, 30D=2718, 7D=2496 traders |
-| `3fa6acd` | Add empty state UI for rankings (filter 0 results → "No traders match" + Reset button; no data → "Rankings loading, please refresh")                                       |
-| `1e90e36` | Fix /api/traders available_sources query (was broken same as /api/rankings bug — LIMIT 500 from index page) + remove search suggestions force-dynamic for CDN caching      |
+| Commit    | Fix                                                                                                                                                                    |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `c638713` | **CRITICAL**: restore `DEFAULT nextval()` on leaderboard_ranks + all partitions. Manually triggered compute-leaderboard → 90D=3355, 30D=2718, 7D=2496 traders restored |
+| `3fa6acd` | Empty state UI for rankings (filter 0 results → "No traders match" + Reset; no data → "Rankings loading")                                                              |
+| `1e90e36` | /api/traders available_sources: fix broken LIMIT 500 query → use leaderboard_count_cache; search suggestions: remove force-dynamic for CDN caching                     |
+| `6a1bad6` | Search: remove bio ILIKE (no trigram index → seq scan); skip Supabase when Meilisearch available; resolveTrader: parallelize 3 fallback steps (saves 200-400ms)        |
+| `4d65f5f` | pipeline_logs: partial index for freshness queries; similar traders: Redis cache (warm 15min TTL)                                                                      |
+| `8dfbd97` | /api/traders: always return totalCount from count cache (was 0 without page param)                                                                                     |
 
-**P2 performance fixes (all shipped)**:
-
-| Commit    | Fix                                                                                                                                                                                                                                                        |
-| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `6a1bad6` | Search: remove bio from ILIKE OR (no trigram index → seq scan); skip Supabase trader query when Meilisearch available (was wasting DB connection ~90% of requests); resolveTrader: parallelize steps 3+4+5 (saves 200-400ms for ~15% of detail page loads) |
-| `4d65f5f` | pipeline_logs: partial index `(status, ended_at DESC) WHERE success` for freshness queries; similar traders: Redis cache (warm 15min TTL, bucketed by score decile)                                                                                        |
+**Final verified state**: totalCount=1876, 28 platforms, movers 5+4, all 3 seasons populated, post-deploy 5/5 healthy
 
 ---
 
