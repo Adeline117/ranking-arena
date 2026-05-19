@@ -76,9 +76,16 @@
 - Code quality: 100/100 ✅
 - Subscription desync: 0/0 (2 users fixed via SQL) ✅
 
+### Post-Audit Cleanup (same session)
+
+| Commit    | Fix                                                                                                                                                 |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `3f0f017` | `npm audit fix` + Next.js 16.2.5→16.2.6: 27→21 vulnerabilities (remaining are transitive: ws via viem/ethers/privy, @opentelemetry via trigger.dev) |
+| `829b27b` | TODO/FIXME cleanup: removed 6 stale design token TODOs + 1 ICP filing TODO. 11→2 real TODOs remaining (both intentional)                            |
+
 ### Retro 2026-05-18
 
-32 commits / 7 days, 53% fixes, 15.6% feat (doubled from 7.4%), 0 reverts (down from 7), 0 type errors, 0 test failures. compute-leaderboard hotspot down from 54→2 changes/week. Action items: npm audit fix (27 vulns), TODO cleanup (2→11), schedule weekly retro. Full report: `docs/retros/retro-2026-05-18.md`.
+32 commits / 7 days, 53% fixes, 15.6% feat (doubled from 7.4%), 0 reverts (down from 7), 0 type errors, 0 test failures. compute-leaderboard hotspot down from 54→2 changes/week. Full report: `docs/retros/retro-2026-05-18.md`.
 
 ---
 
