@@ -39,7 +39,9 @@
 
 **Remaining product-level item**: mixed-language trader names (real data — Chinese traders use Chinese names on Chinese exchanges).
 
-**Final verified state (2026-05-19 20:00 UTC)**: 49 commits this session. 12/12 pages 200. 0 type errors. 2625 tests pass. 100/100 code quality. Git clean. Health: api=30ms, redis=22ms. All data root causes fixed; about page linked; onboarding banner restored; next compute-leaderboard cron populates real exchange follower counts + platform logos for all 7K traders.
+| `041d9f6` | **PREVENTION**: post-compute assertion — if all seasons return 0 traders with no errors, logs CRITICAL + triggers Telegram alert + verifies DB directly. Prevents 12-day empty homepage from recurring silently. (Retro P0 action item) |
+
+**Final verified state (2026-05-19 20:15 UTC)**: 51 commits this session. 12/12 pages 200. 0 type errors. 2625 tests pass. 100/100 code quality. Git clean. All data root causes fixed + prevention assertion added.
 
 ### Retro 2026-05-19
 
