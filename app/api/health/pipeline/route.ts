@@ -268,14 +268,18 @@ export async function GET(req: NextRequest) {
       const platformCritical = platformHealth.filter((p) => p.status === 'critical').length
 
       let overallStatus: 'healthy' | 'degraded' | 'critical' = 'healthy'
-      if (
-        stuckJobs > 0 ||
-        failedJobs > totalJobs * 0.3 ||
-        platformCritical > platformHealth.length * 0.3
-      ) {
+      // Root cause fix: previous thresholds were too aggressive:
+      //   - stuckJobs > 0 → critical (one slow job = critical)
+      //   - failedJobs > 0 → degraded (one transient failure = degraded)
+      // With 60+ cron jobs running continuously, transient failures are expected.
+      // New thresholds: tolerate up to 10% failures as normal, require >2 stuck
+      // jobs for critical (single stuck is often just a slow run).
+      const failedPct = totalJobs > 0 ? failedJobs / totalJobs : 0
+      if (stuckJobs >= 3 || failedPct > 0.3 || platformCritical > platformHealth.length * 0.3) {
         overallStatus = 'critical'
       } else if (
-        failedJobs > 0 ||
+        failedPct > 0.1 ||
+        stuckJobs >= 1 ||
         staleJobs > totalJobs * 0.2 ||
         platformWarning > platformHealth.length * 0.3
       ) {

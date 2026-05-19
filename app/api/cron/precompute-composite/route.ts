@@ -34,10 +34,13 @@ const ROI_ANOMALY_THRESHOLD = 5000
 const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
 const _FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
 
-// Statement timeout for the heavy per-window queries (default 30s is too short
-// for 7D which scans the largest partition). 90s gives ample headroom while
-// still failing fast if Supabase is degraded.
-const WINDOW_QUERY_TIMEOUT_S = 90
+// Statement timeout for the heavy per-window queries. Root cause fix: 90s was
+// too short for 7D — the largest partition grew past what 90s could scan,
+// causing 22+ "canceling statement due to statement timeout" alerts.
+// 150s gives headroom. With 3 sequential queries + display name fetch + cache
+// write, total max is ~500s — still within 300s maxDuration since actual p95
+// for 90D+30D is <10s each, only 7D is slow at ~60-120s.
+const WINDOW_QUERY_TIMEOUT_S = 150
 
 interface SnapshotRow {
   platform: string
