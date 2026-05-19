@@ -515,21 +515,25 @@ export const GET = withPublic(
             })
         : Promise.resolve(null)
 
-    const [meiliResults, supabaseTraders, postsData, libraryData, usersData, groupsData] =
+    let [meiliResults, supabaseTraders, postsData, libraryData, usersData, groupsData] =
       await Promise.all([
         meiliTraderSearch,
-        // Supabase fallback (skipped if Meilisearch returns results)
-        unifiedSearchTraders(supabase, {
-          query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
-          limit: effectiveLimit,
-          platform: effectivePlatform,
-        }).catch((err) => {
-          logger.warn('Supabase trader search failed', {
-            error: err instanceof Error ? err.message : String(err),
-            query: sanitizedQuery,
-          })
-          return []
-        }),
+        // Supabase trader search: only run when Meilisearch is NOT configured.
+        // Previously ran both in parallel and discarded Supabase results ~90% of the time,
+        // wasting a DB connection pool slot per search request.
+        isMeilisearchAvailable()
+          ? Promise.resolve([])
+          : unifiedSearchTraders(supabase, {
+              query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+              limit: effectiveLimit,
+              platform: effectivePlatform,
+            }).catch((err) => {
+              logger.warn('Supabase trader search failed', {
+                error: err instanceof Error ? err.message : String(err),
+                query: sanitizedQuery,
+              })
+              return []
+            }),
 
         // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
         features.social
@@ -557,9 +561,7 @@ export const GET = withPublic(
               supabase
                 .from('user_profiles')
                 .select('id, handle, display_name, avatar_url, bio')
-                .or(
-                  `handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%,bio.ilike.%${sanitizedQuery}%`
-                )
+                .or(`handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%`)
                 .limit(limitPerCategory)
             )
           : Promise.resolve([]),
@@ -574,6 +576,20 @@ export const GET = withPublic(
             )
           : Promise.resolve([]),
       ])
+
+    // If Meilisearch was configured but failed at runtime, run Supabase fallback now
+    if (meiliDegraded && supabaseTraders.length === 0) {
+      try {
+        const fallback = await unifiedSearchTraders(supabase, {
+          query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+          limit: effectiveLimit,
+          platform: effectivePlatform,
+        })
+        supabaseTraders = fallback
+      } catch {
+        /* already logged above */
+      }
+    }
 
     // For exchange name search, fetch top traders from leaderboard if direct search returned nothing
     // Use Meilisearch results if available (1-6ms), otherwise Supabase (100-300ms)

@@ -49,6 +49,9 @@ export const TraderCard = memo(function TraderCard({
   const sourceInfo = parseSourceInfo(trader.source || source || '')
 
   const isSelected = useComparisonStore(useCallback((s) => s.isSelected(trader.id), [trader.id]))
+  // Stable boolean selector: only changes when comparison count crosses the max threshold.
+  // Previously used s.canAddMore() which returns a new closure on every store change,
+  // causing all 50 TraderCards to re-render per comparison add/remove.
   const canAddMore = useComparisonStore(useCallback((s) => s.canAddMore(), []))
   const [shareConfirmed, setShareConfirmed] = useState(false)
 

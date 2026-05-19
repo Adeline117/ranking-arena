@@ -1004,39 +1004,43 @@ export async function resolveTrader(
     }
   }
 
-  // Steps 3+4 in parallel: leaderboard_ranks + trader_profiles_v2
-  // Search by BOTH source_trader_id AND handle/display_name to support platforms
-  // where the URL uses the handle but the DB key is a numeric ID (e.g., eToro).
+  // Steps 3+4+5 in parallel: leaderboard_ranks, trader_profiles_v2, trader_snapshots_v2
+  // Previously sequential (3+4 → 5), now parallel to save 200-400ms for traders
+  // not found in the `traders` table (~10-15% of detail page loads).
   {
-    // leaderboard_ranks uses v1 naming: source → platform, source_trader_id → traderKey
-    // ROOT CAUSE FIX (2026-04-23): was .eq('90D') causing 4,447 traders with only
-    // 7D/30D entries to 404. Check all seasons, prefer 90D > 30D > 7D.
+    const sanitizedForFilter = decodedHandle.replace(/[,.()\[\]\\%_]/g, '')
+
     let lbQuery = supabase
       .from('leaderboard_ranks')
       .select(`${LR.source}, ${LR.source_trader_id}, ${LR.handle}, ${LR.avatar_url}`)
-      .or(
-        `${LR.source_trader_id}.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')},${LR.handle}.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`
-      )
+      .or(`${LR.source_trader_id}.eq.${sanitizedForFilter},${LR.handle}.eq.${sanitizedForFilter}`)
       .in(LR.season_id, ['90D', '30D', '7D'])
       .order(LR.season_id, { ascending: false })
 
     let profileQuery = supabase
       .from('trader_profiles_v2')
       .select('platform, trader_key, display_name, avatar_url')
-      .or(
-        `trader_key.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')},display_name.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`
-      )
+      .or(`trader_key.eq.${sanitizedForFilter},display_name.eq.${sanitizedForFilter}`)
+
+    let svQuery = supabase
+      .from('trader_snapshots_v2')
+      .select('platform, trader_key')
+      .eq(V2.trader_key, decodedHandle)
+      .order('updated_at', { ascending: false })
 
     if (platformFilter) {
       lbQuery = lbQuery.eq(LR.source, platformFilter)
       profileQuery = profileQuery.eq('platform', platformFilter)
+      svQuery = svQuery.eq(V2.platform, platformFilter)
     }
 
-    const [lbResult, profileResult] = await Promise.all([
+    const [lbResult, profileResult, svResult] = await Promise.all([
       lbQuery.limit(1).maybeSingle(),
       profileQuery.limit(1).maybeSingle(),
+      svQuery.limit(1).maybeSingle(),
     ])
 
+    // Priority: leaderboard_ranks > trader_profiles_v2 > trader_snapshots_v2
     if (lbResult.data) {
       return {
         platform: lbResult.data[LR.source],
@@ -1054,27 +1058,11 @@ export async function resolveTrader(
         avatarUrl: profileResult.data.avatar_url || null,
       }
     }
-  }
 
-  // Step 5: Last resort — check trader_snapshots_v2 directly
-  // Some traders exist in snapshots (written by VPS scraper-cron) but not in
-  // trader_sources or leaderboard_ranks (e.g., freshly discovered traders).
-  {
-    let svQuery = supabase
-      .from('trader_snapshots_v2')
-      .select('platform, trader_key')
-      .eq(V2.trader_key, decodedHandle)
-      .order('updated_at', { ascending: false })
-
-    if (platformFilter) {
-      svQuery = svQuery.eq(V2.platform, platformFilter)
-    }
-
-    const { data: svResult } = await svQuery.limit(1).maybeSingle()
-    if (svResult) {
+    if (svResult.data) {
       return {
-        platform: svResult.platform,
-        traderKey: svResult.trader_key,
+        platform: svResult.data.platform,
+        traderKey: svResult.data.trader_key,
         handle: null,
         avatarUrl: null,
       }
