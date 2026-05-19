@@ -232,6 +232,18 @@ export default function Footer() {
       >
         {t('footerLegalEntity')}
       </p>
+      <p
+        style={{
+          fontSize: 11,
+          color: 'var(--color-text-tertiary)',
+          lineHeight: 1.5,
+          marginTop: 8,
+          marginBottom: 0,
+          opacity: 0.7,
+        }}
+      >
+        {t('footerDisclaimerText')}
+      </p>
     </footer>
   )
 }

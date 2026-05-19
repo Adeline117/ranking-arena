@@ -4176,7 +4176,7 @@ const en = {
   footerStatus: 'Status',
   footerSlogan: 'All rankings in crypto',
   footerDisclaimerText:
-    'Data provided is for informational purposes only and does not constitute investment advice. Cryptocurrency trading involves significant risk.',
+    'Risk Disclaimer: Cryptocurrency trading involves substantial risk of loss. Past performance does not guarantee future results. Arena provides data and rankings for informational purposes only — not financial advice. Always do your own research.',
   footerLegalEntity: 'Arena Team · Contact: support@arenafi.org',
 
   // Score breakdown

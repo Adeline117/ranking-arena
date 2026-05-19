@@ -4083,7 +4083,7 @@ const zh = {
   footerStatus: '系统状态',
   footerSlogan: '加密万物排行榜',
   footerDisclaimerText:
-    '本站数据仅供参考，不构成任何投资建议。加密货币交易存在高风险，请谨慎决策。',
+    '风险提示：加密货币交易存在重大亏损风险。过往表现不代表未来收益。Arena 仅提供数据和排名供参考，不构成投资建议。请务必自行研究。',
   footerLegalEntity: 'Arena Team · 联系邮箱: support@arenafi.org',
 
   // Score breakdown

@@ -22,11 +22,16 @@ import {
 
 // ── N/A Indicator ──────────────────────────────────────────────────────────
 
-function NaIndicator({ source, metricType }: { source?: string; metricType: 'winRate' | 'drawdown' }) {
+function NaIndicator({
+  source,
+  metricType,
+}: {
+  source?: string
+  metricType: 'winRate' | 'drawdown'
+}) {
   const platformNote = source ? getPlatformNote(source) : undefined
-  const defaultNote = metricType === 'winRate'
-    ? i18nT('winRateNotAvailable')
-    : i18nT('drawdownNotAvailable')
+  const defaultNote =
+    metricType === 'winRate' ? i18nT('winRateNotAvailable') : i18nT('drawdownNotAvailable')
 
   return (
     <span title={platformNote || defaultNote} style={NA_STYLE}>
@@ -37,7 +42,15 @@ function NaIndicator({ source, metricType }: { source?: string; metricType: 'win
 
 // ── Animated ROI ───────────────────────────────────────────────────────────
 
-function AnimatedROI({ roi, roiColor, animate }: { roi: number; roiColor: string; animate?: boolean }) {
+function AnimatedROI({
+  roi,
+  roiColor,
+  animate,
+}: {
+  roi: number
+  roiColor: string
+  animate?: boolean
+}) {
   const animatedValue = useCountUp(animate ? roi : roi, animate ? 500 : 0)
   const displayValue = animate ? animatedValue : roi
   return (
@@ -77,13 +90,20 @@ export const TraderMetricCells = memo(function TraderMetricCells({
 }: TraderMetricCellsProps) {
   // ROI
   const roi = trader.roi ?? 0
-  const roiColor = roi > 0 ? tokens.colors.accent.success : roi < 0 ? tokens.colors.accent.error : tokens.colors.text.tertiary
+  const roiColor =
+    roi > 0
+      ? tokens.colors.accent.success
+      : roi < 0
+        ? tokens.colors.accent.error
+        : tokens.colors.text.tertiary
 
   // PnL
   const pnl = trader.pnl
   const hasPnl = pnl != null
   const pnlColor = hasPnl
-    ? (pnl >= 0 ? tokens.colors.accent.success : TRADER_ACCENT_ERROR)
+    ? pnl >= 0
+      ? tokens.colors.accent.success
+      : TRADER_ACCENT_ERROR
     : TRADER_TEXT_TERTIARY
   const pnlText = hasPnl ? formatPnL(pnl) : '\u2014'
 
@@ -100,7 +120,14 @@ export const TraderMetricCells = memo(function TraderMetricCells({
           size="sm"
           weight="semibold"
           className="pnl-value"
-          style={{ color: pnlColor, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, opacity: hasPnl ? 0.85 : 0.5, cursor: hasPnl ? 'help' : 'default', fontVariantNumeric: 'tabular-nums' }}
+          style={{
+            color: pnlColor,
+            lineHeight: 1.2,
+            fontSize: tokens.typography.fontSize.sm,
+            opacity: hasPnl ? 0.85 : 0.5,
+            cursor: hasPnl ? 'help' : 'default',
+            fontVariantNumeric: 'tabular-nums',
+          }}
           title={hasPnl ? getPnLTooltipFn(trader.source || source || '', language) : undefined}
         >
           {pnlText}
@@ -110,8 +137,21 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       {/* Win% */}
       <Box className="col-winrate" style={RIGHT_CELL_STYLE}>
         {trader.win_rate != null && Number.isFinite(Number(trader.win_rate)) ? (
-          <Text size="sm" weight="semibold" style={{ color: Number(trader.win_rate) > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums', opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
-            {trader.metrics_estimated ? '~' : ''}{Number(trader.win_rate).toFixed(1)}%
+          <Text
+            size="sm"
+            weight="semibold"
+            style={{
+              color:
+                Number(trader.win_rate) > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY,
+              lineHeight: 1.2,
+              fontSize: tokens.typography.fontSize.sm,
+              fontVariantNumeric: 'tabular-nums',
+              opacity: trader.metrics_estimated ? 0.5 : 1,
+            }}
+            title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}
+          >
+            {trader.metrics_estimated ? '~' : ''}
+            {Number(trader.win_rate).toFixed(1)}%
           </Text>
         ) : (
           <NaIndicator source={trader.source || source} metricType="winRate" />
@@ -121,8 +161,17 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       {/* MDD */}
       <Box className="col-mdd" style={RIGHT_CELL_STYLE}>
         {trader.max_drawdown != null && Number.isFinite(Number(trader.max_drawdown)) ? (
-          <Text size="sm" weight="semibold" style={{ ...MDD_TEXT_BASE_STYLE, opacity: trader.metrics_estimated ? 0.5 : 1 }} title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}>
-            {trader.metrics_estimated ? '~' : ''}{Math.abs(Number(trader.max_drawdown)) < 0.05 ? '< 0.1' : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}`}%
+          <Text
+            size="sm"
+            weight="semibold"
+            style={{ ...MDD_TEXT_BASE_STYLE, opacity: trader.metrics_estimated ? 0.5 : 1 }}
+            title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}
+          >
+            {trader.metrics_estimated ? '~' : ''}
+            {Math.abs(Number(trader.max_drawdown)) < 0.05
+              ? '< 0.1'
+              : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}`}
+            %
           </Text>
         ) : (
           <NaIndicator source={trader.source || source} metricType="drawdown" />
@@ -132,7 +181,19 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       {/* Sharpe Ratio */}
       <Box className="col-sharpe" style={RIGHT_CELL_STYLE}>
         {trader.sharpe_ratio != null && Number.isFinite(Number(trader.sharpe_ratio)) ? (
-          <Text size="sm" weight="semibold" style={{ color: Number(trader.sharpe_ratio) >= 1 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY, lineHeight: 1.2, fontSize: tokens.typography.fontSize.sm, fontVariantNumeric: 'tabular-nums' }}>
+          <Text
+            size="sm"
+            weight="semibold"
+            style={{
+              color:
+                Number(trader.sharpe_ratio) >= 1
+                  ? tokens.colors.accent.success
+                  : TRADER_TEXT_TERTIARY,
+              lineHeight: 1.2,
+              fontSize: tokens.typography.fontSize.sm,
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
             {Number(trader.sharpe_ratio).toFixed(2)}
           </Text>
         ) : (
@@ -140,11 +201,13 @@ export const TraderMetricCells = memo(function TraderMetricCells({
         )}
       </Box>
 
-      {/* Followers */}
+      {/* Followers — show exchange copier count; hide 0 (likely missing data) */}
       <Box className="col-followers" style={RIGHT_CELL_STYLE}>
-        {trader.followers != null ? (
+        {trader.followers != null && Number(trader.followers) > 0 ? (
           <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
-            {Number(trader.followers) >= 1000 ? `${(Number(trader.followers) / 1000).toFixed(1)}K` : trader.followers}
+            {Number(trader.followers) >= 1000
+              ? `${(Number(trader.followers) / 1000).toFixed(1)}K`
+              : trader.followers}
           </Text>
         ) : (
           <span style={NA_DASH_STYLE}>&mdash;</span>
@@ -155,7 +218,9 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       <Box className="col-trades" style={RIGHT_CELL_STYLE}>
         {trader.trades_count != null ? (
           <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
-            {Number(trader.trades_count) >= 1000 ? `${(Number(trader.trades_count) / 1000).toFixed(1)}K` : trader.trades_count}
+            {Number(trader.trades_count) >= 1000
+              ? `${(Number(trader.trades_count) / 1000).toFixed(1)}K`
+              : trader.trades_count}
           </Text>
         ) : (
           <span style={NA_DASH_STYLE}>&mdash;</span>
