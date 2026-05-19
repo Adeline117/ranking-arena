@@ -2,6 +2,82 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Comprehensive Platform Audit + Optimization (2026-05-18)
+
+**Trigger**: Full audit of API interfaces, data accuracy, trader claim flow, and user experience.
+
+**Process**: 3 parallel Explore agents audited the entire platform → discovered 28 issues → 10 already resolved by existing code → implemented 18 fixes across 4 phases + root cause audit.
+
+**Shipped (11 commits, 2 prod migrations, 2 existing desynced users fixed via SQL)**:
+
+### Phase 1: Data Accuracy (trust is #1 for a ranking platform)
+
+| Commit    | Fix                                                                                                                                        |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `472e007` | COMPOSITE_WEIGHTS: import from arena-score.ts instead of hardcoding in precompute-composite (prevents divergence)                          |
+| `472e007` | Cron lock TTL aligned with maxDuration in 3 jobs: precompute-composite (360→300), sync-meilisearch (180→120), snapshot-positions (180→120) |
+| `e1754c4` | Stale cache fallback now sets `is_stale: true` + `stale_reason: 'db_fallback'` so frontend shows warning banner                            |
+| `f800da2` | Zero-score traders (ROI≈0 + PnL≈0) set arena_score=null instead of 0 → excluded from rankings via IS NOT NULL filter                       |
+
+### Phase 2: Claim Flow (trader acquisition)
+
+| Commit    | Fix                                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------------- |
+| `2852695` | Status enum: migration removes vestigial 'approved' (only 'verified' used), CHECK constraint updated |
+| `2852695` | Validation: reject 'video'/'social' verification methods (not implemented)                           |
+| `2852695` | CEX claim atomic: save verifiedUid in state so step 2 retries without re-entering API key            |
+| `2852695` | Post-claim ISR: revalidatePath() invalidates trader detail cache immediately                         |
+| `2852695` | ClaimTraderButton: replace 30s polling with visibilitychange event (saves network requests)          |
+| `049aa15` | Passphrase detection: derive CEX_PLATFORMS from EXCHANGE_CONFIG.requiresPassphrase (config-driven)   |
+| `049aa15` | Drift marked as DEAD_BLOCKED_PLATFORM (API returns empty since $270M exploit, 0 rows in DB)          |
+
+### Phase 3: User Flow (retention)
+
+| Commit    | Fix                                                                                                                                |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `cd21dc8` | useAuthSession: '请先登录' → `t('pleaseLoginFirst')` (3 occurrences, test updated)                                                 |
+| `cd21dc8` | Tip checkout: Stripe customer lookup from user_profiles.stripe_customer_id (was: expired checkout session)                         |
+| `e900dd4` | New cron: reconcile-subscriptions (daily 03:15 UTC) — fixes desync between subscriptions table and user_profiles.subscription_tier |
+| `c05f24a` | BroadcastChannel: localStorage storage event fallback for Safari < 15.4                                                            |
+
+### Phase 4: Infrastructure Hardening
+
+| Commit    | Fix                                                                                                                        |
+| --------- | -------------------------------------------------------------------------------------------------------------------------- |
+| `4b7c860` | Redis unavailable: memory cache TTL extended from memoryTtl+SWR (90s) to redisTtlSeconds (300s) to prevent thundering herd |
+| `2ad9d3b` | compute-leaderboard: pg_try_advisory_lock before upsert (second layer after Redis lock)                                    |
+| `2ad9d3b` | compute-leaderboard: log latest batch-fetch-traders time at start ("Using data as of X, Ymin ago")                         |
+
+### Root Cause Audit (beyond symptoms)
+
+| Commit    | Fix                                                                                                  |
+| --------- | ---------------------------------------------------------------------------------------------------- |
+| `36b0668` | error-messages.ts: 10 hard-coded Chinese strings → i18n `t()` calls + 8 new translation keys (en/zh) |
+
+### Confirmed Not Needed (6 issues)
+
+- Unclaim/unlink: already exists (`DELETE /api/traders/linked`)
+- Tip webhook: already exists (`handlers/checkout.ts`)
+- Cancel subscription: already has Stripe Customer Portal
+- Meilisearch sync: already has cron job
+- Profile deletion: already has 30-day soft delete
+- Subscription dual-write: referral/NFT paths already correctly dual-write; reconciliation cron covers edge cases
+
+### DB Migrations Applied
+
+- `20260518161638_cleanup_claim_status_enum` — remove 'approved' from trader_claims CHECK
+- `20260518164840_add_leaderboard_advisory_lock_fn` — acquire/release_leaderboard_lock RPCs
+
+### Verification
+
+- TypeScript: 0 errors ✅
+- Tests: all pass (redis-layer test updated for new TTL behavior) ✅
+- Post-deploy: 5/5 core URLs healthy ✅
+- Code quality: 100/100 ✅
+- Subscription desync: 0/0 (2 users fixed via SQL) ✅
+
+---
+
 ## Codebase Lint Cleanup (2026-05-12)
 
 **Trigger**: 302 lint problems (141 errors + 161 warnings) accumulated across codebase.
