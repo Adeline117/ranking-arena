@@ -21,7 +21,10 @@
 | `4d65f5f` | pipeline_logs: partial index for freshness queries; similar traders: Redis cache (warm 15min TTL)                                                                      |
 | `8dfbd97` | /api/traders: always return totalCount from count cache (was 0 without page param)                                                                                     |
 
-**Final verified state**: totalCount=1876, 28 platforms, movers 5+4, all 3 seasons populated, post-deploy 5/5 healthy
+| `4673df1` | **SECURITY**: E2E fixtures gated to dev-only (was accessible in prod); API keys error sanitized (was leaking DB details); subscription + api-keys routes get `Cache-Control: private, no-store` |
+| `7a98c4a` | **UX**: homepage error retry UI (was infinite spinner); pricing already-subscribed → Settings redirect; market ErrorState on CoinGecko failure; search API returns 400 on invalid params (was 200) |
+
+**Final verified state**: totalCount=1948/3013/3780, 28 platforms, all 3 seasons populated, post-deploy 5/5 healthy, code quality 100/100
 
 ---
 
