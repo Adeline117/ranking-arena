@@ -16,7 +16,12 @@ import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getLeaderboard, getTraderDetail, searchTraders } from '@/lib/data/unified'
-import { EXCHANGE_CONFIG, DEAD_BLOCKED_PLATFORMS, ALL_SOURCES } from '@/lib/constants/exchanges'
+import {
+  EXCHANGE_CONFIG,
+  DEAD_BLOCKED_PLATFORMS,
+  ALL_SOURCES,
+  SOURCE_TYPE_MAP,
+} from '@/lib/constants/exchanges'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { checkRateLimitFull } from '@/lib/utils/rate-limit'
 import { apiSuccess, apiError } from '@/lib/api/response'
@@ -188,6 +193,43 @@ const v3MainSchema = z.object({
 })
 
 // ---------------------------------------------------------------------------
+// Post-processing: clean up API output for consumers
+// ---------------------------------------------------------------------------
+
+function shortenAddr(addr: string, chars = 4): string {
+  if (!addr || addr.length < 2 * chars + 2) return addr
+  return `${addr.slice(0, chars + 2)}...${addr.slice(-chars)}`
+}
+
+function cleanTraderForApi(
+  trader: Record<string, unknown>,
+  idx: number,
+  offset: number
+): Record<string, unknown> {
+  const t = { ...trader }
+
+  // 1. Sequential rank based on position in result set (not DB global rank)
+  t.rank = offset + idx + 1
+
+  // 2. Handle fallback: use shortened address for DEX wallet addresses
+  if (!t.handle && typeof t.traderKey === 'string') {
+    const key = t.traderKey as string
+    if (key.startsWith('0x') || key.startsWith('dydx1')) {
+      t.handle = shortenAddr(key)
+    }
+  }
+
+  // 3. Followers/copiers: null for DEX platforms (not 0)
+  const sourceType = SOURCE_TYPE_MAP[t.platform as string]
+  if (sourceType === 'web3') {
+    if (t.followers === 0) t.followers = null
+    if (t.copiers === 0) t.copiers = null
+  }
+
+  return t
+}
+
+// ---------------------------------------------------------------------------
 // Endpoint handlers
 // ---------------------------------------------------------------------------
 
@@ -212,7 +254,10 @@ async function handleRankings(params: URLSearchParams) {
     limit,
     offset,
   })
-  return { data: result.traders, total: result.total }
+  const cleaned = result.traders.map((t, i) =>
+    cleanTraderForApi(t as unknown as Record<string, unknown>, i, offset)
+  )
+  return { data: cleaned, total: result.total }
 }
 
 async function handleTrader(params: URLSearchParams) {
@@ -247,7 +292,10 @@ async function handleSearch(params: URLSearchParams) {
   const supabase = getSupabaseAdmin() as SupabaseClient
   const { q, limit, platform } = parsed.data
   const traders = await searchTraders(supabase, { query: q, limit, platform })
-  return { data: traders, total: traders.length }
+  const cleaned = traders.map((t, i) =>
+    cleanTraderForApi(t as unknown as Record<string, unknown>, i, 0)
+  )
+  return { data: cleaned, total: cleaned.length }
 }
 
 async function handlePlatforms() {
@@ -322,8 +370,10 @@ async function handleBulk(params: URLSearchParams) {
     limit,
     offset: 0,
   })
-
-  return { data: result.traders, total: result.total }
+  const cleaned = result.traders.map((t, i) =>
+    cleanTraderForApi(t as unknown as Record<string, unknown>, i, 0)
+  )
+  return { data: cleaned, total: result.total }
 }
 
 // ---------------------------------------------------------------------------
