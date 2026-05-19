@@ -506,6 +506,7 @@ const zh = {
   // 定价页面
   pricingTitle: '升级 Pro 会员',
   pricingSubtitle: '解锁全部高级功能',
+  pricingTrialBadge: '所有套餐均享 7 天免费试用，随时取消',
   monthlyPlan: '月付会员',
   yearlyPlan: '年付会员',
   monthlySubscription: '按月订阅',
