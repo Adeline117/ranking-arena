@@ -125,7 +125,20 @@ export async function getLeaderboard(
       const cached = await getTopTradersWithDetails(period, limit, offset)
       if (cached.length > 0) {
         const traders = cached.map((row) => mapLeaderboardRow(row))
-        return { traders, total: traders.length }
+        // Total from count cache, not data length
+        let total = traders.length
+        try {
+          const { data: cacheRow } = await supabase
+            .from('leaderboard_count_cache')
+            .select('total_count')
+            .eq('season_id', period)
+            .eq('source', '_all')
+            .maybeSingle()
+          if (cacheRow && cacheRow.total_count > 0) total = cacheRow.total_count
+        } catch {
+          /* fall back to data length */
+        }
+        return { traders, total }
       }
     } catch {
       // Redis failed, fall through to DB
@@ -848,14 +861,14 @@ async function searchTradersInner(
 
       return { source: t, scoreRow, relevance, textRelevance }
     })
-    .filter((r) => r.textRelevance > 0)
-    // Deprioritize ghost traders (no leaderboard data) — push to end
-    .sort((a, b) => {
-      const aHasScore = a.scoreRow?.arena_score != null && Number(a.scoreRow.arena_score) > 0
-      const bHasScore = b.scoreRow?.arena_score != null && Number(b.scoreRow.arena_score) > 0
-      if (aHasScore !== bHasScore) return aHasScore ? -1 : 1
-      return b.relevance - a.relevance
+    .filter((r) => {
+      if (r.textRelevance <= 0) return false
+      // Filter out ghost traders (no leaderboard data) — they show all-null
+      // fields to the user which looks broken. Only keep traders with scores.
+      const hasScore = r.scoreRow?.arena_score != null && Number(r.scoreRow.arena_score) > 0
+      return hasScore
     })
+    .sort((a, b) => b.relevance - a.relevance)
 
   // Deduplicate by (handle, platform) — keep the highest-relevance entry.
   // Multiple trader_sources rows can share the same handle on the same platform
