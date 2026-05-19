@@ -1,5 +1,5 @@
 import Stripe from 'stripe'
-import { stripe } from '@/lib/stripe'
+import { stripe, API_TIER_LIMITS } from '@/lib/stripe'
 import { joinProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
 import { updateUserSubscription } from './subscription'
@@ -31,6 +31,20 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     logger.warn(`Payment not completed for session ${session.id}`, {
       status: session.payment_status,
     })
+    return
+  }
+
+  // API tier subscription checkout
+  if (session.metadata?.type === 'api_tier') {
+    const apiPlan = session.metadata.api_plan
+    if (!apiPlan || !['starter', 'pro'].includes(apiPlan)) {
+      logger.error('Invalid api_plan in metadata', { metadata: session.metadata })
+      return
+    }
+    const subscriptionId = session.subscription as string
+    if (subscriptionId) {
+      await handleApiTierActivation(userId, apiPlan, subscriptionId)
+    }
     return
   }
 
@@ -313,5 +327,40 @@ async function handleLifetimePayment(userId: string, customerId: string) {
       details: { userId, customerId, plan: 'lifetime' },
     }),
     'stripe-new-lifetime-alert'
+  )
+}
+
+export async function handleApiTierActivation(
+  userId: string,
+  apiPlan: string,
+  stripeSubscriptionId: string
+) {
+  const dailyLimit = API_TIER_LIMITS[apiPlan] ?? 100
+
+  logger.info('Activating API tier', { userId, apiPlan, dailyLimit, stripeSubscriptionId })
+
+  await withRetry(async () => {
+    const { error } = await getSupabase().rpc('update_user_api_tier', {
+      p_user_id: userId,
+      p_api_tier: apiPlan,
+      p_stripe_subscription_id: stripeSubscriptionId,
+      p_daily_limit: dailyLimit,
+    })
+
+    if (error) {
+      throw new Error(`Failed to update API tier: ${error.message}`)
+    }
+  })
+
+  logger.info(`API tier activated for user ${userId}`, { apiPlan })
+
+  fireAndForget(
+    sendAlert({
+      title: '🎉 New API subscriber',
+      message: `Plan: ${apiPlan} · User: ${userId}`,
+      level: 'info',
+      details: { userId, apiPlan, stripeSubscriptionId },
+    }),
+    'stripe-new-api-subscriber-alert'
   )
 }

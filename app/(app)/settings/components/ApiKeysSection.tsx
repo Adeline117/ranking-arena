@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
+import { useApiCheckout } from '@/lib/hooks/useApiCheckout'
 import { SectionCard, getInputStyle } from './shared'
 
 interface ApiKey {
@@ -19,8 +20,19 @@ interface ApiKey {
   revoked_at: string | null
 }
 
+const TIER_LABELS: Record<string, { label: string; color: string; limit: string }> = {
+  free: { label: 'Free', color: 'var(--color-text-tertiary)', limit: '100 req/day' },
+  starter: { label: 'Starter', color: 'var(--color-brand)', limit: '10,000 req/day' },
+  pro: { label: 'Pro', color: 'var(--color-accent-success)', limit: 'Unlimited' },
+}
+
 export function ApiKeysSection() {
   const { showToast } = useToast()
+  const {
+    checkout: apiCheckout,
+    isLoading: checkoutLoading,
+    error: checkoutError,
+  } = useApiCheckout()
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
@@ -148,6 +160,14 @@ export function ApiKeysSection() {
           </button>
         </Box>
       )}
+
+      {/* Current tier + upgrade */}
+      <ApiTierBanner
+        currentTier={activeKeys[0]?.tier || 'free'}
+        onUpgrade={apiCheckout}
+        isLoading={checkoutLoading}
+        error={checkoutError}
+      />
 
       {/* Create new key */}
       <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
@@ -376,6 +396,84 @@ function UsageChart() {
         </div>
       )}
     </div>
+  )
+}
+
+function ApiTierBanner({
+  currentTier,
+  onUpgrade,
+  isLoading,
+  error,
+}: {
+  currentTier: string
+  onUpgrade: (plan: 'starter' | 'pro') => void
+  isLoading: boolean
+  error: string | null
+}) {
+  const tier = TIER_LABELS[currentTier] || TIER_LABELS.free
+
+  return (
+    <Box
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: tokens.spacing[3],
+        borderRadius: tokens.radius.md,
+        background: 'var(--color-bg-tertiary)',
+        marginBottom: tokens.spacing[4],
+      }}
+    >
+      <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+          <Text size="sm" weight="bold">
+            API Plan:
+          </Text>
+          <span
+            style={{
+              padding: '2px 8px',
+              borderRadius: tokens.radius.sm,
+              background: `${tier.color}20`,
+              color: tier.color,
+              fontSize: 12,
+              fontWeight: 700,
+            }}
+          >
+            {tier.label}
+          </span>
+          <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
+            {tier.limit}
+          </Text>
+        </div>
+        {error && (
+          <Text size="xs" style={{ color: 'var(--color-accent-danger)', marginTop: 4 }}>
+            {error}
+          </Text>
+        )}
+      </div>
+      {currentTier !== 'pro' && (
+        <div style={{ display: 'flex', gap: tokens.spacing[2] }}>
+          {currentTier === 'free' && (
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => onUpgrade('starter')}
+              disabled={isLoading}
+            >
+              {isLoading ? 'Loading...' : 'Upgrade to Starter'}
+            </Button>
+          )}
+          <Button
+            size="sm"
+            variant={currentTier === 'free' ? 'ghost' : 'primary'}
+            onClick={() => onUpgrade('pro')}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Loading...' : 'Upgrade to Pro'}
+          </Button>
+        </div>
+      )}
+    </Box>
   )
 }
 
