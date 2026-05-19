@@ -514,6 +514,7 @@ const en = {
   // Pricing page
   pricingTitle: 'Upgrade to Pro',
   pricingSubtitle: 'Unlock all premium features',
+  pricingTrialBadge: '7-day free trial on all plans. Cancel anytime.',
   monthlyPlan: 'Monthly Plan',
   yearlyPlan: 'Yearly Plan',
   monthlySubscription: 'Monthly subscription',

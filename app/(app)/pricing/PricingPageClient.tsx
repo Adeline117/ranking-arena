@@ -163,6 +163,26 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         >
           {resolved(t('pricingSubtitle'), 'pricingSubtitle', 'Unlock all premium features')}
         </p>
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 8,
+            padding: '8px 16px',
+            borderRadius: 20,
+            background: 'var(--color-accent-primary-bg, rgba(59, 130, 246, 0.1))',
+            color: 'var(--color-accent-primary)',
+            fontSize: 14,
+            fontWeight: 600,
+            marginBottom: tokens.spacing[6],
+          }}
+        >
+          {resolved(
+            t('pricingTrialBadge'),
+            'pricingTrialBadge',
+            '7-day free trial on all plans. Cancel anytime.'
+          )}
+        </div>
 
         {/* Founding member urgency banner */}
         <div
