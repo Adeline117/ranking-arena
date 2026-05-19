@@ -209,7 +209,7 @@ export async function upsertPositionHistory(
 
   // Use upsert with conflict handling
   const { error } = await supabase.from('trader_position_history').upsert(records, {
-    onConflict: 'source,source_trader_id,symbol,open_time',
+    onConflict: 'source,source_trader_id,symbol,open_time,created_at',
     ignoreDuplicates: true,
   })
 
