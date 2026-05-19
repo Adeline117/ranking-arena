@@ -13,7 +13,7 @@ export default function NavLinks() {
   const items = [
     { href: '/', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
     { href: '/market', labelKey: 'market' as const, tooltip: t('navTooltipMarket') },
-    { href: '/library', labelKey: 'library' as const, tooltip: undefined as string | undefined },
+    { href: '/hot', labelKey: 'hot' as const, tooltip: undefined as string | undefined },
   ]
 
   return (

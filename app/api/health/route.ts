@@ -60,7 +60,7 @@ async function checkDatabase(): Promise<{
   try {
     const result = await withTimeout(
       getSupabaseAdmin()
-        .from('library_items')
+        .from('trader_sources')
         .select('id')
         .limit(1)
         .then((r) => ({ ok: !r.error, msg: r.error?.message })),

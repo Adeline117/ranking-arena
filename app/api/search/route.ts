@@ -35,7 +35,7 @@ import { escapeLikePattern } from '@/lib/sanitize'
 
 export interface UnifiedSearchResult {
   id: string
-  type: 'trader' | 'post' | 'library' | 'user' | 'group'
+  type: 'trader' | 'post' | 'user' | 'group'
   title: string
   subtitle?: string
   href: string
@@ -48,7 +48,6 @@ export interface UnifiedSearchResponse {
   results: {
     traders: UnifiedSearchResult[]
     posts: UnifiedSearchResult[]
-    library: UnifiedSearchResult[]
     users: UnifiedSearchResult[]
     groups: UnifiedSearchResult[]
   }
@@ -387,7 +386,7 @@ export const GET = withPublic(
     if (!query || query.length < 1) {
       return success({
         query: '',
-        results: { traders: [], posts: [], library: [], users: [], groups: [] },
+        results: { traders: [], posts: [], users: [], groups: [] },
         total: 0,
       } satisfies UnifiedSearchResponse)
     }
@@ -415,7 +414,7 @@ export const GET = withPublic(
     if (!sanitizedQuery) {
       return success({
         query: query.replace(/</g, '&lt;').replace(/>/g, '&gt;'),
-        results: { traders: [], posts: [], library: [], users: [], groups: [] },
+        results: { traders: [], posts: [], users: [], groups: [] },
         total: 0,
       } satisfies UnifiedSearchResponse)
     }
@@ -451,13 +450,6 @@ export const GET = withPublic(
       author_handle: string | null
       created_at: string
       view_count: number | null
-    }
-    interface LibraryRow {
-      id: string
-      title: string
-      author: string | null
-      slug: string | null
-      category: string | null
     }
     interface UserRow {
       id: string
@@ -510,67 +502,58 @@ export const GET = withPublic(
             })
         : Promise.resolve(null)
 
-    let [meiliResults, supabaseTraders, postsData, libraryData, usersData, groupsData] =
-      await Promise.all([
-        meiliTraderSearch,
-        // Supabase trader search: only run when Meilisearch is NOT configured.
-        // Previously ran both in parallel and discarded Supabase results ~90% of the time,
-        // wasting a DB connection pool slot per search request.
-        isMeilisearchAvailable()
-          ? Promise.resolve([])
-          : unifiedSearchTraders(supabase, {
-              query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
-              limit: effectiveLimit,
-              platform: effectivePlatform,
-            }).catch((err) => {
-              logger.warn('Supabase trader search failed', {
-                error: err instanceof Error ? err.message : String(err),
-                query: sanitizedQuery,
-              })
-              return []
-            }),
+    let [meiliResults, supabaseTraders, postsData, usersData, groupsData] = await Promise.all([
+      meiliTraderSearch,
+      // Supabase trader search: only run when Meilisearch is NOT configured.
+      // Previously ran both in parallel and discarded Supabase results ~90% of the time,
+      // wasting a DB connection pool slot per search request.
+      isMeilisearchAvailable()
+        ? Promise.resolve([])
+        : unifiedSearchTraders(supabase, {
+            query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+            limit: effectiveLimit,
+            platform: effectivePlatform,
+          }).catch((err) => {
+            logger.warn('Supabase trader search failed', {
+              error: err instanceof Error ? err.message : String(err),
+              query: sanitizedQuery,
+            })
+            return []
+          }),
 
-        // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
-        features.social
-          ? safeQuery(
-              supabase
-                .from('posts')
-                .select('id, title, author_handle, created_at, view_count')
-                .or(`title.ilike.%${sanitizedQuery}%`)
-                .eq('visibility', 'public')
-                .order('view_count', { ascending: false, nullsFirst: false })
-                .limit(limitPerCategory)
-            )
-          : Promise.resolve([]),
+      // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
+      features.social
+        ? safeQuery(
+            supabase
+              .from('posts')
+              .select('id, title, author_handle, created_at, view_count')
+              .or(`title.ilike.%${sanitizedQuery}%`)
+              .eq('visibility', 'public')
+              .order('view_count', { ascending: false, nullsFirst: false })
+              .limit(limitPerCategory)
+          )
+        : Promise.resolve([]),
 
-        safeQuery(
-          supabase
-            .from('library_items')
-            .select('id, title, author, slug, category')
-            .or(`title.ilike.%${sanitizedQuery}%,author.ilike.%${sanitizedQuery}%`)
-            .limit(limitPerCategory)
-        ),
+      features.social
+        ? safeQuery(
+            supabase
+              .from('user_profiles')
+              .select('id, handle, display_name, avatar_url, bio')
+              .or(`handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%`)
+              .limit(limitPerCategory)
+          )
+        : Promise.resolve([]),
 
-        features.social
-          ? safeQuery(
-              supabase
-                .from('user_profiles')
-                .select('id, handle, display_name, avatar_url, bio')
-                .or(`handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%`)
-                .limit(limitPerCategory)
-            )
-          : Promise.resolve([]),
-
-        features.social
-          ? safeQuery(
-              supabase
-                .from('groups')
-                .select('id, name, member_count, description')
-                .ilike('name', `%${sanitizedQuery}%`)
-                .limit(limitPerCategory)
-            )
-          : Promise.resolve([]),
-      ])
+      features.social
+        ? safeQuery(
+            supabase
+              .from('groups')
+              .select('id, name, member_count, description')
+              .ilike('name', `%${sanitizedQuery}%`)
+              .limit(limitPerCategory)
+          )
+        : Promise.resolve([]),
+    ])
 
     // If Meilisearch was configured but failed at runtime, run Supabase fallback now
     if (meiliDegraded && supabaseTraders.length === 0) {
@@ -673,14 +656,6 @@ export const GET = withPublic(
       meta: { view_count: p.view_count },
     }))
 
-    const library: UnifiedSearchResult[] = (libraryData as LibraryRow[]).map((l) => ({
-      id: l.id,
-      type: 'library' as const,
-      title: l.title,
-      subtitle: l.author || l.category || undefined,
-      href: `/learn/${l.slug || l.id}`,
-    }))
-
     const users: UnifiedSearchResult[] = (usersData as UserRow[]).map((u) => ({
       id: u.id,
       type: 'user' as const,
@@ -699,8 +674,7 @@ export const GET = withPublic(
       meta: { member_count: g.member_count },
     }))
 
-    const totalResults =
-      traders.length + posts.length + library.length + users.length + groups.length
+    const totalResults = traders.length + posts.length + users.length + groups.length
 
     // "Did you mean" suggestions — combines trader handles + hot posts + popular groups
     let suggestions: string[] | undefined
@@ -742,7 +716,7 @@ export const GET = withPublic(
     const escapedQuery = query.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     const result: UnifiedSearchResponse = {
       query: escapedQuery,
-      results: { traders, posts, library, users, groups },
+      results: { traders, posts, users, groups },
       total: totalResults,
       ...(suggestions ? { suggestions } : {}),
       ...(matchedExchange && !platformFilter ? { matchedExchange } : {}),

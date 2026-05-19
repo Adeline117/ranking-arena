@@ -59,7 +59,7 @@ export function useSearchData(open: boolean, query: string) {
         ? [
             ...searchData.results.traders,
             ...(features.social ? searchData.results.posts : []),
-            ...searchData.results.library,
+
             ...(features.social ? searchData.results.users : []),
             ...(features.social ? searchData.results.groups || [] : []),
           ]

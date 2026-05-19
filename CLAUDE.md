@@ -34,7 +34,7 @@ app/                    # Next.js App Router pages
   rankings/             # Leaderboard pages
   trader/[id]/          # Trader profile pages
   groups/               # Social groups feature
-  library/              # 60k+ educational resources
+  hot/                  # Hot/trending content page
 
 lib/                    # Core business logic
   connectors/           # Exchange API connectors
