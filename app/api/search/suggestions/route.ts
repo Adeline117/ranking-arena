@@ -15,7 +15,8 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { parseLimit } from '@/lib/utils/safe-parse'
 import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
 
-export const dynamic = 'force-dynamic'
+// Removed force-dynamic: Redis cache (60s) + HTTP Cache-Control headers handle freshness.
+// force-dynamic was preventing Vercel CDN from caching responses at the edge.
 
 interface SearchSuggestion {
   type: 'trader' | 'symbol' | 'keyword'
