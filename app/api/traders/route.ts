@@ -313,13 +313,16 @@ async function fetchFromLeaderboard(
     // Plus a lightweight supplementary query for sources not in the current page
     const allSourceSet = new Set<string>()
     for (const r of data || []) allSourceSet.add((r as { source: string }).source)
-    // Supplementary: get distinct sources via lightweight query
+    // Supplementary: get distinct sources from pre-computed count cache
+    // (replaces the broken leaderboard_ranks LIMIT 500 query that returned
+    // rows from a single physical index page — same bug fixed in /api/rankings)
     const { data: sourceRows } = await supabase
-      .from('leaderboard_ranks')
+      .from('leaderboard_count_cache')
       .select('source')
       .eq('season_id', timeRange)
-      .gt('arena_score', 0)
-      .limit(500)
+      .gt('total_count', 0)
+      .neq('source', '_all')
+      .not('source', 'like', '%_gt0')
     for (const r of sourceRows || []) allSourceSet.add((r as { source: string }).source)
     availableSources = [...allSourceSet].sort()
     if (availableSourcesCache.size >= SOURCES_CACHE_MAX) {
