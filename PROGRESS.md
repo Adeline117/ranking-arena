@@ -2,6 +2,39 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## User-Facing Polish + Stripe Test Verified (2026-05-19 late night)
+
+**Continued from evening session — user-perspective QA pass.**
+
+### Stripe API Checkout Verified (test mode)
+
+- Created Stripe Products + Prices: Starter `price_1TYvmC...` ($49/mo), Pro `price_1TYvmD...` ($199/mo)
+- Set env vars on Vercel (preview + dev + prod)
+- Local test: 4/4 scenarios pass (Starter ✅, Pro ✅, invalid plan → 400 ✅, no auth → 401 ✅)
+- Live mode: pending — will create live prices before GTM launch
+
+### API Output Quality Fixes
+
+| Fix                    | Before                                           | After                                    |
+| ---------------------- | ------------------------------------------------ | ---------------------------------------- |
+| Rank numbering         | Started at #15 with gaps (DB global rank leaked) | Sequential 1, 2, 3... from offset        |
+| Total count            | Always = data.length (e.g. 5)                    | Real count from cache (e.g. 1299)        |
+| Search ghosts          | "Whale" returned all-null traders                | Filtered out traders with no arena_score |
+| DEX handles (v3 API)   | `null` for wallet addresses                      | `0x1234...abcd` shortened fallback       |
+| DEX followers (v3 API) | `0` (misleading)                                 | `null` (correct — no copy trading)       |
+
+### Remaining (self-healing)
+
+- 7/20 top traders missing MDD → next enrichment cycle fills from fills/equity curve
+- Bybit scores low (40 vs 90+) → PnL enrichment will backfill after batch-enrich picks up fix
+- bingx/weex/kucoin enrichment → re-enabled, will populate on next 4h cycle
+
+### Session totals
+
+12 commits, 2 migrations (prod), 2 Stripe products, 6 Vercel env vars. Pipeline 19/20 fresh. Deploy 5/5 healthy. Code quality 100/100 on all pushes.
+
+---
+
 ## Library Removal + VPS Pre-flight Root Cause Fix (2026-05-19 night)
 
 ### 1. Remove library feature, restore /hot in navigation
