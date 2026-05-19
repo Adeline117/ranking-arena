@@ -40,7 +40,7 @@ import { fetchPhase1FromV2 } from './fetch-phase1'
 import { rerankAllRows, cleanupStaleRows } from './rerank-cleanup'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
-import { generateIdenticonSvg } from '@/lib/utils/avatar'
+import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
@@ -745,8 +745,9 @@ async function computeSeason(
       copiers: t.copiers ?? null, // Exchange copy-trade count (from v2 or enrichment stats_detail)
       trades_count: t.trades_count,
       handle: displayHandle,
-      // Generate identicon locally when no avatar — eliminates external dicebear.com request per trader
-      avatar_url: info.avatar_url || generateIdenticonSvg(t.source + '_' + t.source_trader_id, 64),
+      // Use exchange platform logo when no avatar (DEX/Web3 traders don't have profile pictures).
+      // Previously generated identicon SVGs which looked like placeholder/test data.
+      avatar_url: info.avatar_url || getExchangeLogoUrl(t.source),
       // Score sub-components for frontend display
       profitability_score: Math.round(scoreResult.returnScore * 100) / 100,
       risk_control_score: Math.round(scoreResult.pnlScore * 100) / 100,

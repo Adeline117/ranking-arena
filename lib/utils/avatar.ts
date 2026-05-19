@@ -477,3 +477,48 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
   // Unknown domains with valid image URLs — proxy for safety (CORS/Referrer)
   return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
 }
+
+/**
+ * Get exchange platform logo URL for traders without a profile avatar.
+ * Used by compute-leaderboard as fallback instead of identicon SVGs.
+ * Returns an absolute path to the local logo file in /public/icons/exchanges/.
+ */
+const EXCHANGE_LOGO_MAP: Record<string, string> = {
+  binance_futures: '/icons/exchanges/binance.jpg',
+  binance_spot: '/icons/exchanges/binance.jpg',
+  binance_web3: '/icons/exchanges/binance.jpg',
+  bybit: '/icons/exchanges/bybit.png',
+  bybit_spot: '/icons/exchanges/bybit.png',
+  bitget_futures: '/icons/exchanges/bitget.png',
+  okx_futures: '/icons/exchanges/okx.svg',
+  okx_spot: '/icons/exchanges/okx.svg',
+  okx_web3: '/icons/exchanges/okx.svg',
+  mexc: '/icons/exchanges/mexc.jpeg',
+  htx_futures: '/icons/exchanges/htx.png',
+  kucoin: '/icons/exchanges/kucoin.png',
+  coinex: '/icons/exchanges/coinex.jpg',
+  bingx: '/icons/exchanges/bingx.png',
+  bingx_spot: '/icons/exchanges/bingx.png',
+  hyperliquid: '/icons/exchanges/hyperliquid.png',
+  gmx: '/icons/exchanges/gmx.svg',
+  dydx: '/icons/exchanges/dydx.png',
+  jupiter_perps: '/icons/exchanges/jupiter.png',
+  aevo: '/icons/exchanges/aevo.png',
+  gains: '/icons/exchanges/gains.svg',
+  bitfinex: '/icons/exchanges/bitfinex.png',
+  blofin: '/icons/exchanges/blofin.png',
+  xt: '/icons/exchanges/xt.png',
+  weex: '/icons/exchanges/weex.png',
+  toobit: '/icons/exchanges/toobit.png',
+  btcc: '/icons/exchanges/btcc.png',
+  bitunix: '/icons/exchanges/bitunix.png',
+  etoro: '/icons/exchanges/etoro.svg',
+  woox: '/icons/exchanges/woox.svg',
+  polymarket: '/icons/exchanges/polymarket.svg',
+  copin: '/icons/exchanges/copin.svg',
+  paradex: '/icons/exchanges/dydx.png',
+}
+
+export function getExchangeLogoUrl(source: string): string {
+  return EXCHANGE_LOGO_MAP[source] || `/icons/exchanges/${source.split('_')[0]}.png`
+}
