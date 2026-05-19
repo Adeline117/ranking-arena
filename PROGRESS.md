@@ -26,9 +26,18 @@
 | `6928aa5` | movers: reduce Redis TTL 600→120s + CDN TTL for empty results 3600→60s (empty results from outage now recover in 2min); rankings/live: add totalCount field |
 | `3688c54` | **UX**: pricing page free trial badge moved above fold (was hidden inside plan card click flow); added pricingTrialBadge i18n key (en+zh) |
 
+### Data Root Cause Fixes (real-user "half-product" perception)
+
+| Commit    | Fix                                                                                                                                                                                                                            |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `64dd2e1` | **ROOT CAUSE**: exchange follower counts (OKX max=17K, eToro max=32K) were never passed to leaderboard_ranks — compute-leaderboard hardcoded `followers: 0`. Changed to `t.followers ?? 0`. Next cron run populates real data. |
+| `6d2934d` | Footer: added full risk disclaimer (en+zh) — was completely missing (critical for crypto financial product). Ranking table: hide followers=0 as `—` (0 is always missing data, not real count). Improved disclaimer text.      |
+
 **UX deep audit confirmed NO issues with**: chart skeletons (ChartSkeleton exists), FearGreedGauge (Suspense+LoadingCard), login page (email/wallet/terms in SSR), mobile (card layout), period switching (skeleton loader), new user experience (hero+rankings visible), FAQ (renders correctly), trending search (client-fetch by design).
 
-**Final verified state (2026-05-19 04:30 UTC)**: 90D=2015, 30D=3013, 7D=3780 traders; 27 platforms; search 10 traders; e2e fixtures BLOCKED; subscription private cache; all 7 pages 200; 0 type errors; 2625 tests pass; code quality 100/100
+**Remaining product-level items (need product decisions, not code fixes)**: onboarding flow (needs design), about page (needs copy), mixed-language trader names (real data — Chinese traders use Chinese names), identicon avatars (85-95% have real avatars, rest are exchange-side missing).
+
+**Final verified state (2026-05-19 19:30 UTC)**: 90D=2015, 30D=3034, 7D=3791 traders; 28 platforms; search 10 traders; e2e fixtures BLOCKED; subscription private cache; risk disclaimer visible; all 7 pages 200; 0 type errors; 2625 tests pass; code quality 100/100
 
 ---
 
