@@ -36,6 +36,37 @@ Pipeline: 16/17 fresh, 0 severe. API: total=1299, search clean, 5/5 deploy healt
 
 ---
 
+## DB Structural Cleanup + VPS Root Cause + Library Removal (2026-05-19 night)
+
+### Database: 44 GB → 18 GB (59% reclaimed)
+
+| Operation                                                            | Savings |
+| -------------------------------------------------------------------- | ------- |
+| `trader_position_history` → partitioned table swap + DROP 20GB flat  | 20 GB   |
+| DROP `idx_snapshots_v2_part_hourly` (duplicate index, 1 scan on Apr) | ~2.4 GB |
+| DROP `idx_snap_v2_p2026_04_win_ts_arena_cov` (274 scans, no parent)  | 2.1 GB  |
+| DROP `leaderboard_ranks_old` (zero references)                       | 502 MB  |
+| DROP `wallets` + `interactions` + `projects` (legacy web3)           | 235 MB  |
+| DROP `library_items` + `book_ratings` (feature removed)              | 61 MB   |
+
+Key migration: `trader_position_history` (130M rows, flat, queries timing out) swapped to monthly-partitioned table via atomic rename. Code `onConflict` updated for partition-compatible unique key.
+
+### VPS Pre-flight Root Cause Fix (P0)
+
+`checkVpsProxy()` used `httpbin.org` for auth test → VPS returned 403 "host not allowed" → misread as key mismatch → Binance/Bitget blocked for days. Fix: use `/health` endpoint. Verified: binance_futures + binance_spot + copin restored.
+
+### Pipeline Alert Noise (3 root causes)
+
+- Health threshold: `failedJobs > 0` = degraded → require >10% failed
+- Enrichment timeout: binance/hyperliquid/okx 35s too short → 50-55s
+- precompute-composite: 7D statement_timeout 90s → 150s
+
+### Library Feature Removal
+
+Removed `/library` from nav/search/API, restored `/hot`. 17 files cleaned.
+
+---
+
 ## User-Facing Polish + Stripe Test Verified (2026-05-19 late night)
 
 **Continued from evening session — user-perspective QA pass.**
