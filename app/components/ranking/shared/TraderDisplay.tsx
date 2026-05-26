@@ -420,16 +420,27 @@ export function MetricStat({
       }}
       title={isNull && nullTooltip ? nullTooltip : undefined}
     >
-      <Text size="xs" style={{ marginBottom: 2, display: 'block', color: TRADER_TEXT_TERTIARY }}>
+      <Text
+        size="xs"
+        style={{
+          marginBottom: 2,
+          display: 'block',
+          color: TRADER_TEXT_TERTIARY,
+          opacity: 0.7,
+          textTransform: 'uppercase',
+          letterSpacing: '0.04em',
+          fontSize: 10,
+        }}
+      >
         {label}
       </Text>
       <Text
-        size="md"
-        weight="semibold"
+        size="sm"
+        weight="medium"
         style={{
-          color: isNull ? TRADER_TEXT_TERTIARY : color || TRADER_TEXT_TERTIARY,
+          color: isNull ? TRADER_TEXT_TERTIARY : color || tokens.colors.text.secondary,
           fontVariantNumeric: 'tabular-nums',
-          opacity: isNull ? 0.4 : 1,
+          opacity: isNull ? 0.35 : 1,
         }}
       >
         {isNull ? '—' : value}

@@ -97,12 +97,12 @@ export const darkTokens = {
     white: '#FFFFFF',
     black: '#000000',
 
-    // Background hierarchy (dark theme - near-black deep purple)
+    // Background hierarchy (dark theme - near-black deep purple, tuned for card separation)
     bg: {
-      primary: '#0B0A10', // Near-black deep purple
-      secondary: '#14131A', // Panel/card background
-      tertiary: '#1C1B23', // Elevated/hover states
-      hover: '#23222B', // Subtle hover
+      primary: '#0A0910', // Near-black deep purple
+      secondary: '#151320', // Panel/card background (more separated from primary)
+      tertiary: '#1D1A2A', // Elevated/hover states
+      hover: '#262336', // Subtle hover
     },
 
     // Text hierarchy (WCAG AA contrast ratios on #0B0A10)
@@ -113,11 +113,11 @@ export const darkTokens = {
       disabled: '#6B6B6B', // Disabled text (4.5:1 WCAG AA on #0B0A10)
     },
 
-    // Border colors
+    // Border colors — slightly more visible for card edges
     border: {
-      primary: '#23222B', // Subtle borders
-      secondary: '#1C1B23', // Very subtle borders
-      focus: '#2A2933', // Focus states
+      primary: '#2C293A', // Subtle borders
+      secondary: '#1D1A2A', // Very subtle borders
+      focus: '#2E2B3D', // Focus states
     },
 
     // Accent colors
@@ -126,8 +126,8 @@ export const darkTokens = {
       success: '#4DFF9A', // Positive ROI/states
       warning: '#FFB800', // Warnings
       error: '#FF4D4D', // Negative ROI/states
-      brand: '#9A85B5', // Arena brand purple (WCAG AA 5.6:1 on card bg)
-      brandHover: '#B09DC8', // Brand hover state (brighter)
+      brand: '#A18CC0', // Arena brand purple (WCAG AA contrast on card bg)
+      brandHover: '#B4A0D0', // Brand hover state (brighter)
       brandMuted: 'rgba(154, 133, 181, 0.15)', // Brand muted background
       brandLight: '#c9b8db', // Brand light for secondary text on brand bg
       translated: '#7CBBB8', // Translated text color (soft teal for dark mode)

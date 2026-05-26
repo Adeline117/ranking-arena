@@ -119,6 +119,8 @@ export const tokens = {
   typography: {
     fontFamily: {
       sans: [
+        'var(--font-inter)',
+        'Inter',
         '-apple-system',
         'BlinkMacSystemFont',
         '"Segoe UI"',
@@ -161,15 +163,15 @@ export const tokens = {
     },
   },
 
-  // Border radius
+  // Border radius — standardized: sm for small badges, md for cards/inputs, lg for panels, xl for sections
   radius: {
     none: '0',
-    sm: '4px',
-    md: '8px',
-    lg: '12px',
-    xl: '16px',
-    '2xl': '20px',
-    '3xl': '24px',
+    sm: '6px',
+    md: '10px',
+    lg: '14px',
+    xl: '18px',
+    '2xl': '22px',
+    '3xl': '26px',
     full: '9999px',
   },
 

@@ -321,7 +321,7 @@ export const TraderCard = memo(function TraderCard({
             <Sparkline roi={trader.roi} width={120} height={24} />
           </Box>
           <Text
-            size="lg"
+            size="xl"
             weight="black"
             style={{
               color:
@@ -331,6 +331,7 @@ export const TraderCard = memo(function TraderCard({
                     : TRADER_ACCENT_ERROR
                   : tokens.colors.text.tertiary,
               marginLeft: 'auto',
+              letterSpacing: '-0.02em',
             }}
           >
             {formatROI(trader.roi)}

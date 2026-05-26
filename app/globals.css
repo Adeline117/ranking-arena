@@ -126,14 +126,14 @@ html.theme-transition #main-content {
   --foreground: #ffffff;
   --mobile-nav-height: 60px;
 
-  /* Brand colors - Arena Purple */
-  --color-brand: #8b6fa8;
-  --color-brand-hover: #9d84b5;
+  /* Brand colors - Arena Purple (slightly more saturated) */
+  --color-brand: #9373b5;
+  --color-brand-hover: #a68ec5;
   --color-brand-muted: var(--color-accent-primary-15);
   --color-brand-light: var(--color-accent-primary-30);
   --color-brand-accent: #c9b8db;
-  --color-brand-deep: #6b4f88;
-  --color-accent-brand: #8b6fa8;
+  --color-brand-deep: #7055a0;
+  --color-accent-brand: #9373b5;
   --color-verified-onchain: #2fe57d;
   --color-verified-web3: #6d5ae6;
 
@@ -152,11 +152,11 @@ html.theme-transition #main-content {
   --background: #0b0a10;
   --foreground: #ededed;
 
-  /* Background colors */
-  --color-bg-primary: #0b0a10;
-  --color-bg-secondary: #14121c;
-  --color-bg-tertiary: #1c1926;
-  --color-bg-hover: #252232;
+  /* Background colors — tuned for card/surface separation */
+  --color-bg-primary: #0a0910;
+  --color-bg-secondary: #151320;
+  --color-bg-tertiary: #1d1a2a;
+  --color-bg-hover: #262336;
 
   /* Text colors (WCAG AA on #0B0A10 — minimum 4.5:1 contrast) */
   --color-text-primary: #f0f0f0;
@@ -164,12 +164,12 @@ html.theme-transition #main-content {
   --color-text-tertiary: #b0b0c4; /* Raised from #A8A8BA for WCAG AA ≥4.5:1 on bg-secondary #14121C */
   --color-text-quaternary: #8585a0;
 
-  /* Border colors */
-  --color-border-primary: #2a2836;
-  --color-border-secondary: #3a3848;
+  /* Border colors — slightly more visible for card edges */
+  --color-border-primary: #2c293a;
+  --color-border-secondary: #3c394c;
 
-  /* Accent colors — brightened for WCAG AA 5.6:1 on secondary bg #14121C */
-  --color-accent-primary: #9a85b5;
+  /* Accent colors — brightened for WCAG AA contrast on card bg */
+  --color-accent-primary: #a18cc0;
   --color-accent-primary-08: rgba(154, 133, 181, 0.08);
   --color-accent-primary-10: rgba(154, 133, 181, 0.1);
   --color-accent-primary-12: rgba(154, 133, 181, 0.12);
@@ -600,8 +600,8 @@ html.theme-transition #main-content {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --font-sans:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC',
-    'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+    var(--font-inter), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+    'Helvetica Neue', Arial, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
   --font-mono:
     ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Monaco, Consolas, 'Liberation Mono',
     'Courier New', monospace;
@@ -643,13 +643,25 @@ textarea,
 /* Theme-aware body styles */
 body {
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'PingFang SC',
-    'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+    var(--font-inter),
+    'Inter',
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    'PingFang SC',
+    'Microsoft YaHei',
+    'Noto Sans CJK SC',
+    sans-serif;
   font-size: 14px;
   line-height: 1.6;
   overscroll-behavior-y: contain;
   background: var(--color-bg-primary);
   color: var(--color-text-primary);
+  font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  font-variant-numeric: tabular-nums;
 }
 
 /* Focus styles — !important ensures inline styles don't override focus ring */
@@ -712,6 +724,22 @@ select:focus-visible {
   50% {
     opacity: 0.5;
   }
+}
+
+/* Content reveal — used when skeleton→content swap happens */
+@keyframes contentReveal {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.content-reveal {
+  animation: contentReveal 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
 /* scrollTicker is needed for the market ticker on homepage */
@@ -805,11 +833,11 @@ select:focus-visible {
 .three-col-layout {
   display: grid;
   grid-template-columns: 240px 1fr 260px;
-  gap: 20px;
+  gap: 24px;
   align-items: start;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0 16px;
+  padding: 0 20px;
   min-height: calc(100vh - 120px);
   /* Fixed height prevents CLS 0.233 from layout shift when data loads */
   contain: layout style;
@@ -1582,11 +1610,12 @@ select:focus-visible {
 .card-hover {
   box-shadow: var(--shadow-card), var(--shadow-border-glow);
   transition:
-    transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
-    box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1);
+    transform 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    box-shadow 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    border-color 250ms ease;
 }
 .card-hover:hover {
-  transform: translateY(-2px);
+  transform: translateY(-3px);
   box-shadow: var(--shadow-card-hover), var(--shadow-border-glow);
 }
 
@@ -1742,18 +1771,18 @@ button:focus-visible,
   border: 1px solid var(--glass-border-light);
   box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
   transition:
-    box-shadow 200ms cubic-bezier(0.4, 0, 0.2, 1),
-    transform 200ms cubic-bezier(0.4, 0, 0.2, 1),
-    border-color 200ms ease;
+    box-shadow 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    transform 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    border-color 250ms ease;
 }
 @media (hover: hover) {
   .glass-card:hover {
     box-shadow:
       var(--shadow-card-hover),
       var(--shadow-inset-subtle),
-      0 0 12px var(--color-brand-muted);
+      0 0 16px var(--color-brand-muted);
     border-color: var(--glass-border-medium);
-    transform: translateY(-2px);
+    transform: translateY(-3px);
   }
 }
 /* Removed: .glass-card:active scale(0.98) — caused entire ranking table
