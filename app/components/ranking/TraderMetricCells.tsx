@@ -118,13 +118,13 @@ export const TraderMetricCells = memo(function TraderMetricCells({
       <Box className="col-pnl" style={PNL_CELL_STYLE}>
         <Text
           size="sm"
-          weight="semibold"
+          weight="medium"
           className="pnl-value"
           style={{
             color: pnlColor,
             lineHeight: 1.2,
             fontSize: tokens.typography.fontSize.sm,
-            opacity: hasPnl ? 0.85 : 0.5,
+            opacity: hasPnl ? 0.7 : 0.4,
             cursor: hasPnl ? 'help' : 'default',
             fontVariantNumeric: 'tabular-nums',
           }}
@@ -139,14 +139,14 @@ export const TraderMetricCells = memo(function TraderMetricCells({
         {trader.win_rate != null && Number.isFinite(Number(trader.win_rate)) ? (
           <Text
             size="sm"
-            weight="semibold"
+            weight="medium"
             style={{
               color:
                 Number(trader.win_rate) > 50 ? tokens.colors.accent.success : TRADER_TEXT_TERTIARY,
               lineHeight: 1.2,
               fontSize: tokens.typography.fontSize.sm,
               fontVariantNumeric: 'tabular-nums',
-              opacity: trader.metrics_estimated ? 0.5 : 1,
+              opacity: trader.metrics_estimated ? 0.4 : 0.75,
             }}
             title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}
           >
@@ -163,8 +163,8 @@ export const TraderMetricCells = memo(function TraderMetricCells({
         {trader.max_drawdown != null && Number.isFinite(Number(trader.max_drawdown)) ? (
           <Text
             size="sm"
-            weight="semibold"
-            style={{ ...MDD_TEXT_BASE_STYLE, opacity: trader.metrics_estimated ? 0.5 : 1 }}
+            weight="medium"
+            style={{ ...MDD_TEXT_BASE_STYLE, opacity: trader.metrics_estimated ? 0.4 : 0.7 }}
             title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}
           >
             {trader.metrics_estimated ? '~' : ''}
@@ -183,7 +183,7 @@ export const TraderMetricCells = memo(function TraderMetricCells({
         {trader.sharpe_ratio != null && Number.isFinite(Number(trader.sharpe_ratio)) ? (
           <Text
             size="sm"
-            weight="semibold"
+            weight="medium"
             style={{
               color:
                 Number(trader.sharpe_ratio) >= 1
@@ -192,6 +192,7 @@ export const TraderMetricCells = memo(function TraderMetricCells({
               lineHeight: 1.2,
               fontSize: tokens.typography.fontSize.sm,
               fontVariantNumeric: 'tabular-nums',
+              opacity: 0.75,
             }}
           >
             {Number(trader.sharpe_ratio).toFixed(2)}
