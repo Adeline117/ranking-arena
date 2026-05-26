@@ -2,6 +2,26 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Leaderboard Sequence Fix + Health Monitor Root Cause (2026-05-26)
+
+### P0: Leaderboard empty — id sequence dropped
+
+**Root cause**: `DROP TABLE leaderboard_ranks_old` (2026-05-19 DB cleanup) CASCADE-deleted the sequence it owned. The partitioned `leaderboard_ranks` table's `id` column became NOT NULL with no default → every `compute-leaderboard` upsert silently wrote 0 rows → rankings went to 0 across all periods.
+
+**Fix**: Created new `leaderboard_ranks_id_seq`, set as default, granted access.
+
+**Restored**: 7D=2,694 / 30D=2,467 / 90D=2,412 traders.
+
+### P1: Health monitor false positives — currentCount hardcoded to 0
+
+**Root cause**: `/api/health/pipeline` removed per-platform count queries (DB load reduction) and hardcoded `currentCount = 0`. Health monitor's zero-trader detection (`currentCount === 0 && avgCount > 10`) fired for every platform.
+
+**Fix**: Changed to stale-platform detection using `ageHours > 48h` only. Updated DEAD_PLATFORMS list (removed recovered bingx/weex, added copin/gateio noise sources).
+
+**Result**: Alerts dropped from 18 platforms → 0 (only VPS timeout remains, network issue).
+
+---
+
 ## Enrichment Root Cause Fix + API Quality (2026-05-20)
 
 ### Enrichment Pipeline Fixes
