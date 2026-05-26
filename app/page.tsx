@@ -98,21 +98,16 @@ export default async function Page() {
 
       {/* WelcomeBanner moved to HomePageLoader Phase 2 (client-only) */}
 
-      {/* SSR Hero — visible until Phase 2 replaces it */}
-      <div id="ssr-hero-shell">
+      {/* SSR Hero — stays visible permanently. Outside #ssr-ranking-table so
+          Phase 2 hiding the table doesn't affect it. Constrained to center
+          column width via max-width + margin for alignment with three-col grid. */}
+      <div id="ssr-hero-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '0 20px' }}>
         <HomeHeroSSR
           traderCount={heroStats?.traderCount}
           exchangeCount={heroStats?.exchangeCount}
         />
       </div>
 
-      {/* SSR ranking table in three-col-layout grid.
-          Uses same CSS grid as Phase 2 — center column renders at final width.
-          No sidebar content rendered (avoids empty placeholders hurting Speed Index).
-          CSS grid reserves sidebar column space without visible empty areas. */}
-      {/* SSR three-col grid — matches Phase 2 exactly. Sidebar grid tracks are
-          reserved by empty divs (no height, just grid placement) so center column
-          renders at the correct width from frame 1. Zero CLS on Phase 2 swap. */}
       {/* SSR ranking table — visible until React takes over.
           The HomePageClient useLayoutEffect hides this BEFORE first paint
           (when initialTraders is provided, loading starts as false).

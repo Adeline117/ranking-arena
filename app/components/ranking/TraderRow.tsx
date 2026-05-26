@@ -207,7 +207,7 @@ export const TraderRow = memo(
               className={`ranking-row ranking-table-grid ranking-table-grid-custom touch-target${rankClass}${flashClass ? ` ${flashClass}` : ''}`}
               style={{
                 ...ROW_BASE_STYLE,
-                borderBottom: rank <= 3 ? undefined : '1px solid var(--glass-border-light)',
+                borderBottom: rank <= 3 ? undefined : '1px solid var(--color-border-primary)',
                 minHeight: rank <= 3 ? 68 : 58,
                 ...heroStyle,
               }}

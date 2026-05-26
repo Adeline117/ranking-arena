@@ -91,7 +91,7 @@ export default function HomePageClient({
   // since any transition would show "double content" (SSR + React stacked).
   useLayoutEffect(() => {
     if (loading) return
-    for (const id of ['ssr-ranking-table', 'ssr-hero-shell']) {
+    for (const id of ['ssr-ranking-table']) {
       const el = document.getElementById(id)
       if (el) {
         el.style.display = 'none'
