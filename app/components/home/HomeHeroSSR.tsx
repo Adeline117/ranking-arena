@@ -47,8 +47,8 @@ export default async function HomeHeroSSR({
   return (
     <section
       style={{
-        padding: `${tokens.spacing[6]} ${tokens.spacing[6]} ${tokens.spacing[5]}`,
-        marginBottom: tokens.spacing[3],
+        padding: `${tokens.spacing[8]} ${tokens.spacing[6]} ${tokens.spacing[6]}`,
+        marginBottom: tokens.spacing[4],
         background:
           'linear-gradient(135deg, var(--color-accent-primary-08, rgba(139,111,168,0.08)) 0%, transparent 60%, var(--color-accent-primary-05, rgba(139,111,168,0.05)) 100%)',
         borderRadius: tokens.radius.xl,
@@ -90,11 +90,12 @@ export default async function HomeHeroSSR({
           {/* LCP element: this headline is the largest above-fold text in the SSR HTML */}
           <h1
             style={{
-              fontSize: 'clamp(18px, 2.5vw, 24px)',
-              fontWeight: 900,
+              fontSize: 'clamp(20px, 2.8vw, 28px)',
+              fontWeight: 700,
               color: 'var(--color-text-primary, #fff)',
-              marginBottom: tokens.spacing[1],
+              marginBottom: tokens.spacing[2],
               lineHeight: 1.2,
+              letterSpacing: '-0.02em',
             }}
           >
             {headline}
@@ -102,10 +103,10 @@ export default async function HomeHeroSSR({
           <p
             style={{
               fontSize: '0.875rem',
-              color: 'var(--color-text-secondary, rgba(255,255,255,0.7))',
-              lineHeight: 1.5,
+              color: 'var(--color-text-tertiary, rgba(255,255,255,0.55))',
+              lineHeight: 1.6,
               margin: 0,
-              maxWidth: 480,
+              maxWidth: 500,
             }}
           >
             {subtitle}
@@ -124,12 +125,13 @@ export default async function HomeHeroSSR({
             <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
               <div
                 style={{
-                  fontSize: '1.25rem',
+                  fontSize: '1.5rem',
                   fontWeight: 700,
-                  color: 'var(--color-accent-primary, #8B6FA8)',
+                  color: 'var(--color-accent-primary, #9373B5)',
                   fontVariantNumeric: 'tabular-nums',
                   lineHeight: 1.2,
                   minHeight: '1.2em',
+                  letterSpacing: '-0.02em',
                 }}
               >
                 {stat.value}

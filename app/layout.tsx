@@ -6,10 +6,10 @@ import { BASE_URL } from '@/lib/constants/urls'
 import { getCriticalCss, getResourceHints } from '@/lib/performance/critical-css'
 import BetaBanner from './components/layout/BetaBanner'
 
-// Optimized font loading — 2 weights instead of 4 saves ~90KB, 'optional' avoids font-swap LCP delay
+// Optimized font loading — 3 weights for better typographic hierarchy, 'optional' avoids font-swap LCP delay
 const inter = Inter({
   subsets: ['latin'],
-  weight: ['400', '600'],
+  weight: ['400', '500', '700'],
   display: 'optional',
   variable: '--font-inter',
   preload: true,

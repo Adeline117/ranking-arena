@@ -38,8 +38,8 @@ export default function HomeHero({
   return (
     <section
       style={{
-        padding: `${tokens.spacing[6]} ${tokens.spacing[6]} ${tokens.spacing[5]}`,
-        marginBottom: tokens.spacing[3],
+        padding: `${tokens.spacing[8]} ${tokens.spacing[6]} ${tokens.spacing[6]}`,
+        marginBottom: tokens.spacing[4],
         background: 'var(--color-bg-secondary)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary)',
@@ -64,11 +64,12 @@ export default function HomeHero({
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
           <h1
             style={{
-              fontSize: 'clamp(18px, 2.5vw, 24px)',
-              fontWeight: tokens.typography.fontWeight.black,
+              fontSize: 'clamp(20px, 2.8vw, 28px)',
+              fontWeight: tokens.typography.fontWeight.bold,
               color: 'var(--color-text-primary)',
-              marginBottom: tokens.spacing[1],
+              marginBottom: tokens.spacing[2],
               lineHeight: tokens.typography.lineHeight.tight,
+              letterSpacing: '-0.02em',
             }}
           >
             {t('heroHeadline' as Parameters<typeof t>[0])}
@@ -77,10 +78,10 @@ export default function HomeHero({
           <p
             style={{
               fontSize: tokens.typography.fontSize.sm,
-              color: 'var(--color-text-secondary)',
+              color: 'var(--color-text-tertiary)',
               lineHeight: tokens.typography.lineHeight.normal,
               margin: 0,
-              maxWidth: 480,
+              maxWidth: 500,
             }}
           >
             {subtitle}
@@ -121,12 +122,13 @@ export default function HomeHero({
             <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
               <div
                 style={{
-                  fontSize: tokens.typography.fontSize.xl,
+                  fontSize: tokens.typography.fontSize['2xl'],
                   fontWeight: tokens.typography.fontWeight.bold,
                   color: 'var(--color-accent-primary)',
                   fontVariantNumeric: 'tabular-nums',
                   lineHeight: 1.2,
                   minHeight: '1.2em',
+                  letterSpacing: '-0.02em',
                 }}
               >
                 <Suspense fallback={<span>{stat.fallback}</span>}>

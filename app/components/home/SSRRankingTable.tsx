@@ -52,7 +52,7 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {traders.map((trader, idx) => {
         const rank = startRank + idx + 1
         const roiVal = trader.roi ?? 0
@@ -85,8 +85,8 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               gap: 8,
               padding: '12px 16px',
               borderRadius: 12,
-              background: 'var(--color-bg-secondary, #14121C)',
-              border: '1px solid var(--color-border-primary, #2A2836)',
+              background: 'var(--color-bg-secondary, #151320)',
+              border: '1px solid var(--color-border-primary, #2C293A)',
               textDecoration: 'none',
               color: 'inherit',
             }}
@@ -235,10 +235,11 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               />
               <span
                 style={{
-                  fontSize: 18,
+                  fontSize: 20,
                   fontWeight: 900,
                   marginLeft: 'auto',
                   color: roiPositive ? '#22c55e' : '#ef4444',
+                  letterSpacing: '-0.02em',
                 }}
               >
                 {formatROI(trader.roi)}
@@ -282,17 +283,18 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                       fontSize: 10,
                       color: 'var(--color-text-tertiary)',
                       textTransform: 'uppercase',
-                      fontWeight: 600,
-                      letterSpacing: '0.5px',
+                      fontWeight: 500,
+                      letterSpacing: '0.04em',
+                      opacity: 0.7,
                     }}
                   >
                     {stat.label}
                   </span>
                   <span
                     style={{
-                      fontSize: 12,
-                      fontWeight: 700,
-                      color: stat.color || 'var(--color-text-primary)',
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: stat.color || 'var(--color-text-secondary)',
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
