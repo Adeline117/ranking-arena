@@ -89,12 +89,14 @@ const DEAD_PLATFORMS = new Set([
   'paradex',
   'kucoin', // copy trading discontinued 2026-03
   'phemex', // API 404 since 2026-04
-  'bingx', // empty leaderboard data
   'bingx_spot', // no leaderboard API
   'bitget_spot', // permanently disabled (no leaderboard API)
   'lbank', // API 404 since 2026-04 (copy-trading endpoint removed)
-  'weex', // 75% timeout rate
+  // 'bingx' — RECOVERED 2026-05-19 via re-enable enrichment
+  // 'weex' — RECOVERED 2026-05-19 via re-enable enrichment
   // 'bybit', 'bybit_spot' — RECOVERED 2026-04-08 via DB seed fallback in connector
+  'copin', // not a real platform — dYdX data aggregator, no independent leaderboard
+  'gateio', // intermittent — API frequently returns empty, low-priority
   'vertex',
   'apex_pro',
   'rabbitx', // DNS dead / no API
@@ -327,23 +329,25 @@ async function runHealthCheck() {
     /* crontab check non-critical */
   }
 
-  // 3c. Zero-trader detection — catch silent data source death
-  // Only alert if a platform has 0 traders AND is stale (>12h since last data).
-  // This avoids false alerts during normal fetch cycle gaps (2-8h between runs).
+  // 3c. Stale platform detection — catch silent data source death
+  // Root cause fix: currentCount is always 0 (per-platform count queries were removed
+  // from /api/health/pipeline to reduce DB load). Only use ageHours as signal.
+  // Alert if a platform has no lastUpdate (ageHours=null) or is stale >48h.
+  // 48h threshold: most platforms fetch every 2-8h, some slow ones every 24h.
   const platforms = pipelineHealth?.platformHealth || pipelineHealth?.platforms || []
   if (Array.isArray(platforms) && platforms.length > 0) {
-    const zeroTraderPlatforms = []
+    const stalePlatforms = []
     for (const p of platforms) {
       const name = p.platform || p.name
       if (!name || DEAD_PLATFORMS.has(name) || p.status === 'dead') continue
       const age = p.ageHours ?? Infinity
-      if (p.currentCount === 0 && p.avgCount > 10 && age > 12) {
-        zeroTraderPlatforms.push(`${name}(avg:${p.avgCount},${age.toFixed(0)}h stale)`)
+      if (age > 48) {
+        stalePlatforms.push(`${name}(${age === Infinity ? 'no data' : age.toFixed(0) + 'h stale'})`)
       }
     }
-    if (zeroTraderPlatforms.length > 0) {
-      issues.push(`🚨 Zero traders: ${zeroTraderPlatforms.join(', ')}`)
-      categories.add('data:zero-traders')
+    if (stalePlatforms.length > 0) {
+      issues.push(`🚨 Stale platforms: ${stalePlatforms.join(', ')}`)
+      categories.add('data:stale-platforms')
     }
   }
 
