@@ -383,18 +383,18 @@
 .sort-header {
   display: flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   background: none;
   border: none;
   padding: 0;
   cursor: pointer;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   white-space: nowrap;
   font-size: 10px;
-  font-weight: 700;
+  font-weight: 500;
   color: var(--color-text-quaternary, var(--color-text-tertiary));
-  transition: color 0.15s;
+  transition: color 0.2s ease;
   min-height: 44px; /* Touch-friendly target size for mobile */
 }
 

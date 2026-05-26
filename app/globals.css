@@ -137,6 +137,11 @@ html.theme-transition #main-content {
   --color-verified-onchain: #2fe57d;
   --color-verified-web3: #6d5ae6;
 
+  /* Secondary accent — teal/cyan for visual variety */
+  --color-accent-secondary: #22d3ee;
+  --color-accent-secondary-muted: rgba(34, 211, 238, 0.12);
+  --color-accent-secondary-border: rgba(34, 211, 238, 0.25);
+
   /* Validation colors */
   --color-success: #2fe57d;
   --color-error: #ff7c7c;
@@ -679,13 +684,16 @@ a:hover {
   color: var(--color-accent-primary);
 }
 
-/* Unified input focus ring */
+/* Unified input focus ring — refined glow */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
   outline: none;
   border-color: var(--color-accent-primary);
   box-shadow: var(--shadow-input-focus);
+  transition:
+    border-color 200ms ease,
+    box-shadow 200ms ease;
 }
 
 /* Selection */
@@ -1242,63 +1250,66 @@ select:focus-visible {
    Button hover/press styles (replaces JS style mutations)
    ============================================ */
 
-/* Base button transition */
+/* Base button transition — smooth, unified easing */
 .btn-base {
   transition:
-    background-color 0.2s ease,
-    color 0.2s ease,
-    border-color 0.2s ease,
-    opacity 0.2s ease,
-    transform 0.2s ease;
+    background-color 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    color 200ms ease,
+    border-color 250ms ease,
+    box-shadow 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94),
+    opacity 200ms ease,
+    transform 250ms cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
-/* Hover lift effect for non-disabled buttons */
+/* Hover lift effect for non-disabled buttons — subtle, not jarring */
 .btn-base:not(:disabled):hover {
-  transform: translateY(-2px);
+  transform: translateY(-1px);
 }
 
 /* Active press effect for non-disabled buttons */
 .btn-base:not(:disabled):active {
-  transform: scale(0.97);
+  transform: scale(0.98) translateY(0);
 }
 
 /* Variant-specific hover shadows */
 .btn-base.btn-primary:not(:disabled) {
   box-shadow: var(--shadow-card), var(--shadow-inset-subtle);
-  background: linear-gradient(135deg, #9d84b5 0%, var(--color-brand) 100%);
+  background: linear-gradient(135deg, var(--color-brand-hover) 0%, var(--color-brand) 100%);
 }
 
 .btn-base.btn-primary:not(:disabled):hover {
   box-shadow:
-    0 0 20px var(--color-accent-primary-30),
+    0 0 24px var(--color-accent-primary-30),
     var(--shadow-card-hover),
     var(--shadow-inset-subtle);
-  background: linear-gradient(135deg, #a891be 0%, #9d84b5 100%);
+  background: linear-gradient(135deg, var(--color-brand-hover) 20%, var(--color-brand) 100%);
 }
 
 .btn-base.btn-secondary:not(:disabled):hover {
   box-shadow: var(--shadow-card-hover);
+  border-color: var(--glass-border-medium);
 }
 
 .btn-base.btn-ghost:not(:disabled):hover {
   box-shadow: var(--shadow-card);
+  border-color: var(--color-border-secondary);
 }
 
 .btn-base.btn-text:not(:disabled):hover {
-  box-shadow: var(--shadow-card);
+  background: var(--color-accent-primary-08);
 }
 
 .btn-base.btn-success:not(:disabled):hover {
-  box-shadow: 0 0 20px rgba(47, 229, 125, 0.3);
+  box-shadow: 0 0 20px rgba(47, 229, 125, 0.25);
 }
 
 .btn-base.btn-danger:not(:disabled):hover {
-  box-shadow: 0 0 20px rgba(255, 124, 124, 0.3);
+  box-shadow: 0 0 20px rgba(255, 124, 124, 0.25);
 }
 
 /* Disabled state - override transforms */
 .btn-base:disabled {
-  opacity: 0.5;
+  opacity: 0.45;
   cursor: not-allowed;
   transform: none !important;
 }
