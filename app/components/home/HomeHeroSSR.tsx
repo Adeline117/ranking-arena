@@ -160,7 +160,7 @@ export default async function HomeHeroSSR({
           display: 'flex',
           alignItems: 'center',
           gap: tokens.spacing[3],
-          marginTop: tokens.spacing[3],
+          marginTop: tokens.spacing[5],
           position: 'relative',
           zIndex: 1,
           flexWrap: 'wrap',
@@ -173,15 +173,17 @@ export default async function HomeHeroSSR({
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            padding: '6px 16px',
+            padding: '8px 20px',
             fontSize: '0.8125rem',
             fontWeight: 600,
-            color: 'var(--color-accent-primary, #8B6FA8)',
-            background: 'transparent',
-            border: '1px solid var(--color-accent-primary, #8B6FA8)',
+            color: '#fff',
+            background:
+              'linear-gradient(135deg, var(--color-brand-hover, #a68ec5) 0%, var(--color-brand, #9373b5) 100%)',
+            border: 'none',
             borderRadius: 9999,
             textDecoration: 'none',
-            minHeight: 36,
+            minHeight: 38,
+            boxShadow: '0 4px 14px var(--color-accent-primary-30, rgba(147,115,181,0.3))',
           }}
         >
           {t('heroCTASignUp')}

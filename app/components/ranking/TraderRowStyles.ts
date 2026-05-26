@@ -6,27 +6,33 @@
 import { tokens } from '@/lib/design-tokens'
 import { TRADER_TEXT_TERTIARY, TRADER_ACCENT_ERROR } from './shared/TraderDisplay'
 
-// Hero row gradient styles (top 3)
+// Hero row gradient styles (top 3) — more dramatic presence
 export const HERO_STYLE_RANK_1: React.CSSProperties = {
   background:
-    'linear-gradient(135deg, rgba(255,215,0,0.13) 0%, rgba(255,215,0,0.04) 40%, transparent 80%)',
-  boxShadow: 'inset 3px 0 0 var(--color-rank-gold), 0 2px 20px rgba(255,215,0,0.08)',
-  borderRadius: 12,
-  margin: '4px',
+    'linear-gradient(135deg, rgba(255,215,0,0.18) 0%, rgba(255,215,0,0.06) 35%, rgba(255,215,0,0.02) 70%, transparent 100%)',
+  boxShadow:
+    'inset 4px 0 0 var(--color-rank-gold), 0 4px 24px rgba(255,215,0,0.10), inset 0 1px 0 rgba(255,215,0,0.10)',
+  borderRadius: 14,
+  margin: '6px 4px 8px',
+  borderTop: '1px solid rgba(255,215,0,0.12)',
 }
 export const HERO_STYLE_RANK_2: React.CSSProperties = {
   background:
-    'linear-gradient(135deg, rgba(192,192,192,0.10) 0%, rgba(192,192,192,0.03) 40%, transparent 80%)',
-  boxShadow: 'inset 3px 0 0 var(--color-rank-silver), 0 2px 16px rgba(192,192,192,0.06)',
-  borderRadius: 12,
-  margin: '4px',
+    'linear-gradient(135deg, rgba(192,192,192,0.14) 0%, rgba(192,192,192,0.04) 35%, transparent 80%)',
+  boxShadow:
+    'inset 4px 0 0 var(--color-rank-silver), 0 3px 18px rgba(192,192,192,0.08), inset 0 1px 0 rgba(192,192,192,0.08)',
+  borderRadius: 14,
+  margin: '4px 4px 6px',
+  borderTop: '1px solid rgba(192,192,192,0.08)',
 }
 export const HERO_STYLE_RANK_3: React.CSSProperties = {
   background:
-    'linear-gradient(135deg, rgba(205,127,50,0.10) 0%, rgba(205,127,50,0.03) 40%, transparent 80%)',
-  boxShadow: 'inset 3px 0 0 var(--color-rank-bronze), 0 2px 16px rgba(205,127,50,0.06)',
-  borderRadius: 12,
-  margin: '4px',
+    'linear-gradient(135deg, rgba(205,127,50,0.14) 0%, rgba(205,127,50,0.04) 35%, transparent 80%)',
+  boxShadow:
+    'inset 4px 0 0 var(--color-rank-bronze), 0 3px 18px rgba(205,127,50,0.08), inset 0 1px 0 rgba(205,127,50,0.08)',
+  borderRadius: 14,
+  margin: '4px 4px 6px',
+  borderTop: '1px solid rgba(205,127,50,0.08)',
 }
 
 // Lazy-loading placeholder styles
