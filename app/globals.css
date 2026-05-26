@@ -750,6 +750,27 @@ select:focus-visible {
   animation: contentReveal 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
 }
 
+/* Hero section subtle border glow animation */
+@keyframes heroGlow {
+  0%,
+  100% {
+    border-color: var(--color-border-primary);
+  }
+  50% {
+    border-color: var(--color-accent-primary-30, rgba(147, 115, 181, 0.3));
+  }
+}
+
+#ssr-hero-shell section {
+  animation: heroGlow 4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  #ssr-hero-shell section {
+    animation: none;
+  }
+}
+
 /* scrollTicker is needed for the market ticker on homepage */
 @keyframes scrollTicker {
   0% {
