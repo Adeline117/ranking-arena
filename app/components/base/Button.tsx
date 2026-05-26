@@ -21,10 +21,10 @@ const BTN_BASE_STYLE: React.CSSProperties = {
 
 const BTN_VARIANT_STYLES: Record<string, React.CSSProperties> = {
   primary: {
-    background: tokens.gradient.primary,
+    background: `linear-gradient(135deg, var(--color-brand-hover, ${tokens.colors.accent.brandHover}) 0%, var(--color-brand, ${tokens.colors.accent.brand}) 100%)`,
     color: tokens.colors.white,
     border: 'none',
-    boxShadow: `0 4px 12px ${tokens.colors.accent.brand}40`,
+    boxShadow: `0 4px 14px ${tokens.colors.accent.brand}35`,
   },
   secondary: {
     background: tokens.glass.bg.light,
@@ -91,7 +91,7 @@ export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElemen
   size?: 'sm' | 'md' | 'lg'
   fullWidth?: boolean
   loading?: boolean
-  error?: boolean | string  // true for error state, or error message string
+  error?: boolean | string // true for error state, or error message string
   icon?: React.ReactNode
   iconPosition?: 'left' | 'right'
 }
@@ -150,22 +150,22 @@ export default function Button({
   }
 
   // 自动生成aria-label（如果未提供）
-  const ariaLabel = props['aria-label'] || (typeof children === 'string' ? children : undefined) || 'Button'
+  const ariaLabel =
+    props['aria-label'] || (typeof children === 'string' ? children : undefined) || 'Button'
 
   // Error state styles
-  const errorStyles: React.CSSProperties = hasError ? {
-    borderColor: tokens.colors.accent.error,
-    boxShadow: `0 0 0 2px ${tokens.colors.accent.error}30`,
-    animation: 'shake 0.5s ease-in-out',
-  } : {}
+  const errorStyles: React.CSSProperties = hasError
+    ? {
+        borderColor: tokens.colors.accent.error,
+        boxShadow: `0 0 0 2px ${tokens.colors.accent.error}30`,
+        animation: 'shake 0.5s ease-in-out',
+      }
+    : {}
 
   // Build CSS class string: btn-base handles transition, hover, and active via CSS
-  const btnClassName = [
-    'btn-base',
-    `btn-${variant}`,
-    hasError && 'btn-error',
-    className,
-  ].filter(Boolean).join(' ')
+  const btnClassName = ['btn-base', `btn-${variant}`, hasError && 'btn-error', className]
+    .filter(Boolean)
+    .join(' ')
 
   return (
     <button
@@ -218,7 +218,7 @@ export default function Button({
           }}
         />
       )}
-      
+
       {/* 加载状态 */}
       {loading && (
         <span style={BTN_LOADING_OVERLAY_STYLE}>
@@ -231,19 +231,20 @@ export default function Button({
           />
         </span>
       )}
-      
+
       {/* 内容 - 加载时隐藏但保留空间 */}
-      <span style={{ 
-        opacity: loading ? 0 : 1,
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: tokens.spacing[2],
-        flexDirection: iconPosition === 'right' ? 'row-reverse' : 'row',
-      }}>
+      <span
+        style={{
+          opacity: loading ? 0 : 1,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          flexDirection: iconPosition === 'right' ? 'row-reverse' : 'row',
+        }}
+      >
         {icon && <span style={{ display: 'flex', alignItems: 'center' }}>{icon}</span>}
         {children}
       </span>
     </button>
   )
 }
-

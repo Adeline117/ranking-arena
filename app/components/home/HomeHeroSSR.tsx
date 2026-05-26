@@ -50,7 +50,7 @@ export default async function HomeHeroSSR({
         padding: `${tokens.spacing[8]} ${tokens.spacing[6]} ${tokens.spacing[6]}`,
         marginBottom: tokens.spacing[4],
         background:
-          'linear-gradient(135deg, var(--color-accent-primary-08, rgba(139,111,168,0.08)) 0%, transparent 60%, var(--color-accent-primary-05, rgba(139,111,168,0.05)) 100%)',
+          'linear-gradient(145deg, var(--color-bg-secondary) 0%, var(--color-bg-primary) 100%)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))',
         position: 'relative',
@@ -59,17 +59,17 @@ export default async function HomeHeroSSR({
         contain: 'layout style',
       }}
     >
-      {/* Subtle decorative gradient orb */}
+      {/* Mesh gradient — layered orbs for depth */}
       <div
         aria-hidden="true"
         style={{
           position: 'absolute',
-          top: -60,
-          right: -40,
-          width: 200,
-          height: 200,
-          borderRadius: '50%',
-          background: 'radial-gradient(circle, rgba(139,111,168,0.12) 0%, transparent 70%)',
+          inset: 0,
+          background: `
+            radial-gradient(ellipse 60% 50% at 15% 80%, rgba(147,115,181,0.12) 0%, transparent 70%),
+            radial-gradient(ellipse 40% 60% at 85% 20%, rgba(34,211,238,0.06) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 40% at 50% 10%, rgba(147,115,181,0.08) 0%, transparent 60%)
+          `,
           pointerEvents: 'none',
         }}
       />
@@ -127,7 +127,7 @@ export default async function HomeHeroSSR({
                 style={{
                   fontSize: '1.5rem',
                   fontWeight: 700,
-                  color: 'var(--color-accent-primary, #9373B5)',
+                  color: 'var(--color-text-primary, #f0f0f0)',
                   fontVariantNumeric: 'tabular-nums',
                   lineHeight: 1.2,
                   minHeight: '1.2em',
@@ -138,12 +138,13 @@ export default async function HomeHeroSSR({
               </div>
               <div
                 style={{
-                  fontSize: '0.75rem',
-                  color: 'var(--color-text-tertiary, rgba(255,255,255,0.45))',
+                  fontSize: '0.6875rem',
+                  color: 'var(--color-accent-secondary, #22d3ee)',
                   textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
+                  letterSpacing: '0.06em',
                   fontWeight: 500,
                   whiteSpace: 'nowrap',
+                  opacity: 0.7,
                 }}
               >
                 {stat.label}

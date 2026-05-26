@@ -208,7 +208,7 @@ export const TraderRow = memo(
               style={{
                 ...ROW_BASE_STYLE,
                 borderBottom: rank <= 3 ? undefined : '1px solid var(--glass-border-light)',
-                minHeight: rank <= 3 ? 64 : 54,
+                minHeight: rank <= 3 ? 68 : 58,
                 ...heroStyle,
               }}
             >

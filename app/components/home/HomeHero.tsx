@@ -40,7 +40,8 @@ export default function HomeHero({
       style={{
         padding: `${tokens.spacing[8]} ${tokens.spacing[6]} ${tokens.spacing[6]}`,
         marginBottom: tokens.spacing[4],
-        background: 'var(--color-bg-secondary)',
+        background:
+          'linear-gradient(145deg, var(--color-bg-secondary) 0%, var(--color-bg-primary) 100%)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary)',
         position: 'relative',
@@ -49,6 +50,20 @@ export default function HomeHero({
         contain: 'layout style',
       }}
     >
+      {/* Mesh gradient — layered orbs for depth */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: `
+            radial-gradient(ellipse 60% 50% at 15% 80%, rgba(147,115,181,0.12) 0%, transparent 70%),
+            radial-gradient(ellipse 40% 60% at 85% 20%, rgba(34,211,238,0.06) 0%, transparent 60%),
+            radial-gradient(ellipse 50% 40% at 50% 10%, rgba(147,115,181,0.08) 0%, transparent 60%)
+          `,
+          pointerEvents: 'none',
+        }}
+      />
       <div
         style={{
           display: 'flex',
@@ -124,7 +139,7 @@ export default function HomeHero({
                 style={{
                   fontSize: tokens.typography.fontSize['2xl'],
                   fontWeight: tokens.typography.fontWeight.bold,
-                  color: 'var(--color-accent-primary)',
+                  color: 'var(--color-text-primary)',
                   fontVariantNumeric: 'tabular-nums',
                   lineHeight: 1.2,
                   minHeight: '1.2em',
@@ -137,12 +152,13 @@ export default function HomeHero({
               </div>
               <div
                 style={{
-                  fontSize: tokens.typography.fontSize.xs,
-                  color: 'var(--color-text-tertiary)',
+                  fontSize: '11px',
+                  color: 'var(--color-accent-secondary, #22d3ee)',
                   textTransform: 'uppercase',
-                  letterSpacing: '0.05em',
+                  letterSpacing: '0.06em',
                   fontWeight: 500,
                   whiteSpace: 'nowrap',
+                  opacity: 0.7,
                 }}
               >
                 {stat.label}
