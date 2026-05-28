@@ -4,7 +4,6 @@ import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { usePresence } from '@/lib/hooks/usePresence'
@@ -190,7 +189,6 @@ export default function ConversationPage({
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box
           style={{
             maxWidth: 800,
@@ -237,7 +235,6 @@ export default function ConversationPage({
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box
           style={{
             maxWidth: 600,
@@ -329,7 +326,6 @@ export default function ConversationPage({
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box
           style={{
             maxWidth: 800,
@@ -407,8 +403,6 @@ export default function ConversationPage({
           </Text>
         </Box>
       )}
-      <TopNav email={email} />
-
       <ConversationHeader
         otherUser={msgHook.otherUser}
         userId={userId}

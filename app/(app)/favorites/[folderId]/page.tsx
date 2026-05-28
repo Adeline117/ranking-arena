@@ -4,7 +4,6 @@ import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text, Button } from '@/app/components/base'
@@ -96,7 +95,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     const loadFolder = async () => {
       setLoading(true)
       setError(null)
-      
+
       try {
         const headers: Record<string, string> = {}
         if (accessToken) {
@@ -108,9 +107,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
         if (!response.ok) {
           // data.error 可能是字符串或对象 {code, message}
-          const errorMsg = typeof data.error === 'string' 
-            ? data.error 
-            : data.error?.message || t('failedToLoad')
+          const errorMsg =
+            typeof data.error === 'string' ? data.error : data.error?.message || t('failedToLoad')
           setError(errorMsg)
           setLoading(false)
           return
@@ -121,7 +119,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         setIsOwner(data.data?.is_owner || false)
         setIsSubscribed(data.data?.is_subscribed || false)
         setSubscriberCount(data.data?.folder?.subscriber_count || 0)
-        
+
         // 初始化编辑表单
         if (data.data?.folder) {
           setEditName(data.data.folder.name)
@@ -141,15 +139,15 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
   const handleSave = async () => {
     if (!accessToken || !folder) return
-    
+
     setSaving(true)
     try {
       const response = await fetch(`/api/bookmark-folders/${folderId}`, {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({
           name: editName,
@@ -178,10 +176,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const handleDelete = async () => {
     if (!accessToken || !folder) return
 
-    const confirmed = await showDangerConfirm(
-      t('deleteFolder'),
-      t('deleteFolderConfirm')
-    )
+    const confirmed = await showDangerConfirm(t('deleteFolder'), t('deleteFolderConfirm'))
     if (!confirmed) {
       return
     }
@@ -190,8 +185,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       const response = await fetch(`/api/bookmark-folders/${folderId}`, {
         method: 'DELETE',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
         },
       })
 
@@ -214,16 +209,16 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       router.push('/login?redirect=/favorites')
       return
     }
-    
+
     if (!folder) return
-    
+
     setSubscribing(true)
     try {
       const response = await fetch(`/api/bookmark-folders/${folderId}/subscribe`, {
         method: isSubscribed ? 'DELETE' : 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
         },
       })
 
@@ -234,7 +229,10 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         setSubscriberCount(data.data?.subscriber_count ?? subscriberCount)
         showToast(data.data?.is_subscribed ? t('bookmarked') : t('unbookmarked'), 'success')
       } else {
-        showToast(data.error || (isSubscribed ? t('unbookmarkFailed') : t('bookmarkFailed')), 'error')
+        showToast(
+          data.error || (isSubscribed ? t('unbookmarkFailed') : t('bookmarkFailed')),
+          'error'
+        )
       }
     } catch (err) {
       logger.error('Error subscribing to folder:', err)
@@ -245,7 +243,15 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   }
 
   const getDefaultAvatar = (name: string) => {
-    const colors = ['var(--color-accent-error)', 'var(--color-chart-teal)', 'var(--color-chart-blue)', 'var(--color-chart-sage)', 'var(--color-chart-yellow)', 'var(--color-chart-pink)', 'var(--color-chart-mint)']
+    const colors = [
+      'var(--color-accent-error)',
+      'var(--color-chart-teal)',
+      'var(--color-chart-blue)',
+      'var(--color-chart-sage)',
+      'var(--color-chart-yellow)',
+      'var(--color-chart-pink)',
+      'var(--color-chart-mint)',
+    ]
     const index = name.charCodeAt(0) % colors.length
     return colors[index]
   }
@@ -254,7 +260,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const handleOpenPost = async (post: BookmarkedPost) => {
     setSelectedPost(post)
     setFullPostContent(post.content)
-    
+
     // 如果内容被截断，加载完整内容
     if (post.content && post.content.length >= 200) {
       setPostDetailLoading(true)
@@ -281,23 +287,23 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   // 移除收藏
   const handleRemoveBookmark = async (e: React.MouseEvent, postId: string, bookmarkId: string) => {
     e.stopPropagation()
-    
+
     if (!accessToken) return
-    
-    setRemovingBookmark(prev => ({ ...prev, [postId]: true }))
-    
+
+    setRemovingBookmark((prev) => ({ ...prev, [postId]: true }))
+
     try {
       const response = await fetch(`/api/posts/${postId}/bookmark`, {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
         },
       })
-      
+
       if (response.ok) {
         // 从列表中移除
-        setPosts(prev => prev.filter(p => p.bookmark_id !== bookmarkId))
+        setPosts((prev) => prev.filter((p) => p.bookmark_id !== bookmarkId))
         // 更新收藏夹计数
         if (folder) {
           setFolder({ ...folder, post_count: Math.max(0, folder.post_count - 1) })
@@ -307,7 +313,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         const data = await response.json()
         // 如果帖子不存在，也从列表中移除
         if (response.status === 404) {
-          setPosts(prev => prev.filter(p => p.bookmark_id !== bookmarkId))
+          setPosts((prev) => prev.filter((p) => p.bookmark_id !== bookmarkId))
           if (folder) {
             setFolder({ ...folder, post_count: Math.max(0, folder.post_count - 1) })
           }
@@ -319,7 +325,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       logger.error('Error removing bookmark:', err)
       showToast(t('networkError'), 'error')
     } finally {
-      setRemovingBookmark(prev => ({ ...prev, [postId]: false }))
+      setRemovingBookmark((prev) => ({ ...prev, [postId]: false }))
     }
   }
 
@@ -327,8 +333,13 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
   if (loading) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <RankingSkeleton />
         </Box>
@@ -338,8 +349,13 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
   if (error || !folder) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <EmptyState
             title={error || t('folderNotFound')}
@@ -367,13 +383,20 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={email} />
-      <Box className="has-mobile-nav" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-        <Breadcrumb items={[
-          { label: t('favorites'), href: '/favorites' },
-          { label: folder.name },
-        ]} />
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <Box
+        className="has-mobile-nav"
+        style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}
+      >
+        <Breadcrumb
+          items={[{ label: t('favorites'), href: '/favorites' }, { label: folder.name }]}
+        />
         {/* 返回链接 */}
         <Link
           href="/favorites"
@@ -462,7 +485,14 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                     resize: 'vertical',
                   }}
                 />
-                <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], cursor: 'pointer' }}>
+                <label
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    cursor: 'pointer',
+                  }}
+                >
                   <input
                     type="checkbox"
                     checked={editIsPublic}
@@ -482,8 +512,17 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
               </Box>
             ) : (
               <>
-                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[1] }}>
-                  <Text size="xl" weight="bold">{folder.name}</Text>
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    marginBottom: tokens.spacing[1],
+                  }}
+                >
+                  <Text size="xl" weight="bold">
+                    {folder.name}
+                  </Text>
                   {folder.is_default && (
                     <span
                       style={{
@@ -530,7 +569,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 )}
                 <Text size="xs" color="tertiary">
                   {t('itemCount').replace('{n}', String(folder.post_count))}
-                  {subscriberCount > 0 && ` · ${t('subscriberCount').replace('{n}', String(subscriberCount))}`}
+                  {subscriberCount > 0 &&
+                    ` · ${t('subscriberCount').replace('{n}', String(subscriberCount))}`}
                   {folder.owner_handle && (
                     <>
                       {' · '}
@@ -554,9 +594,9 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 {t('edit')}
               </Button>
               {!folder.is_default && (
-                <Button 
-                  variant="text" 
-                  size="sm" 
+                <Button
+                  variant="text"
+                  size="sm"
                   onClick={handleDelete}
                   style={{ color: tokens.colors.accent?.error || 'var(--color-accent-error)' }}
                 >
@@ -565,7 +605,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
               )}
             </Box>
           )}
-          
+
           {/* 非所有者的收藏按钮 */}
           {!isOwner && folder.is_public && (
             <Button
@@ -599,10 +639,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
         {/* 帖子列表 */}
         {posts.length === 0 ? (
-          <EmptyState
-            title={t('noBookmarks')}
-            description={t('noBookmarksDesc')}
-          />
+          <EmptyState title={t('noBookmarks')} description={t('noBookmarksDesc')} />
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
             {posts.map((post) => (
@@ -619,8 +656,10 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   transition: `all ${tokens.transition.base}`,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)'
-                  e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
+                  e.currentTarget.style.background =
+                    tokens.colors.bg.tertiary || 'var(--overlay-hover)'
+                  e.currentTarget.style.borderColor =
+                    tokens.colors.border.secondary || tokens.colors.border.primary
                   e.currentTarget.style.transform = 'translateX(4px)'
                 }}
                 onMouseLeave={(e) => {
@@ -632,12 +671,12 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 <Text size="base" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
                   {post.title}
                 </Text>
-                
+
                 {post.content && (
-                  <Text 
-                    size="sm" 
-                    color="secondary" 
-                    style={{ 
+                  <Text
+                    size="sm"
+                    color="secondary"
+                    style={{
                       marginBottom: tokens.spacing[3],
                       display: '-webkit-box',
                       WebkitLineClamp: 2,
@@ -649,9 +688,25 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                     {post.content}
                   </Text>
                 )}
-                
-                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], flexWrap: 'wrap', minWidth: 0 }}>
+
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: tokens.spacing[3],
+                    flexWrap: 'wrap',
+                  }}
+                >
+                  <Box
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[3],
+                      flexWrap: 'wrap',
+                      minWidth: 0,
+                    }}
+                  >
                     {post.author_handle && (
                       <Text size="xs" color="tertiary">
                         @{post.author_handle}
@@ -669,7 +724,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                       </Text>
                     </Box>
                   </Box>
-                  
+
                   {/* 移除收藏按钮 - 只有所有者可以移除 */}
                   {isOwner && (
                     <button
@@ -686,7 +741,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                         opacity: removingBookmark[post.id] ? 0.5 : 1,
                       }}
                       onMouseEnter={(e) => {
-                        e.currentTarget.style.color = tokens.colors.accent?.error || 'var(--color-accent-error)'
+                        e.currentTarget.style.color =
+                          tokens.colors.accent?.error || 'var(--color-accent-error)'
                         e.currentTarget.style.background = 'var(--color-accent-error-10)'
                       }}
                       onMouseLeave={(e) => {
@@ -703,7 +759,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           </Box>
         )}
       </Box>
-      
+
       {/* 帖子详情弹窗 */}
       <PostDetailModal
         post={selectedPost}

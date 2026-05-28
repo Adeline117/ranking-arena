@@ -3,15 +3,18 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import dynamic from 'next/dynamic'
 import PortfolioOverview from '@/app/components/portfolio/PortfolioOverview'
 import PositionList from '@/app/components/portfolio/PositionList'
 
 // Lazy load: modal only opens on user action; analytics is below-the-fold
-const AddExchangeModal = dynamic(() => import('@/app/components/portfolio/AddExchangeModal'), { ssr: false })
-const PortfolioAnalytics = dynamic(() => import('@/app/components/portfolio/PortfolioAnalytics'), { ssr: false })
+const AddExchangeModal = dynamic(() => import('@/app/components/portfolio/AddExchangeModal'), {
+  ssr: false,
+})
+const PortfolioAnalytics = dynamic(() => import('@/app/components/portfolio/PortfolioAnalytics'), {
+  ssr: false,
+})
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -45,7 +48,6 @@ interface Snapshot {
   snapshot_at: string
 }
 
-
 export default function PortfolioPage() {
   const router = useRouter()
   const { showToast } = useToast()
@@ -62,15 +64,25 @@ export default function PortfolioPage() {
 
   // Auth check
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) {
-        router.push('/login?redirect=/portfolio')
-        return
-      }
-      supabase.auth.getSession().then(({ data: sessionData }) => {
-        setToken(sessionData.session?.access_token ?? null)
-      }).catch(() => { /* Intentionally swallowed: session token fetch non-critical */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for portfolio page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (!data.user) {
+          router.push('/login?redirect=/portfolio')
+          return
+        }
+        supabase.auth
+          .getSession()
+          .then(({ data: sessionData }) => {
+            setToken(sessionData.session?.access_token ?? null)
+          })
+          .catch(() => {
+            /* Intentionally swallowed: session token fetch non-critical */
+          }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
+      .catch(() => {
+        /* Intentionally swallowed: auth check non-critical for portfolio page */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [router])
 
   const fetchHeaders = useCallback((): Record<string, string> => {
@@ -80,27 +92,30 @@ export default function PortfolioPage() {
 
   // Load portfolios + positions in parallel with request dedup
   const lastFetchRef = useRef<number>(0)
-  const loadAll = useCallback(async (force = false) => {
-    if (!token) return
-    // Skip if fetched < 30s ago (dedup rapid remounts)
-    if (!force && Date.now() - lastFetchRef.current < 30_000) return
-    lastFetchRef.current = Date.now()
-    setLoading(true)
-    const headers = { Authorization: `Bearer ${token}` }
-    try {
-      const [pRes, posRes] = await Promise.all([
-        fetch('/api/portfolio', { headers }),
-        fetch('/api/portfolio/positions', { headers }),
-      ])
-      const [pJson, posJson] = await Promise.all([pRes.json(), posRes.json()])
-      if (pJson.data) setPortfolios(pJson.data)
-      if (posJson.data) setPositions(posJson.data)
-    } catch {
-      // Intentionally swallowed: portfolio load failure is non-critical
-    } finally {
-      setLoading(false)
-    }
-  }, [token])
+  const loadAll = useCallback(
+    async (force = false) => {
+      if (!token) return
+      // Skip if fetched < 30s ago (dedup rapid remounts)
+      if (!force && Date.now() - lastFetchRef.current < 30_000) return
+      lastFetchRef.current = Date.now()
+      setLoading(true)
+      const headers = { Authorization: `Bearer ${token}` }
+      try {
+        const [pRes, posRes] = await Promise.all([
+          fetch('/api/portfolio', { headers }),
+          fetch('/api/portfolio/positions', { headers }),
+        ])
+        const [pJson, posJson] = await Promise.all([pRes.json(), posRes.json()])
+        if (pJson.data) setPortfolios(pJson.data)
+        if (posJson.data) setPositions(posJson.data)
+      } catch {
+        // Intentionally swallowed: portfolio load failure is non-critical
+      } finally {
+        setLoading(false)
+      }
+    },
+    [token]
+  )
 
   useEffect(() => {
     loadAll()
@@ -110,7 +125,12 @@ export default function PortfolioPage() {
   const loadPortfolios = loadAll
   const loadPositions = loadAll
 
-  const handleAddExchange = async (data: { exchange: string; api_key: string; api_secret: string; label: string }) => {
+  const handleAddExchange = async (data: {
+    exchange: string
+    api_key: string
+    api_secret: string
+    label: string
+  }) => {
     const res = await fetch('/api/portfolio', {
       method: 'POST',
       headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
@@ -118,7 +138,7 @@ export default function PortfolioPage() {
     })
     if (!res.ok) {
       const json = await res.json()
-      throw new Error(json.error || (t('portfolioAddFailed')))
+      throw new Error(json.error || t('portfolioAddFailed'))
     }
     showToast(t('portfolioConnectSuccess'), 'success')
     await loadPortfolios()
@@ -148,10 +168,7 @@ export default function PortfolioPage() {
 
   const handleDelete = async (portfolioId: string) => {
     if (!token || deletingId) return
-    const confirmed = await showConfirm(
-      t('portfolioRemoveExchange'),
-      t('portfolioRemoveConfirm')
-    )
+    const confirmed = await showConfirm(t('portfolioRemoveExchange'), t('portfolioRemoveConfirm'))
     if (!confirmed) return
     setDeletingId(portfolioId)
     try {
@@ -179,7 +196,6 @@ export default function PortfolioPage() {
 
   return (
     <>
-      <TopNav />
       <div style={styles.page}>
         <div style={styles.container}>
           <div style={styles.header}>
@@ -202,7 +218,7 @@ export default function PortfolioPage() {
             <div style={styles.section}>
               <h2 style={styles.sectionTitle}>{t('portfolioConnectedExchanges')}</h2>
               <div style={styles.exchangeList}>
-                {portfolios.map(p => (
+                {portfolios.map((p) => (
                   <div key={p.id} style={styles.exchangeCard}>
                     <div style={styles.exchangeInfo}>
                       <span style={styles.exchangeName}>
@@ -213,10 +229,18 @@ export default function PortfolioPage() {
                       )}
                     </div>
                     <div style={styles.exchangeActions}>
-                      <button style={{ ...styles.syncBtn, opacity: syncingId === p.id ? 0.6 : 1 }} onClick={() => handleSync(p.id)} disabled={!!syncingId}>
+                      <button
+                        style={{ ...styles.syncBtn, opacity: syncingId === p.id ? 0.6 : 1 }}
+                        onClick={() => handleSync(p.id)}
+                        disabled={!!syncingId}
+                      >
                         {syncingId === p.id ? t('portfolioSyncing') : t('portfolioSync')}
                       </button>
-                      <button style={{ ...styles.deleteBtn, opacity: deletingId === p.id ? 0.6 : 1 }} onClick={() => handleDelete(p.id)} disabled={!!deletingId}>
+                      <button
+                        style={{ ...styles.deleteBtn, opacity: deletingId === p.id ? 0.6 : 1 }}
+                        onClick={() => handleDelete(p.id)}
+                        disabled={!!deletingId}
+                      >
                         {deletingId === p.id ? '...' : t('portfolioRemove')}
                       </button>
                     </div>

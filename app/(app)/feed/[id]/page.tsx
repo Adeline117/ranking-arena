@@ -13,7 +13,6 @@ import Image from 'next/image'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
-import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
@@ -116,8 +115,6 @@ export default async function ActivitySharePage({ params }: PageProps) {
 
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
-      <TopNav />
-
       <div
         style={{
           maxWidth: 600,

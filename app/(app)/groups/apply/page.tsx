@@ -7,7 +7,6 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -361,7 +360,6 @@ export default function ApplyGroupPage() {
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Card title={t('applyCreateGroup')}>
             <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
@@ -387,7 +385,6 @@ export default function ApplyGroupPage() {
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Card title={t('groupApplyCreated')}>
             <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
@@ -446,8 +443,6 @@ export default function ApplyGroupPage() {
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
-
       <Box as="main" style={{ maxWidth: 700, margin: '0 auto', padding: tokens.spacing[6] }}>
         {/* 返回链接 */}
         <Link

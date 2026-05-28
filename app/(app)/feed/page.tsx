@@ -11,7 +11,6 @@ import { features } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import ActivityFeed from '@/app/components/feed/ActivityFeed'
 import type { TraderActivity } from '@/lib/types/activities'
-import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -23,20 +22,30 @@ export const revalidate = 60 // ISR: 1 minute
 
 export const metadata: Metadata = {
   title: 'Trader Activity Feed',
-  description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+  description:
+    'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
   alternates: { canonical: `${BASE_URL}/feed` },
   openGraph: {
     title: 'Trader Activity Feed',
-    description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+    description:
+      'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
     url: `${BASE_URL}/feed`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Trader Activity Feed' }],
+    images: [
+      {
+        url: `${BASE_URL}/og-image.png`,
+        width: 1200,
+        height: 630,
+        alt: 'Arena Trader Activity Feed',
+      },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
     title: 'Trader Activity Feed',
-    description: 'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
+    description:
+      'Live auto-generated feed of trader milestones: rank surges, ROI breakthroughs, win streaks, and large profits.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
@@ -57,7 +66,9 @@ async function fetchInitialActivities(): Promise<{
     const LIMIT = 50
     const { data, error } = await supabase
       .from('trader_activities')
-      .select('id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at')
+      .select(
+        'id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at'
+      )
       .order('occurred_at', { ascending: false })
       .limit(LIMIT + 1)
 
@@ -75,7 +86,10 @@ async function fetchInitialActivities(): Promise<{
       nextCursor,
     }
   } catch (error) {
-    logger.warn('[feed] fetchActivities failed:', error instanceof Error ? error.message : String(error))
+    logger.warn(
+      '[feed] fetchActivities failed:',
+      error instanceof Error ? error.message : String(error)
+    )
     return { activities: [], hasMore: false, nextCursor: null }
   }
 }
@@ -96,8 +110,6 @@ export default async function FeedPage() {
         background: tokens.colors.bg.primary,
       }}
     >
-      <TopNav />
-
       <div
         style={{
           maxWidth: 720,

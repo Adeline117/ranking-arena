@@ -8,7 +8,6 @@ import Image from 'next/image'
 import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
@@ -603,7 +602,6 @@ export default function EditPostPage() {
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
           <RankingSkeleton />
         </Box>
@@ -620,7 +618,6 @@ export default function EditPostPage() {
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box
           style={{
             maxWidth: 800,
@@ -645,7 +642,6 @@ export default function EditPostPage() {
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
           {t('editPost')}

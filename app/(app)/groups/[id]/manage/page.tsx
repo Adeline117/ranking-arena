@@ -10,7 +10,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -802,7 +801,6 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box
           style={{
             maxWidth: 900,
@@ -824,7 +822,6 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <Box
           style={{
             maxWidth: 900,
@@ -856,7 +853,6 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
       <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Link
           href={`/groups/${groupId}`}

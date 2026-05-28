@@ -16,7 +16,6 @@ import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
@@ -49,7 +48,9 @@ export default function ClaimPage() {
   // Fetch linked traders for the user
   const fetchLinkedTraders = useCallback(async () => {
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) return
 
       const res = await fetch('/api/traders/linked', {
@@ -85,12 +86,15 @@ export default function ClaimPage() {
 
   // Check auth + fetch linked traders
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setUser(data.user)
-      if (data.user) {
-        fetchLinkedTraders()
-      }
-    }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setUser(data.user)
+        if (data.user) {
+          fetchLinkedTraders()
+        }
+      })
+      .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
   }, [fetchLinkedTraders])
 
   const handleTraderSelect = (result: SearchResult) => {
@@ -107,22 +111,24 @@ export default function ClaimPage() {
     fetchLinkedTraders()
     setTimeout(() => {
       if (selectedTrader) {
-        router.push(`/trader/${encodeURIComponent(selectedTrader.handle)}?source=${encodeURIComponent(selectedTrader.source)}`)
+        router.push(
+          `/trader/${encodeURIComponent(selectedTrader.handle)}?source=${encodeURIComponent(selectedTrader.source)}`
+        )
       }
     }, 2000)
   }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <TopNav />
-
-      <Box style={{
-        flex: 1,
-        padding: `0 ${tokens.spacing[4]}`,
-        maxWidth: '900px',
-        margin: '0 auto',
-        width: '100%',
-      }}>
+      <Box
+        style={{
+          flex: 1,
+          padding: `0 ${tokens.spacing[4]}`,
+          maxWidth: '900px',
+          margin: '0 auto',
+          width: '100%',
+        }}
+      >
         {/* Hero */}
         <HeroSection />
 
@@ -135,23 +141,30 @@ export default function ClaimPage() {
                   linkedTraders={linkedTraders}
                   onRefresh={fetchLinkedTraders}
                 />
-                <Box style={{
-                  textAlign: 'center',
-                  marginBottom: tokens.spacing[5],
-                }}>
-                  <Text style={{
-                    fontSize: tokens.typography.fontSize.lg,
-                    fontWeight: 700,
-                    color: tokens.colors.text.primary,
-                  }}>
+                <Box
+                  style={{
+                    textAlign: 'center',
+                    marginBottom: tokens.spacing[5],
+                  }}
+                >
+                  <Text
+                    style={{
+                      fontSize: tokens.typography.fontSize.lg,
+                      fontWeight: 700,
+                      color: tokens.colors.text.primary,
+                    }}
+                  >
                     {t('linkAdditionalAccount') || 'Link Additional Account'}
                   </Text>
-                  <Text style={{
-                    fontSize: tokens.typography.fontSize.sm,
-                    color: tokens.colors.text.secondary,
-                    marginTop: tokens.spacing[1],
-                  }}>
-                    {t('linkAdditionalAccountDesc') || 'Search for another trader account to link to your profile.'}
+                  <Text
+                    style={{
+                      fontSize: tokens.typography.fontSize.sm,
+                      color: tokens.colors.text.secondary,
+                      marginTop: tokens.spacing[1],
+                    }}
+                  >
+                    {t('linkAdditionalAccountDesc') ||
+                      'Search for another trader account to link to your profile.'}
                   </Text>
                 </Box>
               </>
@@ -170,32 +183,46 @@ export default function ClaimPage() {
         {step === 'verify' && selectedTrader && (
           <Box style={{ marginBottom: tokens.spacing[8] }}>
             {/* Trader info header */}
-            <Box style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.spacing[3],
-              padding: tokens.spacing[4],
-              backgroundColor: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.lg,
-              marginBottom: tokens.spacing[5],
-              maxWidth: '500px',
-              margin: `0 auto ${tokens.spacing[5]}`,
-            }}>
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+                padding: tokens.spacing[4],
+                backgroundColor: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.lg,
+                marginBottom: tokens.spacing[5],
+                maxWidth: '500px',
+                margin: `0 auto ${tokens.spacing[5]}`,
+              }}
+            >
               {selectedTrader.avatar_url && (
                 <img
-                  src={selectedTrader.avatar_url.startsWith('data:') ? selectedTrader.avatar_url : '/api/avatar?url=' + encodeURIComponent(selectedTrader.avatar_url)}
+                  src={
+                    selectedTrader.avatar_url.startsWith('data:')
+                      ? selectedTrader.avatar_url
+                      : '/api/avatar?url=' + encodeURIComponent(selectedTrader.avatar_url)
+                  }
                   alt={selectedTrader.handle || 'Trader'}
                   style={{ width: 40, height: 40, borderRadius: '50%' }}
                 />
               )}
               <Box>
                 <Text style={{ fontWeight: 700 }}>{selectedTrader.handle}</Text>
-                <Text style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
+                <Text
+                  style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: tokens.colors.text.tertiary,
+                  }}
+                >
                   {selectedTrader.source}
                 </Text>
               </Box>
               <button
-                onClick={() => { setStep('search'); setSelectedTrader(null) }}
+                onClick={() => {
+                  setStep('search')
+                  setSelectedTrader(null)
+                }}
                 style={{
                   marginLeft: 'auto',
                   background: 'none',
@@ -212,18 +239,19 @@ export default function ClaimPage() {
             {/* Verification form */}
             {!user ? (
               <Box style={{ textAlign: 'center' }}>
-                <Text style={{ marginBottom: tokens.spacing[3] }}>
-                  {t('pleaseLoginFirst')}
-                </Text>
-                <button onClick={() => useLoginModal.getState().openLoginModal()} style={{
-                  color: tokens.colors.accent.primary,
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                  fontSize: 'inherit',
-                  fontFamily: 'inherit',
-                }}>
+                <Text style={{ marginBottom: tokens.spacing[3] }}>{t('pleaseLoginFirst')}</Text>
+                <button
+                  onClick={() => useLoginModal.getState().openLoginModal()}
+                  style={{
+                    color: tokens.colors.accent.primary,
+                    background: 'none',
+                    border: 'none',
+                    cursor: 'pointer',
+                    textDecoration: 'underline',
+                    fontSize: 'inherit',
+                    fontFamily: 'inherit',
+                  }}
+                >
                   {t('loginToClaim')}
                 </button>
               </Box>
@@ -236,39 +264,42 @@ export default function ClaimPage() {
         )}
 
         {step === 'done' && (
-          <Box style={{
-            textAlign: 'center',
-            padding: tokens.spacing[8],
-          }}>
-            <Box style={{
-              width: 80,
-              height: 80,
-              borderRadius: '50%',
-              backgroundColor: tokens.colors.accent.success + '20',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: `0 auto ${tokens.spacing[4]}`,
-              fontSize: '2rem',
-            }}>
+          <Box
+            style={{
+              textAlign: 'center',
+              padding: tokens.spacing[8],
+            }}
+          >
+            <Box
+              style={{
+                width: 80,
+                height: 80,
+                borderRadius: '50%',
+                backgroundColor: tokens.colors.accent.success + '20',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: `0 auto ${tokens.spacing[4]}`,
+                fontSize: '2rem',
+              }}
+            >
               &#10003;
             </Box>
-            <h2 style={{
-              fontSize: tokens.typography.fontSize['2xl'],
-              fontWeight: 700,
-              marginBottom: tokens.spacing[3],
-              color: tokens.colors.accent.success,
-            }}>
+            <h2
+              style={{
+                fontSize: tokens.typography.fontSize['2xl'],
+                fontWeight: 700,
+                marginBottom: tokens.spacing[3],
+                color: tokens.colors.accent.success,
+              }}
+            >
               {t('claimVerifiedAutoApproved')}
             </h2>
             <Text style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4] }}>
               {t('redirectingToProfile')}
             </Text>
             {linkedTraders.length > 0 && (
-              <LinkedAccountsSidebar
-                linkedTraders={linkedTraders}
-                onRefresh={fetchLinkedTraders}
-              />
+              <LinkedAccountsSidebar linkedTraders={linkedTraders} onRefresh={fetchLinkedTraders} />
             )}
           </Box>
         )}

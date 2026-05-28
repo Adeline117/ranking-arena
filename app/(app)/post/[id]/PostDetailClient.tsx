@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import PostFeed from '@/app/components/post/PostFeed'
 import { tokens } from '@/lib/design-tokens'
@@ -40,53 +39,66 @@ export default function PostDetailClient({ postId }: { postId: string }) {
     Promise.resolve(
       supabase
         .from('posts')
-        .select('id, title, content, author_handle, created_at, updated_at, like_count, comment_count, view_count')
+        .select(
+          'id, title, content, author_handle, created_at, updated_at, like_count, comment_count, view_count'
+        )
         .eq('id', postId)
         .maybeSingle()
-    ).then(({ data }) => {
-      if (data) {
-        setPostData(data as PostData)
-      }
-    }).catch(() => { /* Post fetch non-critical */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    )
+      .then(({ data }) => {
+        if (data) {
+          setPostData(data as PostData)
+        }
+      })
+      .catch(() => {
+        /* Post fetch non-critical */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [postId])
 
-  const structuredData = postData ? combineSchemas(
-    generatePostArticleSchema({
-      id: postData.id,
-      title: postData.title,
-      content: postData.content,
-      authorHandle: postData.author_handle,
-      createdAt: postData.created_at,
-      updatedAt: postData.updated_at,
-      likeCount: postData.like_count,
-      commentCount: postData.comment_count,
-      viewCount: postData.view_count,
-    }),
-    generateBreadcrumbSchema([
-      { name: t('home'), url: BASE_URL },
-      { name: t('posts') },
-      { name: postData.title.slice(0, 30) },
-    ])
-  ) : null
+  const structuredData = postData
+    ? combineSchemas(
+        generatePostArticleSchema({
+          id: postData.id,
+          title: postData.title,
+          content: postData.content,
+          authorHandle: postData.author_handle,
+          createdAt: postData.created_at,
+          updatedAt: postData.updated_at,
+          likeCount: postData.like_count,
+          commentCount: postData.comment_count,
+          viewCount: postData.view_count,
+        }),
+        generateBreadcrumbSchema([
+          { name: t('home'), url: BASE_URL },
+          { name: t('posts') },
+          { name: postData.title.slice(0, 30) },
+        ])
+      )
+    : null
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      background: tokens.colors.bg.primary, 
-      color: tokens.colors.text.primary 
-    }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       {structuredData && <JsonLd data={structuredData} />}
-      <TopNav email={email} />
-      <div style={{ 
-        maxWidth: 800, 
-        margin: '0 auto', 
-        padding: tokens.spacing[6],
-      }}>
+      <div
+        style={{
+          maxWidth: 800,
+          margin: '0 auto',
+          padding: tokens.spacing[6],
+        }}
+      >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Breadcrumb items={[
-            { label: t('hotBreadcrumb'), href: '/hot' },
-            { label: postData?.title?.slice(0, 30) || '...' },
-          ]} />
+          <Breadcrumb
+            items={[
+              { label: t('hotBreadcrumb'), href: '/hot' },
+              { label: postData?.title?.slice(0, 30) || '...' },
+            ]}
+          />
           {postData && (
             <ShareButton
               data={{

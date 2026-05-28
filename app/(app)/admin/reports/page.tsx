@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
@@ -46,9 +45,12 @@ export default function AdminReportsPage() {
     if (!accessToken) return
     setLoading(true)
     try {
-      const response = await fetch('/api/admin/reports?' + new URLSearchParams({ status: filter }), {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
+      const response = await fetch(
+        '/api/admin/reports?' + new URLSearchParams({ status: filter }),
+        {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        }
+      )
       if (response.ok) {
         const data = await response.json()
         setReports(data.data || [])
@@ -68,14 +70,19 @@ export default function AdminReportsPage() {
 
   return (
     <>
-      <TopNav />
       <div style={{ maxWidth: 900, margin: '80px auto', padding: '0 16px' }}>
-        <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], color: 'var(--color-text-primary)', marginBottom: 24 }}>
+        <h1
+          style={{
+            fontSize: tokens.typography.fontSize['2xl'],
+            color: 'var(--color-text-primary)',
+            marginBottom: 24,
+          }}
+        >
           {t('adminReportHandling')}
         </h1>
 
         <div style={{ display: 'flex', gap: 8, marginBottom: 24 }}>
-          {['pending', 'reviewed', 'actioned', 'dismissed'].map(s => (
+          {['pending', 'reviewed', 'actioned', 'dismissed'].map((s) => (
             <button
               key={s}
               onClick={() => setFilter(s)}
@@ -83,7 +90,8 @@ export default function AdminReportsPage() {
                 padding: '6px 16px',
                 borderRadius: 6,
                 border: 'none',
-                background: filter === s ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary)',
+                background:
+                  filter === s ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary)',
                 color: filter === s ? tokens.colors.white : 'var(--color-text-secondary)',
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
@@ -100,7 +108,7 @@ export default function AdminReportsPage() {
           <p style={{ color: 'var(--color-text-tertiary)' }}>{t('adminNoReports')}</p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {reports.map(report => (
+            {reports.map((report) => (
               <div
                 key={report.id}
                 style={{
@@ -110,42 +118,66 @@ export default function AdminReportsPage() {
                   background: 'var(--color-bg-secondary)',
                 }}
               >
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginBottom: 8,
+                  }}
+                >
                   <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <span style={{
-                      padding: '2px 8px',
-                      borderRadius: tokens.radius.sm,
-                      fontSize: tokens.typography.fontSize.xs,
-                      background: 'var(--color-bg-tertiary)',
-                      color: 'var(--color-text-secondary)',
-                    }}>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: tokens.radius.sm,
+                        fontSize: tokens.typography.fontSize.xs,
+                        background: 'var(--color-bg-tertiary)',
+                        color: 'var(--color-text-secondary)',
+                      }}
+                    >
                       {report.content_type}
                     </span>
-                    <span style={{
-                      padding: '2px 8px',
-                      borderRadius: tokens.radius.sm,
-                      fontSize: tokens.typography.fontSize.xs,
-                      background: 'var(--color-accent-error-10)',
-                      color: 'var(--color-accent-error)',
-                    }}>
+                    <span
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: tokens.radius.sm,
+                        fontSize: tokens.typography.fontSize.xs,
+                        background: 'var(--color-accent-error-10)',
+                        color: 'var(--color-accent-error)',
+                      }}
+                    >
                       {REASON_KEYS[report.reason] ? t(REASON_KEYS[report.reason]) : report.reason}
                     </span>
                   </div>
-                  <span style={{
-                    fontSize: tokens.typography.fontSize.xs,
-                    color: STATUS_MAP[report.status]?.color,
-                  }}>
+                  <span
+                    style={{
+                      fontSize: tokens.typography.fontSize.xs,
+                      color: STATUS_MAP[report.status]?.color,
+                    }}
+                  >
                     {STATUS_MAP[report.status] ? t(STATUS_MAP[report.status].key) : report.status}
                   </span>
                 </div>
 
                 {report.description && (
-                  <p style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-secondary)', margin: '8px 0' }}>
+                  <p
+                    style={{
+                      fontSize: tokens.typography.fontSize.sm,
+                      color: 'var(--color-text-secondary)',
+                      margin: '8px 0',
+                    }}
+                  >
                     {report.description}
                   </p>
                 )}
 
-                <div style={{ fontSize: tokens.typography.fontSize.xs, color: 'var(--color-text-tertiary)' }}>
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize.xs,
+                    color: 'var(--color-text-tertiary)',
+                  }}
+                >
                   ID: {report.content_id} | {new Date(report.created_at).toLocaleString()}
                 </div>
               </div>

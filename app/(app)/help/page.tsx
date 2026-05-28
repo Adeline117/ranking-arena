@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -67,12 +66,12 @@ const getFaqData = (t: (key: string) => string) => {
 
 // 展开/收起图标
 const ChevronIcon = ({ isOpen }: { isOpen: boolean }) => (
-  <svg 
-    width={20} 
-    height={20} 
-    viewBox="0 0 24 24" 
-    fill="none" 
-    stroke="currentColor" 
+  <svg
+    width={20}
+    height={20}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
     strokeWidth="2"
     style={{
       transition: 'transform 0.2s',
@@ -117,7 +116,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
           <ChevronIcon isOpen={isOpen} />
         </Box>
       </Box>
-      
+
       {isOpen && (
         <Box
           className="faq-item-content"
@@ -143,10 +142,10 @@ function FaqSection({ title, items }: { title: string; items: Array<{ q: string;
         marginBottom: tokens.spacing[6],
       }}
     >
-      <Text 
-        size="lg" 
-        weight="bold" 
-        style={{ 
+      <Text
+        size="lg"
+        weight="bold"
+        style={{
           marginBottom: tokens.spacing[4],
           paddingBottom: tokens.spacing[2],
           borderBottom: '2px solid var(--color-pro-gradient-start)',
@@ -164,7 +163,6 @@ function FaqSection({ title, items }: { title: string; items: Array<{ q: string;
   )
 }
 
-
 export default function HelpPage() {
   const { t } = useLanguage()
   const [email, setEmail] = useState<string | null>(null)
@@ -173,10 +171,14 @@ export default function HelpPage() {
   const faqData = getFaqData(t)
 
   useEffect(() => {
-     
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for help page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setEmail(data.user?.email ?? null)
+      })
+      .catch(() => {
+        /* Intentionally swallowed: auth check non-critical for help page */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   // Filter FAQ items by search query
@@ -184,9 +186,7 @@ export default function HelpPage() {
     if (!searchQuery.trim()) return items
     const query = searchQuery.toLowerCase()
     return items.filter(
-      (item) =>
-        item.q.toLowerCase().includes(query) ||
-        item.a.toLowerCase().includes(query)
+      (item) => item.q.toLowerCase().includes(query) || item.a.toLowerCase().includes(query)
     )
   }
 
@@ -219,9 +219,6 @@ export default function HelpPage() {
           zIndex: 0,
         }}
       />
-
-      <TopNav email={email} />
-
       <Box
         style={{
           maxWidth: 800,
@@ -233,12 +230,7 @@ export default function HelpPage() {
       >
         {/* 标题 */}
         <Box style={{ textAlign: 'center', marginBottom: tokens.spacing[8] }}>
-          <Text 
-            as="h1" 
-            size="3xl" 
-            weight="black" 
-            style={{ marginBottom: tokens.spacing[3] }}
-          >
+          <Text as="h1" size="3xl" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
             {t('helpCenter')}
           </Text>
           <Text size="md" color="secondary">
@@ -275,7 +267,12 @@ export default function HelpPage() {
               }}
             >
               <Box style={{ marginBottom: tokens.spacing[2] }}>
-                <svg width={24} height={24} viewBox="0 0 24 24" fill="var(--color-pro-gradient-start)">
+                <svg
+                  width={24}
+                  height={24}
+                  viewBox="0 0 24 24"
+                  fill="var(--color-pro-gradient-start)"
+                >
                   <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
                 </svg>
               </Box>
@@ -305,7 +302,14 @@ export default function HelpPage() {
               }}
             >
               <Box style={{ marginBottom: tokens.spacing[2] }}>
-                <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="var(--color-text-secondary)" strokeWidth="2">
+                <svg
+                  width={24}
+                  height={24}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--color-text-secondary)"
+                  strokeWidth="2"
+                >
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
                 </svg>
@@ -316,10 +320,7 @@ export default function HelpPage() {
             </Box>
           </Link>
 
-          <ContactSupportButton
-            variant="card"
-            label={t('contactSupport')}
-          />
+          <ContactSupportButton variant="card" label={t('contactSupport')} />
         </Box>
 
         {/* Search */}
@@ -373,22 +374,34 @@ export default function HelpPage() {
         </Box>
 
         {/* 底部 */}
-        <Box style={{ textAlign: 'center', marginTop: tokens.spacing[8], display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing[2] }}>
+        <Box
+          style={{
+            textAlign: 'center',
+            marginTop: tokens.spacing[8],
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: tokens.spacing[2],
+          }}
+        >
           <Text size="sm" color="tertiary">
             {t('helpNoAnswer')}
           </Text>
-          <ContactSupportButton
-            variant="link"
-            label={t('helpMessageUs')}
-          />
+          <ContactSupportButton variant="link" label={t('helpMessageUs')} />
         </Box>
       </Box>
 
       {/* 动画样式 */}
       <style jsx global>{`
         @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(-8px); }
-          to { opacity: 1; transform: translateY(0); }
+          from {
+            opacity: 0;
+            transform: translateY(-8px);
+          }
+          to {
+            opacity: 1;
+            transform: translateY(0);
+          }
         }
       `}</style>
       {/* MobileBottomNav rendered in root layout */}

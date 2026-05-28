@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
@@ -37,7 +36,6 @@ interface SubscribedFolder {
   subscribed_at: string
 }
 
-
 export default function FavoritesPage() {
   const { t } = useLanguage()
   const { showToast } = useToast()
@@ -66,7 +64,11 @@ export default function FavoritesPage() {
     }
 
     // Skip refetch if same token and data is fresh (<60s)
-    if (lastFetchRef.current.token === accessToken && Date.now() - lastFetchRef.current.ts < 60_000 && folders.length > 0) {
+    if (
+      lastFetchRef.current.token === accessToken &&
+      Date.now() - lastFetchRef.current.ts < 60_000 &&
+      folders.length > 0
+    ) {
       return
     }
 
@@ -78,11 +80,11 @@ export default function FavoritesPage() {
         // 并行加载我的收藏夹和已订阅的收藏夹
         const [foldersResponse, subscribedResponse] = await Promise.all([
           fetch('/api/bookmark-folders', {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
+            headers: { Authorization: `Bearer ${accessToken}` },
             signal: abortController.signal,
           }),
           fetch('/api/bookmark-folders/subscribed', {
-            headers: { 'Authorization': `Bearer ${accessToken}` },
+            headers: { Authorization: `Bearer ${accessToken}` },
             signal: abortController.signal,
           }),
         ])
@@ -103,7 +105,10 @@ export default function FavoritesPage() {
         } else {
           // 订阅功能可能未启用，静默处理
           if (subscribedResponse.status !== 404) {
-            logger.warn('[Favorites] Subscribed folders not available:', subscribedData.error?.message || subscribedResponse.status)
+            logger.warn(
+              '[Favorites] Subscribed folders not available:',
+              subscribedData.error?.message || subscribedResponse.status
+            )
           }
           setSubscribedFolders([])
         }
@@ -127,19 +132,19 @@ export default function FavoritesPage() {
     return () => {
       abortController.abort()
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- load is defined inside effect; showToast/t are stable refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load is defined inside effect; showToast/t are stable refs
   }, [accessToken, authChecked])
 
   const createFolder = async () => {
     if (!newFolderName.trim() || !accessToken) return
-    
+
     setCreating(true)
     try {
       const response = await fetch('/api/bookmark-folders', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${accessToken}`,
+          Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
@@ -147,11 +152,11 @@ export default function FavoritesPage() {
           is_public: newFolderPublic,
         }),
       })
-      
+
       const data = await response.json()
       if (response.ok) {
         const newFolder = data.data?.folder
-        if (newFolder) setFolders(prev => [...prev, newFolder])
+        if (newFolder) setFolders((prev) => [...prev, newFolder])
         setNewFolderName('')
         setNewFolderPublic(false)
         setShowCreateForm(false)
@@ -168,7 +173,15 @@ export default function FavoritesPage() {
   }
 
   const getDefaultAvatar = (name: string) => {
-    const colors = ['var(--color-accent-error)', 'var(--color-chart-teal)', 'var(--color-chart-blue)', 'var(--color-chart-sage)', 'var(--color-chart-yellow)', 'var(--color-chart-pink)', 'var(--color-chart-mint)']
+    const colors = [
+      'var(--color-accent-error)',
+      'var(--color-chart-teal)',
+      'var(--color-chart-blue)',
+      'var(--color-chart-sage)',
+      'var(--color-chart-yellow)',
+      'var(--color-chart-pink)',
+      'var(--color-chart-mint)',
+    ]
     const index = name.charCodeAt(0) % colors.length
     return colors[index]
   }
@@ -176,8 +189,13 @@ export default function FavoritesPage() {
   // 等待认证检查完成后再判断是否需要登录
   if (!authChecked || (authChecked && !accessToken && loading)) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             {t('myFavorites')}
@@ -190,8 +208,13 @@ export default function FavoritesPage() {
 
   if (authChecked && !accessToken) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             {t('myFavorites')}
@@ -226,40 +249,62 @@ export default function FavoritesPage() {
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={email} />
-      <Box className="has-mobile-nav" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100, animation: 'fadeIn 0.3s ease-out' }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <Box
+        className="has-mobile-nav"
+        style={{
+          maxWidth: 900,
+          margin: '0 auto',
+          padding: tokens.spacing[6],
+          paddingBottom: 100,
+          animation: 'fadeIn 0.3s ease-out',
+        }}
+      >
         <Breadcrumb items={[{ label: t('favorites') }]} />
         {/* 页面头部 */}
-        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
+        <Box
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: tokens.spacing[4],
+          }}
+        >
           <Text size="2xl" weight="black">
             {t('myFavorites')}
           </Text>
           {activeTab === 'my' && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setShowCreateForm(!showCreateForm)}
-            >
+            <Button variant="primary" size="sm" onClick={() => setShowCreateForm(!showCreateForm)}>
               + {t('newFolder')}
             </Button>
           )}
         </Box>
-        
+
         {/* 标签切换 */}
-        <Box style={{ 
-          display: 'flex', 
-          gap: tokens.spacing[1], 
-          marginBottom: tokens.spacing[6],
-          borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        }}>
+        <Box
+          style={{
+            display: 'flex',
+            gap: tokens.spacing[1],
+            marginBottom: tokens.spacing[6],
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
           <button
             onClick={() => setActiveTab('my')}
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
               background: 'transparent',
               border: 'none',
-              borderBottom: activeTab === 'my' ? `2px solid ${tokens.colors.accent?.primary || tokens.colors.accent.brand}` : '2px solid transparent',
+              borderBottom:
+                activeTab === 'my'
+                  ? `2px solid ${tokens.colors.accent?.primary || tokens.colors.accent.brand}`
+                  : '2px solid transparent',
               color: activeTab === 'my' ? tokens.colors.text.primary : tokens.colors.text.tertiary,
               fontWeight: activeTab === 'my' ? 700 : 400,
               fontSize: tokens.typography.fontSize.sm,
@@ -276,8 +321,14 @@ export default function FavoritesPage() {
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
               background: 'transparent',
               border: 'none',
-              borderBottom: activeTab === 'subscribed' ? `2px solid ${tokens.colors.accent?.primary || tokens.colors.accent.brand}` : '2px solid transparent',
-              color: activeTab === 'subscribed' ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+              borderBottom:
+                activeTab === 'subscribed'
+                  ? `2px solid ${tokens.colors.accent?.primary || tokens.colors.accent.brand}`
+                  : '2px solid transparent',
+              color:
+                activeTab === 'subscribed'
+                  ? tokens.colors.text.primary
+                  : tokens.colors.text.tertiary,
               fontWeight: activeTab === 'subscribed' ? 700 : 400,
               fontSize: tokens.typography.fontSize.sm,
               cursor: 'pointer',
@@ -319,8 +370,22 @@ export default function FavoritesPage() {
                 fontSize: tokens.typography.fontSize.base,
               }}
             />
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], cursor: 'pointer' }}>
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                marginBottom: tokens.spacing[3],
+              }}
+            >
+              <label
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
+                  cursor: 'pointer',
+                }}
+              >
                 <input
                   type="checkbox"
                   checked={newFolderPublic}
@@ -404,8 +469,10 @@ export default function FavoritesPage() {
                     transition: `all ${tokens.transition.base}`,
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)'
-                    e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
+                    e.currentTarget.style.background =
+                      tokens.colors.bg.tertiary || 'var(--overlay-hover)'
+                    e.currentTarget.style.borderColor =
+                      tokens.colors.border.secondary || tokens.colors.border.primary
                     e.currentTarget.style.transform = 'translateX(4px)'
                   }}
                   onMouseLeave={(e) => {
@@ -420,7 +487,9 @@ export default function FavoritesPage() {
                       width: 48,
                       height: 48,
                       borderRadius: tokens.radius.lg,
-                      backgroundColor: folder.avatar_url ? undefined : getDefaultAvatar(folder.name),
+                      backgroundColor: folder.avatar_url
+                        ? undefined
+                        : getDefaultAvatar(folder.name),
                       backgroundImage: folder.avatar_url ? `url(${folder.avatar_url})` : undefined,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center',
@@ -439,7 +508,15 @@ export default function FavoritesPage() {
 
                   {/* 收藏夹信息 */}
                   <Box style={{ flex: 1 }}>
-                    <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap' }}>
+                    <Box
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[2],
+                        marginBottom: tokens.spacing[1],
+                        flexWrap: 'wrap',
+                      }}
+                    >
                       <Text size="base" weight="bold">
                         {folder.name}
                       </Text>
@@ -500,128 +577,134 @@ export default function FavoritesPage() {
               ))}
             </Box>
           )
+        ) : // 收藏的收藏夹
+        subscribedFolders.length === 0 ? (
+          <EmptyState
+            title={t('noSubscribedFolders')}
+            description={t('noSubscribedFoldersDesc')}
+            action={
+              <Link
+                href="/rankings"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  minHeight: 44,
+                  padding: '10px 24px',
+                  background: tokens.colors.accent.brand,
+                  color: tokens.colors.white,
+                  borderRadius: tokens.radius.md,
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                  fontSize: 14,
+                }}
+              >
+                {t('browsePublicFolders')}
+              </Link>
+            }
+          />
         ) : (
-          // 收藏的收藏夹
-          subscribedFolders.length === 0 ? (
-            <EmptyState
-              title={t('noSubscribedFolders')}
-              description={t('noSubscribedFoldersDesc')}
-              action={
-                <Link
-                  href="/rankings"
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            {subscribedFolders.map((folder) => (
+              <Link
+                key={folder.id}
+                href={`/favorites/${folder.id}`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[4],
+                  padding: tokens.spacing[4],
+                  borderRadius: tokens.radius.lg,
+                  background: tokens.colors.bg.secondary,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  transition: `all ${tokens.transition.base}`,
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.background =
+                    tokens.colors.bg.tertiary || 'var(--overlay-hover)'
+                  e.currentTarget.style.borderColor =
+                    tokens.colors.border.secondary || tokens.colors.border.primary
+                  e.currentTarget.style.transform = 'translateX(4px)'
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.background = tokens.colors.bg.secondary
+                  e.currentTarget.style.borderColor = tokens.colors.border.primary
+                  e.currentTarget.style.transform = 'translateX(0)'
+                }}
+              >
+                {/* 收藏夹头像 */}
+                <Box
                   style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minHeight: 44,
-                    padding: '10px 24px',
-                    background: tokens.colors.accent.brand,
-                    color: tokens.colors.white,
-                    borderRadius: tokens.radius.md,
-                    textDecoration: 'none',
-                    fontWeight: 700,
-                    fontSize: 14,
-                  }}
-                >
-                  {t('browsePublicFolders')}
-                </Link>
-              }
-            />
-          ) : (
-            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-              {subscribedFolders.map((folder) => (
-                <Link
-                  key={folder.id}
-                  href={`/favorites/${folder.id}`}
-                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: tokens.radius.lg,
+                    backgroundColor: folder.avatar_url ? undefined : getDefaultAvatar(folder.name),
+                    backgroundImage: folder.avatar_url ? `url(${folder.avatar_url})` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: tokens.spacing[4],
-                    padding: tokens.spacing[4],
-                    borderRadius: tokens.radius.lg,
-                    background: tokens.colors.bg.secondary,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    textDecoration: 'none',
-                    color: 'inherit',
-                    transition: `all ${tokens.transition.base}`,
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.tertiary || 'var(--overlay-hover)'
-                    e.currentTarget.style.borderColor = tokens.colors.border.secondary || tokens.colors.border.primary
-                    e.currentTarget.style.transform = 'translateX(4px)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.background = tokens.colors.bg.secondary
-                    e.currentTarget.style.borderColor = tokens.colors.border.primary
-                    e.currentTarget.style.transform = 'translateX(0)'
+                    justifyContent: 'center',
+                    flexShrink: 0,
                   }}
                 >
-                  {/* 收藏夹头像 */}
+                  {!folder.avatar_url && (
+                    <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
+                      {folder.name.charAt(0).toUpperCase()}
+                    </Text>
+                  )}
+                </Box>
+
+                {/* 收藏夹信息 */}
+                <Box style={{ flex: 1 }}>
                   <Box
                     style={{
-                      width: 48,
-                      height: 48,
-                      borderRadius: tokens.radius.lg,
-                      backgroundColor: folder.avatar_url ? undefined : getDefaultAvatar(folder.name),
-                      backgroundImage: folder.avatar_url ? `url(${folder.avatar_url})` : undefined,
-                      backgroundSize: 'cover',
-                      backgroundPosition: 'center',
                       display: 'flex',
                       alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
+                      gap: tokens.spacing[2],
+                      marginBottom: tokens.spacing[1],
                     }}
                   >
-                    {!folder.avatar_url && (
-                      <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
-                        {folder.name.charAt(0).toUpperCase()}
-                      </Text>
-                    )}
-                  </Box>
-
-                  {/* 收藏夹信息 */}
-                  <Box style={{ flex: 1 }}>
-                    <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[1] }}>
-                      <Text size="base" weight="bold">
-                        {folder.name}
-                      </Text>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          padding: '2px 6px',
-                          background: tokens.colors.accent.warning + '20',
-                          color: tokens.colors.accent.warning,
-                          borderRadius: tokens.radius.sm,
-                        }}
-                      >
-                        {t('subscribed')}
-                      </span>
-                    </Box>
-                    {folder.description && (
-                      <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
-                        {folder.description}
-                      </Text>
-                    )}
-                    <Text size="xs" color="tertiary">
-                      {t('itemCount').replace('{n}', String(folder.post_count))}
-                      {folder.subscriber_count > 0 && ` · ${t('subscriberCount').replace('{n}', String(folder.subscriber_count))}`}
-                      {folder.owner_handle && ` · @${folder.owner_handle}`}
+                    <Text size="base" weight="bold">
+                      {folder.name}
                     </Text>
+                    <span
+                      style={{
+                        fontSize: 10,
+                        padding: '2px 6px',
+                        background: tokens.colors.accent.warning + '20',
+                        color: tokens.colors.accent.warning,
+                        borderRadius: tokens.radius.sm,
+                      }}
+                    >
+                      {t('subscribed')}
+                    </span>
                   </Box>
-
-                  {/* 箭头 */}
-                  <Text size="lg" color="tertiary">
-                    →
+                  {folder.description && (
+                    <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
+                      {folder.description}
+                    </Text>
+                  )}
+                  <Text size="xs" color="tertiary">
+                    {t('itemCount').replace('{n}', String(folder.post_count))}
+                    {folder.subscriber_count > 0 &&
+                      ` · ${t('subscriberCount').replace('{n}', String(folder.subscriber_count))}`}
+                    {folder.owner_handle && ` · @${folder.owner_handle}`}
                   </Text>
-                </Link>
-              ))}
-            </Box>
-          )
+                </Box>
+
+                {/* 箭头 */}
+                <Text size="lg" color="tertiary">
+                  →
+                </Text>
+              </Link>
+            ))}
+          </Box>
         )}
       </Box>
       {/* MobileBottomNav rendered in root layout */}
     </Box>
   )
 }
-
-

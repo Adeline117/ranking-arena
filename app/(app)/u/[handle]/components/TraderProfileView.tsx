@@ -5,7 +5,6 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
@@ -14,12 +13,20 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
 import { trackEvent } from '@/lib/analytics/track'
-import OverviewPerformanceCard, { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
+import OverviewPerformanceCard, {
+  type ExtendedPerformance,
+} from '@/app/components/trader/OverviewPerformanceCard'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from './types'
 import { profileStyles } from './profileStyles'
 
-const EquityCurveSection = dynamic(() => import('@/app/components/trader/stats/components/EquityCurveSection').then(m => ({ default: m.EquityCurveSection })), { ssr: false })
+const EquityCurveSection = dynamic(
+  () =>
+    import('@/app/components/trader/stats/components/EquityCurveSection').then((m) => ({
+      default: m.EquityCurveSection,
+    })),
+  { ssr: false }
+)
 const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
 const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'), {
@@ -28,11 +35,16 @@ const StatsPage = dynamic(() => import('@/app/components/trader/stats/StatsPage'
 const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTable'), {
   loading: () => <RankingSkeleton />,
 })
-const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), { ssr: false })
-const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), { ssr: false })
-const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), { ssr: false })
+const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), {
+  ssr: false,
+})
+const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), {
+  ssr: false,
+})
+const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), {
+  ssr: false,
+})
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), { ssr: false })
-
 
 interface TraderProfileViewProps {
   email: string | null
@@ -74,15 +86,18 @@ export default function TraderProfileView({
   const canView = isPro || isOwn
 
   // Multi-account support (SWR-based)
-  const { linkedAccounts, aggregatedData, hasMultipleAccounts, isLoading } = useLinkedAccounts(traderProfile?.source, traderProfile?.trader_key)
+  const { linkedAccounts, aggregatedData, hasMultipleAccounts, isLoading } = useLinkedAccounts(
+    traderProfile?.source,
+    traderProfile?.trader_key
+  )
   const [activeAccount, setActiveAccount] = useState<string>('all')
 
   // Tabs — include 'posts' for own profile or claimed user
   type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
   const showPosts = isOwn || profile.isRegistered
-  const traderActiveTab = (['overview', 'stats', 'portfolio', 'posts'].includes(activeTab)
-    ? activeTab as TraderTabKey
-    : 'overview')
+  const traderActiveTab = ['overview', 'stats', 'portfolio', 'posts'].includes(activeTab)
+    ? (activeTab as TraderTabKey)
+    : 'overview'
 
   const handleAccountChange = useCallback((account: string) => {
     setActiveAccount(account)
@@ -97,17 +112,22 @@ export default function TraderProfileView({
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
-
-      <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-        <Breadcrumb items={[
-          { label: t('userProfileLeaderboard'), href: '/rankings' },
-          { label: traderProfile?.handle || profile.handle || handle },
-        ]} />
+      <Box
+        className="page-container"
+        style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}
+      >
+        <Breadcrumb
+          items={[
+            { label: t('userProfileLeaderboard'), href: '/rankings' },
+            { label: traderProfile?.handle || profile.handle || handle },
+          ]}
+        />
 
         {/* TraderHeader — pass user profile bio/avatar for claimed users */}
         <TraderHeader
-          handle={traderProfile?.handle || traderProfile?.trader_key || serverProfile?.traderHandle || ''}
+          handle={
+            traderProfile?.handle || traderProfile?.trader_key || serverProfile?.traderHandle || ''
+          }
           displayName={traderProfile?.display_name || undefined}
           traderId={traderProfile?.id || profile.id}
           avatarUrl={traderProfile?.avatar_url || profile.avatar_url}
@@ -126,7 +146,7 @@ export default function TraderProfileView({
           claimedBio={profile.bio}
           claimedAvatarUrl={profile.avatar_url}
           linkedAccountCount={hasMultipleAccounts ? linkedAccounts.length : undefined}
-          linkedPlatforms={hasMultipleAccounts ? linkedAccounts.map(a => a.platform) : undefined}
+          linkedPlatforms={hasMultipleAccounts ? linkedAccounts.map((a) => a.platform) : undefined}
         />
 
         {/* Multi-account tabs */}
@@ -141,10 +161,19 @@ export default function TraderProfileView({
         {/* Exchange links — copy-trade / DEX view */}
         {traderProfile?.source && traderProfile?.trader_key && (
           <ExchangeLinksBar
-            primary={{ platform: traderProfile.source, traderKey: traderProfile.trader_key, handle: traderProfile.handle }}
-            linkedAccounts={hasMultipleAccounts
-              ? linkedAccounts.map(a => ({ platform: a.platform, traderKey: a.traderKey, handle: a.handle }))
-              : undefined
+            primary={{
+              platform: traderProfile.source,
+              traderKey: traderProfile.trader_key,
+              handle: traderProfile.handle,
+            }}
+            linkedAccounts={
+              hasMultipleAccounts
+                ? linkedAccounts.map((a) => ({
+                    platform: a.platform,
+                    traderKey: a.traderKey,
+                    handle: a.handle,
+                  }))
+                : undefined
             }
             activeAccount={activeAccount}
             isOwnProfile={isOwn}
@@ -164,97 +193,101 @@ export default function TraderProfileView({
         />
 
         {/* Tab Content — dims while loading account switch */}
-        <div style={{
-          opacity: (activeAccount !== 'all' && isLoading) ? 0.5 : 1,
-          transition: 'opacity 0.2s ease',
-          pointerEvents: (activeAccount !== 'all' && isLoading) ? 'none' : 'auto',
-        }}>
-        <Box
-          key={traderActiveTab}
+        <div
           style={{
-            animation: 'fadeInUp 0.4s ease-out forwards',
+            opacity: activeAccount !== 'all' && isLoading ? 0.5 : 1,
+            transition: 'opacity 0.2s ease',
+            pointerEvents: activeAccount !== 'all' && isLoading ? 'none' : 'auto',
           }}
         >
-          {traderActiveTab === 'overview' && (
-            <>
-              {/* Aggregated stats for multi-account "All" view */}
-              {hasMultipleAccounts && activeAccount === 'all' && aggregatedData && (
-                <Box style={{ marginBottom: tokens.spacing[6] }}>
-                  <AggregatedStats
-                    combinedPnl={aggregatedData.combinedPnl}
-                    bestRoi={aggregatedData.bestRoi}
-                    weightedScore={aggregatedData.weightedScore}
-                    accounts={linkedAccounts.map(a => ({
-                      platform: a.platform,
-                      traderKey: a.traderKey,
-                      handle: a.handle,
-                      label: a.label,
-                      roi: a.roi,
-                      pnl: a.pnl,
-                      arenaScore: a.arenaScore,
-                      winRate: a.winRate,
-                      maxDrawdown: a.maxDrawdown,
-                      rank: a.rank,
-                      isPrimary: a.isPrimary,
-                    }))}
-                  />
+          <Box
+            key={traderActiveTab}
+            style={{
+              animation: 'fadeInUp 0.4s ease-out forwards',
+            }}
+          >
+            {traderActiveTab === 'overview' && (
+              <>
+                {/* Aggregated stats for multi-account "All" view */}
+                {hasMultipleAccounts && activeAccount === 'all' && aggregatedData && (
+                  <Box style={{ marginBottom: tokens.spacing[6] }}>
+                    <AggregatedStats
+                      combinedPnl={aggregatedData.combinedPnl}
+                      bestRoi={aggregatedData.bestRoi}
+                      weightedScore={aggregatedData.weightedScore}
+                      accounts={linkedAccounts.map((a) => ({
+                        platform: a.platform,
+                        traderKey: a.traderKey,
+                        handle: a.handle,
+                        label: a.label,
+                        roi: a.roi,
+                        pnl: a.pnl,
+                        arenaScore: a.arenaScore,
+                        winRate: a.winRate,
+                        maxDrawdown: a.maxDrawdown,
+                        rank: a.rank,
+                        isPrimary: a.isPrimary,
+                      }))}
+                    />
+                  </Box>
+                )}
+
+                <TraderOverviewTab
+                  handle={handle}
+                  email={email}
+                  traderProfile={traderProfile}
+                  traderPerformance={traderPerformance}
+                  traderEquityCurve={traderEquityCurve}
+                  traderFeed={_traderFeed}
+                  traderSimilar={_traderSimilar}
+                  serverProfile={serverProfile}
+                  t={t}
+                />
+              </>
+            )}
+
+            {traderActiveTab === 'stats' &&
+              (traderStats ? (
+                <StatsPage
+                  stats={traderStats}
+                  traderHandle={traderProfile?.handle || serverProfile?.traderHandle || ''}
+                  assetBreakdown={traderAssetBreakdown}
+                  equityCurve={traderEquityCurve}
+                  positionHistory={traderPositionHistory}
+                  isPro={canView}
+                  onUnlock={() => router.push('/pricing')}
+                />
+              ) : (
+                <Box
+                  style={{
+                    padding: tokens.spacing[6],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: tokens.radius.xl,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    textAlign: 'center',
+                  }}
+                >
+                  <Text size="sm" color="tertiary">
+                    {t('noStatsData')}
+                  </Text>
                 </Box>
-              )}
+              ))}
 
-              <TraderOverviewTab
-                handle={handle}
-                email={email}
-                traderProfile={traderProfile}
-                traderPerformance={traderPerformance}
-                traderEquityCurve={traderEquityCurve}
-                traderFeed={_traderFeed}
-                traderSimilar={_traderSimilar}
-                serverProfile={serverProfile}
-                t={t}
-              />
-            </>
-          )}
-
-          {traderActiveTab === 'stats' && (
-            traderStats ? (
-              <StatsPage
-                stats={traderStats}
-                traderHandle={traderProfile?.handle || serverProfile?.traderHandle || ''}
-                assetBreakdown={traderAssetBreakdown}
-                equityCurve={traderEquityCurve}
-                positionHistory={traderPositionHistory}
+            {traderActiveTab === 'portfolio' && (
+              <PortfolioTable
+                items={traderPortfolio}
+                history={traderPositionHistory}
                 isPro={canView}
                 onUnlock={() => router.push('/pricing')}
               />
-            ) : (
-              <Box style={{
-                padding: tokens.spacing[6],
-                background: tokens.colors.bg.secondary,
-                borderRadius: tokens.radius.xl,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                textAlign: 'center',
-              }}>
-                <Text size="sm" color="tertiary">
-                  {t('noStatsData')}
-                </Text>
+            )}
+
+            {traderActiveTab === 'posts' && showPosts && (
+              <Box style={{ maxWidth: 900 }}>
+                <PostFeed authorHandle={profile.handle} variant="compact" showSortButtons />
               </Box>
-            )
-          )}
-
-          {traderActiveTab === 'portfolio' && (
-            <PortfolioTable items={traderPortfolio} history={traderPositionHistory} isPro={canView} onUnlock={() => router.push('/pricing')} />
-          )}
-
-          {traderActiveTab === 'posts' && showPosts && (
-            <Box style={{ maxWidth: 900 }}>
-              <PostFeed
-                authorHandle={profile.handle}
-                variant="compact"
-                showSortButtons
-              />
-            </Box>
-          )}
-        </Box>
+            )}
+          </Box>
         </div>
 
         <style>{profileStyles}</style>
@@ -299,29 +332,60 @@ function TraderOverviewTab({
         gap: tokens.spacing[8],
       }}
     >
-      <Box className="stagger-enter" style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}>
+      <Box
+        className="stagger-enter"
+        style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[6] }}
+      >
         {traderPerformance ? (
           <Box style={{ position: 'relative' }}>
             <OverviewPerformanceCard
               performance={traderPerformance as ExtendedPerformance}
               equityCurve={traderEquityCurve?.['90D']}
-              allEquityCurves={traderEquityCurve as Partial<Record<'7D' | '30D' | '90D', Array<{ date: string; roi: number; pnl: number }>>> | undefined}
+              allEquityCurves={
+                traderEquityCurve as
+                  | Partial<
+                      Record<
+                        '7D' | '30D' | '90D',
+                        Array<{ date: string; roi: number; pnl: number }>
+                      >
+                    >
+                  | undefined
+              }
               source={traderProfile?.source}
             />
             {!email && traderEquityCurve?.['90D'] && (
-              <Box style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0, height: '40%',
-                background: 'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 60%, var(--color-lock-bg) 100%)',
-                backdropFilter: tokens.glass.blur.xs, WebkitBackdropFilter: tokens.glass.blur.xs,
-                borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5,
-              }}>
-                <Link href={`/login?returnUrl=${encodeURIComponent(`/u/${handle}`)}`} style={{ textDecoration: 'none' }}>
-                  <Box style={{
-                    padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-                    background: `${tokens.colors.accent.primary}20`, border: `1px solid ${tokens.colors.accent.primary}50`,
-                    borderRadius: tokens.radius.lg, cursor: 'pointer', textAlign: 'center',
-                  }}>
+              <Box
+                style={{
+                  position: 'absolute',
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  height: '40%',
+                  background:
+                    'linear-gradient(to bottom, transparent 0%, var(--color-blur-overlay) 60%, var(--color-lock-bg) 100%)',
+                  backdropFilter: tokens.glass.blur.xs,
+                  WebkitBackdropFilter: tokens.glass.blur.xs,
+                  borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 5,
+                }}
+              >
+                <Link
+                  href={`/login?returnUrl=${encodeURIComponent(`/u/${handle}`)}`}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Box
+                    style={{
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
+                      background: `${tokens.colors.accent.primary}20`,
+                      border: `1px solid ${tokens.colors.accent.primary}50`,
+                      borderRadius: tokens.radius.lg,
+                      cursor: 'pointer',
+                      textAlign: 'center',
+                    }}
+                  >
                     <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
                       {t('userProfileSignUpViewHistory')}
                     </Text>
@@ -331,13 +395,15 @@ function TraderOverviewTab({
             )}
           </Box>
         ) : (
-          <Box style={{
-            padding: tokens.spacing[6],
-            background: tokens.colors.bg.secondary,
-            borderRadius: tokens.radius.xl,
-            border: `1px solid ${tokens.colors.border.primary}`,
-            textAlign: 'center',
-          }}>
+          <Box
+            style={{
+              padding: tokens.spacing[6],
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.xl,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              textAlign: 'center',
+            }}
+          >
             <Text size="sm" color="tertiary">
               {t('noPerformanceData')}
             </Text>

@@ -7,7 +7,6 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import TopNav from '@/app/components/layout/TopNav'
 import { supabase } from '@/lib/supabase/client'
 import { usePremium } from '@/lib/premium/hooks'
 import { clearSubscriptionCache } from '@/app/components/home/hooks/useSubscription'
@@ -342,9 +341,6 @@ function PaymentSuccessContent() {
           pointerEvents: 'none',
         }}
       />
-
-      <TopNav email={email} />
-
       <Box
         style={{
           maxWidth: 600,

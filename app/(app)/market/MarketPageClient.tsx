@@ -2,7 +2,6 @@
 
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, memo } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
@@ -334,7 +333,6 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
         overflowX: 'hidden',
       }}
     >
-      <TopNav email={email} />
       <h1 className="sr-only">Crypto Market Overview</h1>
 
       {/* L0: Scrolling Price Ticker */}
@@ -553,7 +551,6 @@ export default function MarketPage({
     >
       {initialError && (!initialSpotData || initialSpotData.length === 0) ? (
         <div style={{ padding: '48px 16px', textAlign: 'center' }}>
-          <TopNav />
           <ErrorState
             title="Market data temporarily unavailable"
             description="We couldn't load market prices. Please try again in a moment."

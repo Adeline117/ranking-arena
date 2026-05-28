@@ -7,7 +7,6 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -84,7 +83,6 @@ function PageWrapper({ email, children }: PageWrapperProps): React.ReactElement 
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
       {children}
     </Box>
   )

@@ -4,7 +4,6 @@ import { useEffect } from 'react'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -25,15 +24,26 @@ import TraderClaimsTab from './components/TraderClaimsTab'
 import AuditLogTab from './components/AuditLogTab'
 import ModerationQueueTab from './components/ModerationQueueTab'
 
-type AdminTab = 'dashboard' | 'scraperStatus' | 'users' | 'reports' | 'applications' | 'editApplications' | 'alertConfig' | 'traderClaims' | 'auditLog' | 'moderationQueue'
+type AdminTab =
+  | 'dashboard'
+  | 'scraperStatus'
+  | 'users'
+  | 'reports'
+  | 'applications'
+  | 'editApplications'
+  | 'alertConfig'
+  | 'traderClaims'
+  | 'auditLog'
+  | 'moderationQueue'
 
 export default function AdminPage() {
   const router = useRouter()
   const { t } = useLanguage()
   const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
   const { freshnessReport, loadFreshnessReport } = useFreshness()
-  const { applications, editApplications, loadApplications, loadEditApplications } = useApplications(accessToken)
-  
+  const { applications, editApplications, loadApplications, loadEditApplications } =
+    useApplications(accessToken)
+
   const [activeTab, setActiveTab] = useState<AdminTab>('dashboard')
 
   // Load data on mount
@@ -48,8 +58,13 @@ export default function AdminPage() {
 
   if (authChecking) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Text size="lg">{t('verifyingPermission')}</Text>
         </Box>
@@ -59,9 +74,21 @@ export default function AdminPage() {
 
   if (!isAdmin) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={email} />
-        <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], textAlign: 'center' }}>
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
+        <Box
+          style={{
+            maxWidth: 1200,
+            margin: '0 auto',
+            padding: tokens.spacing[6],
+            textAlign: 'center',
+          }}
+        >
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             {t('noPermissionAccess')}
           </Text>
@@ -77,24 +104,45 @@ export default function AdminPage() {
   }
 
   // Check for alerts
-  const hasScraperAlert = freshnessReport?.summary && 
+  const hasScraperAlert =
+    freshnessReport?.summary &&
     (freshnessReport.summary.critical > 0 || freshnessReport.summary.stale > 0)
   const pendingApplicationsCount = applications.length
   const pendingEditApplicationsCount = editApplications.length
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={email} />
-      
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <Box style={{ maxWidth: 1400, margin: '0 auto', padding: tokens.spacing[6] }}>
-        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[6] }}>
+        <Box
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: tokens.spacing[6],
+          }}
+        >
           <Text size="2xl" weight="black">
             {t('adminDashboard')}
           </Text>
         </Box>
 
         {/* Tabs */}
-        <Box role="tablist" aria-label={t('adminDashboard')} style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[6], flexWrap: 'wrap' }}>
+        <Box
+          role="tablist"
+          aria-label={t('adminDashboard')}
+          style={{
+            display: 'flex',
+            gap: tokens.spacing[2],
+            marginBottom: tokens.spacing[6],
+            flexWrap: 'wrap',
+          }}
+        >
           <Button
             variant={activeTab === 'dashboard' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('dashboard')}
@@ -107,10 +155,14 @@ export default function AdminPage() {
           >
             {t('scraperStatus')}
             {hasScraperAlert && (
-              <span style={{ 
-                marginLeft: tokens.spacing[1], 
-                color: freshnessReport?.summary?.critical ? tokens.colors.accent.error : tokens.colors.accent.warning 
-              }}>
+              <span
+                style={{
+                  marginLeft: tokens.spacing[1],
+                  color: freshnessReport?.summary?.critical
+                    ? tokens.colors.accent.error
+                    : tokens.colors.accent.warning,
+                }}
+              >
                 ●
               </span>
             )}
@@ -131,13 +183,15 @@ export default function AdminPage() {
             variant={activeTab === 'applications' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('applications')}
           >
-            {t('groupApplications')} {pendingApplicationsCount > 0 && `(${pendingApplicationsCount})`}
+            {t('groupApplications')}{' '}
+            {pendingApplicationsCount > 0 && `(${pendingApplicationsCount})`}
           </Button>
           <Button
             variant={activeTab === 'editApplications' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('editApplications')}
           >
-            {t('groupEdits')} {pendingEditApplicationsCount > 0 && `(${pendingEditApplicationsCount})`}
+            {t('groupEdits')}{' '}
+            {pendingEditApplicationsCount > 0 && `(${pendingEditApplicationsCount})`}
           </Button>
           <Button
             variant={activeTab === 'traderClaims' ? 'primary' : 'secondary'}
@@ -166,45 +220,25 @@ export default function AdminPage() {
         </Box>
 
         {/* Tab Content */}
-        {activeTab === 'dashboard' && (
-          <DashboardTab accessToken={accessToken} />
-        )}
+        {activeTab === 'dashboard' && <DashboardTab accessToken={accessToken} />}
 
-        {activeTab === 'scraperStatus' && (
-          <ScraperStatusTab />
-        )}
+        {activeTab === 'scraperStatus' && <ScraperStatusTab />}
 
-        {activeTab === 'users' && (
-          <UserManagementTab accessToken={accessToken} />
-        )}
+        {activeTab === 'users' && <UserManagementTab accessToken={accessToken} />}
 
-        {activeTab === 'reports' && (
-          <ReportsTab accessToken={accessToken} />
-        )}
+        {activeTab === 'reports' && <ReportsTab accessToken={accessToken} />}
 
-        {activeTab === 'applications' && (
-          <GroupApplicationsTab accessToken={accessToken} />
-        )}
+        {activeTab === 'applications' && <GroupApplicationsTab accessToken={accessToken} />}
 
-        {activeTab === 'editApplications' && (
-          <GroupEditTab accessToken={accessToken} />
-        )}
+        {activeTab === 'editApplications' && <GroupEditTab accessToken={accessToken} />}
 
-        {activeTab === 'traderClaims' && (
-          <TraderClaimsTab accessToken={accessToken} />
-        )}
+        {activeTab === 'traderClaims' && <TraderClaimsTab accessToken={accessToken} />}
 
-        {activeTab === 'alertConfig' && (
-          <AlertConfigTab accessToken={accessToken} />
-        )}
+        {activeTab === 'alertConfig' && <AlertConfigTab accessToken={accessToken} />}
 
-        {activeTab === 'moderationQueue' && (
-          <ModerationQueueTab accessToken={accessToken} />
-        )}
+        {activeTab === 'moderationQueue' && <ModerationQueueTab accessToken={accessToken} />}
 
-        {activeTab === 'auditLog' && (
-          <AuditLogTab accessToken={accessToken} />
-        )}
+        {activeTab === 'auditLog' && <AuditLogTab accessToken={accessToken} />}
       </Box>
     </Box>
   )

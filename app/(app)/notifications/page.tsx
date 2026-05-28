@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
@@ -492,7 +491,6 @@ export default function NotificationsPage() {
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
       <PullToRefreshWrapper onRefresh={loadNotifications}>
         <Box
           style={{

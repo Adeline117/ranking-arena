@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -91,24 +90,64 @@ export default function CreateCompetitionPage() {
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={null} />
-      <Box style={{ maxWidth: 640, margin: '0 auto', padding: `${tokens.spacing[6]} ${tokens.spacing[4]}` }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <Box
+        style={{
+          maxWidth: 640,
+          margin: '0 auto',
+          padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
+        }}
+      >
         {/* Breadcrumb */}
         <Box style={{ marginBottom: tokens.spacing[4] }}>
-          <Link href="/competitions" style={{ color: tokens.colors.text.secondary, textDecoration: 'none', fontSize: tokens.typography.fontSize.sm }}>
+          <Link
+            href="/competitions"
+            style={{
+              color: tokens.colors.text.secondary,
+              textDecoration: 'none',
+              fontSize: tokens.typography.fontSize.sm,
+            }}
+          >
             {t('compPageTitle')}
           </Link>
-          <Text as="span" style={{ color: tokens.colors.text.tertiary, margin: `0 ${tokens.spacing[2]}` }}>/</Text>
-          <Text as="span" style={{ fontSize: tokens.typography.fontSize.sm }}>{t('compCreateTitle')}</Text>
+          <Text
+            as="span"
+            style={{ color: tokens.colors.text.tertiary, margin: `0 ${tokens.spacing[2]}` }}
+          >
+            /
+          </Text>
+          <Text as="span" style={{ fontSize: tokens.typography.fontSize.sm }}>
+            {t('compCreateTitle')}
+          </Text>
         </Box>
 
-        <Text as="h1" style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 700, marginBottom: tokens.spacing[5] }}>
+        <Text
+          as="h1"
+          style={{
+            fontSize: tokens.typography.fontSize['2xl'],
+            fontWeight: 700,
+            marginBottom: tokens.spacing[5],
+          }}
+        >
           {t('compCreateTitle')}
         </Text>
 
         {!isLoggedIn ? (
-          <Box style={{ padding: tokens.spacing[6], textAlign: 'center', background: tokens.colors.bg.secondary, borderRadius: tokens.radius.lg, border: `1px solid ${tokens.colors.border.primary}` }}>
+          <Box
+            style={{
+              padding: tokens.spacing[6],
+              textAlign: 'center',
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.lg,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
             <Text style={{ color: tokens.colors.text.secondary }}>{t('compLoginRequired')}</Text>
           </Box>
         ) : (
@@ -150,7 +189,9 @@ export default function CreateCompetitionPage() {
                   style={inputStyle}
                 >
                   {metrics.map((m) => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
+                    <option key={m.value} value={m.value}>
+                      {m.label}
+                    </option>
                   ))}
                 </select>
               </Box>
@@ -193,7 +234,9 @@ export default function CreateCompetitionPage() {
               </Box>
 
               {error && (
-                <Text style={{ color: '#ef4444', fontSize: tokens.typography.fontSize.sm }}>{error}</Text>
+                <Text style={{ color: '#ef4444', fontSize: tokens.typography.fontSize.sm }}>
+                  {error}
+                </Text>
               )}
 
               <Button variant="primary" type="submit" loading={submitting} fullWidth>

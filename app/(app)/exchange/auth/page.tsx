@@ -4,7 +4,6 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useToast } from '@/app/components/ui/Toast'
@@ -32,14 +31,18 @@ function ExchangeAuthContent() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-     
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) {
-        router.push('/login?redirect=/exchange/auth')
-        return
-      }
-      setUserId(data.user.id)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for exchange auth page */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (!data.user) {
+          router.push('/login?redirect=/exchange/auth')
+          return
+        }
+        setUserId(data.user.id)
+      })
+      .catch(() => {
+        /* Intentionally swallowed: auth check non-critical for exchange auth page */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [router])
 
   const handleOAuth = async (exchange: string) => {
@@ -54,7 +57,9 @@ function ExchangeAuthContent() {
 
     try {
       // 获取 OAuth 授权 URL
-      const response = await fetch(`/api/exchange/oauth/authorize?exchange=${exchange}&userId=${userId}`)
+      const response = await fetch(
+        `/api/exchange/oauth/authorize?exchange=${exchange}&userId=${userId}`
+      )
       const data = await response.json()
 
       if (!response.ok) {
@@ -75,8 +80,13 @@ function ExchangeAuthContent() {
 
   if (!userId) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={null} />
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
         <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
           <Text size="lg">{t('loading')}</Text>
         </Box>
@@ -84,12 +94,16 @@ function ExchangeAuthContent() {
     )
   }
 
-  const selectedExchange = EXCHANGES.find(e => e.id === exchangeParam)
+  const selectedExchange = EXCHANGES.find((e) => e.id === exchangeParam)
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={null} />
-      
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[6] }}>
           {t('bindExchangeAccount')}
@@ -119,7 +133,14 @@ function ExchangeAuthContent() {
             border="primary"
             style={{ marginBottom: tokens.spacing[4] }}
           >
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+                marginBottom: tokens.spacing[4],
+              }}
+            >
               <ExchangeLogo exchange={selectedExchange.id} size={32} />
               <Text size="lg" weight="bold">
                 {selectedExchange.name}
@@ -138,7 +159,9 @@ function ExchangeAuthContent() {
                   disabled={loading}
                   fullWidth
                 >
-                  {loading ? t('authorizing') : t('useOAuthAuthorize').replace('{exchange}', selectedExchange.name)}
+                  {loading
+                    ? t('authorizing')
+                    : t('useOAuthAuthorize').replace('{exchange}', selectedExchange.name)}
                 </Button>
               ) : (
                 <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[2] }}>
@@ -191,8 +214,24 @@ function ExchangeAuthContent() {
           border="primary"
           style={{ marginBottom: tokens.spacing[4] }}
         >
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[3],
+              marginBottom: tokens.spacing[4],
+            }}
+          >
+            <svg
+              width="24"
+              height="24"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={tokens.colors.accent.brand}
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
             <Text size="lg" weight="bold">
@@ -200,16 +239,26 @@ function ExchangeAuthContent() {
             </Text>
           </Box>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-            {[
-              t('authSecurityTip1'),
-              t('authSecurityTip2'),
-              t('authSecurityTip3'),
-            ].map((item) => (
-              <Box key={item} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-accent-success)" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            {[t('authSecurityTip1'), t('authSecurityTip2'), t('authSecurityTip3')].map((item) => (
+              <Box
+                key={item}
+                style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}
+              >
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="var(--color-accent-success)"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M20 6L9 17L4 12" />
                 </svg>
-                <Text size="sm" color="secondary">{item}</Text>
+                <Text size="sm" color="secondary">
+                  {item}
+                </Text>
               </Box>
             ))}
           </Box>
@@ -229,14 +278,21 @@ function ExchangeAuthContent() {
 
 export default function ExchangeAuthPage() {
   return (
-    <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={null} />
-        <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
-          <Text size="lg">{staticT('loading')}</Text>
+    <Suspense
+      fallback={
+        <Box
+          style={{
+            minHeight: '100vh',
+            background: tokens.colors.bg.primary,
+            color: tokens.colors.text.primary,
+          }}
+        >
+          <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
+            <Text size="lg">{staticT('loading')}</Text>
+          </Box>
         </Box>
-      </Box>
-    }>
+      }
+    >
       <ExchangeAuthContent />
     </Suspense>
   )

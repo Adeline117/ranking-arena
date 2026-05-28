@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
-import TopNav from '@/app/components/layout/TopNav'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
@@ -25,7 +24,9 @@ export default function ReferralClient() {
 
   useEffect(() => {
     async function init() {
-      const { data: { user } } = await supabase.auth.getUser()
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
       if (!user) {
         setIsAuthenticated(false)
         setLoading(false)
@@ -34,7 +35,9 @@ export default function ReferralClient() {
       setIsAuthenticated(true)
       setEmail(user.email ?? null)
 
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) {
         setLoading(false)
         return
@@ -70,7 +73,9 @@ export default function ReferralClient() {
   const handleGenerate = useCallback(async () => {
     setGenerating(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) return
 
       const res = await fetch('/api/referral', {
@@ -82,7 +87,7 @@ export default function ReferralClient() {
       })
       if (res.ok) {
         const json = await res.json()
-        setReferral(prev => ({
+        setReferral((prev) => ({
           referral_code: json.referral_code,
           referral_link: json.referral_link,
           referral_count: prev?.referral_count ?? 0,
@@ -99,39 +104,84 @@ export default function ReferralClient() {
   const shareText = 'Check out Arena - the crypto trader ranking platform!'
 
   return (
-    <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={email} />
-
-      <div style={{ maxWidth: 700, margin: '0 auto', padding: `${tokens.spacing[6]} ${tokens.spacing[4]} ${tokens.spacing[16]}` }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 700,
+          margin: '0 auto',
+          padding: `${tokens.spacing[6]} ${tokens.spacing[4]} ${tokens.spacing[16]}`,
+        }}
+      >
         {/* Header */}
         <div style={{ marginBottom: tokens.spacing[8], textAlign: 'center' }}>
-          <h1 style={{ fontSize: tokens.typography.fontSize.hero, fontWeight: tokens.typography.fontWeight.bold, margin: 0, letterSpacing: '-0.5px' }}>
+          <h1
+            style={{
+              fontSize: tokens.typography.fontSize.hero,
+              fontWeight: tokens.typography.fontWeight.bold,
+              margin: 0,
+              letterSpacing: '-0.5px',
+            }}
+          >
             Referral Program
           </h1>
-          <p style={{ fontSize: tokens.typography.fontSize.base, color: tokens.colors.text.secondary, marginTop: tokens.spacing[2] }}>
+          <p
+            style={{
+              fontSize: tokens.typography.fontSize.base,
+              color: tokens.colors.text.secondary,
+              marginTop: tokens.spacing[2],
+            }}
+          >
             Invite friends to Arena and track your referrals.
           </p>
         </div>
 
         {/* Auth gate */}
         {isAuthenticated === false && (
-          <div style={{
-            padding: `${tokens.spacing[16]} ${tokens.spacing[5]}`,
-            textAlign: 'center',
-            background: tokens.glass.bg.secondary,
-            borderRadius: tokens.radius.lg,
-            border: tokens.glass.border.light,
-          }}>
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ opacity: 0.4, marginBottom: tokens.spacing[4] }}>
+          <div
+            style={{
+              padding: `${tokens.spacing[16]} ${tokens.spacing[5]}`,
+              textAlign: 'center',
+              background: tokens.glass.bg.secondary,
+              borderRadius: tokens.radius.lg,
+              border: tokens.glass.border.light,
+            }}
+          >
+            <svg
+              width="48"
+              height="48"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              style={{ opacity: 0.4, marginBottom: tokens.spacing[4] }}
+            >
               <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2" />
               <circle cx="8.5" cy="7" r="4" />
               <line x1="20" y1="8" x2="20" y2="14" />
               <line x1="23" y1="11" x2="17" y2="11" />
             </svg>
-            <h2 style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: tokens.typography.fontWeight.semibold, margin: `0 0 ${tokens.spacing[2]}` }}>
+            <h2
+              style={{
+                fontSize: tokens.typography.fontSize.lg,
+                fontWeight: tokens.typography.fontWeight.semibold,
+                margin: `0 0 ${tokens.spacing[2]}`,
+              }}
+            >
               Sign in to get your referral link
             </h2>
-            <p style={{ fontSize: tokens.typography.fontSize.base, color: tokens.colors.text.secondary, margin: `0 0 ${tokens.spacing[5]}` }}>
+            <p
+              style={{
+                fontSize: tokens.typography.fontSize.base,
+                color: tokens.colors.text.secondary,
+                margin: `0 0 ${tokens.spacing[5]}`,
+              }}
+            >
               Create an account or log in to start inviting friends.
             </p>
             <Link
@@ -153,90 +203,122 @@ export default function ReferralClient() {
         )}
 
         {/* Loading */}
-        {loading && isAuthenticated !== false && (
-          <LoadingSkeleton variant="card" count={2} />
-        )}
+        {loading && isAuthenticated !== false && <LoadingSkeleton variant="card" count={2} />}
 
         {/* Referral content */}
         {!loading && isAuthenticated && (
           <>
             {/* Stats cards */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: tokens.spacing[3],
-              marginBottom: tokens.spacing[6],
-            }}>
-              <div style={{
-                padding: tokens.spacing[6],
-                background: tokens.glass.bg.secondary,
-                borderRadius: tokens.radius.lg,
-                border: tokens.glass.border.light,
-                textAlign: 'center',
-              }}>
-                <div style={{
-                  fontSize: tokens.typography.fontSize['3xl'],
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  fontFamily: 'var(--font-mono, monospace)',
-                  color: 'var(--color-accent-primary)',
-                }}>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: tokens.spacing[3],
+                marginBottom: tokens.spacing[6],
+              }}
+            >
+              <div
+                style={{
+                  padding: tokens.spacing[6],
+                  background: tokens.glass.bg.secondary,
+                  borderRadius: tokens.radius.lg,
+                  border: tokens.glass.border.light,
+                  textAlign: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize['3xl'],
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    color: 'var(--color-accent-primary)',
+                  }}
+                >
                   {referral?.referral_count ?? 0}
                 </div>
-                <div style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary, marginTop: tokens.spacing[1] }}>
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: tokens.colors.text.secondary,
+                    marginTop: tokens.spacing[1],
+                  }}
+                >
                   Friends Invited
                 </div>
               </div>
-              <div style={{
-                padding: tokens.spacing[6],
-                background: tokens.glass.bg.secondary,
-                borderRadius: tokens.radius.lg,
-                border: tokens.glass.border.light,
-                textAlign: 'center',
-              }}>
-                <div style={{
-                  fontSize: tokens.typography.fontSize['3xl'],
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  fontFamily: 'var(--font-mono, monospace)',
-                  color: tokens.colors.accent.success,
-                }}>
+              <div
+                style={{
+                  padding: tokens.spacing[6],
+                  background: tokens.glass.bg.secondary,
+                  borderRadius: tokens.radius.lg,
+                  border: tokens.glass.border.light,
+                  textAlign: 'center',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize['3xl'],
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontFamily: 'var(--font-mono, monospace)',
+                    color: tokens.colors.accent.success,
+                  }}
+                >
                   {referral?.referral_count ?? 0}
                 </div>
-                <div style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary, marginTop: tokens.spacing[1] }}>
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: tokens.colors.text.secondary,
+                    marginTop: tokens.spacing[1],
+                  }}
+                >
                   Active Referrals
                 </div>
               </div>
             </div>
 
             {/* Referral link */}
-            <div style={{
-              padding: tokens.spacing[6],
-              background: tokens.glass.bg.secondary,
-              borderRadius: tokens.radius.lg,
-              border: tokens.glass.border.light,
-              marginBottom: tokens.spacing[6],
-            }}>
-              <h3 style={{ fontSize: tokens.typography.fontSize.md, fontWeight: tokens.typography.fontWeight.semibold, margin: `0 0 ${tokens.spacing[3]}` }}>
+            <div
+              style={{
+                padding: tokens.spacing[6],
+                background: tokens.glass.bg.secondary,
+                borderRadius: tokens.radius.lg,
+                border: tokens.glass.border.light,
+                marginBottom: tokens.spacing[6],
+              }}
+            >
+              <h3
+                style={{
+                  fontSize: tokens.typography.fontSize.md,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  margin: `0 0 ${tokens.spacing[3]}`,
+                }}
+              >
                 Your Referral Link
               </h3>
               {referral?.referral_code ? (
                 <>
-                  <div style={{
-                    display: 'flex',
-                    gap: tokens.spacing[2],
-                    alignItems: 'center',
-                  }}>
-                    <div style={{
-                      flex: 1,
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                      background: tokens.colors.bg.tertiary,
-                      borderRadius: tokens.radius.md,
-                      fontFamily: 'var(--font-mono, monospace)',
-                      fontSize: tokens.typography.fontSize.sm,
-                      color: tokens.colors.text.secondary,
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      gap: tokens.spacing[2],
+                      alignItems: 'center',
+                    }}
+                  >
+                    <div
+                      style={{
+                        flex: 1,
+                        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                        background: tokens.colors.bg.tertiary,
+                        borderRadius: tokens.radius.md,
+                        fontFamily: 'var(--font-mono, monospace)',
+                        fontSize: tokens.typography.fontSize.sm,
+                        color: tokens.colors.text.secondary,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
                       {referral.referral_link}
                     </div>
                     <button
@@ -245,7 +327,9 @@ export default function ReferralClient() {
                         padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                         borderRadius: tokens.radius.md,
                         border: 'none',
-                        background: copied ? tokens.colors.accent.success : 'var(--color-accent-primary)',
+                        background: copied
+                          ? tokens.colors.accent.success
+                          : 'var(--color-accent-primary)',
                         color: tokens.colors.white,
                         fontSize: tokens.typography.fontSize.sm,
                         fontWeight: tokens.typography.fontWeight.semibold,
@@ -298,13 +382,21 @@ export default function ReferralClient() {
 
             {/* Share buttons */}
             {referral?.referral_link && (
-              <div style={{
-                padding: tokens.spacing[6],
-                background: tokens.glass.bg.secondary,
-                borderRadius: tokens.radius.lg,
-                border: tokens.glass.border.light,
-              }}>
-                <h3 style={{ fontSize: tokens.typography.fontSize.md, fontWeight: tokens.typography.fontWeight.semibold, margin: `0 0 ${tokens.spacing[3]}` }}>
+              <div
+                style={{
+                  padding: tokens.spacing[6],
+                  background: tokens.glass.bg.secondary,
+                  borderRadius: tokens.radius.lg,
+                  border: tokens.glass.border.light,
+                }}
+              >
+                <h3
+                  style={{
+                    fontSize: tokens.typography.fontSize.md,
+                    fontWeight: tokens.typography.fontWeight.semibold,
+                    margin: `0 0 ${tokens.spacing[3]}`,
+                  }}
+                >
                   Share
                 </h3>
                 <div style={{ display: 'flex', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
@@ -334,7 +426,14 @@ export default function ReferralClient() {
                     href={`mailto:?subject=${encodeURIComponent('Check out Arena')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`}
                     style={shareBtnStyle}
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <svg
+                      width="16"
+                      height="16"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                    >
                       <rect x="2" y="4" width="20" height="16" rx="2" />
                       <path d="M22 7l-10 7L2 7" />
                     </svg>

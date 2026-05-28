@@ -17,7 +17,6 @@
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useAdminAuth } from '../hooks/useAdminAuth'
-import TopNav from '@/app/components/layout/TopNav'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface RecentSignup {
@@ -144,7 +143,6 @@ export default function ProMetricsPage() {
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={email} />
         <div style={{ padding: 40, textAlign: 'center' }}>
           <h2>{t('noPermissionAccess')}</h2>
         </div>
@@ -160,7 +158,6 @@ export default function ProMetricsPage() {
         color: 'var(--color-text-primary)',
       }}
     >
-      <TopNav email={email} />
       <div style={{ maxWidth: 1100, margin: '0 auto', padding: tokens.spacing[6] }}>
         <header style={{ marginBottom: tokens.spacing[6] }}>
           <h1
@@ -180,19 +177,12 @@ export default function ProMetricsPage() {
             }}
           >
             The three numbers that answer &ldquo;is the paywall working?&rdquo;
-            {data?.timestamp && (
-              <>
-                {' '}
-                &middot; updated {new Date(data.timestamp).toLocaleString()}
-              </>
-            )}
+            {data?.timestamp && <> &middot; updated {new Date(data.timestamp).toLocaleString()}</>}
           </p>
         </header>
 
         {loading && (
-          <div style={{ padding: 40, color: 'var(--color-text-secondary)' }}>
-            Loading&hellip;
-          </div>
+          <div style={{ padding: 40, color: 'var(--color-text-secondary)' }}>Loading&hellip;</div>
         )}
         {error && (
           <div
@@ -229,11 +219,7 @@ export default function ProMetricsPage() {
                 value={data.newPayingThisWeek}
                 sub={`last ${data.windowDays} days`}
               />
-              <MetricTile
-                label="WAU (7d)"
-                value={data.wau}
-                sub="distinct user_activity rows"
-              />
+              <MetricTile label="WAU (7d)" value={data.wau} sub="distinct user_activity rows" />
             </section>
 
             <section>

@@ -1,6 +1,5 @@
 import { Metadata } from 'next'
 import RankingsSubNav from './RankingsSubNav'
-import TopNavWrapper from './TopNavWrapper'
 import { BASE_URL } from '@/lib/constants/urls'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { generateBreadcrumbSchema } from '@/lib/seo/structured-data'
@@ -33,8 +32,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Trader Rankings',
-    description:
-      'Real-time crypto trader leaderboard across 22+ exchanges.',
+    description: 'Real-time crypto trader leaderboard across 22+ exchanges.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
@@ -54,7 +52,8 @@ export default function RankingsLayout({ children }: { children: React.ReactNode
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'linear-gradient(135deg, var(--color-accent-primary-08) 0%, transparent 40%, var(--color-accent-primary-08) 100%)',
+          background:
+            'linear-gradient(135deg, var(--color-accent-primary-08) 0%, transparent 40%, var(--color-accent-primary-08) 100%)',
           opacity: 0.5,
           pointerEvents: 'none',
           zIndex: 0,
@@ -62,7 +61,6 @@ export default function RankingsLayout({ children }: { children: React.ReactNode
           contain: 'strict layout paint',
         }}
       />
-      <TopNavWrapper />
       <div
         className="container-padding has-mobile-nav"
         style={{
