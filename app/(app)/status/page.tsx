@@ -41,8 +41,16 @@ function StatusDot({ status }: { status: string }) {
       : status === 'degraded' || status === 'skip'
         ? 'var(--color-score-average)'
         : 'var(--color-accent-error)'
+  const label =
+    status === 'pass' || status === 'healthy' || status === 'ok'
+      ? 'Operational'
+      : status === 'degraded' || status === 'skip'
+        ? 'Degraded'
+        : 'Down'
   return (
     <span
+      role="img"
+      aria-label={label}
       style={{
         display: 'inline-block',
         width: 8,
@@ -88,8 +96,9 @@ export default function StatusPage() {
     background: tokens.colors.bg.secondary,
     border: `1px solid ${tokens.colors.border.primary}`,
     borderRadius: tokens.radius.lg,
-    padding: tokens.spacing[5],
+    padding: tokens.spacing[6],
     marginBottom: tokens.spacing[4],
+    transition: `border-color ${tokens.transition.base}`,
   }
 
   return (
@@ -132,6 +141,7 @@ export default function StatusPage() {
         {/* Overall Status */}
         {health && (
           <div
+            className="card-hover"
             style={{
               ...cardStyle,
               display: 'flex',
@@ -169,7 +179,7 @@ export default function StatusPage() {
 
         {/* Service Checks */}
         {health && (
-          <div style={cardStyle}>
+          <div className="card-hover" style={cardStyle}>
             <h2
               style={{
                 fontSize: tokens.typography.fontSize.sm,
@@ -223,7 +233,7 @@ export default function StatusPage() {
 
         {/* Platform Freshness */}
         {platforms && Object.keys(platforms.freshness).length > 0 && (
-          <div style={cardStyle}>
+          <div className="card-hover" style={cardStyle}>
             <h2
               style={{
                 fontSize: tokens.typography.fontSize.sm,
