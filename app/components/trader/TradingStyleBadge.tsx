@@ -4,7 +4,7 @@ import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
-import type { TradingStyle } from '@/lib/types/trader'
+import type { TradingStyle } from '@/lib/utils/trading-style'
 
 export interface TradingStyleBadgeProps {
   style: TradingStyle | null
@@ -25,18 +25,51 @@ interface StyleConfig {
 
 // SVG icon components for each trading style
 function getStyleIcon(style: TradingStyle, size: number = 14): React.ReactNode {
-  const props = { width: size, height: size, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 }
+  const props = {
+    width: size,
+    height: size,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 2,
+  }
   switch (style) {
     case 'scalper':
-      return <svg {...props}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      return (
+        <svg {...props}>
+          <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </svg>
+      )
     case 'swing':
-      return <svg {...props}><path d="M2 12c0-3.5 2.5-6 6-6 4.5 0 4.5 6 9 6 3.5 0 5-2.5 5-6"/><path d="M2 18c0-3.5 2.5-6 6-6 4.5 0 4.5 6 9 6 3.5 0 5-2.5 5-6"/></svg>
+      return (
+        <svg {...props}>
+          <path d="M2 12c0-3.5 2.5-6 6-6 4.5 0 4.5 6 9 6 3.5 0 5-2.5 5-6" />
+          <path d="M2 18c0-3.5 2.5-6 6-6 4.5 0 4.5 6 9 6 3.5 0 5-2.5 5-6" />
+        </svg>
+      )
     case 'trend':
-      return <svg {...props}><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+      return (
+        <svg {...props}>
+          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+          <polyline points="17 6 23 6 23 12" />
+        </svg>
+      )
     case 'position':
-      return <svg {...props}><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+      return (
+        <svg {...props}>
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 9h18" />
+          <path d="M9 21V9" />
+        </svg>
+      )
     case 'unknown':
-      return <svg {...props}><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+      return (
+        <svg {...props}>
+          <circle cx="12" cy="12" r="10" />
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3" />
+          <line x1="12" y1="17" x2="12.01" y2="17" />
+        </svg>
+      )
   }
 }
 
@@ -128,7 +161,9 @@ export default function TradingStyleBadge({
 
   const s = sizeStyles[size]
   const label = t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1)) || config.label
-  const description = t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1) + 'Desc') || config.description
+  const description =
+    t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1) + 'Desc') ||
+    config.description
 
   return (
     <Box
@@ -144,7 +179,9 @@ export default function TradingStyleBadge({
       }}
       title={showTooltip ? description : undefined}
     >
-      <span style={{ display: 'flex', alignItems: 'center', color: config.color }}>{getStyleIcon(style)}</span>
+      <span style={{ display: 'flex', alignItems: 'center', color: config.color }}>
+        {getStyleIcon(style)}
+      </span>
       <Text
         style={{
           fontSize: s.fontSize,
@@ -266,7 +303,9 @@ export function TradingStyleCard({
   }
 
   const config = STYLE_CONFIGS[style]
-  const description = t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1) + 'Desc') || config.description
+  const description =
+    t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1) + 'Desc') ||
+    config.description
 
   return (
     <Box
@@ -277,9 +316,18 @@ export function TradingStyleCard({
         border: `1px solid ${config.color}30`,
       }}
     >
-      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[3] }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: tokens.spacing[3],
+        }}
+      >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <span style={{ display: 'flex', alignItems: 'center', color: config.color }}>{getStyleIcon(style, 24)}</span>
+          <span style={{ display: 'flex', alignItems: 'center', color: config.color }}>
+            {getStyleIcon(style, 24)}
+          </span>
           <Box>
             <Text size="lg" weight="bold" style={{ color: config.color }}>
               {t('tradingStyle' + style.charAt(0).toUpperCase() + style.slice(1)) || config.label}
@@ -291,9 +339,7 @@ export function TradingStyleCard({
             )}
           </Box>
         </Box>
-        {confidence != null && (
-          <ConfidenceMeter confidence={confidence} color={config.color} />
-        )}
+        {confidence != null && <ConfidenceMeter confidence={confidence} color={config.color} />}
       </Box>
 
       <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[3] }}>
@@ -316,7 +362,11 @@ export function TradingStyleCard({
                   border: `1px solid ${tokens.colors.border.primary}`,
                 }}
               >
-                <Text size="xs" weight="bold" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+                <Text
+                  size="xs"
+                  weight="bold"
+                  style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}
+                >
                   {asset}
                 </Text>
               </Box>

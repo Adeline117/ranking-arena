@@ -30,7 +30,7 @@ import type {
   EquityCurvePoint,
 } from '@/lib/types/trading-platform'
 import type { TraderAdvancedMetrics, TraderMarketCorrelation } from '@/lib/types/unified-trader'
-import type { TradingStyle } from '@/lib/types/trader'
+import type { TradingStyle } from '@/lib/utils/trading-style'
 
 interface TraderPageV2Props {
   platform: string

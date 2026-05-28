@@ -14,7 +14,12 @@ const customJestConfig = {
     '^isomorphic-dompurify$': '<rootDir>/lib/utils/__mocks__/isomorphic-dompurify.ts',
     '^@/(.*)$': '<rootDir>/$1',
   },
-  testPathIgnorePatterns: ['<rootDir>/node_modules/', '<rootDir>/.next/', '<rootDir>/e2e/'],
+  testPathIgnorePatterns: [
+    '<rootDir>/node_modules/',
+    '<rootDir>/.next/',
+    '<rootDir>/e2e/',
+    '<rootDir>/.claude/worktrees/',
+  ],
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
     'app/components/**/*.{ts,tsx}',
