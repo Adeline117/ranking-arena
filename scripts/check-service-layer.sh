@@ -67,7 +67,7 @@ fi
 
 if [ -n "$SOURCE_FILES_EXISTING" ]; then
   # shellcheck disable=SC2086
-  if ! npx jest --findRelatedTests $SOURCE_FILES_EXISTING --passWithNoTests --ci --silent 2>&1; then
+  if ! npx jest --findRelatedTests $SOURCE_FILES_EXISTING --passWithNoTests --ci --silent --forceExit 2>&1; then
     echo ""
     echo "═══ Related Tests Failed ═══"
     echo "Fix the failing tests before pushing."
