@@ -141,13 +141,26 @@ export const TraderInfoCell = memo(function TraderInfoCell({
               {i18nT('verifiedBadge')}
             </span>
           )}
-          {/* Bot Badge */}
-          {(trader.is_bot || trader.trader_type === 'bot') && (
+          {/* Bot Badge — confirmed (contract/web3_bot) */}
+          {(trader.trader_type === 'bot' || trader.source === 'web3_bot') && (
             <span role="img" aria-label={`Bot: ${i18nT('botLabel')}`} style={BOT_BADGE_STYLE}>
               <span aria-hidden="true" style={BOT_EMOJI_STYLE}>
                 {'⚡'}
               </span>
               {i18nT('botLabel')}
+            </span>
+          )}
+          {/* Suspected bot badge — heuristic only */}
+          {trader.trader_type === 'suspected_bot' && trader.source !== 'web3_bot' && (
+            <span
+              role="img"
+              aria-label="Suspected bot"
+              style={{ ...BOT_BADGE_STYLE, opacity: 0.7 }}
+            >
+              <span aria-hidden="true" style={BOT_EMOJI_STYLE}>
+                {'⚡'}
+              </span>
+              Bot?
             </span>
           )}
           {/* Trading Style Chip */}

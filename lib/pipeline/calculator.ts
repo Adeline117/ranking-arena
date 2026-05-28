@@ -69,10 +69,7 @@ export class PipelineCalculator {
   /**
    * 计算单个交易员的 Arena Score
    */
-  calculateArenaScore(
-    trader: StandardTraderData,
-    components?: ArenaScoreComponents
-  ): number {
+  calculateArenaScore(trader: StandardTraderData, components?: ArenaScoreComponents): number {
     const comps = components || this.calculateArenaScoreComponents(trader)
     const baseScore = comps.return_score + comps.pnl_score
 
@@ -107,7 +104,7 @@ export class PipelineCalculator {
    */
   private calculateReturnScore(
     roiPct: number | null,
-    config: typeof ARENA_SCORE_CONFIG['7d'],
+    config: (typeof ARENA_SCORE_CONFIG)['7d'],
     window: TimeWindow = '90d'
   ): number {
     if (roiPct === null || roiPct <= 0) return 0
@@ -128,7 +125,7 @@ export class PipelineCalculator {
    */
   private calculatePnlScore(
     pnlUsd: number | null,
-    config: typeof ARENA_SCORE_CONFIG['7d']
+    config: (typeof ARENA_SCORE_CONFIG)['7d']
   ): number {
     if (pnlUsd === null || pnlUsd <= 0) return 0
 
@@ -139,15 +136,12 @@ export class PipelineCalculator {
   }
 
   /**
-   * Bot 检测
+   * Bot 检测（启发式 → suspected_bot）
    *
-   * 检测规则（针对 DEX 地址）：
-   * 1. 交易次数 > 500 → bot
-   * 2. 平均持仓 < 0.5h 且交易 > 100 → bot
-   * 3. 胜率 >= 95% 且交易 > 50 → bot（过于完美）
+   * Pipeline calculator 没有 DB 访问，无法查 is_contract。
+   * 启发式规则只返回 suspected_bot，确定性标记由 compute-leaderboard 处理。
    */
   detectTraderType(trader: StandardTraderData): TraderType {
-    // 只检测 DEX 地址
     if (!isDexPlatform(trader.platform)) return null
     if (!trader.trader_id.startsWith('0x')) return null
 
@@ -155,14 +149,9 @@ export class PipelineCalculator {
     const avgHolding = trader.avg_holding_hours
     const winRate = trader.win_rate_pct
 
-    // 规则 1: 高频交易
-    if (trades > 500) return 'bot'
-
-    // 规则 2: 极短持仓 + 较多交易
-    if (avgHolding !== null && avgHolding < 0.5 && trades > 100) return 'bot'
-
-    // 规则 3: 过于完美的胜率
-    if (winRate !== null && winRate >= 95 && trades > 50) return 'bot'
+    if (trades > 500) return 'suspected_bot'
+    if (avgHolding !== null && avgHolding < 0.5 && trades > 100) return 'suspected_bot'
+    if (winRate !== null && winRate >= 95 && trades > 50) return 'suspected_bot'
 
     return null
   }

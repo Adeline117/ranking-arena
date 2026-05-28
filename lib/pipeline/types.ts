@@ -83,7 +83,7 @@ export interface StandardTraderData {
 // Layer 3: Calculator Types (计算层)
 // =============================================================================
 
-export type TraderType = 'human' | 'bot' | null
+export type TraderType = 'human' | 'bot' | 'suspected_bot' | null
 
 export interface ArenaScoreComponents {
   return_score: number // 0-60
@@ -214,7 +214,7 @@ export interface ArenaScoreWindowConfig {
 
 export const ARENA_SCORE_CONFIG: Record<TimeWindow, ArenaScoreWindowConfig> = {
   '7d': { tanhCoeff: 0.08, roiExponent: 1.8, pnlCoeff: 0.42, pnlBase: 300 },
-  '30d': { tanhCoeff: 0.15, roiExponent: 1.6, pnlCoeff: 0.30, pnlBase: 600 },
+  '30d': { tanhCoeff: 0.15, roiExponent: 1.6, pnlCoeff: 0.3, pnlBase: 600 },
   '90d': { tanhCoeff: 0.18, roiExponent: 1.6, pnlCoeff: 0.27, pnlBase: 650 },
 }
 

@@ -33,30 +33,27 @@ export function detectTraderType(
   avgHoldingHours?: number | null,
   winRate?: number | null,
   isContract?: boolean | null
-): 'human' | 'bot' | null {
+): 'human' | 'bot' | 'suspected_bot' | null {
   // Explicit type always wins (manual override or claim-verified)
   if (existingType === 'human' || existingType === 'bot') return existingType
   // web3_bot source is always bot
   if (source === 'web3_bot') return 'bot'
 
-  // Layer 1: on-chain contract detection — ground truth
-  // If eth_getCode returned bytecode, this address is definitively a smart contract.
+  // Layer 1: on-chain contract detection — ground truth (100% accurate)
   if (isContract === true) return 'bot'
 
-  // Layer 2: heuristic patterns (DEX 0x addresses only)
+  // Layer 2: heuristic patterns → suspected_bot (not 100% accurate)
   if (DEX_SOURCES.has(source) && sourceId.startsWith('0x')) {
-    // High trade count → likely bot
-    if (tradesCount != null && tradesCount > 500) return 'bot'
-    // Extremely short hold times + high trade count → algorithmic trading
+    if (tradesCount != null && tradesCount > 500) return 'suspected_bot'
     if (
       avgHoldingHours != null &&
       avgHoldingHours < 0.5 &&
       tradesCount != null &&
       tradesCount > 100
     )
-      return 'bot'
-    // Suspiciously perfect win rate with many trades → likely bot
-    if (winRate != null && winRate >= 95 && tradesCount != null && tradesCount > 50) return 'bot'
+      return 'suspected_bot'
+    if (winRate != null && winRate >= 95 && tradesCount != null && tradesCount > 50)
+      return 'suspected_bot'
   }
 
   return null

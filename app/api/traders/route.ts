@@ -267,7 +267,8 @@ async function fetchFromLeaderboard(
     profit_factor: row.profit_factor != null ? Number(row.profit_factor) : null,
     calmar_ratio: row.calmar_ratio != null ? Number(row.calmar_ratio) : null,
     // Bot classification
-    is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+    is_bot:
+      row.source === 'web3_bot' || row.trader_type === 'bot' || row.trader_type === 'suspected_bot',
     trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
     is_outlier: row.is_outlier === true,
   }))

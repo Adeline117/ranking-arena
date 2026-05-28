@@ -335,7 +335,11 @@ function RankingTableInner(props: {
     // Apply trader type filter (human/bot)
     if (traderTypeFilter !== 'all') {
       data = data.filter((t) => {
-        const isBot = t.is_bot || t.trader_type === 'bot' || t.source === 'web3_bot'
+        const isBot =
+          t.is_bot ||
+          t.trader_type === 'bot' ||
+          t.trader_type === 'suspected_bot' ||
+          t.source === 'web3_bot'
         return traderTypeFilter === 'bot' ? isBot : !isBot
       })
     }
