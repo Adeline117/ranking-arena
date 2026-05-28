@@ -131,7 +131,10 @@ export async function GET(request: NextRequest) {
             trading_style: (enriched?.trading_style as string) || null,
             sharpe_ratio: enriched?.sharpe_ratio != null ? Number(enriched.sharpe_ratio) : null,
             trader_type: (enriched?.trader_type as string) || null,
-            is_bot: t.platform === 'web3_bot' || enriched?.trader_type === 'bot',
+            is_bot:
+              t.platform === 'web3_bot' ||
+              enriched?.trader_type === 'bot' ||
+              enriched?.trader_type === 'suspected_bot',
           }
         })
 
@@ -200,7 +203,10 @@ export async function GET(request: NextRequest) {
       trading_style: (row.trading_style as string) || null,
       sharpe_ratio: row.sharpe_ratio != null ? Number(row.sharpe_ratio) : null,
       trader_type: (row.trader_type as string) || null,
-      is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+      is_bot:
+        row.source === 'web3_bot' ||
+        row.trader_type === 'bot' ||
+        row.trader_type === 'suspected_bot',
     }))
 
     const totalCount = count ?? 0

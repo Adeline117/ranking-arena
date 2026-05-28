@@ -251,7 +251,7 @@ export const TraderCard = memo(function TraderCard({
                   {sourceInfo.type}
                 </Text>
               </Box>
-              {/* Bot Badge */}
+              {/* Confirmed Bot Badge */}
               {(trader.source === 'web3_bot' || trader.trader_type === 'bot') && (
                 <span
                   style={{
@@ -270,6 +270,28 @@ export const TraderCard = memo(function TraderCard({
                 >
                   <span style={{ fontSize: 9 }}>{'⚡'}</span>
                   Bot
+                </span>
+              )}
+              {/* Suspected Bot Badge */}
+              {trader.trader_type === 'suspected_bot' && trader.source !== 'web3_bot' && (
+                <span
+                  style={{
+                    padding: '1px 5px',
+                    borderRadius: tokens.radius.md,
+                    fontSize: 11,
+                    fontWeight: 600,
+                    color: '#a78bfa',
+                    background: 'rgba(167, 139, 250, 0.08)',
+                    border: '1px solid rgba(167, 139, 250, 0.15)',
+                    lineHeight: 1.4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    opacity: 0.7,
+                  }}
+                >
+                  <span style={{ fontSize: 9 }}>{'⚡'}</span>
+                  Bot?
                 </span>
               )}
               {trader.also_on && trader.also_on.length > 0 && (

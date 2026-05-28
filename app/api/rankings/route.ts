@@ -335,11 +335,11 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       q = q.gte('trades_count', min_trades)
     }
 
-    // Filter by trader type (human/bot)
+    // Filter by trader type (human/bot/suspected_bot)
     if (trader_type === 'bot') {
-      q = q.or('trader_type.eq.bot,source.eq.web3_bot')
+      q = q.or('trader_type.eq.bot,trader_type.eq.suspected_bot,source.eq.web3_bot')
     } else if (trader_type === 'human') {
-      q = q.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.neq.bot')
+      q = q.neq('source', 'web3_bot').or('trader_type.is.null,trader_type.eq.human')
     }
 
     q = q.order(sortColumn, { ascending, nullsFirst: false })
@@ -519,7 +519,10 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       trading_style: (row.trading_style as string) || null,
       avg_holding_hours: row.avg_holding_hours != null ? Number(row.avg_holding_hours) : null,
       style_confidence: null,
-      is_bot: row.source === 'web3_bot' || row.trader_type === 'bot',
+      is_bot:
+        row.source === 'web3_bot' ||
+        row.trader_type === 'bot' ||
+        row.trader_type === 'suspected_bot',
       trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
     }
   })

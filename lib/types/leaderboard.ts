@@ -1007,7 +1007,7 @@ export interface RankingsQuery {
   sort_dir?: 'asc' | 'desc'
   min_pnl?: number
   min_trades?: number
-  trader_type?: 'human' | 'bot'
+  trader_type?: 'human' | 'bot' | 'suspected_bot'
 }
 
 /** Pipeline type: ranked trader row for leaderboard queries */

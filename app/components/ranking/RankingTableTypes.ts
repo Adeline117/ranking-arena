@@ -1,8 +1,28 @@
 // Column customization types
-export type ColumnKey = 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sharpe' | 'sortino' | 'alpha' | 'style' | 'followers' | 'trades'
+export type ColumnKey =
+  | 'score'
+  | 'roi'
+  | 'pnl'
+  | 'winrate'
+  | 'mdd'
+  | 'sharpe'
+  | 'sortino'
+  | 'alpha'
+  | 'style'
+  | 'followers'
+  | 'trades'
 
 // All columns users can toggle (sharpe, followers, trades added per P1-2/3/4)
-export const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd', 'sharpe', 'followers', 'trades']
+export const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = [
+  'score',
+  'roi',
+  'pnl',
+  'winrate',
+  'mdd',
+  'sharpe',
+  'followers',
+  'trades',
+]
 export const DEFAULT_VISIBLE_COLUMNS: ColumnKey[] = ['score', 'roi', 'pnl', 'winrate', 'mdd']
 export const LS_KEY_COLUMNS = 'ranking-visible-columns'
 // View mode type — auto-detected only (mobile→card, desktop→table), no manual toggle
@@ -17,11 +37,13 @@ export function getStoredColumns(): ColumnKey[] {
     const stored = localStorage.getItem(LS_KEY_COLUMNS)
     if (stored) {
       const parsed = JSON.parse(stored) as ColumnKey[]
-      if (Array.isArray(parsed) && parsed.every(c => ALL_TOGGLEABLE_COLUMNS.includes(c))) {
+      if (Array.isArray(parsed) && parsed.every((c) => ALL_TOGGLEABLE_COLUMNS.includes(c))) {
         return parsed
       }
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return DEFAULT_VISIBLE_COLUMNS
 }
 
@@ -69,7 +91,7 @@ export interface Trader {
   score_completeness?: 'full' | 'partial' | 'minimal' | null
   avg_holding_hours?: number | null
   sharpe_ratio?: number | null
-  trader_type?: 'human' | 'bot' | null
+  trader_type?: 'human' | 'bot' | 'suspected_bot' | null
   /** Whether this trader is a bot */
   is_bot?: boolean
   /** Bot category */
