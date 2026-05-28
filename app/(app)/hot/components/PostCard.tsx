@@ -23,13 +23,23 @@ interface PostCardProps {
 }
 
 export function PostCard({
-  post: p, rank, hotTag, translatedTitle, translatedBody,
-  isExpanded, onToggleExpand, onOpenPost, localizedName, t,
+  post: p,
+  rank,
+  hotTag,
+  translatedTitle,
+  translatedBody,
+  isExpanded,
+  onToggleExpand,
+  onOpenPost,
+  localizedName,
+  t,
 }: PostCardProps) {
   const displayBody = translatedBody || p.body
-  const displayTitle = translatedTitle || (p.title && p.title !== 'Untitled' && p.title !== 'untitled' ? p.title : '')
+  const displayTitle =
+    translatedTitle || (p.title && p.title !== 'Untitled' && p.title !== 'untitled' ? p.title : '')
   // Skip body when it's the same as the title (avoid duplication)
-  const bodyIsDuplicate = displayBody.trim() === displayTitle.trim() || displayBody.trim() === p.title?.trim()
+  const bodyIsDuplicate =
+    displayBody.trim() === displayTitle.trim() || displayBody.trim() === p.title?.trim()
   const isLongContent = !bodyIsDuplicate && displayBody.length > 100
   const contentToShow = bodyIsDuplicate
     ? ''
@@ -39,7 +49,7 @@ export function PostCard({
 
   return (
     <Box
-      className="hot-post-item"
+      className="hot-post-item glass-card"
       style={{
         cursor: 'pointer',
         padding: '14px 16px',
@@ -50,7 +60,10 @@ export function PostCard({
         transition: `all 0.2s cubic-bezier(0.4, 0, 0.2, 1)`,
       }}
       onClick={(e: React.MouseEvent) => {
-        if ((e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')) return
+        if (
+          (e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')
+        )
+          return
         onOpenPost(p)
       }}
       onMouseEnter={(e) => {
@@ -65,26 +78,42 @@ export function PostCard({
       }}
     >
       {/* Top row: rank + badges + group */}
-      <Box className="hot-post-meta" style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[1], flexWrap: 'wrap', alignItems: 'center' }}>
-        <Text className="hot-post-rank" size="sm" weight="black" style={{
-          color: rank <= 3 ? 'var(--color-accent-warning)' : 'var(--color-text-tertiary)',
-          fontSize: rank <= 3 ? '15px' : '13px',
-          minWidth: 28,
-        }}>
+      <Box
+        className="hot-post-meta"
+        style={{
+          display: 'flex',
+          gap: tokens.spacing[2],
+          marginBottom: tokens.spacing[1],
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
+        <Text
+          className="hot-post-rank"
+          size="sm"
+          weight="black"
+          style={{
+            color: rank <= 3 ? 'var(--color-accent-warning)' : 'var(--color-text-tertiary)',
+            fontSize: rank <= 3 ? '15px' : '13px',
+            minWidth: 28,
+          }}
+        >
           #{rank}
         </Text>
         {hotTag && (
-          <span style={{
-            fontSize: 11,
-            fontWeight: 800,
-            color: tokens.colors.white,
-            background: hotTag.color,
-            padding: '2px 8px',
-            borderRadius: tokens.radius.full,
-            lineHeight: '16px',
-            letterSpacing: '0.5px',
-            textTransform: 'uppercase',
-          }}>
+          <span
+            style={{
+              fontSize: 11,
+              fontWeight: 800,
+              color: tokens.colors.white,
+              background: hotTag.color,
+              padding: '2px 8px',
+              borderRadius: tokens.radius.full,
+              lineHeight: '16px',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+            }}
+          >
             {hotTag.label}
           </span>
         )}
@@ -106,7 +135,15 @@ export function PostCard({
             {localizedName(p.group, p.group_en)}
           </Link>
         ) : (
-          <Text size="xs" color="secondary" style={{ padding: '2px 10px', background: `var(--color-text-tertiary-10)`, borderRadius: 999 }}>
+          <Text
+            size="xs"
+            color="secondary"
+            style={{
+              padding: '2px 10px',
+              background: `var(--color-text-tertiary-10)`,
+              borderRadius: 999,
+            }}
+          >
             {localizedName(p.group, p.group_en)}
           </Text>
         )}
@@ -122,26 +159,39 @@ export function PostCard({
         }}
         style={{ textDecoration: 'none', color: 'inherit' }}
       >
-        <Text className="hot-post-title" size="base" weight="bold" style={{
-          marginBottom: tokens.spacing[1],
-          lineHeight: 1.4,
-          fontSize: '14px',
-          cursor: 'pointer',
-          display: '-webkit-box',
-          WebkitLineClamp: 3,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-        }}>
-          {translatedTitle || (p.title && p.title !== 'Untitled' && p.title !== 'untitled' ? p.title : (p.body?.slice(0, 80) || ''))}
+        <Text
+          className="hot-post-title"
+          size="base"
+          weight="bold"
+          style={{
+            marginBottom: tokens.spacing[1],
+            lineHeight: 1.4,
+            fontSize: '14px',
+            cursor: 'pointer',
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {translatedTitle ||
+            (p.title && p.title !== 'Untitled' && p.title !== 'untitled'
+              ? p.title
+              : p.body?.slice(0, 80) || '')}
           {translatedTitle && (
-            <span style={{
-              fontSize: 11, fontWeight: 500, marginLeft: 6,
-              padding: '1px 6px', borderRadius: tokens.radius.sm,
-              background: `${'var(--color-text-tertiary)'}15`,
-              color: 'var(--color-text-tertiary)',
-              verticalAlign: 'middle',
-            }}>
+            <span
+              style={{
+                fontSize: 11,
+                fontWeight: 500,
+                marginLeft: 6,
+                padding: '1px 6px',
+                borderRadius: tokens.radius.sm,
+                background: `${'var(--color-text-tertiary)'}15`,
+                color: 'var(--color-text-tertiary)',
+                verticalAlign: 'middle',
+              }}
+            >
               {t('hotTranslatedBadge')}
             </span>
           )}
@@ -150,12 +200,17 @@ export function PostCard({
 
       {/* Body preview — hidden when duplicate of title */}
       {contentToShow && (
-        <Text className="hot-post-body" size="sm" color="secondary" style={{
-          marginBottom: tokens.spacing[1],
-          lineHeight: 1.5,
-          fontSize: '12px',
-          color: translatedBody ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)',
-        }}>
+        <Text
+          className="hot-post-body"
+          size="sm"
+          color="secondary"
+          style={{
+            marginBottom: tokens.spacing[1],
+            lineHeight: 1.5,
+            fontSize: '12px',
+            color: translatedBody ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)',
+          }}
+        >
           {renderContentWithLinks(contentToShow)}
         </Text>
       )}
@@ -181,17 +236,20 @@ export function PostCard({
       )}
 
       {/* Footer: author, time, stats */}
-      <Box className="hot-post-footer" style={{
-        display: 'flex',
-        gap: tokens.spacing[2],
-        fontSize: '12px',
-        color: 'var(--color-text-tertiary)',
-        flexWrap: 'wrap',
-        alignItems: 'center',
-        marginTop: tokens.spacing[1],
-        paddingTop: tokens.spacing[1],
-        borderTop: 'none',
-      }}>
+      <Box
+        className="hot-post-footer"
+        style={{
+          display: 'flex',
+          gap: tokens.spacing[2],
+          fontSize: '12px',
+          color: 'var(--color-text-tertiary)',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          marginTop: tokens.spacing[1],
+          paddingTop: tokens.spacing[1],
+          borderTop: 'none',
+        }}
+      >
         {p.author_handle ? (
           <Link
             href={`/u/${encodeURIComponent(p.author_handle)}`}
@@ -206,16 +264,34 @@ export function PostCard({
             @{p.author}
           </Link>
         ) : (
-          <Text size="xs" color="tertiary">{p.author}</Text>
+          <Text size="xs" color="tertiary">
+            {p.author}
+          </Text>
         )}
-        <Text size="xs" color="tertiary">{p.time}</Text>
+        <Text size="xs" color="tertiary">
+          {p.time}
+        </Text>
         {p.comments > 0 && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              color: 'var(--color-text-tertiary)',
+            }}
+          >
             <CommentIcon size={12} /> {p.comments}
           </span>
         )}
         {p.likes > 0 && (
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4, color: 'var(--color-text-tertiary)' }}>
+          <span
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              color: 'var(--color-text-tertiary)',
+            }}
+          >
             <ThumbsUpIcon size={12} /> {p.likes}
           </span>
         )}
