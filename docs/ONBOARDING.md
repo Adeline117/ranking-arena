@@ -2,6 +2,19 @@
 
 Welcome to Arena. This doc takes you from zero to productive.
 
+## Table of Contents
+
+- [1. Environment Setup](#1-environment-setup)
+- [2. Accounts & Access](#2-accounts--access)
+- [3. Reading Order](#3-reading-order)
+- [4. Key Commands](#4-key-commands)
+- [5. Project Structure](#5-project-structure)
+- [6. Core Concepts](#6-core-concepts)
+- [7. Your First Task](#7-your-first-task)
+- [8. Collaboration Norms](#8-collaboration-norms)
+- [9. Common Gotchas](#9-common-gotchas)
+- [10. Useful Links](#10-useful-links)
+
 ---
 
 ## 1. Environment Setup
@@ -99,28 +112,28 @@ Ask Adeline to grant you access to:
 
 Read in this order, don't skip:
 
-| Order | File                   | Time   | What you'll learn                                                                                                                                       |
-| ----- | ---------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1     | `CLAUDE.md`            | 30 min | **The most important file.** Architecture, directory layout, database schema, coding conventions, mandatory patterns, key commands — everything is here |
-| 2     | `CONTRIBUTING.md`      | 5 min  | Code style, commit message format, PR process                                                                                                           |
-| 3     | `docs/GIT_WORKFLOW.md` | 5 min  | Branch strategy, how we collaborate as a team                                                                                                           |
-| 4     | `PROGRESS.md`          | 10 min | What happened recently, current state of things                                                                                                         |
-| 5     | `TASKS.md`             | 10 min | Task backlog and priorities — what to work on next                                                                                                      |
+| Order | File                                  | Time   | What you'll learn                                                                                                                                       |
+| ----- | ------------------------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1     | [CLAUDE.md](../CLAUDE.md)             | 30 min | **The most important file.** Architecture, directory layout, database schema, coding conventions, mandatory patterns, key commands — everything is here |
+| 2     | [CONTRIBUTING.md](../CONTRIBUTING.md) | 5 min  | Code style, commit message format, PR process                                                                                                           |
+| 3     | [GIT_WORKFLOW.md](./GIT_WORKFLOW.md)  | 5 min  | Branch strategy, how we collaborate as a team                                                                                                           |
+| 4     | [PROGRESS.md](../PROGRESS.md)         | 10 min | What happened recently, current state of things                                                                                                         |
+| 5     | [TASKS.md](../TASKS.md)               | 10 min | Task backlog and priorities — what to work on next                                                                                                      |
 
 ### First Week — Read When Relevant
 
-| File                              | When to read                                                       |
-| --------------------------------- | ------------------------------------------------------------------ |
-| `DECISIONS.md`                    | When you wonder "why was it built this way?"                       |
-| `docs/RUNBOOK.md`                 | Before touching anything in production (has real IPs and commands) |
-| `docs/SCRAPER.md`                 | Before touching the data pipeline or exchange connectors           |
-| `docs/API_BEST_PRACTICES.md`      | Before writing a new API route                                     |
-| `docs/RLS_POLICIES.md`            | Before touching database tables or policies                        |
-| `docs/SECURITY_BEST_PRACTICES.md` | Before touching auth, payments, or user data                       |
-| `docs/system-principles.md`       | Before building UI with state management                           |
-| `docs/EXCHANGE_FIELD_MAPPING.md`  | Before working with exchange data fields                           |
+| File                                                       | When to read                                                       |
+| ---------------------------------------------------------- | ------------------------------------------------------------------ |
+| [DECISIONS.md](../DECISIONS.md)                            | When you wonder "why was it built this way?"                       |
+| [RUNBOOK.md](./RUNBOOK.md)                                 | Before touching anything in production (has real IPs and commands) |
+| [SCRAPER.md](./SCRAPER.md)                                 | Before touching the data pipeline or exchange connectors           |
+| [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md)           | Before writing a new API route                                     |
+| [RLS_POLICIES.md](./RLS_POLICIES.md)                       | Before touching database tables or policies                        |
+| [SECURITY_BEST_PRACTICES.md](./SECURITY_BEST_PRACTICES.md) | Before touching auth, payments, or user data                       |
+| [system-principles.md](./system-principles.md)             | Before building UI with state management                           |
+| [EXCHANGE_FIELD_MAPPING.md](./EXCHANGE_FIELD_MAPPING.md)   | Before working with exchange data fields                           |
 
-Full doc index: `docs/README.md`
+Full doc index: [docs/README.md](./README.md)
 
 ---
 
@@ -176,7 +189,7 @@ scripts/                # CLI tools, import scripts, maintenance
 supabase/migrations/    # Database migrations (SQL)
 ```
 
-Full directory breakdown: `CLAUDE.md` > Directory Structure.
+Full directory breakdown: [CLAUDE.md > Directory Structure](../CLAUDE.md#directory-structure).
 
 ---
 
@@ -197,7 +210,7 @@ The unified ranking metric across all exchanges.
 - Formula: `ReturnScore (0-60) + PnlScore (0-40)`, scaled by confidence and trust weight
 - Period-specific coefficients for 7D / 30D / 90D
 - Composite: `90D * 0.70 + 30D * 0.25 + 7D * 0.05`
-- Source code: `lib/utils/arena-score.ts`
+- Source code: [`lib/utils/arena-score.ts`](../lib/utils/arena-score.ts)
 
 ### Trader identity
 
@@ -205,12 +218,12 @@ Each trader is uniquely identified by `(source, source_trader_id)` — a composi
 
 ### Exchange connectors
 
-Each connector in `lib/connectors/` implements:
+Each connector in [`lib/connectors/`](../lib/connectors/) implements:
 
 - `fetchLeaderboard(period)` — get ranked traders
 - `fetchTraderDetails(traderId)` — get trader profile
 
-Rate limiting and circuit breakers are built in.
+Rate limiting and circuit breakers are built in. See [SCRAPER.md](./SCRAPER.md) for the full architecture.
 
 ---
 
@@ -239,7 +252,9 @@ gh pr create --title "fix: describe what you changed" --body "## Summary\n- ..."
 # 7. After merge, wait for Vercel deploy (5-8 min), then check live site
 ```
 
-Look in `TASKS.md` for a P2/P3 task, or ask Adeline which one is good for getting started.
+Look in [TASKS.md](../TASKS.md) for a P2/P3 task, or ask Adeline which one is good for getting started.
+
+For the full git workflow details, see [GIT_WORKFLOW.md](./GIT_WORKFLOW.md).
 
 ---
 
@@ -260,12 +275,14 @@ Look in `TASKS.md` for a P2/P3 task, or ask Adeline which one is good for gettin
 | Problem                        | Solution                                                                                                                                                         |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Dev server runs out of memory  | Already handled — npm scripts set `--max-old-space-size=3584`                                                                                                    |
-| Binance/OKX API returns 403    | Geo-blocked. Use VPS proxy or Cloudflare Worker (see `docs/SCRAPER.md`)                                                                                          |
+| Binance/OKX API returns 403    | Geo-blocked. Use VPS proxy or Cloudflare Worker (see [SCRAPER.md](./SCRAPER.md))                                                                                 |
 | Push rejected by pre-push hook | The hook runs lint + type-check. Fix all errors before pushing                                                                                                   |
 | Database migration naming      | **Must** use `scripts/new-migration.sh <description>` — prevents timestamp collisions                                                                            |
 | Modal scroll leak              | **Never** write `document.body.style.overflow = 'hidden'`. Use `<ModalOverlay>` or `useModalA11y`. The pre-push hook blocks this pattern                         |
 | Notifications in API routes    | **Never** use raw `supabase.from('notifications').insert()`. Use `sendNotification()` from `lib/data/notifications.ts`. The pre-push hook blocks the raw pattern |
 | First `npm run build` is slow  | Normal. Use `npm run dev` for daily work                                                                                                                         |
+
+For production emergencies, see [RUNBOOK.md](./RUNBOOK.md).
 
 ---
 
@@ -278,3 +295,4 @@ Look in `TASKS.md` for a P2/P3 task, or ask Adeline which one is good for gettin
 | Vercel dashboard   | Ask Adeline for invite                      |
 | Supabase dashboard | Ask Adeline for invite                      |
 | Sentry             | Ask Adeline for invite                      |
+| Full doc index     | [docs/README.md](./README.md)               |
