@@ -40,7 +40,7 @@ const LoadingCard = memo(function LoadingCard({
         className="skeleton"
         style={{
           height: 14,
-          borderRadius: 6,
+          borderRadius: tokens.radius.sm,
           width: i === 0 ? '60%' : i === lines - 1 ? '40%' : '90%',
         }}
       />
@@ -198,12 +198,14 @@ function MobileSectorsTab({
         return (
           <div
             key={s.name}
+            className="card-hover"
             style={{
               padding: '14px 16px',
               background: tokens.glass.bg.secondary,
               borderRadius: tokens.radius.lg,
               border: tokens.glass.border.light,
               borderLeft: `3px solid ${color}`,
+              cursor: 'pointer',
             }}
           >
             <div
