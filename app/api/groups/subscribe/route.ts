@@ -148,7 +148,7 @@ export const POST = withAuth(
           )
         }
 
-        const stripe = new Stripe(stripeSecret, { apiVersion: '2026-03-25.dahlia' })
+        const stripe = new Stripe(stripeSecret, { apiVersion: '2026-04-22.dahlia' })
 
         // Determine expected price (in cents) from the group record
         const expectedPriceDollars =

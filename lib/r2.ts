@@ -66,7 +66,7 @@ export async function deleteFile(key: string): Promise<void> {
 export async function getSignedUrl(key: string, expiresIn = 3600): Promise<string> {
   const client = getClient()
   return awsGetSignedUrl(
-    client,
+    client as any,
     new GetObjectCommand({
       Bucket: R2_BUCKET,
       Key: key,

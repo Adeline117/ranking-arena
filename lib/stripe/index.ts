@@ -24,7 +24,7 @@ export function getStripe(): Stripe {
   if (!_stripe) {
     const secretKey = requireEnv('STRIPE_SECRET_KEY')
     _stripe = new Stripe(secretKey, {
-      apiVersion: '2026-03-25.dahlia',
+      apiVersion: '2026-04-22.dahlia',
       typescript: true,
     })
   }
@@ -233,7 +233,7 @@ export async function createOneTimePaymentSession(params: {
   userId: string
   /** Unique discriminator (e.g. 'lifetime', `tip_${postId}`, `group_${groupId}`) */
   discriminator: string
-  lineItems: Stripe.Checkout.SessionCreateParams.LineItem[]
+  lineItems: Stripe.Checkout.SessionCreateParams['line_items']
   successUrl: string
   cancelUrl: string
   metadata: Record<string, string>

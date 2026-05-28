@@ -17,16 +17,18 @@ function getStripe() {
     throw new Error('STRIPE_SECRET_KEY is not configured')
   }
   return new Stripe(secretKey, {
-  apiVersion: '2026-03-25.dahlia',
-})
+    apiVersion: '2026-04-22.dahlia',
+  })
 }
 
 // 从价格 ID 获取订阅等级
 function getTierFromPriceId(priceId: string): 'free' | 'pro' {
-  if (priceId === env.STRIPE_PRO_MONTHLY_PRICE_ID ||
-      priceId === env.STRIPE_PRO_YEARLY_PRICE_ID ||
-      priceId === process.env.STRIPE_PRO_LIFETIME_PRICE_ID ||
-      priceId === process.env.STRIPE_PRO_PRICE_ID) {
+  if (
+    priceId === env.STRIPE_PRO_MONTHLY_PRICE_ID ||
+    priceId === env.STRIPE_PRO_YEARLY_PRICE_ID ||
+    priceId === process.env.STRIPE_PRO_LIFETIME_PRICE_ID ||
+    priceId === process.env.STRIPE_PRO_PRICE_ID
+  ) {
     return 'pro'
   }
   return 'free'
@@ -71,10 +73,13 @@ export async function POST(request: NextRequest) {
     const session = await stripe.checkout.sessions.retrieve(sessionId)
 
     if (session.payment_status !== 'paid') {
-      return NextResponse.json({
-        error: 'Payment not completed',
-        paymentStatus: session.payment_status
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: 'Payment not completed',
+          paymentStatus: session.payment_status,
+        },
+        { status: 400 }
+      )
     }
 
     const userId = session.metadata?.supabase_user_id || session.metadata?.userId
@@ -88,14 +93,16 @@ export async function POST(request: NextRequest) {
     // Verify the session belongs to the authenticated user
     if (userId !== authUser.id) {
       logger.warn('Session user mismatch', { sessionUserId: userId, authUserId: authUser.id })
-      return NextResponse.json({ error: 'Session does not belong to current user' }, { status: 403 })
+      return NextResponse.json(
+        { error: 'Session does not belong to current user' },
+        { status: 403 }
+      )
     }
 
     // Lifetime one-time payment (mode=payment)
     if (session.mode === 'payment' && plan === 'lifetime') {
-      const { error: subError } = await supabaseAdmin
-        .from('subscriptions')
-        .upsert({
+      const { error: subError } = await supabaseAdmin.from('subscriptions').upsert(
+        {
           user_id: userId,
           stripe_customer_id: customerId,
           stripe_subscription_id: `lifetime_${userId}`,
@@ -106,7 +113,9 @@ export async function POST(request: NextRequest) {
           current_period_end: null,
           cancel_at_period_end: false,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' })
+        },
+        { onConflict: 'user_id' }
+      )
 
       if (subError) {
         logger.error('Failed to update subscriptions for lifetime', { error: subError, userId })
@@ -138,10 +147,13 @@ export async function POST(request: NextRequest) {
 
     // Subscription mode (monthly/yearly)
     if (session.mode !== 'subscription') {
-      return NextResponse.json({
-        error: 'Session is not a subscription',
-        mode: session.mode
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          error: 'Session is not a subscription',
+          mode: session.mode,
+        },
+        { status: 400 }
+      )
     }
 
     // session.subscription 在未 expand 时始终是 string | null
@@ -165,16 +177,23 @@ export async function POST(request: NextRequest) {
 
       // 检查订阅状态
       if (subscription.status !== 'active' && subscription.status !== 'trialing') {
-        return NextResponse.json({
-          error: 'Subscription is not active',
-          status: subscription.status
-        }, { status: 400 })
+        return NextResponse.json(
+          {
+            error: 'Subscription is not active',
+            status: subscription.status,
+          },
+          { status: 400 }
+        )
       }
 
       // 获取周期信息（兼容不同 Stripe API 版本）
       const sub = subscription as unknown as Record<string, unknown>
-      const itemPeriod = subscription.items?.data?.[0] as unknown as Record<string, unknown> | undefined
-      const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as number | undefined
+      const itemPeriod = subscription.items?.data?.[0] as unknown as
+        | Record<string, unknown>
+        | undefined
+      const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as
+        | number
+        | undefined
       const pEnd = (sub.current_period_end ?? itemPeriod?.current_period_end) as number | undefined
       if (pStart) {
         periodStart = new Date(pStart * 1000).toISOString()
@@ -185,16 +204,18 @@ export async function POST(request: NextRequest) {
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error'
       logger.error('Failed to retrieve subscription', { error: errorMessage, subscriptionId })
-      return NextResponse.json({
-        error: 'Failed to retrieve subscription',
-        details: 'Payment verification failed'
-      }, { status: 500 })
+      return NextResponse.json(
+        {
+          error: 'Failed to retrieve subscription',
+          details: 'Payment verification failed',
+        },
+        { status: 500 }
+      )
     }
 
     // 更新订阅记录
-    const { error: subscriptionError } = await supabaseAdmin
-      .from('subscriptions')
-      .upsert({
+    const { error: subscriptionError } = await supabaseAdmin.from('subscriptions').upsert(
+      {
         user_id: userId,
         stripe_customer_id: customerId,
         stripe_subscription_id: subscriptionId,
@@ -203,9 +224,11 @@ export async function POST(request: NextRequest) {
         current_period_start: periodStart,
         current_period_end: periodEnd,
         updated_at: new Date().toISOString(),
-      }, {
+      },
+      {
         onConflict: 'user_id',
-      })
+      }
+    )
 
     if (subscriptionError) {
       logger.error('Failed to update subscriptions table', { error: subscriptionError, userId })
@@ -214,16 +237,17 @@ export async function POST(request: NextRequest) {
     }
 
     // 同时更新 user_profiles 的 subscription_tier
-    const { error: profileError } = await supabaseAdmin
-      .from('user_profiles')
-      .upsert({
+    const { error: profileError } = await supabaseAdmin.from('user_profiles').upsert(
+      {
         id: userId,
         subscription_tier: tier,
         stripe_customer_id: customerId,
         updated_at: new Date().toISOString(),
-      }, {
+      },
+      {
         onConflict: 'id',
-      })
+      }
+    )
 
     if (profileError) {
       logger.error('Failed to update user_profiles', { error: profileError, userId })
@@ -238,7 +262,6 @@ export async function POST(request: NextRequest) {
       status: subscriptionStatus,
       subscriptionId,
     })
-
   } catch (error: unknown) {
     logger.error('Verify session error', { error })
     const message = error instanceof Error ? error.message : ''
