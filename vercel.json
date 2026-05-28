@@ -263,6 +263,10 @@
       "schedule": "35 2 * * *"
     },
     {
+      "path": "/api/cron/detect-contracts?limit=500",
+      "schedule": "10,40 * * * *"
+    },
+    {
       "path": "/api/cron/snapshot-positions",
       "schedule": "48 */4 * * *"
     },
