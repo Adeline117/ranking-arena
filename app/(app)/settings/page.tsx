@@ -4,7 +4,6 @@ import React, { Suspense, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered in root layout.tsx — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
 import dynamic from 'next/dynamic'
@@ -104,7 +103,7 @@ function SettingsContent() {
     h.userId,
     h.loadingSessions,
     h.loadingBlockedUsers,
-  ]) // eslint-disable-line react-hooks/exhaustive-deps -- h.loadSessions/h.loadBlockedUsers are stable refs, listing them causes infinite re-render
+  ])
 
   // ===== Render: auth required / loading states =====
   if (!h.loading && !h.userId) {
@@ -116,7 +115,6 @@ function SettingsContent() {
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={h.email} />
         <Box
           style={{
             maxWidth: 400,
@@ -180,7 +178,6 @@ function SettingsContent() {
           color: tokens.colors.text.primary,
         }}
       >
-        <TopNav email={h.email} />
         <Box
           style={{
             maxWidth: 800,
@@ -219,8 +216,6 @@ function SettingsContent() {
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={h.email} />
-
       {/* Mobile profile quick-nav — shown above settings on small screens */}
       <Box
         className="settings-mobile-profile-menu"
@@ -659,7 +654,6 @@ export default function SettingsPage() {
               color: tokens.colors.text.primary,
             }}
           >
-            <TopNav email={null} />
             <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
                 {[1, 2, 3].map((i) => (

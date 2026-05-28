@@ -5,7 +5,6 @@ import { redirect } from 'next/navigation'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
@@ -596,7 +595,6 @@ export default function NewPostPage() {
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
           {t('postUpdate')}

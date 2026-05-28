@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
-
 interface HealthData {
   status: 'healthy' | 'degraded' | 'unhealthy'
   timestamp: string
@@ -103,7 +101,6 @@ export default function StatusPage() {
         fontFamily: tokens.typography.fontFamily.sans.join(', '),
       }}
     >
-      <TopNav />
       <div
         style={{
           maxWidth: 640,

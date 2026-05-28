@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
-import TopNav from '@/app/components/layout/TopNav'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import HealthScoreCard from './components/HealthScoreCard'
@@ -160,7 +159,6 @@ export default function MonitoringPage() {
   if (authChecking) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
-        <TopNav email={null} />
         <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
           <Text>Verifying admin permissions...</Text>
         </Box>
@@ -171,7 +169,6 @@ export default function MonitoringPage() {
   if (!isAdmin) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
-        <TopNav email={email} />
         <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
             Access Denied
@@ -184,8 +181,6 @@ export default function MonitoringPage() {
 
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
-      <TopNav email={email} />
-
       <Box style={{ maxWidth: '1400px', margin: '0 auto', padding: tokens.spacing[6] }}>
         {/* Header */}
         <Box

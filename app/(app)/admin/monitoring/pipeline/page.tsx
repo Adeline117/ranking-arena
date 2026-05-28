@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAdminAuth } from '../../hooks/useAdminAuth'
-import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 
 // ============================================
@@ -90,21 +89,29 @@ type TabId = 'overview' | 'jobs' | 'freshness' | 'failures' | 'enrichment'
 
 function statusColor(status: string): string {
   switch (status) {
-    case 'healthy': return 'var(--color-accent-success)'
-    case 'warning': return 'var(--color-accent-warning)'
+    case 'healthy':
+      return 'var(--color-accent-success)'
+    case 'warning':
+      return 'var(--color-accent-warning)'
     case 'critical':
-    case 'degraded': return 'var(--color-accent-error)'
-    default: return 'var(--color-text-tertiary)'
+    case 'degraded':
+      return 'var(--color-accent-error)'
+    default:
+      return 'var(--color-text-tertiary)'
   }
 }
 
 function statusBg(status: string): string {
   switch (status) {
-    case 'healthy': return 'rgba(34, 197, 94, 0.08)'
-    case 'warning': return 'rgba(250, 204, 21, 0.08)'
+    case 'healthy':
+      return 'rgba(34, 197, 94, 0.08)'
+    case 'warning':
+      return 'rgba(250, 204, 21, 0.08)'
     case 'critical':
-    case 'degraded': return 'rgba(239, 68, 68, 0.08)'
-    default: return 'transparent'
+    case 'degraded':
+      return 'rgba(239, 68, 68, 0.08)'
+    default:
+      return 'transparent'
   }
 }
 
@@ -200,17 +207,18 @@ const sty = {
     borderBottom: '1px solid var(--color-border-primary)',
     paddingBottom: '0',
   } as React.CSSProperties,
-  tab: (active: boolean) => ({
-    padding: '10px 18px',
-    fontSize: '13px',
-    fontWeight: active ? 600 : 400,
-    color: active ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
-    backgroundColor: 'transparent',
-    border: 'none',
-    borderBottom: active ? '2px solid var(--color-accent-primary)' : '2px solid transparent',
-    cursor: 'pointer',
-    marginBottom: '-1px',
-  } as React.CSSProperties),
+  tab: (active: boolean) =>
+    ({
+      padding: '10px 18px',
+      fontSize: '13px',
+      fontWeight: active ? 600 : 400,
+      color: active ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
+      backgroundColor: 'transparent',
+      border: 'none',
+      borderBottom: active ? '2px solid var(--color-accent-primary)' : '2px solid transparent',
+      cursor: 'pointer',
+      marginBottom: '-1px',
+    }) as React.CSSProperties,
   table: {
     width: '100%',
     borderCollapse: 'collapse' as const,
@@ -361,7 +369,6 @@ export default function PipelineMonitoringDashboard() {
   if (!isAdmin) {
     return (
       <div style={sty.container}>
-        <TopNav email={email} />
         <div style={{ padding: 40, textAlign: 'center' }}>
           <h2>Access Denied</h2>
           <p style={{ color: 'var(--color-text-secondary)' }}>Admin privileges required.</p>
@@ -373,7 +380,6 @@ export default function PipelineMonitoringDashboard() {
   if (loading && !pipelineData) {
     return (
       <div style={sty.container}>
-        <TopNav email={email} />
         <div style={sty.loading}>Loading pipeline monitoring...</div>
       </div>
     )
@@ -383,14 +389,15 @@ export default function PipelineMonitoringDashboard() {
 
   return (
     <div style={sty.container}>
-      <TopNav email={email} />
       <div style={sty.inner}>
         {/* Header */}
         <div style={sty.header}>
           <div>
             <div style={sty.title}>Pipeline Health Monitor</div>
             <div style={sty.subtitle}>
-              {d ? `Status: ${d.status.toUpperCase()} | Updated: ${new Date(d.timestamp).toLocaleTimeString()}` : 'Loading...'}
+              {d
+                ? `Status: ${d.status.toUpperCase()} | Updated: ${new Date(d.timestamp).toLocaleTimeString()}`
+                : 'Loading...'}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -426,13 +433,29 @@ export default function PipelineMonitoringDashboard() {
               <div style={sty.cardLabel}>Healthy Jobs</div>
             </div>
             <div style={sty.card('var(--color-accent-error)')}>
-              <div style={{ ...sty.cardValue, color: d.summary.failedJobs > 0 ? 'var(--color-accent-error)' : 'var(--color-text-primary)' }}>
+              <div
+                style={{
+                  ...sty.cardValue,
+                  color:
+                    d.summary.failedJobs > 0
+                      ? 'var(--color-accent-error)'
+                      : 'var(--color-text-primary)',
+                }}
+              >
                 {d.summary.failedJobs}
               </div>
               <div style={sty.cardLabel}>Failed Jobs</div>
             </div>
             <div style={sty.card('var(--color-accent-warning)')}>
-              <div style={{ ...sty.cardValue, color: d.summary.staleJobs > 0 ? 'var(--color-accent-warning)' : 'var(--color-text-primary)' }}>
+              <div
+                style={{
+                  ...sty.cardValue,
+                  color:
+                    d.summary.staleJobs > 0
+                      ? 'var(--color-accent-warning)'
+                      : 'var(--color-text-primary)',
+                }}
+              >
                 {d.summary.staleJobs}
               </div>
               <div style={sty.cardLabel}>Stale Jobs</div>
@@ -443,7 +466,12 @@ export default function PipelineMonitoringDashboard() {
             </div>
             {enrichmentData && (
               <div style={sty.card('var(--color-border-secondary)')}>
-                <div style={{ ...sty.cardValue, color: coverageColor(enrichmentData.summary.enrichableCoveragePct) }}>
+                <div
+                  style={{
+                    ...sty.cardValue,
+                    color: coverageColor(enrichmentData.summary.enrichableCoveragePct),
+                  }}
+                >
                   {enrichmentData.summary.enrichableCoveragePct}%
                 </div>
                 <div style={sty.cardLabel}>Enrichment Coverage</div>
@@ -454,25 +482,29 @@ export default function PipelineMonitoringDashboard() {
 
         {/* Tabs */}
         <div style={sty.tabs}>
-          {([
-            ['overview', 'Overview'],
-            ['jobs', 'Job Stats'],
-            ['freshness', 'Data Freshness'],
-            ['failures', 'Recent Failures'],
-            ['enrichment', 'Enrichment'],
-          ] as [TabId, string][]).map(([id, label]) => (
+          {(
+            [
+              ['overview', 'Overview'],
+              ['jobs', 'Job Stats'],
+              ['freshness', 'Data Freshness'],
+              ['failures', 'Recent Failures'],
+              ['enrichment', 'Enrichment'],
+            ] as [TabId, string][]
+          ).map(([id, label]) => (
             <button key={id} style={sty.tab(activeTab === id)} onClick={() => setActiveTab(id)}>
               {label}
               {id === 'failures' && d && d.recentFailures.length > 0 && (
-                <span style={{
-                  marginLeft: '6px',
-                  padding: '1px 6px',
-                  borderRadius: '8px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  backgroundColor: 'var(--color-accent-error)',
-                  color: '#fff',
-                }}>
+                <span
+                  style={{
+                    marginLeft: '6px',
+                    padding: '1px 6px',
+                    borderRadius: '8px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    backgroundColor: 'var(--color-accent-error)',
+                    color: '#fff',
+                  }}
+                >
                   {d.recentFailures.length}
                 </span>
               )}
@@ -495,28 +527,66 @@ export default function PipelineMonitoringDashboard() {
 // Tab: Overview
 // ============================================
 
-function OverviewTab({ data, enrichment }: { data: PipelineData; enrichment: EnrichmentData | null }) {
-  const healthyPct = data.summary.totalPlatforms > 0
-    ? Math.round((data.summary.platformHealthy / data.summary.totalPlatforms) * 100)
-    : 0
+function OverviewTab({
+  data,
+  enrichment,
+}: {
+  data: PipelineData
+  enrichment: EnrichmentData | null
+}) {
+  const healthyPct =
+    data.summary.totalPlatforms > 0
+      ? Math.round((data.summary.platformHealthy / data.summary.totalPlatforms) * 100)
+      : 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
       {/* Platform health breakdown */}
-      <div style={{ backgroundColor: 'var(--color-bg-secondary)', borderRadius: tokens.radius.lg, padding: '20px', border: '1px solid var(--color-border-primary)' }}>
-        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>Platform Health</div>
+      <div
+        style={{
+          backgroundColor: 'var(--color-bg-secondary)',
+          borderRadius: tokens.radius.lg,
+          padding: '20px',
+          border: '1px solid var(--color-border-primary)',
+        }}
+      >
+        <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
+          Platform Health
+        </div>
         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
           <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-accent-success)' }}>{data.summary.platformHealthy}</span>
-            <span style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}>healthy</span>
+            <span
+              style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-accent-success)' }}
+            >
+              {data.summary.platformHealthy}
+            </span>
+            <span
+              style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
+            >
+              healthy
+            </span>
           </div>
           <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-accent-warning)' }}>{data.summary.platformWarning}</span>
-            <span style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}>warning</span>
+            <span
+              style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-accent-warning)' }}
+            >
+              {data.summary.platformWarning}
+            </span>
+            <span
+              style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
+            >
+              warning
+            </span>
           </div>
           <div>
-            <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-accent-error)' }}>{data.summary.platformCritical}</span>
-            <span style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}>critical</span>
+            <span style={{ fontSize: '24px', fontWeight: 700, color: 'var(--color-accent-error)' }}>
+              {data.summary.platformCritical}
+            </span>
+            <span
+              style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
+            >
+              critical
+            </span>
           </div>
         </div>
         <div style={{ marginTop: '12px' }}>
@@ -530,16 +600,33 @@ function OverviewTab({ data, enrichment }: { data: PipelineData; enrichment: Enr
       </div>
 
       {/* Top failing jobs */}
-      {data.stats.filter(j => j.error_count > 0).length > 0 && (
-        <div style={{ backgroundColor: 'var(--color-bg-secondary)', borderRadius: tokens.radius.lg, padding: '20px', border: '1px solid var(--color-border-primary)' }}>
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>Jobs With Errors (7D)</div>
+      {data.stats.filter((j) => j.error_count > 0).length > 0 && (
+        <div
+          style={{
+            backgroundColor: 'var(--color-bg-secondary)',
+            borderRadius: tokens.radius.lg,
+            padding: '20px',
+            border: '1px solid var(--color-border-primary)',
+          }}
+        >
+          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
+            Jobs With Errors (7D)
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {data.stats
-              .filter(j => j.error_count > 0)
+              .filter((j) => j.error_count > 0)
               .sort((a, b) => b.error_count - a.error_count)
               .slice(0, 8)
-              .map(j => (
-                <div key={j.job_name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0' }}>
+              .map((j) => (
+                <div
+                  key={j.job_name}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '6px 0',
+                  }}
+                >
                   <span style={{ fontSize: '13px', fontWeight: 500 }}>{j.job_name}</span>
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                     <span style={{ fontSize: '12px', color: 'var(--color-accent-error)' }}>
@@ -557,20 +644,43 @@ function OverviewTab({ data, enrichment }: { data: PipelineData; enrichment: Enr
 
       {/* Enrichment summary */}
       {enrichment && (
-        <div style={{ backgroundColor: 'var(--color-bg-secondary)', borderRadius: tokens.radius.lg, padding: '20px', border: '1px solid var(--color-border-primary)' }}>
-          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>Enrichment Coverage (90D)</div>
+        <div
+          style={{
+            backgroundColor: 'var(--color-bg-secondary)',
+            borderRadius: tokens.radius.lg,
+            padding: '20px',
+            border: '1px solid var(--color-border-primary)',
+          }}
+        >
+          <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
+            Enrichment Coverage (90D)
+          </div>
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             <div>
-              <span style={{ fontSize: '24px', fontWeight: 700 }}>{enrichment.summary.totalEnriched.toLocaleString()}</span>
-              <span style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}>
+              <span style={{ fontSize: '24px', fontWeight: 700 }}>
+                {enrichment.summary.totalEnriched.toLocaleString()}
+              </span>
+              <span
+                style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
+              >
                 / {enrichment.summary.totalTraders.toLocaleString()} traders enriched
               </span>
             </div>
             <div>
-              <span style={{ fontSize: '24px', fontWeight: 700, color: coverageColor(enrichment.summary.enrichableCoveragePct) }}>
+              <span
+                style={{
+                  fontSize: '24px',
+                  fontWeight: 700,
+                  color: coverageColor(enrichment.summary.enrichableCoveragePct),
+                }}
+              >
                 {enrichment.summary.enrichableCoveragePct}%
               </span>
-              <span style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}>enrichable coverage</span>
+              <span
+                style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
+              >
+                enrichable coverage
+              </span>
             </div>
           </div>
         </div>
@@ -584,29 +694,44 @@ function OverviewTab({ data, enrichment }: { data: PipelineData; enrichment: Enr
 // ============================================
 
 function JobStatsTab({ stats }: { stats: JobStat[] }) {
-  const [sortField, setSortField] = useState<'job_name' | 'success_rate' | 'error_count' | 'last_run_at'>('success_rate')
+  const [sortField, setSortField] = useState<
+    'job_name' | 'success_rate' | 'error_count' | 'last_run_at'
+  >('success_rate')
   const [sortAsc, setSortAsc] = useState(false)
 
   const sorted = [...stats].sort((a, b) => {
     const av = a[sortField]
     const bv = b[sortField]
-    if (typeof av === 'string' && typeof bv === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av)
+    if (typeof av === 'string' && typeof bv === 'string')
+      return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av)
     return sortAsc ? (av as number) - (bv as number) : (bv as number) - (av as number)
   })
 
   const toggleSort = (field: typeof sortField) => {
     if (sortField === field) setSortAsc(!sortAsc)
-    else { setSortField(field); setSortAsc(false) }
+    else {
+      setSortField(field)
+      setSortAsc(false)
+    }
   }
 
   const thSortable = (label: string, field: typeof sortField) => (
-    <th style={{ ...sty.th, cursor: 'pointer', userSelect: 'none' }} onClick={() => toggleSort(field)}>
+    <th
+      style={{ ...sty.th, cursor: 'pointer', userSelect: 'none' }}
+      onClick={() => toggleSort(field)}
+    >
       {label} {sortField === field ? (sortAsc ? ' ^' : ' v') : ''}
     </th>
   )
 
   return (
-    <div style={{ borderRadius: tokens.radius.lg, overflow: 'hidden', border: '1px solid var(--color-border-primary)' }}>
+    <div
+      style={{
+        borderRadius: tokens.radius.lg,
+        overflow: 'hidden',
+        border: '1px solid var(--color-border-primary)',
+      }}
+    >
       <table style={sty.table}>
         <thead>
           <tr>
@@ -621,7 +746,9 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
         <tbody>
           {sorted.map((j) => (
             <tr key={j.job_name}>
-              <td style={sty.td}><span style={{ fontWeight: 500 }}>{j.job_name}</span></td>
+              <td style={sty.td}>
+                <span style={{ fontWeight: 500 }}>{j.job_name}</span>
+              </td>
               <td style={sty.td}>{j.total_runs}</td>
               <td style={sty.td}>
                 <span style={{ color: successRateColor(j.success_rate), fontWeight: 600 }}>
@@ -632,7 +759,15 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
                 </div>
               </td>
               <td style={sty.td}>
-                <span style={{ color: j.error_count > 0 ? 'var(--color-accent-error)' : 'var(--color-text-tertiary)', fontWeight: j.error_count > 0 ? 600 : 400 }}>
+                <span
+                  style={{
+                    color:
+                      j.error_count > 0
+                        ? 'var(--color-accent-error)'
+                        : 'var(--color-text-tertiary)',
+                    fontWeight: j.error_count > 0 ? 600 : 400,
+                  }}
+                >
                   {j.error_count}
                 </span>
               </td>
@@ -662,7 +797,7 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
 function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
   const [filter, setFilter] = useState<'all' | 'warning' | 'critical'>('all')
 
-  const filtered = platforms.filter(p => {
+  const filtered = platforms.filter((p) => {
     if (filter === 'all') return true
     if (filter === 'warning') return p.status === 'warning' || p.status === 'critical'
     return p.status === 'critical'
@@ -671,7 +806,7 @@ function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
   return (
     <div>
       <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-        {(['all', 'warning', 'critical'] as const).map(f => (
+        {(['all', 'warning', 'critical'] as const).map((f) => (
           <button
             key={f}
             onClick={() => setFilter(f)}
@@ -686,12 +821,22 @@ function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
               fontWeight: filter === f ? 600 : 400,
             }}
           >
-            {f === 'all' ? `All (${platforms.length})` : f === 'warning' ? `Warning+ (${platforms.filter(p => p.status !== 'healthy').length})` : `Critical (${platforms.filter(p => p.status === 'critical').length})`}
+            {f === 'all'
+              ? `All (${platforms.length})`
+              : f === 'warning'
+                ? `Warning+ (${platforms.filter((p) => p.status !== 'healthy').length})`
+                : `Critical (${platforms.filter((p) => p.status === 'critical').length})`}
           </button>
         ))}
       </div>
 
-      <div style={{ borderRadius: tokens.radius.lg, overflow: 'hidden', border: '1px solid var(--color-border-primary)' }}>
+      <div
+        style={{
+          borderRadius: tokens.radius.lg,
+          overflow: 'hidden',
+          border: '1px solid var(--color-border-primary)',
+        }}
+      >
         <table style={sty.table}>
           <thead>
             <tr>
@@ -710,30 +855,46 @@ function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
                 <td style={sty.td}>
                   <span style={sty.dot(p.status)} />
                   <span style={{ fontWeight: 600 }}>{p.displayName}</span>
-                  <span style={{ color: 'var(--color-text-tertiary)', fontSize: '11px', marginLeft: '6px' }}>
+                  <span
+                    style={{
+                      color: 'var(--color-text-tertiary)',
+                      fontSize: '11px',
+                      marginLeft: '6px',
+                    }}
+                  >
                     {p.platform}
                   </span>
                 </td>
                 <td style={sty.td}>
-                  <span style={sty.badge(statusColor(p.status))}>
-                    {p.status.toUpperCase()}
-                  </span>
+                  <span style={sty.badge(statusColor(p.status))}>{p.status.toUpperCase()}</span>
                 </td>
                 <td style={sty.td}>
                   <span style={{ fontSize: '12px' }}>{formatTime(p.lastUpdate)}</span>
                 </td>
                 <td style={sty.td}>
-                  <span style={{ color: p.ageHours != null && p.ageHours > 6 ? 'var(--color-accent-warning)' : 'var(--color-text-primary)' }}>
+                  <span
+                    style={{
+                      color:
+                        p.ageHours != null && p.ageHours > 6
+                          ? 'var(--color-accent-warning)'
+                          : 'var(--color-text-primary)',
+                    }}
+                  >
                     {formatAge(p.ageHours)}
                   </span>
                 </td>
                 <td style={sty.td}>{p.currentCount}</td>
                 <td style={sty.td}>{p.avgCount ?? 'N/A'}</td>
                 <td style={sty.td}>
-                  <span style={{
-                    color: p.countRatio != null && p.countRatio < 0.5 ? 'var(--color-accent-warning)' : 'var(--color-text-primary)',
-                    fontWeight: 500,
-                  }}>
+                  <span
+                    style={{
+                      color:
+                        p.countRatio != null && p.countRatio < 0.5
+                          ? 'var(--color-accent-warning)'
+                          : 'var(--color-text-primary)',
+                      fontWeight: 500,
+                    }}
+                  >
                     {p.countRatio != null ? `${(p.countRatio * 100).toFixed(0)}%` : 'N/A'}
                   </span>
                 </td>
@@ -771,25 +932,34 @@ function FailuresTab({ failures }: { failures: RecentFailure[] }) {
             padding: '14px 18px',
           }}
         >
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '6px',
+            }}
+          >
             <span style={{ fontWeight: 600, fontSize: '14px' }}>{f.job_name}</span>
             <span style={{ fontSize: '12px', color: 'var(--color-text-tertiary)' }}>
               {formatTime(f.started_at)}
             </span>
           </div>
           {f.error_message && (
-            <div style={{
-              fontSize: '12px',
-              color: 'var(--color-accent-error)',
-              fontFamily: 'monospace',
-              backgroundColor: 'rgba(239, 68, 68, 0.05)',
-              padding: '8px 10px',
-              borderRadius: '6px',
-              whiteSpace: 'pre-wrap',
-              wordBreak: 'break-all',
-              maxHeight: '120px',
-              overflow: 'auto',
-            }}>
+            <div
+              style={{
+                fontSize: '12px',
+                color: 'var(--color-accent-error)',
+                fontFamily: 'monospace',
+                backgroundColor: 'rgba(239, 68, 68, 0.05)',
+                padding: '8px 10px',
+                borderRadius: '6px',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-all',
+                maxHeight: '120px',
+                overflow: 'auto',
+              }}
+            >
               {f.error_message}
             </div>
           )}
@@ -813,9 +983,9 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
   }
 
   // Separate enrichable from non-enrichable
-  const enrichable = data.platforms.filter(p => p.hasEnrichmentConfig && !p.isNoEnrichment)
-  const noEnrich = data.platforms.filter(p => p.isNoEnrichment)
-  const noConfig = data.platforms.filter(p => !p.hasEnrichmentConfig && !p.isNoEnrichment)
+  const enrichable = data.platforms.filter((p) => p.hasEnrichmentConfig && !p.isNoEnrichment)
+  const noEnrich = data.platforms.filter((p) => p.isNoEnrichment)
+  const noConfig = data.platforms.filter((p) => !p.hasEnrichmentConfig && !p.isNoEnrichment)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
@@ -838,7 +1008,9 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
           <div style={sty.cardLabel}>Overall Coverage</div>
         </div>
         <div style={sty.card('var(--color-border-secondary)')}>
-          <div style={{ ...sty.cardValue, color: coverageColor(data.summary.enrichableCoveragePct) }}>
+          <div
+            style={{ ...sty.cardValue, color: coverageColor(data.summary.enrichableCoveragePct) }}
+          >
             {data.summary.enrichableCoveragePct}%
           </div>
           <div style={sty.cardLabel}>Enrichable Coverage</div>
@@ -858,7 +1030,13 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
           Enrichable Platforms ({enrichable.length})
         </div>
-        <div style={{ borderRadius: tokens.radius.lg, overflow: 'hidden', border: '1px solid var(--color-border-primary)' }}>
+        <div
+          style={{
+            borderRadius: tokens.radius.lg,
+            overflow: 'hidden',
+            border: '1px solid var(--color-border-primary)',
+          }}
+        >
           <table style={sty.table}>
             <thead>
               <tr>
@@ -874,12 +1052,20 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
                 .sort((a, b) => a.coveragePct - b.coveragePct)
                 .map((p) => (
                   <tr key={p.platform}>
-                    <td style={sty.td}><span style={{ fontWeight: 600 }}>{p.platform}</span></td>
+                    <td style={sty.td}>
+                      <span style={{ fontWeight: 600 }}>{p.platform}</span>
+                    </td>
                     <td style={sty.td}>{p.totalTraders.toLocaleString()}</td>
                     <td style={sty.td}>{p.enrichedTraders.toLocaleString()}</td>
                     <td style={sty.td}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ color: coverageColor(p.coveragePct), fontWeight: 600, minWidth: '42px' }}>
+                        <span
+                          style={{
+                            color: coverageColor(p.coveragePct),
+                            fontWeight: 600,
+                            minWidth: '42px',
+                          }}
+                        >
                           {p.coveragePct}%
                         </span>
                         <div style={{ flex: 1, ...sty.barContainer }}>
@@ -905,12 +1091,14 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
           <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
             Not Enrichable ({noEnrich.length + noConfig.length})
           </div>
-          <div style={{
-            display: 'flex',
-            flexWrap: 'wrap',
-            gap: '8px',
-          }}>
-            {[...noEnrich, ...noConfig].map(p => (
+          <div
+            style={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            {[...noEnrich, ...noConfig].map((p) => (
               <span
                 key={p.platform}
                 style={{
@@ -922,9 +1110,7 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
                 }}
               >
                 {p.platform}
-                <span style={{ marginLeft: '4px', fontSize: '10px' }}>
-                  ({p.totalTraders})
-                </span>
+                <span style={{ marginLeft: '4px', fontSize: '10px' }}>({p.totalTraders})</span>
               </span>
             ))}
           </div>

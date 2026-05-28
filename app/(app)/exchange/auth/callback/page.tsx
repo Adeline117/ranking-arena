@@ -4,7 +4,6 @@ import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -36,8 +35,9 @@ function ExchangeAuthCallbackContent() {
       }
 
       try {
-         
-        const { data: { user } } = await supabase.auth.getUser()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
         if (!user) {
           setStatus('error')
           setMessage(t('pleaseLogin'))
@@ -49,7 +49,7 @@ function ExchangeAuthCallbackContent() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...getCsrfHeaders()
+            ...getCsrfHeaders(),
           },
           body: JSON.stringify({
             exchange,
@@ -79,14 +79,25 @@ function ExchangeAuthCallbackContent() {
     }
 
     handleCallback()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; t and supabase are stable refs
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; t and supabase are stable refs
   }, [searchParams, router])
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={null} />
-
-      <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10], textAlign: 'center' }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <Box
+        style={{
+          maxWidth: 600,
+          margin: '0 auto',
+          padding: tokens.spacing[10],
+          textAlign: 'center',
+        }}
+      >
         {status === 'loading' && (
           <>
             <Text size="lg" style={{ marginBottom: tokens.spacing[4] }}>
@@ -100,7 +111,11 @@ function ExchangeAuthCallbackContent() {
 
         {status === 'success' && (
           <>
-            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4], color: tokens.colors.accent.success }}>
+            <Text
+              size="lg"
+              weight="bold"
+              style={{ marginBottom: tokens.spacing[4], color: tokens.colors.accent.success }}
+            >
               [OK] {t('authorizationSuccess')}
             </Text>
             <Text size="sm" color="secondary">
@@ -111,7 +126,11 @@ function ExchangeAuthCallbackContent() {
 
         {status === 'error' && (
           <>
-            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4], color: tokens.colors.accent.error }}>
+            <Text
+              size="lg"
+              weight="bold"
+              style={{ marginBottom: tokens.spacing[4], color: tokens.colors.accent.error }}
+            >
               [FAIL] {t('authorizationFailed')}
             </Text>
             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
@@ -140,14 +159,28 @@ function ExchangeAuthCallbackContent() {
 export default function ExchangeAuthCallbackPage() {
   const { t } = useLanguage()
   return (
-    <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-        <TopNav email={null} />
-        <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10], textAlign: 'center' }}>
-          <Text size="lg">{t('loading')}</Text>
+    <Suspense
+      fallback={
+        <Box
+          style={{
+            minHeight: '100vh',
+            background: tokens.colors.bg.primary,
+            color: tokens.colors.text.primary,
+          }}
+        >
+          <Box
+            style={{
+              maxWidth: 600,
+              margin: '0 auto',
+              padding: tokens.spacing[10],
+              textAlign: 'center',
+            }}
+          >
+            <Text size="lg">{t('loading')}</Text>
+          </Box>
         </Box>
-      </Box>
-    }>
+      }
+    >
       <ExchangeAuthCallbackContent />
     </Suspense>
   )

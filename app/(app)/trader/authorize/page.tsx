@@ -8,7 +8,6 @@
 
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
@@ -28,14 +27,17 @@ export default function TraderAuthorizePage() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <TopNav />
-      <Box style={{
-        padding: tokens.spacing[6],
-        maxWidth: '600px',
-        margin: '0 auto',
-        textAlign: 'center',
-      }}>
-        <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], marginBottom: tokens.spacing[3] }}>
+      <Box
+        style={{
+          padding: tokens.spacing[6],
+          maxWidth: '600px',
+          margin: '0 auto',
+          textAlign: 'center',
+        }}
+      >
+        <h1
+          style={{ fontSize: tokens.typography.fontSize['2xl'], marginBottom: tokens.spacing[3] }}
+        >
           {t('authorizeRealData')}
         </h1>
         <p style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4] }}>

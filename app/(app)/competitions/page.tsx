@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
@@ -92,11 +91,29 @@ export default function CompetitionsPage() {
   ]
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <TopNav email={null} />
-      <Box style={{ maxWidth: 960, margin: '0 auto', padding: `${tokens.spacing[6]} ${tokens.spacing[4]}` }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <Box
+        style={{
+          maxWidth: 960,
+          margin: '0 auto',
+          padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
+        }}
+      >
         {/* Header */}
-        <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[6] }}>
+        <Box
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            marginBottom: tokens.spacing[6],
+          }}
+        >
           <Text as="h1" style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 700 }}>
             {t('compPageTitle')}
           </Text>
@@ -108,7 +125,15 @@ export default function CompetitionsPage() {
         </Box>
 
         {/* Tabs */}
-        <Box style={{ display: 'flex', gap: tokens.spacing[1], marginBottom: tokens.spacing[5], borderBottom: `1px solid ${tokens.colors.border.primary}`, paddingBottom: tokens.spacing[1] }}>
+        <Box
+          style={{
+            display: 'flex',
+            gap: tokens.spacing[1],
+            marginBottom: tokens.spacing[5],
+            borderBottom: `1px solid ${tokens.colors.border.primary}`,
+            paddingBottom: tokens.spacing[1],
+          }}
+        >
           {tabs.map((t_) => (
             <button
               key={t_.key}
@@ -142,7 +167,11 @@ export default function CompetitionsPage() {
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
             {competitions.map((comp) => (
-              <Link key={comp.id} href={`/competitions/${comp.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
+              <Link
+                key={comp.id}
+                href={`/competitions/${comp.id}`}
+                style={{ textDecoration: 'none', color: 'inherit' }}
+              >
                 <Box
                   style={{
                     padding: tokens.spacing[4],
@@ -153,13 +182,32 @@ export default function CompetitionsPage() {
                     transition: 'border-color 0.15s ease',
                   }}
                 >
-                  <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
-                    <Text style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: 600 }}>{comp.title}</Text>
+                  <Box
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: tokens.spacing[2],
+                    }}
+                  >
+                    <Text style={{ fontSize: tokens.typography.fontSize.lg, fontWeight: 600 }}>
+                      {comp.title}
+                    </Text>
                     <Box
                       style={{
                         padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                        background: comp.status === 'active' ? 'rgba(34,197,94,0.15)' : comp.status === 'upcoming' ? 'rgba(59,130,246,0.15)' : 'rgba(156,163,175,0.15)',
-                        color: comp.status === 'active' ? '#22c55e' : comp.status === 'upcoming' ? '#3b82f6' : tokens.colors.text.secondary,
+                        background:
+                          comp.status === 'active'
+                            ? 'rgba(34,197,94,0.15)'
+                            : comp.status === 'upcoming'
+                              ? 'rgba(59,130,246,0.15)'
+                              : 'rgba(156,163,175,0.15)',
+                        color:
+                          comp.status === 'active'
+                            ? '#22c55e'
+                            : comp.status === 'upcoming'
+                              ? '#3b82f6'
+                              : tokens.colors.text.secondary,
                         borderRadius: tokens.radius.sm,
                         fontSize: tokens.typography.fontSize.xs,
                         fontWeight: 500,
@@ -170,25 +218,65 @@ export default function CompetitionsPage() {
                     </Box>
                   </Box>
                   {comp.description && (
-                    <Text style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.secondary, marginBottom: tokens.spacing[3] }}>
+                    <Text
+                      style={{
+                        fontSize: tokens.typography.fontSize.sm,
+                        color: tokens.colors.text.secondary,
+                        marginBottom: tokens.spacing[3],
+                      }}
+                    >
                       {comp.description}
                     </Text>
                   )}
-                  <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' as const }}>
+                  <Box
+                    style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' as const }}
+                  >
                     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-                      <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>{t('compMetric')}:</Text>
-                      <Text style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>{metricLabel(comp.metric)}</Text>
+                      <Text
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                        }}
+                      >
+                        {t('compMetric')}:
+                      </Text>
+                      <Text style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>
+                        {metricLabel(comp.metric)}
+                      </Text>
                     </Box>
                     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-                      <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>{t('compParticipants')}:</Text>
-                      <Text style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>{comp.participant_count}/{comp.max_participants}</Text>
+                      <Text
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                        }}
+                      >
+                        {t('compParticipants')}:
+                      </Text>
+                      <Text style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>
+                        {comp.participant_count}/{comp.max_participants}
+                      </Text>
                     </Box>
                     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-                      <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>{t('compPrize')}:</Text>
-                      <Text style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>{formatPrize(comp.prize_pool_cents)}</Text>
+                      <Text
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                        }}
+                      >
+                        {t('compPrize')}:
+                      </Text>
+                      <Text style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>
+                        {formatPrize(comp.prize_pool_cents)}
+                      </Text>
                     </Box>
                     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-                      <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+                      <Text
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                        }}
+                      >
                         {comp.status === 'completed' ? t('compEnded') : t('compTimeLeft')}:
                       </Text>
                       <Text style={{ fontSize: tokens.typography.fontSize.xs, fontWeight: 500 }}>

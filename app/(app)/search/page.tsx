@@ -4,7 +4,6 @@ import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -493,7 +492,6 @@ function SearchContent() {
           zIndex: 0,
         }}
       />
-      <TopNav email={email} />
       <h1 className="sr-only">{t('searchResults')}</h1>
 
       <div
@@ -1035,7 +1033,6 @@ export default function SearchPage() {
             color: tokens.colors.text.primary,
           }}
         >
-          <TopNav email={null} />
           <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px' }}>
             <div style={{ marginTop: 60 }}>
               <div className="skeleton" style={{ height: 200, borderRadius: 14 }} />

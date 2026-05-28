@@ -2,7 +2,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAdminAuth } from '../hooks/useAdminAuth'
-import TopNav from '@/app/components/layout/TopNav'
 import { tokens } from '@/lib/design-tokens'
 
 // ============================================
@@ -44,19 +43,27 @@ interface SelfHealData {
 
 function statusColor(status: string): string {
   switch (status) {
-    case 'healthy': return 'var(--color-accent-success)'
-    case 'warning': return 'var(--color-accent-warning)'
-    case 'critical': return 'var(--color-accent-error)'
-    default: return 'var(--color-text-tertiary)'
+    case 'healthy':
+      return 'var(--color-accent-success)'
+    case 'warning':
+      return 'var(--color-accent-warning)'
+    case 'critical':
+      return 'var(--color-accent-error)'
+    default:
+      return 'var(--color-text-tertiary)'
   }
 }
 
 function statusBg(status: string): string {
   switch (status) {
-    case 'healthy': return 'rgba(34, 197, 94, 0.08)'
-    case 'warning': return 'rgba(250, 204, 21, 0.08)'
-    case 'critical': return 'rgba(239, 68, 68, 0.08)'
-    default: return 'transparent'
+    case 'healthy':
+      return 'rgba(34, 197, 94, 0.08)'
+    case 'warning':
+      return 'rgba(250, 204, 21, 0.08)'
+    case 'critical':
+      return 'rgba(239, 68, 68, 0.08)'
+    default:
+      return 'transparent'
   }
 }
 
@@ -228,7 +235,6 @@ export default function PipelineDashboard() {
   if (!isAdmin) {
     return (
       <div style={styles.container}>
-        <TopNav email={email} />
         <div style={{ padding: 40, textAlign: 'center' }}>
           <h2>Access Denied</h2>
           <p style={{ color: 'var(--color-text-secondary)' }}>Admin privileges required.</p>
@@ -240,7 +246,6 @@ export default function PipelineDashboard() {
   if (loading && !data) {
     return (
       <div style={styles.container}>
-        <TopNav email={email} />
         <div style={styles.loading}>Loading pipeline dashboard...</div>
       </div>
     )
@@ -249,10 +254,11 @@ export default function PipelineDashboard() {
   if (error && !data) {
     return (
       <div style={styles.container}>
-        <TopNav email={email} />
         <div style={styles.loading}>
           <p style={{ color: 'var(--color-accent-error)' }}>Error: {error}</p>
-          <button style={styles.refreshBtn} onClick={fetchData}>Retry</button>
+          <button style={styles.refreshBtn} onClick={fetchData}>
+            Retry
+          </button>
         </div>
       </div>
     )
@@ -260,7 +266,7 @@ export default function PipelineDashboard() {
 
   if (!data) return null
 
-  const filteredPlatforms = data.platforms.filter(p => {
+  const filteredPlatforms = data.platforms.filter((p) => {
     if (filter === 'all') return true
     if (filter === 'warning') return p.status === 'warning' || p.status === 'critical'
     return p.status === 'critical'
@@ -268,13 +274,14 @@ export default function PipelineDashboard() {
 
   return (
     <div style={styles.container}>
-      <TopNav email={email} />
       <div style={styles.inner}>
         {/* Header */}
         <div style={styles.header}>
           <div>
             <span style={styles.title}>Pipeline Self-Heal Dashboard</span>
-            <span style={{ marginLeft: '12px', fontSize: '12px', color: 'var(--color-text-tertiary)' }}>
+            <span
+              style={{ marginLeft: '12px', fontSize: '12px', color: 'var(--color-text-tertiary)' }}
+            >
               Updated: {new Date(data.timestamp).toLocaleTimeString()}
             </span>
           </div>
@@ -290,15 +297,21 @@ export default function PipelineDashboard() {
             <div style={styles.summaryLabel}>Total Platforms</div>
           </div>
           <div style={styles.summaryCard('var(--color-accent-success)')}>
-            <div style={{ ...styles.summaryValue, color: 'var(--color-accent-success)' }}>{data.summary.healthy}</div>
+            <div style={{ ...styles.summaryValue, color: 'var(--color-accent-success)' }}>
+              {data.summary.healthy}
+            </div>
             <div style={styles.summaryLabel}>Healthy</div>
           </div>
           <div style={styles.summaryCard('var(--color-accent-warning)')}>
-            <div style={{ ...styles.summaryValue, color: 'var(--color-accent-warning)' }}>{data.summary.warning}</div>
+            <div style={{ ...styles.summaryValue, color: 'var(--color-accent-warning)' }}>
+              {data.summary.warning}
+            </div>
             <div style={styles.summaryLabel}>Warning</div>
           </div>
           <div style={styles.summaryCard('var(--color-accent-error)')}>
-            <div style={{ ...styles.summaryValue, color: 'var(--color-accent-error)' }}>{data.summary.critical}</div>
+            <div style={{ ...styles.summaryValue, color: 'var(--color-accent-error)' }}>
+              {data.summary.critical}
+            </div>
             <div style={styles.summaryLabel}>Critical</div>
           </div>
           <div style={styles.summaryCard('var(--color-border-secondary)')}>
@@ -309,7 +322,7 @@ export default function PipelineDashboard() {
 
         {/* Filter */}
         <div style={{ display: 'flex', gap: '8px', marginBottom: '16px' }}>
-          {(['all', 'warning', 'critical'] as const).map(f => (
+          {(['all', 'warning', 'critical'] as const).map((f) => (
             <button
               key={f}
               onClick={() => setFilter(f)}
@@ -330,7 +343,13 @@ export default function PipelineDashboard() {
         </div>
 
         {/* Platform Table */}
-        <div style={{ borderRadius: tokens.radius.lg, overflow: 'hidden', border: '1px solid var(--color-border-primary)' }}>
+        <div
+          style={{
+            borderRadius: tokens.radius.lg,
+            overflow: 'hidden',
+            border: '1px solid var(--color-border-primary)',
+          }}
+        >
           <table style={styles.table}>
             <thead>
               <tr>
@@ -348,7 +367,13 @@ export default function PipelineDashboard() {
                   <td style={styles.td}>
                     <span style={styles.dot(p.status)} />
                     <span style={{ fontWeight: 600 }}>{p.displayName}</span>
-                    <span style={{ color: 'var(--color-text-tertiary)', fontSize: '11px', marginLeft: '6px' }}>
+                    <span
+                      style={{
+                        color: 'var(--color-text-tertiary)',
+                        fontSize: '11px',
+                        marginLeft: '6px',
+                      }}
+                    >
                       {p.platform}
                     </span>
                   </td>
@@ -358,7 +383,14 @@ export default function PipelineDashboard() {
                     </span>
                   </td>
                   <td style={styles.td}>
-                    <span style={{ color: p.ageHours != null && p.ageHours > 6 ? 'var(--color-accent-warning)' : 'var(--color-text-primary)' }}>
+                    <span
+                      style={{
+                        color:
+                          p.ageHours != null && p.ageHours > 6
+                            ? 'var(--color-accent-warning)'
+                            : 'var(--color-text-primary)',
+                      }}
+                    >
                       {formatAge(p.ageHours)}
                     </span>
                   </td>
@@ -375,9 +407,7 @@ export default function PipelineDashboard() {
                     )}
                   </td>
                   <td style={styles.td}>
-                    <span style={styles.routeBadge(p.routes.switched)}>
-                      {p.routes.preferred}
-                    </span>
+                    <span style={styles.routeBadge(p.routes.switched)}>{p.routes.preferred}</span>
                     {p.routes.switched && (
                       <span style={{ fontSize: '10px', color: 'var(--color-accent-warning)' }}>
                         (was: {p.routes.default})
@@ -391,7 +421,9 @@ export default function PipelineDashboard() {
         </div>
 
         {filteredPlatforms.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-tertiary)' }}>
+          <div
+            style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-tertiary)' }}
+          >
             No platforms match the current filter.
           </div>
         )}

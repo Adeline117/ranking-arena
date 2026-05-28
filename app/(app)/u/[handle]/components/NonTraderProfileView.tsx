@@ -4,7 +4,6 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -26,7 +25,7 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
   loading: () => (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {[1, 2, 3].map(i => (
+      {[1, 2, 3].map((i) => (
         <div key={i} className="skeleton" style={{ height: 120, borderRadius: tokens.radius.lg }} />
       ))}
     </div>
@@ -85,13 +84,13 @@ export default function NonTraderProfileView({
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
-
-      <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-        <Breadcrumb items={[
-          { label: t('userProfileCommunity'), href: '/' },
-          { label: `@${profile.handle}` },
-        ]} />
+      <Box
+        className="page-container"
+        style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}
+      >
+        <Breadcrumb
+          items={[{ label: t('userProfileCommunity'), href: '/' }, { label: `@${profile.handle}` }]}
+        />
 
         {/* Profile Header */}
         <UserProfileHeader
@@ -118,16 +117,28 @@ export default function NonTraderProfileView({
           {activeTab === 'overview' && (
             <Box className="profile-content" style={{ maxWidth: 900 }}>
               <Box bg="secondary" p={4} radius="lg" border="primary">
-                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
-                  <Text size="lg" weight="black">{t('posts')}</Text>
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: tokens.spacing[4],
+                  }}
+                >
+                  <Text size="lg" weight="black">
+                    {t('posts')}
+                  </Text>
                   {isOwnProfile && (
                     <button
                       onClick={() => router.push(`/u/${handle}/new`)}
                       style={{
                         padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                        borderRadius: tokens.radius.md, border: 'none',
-                        background: tokens.colors.accent.brand, color: tokens.colors.white,
-                        fontSize: tokens.typography.fontSize.sm, fontWeight: tokens.typography.fontWeight.black,
+                        borderRadius: tokens.radius.md,
+                        border: 'none',
+                        background: tokens.colors.accent.brand,
+                        color: tokens.colors.white,
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: tokens.typography.fontWeight.black,
                         cursor: 'pointer',
                       }}
                     >
@@ -158,8 +169,18 @@ export default function NonTraderProfileView({
                   onUnlock={() => router.push('/pricing')}
                 />
               ) : (
-                <Box style={{ padding: tokens.spacing[6], background: tokens.colors.bg.secondary, borderRadius: tokens.radius.xl, border: `1px solid ${tokens.colors.border.primary}`, textAlign: 'center' }}>
-                  <Text size="sm" color="tertiary">{t('userProfileNoStatsYet')}</Text>
+                <Box
+                  style={{
+                    padding: tokens.spacing[6],
+                    background: tokens.colors.bg.secondary,
+                    borderRadius: tokens.radius.xl,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    textAlign: 'center',
+                  }}
+                >
+                  <Text size="sm" color="tertiary">
+                    {t('userProfileNoStatsYet')}
+                  </Text>
                 </Box>
               )}
             </Box>
@@ -167,7 +188,12 @@ export default function NonTraderProfileView({
 
           {activeTab === 'portfolio' && (
             <Box style={{ maxWidth: 900 }}>
-              <PortfolioTable items={traderPortfolio} history={traderPositionHistory} isPro={true} onUnlock={() => router.push('/pricing')} />
+              <PortfolioTable
+                items={traderPortfolio}
+                history={traderPositionHistory}
+                isPro={true}
+                onUnlock={() => router.push('/pricing')}
+              />
             </Box>
           )}
         </Box>

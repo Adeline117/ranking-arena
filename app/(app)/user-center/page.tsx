@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import LevelBadge from '@/app/components/user/LevelBadge'
 import { EXP_ACTIONS, getLevelInfo, type LevelInfo } from '@/lib/utils/user-level'
@@ -37,7 +36,6 @@ export default function UserCenterPageWrapper() {
 function UserCenterSkeleton() {
   return (
     <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
-      <TopNav email={null} />
       <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
         <Box
           style={{
@@ -193,7 +191,6 @@ function UserCenterPage() {
   if (!loading && !userId) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
-        <TopNav email={null} />
         <Box
           style={{
             maxWidth: 400,
@@ -262,8 +259,6 @@ function UserCenterPage() {
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
-
       <Box
         style={{
           maxWidth: 800,

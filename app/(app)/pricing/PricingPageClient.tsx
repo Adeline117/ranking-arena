@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import TopNav from '@/app/components/layout/TopNav'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -133,7 +132,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
       <div
         style={{
           maxWidth: 960,

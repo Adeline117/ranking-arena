@@ -1,6 +1,5 @@
 'use client'
 
-import TopNav from '@/app/components/layout/TopNav'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
@@ -26,7 +25,11 @@ interface UserProfileClientProps {
   serverTraderData?: TraderPageData | null
 }
 
-export default function UserProfileClient({ handle, serverProfile, serverTraderData }: UserProfileClientProps) {
+export default function UserProfileClient({
+  handle,
+  serverProfile,
+  serverTraderData,
+}: UserProfileClientProps) {
   const {
     email,
     currentUserId,
@@ -61,7 +64,6 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
   if (isBlocked) {
     return (
       <>
-        <TopNav email={email} />
         <Box style={{ maxWidth: 600, margin: '80px auto', textAlign: 'center', padding: '0 20px' }}>
           <Box style={{ fontSize: 48, marginBottom: 16 }}>🚫</Box>
           <Box style={{ color: tokens.colors.text.secondary, fontSize: 16 }}>
@@ -109,13 +111,13 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
-
-      <Box className="page-container" style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}>
-        <Breadcrumb items={[
-          { label: t('userProfileCommunity'), href: '/' },
-          { label: `@${profile.handle}` },
-        ]} />
+      <Box
+        className="page-container"
+        style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}
+      >
+        <Breadcrumb
+          items={[{ label: t('userProfileCommunity'), href: '/' }, { label: `@${profile.handle}` }]}
+        />
 
         {/* Profile Header */}
         <UserProfileHeader
@@ -126,7 +128,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
           mounted={mounted}
           followersCount={followersCount}
           followingCount={followingCount}
-          onFollowersCountChange={(delta) => setFollowersCount(prev => prev + delta)}
+          onFollowersCountChange={(delta) => setFollowersCount((prev) => prev + delta)}
           onFollowersClick={() => {
             if (profile.isRegistered && (isOwnProfile || profile.show_followers !== false)) {
               setModalType('followers')
@@ -135,10 +137,7 @@ export default function UserProfileClient({ handle, serverProfile, serverTraderD
         />
 
         {/* Tabs */}
-        <UserProfileTabs
-          activeTab={activeProfileTab}
-          onTabChange={handleProfileTabChange}
-        />
+        <UserProfileTabs activeTab={activeProfileTab} onTabChange={handleProfileTabChange} />
 
         {/* Tab Content */}
         <UserProfileContent

@@ -8,11 +8,12 @@ import nextDynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text, Button } from '@/app/components/base'
 
 // Lazy load: TraderComparison includes charts (RadarChart, EquityCurveOverlay) — heavy below-the-fold content
-const TraderComparison = nextDynamic(() => import('@/app/components/premium/TraderComparison'), { ssr: false })
+const TraderComparison = nextDynamic(() => import('@/app/components/premium/TraderComparison'), {
+  ssr: false,
+})
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -55,15 +56,17 @@ function CompareContent() {
   const [traders, setTraders] = useState<TraderCompareData[]>([])
   // Search state removed - traders added from followed list only
   const [isPro, setIsPro] = useState(BETA_PRO_FEATURES_FREE)
-  const [followedTraders, setFollowedTraders] = useState<Array<{
-    id: string
-    handle: string
-    type: string
-    avatar_url?: string
-    roi?: number
-    source?: string
-    arena_score?: number
-  }>>([])
+  const [followedTraders, setFollowedTraders] = useState<
+    Array<{
+      id: string
+      handle: string
+      type: string
+      avatar_url?: string
+      roi?: number
+      source?: string
+      arena_score?: number
+    }>
+  >([])
   const [followedLoading, setFollowedLoading] = useState(false)
 
   // Check auth
@@ -123,7 +126,9 @@ function CompareContent() {
     const fetchFollowed = async () => {
       setFollowedLoading(true)
       try {
-        const { data: { user } } = await supabase.auth.getUser()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
         if (!user) return
 
         const res = await fetch(`/api/following?userId=${user.id}`, {
@@ -131,7 +136,9 @@ function CompareContent() {
         })
         if (res.ok) {
           const data = await res.json()
-          const traders = (data.items || []).filter((item: { type: string }) => item.type === 'trader')
+          const traders = (data.items || []).filter(
+            (item: { type: string }) => item.type === 'trader'
+          )
           setFollowedTraders(traders)
         }
       } catch (err) {
@@ -181,22 +188,22 @@ function CompareContent() {
       showToast(t('compareMax10'), 'warning')
       return
     }
-    if (traders.some(tr => tr.id === traderId)) {
+    if (traders.some((tr) => tr.id === traderId)) {
       showToast(t('compareAlreadyAdded'), 'warning')
       return
     }
 
-    const newIds = [...traders.map(tr => tr.id), traderId]
+    const newIds = [...traders.map((tr) => tr.id), traderId]
     await loadTraders(newIds)
     router.replace(`/compare?ids=${newIds.join(',')}`, { scroll: false })
   }
 
   // Remove trader
   const handleRemoveTrader = (traderId: string) => {
-    const newTraders = traders.filter(tr => tr.id !== traderId)
+    const newTraders = traders.filter((tr) => tr.id !== traderId)
     setTraders(newTraders)
     if (newTraders.length > 0) {
-      router.replace(`/compare?ids=${newTraders.map(tr => tr.id).join(',')}`, { scroll: false })
+      router.replace(`/compare?ids=${newTraders.map((tr) => tr.id).join(',')}`, { scroll: false })
     } else {
       router.replace('/compare', { scroll: false })
     }
@@ -205,7 +212,6 @@ function CompareContent() {
   if (loading) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
-        <TopNav email={email} />
         <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6] }}>
           <LoadingSkeleton variant="detail" count={2} />
         </Box>
@@ -214,7 +220,13 @@ function CompareContent() {
   }
 
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
       <Box
         style={{
           position: 'fixed',
@@ -225,12 +237,25 @@ function CompareContent() {
           zIndex: 0,
         }}
       />
-
-      <TopNav email={email} />
-
-      <Box style={{ maxWidth: 1200, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100, position: 'relative', zIndex: 1 }}>
+      <Box
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          padding: tokens.spacing[6],
+          paddingBottom: 100,
+          position: 'relative',
+          zIndex: 1,
+        }}
+      >
         {/* Title */}
-        <Box style={{ marginBottom: tokens.spacing[6], display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <Box
+          style={{
+            marginBottom: tokens.spacing[6],
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'flex-start',
+          }}
+        >
           <Box>
             <Text size="2xl" weight="black" className="gradient-text">
               {t('compareTraders')}
@@ -242,8 +267,9 @@ function CompareContent() {
           {traders.length > 0 && isPro && (
             <ExportButton
               onExport={async (format) => {
-                const { exportToCSV, exportToJSON, exportToPDF } = await import('@/lib/utils/export')
-                const rows = traders.map(tr => ({
+                const { exportToCSV, exportToJSON, exportToPDF } =
+                  await import('@/lib/utils/export')
+                const rows = traders.map((tr) => ({
                   handle: tr.handle || tr.id,
                   source: tr.source,
                   roi: tr.roi,
@@ -255,9 +281,10 @@ function CompareContent() {
                   arena_score: tr.arena_score ?? '',
                   trades_count: tr.trades_count ?? '',
                 }))
-                const filename = `compare-${traders.map(tr => tr.handle || tr.id).join('-')}`
+                const filename = `compare-${traders.map((tr) => tr.handle || tr.id).join('-')}`
                 if (format === 'json') exportToJSON(rows, filename)
-                else if (format === 'pdf') exportToPDF(rows as unknown as Record<string, unknown>[], filename)
+                else if (format === 'pdf')
+                  exportToPDF(rows as unknown as Record<string, unknown>[], filename)
                 else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
               }}
             />
@@ -278,13 +305,25 @@ function CompareContent() {
           >
             <Box
               style={{
-                width: 48, height: 48, borderRadius: tokens.radius.lg,
+                width: 48,
+                height: 48,
+                borderRadius: tokens.radius.lg,
                 background: 'var(--color-blur-overlay)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                margin: '0 auto', marginBottom: tokens.spacing[3],
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                margin: '0 auto',
+                marginBottom: tokens.spacing[3],
               }}
             >
-              <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="var(--color-pro-gradient-start)" strokeWidth="2">
+              <svg
+                width={24}
+                height={24}
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--color-pro-gradient-start)"
+                strokeWidth="2"
+              >
                 <path d="M19 11H5C3.9 11 3 11.9 3 13V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V13C21 11.9 20.1 11 19 11Z" />
                 <path d="M7 11V7C7 4.2 9.2 2 12 2C14.8 2 17 4.2 17 7V11" strokeLinecap="round" />
               </svg>
@@ -320,7 +359,9 @@ function CompareContent() {
               marginBottom: tokens.spacing[4],
             }}
           >
-            <Text size="sm" style={{ color: tokens.colors.accent.error }}>{error}</Text>
+            <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+              {error}
+            </Text>
           </Box>
         )}
 
@@ -344,7 +385,9 @@ function CompareContent() {
                 {t('compareLoginToSelect')}
               </Text>
             ) : followedLoading ? (
-              <Text size="sm" color="tertiary">{t('loading')}</Text>
+              <Text size="sm" color="tertiary">
+                {t('loading')}
+              </Text>
             ) : followedTraders.length === 0 ? (
               <Text size="sm" color="tertiary">
                 {t('compareNoFollowed')}
@@ -358,7 +401,7 @@ function CompareContent() {
                 }}
               >
                 {followedTraders.map((ft) => {
-                  const isAdded = traders.some(tr => tr.id === ft.id)
+                  const isAdded = traders.some((tr) => tr.id === ft.id)
                   return (
                     <Box
                       key={ft.id}
@@ -370,40 +413,60 @@ function CompareContent() {
                         padding: tokens.spacing[3],
                         borderRadius: tokens.radius.lg,
                         border: `1px solid ${tokens.colors.border.primary}`,
-                        background: isAdded ? `${tokens.colors.bg.tertiary}` : tokens.colors.bg.primary,
+                        background: isAdded
+                          ? `${tokens.colors.bg.tertiary}`
+                          : tokens.colors.bg.primary,
                         cursor: isAdded ? 'not-allowed' : 'pointer',
                         opacity: isAdded ? 0.45 : 1,
                         transition: 'all 0.2s',
                       }}
-                      onMouseEnter={e => {
-                        if (!isAdded) e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                      onMouseEnter={(e) => {
+                        if (!isAdded)
+                          e.currentTarget.style.borderColor = tokens.colors.accent.primary
                       }}
-                      onMouseLeave={e => {
+                      onMouseLeave={(e) => {
                         e.currentTarget.style.borderColor = tokens.colors.border.primary
                       }}
                     >
                       {ft.avatar_url ? (
                         <img
-                          src={ft.avatar_url.startsWith('data:') ? ft.avatar_url : '/api/avatar?url=' + encodeURIComponent(ft.avatar_url)}
+                          src={
+                            ft.avatar_url.startsWith('data:')
+                              ? ft.avatar_url
+                              : '/api/avatar?url=' + encodeURIComponent(ft.avatar_url)
+                          }
                           alt={ft.handle || 'Trader avatar'}
                           width={32}
                           height={32}
                           loading="lazy"
                           style={{
-                            width: 32, height: 32,
+                            width: 32,
+                            height: 32,
                             borderRadius: tokens.radius.full,
                             objectFit: 'cover',
                             flexShrink: 0,
                           }}
-                          onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          onError={(e) => {
+                            ;(e.target as HTMLImageElement).style.display = 'none'
+                          }}
                         />
                       ) : (
                         <Box
                           style={{
-                            width: 32, height: 32,
+                            width: 32,
+                            height: 32,
                             borderRadius: tokens.radius.full,
-                            background: `linear-gradient(135deg, hsl(${Math.abs(ft.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 75%, 45%), hsl(${Math.abs(ft.id.split('').reverse().reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 75%, 55%))`,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            background: `linear-gradient(135deg, hsl(${Math.abs(ft.id.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 75%, 45%), hsl(${
+                              Math.abs(
+                                ft.id
+                                  .split('')
+                                  .reverse()
+                                  .reduce((a, c) => a + c.charCodeAt(0), 0)
+                              ) % 360
+                            }, 75%, 55%))`,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                             flexShrink: 0,
                           }}
                         >
@@ -413,25 +476,35 @@ function CompareContent() {
                         </Box>
                       )}
                       <Box style={{ minWidth: 0, flex: 1 }}>
-                        <Text size="xs" weight="semibold" style={{
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}>
+                        <Text
+                          size="xs"
+                          weight="semibold"
+                          style={{
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
                           {ft.handle || ft.id.slice(0, 8)}
                         </Text>
-                        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}>
-                          <Text size="xs" color="tertiary">{ft.source || ''}</Text>
+                        <Box
+                          style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
+                        >
+                          <Text size="xs" color="tertiary">
+                            {ft.source || ''}
+                          </Text>
                           <Text
                             size="xs"
                             weight="bold"
                             style={{
-                              color: (ft.roi ?? 0) >= 0
-                                ? tokens.colors.accent.success
-                                : tokens.colors.accent.error,
+                              color:
+                                (ft.roi ?? 0) >= 0
+                                  ? tokens.colors.accent.success
+                                  : tokens.colors.accent.error,
                             }}
                           >
-                            {(ft.roi ?? 0) >= 0 ? '+' : ''}{(ft.roi ?? 0).toFixed(1)}%
+                            {(ft.roi ?? 0) >= 0 ? '+' : ''}
+                            {(ft.roi ?? 0).toFixed(1)}%
                           </Text>
                         </Box>
                       </Box>
@@ -464,15 +537,24 @@ function CompareContent() {
   )
 }
 
-
 export default function ComparePage() {
   const { t } = useLanguage()
   return (
-    <Suspense fallback={
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <Text style={{ color: 'var(--color-text-secondary)' }}>{t('loading')}</Text>
-      </Box>
-    }>
+    <Suspense
+      fallback={
+        <Box
+          style={{
+            minHeight: '100vh',
+            background: tokens.colors.bg.primary,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <Text style={{ color: 'var(--color-text-secondary)' }}>{t('loading')}</Text>
+        </Box>
+      }
+    >
       <CompareContent />
     </Suspense>
   )

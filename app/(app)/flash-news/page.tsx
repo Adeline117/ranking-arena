@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { formatTimeAgo } from '@/lib/utils/date'
-import TopNav from '@/app/components/layout/TopNav'
 import { Box, Text } from '@/app/components/base'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { useToast } from '@/app/components/ui/Toast'
@@ -24,7 +23,15 @@ interface FlashNews {
   content_en?: string
   source: string
   source_url?: string
-  category: 'crypto' | 'macro' | 'defi' | 'regulation' | 'market' | 'btc_eth' | 'altcoin' | 'exchange'
+  category:
+    | 'crypto'
+    | 'macro'
+    | 'defi'
+    | 'regulation'
+    | 'market'
+    | 'btc_eth'
+    | 'altcoin'
+    | 'exchange'
   importance: 'breaking' | 'important' | 'normal'
   tags: string[]
   published_at: string
@@ -92,7 +99,6 @@ const CATEGORY_COLORS_MAPPED: Record<string, string> = {
   regulation: CATEGORY_COLORS.macro,
 }
 
-
 export default function FlashNewsPage() {
   const { language, t } = useLanguage()
   const { showToast } = useToast()
@@ -104,44 +110,60 @@ export default function FlashNewsPage() {
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [hasMore, setHasMore] = useState(true)
   const [_pagination, setPagination] = useState({
-    page: 1, limit: 20, total: 0, totalPages: 1, hasNext: false, hasPrev: false,
+    page: 1,
+    limit: 20,
+    total: 0,
+    totalPages: 1,
+    hasNext: false,
+    hasPrev: false,
   })
   const sentinelRef = useRef<HTMLDivElement>(null)
   // Translation cache for content: { [newsId]: translatedContent }
   const [translatedContent, setTranslatedContent] = useState<Record<string, string>>({})
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set())
 
-  const fetchNews = useCallback(async (page = 1, category = 'all', append = false) => {
-    try {
-      if (append) setLoadingMore(true); else setLoading(true)
-      const params = new URLSearchParams({ page: page.toString(), limit: '20' })
-      if (category !== 'all') {
-        params.append('category', category)
-      }
+  const fetchNews = useCallback(
+    async (page = 1, category = 'all', append = false) => {
+      try {
+        if (append) setLoadingMore(true)
+        else setLoading(true)
+        const params = new URLSearchParams({ page: page.toString(), limit: '20' })
+        if (category !== 'all') {
+          params.append('category', category)
+        }
 
-      const response = await fetch(`/api/flash-news?${params}`)
-      if (!response.ok) throw new Error('Failed to fetch news')
+        const response = await fetch(`/api/flash-news?${params}`)
+        if (!response.ok) throw new Error('Failed to fetch news')
 
-      const raw = await response.json()
-      // API wraps in { success, data: { news, pagination } }
-      const data: FlashNewsResponse = raw.data || raw
-      const newsList = data.news || []
-      const pag = data.pagination || { page: 1, limit: 20, total: 0, totalPages: 0, hasNext: false, hasPrev: false }
-      if (append) {
-        setNews(prev => [...prev, ...newsList])
-      } else {
-        setNews(newsList)
+        const raw = await response.json()
+        // API wraps in { success, data: { news, pagination } }
+        const data: FlashNewsResponse = raw.data || raw
+        const newsList = data.news || []
+        const pag = data.pagination || {
+          page: 1,
+          limit: 20,
+          total: 0,
+          totalPages: 0,
+          hasNext: false,
+          hasPrev: false,
+        }
+        if (append) {
+          setNews((prev) => [...prev, ...newsList])
+        } else {
+          setNews(newsList)
+        }
+        setPagination(pag)
+        setHasMore(pag.hasNext)
+        if (!append) setLastUpdated(new Date())
+      } catch {
+        showToast(t('flashNewsFetchFailed'), 'error')
+      } finally {
+        setLoading(false)
+        setLoadingMore(false)
       }
-      setPagination(pag)
-      setHasMore(pag.hasNext)
-      if (!append) setLastUpdated(new Date())
-    } catch {
-      showToast(t('flashNewsFetchFailed'), 'error')
-    } finally {
-      setLoading(false)
-      setLoadingMore(false)
-    }
-  }, [showToast, t])
+    },
+    [showToast, t]
+  )
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
@@ -163,12 +185,28 @@ export default function FlashNewsPage() {
         setCurrentPage(1)
       })
     }
-    const start = () => { if (!interval) interval = setInterval(autoRefresh, 120000) }
-    const stop = () => { if (interval) { clearInterval(interval); interval = null } }
-    const onVisibility = () => { if (document.hidden) { stop() } else { start() } }
+    const start = () => {
+      if (!interval) interval = setInterval(autoRefresh, 120000)
+    }
+    const stop = () => {
+      if (interval) {
+        clearInterval(interval)
+        interval = null
+      }
+    }
+    const onVisibility = () => {
+      if (document.hidden) {
+        stop()
+      } else {
+        start()
+      }
+    }
     if (!document.hidden) start()
     document.addEventListener('visibilitychange', onVisibility)
-    return () => { stop(); document.removeEventListener('visibilitychange', onVisibility) }
+    return () => {
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
   }, [fetchNews, selectedCategory])
 
   // Infinite scroll via IntersectionObserver
@@ -177,7 +215,7 @@ export default function FlashNewsPage() {
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          setCurrentPage(prev => {
+          setCurrentPage((prev) => {
             const nextPage = prev + 1
             fetchNews(nextPage, selectedCategory, true)
             return nextPage
@@ -191,59 +229,64 @@ export default function FlashNewsPage() {
   }, [hasMore, loading, loadingMore, selectedCategory, fetchNews])
 
   // Translate content for items that need it
-  const translateNewsContent = useCallback(async (items: FlashNews[]) => {
-    const targetLang = language as 'zh' | 'en'
-    const needsTranslation = items.filter(item => {
-      if (!item.content) return false
-      if (translatedContent[item.id]) return false
-      if (translatingIds.has(item.id)) return false
-      // If we have a pre-translated version, no need
-      if (targetLang === 'zh' && item.content_zh) return false
-      if (targetLang === 'en' && item.content_en) return false
-      return true
-    }).slice(0, 5) // batch max 5
+  const translateNewsContent = useCallback(
+    async (items: FlashNews[]) => {
+      const targetLang = language as 'zh' | 'en'
+      const needsTranslation = items
+        .filter((item) => {
+          if (!item.content) return false
+          if (translatedContent[item.id]) return false
+          if (translatingIds.has(item.id)) return false
+          // If we have a pre-translated version, no need
+          if (targetLang === 'zh' && item.content_zh) return false
+          if (targetLang === 'en' && item.content_en) return false
+          return true
+        })
+        .slice(0, 5) // batch max 5
 
-    if (needsTranslation.length === 0) return
+      if (needsTranslation.length === 0) return
 
-    const newTranslatingIds = new Set(translatingIds)
-    needsTranslation.forEach(item => newTranslatingIds.add(item.id))
-    setTranslatingIds(newTranslatingIds)
+      const newTranslatingIds = new Set(translatingIds)
+      needsTranslation.forEach((item) => newTranslatingIds.add(item.id))
+      setTranslatingIds(newTranslatingIds)
 
-    try {
-      const batchItems = needsTranslation.map(item => ({
-        id: item.id,
-        text: (item.content || '').slice(0, 500),
-        contentType: 'flash_news' as const,
-        contentId: item.id,
-      }))
+      try {
+        const batchItems = needsTranslation.map((item) => ({
+          id: item.id,
+          text: (item.content || '').slice(0, 500),
+          contentType: 'flash_news' as const,
+          contentId: item.id,
+        }))
 
-      const response = await fetch('/api/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-        body: JSON.stringify({ items: batchItems, targetLang }),
-      })
+        const response = await fetch('/api/translate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+          body: JSON.stringify({ items: batchItems, targetLang }),
+        })
 
-      const data = await response.json()
-      if (response.ok && data.success && data.data?.results) {
-        const results = data.data.results as Record<string, { translatedText: string }>
-        setTranslatedContent(prev => {
-          const updated = { ...prev }
-          for (const [id, result] of Object.entries(results)) {
-            updated[id] = result.translatedText
-          }
-          return updated
+        const data = await response.json()
+        if (response.ok && data.success && data.data?.results) {
+          const results = data.data.results as Record<string, { translatedText: string }>
+          setTranslatedContent((prev) => {
+            const updated = { ...prev }
+            for (const [id, result] of Object.entries(results)) {
+              updated[id] = result.translatedText
+            }
+            return updated
+          })
+        }
+      } catch {
+        // Translation is best-effort; original text remains visible
+      } finally {
+        setTranslatingIds((prev) => {
+          const next = new Set(prev)
+          needsTranslation.forEach((item) => next.delete(item.id))
+          return next
         })
       }
-    } catch {
-      // Translation is best-effort; original text remains visible
-    } finally {
-      setTranslatingIds(prev => {
-        const next = new Set(prev)
-        needsTranslation.forEach(item => next.delete(item.id))
-        return next
-      })
-    }
-  }, [language, translatedContent, translatingIds])
+    },
+    [language, translatedContent, translatingIds]
+  )
 
   // Trigger translation when news or language changes
   useEffect(() => {
@@ -283,21 +326,55 @@ export default function FlashNewsPage() {
   }
 
   return (
-    <Box style={{ background: tokens.colors.bg.primary, minHeight: '100vh', color: tokens.colors.text.primary }}>
-      <TopNav />
-      <Box style={{ maxWidth: '800px', margin: '0 auto', padding: `${tokens.spacing[4]} ${tokens.spacing[4]}` }}>
+    <Box
+      style={{
+        background: tokens.colors.bg.primary,
+        minHeight: '100vh',
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <Box
+        style={{
+          maxWidth: '800px',
+          margin: '0 auto',
+          padding: `${tokens.spacing[4]} ${tokens.spacing[4]}`,
+        }}
+      >
         {/* Header */}
         <Box style={{ marginBottom: tokens.spacing[5] }}>
-          <Text style={{ fontSize: tokens.typography.fontSize['3xl'], fontWeight: tokens.typography.fontWeight.black, marginBottom: tokens.spacing[1], letterSpacing: '-0.5px' }}>
+          <Text
+            style={{
+              fontSize: tokens.typography.fontSize['3xl'],
+              fontWeight: tokens.typography.fontWeight.black,
+              marginBottom: tokens.spacing[1],
+              letterSpacing: '-0.5px',
+            }}
+          >
             {t('flashNewsCenter')}
           </Text>
-          <Text style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.md, lineHeight: tokens.typography.lineHeight.relaxed }}>
+          <Text
+            style={{
+              color: tokens.colors.text.secondary,
+              fontSize: tokens.typography.fontSize.md,
+              lineHeight: tokens.typography.lineHeight.relaxed,
+            }}
+          >
             {t('flashNewsDesc')}
           </Text>
           {lastUpdated && (
-            <Text style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, marginTop: tokens.spacing[1] }}>
+            <Text
+              style={{
+                color: tokens.colors.text.tertiary,
+                fontSize: tokens.typography.fontSize.xs,
+                marginTop: tokens.spacing[1],
+              }}
+            >
               {t('flashNewsLastUpdated')}
-              {lastUpdated.toLocaleTimeString(({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] || 'en-US', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+              {lastUpdated.toLocaleTimeString(
+                ({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] ||
+                  'en-US',
+                { hour: '2-digit', minute: '2-digit', second: '2-digit' }
+              )}
             </Text>
           )}
         </Box>
@@ -317,7 +394,14 @@ export default function FlashNewsPage() {
           ) : news.length === 0 ? (
             <EmptyState
               icon={
-                <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <svg
+                  width="28"
+                  height="28"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                >
                   <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                 </svg>
               }
@@ -347,24 +431,35 @@ export default function FlashNewsPage() {
               {/* Infinite scroll sentinel */}
               <div ref={sentinelRef} style={{ height: 1 }} />
               {loadingMore && (
-                <Box style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}>
+                <Box
+                  style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}
+                >
                   <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                    <Box style={{
-                      width: 16, height: 16, borderRadius: '50%',
-                      border: `2px solid var(--color-accent-primary)`,
-                      borderTopColor: 'transparent',
-                      animation: 'spin 0.6s linear infinite',
-                    }} />
-                    <Text size="sm" color="tertiary">{t('loading')}</Text>
+                    <Box
+                      style={{
+                        width: 16,
+                        height: 16,
+                        borderRadius: '50%',
+                        border: `2px solid var(--color-accent-primary)`,
+                        borderTopColor: 'transparent',
+                        animation: 'spin 0.6s linear infinite',
+                      }}
+                    />
+                    <Text size="sm" color="tertiary">
+                      {t('loading')}
+                    </Text>
                   </Box>
                 </Box>
               )}
               {!hasMore && news.length > 0 && (
-                <Box style={{
-                  textAlign: 'center', padding: tokens.spacing[4],
-                  borderTop: `1px solid ${tokens.colors.border.primary}`,
-                  marginTop: tokens.spacing[2],
-                }}>
+                <Box
+                  style={{
+                    textAlign: 'center',
+                    padding: tokens.spacing[4],
+                    borderTop: `1px solid ${tokens.colors.border.primary}`,
+                    marginTop: tokens.spacing[2],
+                  }}
+                >
                   <Text size="sm" color="tertiary">
                     {t('flashNewsTotal').replace('{count}', String(news.length))}
                   </Text>
