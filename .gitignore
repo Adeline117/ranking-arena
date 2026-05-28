@@ -82,8 +82,8 @@ secrets/
 # Cloudflare Worker
 cloudflare-worker/node_modules/
 
-# Worker (removed from repo, replaced by inline cron)
-worker/
+# Worker env (secrets)
+worker/.env
 
 # Infrastructure
 infra/*/node_modules/
