@@ -2,6 +2,49 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Documentation Cleanup + Onboarding + Dead File Purge (2026-05-28)
+
+Preparing for first teammate. Three phases of cleanup:
+
+### Phase 1: Documentation audit and cleanup
+
+Audited all docs for freshness, redundancy, and contradictions.
+
+- **Deleted 7 docs** (-3,072 lines): CHANGELOG.md (3mo stale), TOKENS_PERMISSIONS.md (wrong platform "Antigravity"), ARENA_SCORE_METHODOLOGY.md (contradicted CLAUDE.md formula), PROJECT_STRUCTURE.md (906 lines redundant with CLAUDE.md), DATA_PIPELINE_ARCHITECTURE.md (unimplemented proposal), SCRAPER_ARCHITECTURE.md + SCRAPER_USAGE_GUIDE.md (merged)
+- **Fixed contradictions**: DECISIONS.md ADR-005 (old percentile formula → current tanh), ARCHITECTURE.md (cron "6h" → "15-60min", alerts "Slack" → "Telegram")
+- **Created** `docs/SCRAPER.md` — merged two scraper docs into one
+- **Updated** `docs/GIT_WORKFLOW.md` — rewritten for PR-based team workflow
+- **Updated** `docs/README.md` — removed dead links, new structure
+
+### Phase 2: Onboarding guide
+
+Created `docs/ONBOARDING.md` for new teammate:
+
+- Environment setup with env vars split into 4 tiers (required / payments / optional / ignore)
+- Account access table with required/optional markers
+- Day 1 reading order (5 files, ~1hr) + first week reference docs
+- Key commands, project structure, core concepts
+- First task walkthrough (branch → code → test → PR → review → merge → verify)
+- Common gotchas (pre-push hooks, migration naming, modal patterns)
+- Table of contents + clickable links to all referenced docs and source files
+
+### Phase 3: Dead file purge
+
+Deleted 79 files (-12,820 lines) across 5 categories:
+
+- **19** one-time fix/backfill scripts (April incident, date-scoped backfills)
+- **10** versioned duplicates (v1 superseded by v2/final)
+- **13** debug/verification scripts (debug-binance-_, verify-_-fix.\*)
+- **16** scripts superseded by Vercel cron / diagnose.mjs
+- **19** broken/abandoned/setup scripts (hardcoded creds, dead imports)
+- **1** deprecated API route (`app/api/cron/[platform]/` — returned 410)
+- **2** broken package.json scripts (`worker:jobs`, `worker:discover:all`)
+- Removed local dead dirs: `worker/` (stub with leaked service key), `infra/bullmq/` (empty stub)
+
+**Net result**: -15,892 lines deleted across both phases. Docs are consistent, no contradictions, ready for team collaboration.
+
+---
+
 ## Leaderboard Sequence Fix + Health Monitor Root Cause (2026-05-26)
 
 ### P0: Leaderboard empty — id sequence dropped
