@@ -2,7 +2,6 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-// TopNav provided by legal layout
 import Footer from '@/app/components/layout/Footer'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'

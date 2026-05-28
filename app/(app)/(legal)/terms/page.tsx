@@ -1,6 +1,5 @@
 import React from 'react'
 import Link from 'next/link'
-// TopNav provided by legal layout
 
 /* ---------- styles ---------- */
 

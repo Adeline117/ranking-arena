@@ -1,11 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "jsx": "react-jsx",
     "module": "esnext",
     "moduleResolution": "bundler",
@@ -22,7 +18,7 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./*"]
-    }, 
+    },
     "plugins": [
       {
         "name": "next"
@@ -54,6 +50,9 @@
     "docs/archive",
     "scripts/test-connectors.ts",
     "scripts/discover-api-endpoints.ts",
-    "scripts/test-vps-scraper-quick.ts"
+    "scripts/test-vps-scraper-quick.ts",
+    "worker",
+    "infra",
+    ".claude/worktrees"
   ]
 }
