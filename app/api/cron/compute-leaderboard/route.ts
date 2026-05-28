@@ -685,6 +685,26 @@ async function computeSeason(
     return 0
   }
 
+  // Prefetch on-chain contract detection results from trader_sources.
+  // Used by detectTraderType as ground-truth Layer 1 (eth_getCode).
+  const contractAddresses = new Set<string>()
+  try {
+    // is_contract is a new column — cast to bypass stale generated types
+    const { data: contracts } = await (supabase
+      .from('trader_sources')
+      .select('source_trader_id')
+      .eq('is_contract' as any, true) as any)
+    if (contracts) {
+      for (const c of contracts as Array<{ source_trader_id: string }>)
+        contractAddresses.add(c.source_trader_id)
+    }
+    if (contractAddresses.size > 0) {
+      logger.info(`[${season}] Loaded ${contractAddresses.size} known contract addresses`)
+    }
+  } catch (e) {
+    logger.warn(`[${season}] Failed to prefetch contract addresses (non-critical):`, e)
+  }
+
   // Batch fetch handles + avatars: trader_profiles_v2 primary, traders table
   // fallback for any key still missing a handle. Logic in fetch-handles.ts.
   const handleMap = await fetchHandleAvatarMap(supabase, uniqueTraders)
@@ -797,7 +817,8 @@ async function computeSeason(
         t.trades_count,
         t.trader_type,
         t.avg_holding_hours,
-        t.win_rate
+        t.win_rate,
+        contractAddresses.has(t.source_trader_id) || undefined
       ),
       metrics_estimated: t.metrics_estimated || false,
     }
