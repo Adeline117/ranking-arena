@@ -34,8 +34,6 @@
     "test:e2e:report": "playwright show-report",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "worker:jobs": "npx tsx worker/src/job-runner/index.ts",
-    "worker:discover:all": "npx tsx worker/src/job-runner/discover-leaderboard.ts binance_futures",
     "prepare": "[ -d .git ] && cp scripts/check-service-layer.sh .git/hooks/check-service-layer.sh 2>/dev/null; true",
     "cap:sync": "npx cap sync",
     "cap:sync:ios": "npx cap sync ios",
