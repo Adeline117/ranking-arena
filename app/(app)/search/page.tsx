@@ -275,7 +275,7 @@ function SearchContent() {
           style={{
             background: tokens.colors.bg.secondary,
             border: `1px solid ${tokens.colors.border.primary}`,
-            borderRadius: 14,
+            borderRadius: tokens.radius.lg,
             overflow: 'hidden',
           }}
         >
@@ -321,7 +321,7 @@ function SearchContent() {
         style={{
           background: tokens.colors.bg.secondary,
           border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: 14,
+          borderRadius: tokens.radius.lg,
           overflow: 'hidden',
         }}
       >
@@ -558,10 +558,10 @@ function SearchContent() {
                       activeTab === tab.key
                         ? tokens.colors.accent.brand
                         : tokens.colors.text.secondary,
-                    fontSize: 13,
+                    fontSize: tokens.typography.fontSize.sm,
                     fontWeight: activeTab === tab.key ? 700 : 500,
                     textDecoration: 'none',
-                    transition: 'all 0.15s',
+                    transition: tokens.transition.fast,
                   }}
                 >
                   {tab.label}{' '}
@@ -661,17 +661,25 @@ function SearchContent() {
                 style={{
                   background: tokens.colors.bg.secondary,
                   border: `1px solid ${tokens.colors.border.primary}`,
-                  borderRadius: 14,
+                  borderRadius: tokens.radius.lg,
                   padding: 18,
                 }}
               >
                 <div
                   className="skeleton"
-                  style={{ height: 18, width: '40%', marginBottom: 16, borderRadius: 6 }}
+                  style={{
+                    height: 18,
+                    width: '40%',
+                    marginBottom: 16,
+                    borderRadius: tokens.radius.sm,
+                  }}
                 />
                 {[1, 2, 3].map((j) => (
                   <div key={j} style={{ display: 'flex', gap: 10, marginBottom: 12 }}>
-                    <div className="skeleton" style={{ flex: 1, height: 14, borderRadius: 4 }} />
+                    <div
+                      className="skeleton"
+                      style={{ flex: 1, height: 14, borderRadius: tokens.radius.sm }}
+                    />
                   </div>
                 ))}
               </div>
@@ -775,7 +783,7 @@ function SearchContent() {
                       href={`/search?q=${encodeURIComponent(term)}`}
                       style={{
                         padding: '8px 18px',
-                        borderRadius: 10,
+                        borderRadius: tokens.radius.md,
                         background: tokens.colors.bg.secondary,
                         border: `1px solid ${tokens.colors.border.primary}`,
                         color: tokens.colors.text.secondary,
@@ -821,7 +829,7 @@ function SearchContent() {
                     href={`/search?q=${encodeURIComponent(term)}`}
                     style={{
                       padding: '8px 18px',
-                      borderRadius: 10,
+                      borderRadius: tokens.radius.md,
                       background: tokens.colors.bg.secondary,
                       border: `1px solid ${tokens.colors.border.primary}`,
                       color: tokens.colors.text.secondary,
@@ -888,7 +896,7 @@ function SearchContent() {
                       href={`/search?q=${encodeURIComponent(suggestion)}`}
                       style={{
                         padding: '8px 18px',
-                        borderRadius: 10,
+                        borderRadius: tokens.radius.md,
                         background: 'var(--color-accent-primary-12)',
                         border: '1px solid var(--color-accent-primary-25)',
                         color: tokens.colors.accent.primary,
@@ -1035,7 +1043,7 @@ export default function SearchPage() {
         >
           <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px' }}>
             <div style={{ marginTop: 60 }}>
-              <div className="skeleton" style={{ height: 200, borderRadius: 14 }} />
+              <div className="skeleton" style={{ height: 200, borderRadius: tokens.radius.lg }} />
             </div>
           </div>
         </div>
