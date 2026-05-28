@@ -7,7 +7,6 @@ import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import { localizedLabel } from '@/lib/utils/format'
 import { useLanguage } from '../Providers/LanguageProvider'
-import TopNav from '@/app/components/layout/TopNav'
 import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import RecommendedGroups from '@/app/components/sidebar/RecommendedGroups'
@@ -35,7 +34,7 @@ interface GroupsFeedPageProps {
 
 export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFeedPageProps) {
   const { language, t } = useLanguage()
-  const { email, userId } = useAuthSession()
+  const { userId } = useAuthSession()
   const [myGroups, setMyGroups] = useState<Group[]>([])
   const [_loadingGroups, setLoadingGroups] = useState(true)
   const [_groupsError, setGroupsError] = useState(false)
@@ -87,8 +86,6 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
         color: tokens.colors.text.primary,
       }}
     >
-      <TopNav email={email} />
-
       <h1 className="sr-only">{t('groups')}</h1>
       <ThreeColumnLayout
         leftSidebar={
@@ -239,11 +236,12 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
                         key={g.id}
                         href={`/groups/${g.id}`}
                         prefetch={false}
+                        className="card-hover"
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: tokens.spacing[3],
-                          padding: tokens.spacing[3],
+                          padding: tokens.spacing[4],
                           background: tokens.colors.bg.secondary,
                           borderRadius: tokens.radius.lg,
                           border: `1px solid ${tokens.colors.border.primary}`,
