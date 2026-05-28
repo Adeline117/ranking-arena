@@ -1,5 +1,11 @@
 # Documentation Index
 
+## Start Here
+
+| Document                         | Description                                                 |
+| -------------------------------- | ----------------------------------------------------------- |
+| [ONBOARDING.md](./ONBOARDING.md) | New teammate? Start here. Setup, reading order, first task. |
+
 ## Core
 
 | Document                                                       | Description                                          |
