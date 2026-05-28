@@ -1,14 +1,16 @@
 /**
  * Contract Detection Cron Job
  *
- * Batch-checks DEX 0x addresses via eth_getCode to determine if they are
- * smart contracts (bots) or EOAs. Results are cached permanently in
- * trader_sources.is_contract since an address's contract status is immutable.
+ * Batch-checks DEX 0x addresses via eth_getCode to classify them:
+ *   - EOA (no bytecode) → is_contract = false
+ *   - Proxy/wallet (<100b bytecode) → is_contract = true, but NOT a bot
+ *   - Real contract (>=100b bytecode) → is_contract = true, IS a bot
+ *
+ * Only addresses with bytecodeSize >= MIN_BOT_BYTECODE_SIZE are treated
+ * as bots by detectTraderType. Short proxies (Gains per-user proxies,
+ * smart wallets, ERC-4337 accounts) are excluded.
  *
  * GET /api/cron/detect-contracts?limit=500
- *
- * Designed to run every 30 minutes, processing 500 unchecked addresses per run.
- * At that rate, 15,000 DEX addresses are fully classified within ~15 hours.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -19,6 +21,7 @@ import { createLogger } from '@/lib/utils/logger'
 import {
   batchCheckContracts,
   getChainForPlatform,
+  isBotContract,
   DEX_CHAIN_MAP,
 } from '@/lib/services/contract-detector'
 
@@ -41,7 +44,6 @@ export async function GET(request: NextRequest) {
     const dexPlatforms = Object.keys(DEX_CHAIN_MAP)
 
     // Fetch unchecked 0x addresses from DEX platforms
-    // is_contract / contract_checked_at are new columns — cast to bypass stale generated types
     const { data: unchecked, error: fetchError } = await (supabase
       .from('trader_sources')
       .select('id, source, source_trader_id')
@@ -54,7 +56,7 @@ export async function GET(request: NextRequest) {
     if (!unchecked?.length) {
       log.info('No unchecked addresses remaining')
       await plog.success(0)
-      return NextResponse.json({ checked: 0, contracts: 0, eoas: 0, errors: 0 })
+      return NextResponse.json({ checked: 0, bots: 0, proxies: 0, eoas: 0, errors: 0 })
     }
 
     log.info(`Checking ${unchecked.length} addresses`)
@@ -72,63 +74,91 @@ export async function GET(request: NextRequest) {
       byChain.get(chainId)!.push({ id: row.id, address: row.source_trader_id })
     }
 
-    let totalContracts = 0
+    let totalBots = 0
+    let totalProxies = 0
     let totalEoas = 0
     let totalErrors = 0
     const now = new Date().toISOString()
 
-    // Process each chain
     for (const [chainId, rows] of byChain) {
       const addresses = rows.map((r) => r.address)
       const results = await batchCheckContracts(addresses, chainId)
 
-      // Batch update DB
-      const contractIds: number[] = []
+      // Classify and batch update
+      const botUpdates: Array<{ id: number; size: number }> = []
+      const proxyUpdates: Array<{ id: number; size: number }> = []
       const eoaIds: number[] = []
 
       for (const row of rows) {
         const result = results.get(row.address)
-        if (result === true) {
-          contractIds.push(row.id)
-          totalContracts++
-        } else if (result === false) {
+        if (result == null) {
+          totalErrors++
+          continue
+        }
+
+        if (!result.isContract) {
           eoaIds.push(row.id)
           totalEoas++
+        } else if (isBotContract(result)) {
+          botUpdates.push({ id: row.id, size: result.bytecodeSize })
+          totalBots++
         } else {
-          totalErrors++
+          proxyUpdates.push({ id: row.id, size: result.bytecodeSize })
+          totalProxies++
         }
       }
 
-      // Update contracts
-      if (contractIds.length > 0) {
-        const { error } = await (supabase
+      // Update bots (real contracts with logic)
+      for (const u of botUpdates) {
+        await (supabase
           .from('trader_sources')
-          .update({ is_contract: true, contract_checked_at: now } as any)
-          .in('id', contractIds) as any)
-        if (error) log.error('Failed to update contracts', error)
+          .update({
+            is_contract: true,
+            contract_checked_at: now,
+            contract_bytecode_size: u.size,
+          } as any)
+          .eq('id', u.id) as any)
+      }
+
+      // Update proxies/wallets (contract but not a bot)
+      for (const u of proxyUpdates) {
+        await (supabase
+          .from('trader_sources')
+          .update({
+            is_contract: false, // NOT a bot — treat same as EOA for trader_type purposes
+            contract_checked_at: now,
+            contract_bytecode_size: u.size,
+          } as any)
+          .eq('id', u.id) as any)
       }
 
       // Update EOAs
       if (eoaIds.length > 0) {
-        const { error } = await (supabase
+        await (supabase
           .from('trader_sources')
-          .update({ is_contract: false, contract_checked_at: now } as any)
+          .update({
+            is_contract: false,
+            contract_checked_at: now,
+            contract_bytecode_size: 0,
+          } as any)
           .in('id', eoaIds) as any)
-        if (error) log.error('Failed to update EOAs', error)
       }
 
-      log.info(`Chain ${chainId}: ${contractIds.length} contracts, ${eoaIds.length} EOAs`)
+      log.info(
+        `Chain ${chainId}: ${botUpdates.length} bots, ${proxyUpdates.length} proxies, ${eoaIds.length} EOAs`
+      )
     }
 
-    const total = totalContracts + totalEoas
+    const total = totalBots + totalProxies + totalEoas
     log.info(
-      `Done: ${total} checked, ${totalContracts} contracts, ${totalEoas} EOAs, ${totalErrors} errors`
+      `Done: ${total} checked, ${totalBots} bots, ${totalProxies} proxies, ${totalEoas} EOAs, ${totalErrors} errors`
     )
     await plog.success(total)
 
     return NextResponse.json({
       checked: total,
-      contracts: totalContracts,
+      bots: totalBots,
+      proxies: totalProxies,
       eoas: totalEoas,
       errors: totalErrors,
       remaining: (unchecked as any[]).length - total,

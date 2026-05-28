@@ -2,11 +2,17 @@
  * On-Chain Contract Detector
  *
  * Uses eth_getCode (via viem getBytecode) to determine if a 0x address
- * is a smart contract or an EOA. This is a ground-truth signal:
- *   - bytecode present → contract → definitively a bot/vault
- *   - no bytecode → EOA → controlled by a private key (human or script)
+ * is a smart contract or an EOA, AND whether the contract has real logic
+ * (>=100 bytes) or is just a minimal proxy / smart wallet (<100 bytes).
  *
- * Results are cached in trader_sources.is_contract (immutable per address+chain).
+ * Classification:
+ *   - no bytecode → EOA (not a contract)
+ *   - bytecode >= MIN_BOT_BYTECODE_SIZE → real contract → bot
+ *   - bytecode < MIN_BOT_BYTECODE_SIZE → proxy/wallet → NOT a bot
+ *     (Gains/GMX deploy per-user proxy contracts, Hyperliquid/Binance
+ *      users often bridge via smart wallets — these are human-operated)
+ *
+ * Results are cached in trader_sources.is_contract + contract_bytecode_size.
  */
 
 import { createPublicClient, http, type PublicClient, type Address, type Chain } from 'viem'
@@ -61,6 +67,16 @@ function getClient(chainId: number): PublicClient {
   return client
 }
 
+// Contracts below this bytecode size are proxy stubs / smart wallets, not bots.
+// Gains/GMX deploy per-user 23-byte minimal proxies; smart wallets (Safe, ERC-4337)
+// are typically 45-90 bytes. Real trading bot contracts have 100+ bytes of logic.
+export const MIN_BOT_BYTECODE_SIZE = 100
+
+export interface ContractCheckResult {
+  isContract: boolean
+  bytecodeSize: number // 0 for EOA
+}
+
 // ── Public API ──
 
 /**
@@ -72,19 +88,31 @@ export function getChainForPlatform(platform: string): number | null {
 }
 
 /**
- * Check if a single address is a smart contract.
- * Returns true (contract), false (EOA), or null (RPC error — don't cache).
+ * Check a single address. Returns bytecode size (0 = EOA), or null on RPC error.
  */
-export async function isContract(address: string, chainId: number): Promise<boolean | null> {
+export async function checkContract(
+  address: string,
+  chainId: number
+): Promise<ContractCheckResult | null> {
   try {
     const client = getClient(chainId)
     const bytecode = await client.getBytecode({ address: address as Address })
-    // getBytecode returns undefined for EOAs, hex string for contracts
-    return bytecode != null && bytecode !== '0x' && bytecode.length > 2
+    if (bytecode == null || bytecode === '0x' || bytecode.length <= 2) {
+      return { isContract: false, bytecodeSize: 0 }
+    }
+    const bytecodeSize = (bytecode.length - 2) / 2 // hex chars → bytes
+    return { isContract: true, bytecodeSize }
   } catch (err) {
     log.warn(`RPC error checking ${address} on chain ${chainId}`, err)
     return null
   }
+}
+
+/**
+ * Is this address a real bot contract (not a proxy/wallet)?
+ */
+export function isBotContract(result: ContractCheckResult): boolean {
+  return result.isContract && result.bytecodeSize >= MIN_BOT_BYTECODE_SIZE
 }
 
 /**
@@ -95,8 +123,8 @@ export async function batchCheckContracts(
   addresses: string[],
   chainId: number,
   concurrency = 20
-): Promise<Map<string, boolean | null>> {
-  const results = new Map<string, boolean | null>()
+): Promise<Map<string, ContractCheckResult | null>> {
+  const results = new Map<string, ContractCheckResult | null>()
   if (addresses.length === 0) return results
 
   for (let i = 0; i < addresses.length; i += concurrency) {
@@ -104,7 +132,7 @@ export async function batchCheckContracts(
     const settled = await Promise.allSettled(
       batch.map(async (addr) => ({
         addr,
-        result: await isContract(addr, chainId),
+        result: await checkContract(addr, chainId),
       }))
     )
 
@@ -112,10 +140,8 @@ export async function batchCheckContracts(
       if (outcome.status === 'fulfilled') {
         results.set(outcome.value.addr, outcome.value.result)
       }
-      // Rejected promises are silently skipped (already logged in isContract)
     }
 
-    // 200ms pause between batches to avoid hammering free RPCs
     if (i + concurrency < addresses.length) {
       await new Promise((r) => setTimeout(r, 200))
     }
