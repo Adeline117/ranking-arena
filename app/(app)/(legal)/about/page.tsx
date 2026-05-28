@@ -10,6 +10,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 function FeatureCard({ title, description }: { title: string; description: string }) {
   return (
     <Box
+      className="card-hover"
       style={{
         padding: tokens.spacing[5],
         background: 'var(--color-bg-secondary)',
@@ -18,7 +19,7 @@ function FeatureCard({ title, description }: { title: string; description: strin
         transition: `border-color ${tokens.transition.fast}`,
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'var(--color-pro-gradient-start)'
+        e.currentTarget.style.borderColor = 'var(--color-brand)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.borderColor = 'var(--color-border-primary)'
@@ -44,7 +45,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         style={{
           marginBottom: tokens.spacing[4],
           paddingBottom: tokens.spacing[2],
-          borderBottom: '2px solid var(--color-pro-gradient-start)',
+          borderBottom: '2px solid var(--color-brand)',
           display: 'inline-block',
         }}
       >
@@ -80,7 +81,7 @@ export default function AboutPage() {
         style={{
           position: 'fixed',
           inset: 0,
-          background: `radial-gradient(ellipse at 30% 20%, var(--color-pro-glow) 0%, transparent 50%),
+          background: `radial-gradient(ellipse at 30% 20%, var(--color-brand-muted) 0%, transparent 50%),
                        radial-gradient(ellipse at 70% 80%, var(--color-accent-primary-08) 0%, transparent 50%)`,
           pointerEvents: 'none',
           zIndex: 0,
@@ -89,7 +90,7 @@ export default function AboutPage() {
 
       <Box
         style={{
-          maxWidth: 800,
+          maxWidth: 900,
           margin: '0 auto',
           padding: tokens.spacing[6],
           position: 'relative',
