@@ -7,7 +7,14 @@
  */
 
 // Re-export the canonical type so consumers can discover it here
-export { type UnifiedTrader, type TraderDetail, type TradingPeriod, type EquityPoint, type AssetWeight, type TraderPosition } from './unified-trader'
+export {
+  type UnifiedTrader,
+  type TraderDetail,
+  type TradingPeriod,
+  type EquityPoint,
+  type AssetWeight,
+  type TraderPosition,
+} from './unified-trader'
 
 // ============================================
 // 交易所和数据源
@@ -23,51 +30,23 @@ export const EXCHANGES_WITH_WEB3 = ['binance_web3', ...EXCHANGES] as const
 
 /** 已下线的交易所（保留类型定义用于数据迁移） */
 export const DEPRECATED_EXCHANGES = ['kucoin', 'gate', 'mexc', 'coinex'] as const
-export type DeprecatedExchange = typeof DEPRECATED_EXCHANGES[number]
+export type DeprecatedExchange = (typeof DEPRECATED_EXCHANGES)[number]
 
-export type Exchange = typeof EXCHANGES[number]
-export type ExchangeWithWeb3 = typeof EXCHANGES_WITH_WEB3[number]
+export type Exchange = (typeof EXCHANGES)[number]
+export type ExchangeWithWeb3 = (typeof EXCHANGES_WITH_WEB3)[number]
 
 /** 时间范围 */
 export type TimeRange = '7D' | '30D' | '90D' | '1Y' | '2Y' | 'All'
 
-/**
- * Trading style classification
- * This is the canonical definition - all other files should import from here
- *
- * Values:
- * - scalper: High-frequency, short holding periods (<4h), many trades
- * - swing: Medium-term trades, holding 4-48 hours
- * - trend: Longer-term trend following, holding 48h-2 weeks
- * - position: Long-term holding, >2 weeks
- * - unknown: Unable to classify (insufficient data)
- */
-export type TradingStyle = 'scalper' | 'swing' | 'trend' | 'position' | 'unknown'
-
-/**
- * Valid trading styles for API filtering (excludes 'unknown')
- */
-export const VALID_TRADING_STYLES = ['scalper', 'swing', 'trend', 'position'] as const
-export type FilterableTradingStyle = (typeof VALID_TRADING_STYLES)[number]
-
-/**
- * Legacy mapping for backwards compatibility with APIs
- * @deprecated Use TradingStyle instead
- */
-export type TradingStyleLegacy = 'high_frequency' | 'swing' | 'trend' | 'scalping' | 'position'
-
-/**
- * Maps legacy style names to current style names
- */
-export const TRADING_STYLE_LEGACY_MAP: Record<TradingStyleLegacy | 'hft' | 'day_trader', TradingStyle> = {
-  high_frequency: 'scalper',
-  hft: 'scalper',
-  scalping: 'scalper',
-  day_trader: 'swing',
-  swing: 'swing',
-  trend: 'trend',
-  position: 'position',
-}
+// TradingStyle canonical definition moved to @/lib/utils/trading-style
+export {
+  type TradingStyle,
+  type FilterableTradingStyle,
+  type TradingStyleLegacy,
+  VALID_TRADING_STYLES,
+  TRADING_STYLE_LEGACY_MAP,
+} from '@/lib/utils/trading-style'
+import type { TradingStyle } from '@/lib/utils/trading-style'
 
 /** 风险等级 */
 export type RiskLevel = 1 | 2 | 3 | 4 | 5
@@ -159,14 +138,14 @@ export interface TraderPerformance {
 
 /** 月度绩效 */
 export interface MonthlyPerformance {
-  month: string  // YYYY-MM 格式
-  value: number  // ROI 百分比
+  month: string // YYYY-MM 格式
+  value: number // ROI 百分比
 }
 
 /** 年度绩效 */
 export interface YearlyPerformance {
   year: number
-  value: number  // ROI 百分比
+  value: number // ROI 百分比
 }
 
 // ============================================
@@ -370,7 +349,16 @@ export interface RankingQueryParams {
   minPnl?: number
   minTrades?: number
   /** 排序字段 */
-  sortBy?: 'roi' | 'pnl' | 'win_rate' | 'risk_adjusted' | 'arena_score' | 'arena_score_v3' | 'sortino' | 'calmar' | 'alpha'
+  sortBy?:
+    | 'roi'
+    | 'pnl'
+    | 'win_rate'
+    | 'risk_adjusted'
+    | 'arena_score'
+    | 'arena_score_v3'
+    | 'sortino'
+    | 'calmar'
+    | 'alpha'
   /** 交易风格过滤 */
   tradingStyle?: TradingStyle
   /** 最小 Alpha 阈值 */

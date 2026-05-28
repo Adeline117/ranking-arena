@@ -3,9 +3,34 @@
  * 根据持仓时间和交易频率自动判断交易风格
  */
 
-// Re-export TradingStyle from canonical location
-export type { TradingStyle } from '@/lib/types/trader'
-import type { TradingStyle } from '@/lib/types/trader'
+/**
+ * Trading style classification (canonical definition)
+ *
+ * - scalper: High-frequency, short holding periods (<4h), many trades
+ * - swing: Medium-term trades, holding 4-48 hours
+ * - trend: Longer-term trend following, holding 48h-2 weeks
+ * - position: Long-term holding, >2 weeks
+ * - unknown: Unable to classify (insufficient data)
+ */
+export type TradingStyle = 'scalper' | 'swing' | 'trend' | 'position' | 'unknown'
+
+export const VALID_TRADING_STYLES = ['scalper', 'swing', 'trend', 'position'] as const
+export type FilterableTradingStyle = (typeof VALID_TRADING_STYLES)[number]
+
+export type TradingStyleLegacy = 'high_frequency' | 'swing' | 'trend' | 'scalping' | 'position'
+
+export const TRADING_STYLE_LEGACY_MAP: Record<
+  TradingStyleLegacy | 'hft' | 'day_trader',
+  TradingStyle
+> = {
+  high_frequency: 'scalper',
+  hft: 'scalper',
+  scalping: 'scalper',
+  day_trader: 'swing',
+  swing: 'swing',
+  trend: 'trend',
+  position: 'position',
+}
 
 export interface TradingStyleInfo {
   style: TradingStyle
@@ -91,5 +116,5 @@ export function getStyleInfo(style: TradingStyle): TradingStyleInfo {
  * 获取所有可筛选的交易风格（不含unknown）
  */
 export function getFilterableStyles(): TradingStyleInfo[] {
-  return (['scalper', 'swing', 'trend', 'position'] as TradingStyle[]).map(s => getStyleInfo(s))
+  return (['scalper', 'swing', 'trend', 'position'] as TradingStyle[]).map((s) => getStyleInfo(s))
 }
