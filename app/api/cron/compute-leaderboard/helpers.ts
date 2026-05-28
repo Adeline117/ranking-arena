@@ -22,9 +22,16 @@ const DEX_SOURCES = new Set([
 const DATA_FRESHNESS_HOURS_CEX = 6
 const DATA_FRESHNESS_HOURS_DEX = 12
 
-// Bot detection for DEX traders
-// Layer 1: on-chain contract detection (eth_getCode) — 100% accurate
-// Layer 2: heuristic patterns (freqtrade 47.8K★ trading frequency)
+// Bot detection — only 100%-certain sources can label 'bot'.
+// Everything else is 'suspected_bot'.
+//
+// 'bot' sources (100% accurate):
+//   - web3_bot platform (hardcoded known bots)
+//   - manual/admin override (existingType === 'bot')
+//
+// 'suspected_bot' sources (high confidence but not 100%):
+//   - on-chain contract detection (could be complex smart wallet)
+//   - heuristic patterns (could be active human scalper)
 export function detectTraderType(
   source: string,
   sourceId: string,
@@ -36,13 +43,13 @@ export function detectTraderType(
 ): 'human' | 'bot' | 'suspected_bot' | null {
   // Explicit type always wins (manual override or claim-verified)
   if (existingType === 'human' || existingType === 'bot') return existingType
-  // web3_bot source is always bot
+  // web3_bot source is always bot (hardcoded known bots — 100% accurate)
   if (source === 'web3_bot') return 'bot'
 
-  // Layer 1: on-chain contract detection — ground truth (100% accurate)
-  if (isContract === true) return 'bot'
+  // On-chain contract detection → suspected_bot (could be smart wallet)
+  if (isContract === true) return 'suspected_bot'
 
-  // Layer 2: heuristic patterns → suspected_bot (not 100% accurate)
+  // Heuristic patterns → suspected_bot (could be active human)
   if (DEX_SOURCES.has(source) && sourceId.startsWith('0x')) {
     if (tradesCount != null && tradesCount > 500) return 'suspected_bot'
     if (
