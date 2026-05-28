@@ -155,7 +155,7 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                       key={tab.value}
                       onClick={() => setActiveHotTab(tab.value)}
                       style={{
-                        padding: '5px 12px',
+                        padding: '7px 16px',
                         minHeight: 32,
                         borderRadius: tokens.radius.lg,
                         border: activeHotTab === tab.value ? 'none' : tokens.glass.border.light,
@@ -170,7 +170,7 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                             ? 'var(--color-on-accent)'
                             : 'var(--color-text-secondary)',
                         fontWeight: activeHotTab === tab.value ? 900 : 600,
-                        fontSize: '11px',
+                        fontSize: tokens.typography.fontSize.sm,
                         cursor: 'pointer',
                         transition: tokens.transition.all,
                         boxShadow:
