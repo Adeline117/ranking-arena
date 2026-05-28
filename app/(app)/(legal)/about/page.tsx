@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import TopNav from '@/app/components/layout/TopNav'
+// TopNav provided by legal layout
 import Footer from '@/app/components/layout/Footer'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -55,7 +55,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-
 export default function AboutPage() {
   const { t } = useLanguage()
 
@@ -88,8 +87,6 @@ export default function AboutPage() {
         }}
       />
 
-      <TopNav />
-
       <Box
         style={{
           maxWidth: 800,
@@ -111,7 +108,11 @@ export default function AboutPage() {
 
         {/* Introduction */}
         <Section title={t('aboutIntroTitle')}>
-          <Text size="sm" color="secondary" style={{ lineHeight: 1.8, marginBottom: tokens.spacing[3] }}>
+          <Text
+            size="sm"
+            color="secondary"
+            style={{ lineHeight: 1.8, marginBottom: tokens.spacing[3] }}
+          >
             {t('aboutIntroP1')}
           </Text>
           <Text size="sm" color="secondary" style={{ lineHeight: 1.8 }}>
@@ -136,7 +137,11 @@ export default function AboutPage() {
 
         {/* Data Sources */}
         <Section title={t('aboutDataTitle')}>
-          <Text size="sm" color="secondary" style={{ lineHeight: 1.8, marginBottom: tokens.spacing[4] }}>
+          <Text
+            size="sm"
+            color="secondary"
+            style={{ lineHeight: 1.8, marginBottom: tokens.spacing[4] }}
+          >
             {t('aboutDataDesc')}
           </Text>
           <Box
@@ -192,7 +197,8 @@ export default function AboutPage() {
                   size="2xl"
                   weight="black"
                   style={{
-                    background: 'linear-gradient(135deg, var(--color-pro-gradient-start), var(--color-pro-gradient-end))',
+                    background:
+                      'linear-gradient(135deg, var(--color-pro-gradient-start), var(--color-pro-gradient-end))',
                     WebkitBackgroundClip: 'text',
                     WebkitTextFillColor: 'transparent',
                     marginBottom: tokens.spacing[1],
@@ -234,7 +240,11 @@ export default function AboutPage() {
               border: '1px solid var(--color-border-primary)',
             }}
           >
-            <Text size="sm" color="secondary" style={{ lineHeight: 1.8, marginBottom: tokens.spacing[3] }}>
+            <Text
+              size="sm"
+              color="secondary"
+              style={{ lineHeight: 1.8, marginBottom: tokens.spacing[3] }}
+            >
               {t('aboutContactDesc')}
             </Text>
             <Link

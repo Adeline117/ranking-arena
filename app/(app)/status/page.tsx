@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import TopNav from '@/app/components/layout/TopNav'
 
 interface HealthData {
   status: 'healthy' | 'degraded' | 'unhealthy'
@@ -38,10 +39,10 @@ function formatAgo(iso: string): string {
 function StatusDot({ status }: { status: string }) {
   const color =
     status === 'pass' || status === 'healthy' || status === 'ok'
-      ? "var(--color-accent-success)"
+      ? 'var(--color-accent-success)'
       : status === 'degraded' || status === 'skip'
-        ? "var(--color-score-average)"
-        : "var(--color-accent-error)"
+        ? 'var(--color-score-average)'
+        : 'var(--color-accent-error)'
   return (
     <span
       style={{
@@ -100,10 +101,16 @@ export default function StatusPage() {
         background: tokens.colors.bg.primary,
         color: tokens.colors.text.primary,
         fontFamily: tokens.typography.fontFamily.sans.join(', '),
-        padding: tokens.spacing[6],
       }}
     >
-      <div style={{ maxWidth: 640, margin: '0 auto' }}>
+      <TopNav />
+      <div
+        style={{
+          maxWidth: 640,
+          margin: '0 auto',
+          padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
+        }}
+      >
         <header style={{ marginBottom: tokens.spacing[8] }}>
           <h1
             style={{
@@ -114,7 +121,9 @@ export default function StatusPage() {
           >
             System Status
           </h1>
-          <p style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm }}>
+          <p
+            style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm }}
+          >
             {loading
               ? 'Checking...'
               : error
@@ -251,7 +260,7 @@ export default function StatusPage() {
                     <span
                       style={{
                         fontSize: tokens.typography.fontSize.xs,
-                        color: isStale ? "var(--color-score-average)" : tokens.colors.text.tertiary,
+                        color: isStale ? 'var(--color-score-average)' : tokens.colors.text.tertiary,
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
                     >
