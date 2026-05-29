@@ -89,14 +89,20 @@ export default function HomePageClient({
   // never shows the SSR table (it's hidden before first paint).
   // On slow connections (SSR already painted), we collapse it instantly
   // since any transition would show "double content" (SSR + React stacked).
+  // Hide SSR period controls immediately on mount to prevent double-selector flash.
+  // React always renders its own TimeRangeSelector, so SSR controls are redundant.
+  useLayoutEffect(() => {
+    const ssrControls = document.querySelector(
+      '#ssr-ranking-table .ssr-controls'
+    ) as HTMLElement | null
+    if (ssrControls) ssrControls.style.display = 'none'
+  }, [])
+
+  // Hide full SSR table once React data is ready
   useLayoutEffect(() => {
     if (loading) return
-    for (const id of ['ssr-ranking-table']) {
-      const el = document.getElementById(id)
-      if (el) {
-        el.style.display = 'none'
-      }
-    }
+    const el = document.getElementById('ssr-ranking-table')
+    if (el) el.style.display = 'none'
   }, [loading])
 
   // Sync time range with URL on initial load
