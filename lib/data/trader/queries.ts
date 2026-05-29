@@ -290,13 +290,13 @@ export async function getTraderDetail(
           .limit(5)
           .abortSignal(phase1Signal)
       ),
-      // Profile from traders table
+      // Profile from trader_sources table
       safeQuery(() =>
         supabase
-          .from('traders')
-          .select('trader_key, handle, profile_url, avatar_url, market_type')
-          .eq('platform', platform)
-          .eq('trader_key', traderKey)
+          .from('trader_sources')
+          .select('source_trader_id, handle, profile_url, avatar_url, market_type')
+          .eq('source', platform)
+          .eq('source_trader_id', traderKey)
           .limit(1)
           .abortSignal(phase1Signal)
           .maybeSingle()
@@ -771,31 +771,31 @@ async function searchTradersInner(
     )
   }
 
-  // --- Fallback: ILIKE search using traders table ---
+  // --- Fallback: ILIKE search using trader_sources table ---
   if (!sourcesData) {
     let sourcesQuery = supabase
-      .from('traders')
-      .select('trader_key, handle, platform, avatar_url')
+      .from('trader_sources')
+      .select('source_trader_id, handle, source, avatar_url')
       .or(
-        `handle.ilike.%${sanitizedQuery.replace(/[,.()\[\]]/g, '')}%,trader_key.ilike.%${sanitizedQuery.replace(/[,.()\[\]]/g, '')}%`
+        `handle.ilike.%${sanitizedQuery.replace(/[,.()\[\]]/g, '')}%,source_trader_id.ilike.%${sanitizedQuery.replace(/[,.()\[\]]/g, '')}%`
       )
 
     if (platform) {
-      sourcesQuery = sourcesQuery.eq('platform', platform)
+      sourcesQuery = sourcesQuery.eq('source', platform)
     }
 
     const { data, error } = await sourcesQuery.limit(limit * 4)
     if (error || !data || data.length === 0) return []
     sourcesData = data.map(
       (d: {
-        trader_key: string
+        source_trader_id: string
         handle: string | null
-        platform: string
+        source: string
         avatar_url: string | null
       }) => ({
-        source_trader_id: d.trader_key,
+        source_trader_id: d.source_trader_id,
         handle: d.handle,
-        source: d.platform,
+        source: d.source,
         avatar_url: d.avatar_url,
       })
     )
@@ -996,17 +996,17 @@ export async function resolveTrader(
 
   const platformFilter = params.platform
 
-  // Steps 1+2 combined: Try traders table by handle OR trader_key (single query)
+  // Steps 1+2 combined: Try trader_sources by handle OR source_trader_id (single query)
   {
     let query = supabase
-      .from('traders')
-      .select('platform, trader_key, handle, avatar_url')
+      .from('trader_sources')
+      .select('source, source_trader_id, handle, avatar_url')
       .or(
-        `handle.eq.${decodedHandle.replace(/[,()\[\]\\%_]/g, '')},trader_key.eq.${decodedHandle.replace(/[,()\[\]\\%_]/g, '')}`
+        `handle.eq.${decodedHandle.replace(/[,()\[\]\\%_]/g, '')},source_trader_id.eq.${decodedHandle.replace(/[,()\[\]\\%_]/g, '')}`
       )
 
     if (platformFilter) {
-      query = query.eq('platform', platformFilter)
+      query = query.eq('source', platformFilter)
     }
 
     // Multiple traders may share the same handle (e.g., 鎏渊).
@@ -1015,7 +1015,7 @@ export async function resolveTrader(
     let data = candidates?.[0] ?? null
     if (candidates && candidates.length > 1) {
       // Check which candidate has leaderboard data
-      const ids = candidates.map((c: { trader_key: string }) => c.trader_key)
+      const ids = candidates.map((c: { source_trader_id: string }) => c.source_trader_id)
       const { data: lbCheck } = await supabase
         .from('leaderboard_ranks')
         .select(`${LR.source_trader_id}, ${LR.arena_score}`)
@@ -1027,14 +1027,15 @@ export async function resolveTrader(
       if (lbCheck?.[0]) {
         data =
           candidates.find(
-            (c: { trader_key: string }) => c.trader_key === lbCheck[0][LR.source_trader_id]
+            (c: { source_trader_id: string }) =>
+              c.source_trader_id === lbCheck[0][LR.source_trader_id]
           ) || data
       }
     }
     if (data) {
       return {
-        platform: data.platform,
-        traderKey: data.trader_key,
+        platform: data.source,
+        traderKey: data.source_trader_id,
         handle: data.handle || null,
         avatarUrl: data.avatar_url || null,
       }
@@ -1043,7 +1044,7 @@ export async function resolveTrader(
 
   // Steps 3+4+5 in parallel: leaderboard_ranks, trader_profiles_v2, trader_snapshots_v2
   // Previously sequential (3+4 → 5), now parallel to save 200-400ms for traders
-  // not found in the `traders` table (~10-15% of detail page loads).
+  // not found in the trader_sources table (~10-15% of detail page loads).
   {
     const sanitizedForFilter = decodedHandle.replace(/[,.()\[\]\\%_]/g, '')
 

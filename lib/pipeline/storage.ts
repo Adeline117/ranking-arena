@@ -13,7 +13,6 @@ import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { validateBeforeWrite, logRejectedWrites } from './validate-before-write'
 import { truncateToHour } from '@/lib/utils/date'
 
-
 const log = createLogger('pipeline:storage')
 
 // =============================================================================
@@ -30,10 +29,7 @@ export class PipelineStorage {
   /**
    * 主入口：持久化数据
    */
-  async persist(
-    supabase: SupabaseClient,
-    traders: EnrichedTraderData[]
-  ): Promise<PersistResult> {
+  async persist(supabase: SupabaseClient, traders: EnrichedTraderData[]): Promise<PersistResult> {
     if (traders.length === 0) {
       return { upserted: 0, errors: 0 }
     }
@@ -61,7 +57,9 @@ export class PipelineStorage {
         stats.details.snapshots_upserted += snapshotsResult.count
         stats.upserted += snapshotsResult.count
       } catch (error) {
-        log.error('Batch persist failed', { error: error instanceof Error ? error.message : String(error) })
+        log.error('Batch persist failed', {
+          error: error instanceof Error ? error.message : String(error),
+        })
         stats.errors += batch.length
       }
     }
@@ -76,31 +74,30 @@ export class PipelineStorage {
     supabase: SupabaseClient,
     traders: EnrichedTraderData[]
   ): Promise<{ count: number }> {
-    // 准备数据 — use `traders` table (merged identity table since 2026-03-18)
+    // Write to trader_sources (canonical identity table)
     const traderRows = traders.map((t) => ({
-      platform: t.platform,
-      trader_key: t.trader_id,
+      source: t.platform,
+      source_trader_id: t.trader_id,
       market_type: SOURCE_TYPE_MAP[t.platform] || 'futures',
       handle: t.display_name,
       avatar_url: t.avatar_url,
       is_active: true,
       last_seen_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
     }))
 
-    // 按 (platform, trader_key) 去重
-    const unique = this.dedupeBy(traderRows, (s) => `${s.platform}:${s.trader_key}`)
+    // 按 (source, source_trader_id) 去重
+    const unique = this.dedupeBy(traderRows, (s) => `${s.source}:${s.source_trader_id}`)
 
     // Upsert
-    const { error, count } = await supabase
-      .from('traders')
-      .upsert(unique, {
-        onConflict: 'platform,trader_key',
-        ignoreDuplicates: false,
-      })
+    const { error, count } = await supabase.from('trader_sources').upsert(unique, {
+      onConflict: 'source,source_trader_id',
+      ignoreDuplicates: false,
+    })
 
     if (error) {
-      log.error('upsertSources error', { error: error instanceof Error ? error.message : String(error) })
+      log.error('upsertSources error', {
+        error: error instanceof Error ? error.message : String(error),
+      })
       // 不抛出，允许继续
     }
 
@@ -149,16 +146,16 @@ export class PipelineStorage {
     if (validSnapshots.length === 0) return { count: 0 }
 
     // Upsert only validated rows
-    const { error, count } = await supabase
-      .from('trader_snapshots_v2')
-      .upsert(validSnapshots, {
-        onConflict: 'platform,market_type,trader_key,window,as_of_ts',
-        ignoreDuplicates: false,
-        count: 'exact',
-      })
+    const { error, count } = await supabase.from('trader_snapshots_v2').upsert(validSnapshots, {
+      onConflict: 'platform,market_type,trader_key,window,as_of_ts',
+      ignoreDuplicates: false,
+      count: 'exact',
+    })
 
     if (error) {
-      log.error('upsertSnapshots error', { error: error instanceof Error ? error.message : String(error) })
+      log.error('upsertSnapshots error', {
+        error: error instanceof Error ? error.message : String(error),
+      })
       throw error
     }
 
@@ -189,15 +186,15 @@ export class PipelineStorage {
       computed_at: new Date().toISOString(),
     }))
 
-    const { error, count } = await supabase
-      .from('leaderboard_ranks')
-      .upsert(ranks, {
-        onConflict: 'source,source_trader_id,season_id',
-        count: 'exact',
-      })
+    const { error, count } = await supabase.from('leaderboard_ranks').upsert(ranks, {
+      onConflict: 'source,source_trader_id,season_id',
+      count: 'exact',
+    })
 
     if (error) {
-      log.error('persistLeaderboardRanks error', { error: error instanceof Error ? error.message : String(error) })
+      log.error('persistLeaderboardRanks error', {
+        error: error instanceof Error ? error.message : String(error),
+      })
       throw error
     }
 
@@ -226,15 +223,15 @@ export class PipelineStorage {
       created_at: new Date().toISOString(),
     }))
 
-    const { error, count } = await supabase
-      .from('trader_daily_snapshots')
-      .upsert(dailySnapshots, {
-        onConflict: 'date,platform,trader_key',
-        count: 'exact',
-      })
+    const { error, count } = await supabase.from('trader_daily_snapshots').upsert(dailySnapshots, {
+      onConflict: 'date,platform,trader_key',
+      count: 'exact',
+    })
 
     if (error) {
-      log.error('persistDailySnapshots error', { error: error instanceof Error ? error.message : String(error) })
+      log.error('persistDailySnapshots error', {
+        error: error instanceof Error ? error.message : String(error),
+      })
       throw error
     }
 

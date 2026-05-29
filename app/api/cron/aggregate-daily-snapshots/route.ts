@@ -128,11 +128,10 @@ async function aggregateForDate(
     recentCutoff.setUTCDate(recentCutoff.getUTCDate() - 2)
     const recentCutoffStr = recentCutoff.toISOString()
 
-    // First, get distinct platform names — use traders table (small, indexed)
-    // instead of scanning 1.5M v2 rows with limit(50000) which misses small platforms
+    // Get distinct platform names from trader_sources (canonical identity table)
     const { data: platformList, error: platformListError } = await readDb
-      .from('traders')
-      .select('platform')
+      .from('trader_sources')
+      .select('source')
       .eq('is_active', true)
 
     if (platformListError || !platformList) {
@@ -142,9 +141,7 @@ async function aggregateForDate(
       return { inserted: 0, errors: 1 }
     }
 
-    const distinctPlatforms = [
-      ...new Set(platformList.map((r: { platform: string }) => r.platform)),
-    ]
+    const distinctPlatforms = [...new Set(platformList.map((r: { source: string }) => r.source))]
 
     snapshotMap = new Map()
 

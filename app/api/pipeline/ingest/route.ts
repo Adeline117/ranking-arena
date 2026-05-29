@@ -117,27 +117,26 @@ export async function POST(request: NextRequest) {
     const traderRows = traders
       .filter((t) => t.trader_key)
       .map((t) => ({
-        platform,
-        trader_key: t.trader_key,
+        source: platform,
+        source_trader_id: t.trader_key,
         market_type: marketType,
         handle: t.display_name || null,
         avatar_url: t.avatar_url || null,
         is_active: true,
         last_seen_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       }))
 
     if (traderRows.length > 0) {
-      // Dedupe by trader_key
+      // Dedupe by source_trader_id
       const seen = new Set<string>()
       const unique = traderRows.filter((r) => {
-        if (seen.has(r.trader_key)) return false
-        seen.add(r.trader_key)
+        if (seen.has(r.source_trader_id)) return false
+        seen.add(r.source_trader_id)
         return true
       })
       await supabase
-        .from('traders')
-        .upsert(unique, { onConflict: 'platform,trader_key' })
+        .from('trader_sources')
+        .upsert(unique, { onConflict: 'source,source_trader_id' })
         .then(({ error }) => {
           if (error) logger.warn(`[ingest] Traders upsert: ${error.message}`)
         })
