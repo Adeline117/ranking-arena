@@ -27,15 +27,15 @@ function getMarketType(source: string): string {
 // ============================================
 
 export type FailureReason =
-  | 'geo_blocked'      // 451/403 + geo-block indicators
-  | 'waf_blocked'      // Cloudflare/Akamai WAF (HTML response)
-  | 'auth_required'    // 401 — needs API key
-  | 'endpoint_gone'    // 404 — API changed
-  | 'rate_limited'     // 429 — too many requests
-  | 'timeout'          // Request timed out
-  | 'server_error'     // 5xx — upstream server error (transient)
-  | 'empty_data'       // 200 but no usable data
-  | 'parse_error'      // Response couldn't be parsed
+  | 'geo_blocked' // 451/403 + geo-block indicators
+  | 'waf_blocked' // Cloudflare/Akamai WAF (HTML response)
+  | 'auth_required' // 401 — needs API key
+  | 'endpoint_gone' // 404 — API changed
+  | 'rate_limited' // 429 — too many requests
+  | 'timeout' // Request timed out
+  | 'server_error' // 5xx — upstream server error (transient)
+  | 'empty_data' // 200 but no usable data
+  | 'parse_error' // Response couldn't be parsed
   | 'unknown'
 
 export interface FetchDiagnostic {
@@ -60,9 +60,15 @@ export function classifyFetchError(
   const isHtml = body.trimStart().startsWith('<') || body.includes('<!DOCTYPE')
 
   // Timeout / network errors
-  if (msg.includes('abort') || msg.includes('timeout') || msg.includes('ETIMEDOUT')
-    || msg.includes('ECONNREFUSED') || msg.includes('ECONNRESET')
-    || msg.includes('fetch failed') || msg.includes('ENETUNREACH')) {
+  if (
+    msg.includes('abort') ||
+    msg.includes('timeout') ||
+    msg.includes('ETIMEDOUT') ||
+    msg.includes('ECONNREFUSED') ||
+    msg.includes('ECONNRESET') ||
+    msg.includes('fetch failed') ||
+    msg.includes('ENETUNREACH')
+  ) {
     return 'timeout'
   }
 
@@ -114,7 +120,9 @@ export function classifyFetchError(
     (responseStatus && responseStatus >= 500) ||
     /HTTP 5\d\d/.test(msg) ||
     msg.includes('Server error') ||
-    msg.includes('502') || msg.includes('503') || msg.includes('500')
+    msg.includes('502') ||
+    msg.includes('503') ||
+    msg.includes('500')
   ) {
     return 'server_error'
   }
@@ -126,7 +134,8 @@ export function classifyFetchError(
 // VPS Proxy Support
 // ============================================
 
-const VPS_PROXY_URL = process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP || ''
+const VPS_PROXY_URL =
+  process.env.VPS_PROXY_SG || process.env.VPS_PROXY_URL || process.env.VPS_PROXY_JP || ''
 
 export async function fetchViaVpsProxy<T = unknown>(
   targetUrl: string,
@@ -192,10 +201,7 @@ export async function fetchWithFallback<T = unknown>(
     const reason = classifyFetchError(directErr)
 
     // Only fallback to VPS for blockable errors
-    if (
-      (reason === 'geo_blocked' || reason === 'waf_blocked') &&
-      VPS_PROXY_URL
-    ) {
+    if ((reason === 'geo_blocked' || reason === 'waf_blocked') && VPS_PROXY_URL) {
       dataLogger.warn(
         `[${opts?.platform || 'fetcher'}] Direct blocked (${reason}), trying VPS proxy for ${url.slice(0, 80)}...`
       )
@@ -206,7 +212,7 @@ export async function fetchWithFallback<T = unknown>(
         // Both failed — throw with combined context
         throw new Error(
           `Direct: ${directErr instanceof Error ? directErr.message : String(directErr)}; ` +
-          `VPS proxy: ${proxyErr instanceof Error ? proxyErr.message : String(proxyErr)}`
+            `VPS proxy: ${proxyErr instanceof Error ? proxyErr.message : String(proxyErr)}`
         )
       }
     }
@@ -270,7 +276,7 @@ export const TraderDataSchema = z.object({
 
 /** Tracks which tables succeeded/failed during a write batch */
 export interface WriteConsistency {
-  trader_sources: 'ok' | 'failed'  // now writes to unified `traders` table
+  trader_sources: 'ok' | 'failed' // now writes to unified `traders` table
   trader_snapshots_v2: 'ok' | 'failed'
 }
 
@@ -281,10 +287,7 @@ export interface FetchResult {
   write_consistency?: WriteConsistency
 }
 
-export type PlatformFetcher = (
-  supabase: SupabaseClient,
-  periods: string[]
-) => Promise<FetchResult>
+export type PlatformFetcher = (supabase: SupabaseClient, periods: string[]) => Promise<FetchResult>
 
 // ============================================
 // Supabase
@@ -294,7 +297,10 @@ export function getSupabaseClient(): SupabaseClient | null {
   try {
     return getSupabaseAdmin()
   } catch (err) {
-    dataLogger.error('[enrichment/shared] Failed to create Supabase client:', err instanceof Error ? err.message : String(err))
+    dataLogger.error(
+      '[enrichment/shared] Failed to create Supabase client:',
+      err instanceof Error ? err.message : String(err)
+    )
     return null
   }
 }
@@ -315,7 +321,7 @@ const ARENA_PARAMS: Record<string, { tanhCoeff: number; roiExponent: number }> =
 
 const PNL_PARAMS: Record<string, { base: number; coeff: number }> = {
   '7D': { base: 300, coeff: 0.42 },
-  '30D': { base: 600, coeff: 0.30 },
+  '30D': { base: 600, coeff: 0.3 },
   '90D': { base: 650, coeff: 0.27 },
 }
 
@@ -346,7 +352,8 @@ export function calculateArenaScore(
   // Return score (0-60)
   const intensity = (365 / days) * safeLog1p(cappedRoi / 100)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
-  const returnScore = r0 > 0 ? clip(MAX_RETURN * Math.pow(r0, params.roiExponent), 0, MAX_RETURN) : 0
+  const returnScore =
+    r0 > 0 ? clip(MAX_RETURN * Math.pow(r0, params.roiExponent), 0, MAX_RETURN) : 0
 
   // PnL score (0-40)
   const pnlScore = calcPnlScore(pnl, period)
@@ -374,7 +381,9 @@ export async function upsertTraders(
     } else {
       rejected++
       if (rejected <= 10) {
-        const issues = result.error.issues.map(i => `${i.path.join('.')}: ${i.message}`).join(', ')
+        const issues = result.error.issues
+          .map((i) => `${i.path.join('.')}: ${i.message}`)
+          .join(', ')
         dataLogger.warn(`[validation] Rejected trader ${t.source}/${t.source_trader_id}: ${issues}`)
       }
     }
@@ -390,24 +399,31 @@ export async function upsertTraders(
       // Alert delivery MUST NOT be swallowed silently — if Telegram is down
       // and we also fail to log the reason, the entire "connector broken"
       // safety net goes dark. Log the failure so Sentry still captures it.
-      import('@/lib/alerts/send-alert').then(({ sendRateLimitedAlert }) =>
-        sendRateLimitedAlert({
-          title: `Connector 异常: ${traders[0]?.source} ${Math.round(rejectionRate * 100)}% 数据被拒`,
-          message: `${msg}\n可能原因: 交易所 API 格式变更、scraper 故障、字段映射错误`,
-          level: 'critical',
-          details: { source: traders[0]?.source, rejected, total: traders.length },
-        }, `connector-reject-${traders[0]?.source}`, 60 * 60 * 1000)
-      ).catch((alertErr) => {
-        dataLogger.error(
-          `[alerting] Failed to deliver connector-reject alert for ${traders[0]?.source}: ${alertErr instanceof Error ? alertErr.message : String(alertErr)}`,
-          { source: traders[0]?.source, rejected, total: traders.length, originalAlert: msg },
+      import('@/lib/alerts/send-alert')
+        .then(({ sendRateLimitedAlert }) =>
+          sendRateLimitedAlert(
+            {
+              title: `Connector 异常: ${traders[0]?.source} ${Math.round(rejectionRate * 100)}% 数据被拒`,
+              message: `${msg}\n可能原因: 交易所 API 格式变更、scraper 故障、字段映射错误`,
+              level: 'critical',
+              details: { source: traders[0]?.source, rejected, total: traders.length },
+            },
+            `connector-reject-${traders[0]?.source}`,
+            60 * 60 * 1000
+          )
         )
-      })
+        .catch((alertErr) => {
+          dataLogger.error(
+            `[alerting] Failed to deliver connector-reject alert for ${traders[0]?.source}: ${alertErr instanceof Error ? alertErr.message : String(alertErr)}`,
+            { source: traders[0]?.source, rejected, total: traders.length, originalAlert: msg }
+          )
+        })
     } else {
       dataLogger.warn(msg)
     }
   }
-  if (validated.length === 0) return { saved: 0, error: `All ${traders.length} traders failed validation` }
+  if (validated.length === 0)
+    return { saved: 0, error: `All ${traders.length} traders failed validation` }
 
   // Normalize 0x addresses to lowercase before dedup and DB writes
   // This prevents duplicate entries for the same trader with different casing
@@ -429,31 +445,42 @@ export async function upsertTraders(
     }
   }
   if (deduped.length < validated.length) {
-    dataLogger.warn(`[upsert] Deduped ${validated.length - deduped.length} duplicate traders for ${validated[0]?.source}`)
+    dataLogger.warn(
+      `[upsert] Deduped ${validated.length - deduped.length} duplicate traders for ${validated[0]?.source}`
+    )
   }
 
   // Validate snapshots before DB writes — uses unified gatekeeper
   let snapshotRejected = 0
-  const snapshotValidated = deduped.filter(t => {
-    const { rejected } = sanitizeRow({
-      platform: t.source,
-      trader_key: t.source_trader_id,
-      roi_pct: t.roi,
-      pnl_usd: t.pnl,
-      win_rate: t.win_rate,
-      max_drawdown: t.max_drawdown,
-    } as Record<string, unknown>, 'trader_snapshots_v2')
-    const hasRequiredFieldError = rejected.some(r => r.field === 'platform' || r.field === 'trader_key')
+  const snapshotValidated = deduped.filter((t) => {
+    const { rejected } = sanitizeRow(
+      {
+        platform: t.source,
+        trader_key: t.source_trader_id,
+        roi_pct: t.roi,
+        pnl_usd: t.pnl,
+        win_rate: t.win_rate,
+        max_drawdown: t.max_drawdown,
+      } as Record<string, unknown>,
+      'trader_snapshots_v2'
+    )
+    const hasRequiredFieldError = rejected.some(
+      (r) => r.field === 'platform' || r.field === 'trader_key'
+    )
     if (hasRequiredFieldError) {
       snapshotRejected++
       if (snapshotRejected <= 10) {
-        dataLogger.warn(`[upsert] Skipping invalid snapshot for ${t.source}/${t.source_trader_id}: ${rejected.map(r => r.reason).join(', ')}`)
+        dataLogger.warn(
+          `[upsert] Skipping invalid snapshot for ${t.source}/${t.source_trader_id}: ${rejected.map((r) => r.reason).join(', ')}`
+        )
       }
     }
     return !hasRequiredFieldError
   })
   if (snapshotRejected > 0) {
-    dataLogger.warn(`[upsert] Snapshot validation rejected ${snapshotRejected}/${deduped.length} traders for ${deduped[0]?.source}`)
+    dataLogger.warn(
+      `[upsert] Snapshot validation rejected ${snapshotRejected}/${deduped.length} traders for ${deduped[0]?.source}`
+    )
   }
   if (snapshotValidated.length === 0) {
     return { saved: 0, error: `All ${deduped.length} traders failed snapshot validation` }
@@ -463,7 +490,7 @@ export async function upsertTraders(
   // If median |ROI| of this batch is <0.5% AND we have >20 traders, likely a ÷100 bug
   {
     const rois = snapshotValidated
-      .map(t => t.roi)
+      .map((t) => t.roi)
       .filter((r): r is number => r != null && r !== 0)
     if (rois.length > 20) {
       rois.sort((a, b) => Math.abs(a) - Math.abs(b))
@@ -471,22 +498,30 @@ export async function upsertTraders(
       if (medianAbsRoi < 0.5) {
         // Median |ROI| < 0.5% across 20+ traders is suspicious (likely decimal ratio bug)
         const source = snapshotValidated[0]?.source
-        dataLogger.warn(`[sanity] ${source}: median |ROI| = ${medianAbsRoi.toFixed(3)}% across ${rois.length} traders — possible decimal bug`)
+        dataLogger.warn(
+          `[sanity] ${source}: median |ROI| = ${medianAbsRoi.toFixed(3)}% across ${rois.length} traders — possible decimal bug`
+        )
         // Same reasoning as above — decimal-bug sanity alerts are high-signal;
         // log the delivery failure so it is not lost.
-        import('@/lib/alerts/send-alert').then(({ sendRateLimitedAlert }) =>
-          sendRateLimitedAlert({
-            title: `数据异常: ${source} ROI 中位数仅 ${medianAbsRoi.toFixed(3)}%`,
-            message: `${rois.length} 个交易员的 |ROI| 中位数异常低，可能是小数/百分比混淆（如 0.155 应该是 15.5%）`,
-            level: 'warning',
-            details: { source, medianAbsRoi, traderCount: rois.length },
-          }, `sanity-roi-${source}`, 6 * 60 * 60 * 1000)
-        ).catch((alertErr) => {
-          dataLogger.error(
-            `[alerting] Failed to deliver ROI sanity alert for ${source}: ${alertErr instanceof Error ? alertErr.message : String(alertErr)}`,
-            { source, medianAbsRoi, traderCount: rois.length },
+        import('@/lib/alerts/send-alert')
+          .then(({ sendRateLimitedAlert }) =>
+            sendRateLimitedAlert(
+              {
+                title: `数据异常: ${source} ROI 中位数仅 ${medianAbsRoi.toFixed(3)}%`,
+                message: `${rois.length} 个交易员的 |ROI| 中位数异常低，可能是小数/百分比混淆（如 0.155 应该是 15.5%）`,
+                level: 'warning',
+                details: { source, medianAbsRoi, traderCount: rois.length },
+              },
+              `sanity-roi-${source}`,
+              6 * 60 * 60 * 1000
+            )
           )
-        })
+          .catch((alertErr) => {
+            dataLogger.error(
+              `[alerting] Failed to deliver ROI sanity alert for ${source}: ${alertErr instanceof Error ? alertErr.message : String(alertErr)}`,
+              { source, medianAbsRoi, traderCount: rois.length }
+            )
+          })
       }
     }
   }
@@ -538,7 +573,9 @@ export async function upsertTraders(
       }
     } catch (err) {
       consistency.trader_sources = 'failed'
-      dataLogger.error(`[upsert] traders exception: ${err instanceof Error ? err.message : String(err)}`)
+      dataLogger.error(
+        `[upsert] traders exception: ${err instanceof Error ? err.message : String(err)}`
+      )
     }
 
     // --- 3. trader_snapshots (v1) — REMOVED ---
@@ -553,10 +590,10 @@ export async function upsertTraders(
       // the enrichment pipeline. This fixes the P0 issue where Hyperliquid's hourly
       // discover job (which doesn't have win_rate) was overwriting enrichment-computed
       // win_rate with null on every run.
-      const hasWinRate = batch.some(t => t.win_rate != null)
-      const hasMaxDrawdown = batch.some(t => t.max_drawdown != null)
-      const hasSharpeRatio = batch.some(t => t.sharpe_ratio != null)
-      const hasTradesCount = batch.some(t => t.trades_count != null)
+      const hasWinRate = batch.some((t) => t.win_rate != null)
+      const hasMaxDrawdown = batch.some((t) => t.max_drawdown != null)
+      const hasSharpeRatio = batch.some((t) => t.sharpe_ratio != null)
+      const hasTradesCount = batch.some((t) => t.trades_count != null)
 
       const snapshots = batch.map((t) => {
         const w = t.season_id?.toUpperCase() || '30D'
@@ -564,38 +601,37 @@ export async function upsertTraders(
         // Real data only — null is better than estimated values.
         // Enrichment pipeline fills in WR/MDD/Sharpe from real API data + equity curve.
         const row: Record<string, unknown> = {
-        platform: t.source,
-        market_type: getMarketType(t.source),
-        trader_key: t.source_trader_id,
-        window: w,
-        as_of_ts: truncateToHour(t.captured_at),
-        // Flat columns — read by leaderboard, scoring, and frontend
-        // Cap extreme ROI values (>100,000% is likely a normalization bug)
-        roi_pct: t.roi != null && Math.abs(t.roi) > 100000 ? null
-          : (t.roi ?? null),
-        pnl_usd: t.pnl ?? null,
-        arena_score: t.arena_score ?? null,  // computed by compute-leaderboard, don't overwrite with placeholder
-        followers: t.followers ?? null,  // Exchange followers (v2 fallback needs this when trader isn't in leaderboard_ranks yet)
-        copiers: t.copiers ?? null,  // Exchange copy-trade count (from connector API)
-        // JSONB metrics — full data for detail views and future use
-        metrics: {
-          roi: t.roi ?? null,
-          pnl: t.pnl ?? null,
-          win_rate: t.win_rate ?? null,
-          max_drawdown: t.max_drawdown ?? null,
-          trades_count: t.trades_count ?? null,
-          followers: t.followers ?? null,  // exchange followers in JSONB (top-level followers is Arena-only)
-          copiers: t.copiers ?? null,
-          sharpe_ratio: t.sharpe_ratio ?? null,
-          arena_score: t.arena_score ?? null,
-          aum: t.aum || null,
-        },
-        quality_flags: {
-          is_suspicious: false,
-          suspicion_reasons: [],
-          data_completeness: t.win_rate != null && t.max_drawdown != null ? 1.0 : 0.7,
-        },
-        updated_at: new Date().toISOString(),
+          platform: t.source,
+          market_type: getMarketType(t.source),
+          trader_key: t.source_trader_id,
+          window: w,
+          as_of_ts: truncateToHour(t.captured_at),
+          // Flat columns — read by leaderboard, scoring, and frontend
+          // Cap extreme ROI values (>100,000% is likely a normalization bug)
+          roi_pct: t.roi != null && Math.abs(t.roi) > 100000 ? null : (t.roi ?? null),
+          pnl_usd: t.pnl ?? null,
+          arena_score: t.arena_score ?? null, // computed by compute-leaderboard, don't overwrite with placeholder
+          followers: t.followers ?? null, // Exchange followers (v2 fallback needs this when trader isn't in leaderboard_ranks yet)
+          copiers: t.copiers ?? null, // Exchange copy-trade count (from connector API)
+          // JSONB metrics — full data for detail views and future use
+          metrics: {
+            roi: t.roi ?? null,
+            pnl: t.pnl ?? null,
+            win_rate: t.win_rate ?? null,
+            max_drawdown: t.max_drawdown ?? null,
+            trades_count: t.trades_count ?? null,
+            followers: t.followers ?? null, // exchange followers in JSONB (top-level followers is Arena-only)
+            copiers: t.copiers ?? null,
+            sharpe_ratio: t.sharpe_ratio ?? null,
+            arena_score: t.arena_score ?? null,
+            aum: t.aum || null,
+          },
+          quality_flags: {
+            is_suspicious: false,
+            suspicion_reasons: [],
+            data_completeness: t.win_rate != null && t.max_drawdown != null ? 1.0 : 0.7,
+          },
+          updated_at: new Date().toISOString(),
         }
 
         // Only include enrichment-sourced fields when batch has real data for them.
@@ -626,9 +662,38 @@ export async function upsertTraders(
         writeErrors.push(`trader_snapshots_v2: ${snapErr.message} (${snapErr.code})`)
         dataLogger.error(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
       }
+
+      // Dual-write to trader_latest (hot path — always latest, no as_of_ts)
+      const latestRows = snapshots.map((s: Record<string, unknown>) => ({
+        platform: s.platform,
+        market_type: s.market_type,
+        trader_key: s.trader_key,
+        window: s.window,
+        roi_pct: s.roi_pct,
+        pnl_usd: s.pnl_usd,
+        win_rate: s.win_rate,
+        max_drawdown: s.max_drawdown,
+        trades_count: s.trades_count,
+        followers: s.followers,
+        copiers: s.copiers,
+        arena_score: s.arena_score,
+        sharpe_ratio: s.sharpe_ratio,
+        metrics: s.metrics,
+        quality_flags: s.quality_flags,
+        updated_at: s.updated_at,
+        fetched_at: s.updated_at,
+      }))
+      const { error: latestErr } = await supabase
+        .from('trader_latest' as any)
+        .upsert(latestRows, { onConflict: 'platform,trader_key,window' } as any)
+      if (latestErr) {
+        dataLogger.warn(`[upsert] trader_latest error: ${latestErr.message}`)
+      }
     } catch (err) {
       consistency.trader_snapshots_v2 = 'failed'
-      dataLogger.error(`[upsert] trader_snapshots_v2 exception: ${err instanceof Error ? err.message : String(err)}`)
+      dataLogger.error(
+        `[upsert] trader_snapshots_v2 exception: ${err instanceof Error ? err.message : String(err)}`
+      )
     }
 
     // Count as saved if v2 snapshot write succeeded (v2 is now the primary table)
@@ -636,30 +701,40 @@ export async function upsertTraders(
       saved += batch.length
 
       // Fire-and-forget: update live rankings sorted set for traders with arena_score
-      import('@/lib/realtime/ranking-store').then(({ updateTraderScore }) => {
-        for (const t of batch) {
-          if (t.arena_score != null && t.arena_score > 0) {
-            updateTraderScore(t.season_id, t.source, t.source_trader_id, t.arena_score).catch(err => dataLogger.warn('[RankingStore] Failed to update trader score:', err.message))
+      import('@/lib/realtime/ranking-store')
+        .then(({ updateTraderScore }) => {
+          for (const t of batch) {
+            if (t.arena_score != null && t.arena_score > 0) {
+              updateTraderScore(t.season_id, t.source, t.source_trader_id, t.arena_score).catch(
+                (err) =>
+                  dataLogger.warn('[RankingStore] Failed to update trader score:', err.message)
+              )
+            }
           }
-        }
-      }).catch(err => dataLogger.warn('[RankingStore] Failed to import ranking-store module:', err.message))
+        })
+        .catch((err) =>
+          dataLogger.warn('[RankingStore] Failed to import ranking-store module:', err.message)
+        )
 
       // Fire-and-forget: dual-write snapshots to ClickHouse for analytics
       fireAndForget(
-        syncToClickHouse('trader_snapshots_history', batch.map(t => ({
-          platform: t.source,
-          trader_key: t.source_trader_id,
-          period: t.season_id,
-          roi_pct: t.roi ?? 0,
-          pnl_usd: t.pnl ?? 0,
-          arena_score: t.arena_score ?? 0,
-          win_rate: t.win_rate ?? null,
-          max_drawdown: t.max_drawdown ?? null,
-          sharpe_ratio: t.sharpe_ratio ?? null,
-          followers: t.followers ?? 0,
-          rank: t.rank ?? 0,
-          captured_at: new Date().toISOString(),
-        }))),
+        syncToClickHouse(
+          'trader_snapshots_history',
+          batch.map((t) => ({
+            platform: t.source,
+            trader_key: t.source_trader_id,
+            period: t.season_id,
+            roi_pct: t.roi ?? 0,
+            pnl_usd: t.pnl ?? 0,
+            arena_score: t.arena_score ?? 0,
+            win_rate: t.win_rate ?? null,
+            max_drawdown: t.max_drawdown ?? null,
+            sharpe_ratio: t.sharpe_ratio ?? null,
+            followers: t.followers ?? 0,
+            rank: t.rank ?? 0,
+            captured_at: new Date().toISOString(),
+          }))
+        ),
         'clickhouse-snapshot-sync'
       )
     }
@@ -672,14 +747,18 @@ export async function upsertTraders(
   if (failedTables.length > 0) {
     dataLogger.warn(
       `[upsert] Partial write failure for ${validated[0]?.source}: ` +
-      `failed=[${failedTables.join(',')}], succeeded=[${Object.entries(consistency).filter(([, s]) => s === 'ok').map(([t]) => t).join(',')}]`
+        `failed=[${failedTables.join(',')}], succeeded=[${Object.entries(consistency)
+          .filter(([, s]) => s === 'ok')
+          .map(([t]) => t)
+          .join(',')}]`
     )
   }
 
   // Surface write errors so callers can detect and report failures
-  const writeError = failedTables.length > 0
-    ? `Write failed for tables: ${failedTables.join(', ')}${writeErrors.length > 0 ? ` (${writeErrors.slice(0, 3).join('; ')})` : ''}`
-    : undefined
+  const writeError =
+    failedTables.length > 0
+      ? `Write failed for tables: ${failedTables.join(', ')}${writeErrors.length > 0 ? ` (${writeErrors.slice(0, 3).join('; ')})` : ''}`
+      : undefined
 
   return { saved, error: writeError, write_consistency: consistency }
 }
@@ -759,7 +838,10 @@ export async function fetchWithVpsFallback<T = unknown>(
   } catch (directErr) {
     const msg = directErr instanceof Error ? directErr.message : ''
     const isBlocked =
-      msg.includes('451') || msg.includes('403') || msg.includes('Access Denied') || msg.includes('geo-blocked')
+      msg.includes('451') ||
+      msg.includes('403') ||
+      msg.includes('Access Denied') ||
+      msg.includes('geo-blocked')
 
     if (!isBlocked) throw directErr
 
@@ -810,7 +892,9 @@ export async function fetchJsonWithRetry<T = unknown>(
       }
 
       const delay = Math.min(1000 * Math.pow(2, attempt), 8000) * (0.5 + Math.random() * 0.5)
-      dataLogger.warn(`[fetchJsonWithRetry] Attempt ${attempt + 1} failed for ${url}, retrying in ${Math.round(delay)}ms`)
+      dataLogger.warn(
+        `[fetchJsonWithRetry] Attempt ${attempt + 1} failed for ${url}, retrying in ${Math.round(delay)}ms`
+      )
       await sleep(delay)
     }
   }
@@ -849,57 +933,57 @@ export interface PlatformFormatConfig {
  */
 export const PLATFORM_FORMAT: Record<string, PlatformFormatConfig> = {
   // DEX platforms — typically return decimal
-  hyperliquid:      { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  dydx:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  drift:            { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  gmx:              { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  gains:            { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  vertex:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  'jupiter-perps':  { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  jupiter_perps:    { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  aevo:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  paradex:          { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  kwenta:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  synthetix:        { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  mux:              { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  uniswap:          { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  pancakeswap:      { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  hyperliquid: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  dydx: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  drift: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  gmx: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  gains: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  vertex: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  'jupiter-perps': { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  jupiter_perps: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  aevo: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  paradex: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  kwenta: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  synthetix: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  mux: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  uniswap: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  pancakeswap: { roiFormat: 'decimal', winRateFormat: 'decimal' },
 
   // CEX platforms returning decimal ROI
-  gateio:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  coinex:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  bingx:            { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  toobit:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  btse:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  cryptocom:        { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  pionex:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  mexc:             { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  bitget_futures:   { roiFormat: 'decimal', winRateFormat: 'percentage' },
-  bitget_spot:      { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  kucoin:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  blofin:           { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  gateio: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  coinex: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  bingx: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  toobit: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  btse: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  cryptocom: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  pionex: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  mexc: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  bitget_futures: { roiFormat: 'decimal', winRateFormat: 'percentage' },
+  bitget_spot: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  kucoin: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  blofin: { roiFormat: 'decimal', winRateFormat: 'decimal' },
 
   // CEX platforms returning percentage ROI
-  binance_futures:  { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  binance_futures: { roiFormat: 'percentage', winRateFormat: 'decimal' },
   // binance_spot: REMOVED 2026-03-14
-  bybit:            { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  bybit_spot:       { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  okx_futures:      { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  okx_web3:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  htx_futures:      { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  phemex:           { roiFormat: 'percentage', winRateFormat: 'decimal' },
-  weex:             { roiFormat: 'percentage', winRateFormat: 'decimal' },
-  bitmart:          { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  bitunix:          { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  btcc:             { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  xt:               { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  binance_web3:     { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  web3_bot:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  lbank:            { roiFormat: 'percentage', winRateFormat: 'decimal' },
-  okx_spot:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  bybit: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  bybit_spot: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  okx_futures: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  okx_web3: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  htx_futures: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  phemex: { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  weex: { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  bitmart: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  bitunix: { roiFormat: 'decimal', winRateFormat: 'decimal' },
+  btcc: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  xt: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  binance_web3: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  web3_bot: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  lbank: { roiFormat: 'percentage', winRateFormat: 'decimal' },
+  okx_spot: { roiFormat: 'percentage', winRateFormat: 'percentage' },
   perpetual_protocol: { roiFormat: 'decimal', winRateFormat: 'decimal' },
-  whitebit:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
-  bitfinex:         { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  whitebit: { roiFormat: 'percentage', winRateFormat: 'percentage' },
+  bitfinex: { roiFormat: 'percentage', winRateFormat: 'percentage' },
 }
 
 /**
@@ -915,7 +999,9 @@ export function normalizeWinRate(wr: number | null, format?: DataFormat): number
   if (format === 'percentage') return wr
   // Legacy heuristic fallback — log warning in non-test environments
   if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
-    dataLogger.warn(`[normalizeWinRate] No format specified for value ${wr}, using heuristic. Pass 'decimal' or 'percentage' explicitly.`)
+    dataLogger.warn(
+      `[normalizeWinRate] No format specified for value ${wr}, using heuristic. Pass 'decimal' or 'percentage' explicitly.`
+    )
   }
   return wr <= 1 ? wr * 100 : wr
 }
@@ -928,7 +1014,10 @@ export function normalizeWinRate(wr: number | null, format?: DataFormat): number
  *                           or an explicit DataFormat ('decimal' | 'percentage').
  *                           If omitted, uses legacy heuristic with a warning.
  */
-export function normalizeROI(rawRoi: number | null, platformOrFormat?: string | DataFormat): number | null {
+export function normalizeROI(
+  rawRoi: number | null,
+  platformOrFormat?: string | DataFormat
+): number | null {
   if (rawRoi == null) return null
 
   // Resolve format
@@ -948,7 +1037,9 @@ export function normalizeROI(rawRoi: number | null, platformOrFormat?: string | 
 
   // Legacy heuristic fallback — log warning in non-test environments
   if (typeof process !== 'undefined' && process.env.NODE_ENV !== 'test') {
-    dataLogger.warn(`[normalizeROI] No format resolved for platform="${platformOrFormat}", value=${rawRoi}. Using heuristic. Pass format explicitly.`)
+    dataLogger.warn(
+      `[normalizeROI] No format resolved for platform="${platformOrFormat}", value=${rawRoi}. Using heuristic. Pass format explicitly.`
+    )
   }
   return Math.abs(rawRoi) <= 1 ? rawRoi * 100 : rawRoi
 }

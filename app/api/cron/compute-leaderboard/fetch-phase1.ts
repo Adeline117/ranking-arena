@@ -81,24 +81,25 @@ export async function fetchPhase1FromV2(
         let data: any[] | null = null
         let error: { message: string; code?: string } | null = null
         try {
-          // PERF FIX: add as_of_ts filter for partition pruning. Without it,
-          // Postgres scans ALL monthly partitions (22.9s avg). With it, only
-          // the current month's partition is scanned (~2-4s).
-          const partitionPruneDate = new Date(Date.now() - 31 * 24 * 3600 * 1000).toISOString()
-          const result = await queryWithTimeout(
-            supabase
-              .from('trader_snapshots_v2')
+          // HOT PATH: Read from trader_latest (~45K rows) instead of
+          // trader_snapshots_v2 (~10M rows). 250x fewer rows scanned.
+          // trader_latest holds only the latest snapshot per trader per window.
+          const result: {
+            data: TraderRow[] | null
+            error: { message: string; code?: string } | null
+          } = await queryWithTimeout(
+            (supabase as any)
+              .from('trader_latest')
               .select(
                 'platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics'
               )
               .eq('platform', source)
               .eq('window', v2Window)
               .gte('updated_at', freshnessISO)
-              .gte('as_of_ts', partitionPruneDate)
               .order('updated_at', { ascending: false })
               .limit(1000)
           )
-          data = result.data as TraderRow[] | null
+          data = result.data
           error = result.error
         } catch {
           logger.warn(`[${season}] ${source}: Phase 1 query timeout, skipping`)
@@ -106,24 +107,24 @@ export async function fetchPhase1FromV2(
         }
 
         // Fallback: if this window has too few traders, use 30D data
-        // (many platforms only fetch one window; 30D is the most common)
         if ((!data || data.length < FALLBACK_THRESHOLD) && v2Window !== '30D') {
           try {
-            const fallback = await queryWithTimeout(
-              supabase
-                .from('trader_snapshots_v2')
-                .select(
-                  'platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics'
-                )
-                .eq('platform', source)
-                .eq('window', '30D')
-                .gte('updated_at', freshnessISO)
-                .order('updated_at', { ascending: false })
-                .limit(1000)
-            )
+            const fallback: { data: TraderRow[] | null; error: typeof error } =
+              await queryWithTimeout(
+                (supabase as any)
+                  .from('trader_latest')
+                  .select(
+                    'platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics'
+                  )
+                  .eq('platform', source)
+                  .eq('window', '30D')
+                  .gte('updated_at', freshnessISO)
+                  .order('updated_at', { ascending: false })
+                  .limit(1000)
+              )
             if (!fallback.error && fallback.data && fallback.data.length > (data?.length || 0)) {
               data = fallback.data
-              error = fallback.error as typeof error
+              error = fallback.error
             }
           } catch {
             // Fallback also timed out — use primary result
