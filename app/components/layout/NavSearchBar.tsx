@@ -68,7 +68,7 @@ export default function NavSearchBar({
             padding: `0 ${tokens.spacing[4]} 0 40px`,
             outline: 'none',
             fontWeight: tokens.typography.fontWeight.medium,
-            fontSize: tokens.typography.fontSize.sm,
+            fontSize: '16px', // >= 16px prevents iOS Safari auto-zoom on focus
             fontFamily: tokens.typography.fontFamily.sans.join(', '),
             transition: `all ${tokens.transition.base}`,
             boxShadow: tokens.shadow.inner,
@@ -114,7 +114,11 @@ export default function NavSearchBar({
           <SearchIcon size={16} />
         </Box>
       </form>
-      <SearchDropdown open={showSearchDropdown} query={searchQuery} onClose={() => setShowSearchDropdown(false)} />
+      <SearchDropdown
+        open={showSearchDropdown}
+        query={searchQuery}
+        onClose={() => setShowSearchDropdown(false)}
+      />
     </div>
   )
 }
