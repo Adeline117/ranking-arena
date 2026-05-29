@@ -5,7 +5,6 @@ import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
-import { usePeriodStore } from '@/lib/stores/periodStore'
 
 export type Period = '7D' | '30D' | '90D'
 
@@ -55,7 +54,6 @@ export function PeriodSelector({
   lastUpdated,
 }: PeriodSelectorProps) {
   const { t, language } = useLanguage()
-  const setGlobalPeriod = usePeriodStore((s) => s.setPeriod)
   const containerRef = useRef<HTMLDivElement>(null)
   const [indicatorStyle, setIndicatorStyle] = useState<{ left: number; width: number } | null>(null)
 
@@ -80,11 +78,6 @@ export function PeriodSelector({
     const raf = requestAnimationFrame(updateIndicator)
     return () => cancelAnimationFrame(raf)
   }, [updateIndicator])
-
-  // Sync selected period to global store so ShareOnXButton reads the current window
-  useEffect(() => {
-    setGlobalPeriod(period)
-  }, [period, setGlobalPeriod])
 
   return (
     <Box
