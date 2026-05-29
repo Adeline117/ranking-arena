@@ -647,23 +647,8 @@ export async function upsertTraders(
         return row
       })
 
-      // Upsert snapshots — update metrics on conflict so re-runs refresh data
-      // Emergency fix 2026-04-01: Add retry logic for Supabase 502 errors
-      const { error: snapErr } = await retryUpsert(
-        supabase,
-        'trader_snapshots_v2',
-        snapshots,
-        { onConflict: 'platform,market_type,trader_key,window,as_of_ts' },
-        { maxAttempts: 3, initialDelayMs: 2000 }
-      )
-
-      if (snapErr) {
-        consistency.trader_snapshots_v2 = 'failed'
-        writeErrors.push(`trader_snapshots_v2: ${snapErr.message} (${snapErr.code})`)
-        dataLogger.error(`[upsert] trader_snapshots_v2 error: ${snapErr.message}`)
-      }
-
-      // Dual-write to trader_latest (hot path — always latest, no as_of_ts)
+      // PRIMARY WRITE: trader_latest (hot path, UPSERT latest — 45K rows)
+      // This is the canonical snapshot table. compute-leaderboard reads from here.
       const latestRows = snapshots.map((s: Record<string, unknown>) => ({
         platform: s.platform,
         market_type: s.market_type,
@@ -687,8 +672,24 @@ export async function upsertTraders(
         .from('trader_latest' as any)
         .upsert(latestRows, { onConflict: 'platform,trader_key,window' } as any)
       if (latestErr) {
-        dataLogger.warn(`[upsert] trader_latest error: ${latestErr.message}`)
+        consistency.trader_snapshots_v2 = 'failed'
+        writeErrors.push(`trader_latest: ${latestErr.message}`)
+        dataLogger.error(`[upsert] trader_latest error: ${latestErr.message}`)
       }
+
+      // ARCHIVE WRITE: trader_snapshots_v2 (cold path, append-only — for daily aggregation)
+      // Fire-and-forget: failure doesn't affect consistency tracking.
+      retryUpsert(
+        supabase,
+        'trader_snapshots_v2',
+        snapshots,
+        { onConflict: 'platform,market_type,trader_key,window,as_of_ts' },
+        { maxAttempts: 2, initialDelayMs: 1000 }
+      ).catch((err: unknown) => {
+        dataLogger.warn(
+          `[upsert] snapshots_v2 archive write failed (non-critical): ${err instanceof Error ? err.message : String(err)}`
+        )
+      })
     } catch (err) {
       consistency.trader_snapshots_v2 = 'failed'
       dataLogger.error(
@@ -696,7 +697,7 @@ export async function upsertTraders(
       )
     }
 
-    // Count as saved if v2 snapshot write succeeded (v2 is now the primary table)
+    // Count as saved if trader_latest write succeeded (primary hot path)
     if (consistency.trader_snapshots_v2 !== 'failed') {
       saved += batch.length
 
