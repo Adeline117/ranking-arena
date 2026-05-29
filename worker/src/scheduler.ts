@@ -55,7 +55,8 @@ const FETCH_SCHEDULES: PlatformSchedule[] = [
   { platform: 'toobit', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'polymarket', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'copin', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'web3_bot', intervalMs: 8 * 3600_000, windows: ['90d'] },
+  // web3_bot excluded — uses dedicated Web3BotConnector with DeFi Llama/CoinGecko,
+  // not SOURCE_TO_CONNECTOR_MAP. Stays on Vercel cron.
 
   // Web3 wallets
   { platform: 'binance_web3', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
