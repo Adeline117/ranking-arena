@@ -14,7 +14,8 @@ export type SortBy = 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown'
 export type SortOrder = 'asc' | 'desc'
 
 const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
-const STALE_THRESHOLD_MS = FIVE_MINUTES_MS
+const AUTO_REFRESH_MS = 60_000 // 60s — rankings update frequently with event-driven pipeline
+const STALE_THRESHOLD_MS = AUTO_REFRESH_MS
 const PAGE_SIZE = 50
 
 interface UseTraderDataOptions {
@@ -147,7 +148,7 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
  */
 export function useTraderData(options: UseTraderDataOptions = {}) {
   const {
-    autoRefreshInterval = FIVE_MINUTES_MS,
+    autoRefreshInterval = AUTO_REFRESH_MS,
     initialTraders,
     initialLastUpdated,
     initialTotalCount = 0,

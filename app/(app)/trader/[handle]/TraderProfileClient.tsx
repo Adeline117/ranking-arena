@@ -647,7 +647,7 @@ export default function TraderProfileClient({
             onIndexChange={(i) => handleTabChange(tabKeys[i])}
           >
             {/* Overview Tab — always mounted (primary tab, avoids skeleton flash on swipe-back) */}
-            <Box style={{ minHeight: 200 }} className="tab-pane-enter">
+            <Box id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" style={{ minHeight: 200 }} className="tab-pane-enter">
               <OverviewTab
                 data={data}
                 traderProfile={traderProfile}
@@ -681,7 +681,7 @@ export default function TraderProfileClient({
             </Box>
 
             {/* Stats Tab — lazy: only mount after first visit */}
-            <Box style={{ minHeight: 200 }} className="tab-pane-enter">
+            <Box id="panel-stats" role="tabpanel" aria-labelledby="tab-stats" style={{ minHeight: 200 }} className="tab-pane-enter">
               <StatsTab
                 visited={visitedTabs.has('stats')}
                 stats={traderStats}
@@ -695,7 +695,7 @@ export default function TraderProfileClient({
             </Box>
 
             {/* Portfolio Tab — lazy: only mount after first visit */}
-            <Box style={{ minHeight: 200 }} className="tab-pane-enter">
+            <Box id="panel-portfolio" role="tabpanel" aria-labelledby="tab-portfolio" style={{ minHeight: 200 }} className="tab-pane-enter">
               <PortfolioTab
                 visited={visitedTabs.has('portfolio')}
                 portfolio={traderPortfolio}
@@ -708,7 +708,7 @@ export default function TraderProfileClient({
 
             {/* Posts Tab (only for claimed traders) — lazy mount on first visit */}
             {claimedUser && (
-              <Box style={{ minHeight: 200 }} className="tab-pane-enter">
+              <Box id="panel-posts" role="tabpanel" aria-labelledby="tab-posts" style={{ minHeight: 200 }} className="tab-pane-enter">
                 {visitedTabs.has('posts') && (
                   <Box bg="secondary" p={4} radius="lg" border="primary" style={{ maxWidth: 900 }}>
                     <Box

@@ -179,8 +179,10 @@ export default function TraderTabs({
                   onTabChange(tabs[newIndex].key)
                 }
               }}
+              id={`tab-${tab.key}`}
               aria-label={tab.label}
               aria-selected={activeTab === tab.key}
+              aria-controls={`panel-${tab.key}`}
               role="tab"
               tabIndex={activeTab === tab.key ? 0 : -1}
               style={{

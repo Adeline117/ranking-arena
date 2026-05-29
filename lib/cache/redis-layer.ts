@@ -74,8 +74,8 @@ export const CACHE_TIERS = {
    * - 同时缓存到内存和 Redis
    */
   hot: {
-    memoryTtlSeconds: 60, // 内存缓存 1 分钟
-    redisTtlSeconds: 300, // Redis 缓存 5 分钟
+    memoryTtlSeconds: 30, // 内存缓存 30 秒
+    redisTtlSeconds: 120, // Redis 缓存 2 分钟
     staleWhileRevalidate: 30, // 允许 30 秒过期数据
     priority: 1,
   },
