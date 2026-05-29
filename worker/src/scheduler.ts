@@ -100,7 +100,30 @@ export async function registerSchedules(): Promise<void> {
     )
   }
 
+  // Enrichment — fallback schedule (event-driven also triggers after fetch)
+  const ENRICH_INTERVAL_MS = 4 * 3600_000 // every 4h fallback
+  for (const period of ['7D', '30D', '90D']) {
+    for (const tier of ['fast', 'slow']) {
+      await queue.upsertJobScheduler(
+        `enrich:${period}:${tier}`,
+        { every: ENRICH_INTERVAL_MS },
+        {
+          name: JOB.ENRICH_PLATFORM,
+          data: { period, tier, limit: 200 },
+        },
+      )
+    }
+  }
+
+  // Meilisearch sync — fallback schedule (event-driven also triggers after score)
+  await queue.upsertJobScheduler(
+    'meilisearch-sync',
+    { every: 2 * 3600_000 }, // every 2h fallback
+    { name: JOB.SYNC_MEILISEARCH, data: {} },
+  )
+
+  const enrichSchedules = 6 // 3 periods × 2 tiers
   console.log(
-    `[scheduler] Registered ${FETCH_SCHEDULES.length} fetch schedules + ${seasons.length} score schedules`
+    `[scheduler] Registered ${FETCH_SCHEDULES.length} fetch + ${seasons.length} score + ${enrichSchedules} enrich + 1 meilisearch schedules`
   )
 }
