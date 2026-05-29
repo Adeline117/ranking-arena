@@ -2,6 +2,62 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## UX Full Audit + Root Cause Fixes (2026-05-28)
+
+Full UX audit across homepage, trader detail, search, auth, and mobile. 10 CRITICAL + 17 HIGH issues found, 13 commits shipped.
+
+### Root cause fixes (architectural)
+
+| Problem                       | Root cause                                                                                                                                                       | Fix                                                                                                                                                            |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Trader tab skeleton flash     | SwipeableView mounted ALL tab components on page load; non-visited tabs rendered `<RankingSkeleton/>` visible during swipe                                       | Gate tab mount with `visitedTabs.has(key)` at parent level — non-visited tabs render `null`, component only mounts on first visit                              |
+| Period selector desync        | Period state split across 3 sources: Zustand store + OverviewPerformanceCard local useState + PeriodSelector useEffect sync (circular chain with eslint-disable) | Eliminated local useState. OverviewPerformanceCard reads/writes Zustand store directly. Removed PeriodSelector's circular sync effect. Single source of truth. |
+| RankingSkeleton CLS on mobile | Skeleton always rendered 7-column desktop grid, but real RankingTable switches to card mode at 768px                                                             | Dual layout: desktop grid + mobile card, CSS media query switches at 768px breakpoint matching the real table                                                  |
+
+### Performance fixes
+
+- **LCP**: Top-3 avatars in SSR ranking table changed from `loading="lazy"` to `loading="eager"`, rank 1 gets `fetchPriority="high"`
+- **SVG gradient collisions**: DrawdownChart static `id="drawdown-fill"` → `useId()` unique per instance
+- **Loading overlay on period switch**: When refreshing with existing data, show semi-transparent spinner overlay instead of silently showing stale data
+
+### Auth fixes
+
+- **OTP resend button**: Added "Resend code" with 30s cooldown timer in login modal email-sent step
+- **iOS numeric keypad**: Added `pattern="[0-9]*"` to OTP input
+- **Session expiry**: Now opens LoginModal via Zustand store (not just a transient toast). Users can re-authenticate in-place without losing page context
+
+### Mobile fixes
+
+- **iOS Safari auto-zoom**: NavSearchBar (13px) and MobileSearchOverlay (14px) font sizes → 16px
+- **Keyboard detection**: Bottom nav uses `visualViewport.height` at mount as baseline instead of `window.innerHeight` (fixes iPad external keyboard edge case)
+- **SSR hydration**: SSR period controls hidden immediately on mount via `useLayoutEffect`, preventing double-selector flash
+
+### Accessibility fixes
+
+- Tab panels: Added `role="tabpanel"`, `id="panel-{key}"`, `aria-labelledby="tab-{key}"` to all trader detail tabs; tab buttons get `aria-controls`
+- Hero CTA: `minHeight` 38px → 44px (WCAG 2.5.5 touch target)
+- Refresh button: Added `aria-label`, increased tap area padding 2px → 8px
+
+### Dependency upgrades (14 PRs merged)
+
+Merged all 14 open dependabot PRs: react-dom 19.2.6, stripe 22.1.1, @supabase/ssr 0.10.3, @tanstack/react-query 5.100.11, ccxt 4.5.54, eslint-config-next 16.2.6, @trigger.dev/sdk 4.4.6, @aws-sdk/client-s3 3.1049.0, @capacitor/camera 8.2.0, + 5 GitHub Actions updates. Resolved Stripe v22 type errors (API version 2026-03-25 → 2026-04-22, SessionCreateParams type path). Downgraded eslint 10 → 9 (incompatible with eslint-plugin-react). Cleaned up 49 stale remote branches.
+
+### Code quality fixes
+
+- **Deprecated type migration**: Moved `TradingStyle` canonical definition from deprecated `lib/types/trader.ts` → `lib/utils/trading-style.ts`, updated 4 consumers
+- **Lighthouse CI workflow**: Fixed non-existent `actions/setup-node@v6` and `actions/upload-artifact@v6` → `@v4`
+- **Jest worktree noise**: Added `.claude/worktrees/` to `testPathIgnorePatterns` and `tsconfig.json` exclude
+- **tsconfig.json**: Excluded `worker/`, `infra/`, `.claude/worktrees/` from type checking
+
+### Deferred (needs design decision)
+
+- Wire `useTraderPositionsRealtime` into PortfolioTab (needs new UI design)
+- PremiumGate navigates to `/login` instead of opening modal (product decision)
+- Search combobox `aria-activedescendant` (needs SearchDropdown item IDs refactor)
+- 173 hardcoded color values in home components (design system migration, multi-session)
+
+---
+
 ## Documentation Cleanup + Onboarding + Dead File Purge (2026-05-28)
 
 Preparing for first teammate. Three phases of cleanup:
