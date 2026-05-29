@@ -182,7 +182,7 @@ export default async function HomeHeroSSR({
             border: 'none',
             borderRadius: 9999,
             textDecoration: 'none',
-            minHeight: 38,
+            minHeight: 44, // WCAG 2.5.5 minimum touch target
             boxShadow: '0 4px 14px var(--color-accent-primary-30, rgba(147,115,181,0.3))',
           }}
         >
