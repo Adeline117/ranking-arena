@@ -925,7 +925,38 @@ function RankingTableInner(props: {
           onClose={() => setShowScoreRulesModal(false)}
         />
 
-        <Box style={{ minHeight: 400, contain: 'layout style' }}>
+        <Box style={{ minHeight: 400, contain: 'layout style', position: 'relative' }}>
+          {/* Loading overlay — shown when refreshing with existing data (e.g. period switch) */}
+          {loading && sortedTraders.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                zIndex: 5,
+                display: 'flex',
+                alignItems: 'flex-start',
+                justifyContent: 'center',
+                paddingTop: 80,
+                background: 'var(--color-bg-primary-80, rgba(0,0,0,0.4))',
+                backdropFilter: 'blur(1px)',
+                borderRadius: tokens.radius.lg,
+                pointerEvents: 'none',
+              }}
+            >
+              <svg
+                width="24"
+                height="24"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--color-accent-primary)"
+                strokeWidth="2.5"
+                style={{ animation: 'spin 1s linear infinite' }}
+              >
+                <circle cx="12" cy="12" r="10" opacity={0.25} />
+                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+              </svg>
+            </div>
+          )}
           {loading && sortedTraders.length === 0 ? (
             <Box style={{ animation: 'fadeIn 0.2s ease-in' }}>
               <RankingSkeleton />
