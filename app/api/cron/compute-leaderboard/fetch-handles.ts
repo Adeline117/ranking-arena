@@ -33,7 +33,7 @@ export interface TraderForHandleLookup {
  */
 export async function fetchHandleAvatarMap(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  uniqueTraders: readonly TraderForHandleLookup[],
+  uniqueTraders: readonly TraderForHandleLookup[]
 ): Promise<Map<string, HandleAvatar>> {
   const handleMap = new Map<string, HandleAvatar>()
 
@@ -56,21 +56,25 @@ export async function fetchHandleAvatarMap(
           .eq('platform', source)
           .in('trader_key', chunk)
 
-        v2Data?.forEach((s: { trader_key: string; display_name: string | null; avatar_url: string | null }) => {
-          const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
-          handleMap.set(`${source}:${tid}`, {
-            handle: s.display_name,
-            avatar_url: s.avatar_url || null,
-          })
-        })
+        v2Data?.forEach(
+          (s: { trader_key: string; display_name: string | null; avatar_url: string | null }) => {
+            const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
+            handleMap.set(`${source}:${tid}`, {
+              handle: s.display_name,
+              avatar_url: s.avatar_url || null,
+            })
+          }
+        )
       }
-    }),
+    })
   )
 
   // Step 2: Targeted fallback — only query traders table for keys with NULL handles
   const missingHandleBySource = new Map<string, string[]>()
   for (const t of uniqueTraders) {
-    const tid = t.source_trader_id.startsWith('0x') ? t.source_trader_id.toLowerCase() : t.source_trader_id
+    const tid = t.source_trader_id.startsWith('0x')
+      ? t.source_trader_id.toLowerCase()
+      : t.source_trader_id
     const key = `${t.source}:${tid}`
     const entry = handleMap.get(key)
     if (!entry || !entry.handle) {
@@ -87,23 +91,27 @@ export async function fetchHandleAvatarMap(
       for (let i = 0; i < traderIds.length; i += 500) {
         const chunk = traderIds.slice(i, i + 500)
         const { data: fallbackData } = await supabase
-          .from('traders')
-          .select('trader_key, handle, avatar_url')
-          .eq('platform', source)
-          .in('trader_key', chunk)
+          .from('trader_sources')
+          .select('source_trader_id, handle, avatar_url')
+          .eq('source', source)
+          .in('source_trader_id', chunk)
 
-        fallbackData?.forEach((s: { trader_key: string; handle: string | null; avatar_url: string | null }) => {
-          const tid = s.trader_key.startsWith('0x') ? s.trader_key.toLowerCase() : s.trader_key
-          const key = `${source}:${tid}`
-          if (!handleMap.has(key) || (!handleMap.get(key)!.handle && s.handle)) {
-            handleMap.set(key, {
-              handle: handleMap.get(key)?.handle || s.handle,
-              avatar_url: handleMap.get(key)?.avatar_url || s.avatar_url || null,
-            })
+        fallbackData?.forEach(
+          (s: { source_trader_id: string; handle: string | null; avatar_url: string | null }) => {
+            const tid = s.source_trader_id.startsWith('0x')
+              ? s.source_trader_id.toLowerCase()
+              : s.source_trader_id
+            const key = `${source}:${tid}`
+            if (!handleMap.has(key) || (!handleMap.get(key)!.handle && s.handle)) {
+              handleMap.set(key, {
+                handle: handleMap.get(key)?.handle || s.handle,
+                avatar_url: handleMap.get(key)?.avatar_url || s.avatar_url || null,
+              })
+            }
           }
-        })
+        )
       }
-    }),
+    })
   )
 
   return handleMap

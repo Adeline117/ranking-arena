@@ -239,14 +239,11 @@ export async function GET(req: Request) {
 
       const cutoffTime = new Date(Date.now() - skipRecent * 60 * 60 * 1000).toISOString()
 
-      // traders table uses platform/trader_key columns (not source/source_trader_id)
-      // Order by updated_at ascending so least-recently-updated get enriched first
-      // Removed ORDER BY updated_at — causes statement timeout on large traders table.
-      // The LIMIT + random platform shuffle gives adequate coverage without expensive sort.
+      // Use trader_sources (canonical identity table)
       let baseQuery = supabase
-        .from('traders')
-        .select('platform, trader_key')
-        .in('platform', platforms)
+        .from('trader_sources')
+        .select('source, source_trader_id')
+        .in('source', platforms)
         .eq('is_active', true)
         .limit(limit)
 
@@ -265,8 +262,8 @@ export async function GET(req: Request) {
 
       // Normalize to TraderToEnrich shape expected by enrichTrader()
       const traders: TraderToEnrich[] = (rawTraders || []).map((r: TraderRow) => ({
-        source: r.platform,
-        source_trader_id: r.trader_key,
+        source: r.source,
+        source_trader_id: r.source_trader_id,
       }))
 
       return await processTraders(
@@ -342,10 +339,10 @@ async function processTraders(
     await Promise.all(
       Array.from(byPlatform.entries()).map(([platform, keys]) =>
         supabase
-          .from('traders')
+          .from('trader_sources')
           .update({ last_seen_at: now } as Record<string, unknown>)
-          .eq('platform', platform)
-          .in('trader_key', keys)
+          .eq('source', platform)
+          .in('source_trader_id', keys)
       )
     )
   } catch (err) {
