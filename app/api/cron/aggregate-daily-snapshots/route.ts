@@ -154,10 +154,12 @@ async function aggregateForDate(
     const PER_PLATFORM_LIMIT = 10000
     for (const platform of distinctPlatforms) {
       try {
-        const { data: platformData, error: platformError } = await readDb
-          .from('trader_snapshots_v2')
+        // Read from trader_latest (hot path, ~45K rows) instead of
+        // trader_snapshots_v2 (10M+ rows). Already deduplicated — 1 row per trader per window.
+        const { data: platformData, error: platformError } = await (readDb as any)
+          .from('trader_latest')
           .select(
-            'platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, as_of_ts'
+            'platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, updated_at'
           )
           .eq('platform', platform)
           .eq('window', '90D')

@@ -151,28 +151,7 @@ export async function upsertEquityCurve(
           }
         }
 
-        const fourHoursAgo = new Date(Date.now() - 4 * 3600_000).toISOString()
-        const { error: v2Err, count: v2Count } = await supabase
-          .from('trader_snapshots_v2')
-          .update(v2Update, { count: 'exact' })
-          .eq('platform', source)
-          .eq('trader_key', traderId)
-          .eq('window', v2Window)
-          .gte('as_of_ts', fourHoursAgo)
-          .order('as_of_ts', { ascending: false })
-          .limit(1)
-
-        if (v2Err) {
-          log.warn(`equity ROI sync failed for ${source}/${traderId}/${v2Window}`, {
-            error: v2Err.message,
-          })
-        } else if (v2Count === 0) {
-          log.warn(
-            `equity ROI sync matched 0 rows for ${source}/${traderId}/${v2Window} (4h lookback from ${fourHoursAgo} — no snapshot found)`
-          )
-        }
-
-        // Also sync to trader_latest (hot path)
+        // Sync to trader_latest (primary hot path for compute-leaderboard)
         await (supabase as any)
           .from('trader_latest')
           .update({ ...v2Update, updated_at: new Date().toISOString() })
@@ -348,27 +327,8 @@ export async function upsertStatsDetail(
         }
       }
 
-      // Update all matching v2 rows (removed .is('win_rate', null) guard
-      // so stale win_rate values get refreshed with latest enrichment data)
-      const fourHoursAgo = new Date(Date.now() - 4 * 3600_000).toISOString()
-      const { error: v2Err, count: v2Count } = await supabase
-        .from('trader_snapshots_v2')
-        .update(v2Update, { count: 'exact' })
-        .eq('platform', source)
-        .eq('trader_key', traderId)
-        .gte('as_of_ts', fourHoursAgo)
-        .order('as_of_ts', { ascending: false })
-        .limit(1)
-
-      if (v2Err) {
-        log.warn(`v2 stats sync failed for ${source}/${traderId}`, { error: v2Err.message })
-      } else if (v2Count === 0) {
-        log.warn(
-          `v2 stats sync matched 0 rows for ${source}/${traderId} (4h lookback from ${fourHoursAgo})`
-        )
-      }
-
-      // Also sync to trader_latest (hot path for compute-leaderboard)
+      // Sync to trader_latest (primary hot path for compute-leaderboard)
+      // snapshots_v2 sync removed — trader_latest is the source of truth
       const windowMap: Record<string, string> = {
         '7D': '7D',
         '30D': '30D',
