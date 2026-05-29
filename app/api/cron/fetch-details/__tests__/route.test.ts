@@ -11,14 +11,16 @@
 
 // Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
-
 
 const mockFrom = jest.fn()
 const mockSupabaseClient = { from: mockFrom }
@@ -80,9 +82,30 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  apiLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  dataLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
   captureError: jest.fn(),
   captureMessage: jest.fn(),
 }))
@@ -146,12 +169,12 @@ describe('GET /api/cron/fetch-details', () => {
 
   it('processes traders successfully', async () => {
     const traders = [
-      { platform: 'binance_futures', trader_key: 'trader1' },
-      { platform: 'bybit', trader_key: 'trader2' },
+      { source: 'binance_futures', source_trader_id: 'trader1' },
+      { source: 'bybit', source_trader_id: 'trader2' },
     ]
 
     mockFrom.mockImplementation((table: string) => {
-      if (table === 'traders') return chainable({ data: traders, error: null })
+      if (table === 'trader_sources') return chainable({ data: traders, error: null })
       return chainable({ data: null, error: null })
     })
 
