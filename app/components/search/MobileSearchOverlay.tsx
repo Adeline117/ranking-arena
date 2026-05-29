@@ -108,7 +108,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
               border: `1px solid ${tokens.colors.border.primary}`,
               borderRadius: tokens.radius.md,
               color: tokens.colors.text.primary,
-              fontSize: tokens.typography.fontSize.base,
+              fontSize: '16px', // >= 16px prevents iOS Safari auto-zoom on focus
               outline: 'none',
             }}
           />
