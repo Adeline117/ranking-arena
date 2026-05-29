@@ -686,7 +686,7 @@ export default function TraderProfileClient({
               />
             </Box>
 
-            {/* Stats Tab — lazy: only mount after first visit */}
+            {/* Stats Tab — not mounted until first visit (prevents skeleton flash in SwipeableView) */}
             <Box
               id="panel-stats"
               role="tabpanel"
@@ -694,19 +694,21 @@ export default function TraderProfileClient({
               style={{ minHeight: 200 }}
               className="tab-pane-enter"
             >
-              <StatsTab
-                visited={visitedTabs.has('stats')}
-                stats={traderStats}
-                traderHandle={traderProfile?.handle || data.handle}
-                assetBreakdown={traderAssetBreakdown}
-                equityCurve={traderEquityCurve}
-                positionHistory={traderPositionHistory}
-                isPro={isPro}
-                onUnlock={handlePricingRedirect}
-              />
+              {visitedTabs.has('stats') ? (
+                <StatsTab
+                  visited
+                  stats={traderStats}
+                  traderHandle={traderProfile?.handle || data.handle}
+                  assetBreakdown={traderAssetBreakdown}
+                  equityCurve={traderEquityCurve}
+                  positionHistory={traderPositionHistory}
+                  isPro={isPro}
+                  onUnlock={handlePricingRedirect}
+                />
+              ) : null}
             </Box>
 
-            {/* Portfolio Tab — lazy: only mount after first visit */}
+            {/* Portfolio Tab — not mounted until first visit (prevents skeleton flash in SwipeableView) */}
             <Box
               id="panel-portfolio"
               role="tabpanel"
@@ -714,14 +716,16 @@ export default function TraderProfileClient({
               style={{ minHeight: 200 }}
               className="tab-pane-enter"
             >
-              <PortfolioTab
-                visited={visitedTabs.has('portfolio')}
-                portfolio={traderPortfolio}
-                positionHistory={traderPositionHistory}
-                source={data.source}
-                isPro={isPro}
-                onUnlock={handlePricingRedirect}
-              />
+              {visitedTabs.has('portfolio') ? (
+                <PortfolioTab
+                  visited
+                  portfolio={traderPortfolio}
+                  positionHistory={traderPositionHistory}
+                  source={data.source}
+                  isPro={isPro}
+                  onUnlock={handlePricingRedirect}
+                />
+              ) : null}
             </Box>
 
             {/* Posts Tab (only for claimed traders) — lazy mount on first visit */}

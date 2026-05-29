@@ -94,15 +94,8 @@ export default function OverviewPerformanceCard({
   positionSummary,
 }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
-  const globalPeriod = usePeriodStore((s) => s.period) as Period
-  const [period, setPeriod] = useState<Period>(globalPeriod || '90D')
-
-  // Sync from global store (e.g. URL ?period=7D on initial load)
-  useEffect(() => {
-    if (globalPeriod && globalPeriod !== period) {
-      setPeriod(globalPeriod)
-    }
-  }, [globalPeriod]) // eslint-disable-line react-hooks/exhaustive-deps
+  const period = usePeriodStore((s) => s.period) as Period
+  const setStorePeriod = usePeriodStore((s) => s.setPeriod)
   const [isAnimating, setIsAnimating] = useState(false)
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
@@ -119,7 +112,7 @@ export default function OverviewPerformanceCard({
     if (newPeriod !== period) {
       setIsAnimating(true)
       setTimeout(() => {
-        setPeriod(newPeriod)
+        setStorePeriod(newPeriod)
         setIsAnimating(false)
       }, 150)
     }
