@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useId } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
@@ -18,28 +18,44 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
   const { t, language } = useLanguage()
   const [hoverIdx, setHoverIdx] = useState<number | null>(null)
   const svgRef = useRef<SVGSVGElement>(null)
+  const gradientId = `drawdown-fill-${useId().replace(/:/g, '')}`
 
-  const locale = language === 'zh' ? 'zh-CN' : language === 'ja' ? 'ja-JP' : language === 'ko' ? 'ko-KR' : 'en-US'
+  const locale =
+    language === 'zh'
+      ? 'zh-CN'
+      : language === 'ja'
+        ? 'ja-JP'
+        : language === 'ko'
+          ? 'ko-KR'
+          : 'en-US'
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    if (!svgRef.current) return
-    const rect = svgRef.current.getBoundingClientRect()
-    const relX = e.clientX - rect.left
-    const svgX = (relX / rect.width) * CHART_WIDTH
-    const dataX = svgX - PADDING.left
-    if (dataX < 0 || dataX > INNER_WIDTH) { setHoverIdx(null); return }
-    const idx = Math.round((dataX / INNER_WIDTH) * (equityCurve.length - 1))
-    setHoverIdx(Math.max(0, Math.min(equityCurve.length - 1, idx)))
-  }, [equityCurve.length])
+  const handleMouseMove = useCallback(
+    (e: React.MouseEvent<SVGSVGElement>) => {
+      if (!svgRef.current) return
+      const rect = svgRef.current.getBoundingClientRect()
+      const relX = e.clientX - rect.left
+      const svgX = (relX / rect.width) * CHART_WIDTH
+      const dataX = svgX - PADDING.left
+      if (dataX < 0 || dataX > INNER_WIDTH) {
+        setHoverIdx(null)
+        return
+      }
+      const idx = Math.round((dataX / INNER_WIDTH) * (equityCurve.length - 1))
+      setHoverIdx(Math.max(0, Math.min(equityCurve.length - 1, idx)))
+    },
+    [equityCurve.length]
+  )
 
   if (!equityCurve || equityCurve.length < 2) {
     return (
-      <div style={{
-        padding: tokens.spacing[4],
-        color: tokens.colors.text.tertiary,
-        fontSize: tokens.typography.fontSize.sm,
-        textAlign: 'center',
-      }}>
+      <div
+        style={{
+          padding: tokens.spacing[4],
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.sm,
+          textAlign: 'center',
+        }}
+      >
         {t('noData')}
       </div>
     )
@@ -47,23 +63,25 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
 
   // Compute drawdown series
   let peak = -Infinity
-  const drawdowns = equityCurve.map(p => {
+  const drawdowns = equityCurve.map((p) => {
     peak = Math.max(peak, p.roi)
     const dd = peak > 0 ? ((p.roi - peak) / peak) * 100 : 0
     return { date: p.date, drawdown: Math.min(dd, 0) }
   })
 
-  const minDrawdown = Math.min(...drawdowns.map(d => d.drawdown), 0)
+  const minDrawdown = Math.min(...drawdowns.map((d) => d.drawdown), 0)
 
   // If no drawdown at all, show a "no drawdown" message
   if (minDrawdown === 0) {
     return (
-      <div style={{
-        padding: tokens.spacing[4],
-        color: tokens.colors.accent.success,
-        fontSize: tokens.typography.fontSize.sm,
-        textAlign: 'center',
-      }}>
+      <div
+        style={{
+          padding: tokens.spacing[4],
+          color: tokens.colors.accent.success,
+          fontSize: tokens.typography.fontSize.sm,
+          textAlign: 'center',
+        }}
+      >
         {t('noDrawdownRecorded') || 'No drawdown recorded'}
       </div>
     )
@@ -85,7 +103,7 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
   // Area: top edge is 0 line, fill down to drawdown line
   const areaPath = [
     `M ${points[0].x} ${PADDING.top}`,
-    ...points.map(p => `L ${p.x} ${p.y}`),
+    ...points.map((p) => `L ${p.x} ${p.y}`),
     `L ${points[points.length - 1].x} ${PADDING.top}`,
     'Z',
   ].join(' ')
@@ -95,7 +113,7 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
 
   // Y-axis ticks
   const yTicks = [0, -yRange * 0.25, -yRange * 0.5, -yRange * 0.75, -yRange].filter(
-    v => Math.abs(v) <= yRange
+    (v) => Math.abs(v) <= yRange
   )
 
   // X-axis labels (show ~5 dates)
@@ -132,14 +150,14 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
       >
         {/* Gradient definition */}
         <defs>
-          <linearGradient id="drawdown-fill" x1="0" y1="0" x2="0" y2="1">
+          <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#ef4444" stopOpacity={0.05} />
             <stop offset="100%" stopColor="#ef4444" stopOpacity={0.3} />
           </linearGradient>
         </defs>
 
         {/* Y-axis gridlines and labels */}
-        {yTicks.map(tick => {
+        {yTicks.map((tick) => {
           const y = PADDING.top + (Math.abs(tick) / yRange) * INNER_HEIGHT
           return (
             <g key={tick}>
@@ -166,7 +184,7 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
         })}
 
         {/* Area fill */}
-        <path d={areaPath} fill="url(#drawdown-fill)" />
+        <path d={areaPath} fill={`url(#${gradientId})`} />
 
         {/* Line */}
         <path d={linePath} fill="none" stroke="#ef4444" strokeWidth={1.5} />
@@ -196,74 +214,97 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
         ))}
 
         {/* Max drawdown annotation */}
-        {minDrawdown < 0 && (() => {
-          const minIdx = drawdowns.findIndex(d => d.drawdown === minDrawdown)
-          if (minIdx < 0) return null
-          const px = points[minIdx].x
-          const py = points[minIdx].y
-          return (
-            <g>
-              <circle cx={px} cy={py} r={3} fill="#ef4444" />
-              <text
-                x={px}
-                y={py + 12}
-                textAnchor="middle"
-                fill="#ef4444"
-                fontSize={8}
-                fontWeight={600}
-              >
-                {minDrawdown.toFixed(1)}%
-              </text>
-            </g>
-          )
-        })()}
+        {minDrawdown < 0 &&
+          (() => {
+            const minIdx = drawdowns.findIndex((d) => d.drawdown === minDrawdown)
+            if (minIdx < 0) return null
+            const px = points[minIdx].x
+            const py = points[minIdx].y
+            return (
+              <g>
+                <circle cx={px} cy={py} r={3} fill="#ef4444" />
+                <text
+                  x={px}
+                  y={py + 12}
+                  textAnchor="middle"
+                  fill="#ef4444"
+                  fontSize={8}
+                  fontWeight={600}
+                >
+                  {minDrawdown.toFixed(1)}%
+                </text>
+              </g>
+            )
+          })()}
 
         {/* Hover crosshair + dot */}
         {hoverPoint && (
           <g>
             <line
-              x1={hoverPoint.x} y1={PADDING.top}
-              x2={hoverPoint.x} y2={PADDING.top + INNER_HEIGHT}
-              stroke="var(--color-text-tertiary)" strokeWidth={0.8} strokeDasharray="3,3"
+              x1={hoverPoint.x}
+              y1={PADDING.top}
+              x2={hoverPoint.x}
+              y2={PADDING.top + INNER_HEIGHT}
+              stroke="var(--color-text-tertiary)"
+              strokeWidth={0.8}
+              strokeDasharray="3,3"
             />
-            <circle cx={hoverPoint.x} cy={hoverPoint.y} r={3.5} fill="#ef4444" stroke="var(--color-bg-primary)" strokeWidth={1.5} />
+            <circle
+              cx={hoverPoint.x}
+              cy={hoverPoint.y}
+              r={3.5}
+              fill="#ef4444"
+              stroke="var(--color-bg-primary)"
+              strokeWidth={1.5}
+            />
           </g>
         )}
       </svg>
 
       {/* Tooltip */}
-      {hoverPoint && svgRef.current && (() => {
-        const rect = svgRef.current.getBoundingClientRect()
-        const pxX = (hoverPoint.x / CHART_WIDTH) * rect.width
-        const pxY = (hoverPoint.y / CHART_HEIGHT) * rect.height
-        const flipLeft = pxX > rect.width * 0.7
-        return (
-          <div
-            style={{
-              position: 'absolute',
-              left: flipLeft ? pxX - 8 : pxX + 8,
-              top: Math.max(0, pxY - 36),
-              transform: flipLeft ? 'translateX(-100%)' : 'translateX(0)',
-              background: 'var(--color-bg-primary)',
-              border: '1px solid var(--color-border-primary)',
-              borderRadius: tokens.radius.md,
-              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-              boxShadow: '0 2px 8px var(--color-overlay-subtle)',
-              pointerEvents: 'none' as const,
-              whiteSpace: 'nowrap' as const,
-              zIndex: 10,
-              fontSize: 11,
-            }}
-          >
-            <div style={{ color: 'var(--color-text-tertiary)', marginBottom: 1 }}>
-              {new Date(hoverPoint.date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+      {hoverPoint &&
+        svgRef.current &&
+        (() => {
+          const rect = svgRef.current.getBoundingClientRect()
+          const pxX = (hoverPoint.x / CHART_WIDTH) * rect.width
+          const pxY = (hoverPoint.y / CHART_HEIGHT) * rect.height
+          const flipLeft = pxX > rect.width * 0.7
+          return (
+            <div
+              style={{
+                position: 'absolute',
+                left: flipLeft ? pxX - 8 : pxX + 8,
+                top: Math.max(0, pxY - 36),
+                transform: flipLeft ? 'translateX(-100%)' : 'translateX(0)',
+                background: 'var(--color-bg-primary)',
+                border: '1px solid var(--color-border-primary)',
+                borderRadius: tokens.radius.md,
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                boxShadow: '0 2px 8px var(--color-overlay-subtle)',
+                pointerEvents: 'none' as const,
+                whiteSpace: 'nowrap' as const,
+                zIndex: 10,
+                fontSize: 11,
+              }}
+            >
+              <div style={{ color: 'var(--color-text-tertiary)', marginBottom: 1 }}>
+                {new Date(hoverPoint.date).toLocaleDateString(locale, {
+                  month: 'short',
+                  day: 'numeric',
+                })}
+              </div>
+              <div
+                style={{
+                  color: '#ef4444',
+                  fontWeight: 600,
+                  fontFamily: 'var(--font-mono, monospace)',
+                }}
+              >
+                {hoverPoint.drawdown.toFixed(2)}%
+              </div>
             </div>
-            <div style={{ color: '#ef4444', fontWeight: 600, fontFamily: 'var(--font-mono, monospace)' }}>
-              {hoverPoint.drawdown.toFixed(2)}%
-            </div>
-          </div>
-        )
-      })()}
+          )
+        })()}
     </div>
   )
 }
