@@ -171,6 +171,17 @@ export async function upsertEquityCurve(
             `equity ROI sync matched 0 rows for ${source}/${traderId}/${v2Window} (4h lookback from ${fourHoursAgo} — no snapshot found)`
           )
         }
+
+        // Also sync to trader_latest (hot path)
+        await (supabase as any)
+          .from('trader_latest')
+          .update({ ...v2Update, updated_at: new Date().toISOString() })
+          .eq('platform', source)
+          .eq('trader_key', traderId)
+          .eq('window', v2Window)
+          .then(({ error: latestErr }: { error: { message: string } | null }) => {
+            if (latestErr) log.warn(`trader_latest equity sync failed: ${latestErr.message}`)
+          })
       }
     }
   }
@@ -356,6 +367,32 @@ export async function upsertStatsDetail(
           `v2 stats sync matched 0 rows for ${source}/${traderId} (4h lookback from ${fourHoursAgo})`
         )
       }
+
+      // Also sync to trader_latest (hot path for compute-leaderboard)
+      const windowMap: Record<string, string> = {
+        '7D': '7D',
+        '30D': '30D',
+        '90D': '90D',
+        WEEKLY: '7D',
+        MONTHLY: '30D',
+        QUARTERLY: '90D',
+        '7d': '7D',
+        '30d': '30D',
+        '90d': '90D',
+      }
+      const latestWindow = windowMap[period] || period
+      await (supabase as any)
+        .from('trader_latest')
+        .update({ ...v2Update, updated_at: new Date().toISOString() })
+        .eq('platform', source)
+        .eq('trader_key', traderId)
+        .eq('window', latestWindow)
+        .then(({ error: latestErr }: { error: { message: string } | null }) => {
+          if (latestErr)
+            log.warn(
+              `trader_latest stats sync failed for ${source}/${traderId}: ${latestErr.message}`
+            )
+        })
     }
   }
 
@@ -442,36 +479,18 @@ export async function upsertPortfolio(
     captured_at: capturedAt,
   }))
 
-  // DELETE old rows then INSERT new snapshot (unique constraint includes captured_at,
-  // so upsert with a new timestamp never matches — must replace instead)
-  const { error: delError } = await supabase
+  // UPSERT on (source, source_trader_id, symbol) — replaces DELETE+INSERT pattern
+  // that caused dead row bloat. Old symbols no longer held get stale captured_at.
+  const { error: upsertError } = await supabase
     .from('trader_portfolio')
-    .delete()
-    .eq('source', source)
-    .eq('source_trader_id', traderId)
+    .upsert(records, { onConflict: 'source,source_trader_id,symbol' })
 
-  if (delError) {
-    log.error(`Portfolio delete failed for ${source}/${traderId}`, {
-      error: delError instanceof Error ? delError.message : String(delError),
+  if (upsertError) {
+    log.error(`Portfolio upsert failed for ${source}/${traderId}`, {
+      error: upsertError instanceof Error ? upsertError.message : String(upsertError),
     })
-    return { saved: 0, error: delError.message }
+    return { saved: 0, error: upsertError.message }
   }
 
-  const BATCH_SIZE = 25
-  let saved = 0
-  for (let i = 0; i < records.length; i += BATCH_SIZE) {
-    const batch = records.slice(i, i + BATCH_SIZE)
-    const { error } = await supabase.from('trader_portfolio').insert(batch)
-
-    if (error) {
-      log.error(`Portfolio batch ${i} failed for ${source}/${traderId}`, {
-        error: error instanceof Error ? error.message : String(error),
-      })
-      // Continue inserting remaining batches instead of losing data
-      continue
-    }
-    saved += batch.length
-  }
-
-  return { saved }
+  return { saved: records.length }
 }
