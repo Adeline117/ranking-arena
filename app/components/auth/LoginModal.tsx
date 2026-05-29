@@ -70,6 +70,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
   const [otp, setOtp] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
   const emailRef = useRef<HTMLInputElement>(null)
   const otpRef = useRef<HTMLInputElement>(null)
 
@@ -81,8 +82,16 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
       setOtp('')
       setError('')
       setLoading(false)
+      setResendCooldown(0)
     }
   }, [open])
+
+  // Resend cooldown timer
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setTimeout(() => setResendCooldown((c) => c - 1), 1000)
+    return () => clearTimeout(timer)
+  }, [resendCooldown])
 
   // Focus inputs
   useEffect(() => {
@@ -494,6 +503,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               ref={otpRef}
               type="text"
               inputMode="numeric"
+              pattern="[0-9]*"
               autoComplete="one-time-code"
               value={otp}
               onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
@@ -554,6 +564,33 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 </svg>
               )}
               {loading ? t('authVerifying') : t('authVerify')}
+            </button>
+
+            <button
+              onClick={() => {
+                setResendCooldown(30)
+                setOtp('')
+                setError('')
+                handleSendOTP()
+              }}
+              disabled={resendCooldown > 0 || loading}
+              style={{
+                width: '100%',
+                padding: '8px 16px',
+                borderRadius: tokens.radius.lg,
+                background: 'none',
+                border: '1px solid var(--glass-border-medium)',
+                color:
+                  resendCooldown > 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)',
+                fontWeight: 500,
+                fontSize: 13,
+                cursor: resendCooldown > 0 || loading ? 'not-allowed' : 'pointer',
+                marginTop: 8,
+              }}
+            >
+              {resendCooldown > 0
+                ? `${t('authResendCode') || 'Resend code'} (${resendCooldown}s)`
+                : t('authResendCode') || 'Resend code'}
             </button>
 
             {error && (
