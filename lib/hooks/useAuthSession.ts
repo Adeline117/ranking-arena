@@ -115,6 +115,13 @@ function initializeAuth() {
         .catch(() => {
           logger.warn('[useAuthSession] Could not show auth-lost toast')
         })
+
+      // Open login modal so user can re-authenticate in-place (not just a toast)
+      import('@/lib/hooks/useLoginModal')
+        .then(({ useLoginModal }) => {
+          useLoginModal.getState().openLoginModal('session-expired')
+        })
+        .catch(() => {})
     })
   }
 
