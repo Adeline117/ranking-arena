@@ -1,4 +1,3 @@
-
 import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
@@ -78,7 +77,13 @@ export function Skeleton({
   )
 }
 
-export function SkeletonLine({ width = '100%', height = '16px' }: { width?: string | number; height?: string | number }) {
+export function SkeletonLine({
+  width = '100%',
+  height = '16px',
+}: {
+  width?: string | number
+  height?: string | number
+}) {
   return <Skeleton width={width} height={height} variant="rounded" animation="shimmer" />
 }
 
@@ -86,12 +91,7 @@ export function SkeletonText({ lines = 3, spacing = 8 }: { lines?: number; spaci
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: spacing }}>
       {Array.from({ length: lines }).map((_, i) => (
-        <Skeleton 
-          key={i} 
-          width={i === lines - 1 ? '60%' : '100%'} 
-          height="14px" 
-          variant="text"
-        />
+        <Skeleton key={i} width={i === lines - 1 ? '60%' : '100%'} height="14px" variant="text" />
       ))}
     </div>
   )
@@ -101,7 +101,13 @@ export function SkeletonAvatar({ size = 40 }: { size?: number }) {
   return <Skeleton width={`${size}px`} height={`${size}px`} variant="circular" />
 }
 
-export function SkeletonButton({ width = '80px', height = '36px' }: { width?: string; height?: string }) {
+export function SkeletonButton({
+  width = '80px',
+  height = '36px',
+}: {
+  width?: string
+  height?: string
+}) {
   return <Skeleton width={width} height={height} variant="rounded" />
 }
 
@@ -167,7 +173,14 @@ export function ChartSkeleton({
       }}
     >
       {showTitle && (
-        <div style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div
+          style={{
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}
+        >
           <Skeleton width="120px" height="14px" variant="rounded" animation="pulse" />
           <Skeleton width="60px" height="12px" variant="rounded" animation="pulse" />
         </div>
@@ -202,7 +215,11 @@ export function ChartSkeleton({
             height="100%"
             viewBox="0 0 400 100"
             preserveAspectRatio="none"
-            style={{ position: 'absolute', inset: 0, animation: 'skeletonPulse 1.5s ease-in-out infinite' }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              animation: 'skeletonPulse 1.5s ease-in-out infinite',
+            }}
             aria-hidden="true"
           >
             <path
@@ -218,7 +235,17 @@ export function ChartSkeleton({
             />
           </svg>
         ) : (
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'flex-end', gap: 4, animation: 'skeletonPulse 1.5s ease-in-out infinite' }} aria-hidden="true">
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'flex-end',
+              gap: 4,
+              animation: 'skeletonPulse 1.5s ease-in-out infinite',
+            }}
+            aria-hidden="true"
+          >
             {Array.from({ length: 12 }).map((_, i) => (
               <div
                 key={i}
@@ -240,14 +267,15 @@ export function ChartSkeleton({
 
 export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
   return (
-    <Box 
+    <Box
       className="stagger-children"
       role="status"
       aria-label={t('loadingSkeleton')}
       style={{ display: 'flex', flexDirection: 'column', gap: 0 }}
     >
-      {/* Skeleton header */}
+      {/* Desktop: grid header (hidden on mobile) */}
       <Box
+        className="ranking-skeleton-header"
         style={{
           display: 'grid',
           gridTemplateColumns: '40px minmax(140px, 1.5fr) 58px 96px 80px 64px 64px',
@@ -259,73 +287,136 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
       >
         <Skeleton width="20px" height="12px" variant="rounded" animation="pulse" />
         <Skeleton width="60px" height="12px" variant="rounded" animation="pulse" />
-        <Skeleton width="30px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
-        <Skeleton width="30px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
-        <Skeleton width="30px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
-        <Skeleton width="30px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
-        <Skeleton width="36px" height="12px" variant="rounded" animation="pulse" style={{ marginLeft: 'auto' }} />
+        <Skeleton
+          width="30px"
+          height="12px"
+          variant="rounded"
+          animation="pulse"
+          style={{ marginLeft: 'auto' }}
+        />
+        <Skeleton
+          width="30px"
+          height="12px"
+          variant="rounded"
+          animation="pulse"
+          style={{ marginLeft: 'auto' }}
+        />
+        <Skeleton
+          width="30px"
+          height="12px"
+          variant="rounded"
+          animation="pulse"
+          style={{ marginLeft: 'auto' }}
+        />
+        <Skeleton
+          width="30px"
+          height="12px"
+          variant="rounded"
+          animation="pulse"
+          style={{ marginLeft: 'auto' }}
+        />
+        <Skeleton
+          width="36px"
+          height="12px"
+          variant="rounded"
+          animation="pulse"
+          style={{ marginLeft: 'auto' }}
+        />
       </Box>
       {Array.from({ length: rows }).map((_, i) => (
-        <Box
-          key={i}
-          style={{
-            display: 'grid',
-            gridTemplateColumns: '40px minmax(140px, 1.5fr) 58px 96px 80px 64px 64px',
-            alignItems: 'center',
-            gap: tokens.spacing[2],
-            padding: `10px ${tokens.spacing[4]}`,
-            minHeight: 56,
-            borderBottom: `1px solid ${tokens.colors.border.primary}15`,
-            animationDelay: `${i * 50}ms`,
-          }}
-        >
-          {/* Rank */}
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            {i < 3 ? (
-              <Skeleton width="30px" height="30px" variant="circular" />
-            ) : (
-              <Skeleton width="24px" height="14px" variant="rounded" />
-            )}
-          </div>
-          
-          {/* Trader Info */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], minWidth: 0 }}>
-            <Skeleton width="36px" height="36px" variant="circular" style={{ flexShrink: 0 }} />
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}>
-              <Skeleton width={`${60 + (i * 17 % 40)}%`} height="14px" />
-              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                <Skeleton width="14px" height="14px" variant="circular" />
-                <Skeleton width="50px" height="10px" />
+        <Box key={i}>
+          {/* Desktop row: grid (hidden on mobile via CSS) */}
+          <div
+            className="ranking-skeleton-row-desktop"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: '40px minmax(140px, 1.5fr) 58px 96px 80px 64px 64px',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              padding: `10px ${tokens.spacing[4]}`,
+              minHeight: 56,
+              borderBottom: `1px solid ${tokens.colors.border.primary}15`,
+              animationDelay: `${i * 50}ms`,
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'center' }}>
+              {i < 3 ? (
+                <Skeleton width="30px" height="30px" variant="circular" />
+              ) : (
+                <Skeleton width="24px" height="14px" variant="rounded" />
+              )}
+            </div>
+            <div
+              style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], minWidth: 0 }}
+            >
+              <Skeleton width="36px" height="36px" variant="circular" style={{ flexShrink: 0 }} />
+              <div
+                style={{ display: 'flex', flexDirection: 'column', gap: 4, flex: 1, minWidth: 0 }}
+              >
+                <Skeleton width={`${60 + ((i * 17) % 40)}%`} height="14px" />
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Skeleton width="14px" height="14px" variant="circular" />
+                  <Skeleton width="50px" height="10px" />
+                </div>
               </div>
             </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Skeleton width="64px" height="16px" variant="rounded" />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Skeleton width="56px" height="14px" variant="rounded" />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Skeleton width="40px" height="14px" variant="rounded" />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Skeleton width="40px" height="14px" variant="rounded" />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+              <Skeleton width="56px" height="24px" variant="rounded" />
+            </div>
           </div>
-          
-          {/* ROI */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-            <Skeleton width="64px" height="16px" variant="rounded" />
-          </div>
-          
-          {/* PnL */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="col-pnl">
-            <Skeleton width="56px" height="14px" variant="rounded" />
-          </div>
-          
-          {/* Win% */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="col-winrate">
-            <Skeleton width="40px" height="14px" variant="rounded" />
-          </div>
-          
-          {/* MDD */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="col-mdd">
-            <Skeleton width="40px" height="14px" variant="rounded" />
-          </div>
-          
-          {/* Score */}
-          <div style={{ display: 'flex', justifyContent: 'flex-end' }} className="col-score">
-            <Skeleton width="56px" height="24px" variant="rounded" />
+
+          {/* Mobile row: card layout (hidden on desktop via CSS) */}
+          <div
+            className="ranking-skeleton-row-mobile"
+            style={{
+              display: 'none',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              borderBottom: `1px solid ${tokens.colors.border.primary}15`,
+              gap: tokens.spacing[3],
+              alignItems: 'center',
+              animationDelay: `${i * 50}ms`,
+            }}
+          >
+            <div
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: 28 }}
+            >
+              {i < 3 ? (
+                <Skeleton width="24px" height="24px" variant="circular" />
+              ) : (
+                <Skeleton width="20px" height="14px" variant="rounded" />
+              )}
+            </div>
+            <Skeleton width="36px" height="36px" variant="circular" style={{ flexShrink: 0 }} />
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <Skeleton width={`${50 + ((i * 13) % 30)}%`} height="14px" />
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <Skeleton width="80%" height="12px" />
+                <Skeleton width="60%" height="12px" />
+              </div>
+            </div>
+            <Skeleton width="44px" height="22px" variant="rounded" style={{ flexShrink: 0 }} />
           </div>
         </Box>
       ))}
+      <style>{`
+        @media (max-width: 767px) {
+          .ranking-skeleton-header { display: none !important; }
+          .ranking-skeleton-row-desktop { display: none !important; }
+          .ranking-skeleton-row-mobile { display: flex !important; }
+        }
+      `}</style>
     </Box>
   )
 }
@@ -349,24 +440,34 @@ export function TraderCardSkeleton() {
         </div>
         <SkeletonButton width="80px" height="32px" />
       </div>
-      
+
       {/* Stats Grid */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: 'repeat(4, 1fr)', 
-        gap: tokens.spacing[3],
-        padding: tokens.spacing[3],
-        background: tokens.colors.bg.tertiary,
-        borderRadius: tokens.radius.lg,
-      }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: tokens.spacing[3],
+          padding: tokens.spacing[3],
+          background: tokens.colors.bg.tertiary,
+          borderRadius: tokens.radius.lg,
+        }}
+      >
         {Array.from({ length: 4 }).map((_, i) => (
-          <div key={i} style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1], alignItems: 'center' }}>
+          <div
+            key={i}
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.spacing[1],
+              alignItems: 'center',
+            }}
+          >
             <Skeleton width="50px" height="24px" />
             <Skeleton width="40px" height="10px" />
           </div>
         ))}
       </div>
-      
+
       {/* Chart Area */}
       <Skeleton width="100%" height="120px" variant="rounded" />
     </Box>
@@ -389,10 +490,10 @@ export function PostSkeleton() {
           <Skeleton width="60px" height="10px" />
         </div>
       </div>
-      
+
       {/* Content */}
       <SkeletonText lines={3} />
-      
+
       {/* Actions */}
       <div style={{ display: 'flex', gap: tokens.spacing[4], paddingTop: tokens.spacing[2] }}>
         <Skeleton width="50px" height="20px" />
@@ -428,12 +529,21 @@ export function ProfileSkeleton() {
           <SkeletonButton width="100px" height="40px" />
         </div>
       </Box>
-      
+
       {/* Stats Cards */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}>
+      <div
+        style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[4] }}
+      >
         {Array.from({ length: 3 }).map((_, i) => (
           <Box key={i} className="glass-card" p={4} radius="xl">
-            <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], alignItems: 'center' }}>
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: tokens.spacing[2],
+                alignItems: 'center',
+              }}
+            >
               <Skeleton width="60px" height="32px" />
               <Skeleton width="80px" height="12px" />
             </div>
@@ -501,7 +611,9 @@ export function ListSkeleton({ count = 5, gap = 12 }: { count?: number; gap?: nu
           style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}
         >
           <SkeletonAvatar size={40} />
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+          <div
+            style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}
+          >
             <Skeleton width="60%" height="14px" />
             <Skeleton width="40%" height="10px" />
           </div>
@@ -517,25 +629,27 @@ export function TableSkeleton({ rows = 5, columns = 5 }: { rows?: number; column
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
       {/* 表头 */}
-      <div style={{ 
-        display: 'grid', 
-        gridTemplateColumns: `repeat(${columns}, 1fr)`,
-        gap: tokens.spacing[3],
-        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-        background: tokens.colors.bg.tertiary,
-        borderRadius: tokens.radius.md,
-      }}>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${columns}, 1fr)`,
+          gap: tokens.spacing[3],
+          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+          background: tokens.colors.bg.tertiary,
+          borderRadius: tokens.radius.md,
+        }}
+      >
         {Array.from({ length: columns }).map((_, i) => (
           <Skeleton key={i} width="60%" height="12px" />
         ))}
       </div>
-      
+
       {/* 表行 */}
       {Array.from({ length: rows }).map((_, rowIndex) => (
-        <div 
+        <div
           key={rowIndex}
-          style={{ 
-            display: 'grid', 
+          style={{
+            display: 'grid',
             gridTemplateColumns: `repeat(${columns}, 1fr)`,
             gap: tokens.spacing[3],
             padding: `${tokens.spacing[3]} ${tokens.spacing[3]}`,
@@ -544,11 +658,7 @@ export function TableSkeleton({ rows = 5, columns = 5 }: { rows?: number; column
           }}
         >
           {Array.from({ length: columns }).map((_, colIndex) => (
-            <Skeleton 
-              key={colIndex} 
-              width={colIndex === 0 ? '40px' : '80%'} 
-              height="16px" 
-            />
+            <Skeleton key={colIndex} width={colIndex === 0 ? '40px' : '80%'} height="16px" />
           ))}
         </div>
       ))}
