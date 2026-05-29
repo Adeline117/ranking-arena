@@ -66,8 +66,8 @@ interface TraderToEnrich {
 }
 
 interface TraderRow {
-  platform: string
-  trader_key: string
+  source: string
+  source_trader_id: string
 }
 
 /**
