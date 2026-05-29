@@ -86,7 +86,7 @@ async function main() {
             {
               headers: { Authorization: `Bearer ${enrichSecret}` },
               signal: AbortSignal.timeout(300_000),
-            },
+            }
           )
           const enrichBody = await enrichResp.json().catch(() => ({}))
           job.log(`batch-enrich ${period}/${tier}: ${enrichResp.status}`)
@@ -138,19 +138,27 @@ async function main() {
         // Enrich first (backfills metrics before score calc)
         for (const period of ['7D', '30D', '90D']) {
           for (const tier of ['fast', 'slow']) {
-            await q.add(JOB.ENRICH_PLATFORM, { period, tier }, {
-              jobId: `enrich-after-fetch:${period}:${tier}:${Date.now()}`,
-              priority: 2,
-            })
+            await q.add(
+              JOB.ENRICH_PLATFORM,
+              { period, tier },
+              {
+                jobId: `enrich-after-fetch_${period}_${tier}_${Date.now()}`,
+                priority: 2,
+              }
+            )
           }
         }
         // Score after enrich (priority 1 = runs after enrich completes)
         for (const season of ['7D', '30D', '90D'] as const) {
-          await q.add(JOB.COMPUTE_LEADERBOARD, { season }, {
-            jobId: `score-after-fetch:${season}:${Date.now()}`,
-            priority: 1,
-            delay: 120_000, // 2 min delay to let enrich finish first
-          })
+          await q.add(
+            JOB.COMPUTE_LEADERBOARD,
+            { season },
+            {
+              jobId: `score-after-fetch_${season}_${Date.now()}`,
+              priority: 1,
+              delay: 120_000, // 2 min delay to let enrich finish first
+            }
+          )
         }
       }
     }
@@ -160,10 +168,14 @@ async function main() {
       // Only trigger once (after 90D, which runs last)
       const { season } = job.data as { season: string }
       if (season === '90D') {
-        await q.add(JOB.SYNC_MEILISEARCH, {}, {
-          jobId: `meilisearch-after-score:${Date.now()}`,
-          priority: 1,
-        })
+        await q.add(
+          JOB.SYNC_MEILISEARCH,
+          {},
+          {
+            jobId: `meilisearch-after-score_${Date.now()}`,
+            priority: 1,
+          }
+        )
       }
     }
   })
