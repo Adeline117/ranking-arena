@@ -476,22 +476,8 @@ function SearchContent() {
     <div
       style={{
         minHeight: '100vh',
-        background: tokens.colors.bg.primary,
-        color: tokens.colors.text.primary,
-        isolation: 'isolate',
-        position: 'relative',
       }}
     >
-      <div
-        style={{
-          position: 'fixed',
-          inset: 0,
-          background: tokens.gradient.mesh,
-          opacity: 0.5,
-          pointerEvents: 'none',
-          zIndex: 0,
-        }}
-      />
       <h1 className="sr-only">{t('searchResults')}</h1>
 
       <div
@@ -499,8 +485,6 @@ function SearchContent() {
           maxWidth: 900,
           margin: '0 auto',
           padding: '24px 20px 100px',
-          position: 'relative',
-          zIndex: 1,
         }}
       >
         {/* Search header */}
@@ -1034,13 +1018,7 @@ export default function SearchPage() {
   return (
     <Suspense
       fallback={
-        <div
-          style={{
-            minHeight: '100vh',
-            background: tokens.colors.bg.primary,
-            color: tokens.colors.text.primary,
-          }}
-        >
+        <div style={{ minHeight: '100vh' }}>
           <div style={{ maxWidth: 900, margin: '0 auto', padding: '24px 20px' }}>
             <div style={{ marginTop: 60 }}>
               <div className="skeleton" style={{ height: 200, borderRadius: tokens.radius.lg }} />
