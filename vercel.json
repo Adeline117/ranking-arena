@@ -302,7 +302,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "s-maxage=600, stale-while-revalidate=300"
+          "value": "s-maxage=120, stale-while-revalidate=60"
         }
       ]
     },
@@ -329,7 +329,7 @@
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "s-maxage=600, stale-while-revalidate=300"
+          "value": "s-maxage=120, stale-while-revalidate=60"
         }
       ]
     },

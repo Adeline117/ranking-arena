@@ -28,11 +28,15 @@ config({ path: resolve(__dirname, '..', '.env') })
 
 import { Worker } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
-import { QUEUE_NAME, JOB } from './queues'
+import { QUEUE_NAME, JOB, getQueue } from './queues'
 import { registerSchedules } from './scheduler'
 import { processFetch } from './processors/fetch'
 
 const FETCH_CONCURRENCY = 5 // 5 platforms fetching in parallel
+
+// Track fetch completions to trigger leaderboard recompute
+let fetchCompletedSinceLastScore = 0
+const FETCH_BATCH_THRESHOLD = 5 // After N platforms fetch, trigger score recompute
 
 async function main() {
   console.log('[worker] Arena Pipeline Worker starting...')
@@ -48,10 +52,26 @@ async function main() {
         case JOB.FETCH_PLATFORM:
           return processFetch(job)
 
-        case JOB.COMPUTE_LEADERBOARD:
-          // TODO: Phase 2 — migrate compute-leaderboard
-          job.log(`[skip] ${job.name} not yet migrated — still running on Vercel cron`)
-          return { skipped: true }
+        case JOB.COMPUTE_LEADERBOARD: {
+          // Trigger Vercel's compute-leaderboard endpoint (still runs there)
+          const { season } = job.data as { season: string }
+          const cronSecret = process.env.CRON_SECRET
+          if (!cronSecret) {
+            job.log('[skip] CRON_SECRET not set, cannot trigger compute-leaderboard')
+            return { skipped: true }
+          }
+          const siteUrl = process.env.SITE_URL || 'https://www.arenafi.org'
+          job.log(`Triggering compute-leaderboard for ${season}`)
+          const resp = await fetch(`${siteUrl}/api/cron/compute-leaderboard?season=${season}`, {
+            headers: { Authorization: `Bearer ${cronSecret}` },
+            signal: AbortSignal.timeout(300_000), // 5 min timeout
+          })
+          const body = await resp.json().catch(() => ({}))
+          job.log(
+            `compute-leaderboard ${season}: ${resp.status} — ${JSON.stringify(body).slice(0, 200)}`
+          )
+          return { season, status: resp.status, ...body }
+        }
 
         case JOB.ENRICH_PLATFORM:
           // TODO: Phase 2 — migrate batch-enrich
@@ -71,11 +91,31 @@ async function main() {
     }
   )
 
-  // 3. Event logging
-  worker.on('completed', (job) => {
+  // 3. Event logging + event-driven score trigger
+  worker.on('completed', async (job) => {
     const duration =
       job.finishedOn && job.processedOn ? `${job.finishedOn - job.processedOn}ms` : '?ms'
     console.log(`[worker] ✓ ${job.name} (${JSON.stringify(job.data)}) completed in ${duration}`)
+
+    // Event-driven: after N platform fetches complete, trigger leaderboard recompute
+    if (job.name === JOB.FETCH_PLATFORM) {
+      fetchCompletedSinceLastScore++
+      if (fetchCompletedSinceLastScore >= FETCH_BATCH_THRESHOLD) {
+        fetchCompletedSinceLastScore = 0
+        console.log('[worker] Fetch batch threshold reached — triggering score recompute')
+        const q = getQueue()
+        for (const season of ['7D', '30D', '90D'] as const) {
+          await q.add(
+            JOB.COMPUTE_LEADERBOARD,
+            { season },
+            {
+              jobId: `score-after-fetch:${season}:${Date.now()}`,
+              priority: 1, // Higher priority than scheduled fetches
+            }
+          )
+        }
+      }
+    }
   })
 
   worker.on('failed', (job, err) => {
