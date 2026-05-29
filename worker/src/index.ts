@@ -18,6 +18,14 @@
  *   Failed jobs auto-retry 3x with exponential backoff.
  */
 
+import { resolve, dirname } from 'path'
+import { fileURLToPath } from 'url'
+import { config } from 'dotenv'
+
+// Load worker/.env relative to this file's location
+const __dirname = dirname(fileURLToPath(import.meta.url))
+config({ path: resolve(__dirname, '..', '.env') })
+
 import { Worker } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
 import { QUEUE_NAME, JOB } from './queues'
