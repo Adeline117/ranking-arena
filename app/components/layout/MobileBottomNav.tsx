@@ -380,12 +380,15 @@ function useKeyboardOpen(): boolean {
     if (typeof window === 'undefined' || !window.visualViewport) return
 
     const vv = window.visualViewport
-    const threshold = window.innerHeight * 0.75 // keyboard takes >25% of screen
+    // Capture initial viewport height as baseline (before any keyboard)
+    // More reliable than window.innerHeight which changes with browser chrome
+    const initialHeight = vv.height
 
     const handleResize = () => {
-      setKeyboardOpen(vv.height < threshold)
+      setKeyboardOpen(vv.height < initialHeight * 0.75)
     }
 
+    handleResize() // Set correct initial state
     vv.addEventListener('resize', handleResize)
     return () => vv.removeEventListener('resize', handleResize)
   }, [])
