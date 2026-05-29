@@ -82,8 +82,9 @@ secrets/
 # Cloudflare Worker
 cloudflare-worker/node_modules/
 
-# Worker env (secrets)
+# Worker secrets + logs
 worker/.env
+worker/logs/
 
 # Infrastructure
 infra/*/node_modules/
