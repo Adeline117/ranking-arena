@@ -17,32 +17,8 @@ import { calculateArenaScore, parseNum, normalizeWinRate } from '../shared'
 // ============================================
 
 describe('Fetcher Registry', () => {
-  // NOTE: Inline fetchers have been removed (2026-03-13). All platforms use ConnectorRegistry.
-  // INLINE_FETCHERS is now an empty stub for backward compatibility.
-  // getSupportedInlinePlatforms() now returns the active platform list (for monitoring).
-
-  test('INLINE_FETCHERS is an empty stub (all platforms migrated to ConnectorRegistry)', () => {
-    // After connector migration, INLINE_FETCHERS is empty
-    expect(typeof INLINE_FETCHERS).toBe('object')
-  })
-
-  test('all fetcher values are functions (empty registry has no entries)', () => {
-    // With empty INLINE_FETCHERS, this is a no-op assertion
-    for (const [_key, fetcher] of Object.entries(INLINE_FETCHERS)) {
-      expect(typeof fetcher).toBe('function')
-    }
-  })
-
-  test('getInlineFetcher returns null for all platforms (deprecated)', () => {
-    // After migration, getInlineFetcher returns null for everything
-    const fetcher = getInlineFetcher('binance_futures')
-    expect(fetcher).toBeNull()
-  })
-
-  test('getInlineFetcher returns null for unknown platform', () => {
-    const fetcher = getInlineFetcher('nonexistent_platform_xyz')
-    expect(fetcher).toBeNull()
-  })
+  // Inline fetchers removed (2026-03-13). All platforms use ConnectorRegistry.
+  // getSupportedInlinePlatforms() returns the active platform list (for monitoring).
 
   test('getSupportedInlinePlatforms returns active platform list', () => {
     const platforms = getSupportedInlinePlatforms()
@@ -217,6 +193,7 @@ describe('Shared Utilities', () => {
 // Mock Supabase Client for Fetcher Tests
 // ============================================
 
+// Mock Supabase helper kept for future connector integration tests
 function _createMockSupabase() {
   const upsertFn = jest.fn().mockResolvedValue({ error: null })
   const fromFn = jest.fn().mockReturnValue({
@@ -231,16 +208,6 @@ function _createMockSupabase() {
     mocks: { from: fromFn, upsert: upsertFn },
   }
 }
-
-describe('Fetcher Function Signatures', () => {
-  // NOTE: Inline fetchers have been removed (2026-03-13). All platforms use ConnectorRegistry.
-  // INLINE_FETCHERS is now an empty stub, so there are no function signatures to verify.
-
-  test('INLINE_FETCHERS is empty after connector migration', () => {
-    const platforms = Object.keys(INLINE_FETCHERS)
-    expect(platforms).toHaveLength(0)
-  })
-})
 
 // ============================================
 // Light API Health Checks
