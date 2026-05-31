@@ -157,37 +157,32 @@ const cachedFindUserHandleByTrader = unstable_cache(
   async (traderHandle: string): Promise<string | null> => {
     try {
       const supabase = getReadReplica()
-      const { data: trader } = await supabase
-        .from('traders')
-        .select('id, trader_authorizations!inner(user_id, user_profiles:user_id(handle))')
+      // Find trader identity by handle, then check for active authorization
+      const { data: sources } = await supabase
+        .from('trader_sources')
+        .select('source, source_trader_id')
         .eq('handle', traderHandle)
-        .eq('trader_authorizations.status', 'active')
-        .maybeSingle()
+        .limit(10)
 
-      if (!trader) return null
+      if (!sources?.length) return null
 
-      const auths = trader.trader_authorizations as unknown as Array<{
-        user_id: string
-        user_profiles: { handle: string | null } | null
-      }>
-      return auths?.[0]?.user_profiles?.handle || null
-    } catch {
-      // Fallback: query via trader_authorizations table
-      try {
-        const supabase = getReadReplica()
+      for (const src of sources) {
         const { data: auth } = await supabase
           .from('trader_authorizations')
-          .select('user_id, traders!inner(handle), user_profiles:user_id(handle)')
-          .eq('traders.handle', traderHandle)
+          .select('user_profiles:user_id(handle)')
+          .eq('platform', src.source)
+          .eq('trader_id', src.source_trader_id)
           .eq('status', 'active')
           .maybeSingle()
 
-        if (!auth) return null
-        const profile = auth.user_profiles as unknown as { handle: string | null } | null
-        return profile?.handle || null
-      } catch {
-        return null
+        if (auth?.user_profiles) {
+          const profile = auth.user_profiles as unknown as { handle: string | null } | null
+          return profile?.handle || null
+        }
       }
+      return null
+    } catch {
+      return null
     }
   },
   ['trader-user-handle'],
