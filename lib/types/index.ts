@@ -30,8 +30,8 @@
 export * from './post'
 export * from './comment'
 export * from './notification'
-export type { TradingStyle, BotCategory, FilterableTradingStyle } from './trader'
-export { VALID_TRADING_STYLES, TRADING_STYLE_LEGACY_MAP } from './trader'
+export type { TradingStyle, FilterableTradingStyle } from '@/lib/utils/trading-style'
+export { VALID_TRADING_STYLES, TRADING_STYLE_LEGACY_MAP } from '@/lib/utils/trading-style'
 export type { SubscriptionTier, ActiveSubscriptionTier } from './premium'
 export { normalizeSubscriptionTier } from './premium'
 
@@ -154,7 +154,8 @@ export interface SortParams<T extends string = string> {
 /**
  * 通用列表请求参数
  */
-export interface ListParams<TSortField extends string = string> extends PaginationParams, SortParams<TSortField> {
+export interface ListParams<TSortField extends string = string>
+  extends PaginationParams, SortParams<TSortField> {
   search?: string
   filter?: Record<string, string | number | boolean | string[]>
 }
@@ -228,9 +229,7 @@ export interface AuthoredEntity extends BaseEntity {
 // Result Type (discriminated union for error handling)
 // ============================================
 
-export type Result<T, E = Error> =
-  | { ok: true; data: T }
-  | { ok: false; error: E }
+export type Result<T, E = Error> = { ok: true; data: T } | { ok: false; error: E }
 
 export function Ok<T>(data: T): Result<T, never> {
   return { ok: true, data }
@@ -293,9 +292,11 @@ export type RequiredBy<T, K extends keyof T> = Omit<T, K> & Required<Pick<T, K>>
 /**
  * 深度 Partial
  */
-export type DeepPartial<T> = T extends object ? {
-  [P in keyof T]?: DeepPartial<T[P]>
-} : T
+export type DeepPartial<T> = T extends object
+  ? {
+      [P in keyof T]?: DeepPartial<T[P]>
+    }
+  : T
 
 /**
  * 非空类型
@@ -312,6 +313,10 @@ export type ArrayElement<T> = T extends readonly (infer U)[] ? U : never
 /**
  * 提取函数返回类型（支持异步）
  */
-export type AsyncReturnType<T extends (...args: unknown[]) => unknown> =
-  T extends (...args: unknown[]) => Promise<infer U> ? U :
-  T extends (...args: unknown[]) => infer U ? U : never
+export type AsyncReturnType<T extends (...args: unknown[]) => unknown> = T extends (
+  ...args: unknown[]
+) => Promise<infer U>
+  ? U
+  : T extends (...args: unknown[]) => infer U
+    ? U
+    : never
