@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from '@supabase/supabase-js'
 /**
  * Fetcher Integration Tests
  *
@@ -9,7 +9,7 @@ import type { SupabaseClient } from "@supabase/supabase-js"
  *   - Light health-check: API endpoints reachable (HTTP status only)
  */
 
-import { INLINE_FETCHERS, getInlineFetcher, getSupportedInlinePlatforms } from '../index'
+import { getSupportedInlinePlatforms } from '../index'
 import { calculateArenaScore, parseNum, normalizeWinRate } from '../shared'
 
 // ============================================
@@ -67,10 +67,10 @@ describe('Fetcher Registry', () => {
 describe('Arena Score Calculation', () => {
   test('calculates score for typical 90D trader', () => {
     const score = calculateArenaScore(
-      150,    // 150% ROI
-      50000,  // $50k PnL
-      20,     // 20% max drawdown
-      65,     // 65% win rate
+      150, // 150% ROI
+      50000, // $50k PnL
+      20, // 20% max drawdown
+      65, // 65% win rate
       '90D'
     )
 
@@ -227,7 +227,7 @@ function _createMockSupabase() {
   })
 
   return {
-    client: { from: fromFn } as unknown as SupabaseClient,  
+    client: { from: fromFn } as unknown as SupabaseClient,
     mocks: { from: fromFn, upsert: upsertFn },
   }
 }
@@ -277,46 +277,50 @@ describe('API Endpoint Health Checks', () => {
     }
   })()
 
-  test.each(endpoints)('$name endpoint is reachable', async ({ url, method }) => {
-    // Skip if fetch is not available (jsdom environment without polyfill)
-    if (!nodeFetch || typeof nodeFetch !== 'function') {
-      console.warn('[health] fetch not available in this test environment — skipping')
-      return
-    }
-
-    try {
-      const controller = new AbortController()
-      const timeout = setTimeout(() => controller.abort(), 10000)
-
-      const res = await nodeFetch(url, {
-        method: method || 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (compatible; HealthCheck/1.0)',
-          'Content-Type': 'application/json',
-        },
-        body: method === 'POST' ? '{}' : undefined,
-        signal: controller.signal,
-      })
-
-      clearTimeout(timeout)
-
-      // We just check that the server responds (even 400/403 means it's reachable)
-      expect(res.status).toBeGreaterThanOrEqual(200)
-      expect(res.status).toBeLessThan(600)
-    } catch (error: unknown) {
-      // Network errors are acceptable in CI — mark as soft pass
-      const msg = error instanceof Error ? error.message : String(error)
-      if (
-        msg.includes('abort') ||
-        msg.includes('ENOTFOUND') ||
-        msg.includes('ECONNREFUSED') ||
-        msg.includes('fetch is not defined') ||
-        msg.includes('not a function')
-      ) {
-        console.warn(`[health] ${url} — network error (expected in CI): ${msg}`)
-        return // soft pass
+  test.each(endpoints)(
+    '$name endpoint is reachable',
+    async ({ url, method }) => {
+      // Skip if fetch is not available (jsdom environment without polyfill)
+      if (!nodeFetch || typeof nodeFetch !== 'function') {
+        console.warn('[health] fetch not available in this test environment — skipping')
+        return
       }
-      throw error
-    }
-  }, 15000)
+
+      try {
+        const controller = new AbortController()
+        const timeout = setTimeout(() => controller.abort(), 10000)
+
+        const res = await nodeFetch(url, {
+          method: method || 'GET',
+          headers: {
+            'User-Agent': 'Mozilla/5.0 (compatible; HealthCheck/1.0)',
+            'Content-Type': 'application/json',
+          },
+          body: method === 'POST' ? '{}' : undefined,
+          signal: controller.signal,
+        })
+
+        clearTimeout(timeout)
+
+        // We just check that the server responds (even 400/403 means it's reachable)
+        expect(res.status).toBeGreaterThanOrEqual(200)
+        expect(res.status).toBeLessThan(600)
+      } catch (error: unknown) {
+        // Network errors are acceptable in CI — mark as soft pass
+        const msg = error instanceof Error ? error.message : String(error)
+        if (
+          msg.includes('abort') ||
+          msg.includes('ENOTFOUND') ||
+          msg.includes('ECONNREFUSED') ||
+          msg.includes('fetch is not defined') ||
+          msg.includes('not a function')
+        ) {
+          console.warn(`[health] ${url} — network error (expected in CI): ${msg}`)
+          return // soft pass
+        }
+        throw error
+      }
+    },
+    15000
+  )
 })

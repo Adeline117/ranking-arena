@@ -70,16 +70,3 @@ type InlineFetcherFn = (
   duration: number
   periods: Record<string, { total: number; saved: number; error?: string }>
 }>
-
-/**
- * @deprecated All inline fetchers have been removed. Use ConnectorRegistry instead.
- * Returns null for all platforms — kept as stub for backward compatibility.
- */
-export function getInlineFetcher(_platform: string): InlineFetcherFn | null {
-  return null
-}
-
-/**
- * @deprecated Inline fetchers have been removed. This is an empty registry stub.
- */
-export const INLINE_FETCHERS: Record<string, InlineFetcherFn> = {}
