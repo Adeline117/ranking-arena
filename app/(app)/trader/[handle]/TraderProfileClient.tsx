@@ -503,12 +503,8 @@ export default function TraderProfileClient({
             isRegistered={!!claimedUser}
             isOwnProfile={isOwner}
             followers={traderProfile?.followers ?? undefined}
-            profileUrl={traderProfile?.profile_url || data.profile_url || undefined}
             source={traderProfile?.source || data.source}
-            isPro={isPro}
             roi90d={traderPerformance?.roi_90d ?? (data.roi != null ? data.roi : undefined)}
-            maxDrawdown={traderPerformance?.max_drawdown ?? data.max_drawdown ?? undefined}
-            winRate={traderPerformance?.win_rate ?? data.win_rate ?? undefined}
             arenaScore={
               hasMultipleAccounts && activeAccount === 'all' && aggregatedData
                 ? aggregatedData.weightedScore
