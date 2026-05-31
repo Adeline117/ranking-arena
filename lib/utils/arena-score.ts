@@ -1,5 +1,4 @@
 import { round2 } from '@/lib/utils/currency'
-import { isFeatureEnabledForUser } from '@/lib/features'
 
 /**
  * Arena Score V3 计算模块
@@ -32,20 +31,20 @@ export type ScoreConfidence = 'full' | 'partial' | 'minimal'
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderScoreInput {
-  roi: number          // ROI（百分比，如 25% = 25）
-  pnl: number | null   // 已实现盈亏（USD），null = 未知（得分按 0 处理）
-  maxDrawdown: number | null  // 最大回撤（百分比，如 20% = 20）
-  winRate: number | null      // 胜率（百分比，如 60% = 60）
-  source?: string      // 数据来源（用于 trust weight）
+  roi: number // ROI（百分比，如 25% = 25）
+  pnl: number | null // 已实现盈亏（USD），null = 未知（得分按 0 处理）
+  maxDrawdown: number | null // 最大回撤（百分比，如 20% = 20）
+  winRate: number | null // 胜率（百分比，如 60% = 60）
+  source?: string // 数据来源（用于 trust weight）
 }
 
 export interface ArenaScoreResult {
-  totalScore: number      // 总分 (0-100)
-  returnScore: number     // 收益分 (0-60)
-  pnlScore: number        // PnL 分 (0-40)
-  drawdownScore: number   // 回撤分 (V3已移除, 恒为0)
-  stabilityScore: number  // 稳定分 (V3已移除, 恒为0)
-  scoreConfidence: ScoreConfidence  // 数据完整性标记
+  totalScore: number // 总分 (0-100)
+  returnScore: number // 收益分 (0-60)
+  pnlScore: number // PnL 分 (0-40)
+  drawdownScore: number // 回撤分 (V3已移除, 恒为0)
+  stabilityScore: number // 稳定分 (V3已移除, 恒为0)
+  scoreConfidence: ScoreConfidence // 数据完整性标记
 }
 
 export interface OverallScoreInput {
@@ -63,57 +62,57 @@ export const ARENA_CONFIG = {
   // 注：tanh 系数越小，曲线越平缓，高收益者分数压缩更明显
   PARAMS: {
     '7D': {
-      tanhCoeff: 0.08,      // tanh 系数（从 0.12 降低，减少满分）
-      roiExponent: 1.8,     // ROI 指数
-      mddThreshold: 15,     // 回撤阈值（百分比）
-      winRateCap: 62,       // 胜率满分线（百分比）
+      tanhCoeff: 0.08, // tanh 系数（从 0.12 降低，减少满分）
+      roiExponent: 1.8, // ROI 指数
+      mddThreshold: 15, // 回撤阈值（百分比）
+      winRateCap: 62, // 胜率满分线（百分比）
     },
     '30D': {
-      tanhCoeff: 0.15,      // tanh 系数（从 0.22 降低，减少满分）
+      tanhCoeff: 0.15, // tanh 系数（从 0.22 降低，减少满分）
       roiExponent: 1.6,
       mddThreshold: 30,
       winRateCap: 68,
     },
     '90D': {
-      tanhCoeff: 0.18,      // 保持不变
+      tanhCoeff: 0.18, // 保持不变
       roiExponent: 1.6,
       mddThreshold: 40,
       winRateCap: 70,
     },
   },
-  
+
   // 稳定性计算的基线胜率
   WIN_RATE_BASELINE: 45,
-  
+
   // PnL 评分参数（V3: 基于真实数据分布标定，中位数≈13分，p90≈35分）
   PNL_PARAMS: {
-    '7D':  { base: 300,  coeff: 0.42 },
-    '30D': { base: 600,  coeff: 0.30 },
-    '90D': { base: 650,  coeff: 0.27 },
+    '7D': { base: 300, coeff: 0.42 },
+    '30D': { base: 600, coeff: 0.3 },
+    '90D': { base: 650, coeff: 0.27 },
   },
 
   // 分数权重（V3：只保留 ROI + PnL，总分 100）
   MAX_RETURN_SCORE: 60,
   MAX_PNL_SCORE: 40,
-  MAX_DRAWDOWN_SCORE: 0,   // V3 已移除
-  MAX_STABILITY_SCORE: 0,  // V3 已移除
-  
+  MAX_DRAWDOWN_SCORE: 0, // V3 已移除
+  MAX_STABILITY_SCORE: 0, // V3 已移除
+
   // 总体分数权重
   OVERALL_WEIGHTS: {
-    '90D': 0.70,
+    '90D': 0.7,
     '30D': 0.25,
     '7D': 0.05,
   },
-  
+
   // 缺失数据默认中位值
   DEFAULTS: {
-    WIN_RATE: 50,       // 中位胜率（%）
-    MAX_DRAWDOWN: -20,  // 中位最大回撤（%）
+    WIN_RATE: 50, // 中位胜率（%）
+    MAX_DRAWDOWN: -20, // 中位最大回撤（%）
   },
 
   // ROI 合理性上限（超过此值的 ROI 会被 cap）
   // 防止异常高 ROI（如 Hyperliquid 百万级%）垄断排行榜
-  ROI_CAP: 10000,  // 10000% = 100x，超过此值 ROI 按 10000% 计算 score
+  ROI_CAP: 10000, // 10000% = 100x，超过此值 ROI 按 10000% 计算 score
 
   // 数据完整性惩罚乘数（应用于总分）
   // 'full': 所有字段完整 → 1.0（无惩罚）
@@ -122,16 +121,16 @@ export const ARENA_CONFIG = {
   CONFIDENCE_MULTIPLIER: {
     full: 1.0,
     partial: 0.92,
-    minimal: 0.80,
+    minimal: 0.8,
   },
 
   // 缺失数据惩罚
   MISSING_90D_PENALTY: 0.85,
-  ONLY_7D_PENALTY: 0.70,
+  ONLY_7D_PENALTY: 0.7,
 
   // 动量因子参数
-  MOMENTUM_MAX_BONUS: 2.5,    // 最大加分（7D远超30D时）
-  MOMENTUM_MAX_PENALTY: 1,    // 最大扣分（7D远低于30D时）
+  MOMENTUM_MAX_BONUS: 2.5, // 最大加分（7D远超30D时）
+  MOMENTUM_MAX_PENALTY: 1, // 最大扣分（7D远低于30D时）
 
   // === 排行榜稳定性参数 ===
 
@@ -153,12 +152,16 @@ export const ARENA_CONFIG = {
  * @param totalSignals Total possible metrics
  * @param z Z-score for confidence interval (default 1.96 = 95%)
  */
-export function wilsonLowerBound(positiveSignals: number, totalSignals: number, z: number = 1.96): number {
+export function wilsonLowerBound(
+  positiveSignals: number,
+  totalSignals: number,
+  z: number = 1.96
+): number {
   if (totalSignals === 0) return 0
   const phat = positiveSignals / totalSignals
-  const denominator = 1 + z * z / totalSignals
-  const centre = phat + z * z / (2 * totalSignals)
-  const spread = z * Math.sqrt((phat * (1 - phat) + z * z / (4 * totalSignals)) / totalSignals)
+  const denominator = 1 + (z * z) / totalSignals
+  const centre = phat + (z * z) / (2 * totalSignals)
+  const spread = z * Math.sqrt((phat * (1 - phat) + (z * z) / (4 * totalSignals)) / totalSignals)
   return (centre - spread) / denominator
 }
 
@@ -174,10 +177,10 @@ export function wilsonConfidenceMultiplier(
   pnl: number | null | undefined,
   maxDrawdown: number | null | undefined,
   winRate: number | null | undefined,
-  sharpeRatio: number | null | undefined,
+  sharpeRatio: number | null | undefined
 ): number {
   const signals = [roi, pnl, maxDrawdown, winRate, sharpeRatio]
-  const available = signals.filter(v => v != null).length
+  const available = signals.filter((v) => v != null).length
   const wilson = wilsonLowerBound(available, 5, 1.96)
   // Blend: minimum 0.3 (never fully zero out), max 1.0
   return 0.3 + 0.7 * wilson
@@ -204,9 +207,12 @@ export function safeLog1p(x: number): number {
  */
 function getPeriodDays(period: Period): number {
   switch (period) {
-    case '7D': return 7
-    case '30D': return 30
-    case '90D': return 90
+    case '7D':
+      return 7
+    case '30D':
+      return 30
+    case '90D':
+      return 90
   }
 }
 
@@ -217,23 +223,23 @@ function getPeriodDays(period: Period): number {
 /**
  * 计算 ROI 强度
  * I_d = (365 / d) * ln(1 + ROI_d)
- * 
+ *
  * @param roi ROI 百分比（如 25 表示 25%）
  * @param period 时间段
  */
 export function calculateRoiIntensity(roi: number, period: Period): number {
   const days = getPeriodDays(period)
-  const roiDecimal = roi / 100  // 转换为小数
+  const roiDecimal = roi / 100 // 转换为小数
   return (365 / days) * safeLog1p(roiDecimal)
 }
 
 /**
  * 计算收益分 (0-60)
  * ReturnScore = 60 * tanh(coeff * I)^exponent
- * 
+ *
  * ROI 会被 cap 到 ARENA_CONFIG.ROI_CAP 以防止异常值
  * （如 Hyperliquid 百万级 ROI）垄断排行榜。
- * 
+ *
  * @param roi ROI 百分比
  * @param period 时间段
  */
@@ -246,10 +252,10 @@ export function calculateReturnScore(roi: number | bigint, period: Period): numb
   const cappedRoi = Math.min(r, ARENA_CONFIG.ROI_CAP)
 
   const intensity = calculateRoiIntensity(cappedRoi, period)
-  
+
   // R0 = tanh(coeff * I)
   const r0 = Math.tanh(params.tanhCoeff * intensity)
-  
+
   // ReturnScore = 70 * R0^exponent
   // 只有正收益才有正分数
   if (r0 <= 0) return 0
@@ -261,16 +267,17 @@ export function calculateReturnScore(roi: number | bigint, period: Period): numb
 /**
  * 计算回撤分 (0-8)
  * DrawdownScore = 8 * clip(1 - MDD/阈值, 0, 1)
- * 
+ *
  * @param maxDrawdown 最大回撤百分比（如 20 表示 20%）
  * @param period 时间段
  */
 export function calculateDrawdownScore(maxDrawdown: number | null, period: Period): number {
   // 缺失或 0 时使用默认中位值（-20%）
   // DD=0 不代表零回撤，通常是数据缺失被存为 0，不应获得满分
-  const effectiveMdd = (maxDrawdown === null || maxDrawdown === undefined || maxDrawdown === 0)
-    ? ARENA_CONFIG.DEFAULTS.MAX_DRAWDOWN
-    : maxDrawdown
+  const effectiveMdd =
+    maxDrawdown === null || maxDrawdown === undefined || maxDrawdown === 0
+      ? ARENA_CONFIG.DEFAULTS.MAX_DRAWDOWN
+      : maxDrawdown
 
   // 归一化：如果 |maxDrawdown| <= 1，认为是小数格式（0.20），需要转换为百分比（20）
   const mddAbs = Math.abs(effectiveMdd)
@@ -284,23 +291,24 @@ export function calculateDrawdownScore(maxDrawdown: number | null, period: Perio
 /**
  * 计算稳定分 (0-7)
  * StabilityScore = 7 * clip((WinRate - 0.45) / (上限 - 0.45), 0, 1)
- * 
+ *
  * @param winRate 胜率百分比（如 60 表示 60%）
  * @param period 时间段
  */
 export function calculateStabilityScore(winRate: number | null, period: Period): number {
   // 缺失时使用默认中位值（50%）而非给予固定中等分数
-  const effectiveWinRate = (winRate === null || winRate === undefined)
-    ? ARENA_CONFIG.DEFAULTS.WIN_RATE
-    : winRate
+  const effectiveWinRate =
+    winRate === null || winRate === undefined ? ARENA_CONFIG.DEFAULTS.WIN_RATE : winRate
 
   // 归一化：如果 winRate <= 1，认为是小数格式（0.60），需要转换为百分比（60）
-  const normalizedWinRate = effectiveWinRate <= 1 && effectiveWinRate >= 0 ? effectiveWinRate * 100 : effectiveWinRate
+  const normalizedWinRate =
+    effectiveWinRate <= 1 && effectiveWinRate >= 0 ? effectiveWinRate * 100 : effectiveWinRate
 
   const cap = ARENA_CONFIG.PARAMS[period].winRateCap
   const baseline = ARENA_CONFIG.WIN_RATE_BASELINE
 
-  const score = ARENA_CONFIG.MAX_STABILITY_SCORE * clip((normalizedWinRate - baseline) / (cap - baseline), 0, 1)
+  const score =
+    ARENA_CONFIG.MAX_STABILITY_SCORE * clip((normalizedWinRate - baseline) / (cap - baseline), 0, 1)
   return clip(score, 0, ARENA_CONFIG.MAX_STABILITY_SCORE)
 }
 
@@ -357,7 +365,7 @@ export function debouncedConfidence(
 
 /**
  * 计算 Arena Score（单个时间段）
- * 
+ *
  * @param input 交易员数据
  * @param period 时间段 ('7D' | '30D' | '90D')
  * @returns Arena Score 结果
@@ -369,7 +377,7 @@ export function debouncedConfidence(
  */
 export function getScoreConfidence(
   maxDrawdown: number | null | undefined,
-  winRate: number | null | undefined,
+  winRate: number | null | undefined
 ): ScoreConfidence {
   // DD=0 也视为缺失数据（通常是未提供而非真正零回撤）
   const hasMdd = maxDrawdown !== null && maxDrawdown !== undefined && maxDrawdown !== 0
@@ -381,16 +389,7 @@ export function getScoreConfidence(
   return 'minimal'
 }
 
-export function calculateArenaScore(
-  input: TraderScoreInput,
-  period: Period
-): ArenaScoreResult {
-  // Feature flag kill-switch: when arena_score_v2 is enabled, this is the
-  // entry point where the v2 algorithm would diverge. For now, both paths
-  // use the same logic — the flag just provides the infrastructure to swap
-  // algorithms safely in production with percentage-based rollout.
-  const _useV2 = isFeatureEnabledForUser('arena_score_v2')
-
+export function calculateArenaScore(input: TraderScoreInput, period: Period): ArenaScoreResult {
   // Guard against BigInt from Supabase — Number() converts safely
   const roi = Number(input.roi)
   const pnl = Number(input.pnl)
@@ -405,9 +404,9 @@ export function calculateArenaScore(
     totalScore: round2(totalScore),
     returnScore: round2(returnScore),
     pnlScore: round2(pnlScore),
-    drawdownScore: 0,      // V3 已移除
-    stabilityScore: 0,     // V3 已移除
-    scoreConfidence: 'full',  // V3 不再区分置信度
+    drawdownScore: 0, // V3 已移除
+    stabilityScore: 0, // V3 已移除
+    scoreConfidence: 'full', // V3 不再区分置信度
   }
 }
 
@@ -422,10 +421,7 @@ export function calculateArenaScore(
  * @param score30d 30天分数
  * @returns 动量加分（可为负数）
  */
-export function calculateMomentumBonus(
-  score7d: number | null,
-  score30d: number | null,
-): number {
+export function calculateMomentumBonus(score7d: number | null, score30d: number | null): number {
   if (score7d === null || score7d === undefined) return 0
   if (score30d === null || score30d === undefined) return 0
   if (score30d === 0) return 0
@@ -439,51 +435,51 @@ export function calculateMomentumBonus(
 /**
  * 计算总体分数（个人主页用）
  * OverallScore = 0.70 * Score_90 + 0.25 * Score_30 + 0.05 * Score_7
- * 
+ *
  * 缺失数据处理：
  * - 缺 90D：(0.80 * S30 + 0.20 * S7) * 0.85
  * - 只有 7D：S7 * 0.70
- * 
+ *
  * @param input 各时间段分数
  * @returns 总体分数 (0-100)
  */
 export function calculateOverallScore(input: OverallScoreInput): number {
   const { score7d, score30d, score90d } = input
-  
+
   const has7d = score7d !== null && score7d !== undefined
   const has30d = score30d !== null && score30d !== undefined
   const has90d = score90d !== null && score90d !== undefined
-  
+
   let overall: number
-  
+
   if (has90d && has30d && has7d) {
     // 完整数据：标准加权
-    overall = 
+    overall =
       ARENA_CONFIG.OVERALL_WEIGHTS['90D'] * score90d! +
       ARENA_CONFIG.OVERALL_WEIGHTS['30D'] * score30d! +
       ARENA_CONFIG.OVERALL_WEIGHTS['7D'] * score7d!
   } else if (has30d && has7d && !has90d) {
     // 缺 90D：降权惩罚
-    overall = (0.80 * score30d! + 0.20 * score7d!) * ARENA_CONFIG.MISSING_90D_PENALTY
+    overall = (0.8 * score30d! + 0.2 * score7d!) * ARENA_CONFIG.MISSING_90D_PENALTY
   } else if (has7d && !has30d && !has90d) {
     // 只有 7D：强惩罚
     overall = score7d! * ARENA_CONFIG.ONLY_7D_PENALTY
   } else if (has90d && !has30d && !has7d) {
     // 只有 90D
-    overall = score90d! * 0.90
+    overall = score90d! * 0.9
   } else if (has90d && has30d && !has7d) {
     // 有 90D 和 30D，缺 7D
-    overall = 
+    overall =
       ARENA_CONFIG.OVERALL_WEIGHTS['90D'] * score90d! +
       (ARENA_CONFIG.OVERALL_WEIGHTS['30D'] + ARENA_CONFIG.OVERALL_WEIGHTS['7D']) * score30d!
   } else if (has90d && has7d && !has30d) {
     // 有 90D 和 7D，缺 30D
-    overall = 
+    overall =
       ARENA_CONFIG.OVERALL_WEIGHTS['90D'] * score90d! +
       (ARENA_CONFIG.OVERALL_WEIGHTS['30D'] + ARENA_CONFIG.OVERALL_WEIGHTS['7D']) * score7d!
   } else if (has30d && !has7d && !has90d) {
     // 只有 30D
-    overall = score30d! * 0.80
+    overall = score30d! * 0.8
   } else {
     // 无数据
     overall = 0
@@ -498,7 +494,7 @@ export function calculateOverallScore(input: OverallScoreInput): number {
 
 /**
  * 批量计算 Arena Score（用于排行榜）
- * 
+ *
  * @param traders 交易员列表
  * @param period 时间段
  * @returns 带有 arena_score 的交易员列表，已按分数排序
@@ -508,15 +504,14 @@ export function rankByArenaScore<T extends TraderScoreInput & { id: string }>(
   period: Period
 ): (T & { arena_score: number; score_details: ArenaScoreResult })[] {
   // 计算分数
-  const scored = traders
-    .map(trader => {
-      const result = calculateArenaScore(trader, period)
-      return {
-        ...trader,
-        arena_score: result.totalScore,
-        score_details: result,
-      }
-    })
+  const scored = traders.map((trader) => {
+    const result = calculateArenaScore(trader, period)
+    return {
+      ...trader,
+      arena_score: result.totalScore,
+      score_details: result,
+    }
+  })
 
   // 按分数降序排序
   scored.sort((a, b) => {
@@ -615,18 +610,21 @@ export function calculateArenaScoreV3Legacy(
 
   // Simple threshold-based scoring (legacy behavior)
   // Scale sub-scores to V3 Legacy weight budget: return=55, pnl=12, dd=8, stability=5
-  const returnScore = ARENA_CONFIG.MAX_RETURN_SCORE > 0
-    ? calculateReturnScore(Math.min(roi, ARENA_CONFIG.ROI_CAP), _period) * (55 / ARENA_CONFIG.MAX_RETURN_SCORE)
-    : 0
-  const pnlScore = ARENA_CONFIG.MAX_PNL_SCORE > 0
-    ? calculatePnlScore(pnl, _period) * (12 / ARENA_CONFIG.MAX_PNL_SCORE)
-    : 0
-  const drawdownScore = ARENA_CONFIG.MAX_DRAWDOWN_SCORE > 0
-    ? calculateDrawdownScore(maxDrawdown, _period)
-    : 0
-  const stabilityScore = ARENA_CONFIG.MAX_STABILITY_SCORE > 0
-    ? calculateStabilityScore(winRate, _period) * (5 / ARENA_CONFIG.MAX_STABILITY_SCORE)
-    : 0
+  const returnScore =
+    ARENA_CONFIG.MAX_RETURN_SCORE > 0
+      ? calculateReturnScore(Math.min(roi, ARENA_CONFIG.ROI_CAP), _period) *
+        (55 / ARENA_CONFIG.MAX_RETURN_SCORE)
+      : 0
+  const pnlScore =
+    ARENA_CONFIG.MAX_PNL_SCORE > 0
+      ? calculatePnlScore(pnl, _period) * (12 / ARENA_CONFIG.MAX_PNL_SCORE)
+      : 0
+  const drawdownScore =
+    ARENA_CONFIG.MAX_DRAWDOWN_SCORE > 0 ? calculateDrawdownScore(maxDrawdown, _period) : 0
+  const stabilityScore =
+    ARENA_CONFIG.MAX_STABILITY_SCORE > 0
+      ? calculateStabilityScore(winRate, _period) * (5 / ARENA_CONFIG.MAX_STABILITY_SCORE)
+      : 0
 
   let alphaScore = 0
   if (alpha != null && alpha > 0) alphaScore = clip(5 * Math.min(1, alpha / 10), 0, 5)
@@ -634,16 +632,25 @@ export function calculateArenaScoreV3Legacy(
   let riskAdjustedScore = 0
   if (sortinoRatio != null && sortinoRatio > 0)
     riskAdjustedScore += 7 * Math.min(1, sortinoRatio / 2)
-  if (calmarRatio != null && calmarRatio > 0)
-    riskAdjustedScore += 3 * Math.min(1, calmarRatio / 2)
+  if (calmarRatio != null && calmarRatio > 0) riskAdjustedScore += 3 * Math.min(1, calmarRatio / 2)
 
   const consistencyScore = 2.5 // neutral default
 
-  const rawTotal = returnScore + pnlScore + drawdownScore + stabilityScore +
-                   alphaScore + riskAdjustedScore + consistencyScore
+  const rawTotal =
+    returnScore +
+    pnlScore +
+    drawdownScore +
+    stabilityScore +
+    alphaScore +
+    riskAdjustedScore +
+    consistencyScore
   // Wilson Score confidence: smooth curve based on metric availability (replaces hard-coded tiers)
   const confidenceMultiplier = wilsonConfidenceMultiplier(
-    roi, pnl, maxDrawdown, winRate, sortinoRatio ?? calmarRatio
+    roi,
+    pnl,
+    maxDrawdown,
+    winRate,
+    sortinoRatio ?? calmarRatio
   )
   const totalScore = clip(rawTotal * confidenceMultiplier, 0, 100)
 
