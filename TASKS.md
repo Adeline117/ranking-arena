@@ -60,7 +60,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 ### Code Quality
 
 - [~] computeSeason main loop split: 972 lines → ~600 target
-- [ ] TraderHeader 40-prop interface trim
+- [x] TraderHeader 40-prop interface trim (40 → 34: removed uid, following, isPro, maxDrawdown, winRate, profileUrl)
 
 ---
 
@@ -73,7 +73,7 @@ _None currently_
 ## 🟢 P3 - Nice to Have
 
 - [ ] Lighthouse re-audit on production (API quota previously exhausted)
-- [ ] Monthly dependency update review (dependabot PRs merging)
+- [x] Monthly dependency update review (14 dependabot PRs merged 2026-05-28)
 
 ---
 
