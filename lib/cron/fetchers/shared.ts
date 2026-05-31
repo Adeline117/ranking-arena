@@ -540,41 +540,35 @@ export async function upsertTraders(
   for (let i = 0; i < snapshotValidated.length; i += BATCH) {
     const batch = snapshotValidated.slice(i, i + BATCH)
 
-    // --- 1. traders (unified identity table) ---
-    // Replaces both trader_sources and trader_profiles_v2 (merged 2026-03-18)
+    // --- 1. trader_sources (canonical identity table) ---
     try {
       const traderRows = batch.map((t) => ({
-        platform: t.source,
-        trader_key: t.source_trader_id,
+        source: t.source,
+        source_trader_id: t.source_trader_id,
         market_type: getMarketType(t.source),
         handle: t.handle || null,
         avatar_url: t.avatar_url || null,
-        profile_url: t.profile_url || null,
-        followers: t.followers ?? 0,
-        aum: t.aum || null,
         is_active: true,
         last_seen_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
       }))
 
-      // Emergency fix 2026-04-01: Add retry logic for Supabase 502 errors
       const { error: traderErr } = await retryUpsert(
         supabase,
-        'traders',
+        'trader_sources',
         traderRows,
-        { onConflict: 'platform,trader_key' },
+        { onConflict: 'source,source_trader_id' },
         { maxAttempts: 3, initialDelayMs: 2000 }
       )
 
       if (traderErr) {
         consistency.trader_sources = 'failed'
-        writeErrors.push(`traders: ${traderErr.message} (${traderErr.code})`)
-        dataLogger.warn(`[upsert] traders error: ${traderErr.message}`)
+        writeErrors.push(`trader_sources: ${traderErr.message} (${traderErr.code})`)
+        dataLogger.warn(`[upsert] trader_sources error: ${traderErr.message}`)
       }
     } catch (err) {
       consistency.trader_sources = 'failed'
       dataLogger.error(
-        `[upsert] traders exception: ${err instanceof Error ? err.message : String(err)}`
+        `[upsert] trader_sources exception: ${err instanceof Error ? err.message : String(err)}`
       )
     }
 

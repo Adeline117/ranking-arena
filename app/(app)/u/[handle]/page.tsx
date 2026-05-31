@@ -12,7 +12,11 @@ export const revalidate = 60
 // for 30+ seconds. Race against this timeout so users see a fast fallback.
 const SSR_TIMEOUT_MS = 4000
 
-export async function generateMetadata({ params }: { params: Promise<{ handle: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ handle: string }>
+}): Promise<Metadata> {
   const { handle } = await params
   const decoded = decodeURIComponent(handle)
 
@@ -27,7 +31,9 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
         .select('avatar_url, bio, trader_source, trader_source_id')
         .eq('handle', decoded)
         .maybeSingle(),
-      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+      new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+      ),
     ])
     avatarUrl = data?.avatar_url || null
 
@@ -41,19 +47,29 @@ export async function generateMetadata({ params }: { params: Promise<{ handle: s
           .eq('source_trader_id', data.trader_source_id)
           .eq('season_id', '90D')
           .maybeSingle(),
-        new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+        new Promise<{ data: null }>((resolve) =>
+          setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+        ),
       ])
       if (lr) {
         traderMeta = { roi: lr.roi, score: lr.arena_score, platform: lr.source }
       }
     }
-  } catch { /* use default */ }
+  } catch {
+    /* use default */
+  }
 
   const title = `@${decoded} — Arena Profile`
-  const traderParts = traderMeta ? [
-    traderMeta.roi != null ? `${traderMeta.roi >= 0 ? '+' : ''}${traderMeta.roi.toFixed(1)}% ROI` : null,
-    traderMeta.score != null ? `Score ${traderMeta.score.toFixed(0)}` : null,
-  ].filter(Boolean).join(' · ') : null
+  const traderParts = traderMeta
+    ? [
+        traderMeta.roi != null
+          ? `${traderMeta.roi >= 0 ? '+' : ''}${traderMeta.roi.toFixed(1)}% ROI`
+          : null,
+        traderMeta.score != null ? `Score ${traderMeta.score.toFixed(0)}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · ')
+    : null
   const description = traderParts
     ? `@${decoded} — Verified trader${traderMeta?.platform ? ` on ${traderMeta.platform}` : ''} (${traderParts}). View performance, analytics, and rankings on Arena.`
     : `View @${decoded}'s trading stats, posts, and activity on Arena — the crypto trader ranking platform.`
@@ -95,7 +111,7 @@ export async function generateStaticParams() {
       .not('handle', 'is', null)
       .order('created_at', { ascending: true })
       .limit(30)
-    
+
     return (data || [])
       .filter((u: { handle: string | null }) => u.handle)
       .map((u: { handle: string }) => ({ handle: u.handle }))
@@ -130,13 +146,18 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
   // Only select columns that actually exist in user_profiles table
   // follower_count / following_count are cached columns — avoid re-counting.
-  const selectFields = 'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role, follower_count, following_count'
+  const selectFields =
+    'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role, follower_count, following_count'
 
   const [handleResult, handleIlikeResult, uuidResult] = await Promise.race([
     Promise.all([
       supabase.from('user_profiles').select(selectFields).eq('handle', decodedHandle).maybeSingle(),
       // Case-insensitive fallback
-      supabase.from('user_profiles').select(selectFields).ilike('handle', decodedHandle).maybeSingle(),
+      supabase
+        .from('user_profiles')
+        .select(selectFields)
+        .ilike('handle', decodedHandle)
+        .maybeSingle(),
       uuidRegex.test(handle)
         ? supabase.from('user_profiles').select(selectFields).eq('id', handle).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -168,9 +189,25 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   try {
     const [tradersRes, subscriptionData, claimedTraderRes] = await Promise.race([
       Promise.all([
-        supabase.from('trader_follows').select('id', { count: 'estimated', head: true }).eq('user_id', userProfile.id),
-        supabase.from('subscriptions').select('tier, status').eq('user_id', userProfile.id).in('status', ['active', 'trialing']).order('created_at', { ascending: false }).limit(1).maybeSingle(),
-        supabase.from('trader_authorizations').select('id, trader_id').eq('user_id', userProfile.id).eq('status', 'active').limit(1).maybeSingle(),
+        supabase
+          .from('trader_follows')
+          .select('id', { count: 'estimated', head: true })
+          .eq('user_id', userProfile.id),
+        supabase
+          .from('subscriptions')
+          .select('tier, status')
+          .eq('user_id', userProfile.id)
+          .in('status', ['active', 'trialing'])
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from('trader_authorizations')
+          .select('id, trader_id, platform')
+          .eq('user_id', userProfile.id)
+          .eq('status', 'active')
+          .limit(1)
+          .maybeSingle(),
       ]),
       new Promise<[{ count: null }, { data: null }, { data: null }]>((resolve) =>
         setTimeout(() => resolve([{ count: null }, { data: null }, { data: null }]), SSR_TIMEOUT_MS)
@@ -179,14 +216,15 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     tradersCount = tradersRes.count || 0
     hasPro = hasPro || subscriptionData?.data?.tier === 'pro'
     hasClaimedTrader = !!claimedTraderRes?.data
-    
+
     // If user has a claimed trader, fetch the trader handle
-    if (claimedTraderRes?.data?.trader_id) {
+    if (claimedTraderRes?.data?.trader_id && claimedTraderRes?.data?.platform) {
       try {
         const { data: traderRow } = await supabase
-          .from('traders')
+          .from('trader_sources')
           .select('handle')
-          .eq('id', claimedTraderRes.data.trader_id)
+          .eq('source', claimedTraderRes.data.platform)
+          .eq('source_trader_id', claimedTraderRes.data.trader_id)
           .maybeSingle()
         if (traderRow?.handle) {
           traderHandle = traderRow.handle
@@ -221,10 +259,9 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
 async function fetchTraderData(traderHandle: string) {
   try {
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
-    const res = await fetch(
-      `${baseUrl}/api/traders/${encodeURIComponent(traderHandle)}`,
-      { next: { revalidate: 60 } }
-    )
+    const res = await fetch(`${baseUrl}/api/traders/${encodeURIComponent(traderHandle)}`, {
+      next: { revalidate: 60 },
+    })
     if (!res.ok) return null
     const json = await res.json()
     // Unwrap API envelope { success, data } to get the raw trader data
@@ -249,32 +286,32 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
   }
 
   // JSON-LD structured data for search engines
-  const personSchema = profile ? {
-    '@context': 'https://schema.org',
-    '@type': 'ProfilePage',
-    mainEntity: {
-      '@type': 'Person',
-      name: profile.handle,
-      ...(profile.avatar_url ? { image: profile.avatar_url } : {}),
-      ...(profile.bio ? { description: profile.bio } : {}),
-      url: `${BASE_URL}/u/${encodeURIComponent(profile.handle)}`,
-    },
-  } : null
+  const personSchema = profile
+    ? {
+        '@context': 'https://schema.org',
+        '@type': 'ProfilePage',
+        mainEntity: {
+          '@type': 'Person',
+          name: profile.handle,
+          ...(profile.avatar_url ? { image: profile.avatar_url } : {}),
+          ...(profile.bio ? { description: profile.bio } : {}),
+          url: `${BASE_URL}/u/${encodeURIComponent(profile.handle)}`,
+        },
+      }
+    : null
 
   return (
     <>
       {personSchema && (
         <script
           type="application/ld+json"
-          dangerouslySetInnerHTML={{ __html: JSON.stringify(personSchema).replace(/</g, '\\u003c') }}
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(personSchema).replace(/</g, '\\u003c'),
+          }}
         />
       )}
       <Suspense>
-        <UserProfileClient
-          handle={handle}
-          serverProfile={profile}
-          serverTraderData={traderData}
-        />
+        <UserProfileClient handle={handle} serverProfile={profile} serverTraderData={traderData} />
       </Suspense>
     </>
   )
