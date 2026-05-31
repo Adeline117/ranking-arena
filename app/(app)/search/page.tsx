@@ -61,12 +61,13 @@ interface MappedSearchResults {
 
 function SearchContent() {
   const searchParams = useSearchParams()
-  const _router = useRouter()
+  const router = useRouter()
   const { t } = useLanguage()
   const { email } = useAuthSession()
   const query = searchParams.get('q') || ''
   const activeTab = searchParams.get('tab') || 'all'
   const platformFilter = searchParams.get('platform') || ''
+  const [inputValue, setInputValue] = useState(query)
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [trendingSearches, setTrendingSearches] = useState<string[]>([
     'BTC',
@@ -76,6 +77,24 @@ function SearchContent() {
     'SOL',
   ])
   const { showToast } = useToast()
+
+  // Sync input value when URL query changes externally (e.g. from nav bar)
+  useEffect(() => {
+    setInputValue(query)
+  }, [query])
+
+  // Update URL when input changes (debounced)
+  const debouncedInputValue = useDebounce(inputValue.trim(), 300)
+  useEffect(() => {
+    if (debouncedInputValue === query) return
+    const params = new URLSearchParams(searchParams.toString())
+    if (debouncedInputValue) {
+      params.set('q', debouncedInputValue)
+    } else {
+      params.delete('q')
+    }
+    router.replace(`/search?${params.toString()}`)
+  }, [debouncedInputValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Debounce the query for SWR — prevents firing on every keystroke
   const debouncedQuery = useDebounce(query.trim(), 300)
@@ -487,6 +506,86 @@ function SearchContent() {
           padding: '24px 20px 100px',
         }}
       >
+        {/* Inline search input — users can refine without scrolling to nav bar */}
+        <div style={{ position: 'relative', marginBottom: 16 }}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.text.tertiary}
+            strokeWidth="2"
+            strokeLinecap="round"
+            style={{
+              position: 'absolute',
+              left: 14,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              pointerEvents: 'none',
+            }}
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+          <input
+            type="search"
+            value={inputValue}
+            onChange={(e) => setInputValue(e.target.value)}
+            placeholder={t('searchPlaceholder') || 'Search traders, posts, groups...'}
+            autoFocus={!query}
+            enterKeyHint="search"
+            style={{
+              width: '100%',
+              padding: '12px 14px 12px 44px',
+              fontSize: '16px', // >= 16px prevents iOS Safari auto-zoom
+              fontWeight: 500,
+              color: tokens.colors.text.primary,
+              background: tokens.colors.bg.secondary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.lg,
+              outline: 'none',
+              boxSizing: 'border-box',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = tokens.colors.accent.primary
+              e.currentTarget.style.boxShadow = `0 0 0 2px ${tokens.colors.accent.primary}20`
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = tokens.colors.border.primary
+              e.currentTarget.style.boxShadow = 'none'
+            }}
+          />
+          {inputValue && (
+            <button
+              onClick={() => {
+                setInputValue('')
+                router.replace('/search')
+              }}
+              style={{
+                position: 'absolute',
+                right: 12,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                background: `${tokens.colors.text.tertiary}20`,
+                border: 'none',
+                borderRadius: tokens.radius.full,
+                width: 22,
+                height: 22,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                color: tokens.colors.text.tertiary,
+                fontSize: 14,
+                lineHeight: 1,
+              }}
+              aria-label="Clear search"
+            >
+              ×
+            </button>
+          )}
+        </div>
+
         {/* Search header */}
         {query && (
           <div
