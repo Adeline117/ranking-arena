@@ -2,6 +2,37 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Search UX + Code Quality + Dead Code Purge (2026-05-30)
+
+### Search UX
+
+- Added inline search input to `/search` page — users can now refine queries without scrolling to nav bar. Controlled input syncs bidirectionally with `?q=` URL param via `router.replace` (debounced 300ms). Font-size 16px for iOS. Clear button. Auto-focuses on empty query.
+
+### Code Quality (P1 from TASKS.md)
+
+- **TraderHeader prop trim**: 40 → 34 props. Removed 6 unused props (`uid`, `following`, `isPro`, `maxDrawdown`, `winRate`, `profileUrl`) from interface + both call sites (TraderProfileClient, TraderProfileView). These were destructured with `_` prefix since the header was split into sub-components.
+
+### Dead Code Purge (automated scan)
+
+Full codebase scan found 9 HIGH-confidence dead code targets. All deleted:
+
+| Deleted                                                          | Reason                                                                                         |
+| ---------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| `lib/compliance/` (consent.ts, index.ts, test)                   | GDPR module — zero imports anywhere                                                            |
+| `lib/media/` (upload.ts, image-utils.ts, constants.ts, index.ts) | Zero imports anywhere                                                                          |
+| `lib/realtime/BinaryCodec.ts`                                    | Exported but never consumed                                                                    |
+| `lib/scoring/index.ts`                                           | Barrel re-export with no consumers                                                             |
+| `app/components/trader/PortfolioProLock.tsx`                     | Removed from parent, stranded                                                                  |
+| `app/components/trader/CopyTradeButton.tsx`                      | Zero imports                                                                                   |
+| `app/components/web3/NFTBadge.tsx`                               | Zero imports                                                                                   |
+| `scripts/test-cron-local.ts`                                     | Used removed `getInlineFetcher`                                                                |
+| `lib/features.ts` `arena_score_v2` flag                          | Permanently disabled (enabled: false, rolloutPct: 0), dead `_useV2` variable in arena-score.ts |
+| `lib/cron/fetchers/index.ts` stubs                               | `getInlineFetcher` (always null) + `INLINE_FETCHERS` (always empty) — deprecated since 2026-03 |
+
+**Total**: -1,964 lines. Pipeline health check: 20/20 platforms fresh, 0 stale.
+
+---
+
 ## UX Full Audit + Root Cause Fixes (2026-05-28)
 
 Full UX audit across homepage, trader detail, search, auth, and mobile. 10 CRITICAL + 17 HIGH issues found, 13 commits shipped.
