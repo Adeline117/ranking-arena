@@ -9,36 +9,35 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import {
-  formatAum, getActiveDays, formatActiveDays,
-} from './TraderHeaderHelpers'
+import { formatAum, getActiveDays, formatActiveDays } from './TraderHeaderHelpers'
 import { TraderHeaderBadges } from './TraderHeaderBadges'
 import { TraderHeaderAvatar } from './TraderHeaderAvatar'
 import { TraderHeaderActions } from './TraderHeaderActions'
 
 // Lazy-load rarely-used components
-const _OnChainBadge = dynamic(() => import('./OnChainBadge').then(m => ({ default: m.OnChainBadge })), { ssr: false })
-const _BadgeDisplay = dynamic(() => import('./BadgeDisplay').then(m => ({ default: m.BadgeDisplay })), { ssr: false })
+const _OnChainBadge = dynamic(
+  () => import('./OnChainBadge').then((m) => ({ default: m.OnChainBadge })),
+  { ssr: false }
+)
+const _BadgeDisplay = dynamic(
+  () => import('./BadgeDisplay').then((m) => ({ default: m.BadgeDisplay })),
+  { ssr: false }
+)
 
 interface TraderHeaderProps {
   handle: string
   displayName?: string
   traderId: string
-  uid?: number
   avatarUrl?: string
   coverUrl?: string
   isRegistered?: boolean
   followers?: number
-  following?: number
   aum?: number
   isOwnProfile?: boolean
   source?: string
   proBadgeTier?: 'pro' | null
-  isPro?: boolean
   activeSince?: string
   roi90d?: number
-  maxDrawdown?: number
-  winRate?: number
   /** Arena Score for display in header */
   arenaScore?: number | null
   /** Score confidence level — 'full', 'partial', or 'minimal' */
@@ -67,8 +66,6 @@ interface TraderHeaderProps {
   linkedAccountCount?: number
   /** Platforms of linked accounts (for showing exchange badges) */
   linkedPlatforms?: string[]
-  /** External profile URL on the exchange */
-  profileUrl?: string | null
   /** Data source type: 'authorized' | 'public_api' | 'enrichment' | 'historical' */
   dataSource?: 'authorized' | 'public_api' | 'enrichment' | 'historical' | null
   /** Whether this trader has an active authorization (API key or wallet bound) */
@@ -88,21 +85,16 @@ export default function TraderHeader({
   handle,
   displayName: displayNameProp,
   traderId,
-  uid: _uid,
   avatarUrl,
   coverUrl,
   isRegistered,
   followers = 0,
-  following: _following = 0,
   aum,
   isOwnProfile = false,
   source,
   proBadgeTier,
-  isPro: _isPro = false,
   activeSince,
   roi90d,
-  maxDrawdown: _maxDrawdown,
-  winRate: _winRate,
   arenaScore,
   scoreConfidence,
   tradesCount,
@@ -117,7 +109,6 @@ export default function TraderHeader({
   linkedPlatforms,
   platform,
   traderKey,
-  profileUrl: _profileUrl,
   dataSource,
   isAuthorized = false,
   authorizedSince,
@@ -157,13 +148,16 @@ export default function TraderHeader({
   }
 
   const copyHandle = useCallback(() => {
-    navigator.clipboard.writeText(handle).then(() => {
-      setHandleCopied(true)
-      setTimeout(() => setHandleCopied(false), 2000)
-      _showToast(t('copiedToClipboard'), 'success', 2000)
-    }).catch(() => {
-      _showToast(t('copyFailed') || 'Copy failed', 'error', 2000)
-    })
+    navigator.clipboard
+      .writeText(handle)
+      .then(() => {
+        setHandleCopied(true)
+        setTimeout(() => setHandleCopied(false), 2000)
+        _showToast(t('copiedToClipboard'), 'success', 2000)
+      })
+      .catch(() => {
+        _showToast(t('copyFailed') || 'Copy failed', 'error', 2000)
+      })
   }, [handle, _showToast, t])
 
   useEffect(() => {
@@ -173,10 +167,15 @@ export default function TraderHeader({
       setUserId(externalUserId)
       return
     }
-     
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for trader header */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setUserId(data.user?.id ?? null)
+      })
+      .catch(() => {
+        /* Intentionally swallowed: auth check non-critical for trader header */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [externalUserId])
 
   // Prefer claimed user avatar over exchange avatar
@@ -198,14 +197,20 @@ export default function TraderHeader({
   if (linkedAccountCount && linkedAccountCount >= 2) {
     subtitleParts.push(`${linkedAccountCount} ${t('verifiedAccounts') || 'verified accounts'}`)
   }
-  if (followerCount > 0) subtitleParts.push(`${followerCount.toLocaleString('en-US')} ${t('arenaFollowers') || 'followers'}`)
+  if (followerCount > 0)
+    subtitleParts.push(
+      `${followerCount.toLocaleString('en-US')} ${t('arenaFollowers') || 'followers'}`
+    )
   // copiers removed — only show platform internal followers
-  if (aum !== undefined && aum > 0) subtitleParts.push(`${t('aumLabel') || 'AUM'} ${formatAum(aum)}`)
+  if (aum !== undefined && aum > 0)
+    subtitleParts.push(`${t('aumLabel') || 'AUM'} ${formatAum(aum)}`)
   if (activeDays !== null && activeDays >= 7) subtitleParts.push(formatActiveDays(activeDays, t))
   if (rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()]) {
-    subtitleParts.push(t('rankedOnExchange')
-      .replace('{rank}', rank.toLocaleString('en-US'))
-      .replace('{exchange}', EXCHANGE_NAMES[source.toLowerCase()] || source))
+    subtitleParts.push(
+      t('rankedOnExchange')
+        .replace('{rank}', rank.toLocaleString('en-US'))
+        .replace('{exchange}', EXCHANGE_NAMES[source.toLowerCase()] || source)
+    )
   }
 
   return (
@@ -252,7 +257,10 @@ export default function TraderHeader({
         {/* Name + badges + subtitle */}
         <Box style={{ flex: 1, minWidth: 0 }}>
           {/* Line 1: Name + exchange badge + score badge */}
-          <Box className="trader-name-badges-row" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+          <Box
+            className="trader-name-badges-row"
+            style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}
+          >
             <Text
               as="h1"
               size="lg"
@@ -277,19 +285,44 @@ export default function TraderHeader({
               title={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
               aria-label={handleCopied ? t('copiedToClipboard') : `${t('copyHandle')}: ${handle}`}
               style={{
-                background: 'none', border: 'none', cursor: 'pointer',
-                padding: 4, minWidth: 44, minHeight: 44,
-                display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 4,
+                minWidth: 44,
+                minHeight: 44,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
                 color: handleCopied ? tokens.colors.accent.success : tokens.colors.text.tertiary,
-                transition: 'color 0.2s ease', flexShrink: 0,
+                transition: 'color 0.2s ease',
+                flexShrink: 0,
               }}
             >
               {handleCopied ? (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
               ) : (
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                   <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
                 </svg>
@@ -321,25 +354,42 @@ export default function TraderHeader({
 
           {/* Line 2: Subtitle — followers, copiers, rank, updated */}
           {(subtitleParts.length > 0 || lastUpdated) && (
-            <Box style={{ display: 'flex', alignItems: 'center', gap: 4, marginTop: 2, flexWrap: 'wrap' }}>
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                marginTop: 2,
+                flexWrap: 'wrap',
+              }}
+            >
               {subtitleParts.length > 0 && (
-                <Text size="xs" style={{
-                  color: hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary,
-                  fontSize: tokens.typography.fontSize.xs, lineHeight: 1.3,
-                  // #34: Brief scale animation when follower count changes
-                  transition: 'transform 0.3s ease',
-                  transform: followerAnimating ? 'scale(1.08)' : 'scale(1)',
-                }}>
+                <Text
+                  size="xs"
+                  style={{
+                    color: hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary,
+                    fontSize: tokens.typography.fontSize.xs,
+                    lineHeight: 1.3,
+                    // #34: Brief scale animation when follower count changes
+                    transition: 'transform 0.3s ease',
+                    transform: followerAnimating ? 'scale(1.08)' : 'scale(1)',
+                  }}
+                >
                   {subtitleParts.join(' · ')}
                 </Text>
               )}
               {lastUpdated && (
                 <Text
                   size="xs"
-                  style={{ color: tokens.colors.text.tertiary, fontSize: tokens.typography.fontSize.xs, opacity: 0.6 }}
+                  style={{
+                    color: tokens.colors.text.tertiary,
+                    fontSize: tokens.typography.fontSize.xs,
+                    opacity: 0.6,
+                  }}
                   title={new Date(lastUpdated).toLocaleString()}
                 >
-                  {subtitleParts.length > 0 ? ' · ' : ''}{t('updated')} {getRelativeTime(lastUpdated)}
+                  {subtitleParts.length > 0 ? ' · ' : ''}
+                  {t('updated')} {getRelativeTime(lastUpdated)}
                 </Text>
               )}
             </Box>
@@ -347,7 +397,18 @@ export default function TraderHeader({
 
           {/* Bio — from claimed user or exchange profile */}
           {claimedBio && claimedBio !== 'null' && claimedBio !== 'undefined' && (
-            <Text size="xs" color="secondary" style={{ marginTop: 2, maxWidth: 400, lineHeight: 1.4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <Text
+              size="xs"
+              color="secondary"
+              style={{
+                marginTop: 2,
+                maxWidth: 400,
+                lineHeight: 1.4,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {claimedBio}
             </Text>
           )}
@@ -367,9 +428,8 @@ export default function TraderHeader({
         rank={rank}
         roi90d={roi90d}
         arenaScore={arenaScore}
-        onFollowChange={(delta) => setFollowerCount(prev => Math.max(0, prev + delta))}
+        onFollowChange={(delta) => setFollowerCount((prev) => Math.max(0, prev + delta))}
       />
-
     </Box>
   )
 }

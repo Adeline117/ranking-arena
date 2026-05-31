@@ -136,10 +136,7 @@ export default function TraderProfileView({
           isOwnProfile={isOwn}
           followers={traderProfile?.followers ?? profile.followers}
           source={traderProfile?.source}
-          isPro={isPro}
           roi90d={traderPerformance?.roi_90d}
-          maxDrawdown={traderPerformance?.max_drawdown}
-          winRate={traderPerformance?.win_rate}
           arenaScore={(traderPerformance as ExtendedPerformance | null)?.arena_score_90d ?? null}
           currentUserId={currentUserId}
           isVerifiedTrader={profile.isVerifiedTrader}
