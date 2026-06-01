@@ -6,6 +6,8 @@ import RankingSection from './RankingSection'
 import PullToRefresh from '../ui/PullToRefresh'
 import { useTraderData } from './hooks'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import Link from 'next/link'
+import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TimeRange } from './hooks/useTraderData'
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
@@ -155,6 +157,55 @@ export default function HomePageClient({
           lastRefreshFailed={lastRefreshFailed}
           staleDataWarning={staleDataWarning}
         />
+
+        {/* API CTA — subtle banner for developer discovery */}
+        <Link
+          href="/api-docs"
+          prefetch={false}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            marginTop: tokens.spacing[4],
+            borderRadius: tokens.radius.lg,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            background: tokens.colors.bg.secondary,
+            color: tokens.colors.text.secondary,
+            fontSize: tokens.typography.fontSize.sm,
+            textDecoration: 'none',
+            transition: `all ${tokens.transition.base}`,
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
+          </svg>
+          {t('apiCtaBanner') || 'Build with Arena Data — Free API for developers'}
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ opacity: 0.5 }}
+          >
+            <path d="m9 18 6-6-6-6" />
+          </svg>
+        </Link>
       </div>
     </PullToRefresh>
   )
