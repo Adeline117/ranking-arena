@@ -710,6 +710,31 @@ export async function runEnrichment(params: {
     // Non-blocking: if PipelineState is down, proceed with enrichment
   }
 
+  // eToro CopySim IP cooldown: skip enrichment if rate-limited in last 24h.
+  // When CopySim returns 403/429, enrichment-etoro sets this key.
+  if (platformParam === 'etoro') {
+    try {
+      const cooldownKey = 'etoro_copysim_blocked_until'
+      const blockedUntil = await PipelineState.get(cooldownKey)
+      if (typeof blockedUntil === 'number' && Date.now() < blockedUntil) {
+        const hoursLeft = Math.ceil((blockedUntil - Date.now()) / 3600000)
+        logger.info(
+          `[enrich] Skipping etoro - CopySim IP cooldown active (${hoursLeft}h remaining)`
+        )
+        await plog.success(0, { reason: `CopySim IP cooldown: ${hoursLeft}h remaining` })
+        return {
+          ok: true,
+          duration: 0,
+          period,
+          summary: { total: 0, enriched: 0, failed: 0, suppressedErrors: 0 },
+          results: {},
+        }
+      }
+    } catch {
+      // Non-blocking
+    }
+  }
+
   const supabase = getSupabaseAdmin() as SupabaseClient
   const readDb = getReadReplica() // Read replica for leaderboard_ranks lookups
 
