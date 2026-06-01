@@ -48,8 +48,8 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 ### Data Quality (feeds directly into API product value)
 
-- [ ] Verify overall Sharpe lifts from 29% → 45%+ (root causes fixed in 064989ff4, ee81aa2f4)
-- [ ] Verify okx_futures staleness (occasionally 10h, should be ≤6h)
+- [x] Verify overall Sharpe lifts from 29% → 45%+ — actual: 77% (7D), 85% (30D), 91% (90D)
+- [x] Verify okx_futures staleness — 0 gaps >2h in last 7 days (worker fixed it)
 - [ ] Gains enrichment: native API dead, Etherscan rate-limited — needs alternative data source
 
 ### Infrastructure
