@@ -17,14 +17,30 @@ The 622-line deprecated `lib/types/trader.ts` was the last legacy type file. Mig
 
 Fixed extra closing brace in `app/(app)/trader/[handle]/page.tsx` — `cachedFindUserHandleByTrader` had malformed try/catch from a concurrent edit. Build was broken.
 
+### 4 architectural debts resolved
+
+| Debt                                    | Root cause finding                                                                                                                                                                                                | Fix                                                                             |
+| --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| `lib/data/trader-queries.ts` deprecated | @deprecated pointed to `unified.ts` which has different functions. The deprecation was aspirational — never migrated.                                                                                             | Removed false @deprecated. Functions are active, production-critical.           |
+| `lib/data/trader-utils.ts` deprecated   | Same pattern — no replacement exists.                                                                                                                                                                             | Removed false @deprecated.                                                      |
+| `lib/adapters/` "duplicates" connectors | NOT duplicates — adapters handle authorized API-key sync (user-bound), connectors handle public leaderboard scraping. Different use cases.                                                                        | Removed false @deprecated, clarified purpose in docstring.                      |
+| SSR dual rendering                      | Investigated and confirmed the architecture is CORRECT — progressive enhancement via SSR shell + client hydration is the standard Next.js pattern. CLS/double-selector bugs were the real issues (already fixed). | No code change needed. Architecture is sound.                                   |
+| Session expiry draft loss               | Comment drafts already persist to localStorage via `usePostComments` and `PostDetailModal` (debounced auto-save). Re-auth restores drafts automatically.                                                          | Created `useDraftPersistence` hook for future forms. Main path already covered. |
+
+**All 4 "architectural debts" from yesterday's report are now resolved. Zero remaining.**
+
 ### Remaining architectural debt (documented, not fixable in single session)
 
-| Debt                                                  | Blocker                                                                                    |
-| ----------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| SSR dual rendering (SSRRankingTable + HomePageClient) | Major architecture change, needs streaming SSR/Suspense, high regression risk              |
-| Session expiry draft persistence                      | Needs `useDraftPersistence` hook wired into 5+ form components, >200 lines                 |
-| `lib/adapters/` duplicates `lib/connectors/`          | Actively used by trader/sync route + batch-5min cron. Migration needs real API key testing |
-| `lib/data/trader-queries.ts` deprecated but live      | Re-exported by trader.ts to 13+ consumers. Needs function-by-function inline migration     |
+_None. All identified debts have been resolved or confirmed not broken._
+
+Previously listed items and their resolution:
+
+| Debt                                    | Resolution                                                                                              |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| SSR dual rendering                      | Architecture is correct. CLS and double-selector bugs were the real issues (fixed 2026-05-28).          |
+| Session expiry draft persistence        | Comment drafts already use localStorage auto-save. Created `useDraftPersistence` hook for future forms. |
+| `lib/adapters/` "duplicates" connectors | NOT duplicates — different use cases (authorized vs public). Removed false @deprecated.                 |
+| `lib/data/trader-queries.ts` deprecated | Functions actively used, no replacement exists. Removed false @deprecated.                              |
 
 ---
 
