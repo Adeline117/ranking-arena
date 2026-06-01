@@ -328,17 +328,13 @@ export async function fetchGainsEquityCurve(
  * including totalPnl, totalVolume, trades, wins — enabling ROI computation.
  */
 export async function fetchGainsStatsDetail(addr: string): Promise<StatsDetail | null> {
-  // Primary: Gains native per-trader stats API
-  try {
-    const nativeStats = await fetchGainsNativeStats(addr)
-    if (nativeStats) return nativeStats
-  } catch (err) {
-    logger.warn(
-      `[gains] Native stats failed for ${addr}: ${err instanceof Error ? err.message : String(err)}`
-    )
-  }
+  // Primary: Gains leaderboard API (working, returns aggregate stats per trader)
+  // Native per-trader stats API has been dead since 2026-04 (404).
+  // Copin GNS endpoints return [] (broken since 2026-04).
+  const stats = await fetchGainsLeaderboardStats(addr)
+  if (stats) return stats
 
-  // Fallback: Copin leaderboard stats (also computes ROI from totalPnl/totalVolume)
+  // Fallback: Copin leaderboard stats
   return buildCopinStatsDetail('gains', addr)
 }
 
@@ -352,6 +348,93 @@ export async function fetchGainsStatsDetail(addr: string): Promise<StatsDetail |
  *
  * Also tries the leaderboard endpoint to find this trader's aggregate PnL data.
  */
+/**
+ * Fetch Gains stats directly from the working leaderboard API.
+ * Computes Sharpe estimate from avg_win/avg_loss/win_rate.
+ */
+async function fetchGainsLeaderboardStats(addr: string): Promise<StatsDetail | null> {
+  const chainNames = ['arbitrum', 'polygon', 'base']
+  for (const chain of chainNames) {
+    try {
+      const url = `https://backend-${chain}.gains.trade/leaderboard`
+      const leaderboard = await fetchJson<GainsLeaderboardEntry[]>(url, { timeoutMs: 10000 })
+      if (!Array.isArray(leaderboard)) continue
+      const addrLower = addr.toLowerCase()
+      const found = leaderboard.find(
+        (e) => String(e.address || e.trader || '').toLowerCase() === addrLower
+      )
+      if (!found) continue
+
+      const totalTrades = found.count ?? 0
+      if (totalTrades === 0) continue
+      const wins = Number(found.count_win) || 0
+      const losses = Number(found.count_loss) || 0
+      const pnl = found.total_pnl_usd ?? found.total_pnl ?? found.pnl ?? null
+      const profitableTradesPct =
+        totalTrades > 0 ? Math.round((wins / totalTrades) * 1000) / 10 : null
+      const avgWin = found.avg_win ?? null
+      const avgLoss = found.avg_loss ?? null
+
+      // MDD approximation from avg_loss/avg_win
+      let maxDrawdown: number | null = null
+      if (avgLoss != null && losses > 0 && avgWin != null && wins > 0) {
+        const totalLosses = Math.abs(avgLoss) * losses
+        const totalWins = avgWin * wins
+        const peakEquity = totalWins + totalLosses
+        if (peakEquity > 0) {
+          const mdd = (totalLosses / peakEquity) * 100
+          if (mdd > 0.01 && mdd <= 100) maxDrawdown = Math.round(mdd * 100) / 100
+        }
+      }
+
+      // Sharpe estimate from avg_win/avg_loss/win_rate
+      // E[r] = p * W - (1-p) * |L|
+      // Var[r] = p * W² + (1-p) * L² - E[r]²
+      // Sharpe ≈ E[r] / sqrt(Var[r])
+      let sharpeRatio: number | null = null
+      if (avgWin != null && avgLoss != null && totalTrades >= 10) {
+        const p = wins / totalTrades
+        const W = avgWin
+        const L = Math.abs(avgLoss)
+        const expectedReturn = p * W - (1 - p) * L
+        const variance = p * W * W + (1 - p) * L * L - expectedReturn * expectedReturn
+        if (variance > 0) {
+          const raw = expectedReturn / Math.sqrt(variance)
+          sharpeRatio = Math.round(Math.max(-5, Math.min(10, raw)) * 100) / 100
+        }
+      }
+
+      return {
+        totalTrades: totalTrades > 0 ? totalTrades : null,
+        profitableTradesPct,
+        avgHoldingTimeHours: null,
+        avgProfit: avgWin,
+        avgLoss,
+        largestWin: null,
+        largestLoss: null,
+        sharpeRatio,
+        maxDrawdown,
+        currentDrawdown: null,
+        volatility: null,
+        pnl,
+        copiersCount: null,
+        copiersPnl: null,
+        aum: null,
+        winningPositions: wins > 0 ? wins : null,
+        totalPositions: totalTrades > 0 ? totalTrades : null,
+      }
+    } catch (err) {
+      logger.warn(
+        `[gains] Leaderboard stats failed for ${addr} (${chain}):`,
+        err instanceof Error ? err.message : String(err)
+      )
+      continue
+    }
+  }
+  return null
+}
+
+/** @deprecated Native stats API dead since 2026-04 (404). Kept for reference. */
 async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> {
   // Try all chains (Arbitrum first as most active)
   const chains = [
