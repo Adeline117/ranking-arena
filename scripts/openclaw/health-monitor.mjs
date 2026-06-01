@@ -332,8 +332,10 @@ async function runHealthCheck() {
   // 3c. Stale platform detection — catch silent data source death
   // Root cause fix: currentCount is always 0 (per-platform count queries were removed
   // from /api/health/pipeline to reduce DB load). Only use ageHours as signal.
-  // Alert if a platform has no lastUpdate (ageHours=null) or is stale >48h.
-  // 48h threshold: most platforms fetch every 2-8h, some slow ones every 24h.
+  // Alert if a platform has no lastUpdate (ageHours=null) or is stale >threshold.
+  // Default 48h; BloFin uses 12h (Mac Mini only, no fallback — need fast detection).
+  const STALE_THRESHOLD_OVERRIDES = { blofin: 12 }
+  const DEFAULT_STALE_THRESHOLD = 48
   const platforms = pipelineHealth?.platformHealth || pipelineHealth?.platforms || []
   if (Array.isArray(platforms) && platforms.length > 0) {
     const stalePlatforms = []
@@ -341,8 +343,11 @@ async function runHealthCheck() {
       const name = p.platform || p.name
       if (!name || DEAD_PLATFORMS.has(name) || p.status === 'dead') continue
       const age = p.ageHours ?? Infinity
-      if (age > 48) {
-        stalePlatforms.push(`${name}(${age === Infinity ? 'no data' : age.toFixed(0) + 'h stale'})`)
+      const threshold = STALE_THRESHOLD_OVERRIDES[name] || DEFAULT_STALE_THRESHOLD
+      if (age > threshold) {
+        stalePlatforms.push(
+          `${name}(${age === Infinity ? 'no data' : age.toFixed(0) + 'h stale'}, threshold: ${threshold}h)`
+        )
       }
     }
     if (stalePlatforms.length > 0) {
