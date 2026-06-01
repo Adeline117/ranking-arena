@@ -50,7 +50,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 - [x] Verify overall Sharpe lifts from 29% → 45%+ — actual: 77% (7D), 85% (30D), 91% (90D)
 - [x] Verify okx_futures staleness — 0 gaps >2h in last 7 days (worker fixed it)
-- [ ] Gains enrichment: native API dead, Etherscan rate-limited — needs alternative data source
+- [x] Gains enrichment: switched to leaderboard API + Sharpe estimate from avg_win/avg_loss
 
 ### Infrastructure
 
