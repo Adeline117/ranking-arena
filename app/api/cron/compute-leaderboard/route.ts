@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/api'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getReadReplica } from '@/lib/supabase/read-replica'
-import { calculateArenaScore, type Period } from '@/lib/utils/arena-score'
+import { type Period } from '@/lib/utils/arena-score'
 import { SOURCES_WITH_DATA, SOURCE_TYPE_MAP, SOURCE_TRUST_WEIGHT } from '@/lib/constants/exchanges'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import {
@@ -25,12 +25,7 @@ import {
 } from './post-processing'
 import { detectTraderType, deriveWinRateMDD } from './helpers'
 import { type TraderRow, makeAddToTraderMap } from './trader-row'
-import {
-  computeLastResortCalmar,
-  classifyTradingStyle,
-  markOutliers,
-  applyArenaFollowers,
-} from './scoring-helpers'
+import { computeLastResortCalmar, classifyTradingStyle } from './scoring-helpers'
 import { checkPlatformFreshness } from './freshness-check'
 import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
@@ -38,9 +33,8 @@ import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enr
 import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
 import { fetchPhase1FromV2 } from './fetch-phase1'
 import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank-cleanup'
+import { scoreTraders, type ScoredTrader } from './score-traders'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { sanitizeDisplayName } from '@/lib/utils/profanity'
-import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
@@ -709,144 +703,14 @@ async function computeSeason(
   // fallback for any key still missing a handle. Logic in fetch-handles.ts.
   const handleMap = await fetchHandleAvatarMap(supabase, uniqueTraders)
 
-  // Calculate arena_score and rank
-  const scored = uniqueTraders.map((t) => {
-    // Win rate should already be percentage (0-100) from fetcher normalization.
-    // Only clamp to valid range; don't re-normalize decimal→percentage.
-    let normalizedWinRate: number | null = null
-    if (t.win_rate != null && !isNaN(t.win_rate)) {
-      // Safety: if somehow still decimal (0-1 range), convert
-      const wr = t.win_rate > 0 && t.win_rate <= 1 ? t.win_rate * 100 : t.win_rate
-      normalizedWinRate = Math.max(0, Math.min(100, wr))
-    }
-
-    const scoreResult = calculateArenaScore(
-      {
-        roi: t.roi!, // guaranteed non-null by filter above
-        pnl: t.pnl ?? null,
-        maxDrawdown: t.max_drawdown,
-        winRate: normalizedWinRate,
-      },
-      season
-    )
-
-    // V3 only scores ROI + PnL, so confidence is based on those 2 signals only.
-    // Previous Wilson(5-signal) was wrong: even 5/5 capped multiplier at 0.696.
-    const hasRoi = t.roi != null
-    const hasPnl = t.pnl != null && Number(t.pnl) > 0
-    const confidenceMultiplier =
-      hasRoi && hasPnl
-        ? 1.0
-        : hasRoi
-          ? 0.85 // ROI only, no PnL data
-          : 0.5 // neither (shouldn't happen, but safe fallback)
-    // Estimation penalty kept for future use — currently always 1.0 since Phase 5 estimation was removed
-    const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
-    // Low trade count penalty: traders with very few trades have unreliable metrics
-    // (e.g., 100% WR with 1 trade is meaningless, not skill)
-    // Scale: 0 trades → 0.6x, 1 → 0.7x, 2 → 0.8x, 5 → 0.92x, 10+ → 1.0x
-    let tradeCountPenalty = 1.0
-    if (t.trades_count != null && t.trades_count >= 0 && t.trades_count < 10) {
-      tradeCountPenalty = 0.6 + 0.04 * t.trades_count // 0.6 at 0, 1.0 at 10
-    }
-    const rawSubScores =
-      scoreResult.returnScore +
-      scoreResult.pnlScore +
-      scoreResult.drawdownScore +
-      scoreResult.stabilityScore
-    // Trust weight removed from score formula — same skill shouldn't get different
-    // scores based on exchange. Trust weight used only as tie-breaker in sort below.
-    const rawFinalScore =
-      Math.round(
-        Math.max(
-          0,
-          Math.min(100, rawSubScores * confidenceMultiplier * estimationPenalty * tradeCountPenalty)
-        ) * 100
-      ) / 100
-    // Score=0 means no meaningful signal (ROI≈0 + PnL≈0). Set null so rankings
-    // query (arena_score IS NOT NULL) excludes them — prevents "0-score" traders
-    // from appearing at the bottom of the leaderboard with no useful information.
-    const finalScore = rawFinalScore > 0 ? rawFinalScore : null
-
-    const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || {
-      handle: null,
-      avatar_url: null,
-    }
-    // Only use handle if it's a real nickname, not a numeric UID
-    const rawHandle = info.handle?.trim() || null
-    const isNumericUid = rawHandle && /^\d{7,}$/.test(rawHandle)
-    // Apply profanity filter before storing in database
-    const displayHandle = rawHandle && !isNumericUid ? sanitizeDisplayName(rawHandle) : null
-
-    return {
-      source: t.source,
-      source_trader_id: t.source_trader_id,
-      arena_score: finalScore,
-      roi: t.roi ?? 0,
-      pnl: t.pnl,
-      win_rate: normalizedWinRate,
-      max_drawdown: t.max_drawdown,
-      followers: t.followers ?? 0, // Exchange follower count; overridden by Arena follower count if available
-      copiers: t.copiers ?? null, // Exchange copy-trade count (from v2 or enrichment stats_detail)
-      trades_count: t.trades_count,
-      handle: displayHandle,
-      // Use exchange platform logo when no avatar (DEX/Web3 traders don't have profile pictures).
-      // Previously generated identicon SVGs which looked like placeholder/test data.
-      avatar_url: info.avatar_url || getExchangeLogoUrl(t.source),
-      // Score sub-components for frontend display
-      profitability_score: Math.round(scoreResult.returnScore * 100) / 100,
-      risk_control_score: Math.round(scoreResult.pnlScore * 100) / 100,
-      execution_score: null, // V3 removed drawdown/stability sub-scores
-      // Data completeness: derive from which metrics are available
-      score_completeness:
-        t.max_drawdown != null && t.win_rate != null
-          ? 'full'
-          : t.max_drawdown != null || t.win_rate != null
-            ? 'partial'
-            : 'minimal',
-      trading_style: t.trading_style,
-      avg_holding_hours: t.avg_holding_hours,
-      style_confidence: t.style_confidence,
-      sharpe_ratio: t.sharpe_ratio,
-      sortino_ratio: t.sortino_ratio ?? null,
-      profit_factor: t.profit_factor ?? null,
-      calmar_ratio: t.calmar_ratio ?? null,
-      trader_type: detectTraderType(
-        t.source,
-        t.source_trader_id,
-        t.trades_count,
-        t.trader_type,
-        t.avg_holding_hours,
-        t.win_rate,
-        contractAddresses.has(t.source_trader_id) || undefined
-      ),
-      metrics_estimated: t.metrics_estimated || false,
-    }
-  })
-
-  // Pre-write validation: flag rows that look like data corruption with
-  // is_outlier=true. They stay in the array (counted toward ranking totals)
-  // but get filtered out of public leaderboards downstream by the is_outlier
-  // column. Heuristics live in scoring-helpers.markOutliers.
-  const outlierCount = markOutliers(scored)
-  if (outlierCount > 0) {
-    logger.info(
-      `[${season}] Marked ${outlierCount} outliers (kept in leaderboard with is_outlier=true)`
-    )
-  }
-
-  // Phase: Replace exchange followers with Arena internal follower counts.
-  // Logic + RPC fallback live in scoring-helpers.applyArenaFollowers.
-  {
-    const { applied, uniqueIds } = await applyArenaFollowers(supabase, scored, season)
-    logger.info(
-      `[${season}] Arena followers: ${applied} traders have followers (${uniqueIds} unique trader_ids queried)`
-    )
-  }
-
-  // Filter out traders with null arena_score (ROI≈0 + PnL≈0, no useful signal)
-  // before sorting/ranking. These are excluded from rankings queries anyway.
-  const scoredFiltered = scored.filter((t) => t.arena_score != null)
+  // Calculate arena scores, mark outliers, apply followers, filter nulls
+  const { scored, scoredFiltered } = await scoreTraders(
+    uniqueTraders,
+    handleMap,
+    contractAddresses,
+    season,
+    supabase
+  )
 
   // Sort by arena_score desc, then trust weight (higher trust = higher for ties),
   // then Sharpe ratio (better risk-adjusted), then stable id.
@@ -1153,7 +1017,7 @@ async function computeSeason(
         profit_factor: t.profit_factor ?? null,
         calmar_ratio: t.calmar_ratio ?? null,
         trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
-        is_outlier: (t as Record<string, unknown>).is_outlier === true ? true : false,
+        is_outlier: (t as unknown as Record<string, unknown>).is_outlier === true ? true : false,
       }
     })
 
