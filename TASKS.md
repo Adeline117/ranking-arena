@@ -38,9 +38,9 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 #### Go-to-Market (do)
 
-- [ ] Landing section on homepage or dedicated `/api` page
+- [x] Landing section on homepage — API CTA banner below ranking table + nav/footer links to /api-docs
 - [ ] Reach out to copy-trading platforms, analytics tools, hedge funds
-- [ ] Add API link to README + socials
+- [x] Add API link to README (Data API section with pricing + curl example) + nav + footer
 
 ---
 
@@ -54,8 +54,8 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 ### Infrastructure
 
-- [ ] BloFin Sharpe: Mac Mini only (geo-blocked from VPS + CF). Watch success rate
-- [ ] eToro CopySim: retry after 24h IP cooldown
+- [x] BloFin Sharpe: added 12h staleness alert in health monitor (Mac Mini only, no fallback)
+- [x] eToro CopySim: added automatic 24h IP cooldown via PipelineState (enrichment-etoro detects 403/429, enrichment-runner skips until cooldown expires)
 
 ### Code Quality
 
