@@ -11,14 +11,16 @@
 
 // Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
-
 
 const mockFrom = jest.fn()
 const mockSupabaseClient = { from: mockFrom }
@@ -62,9 +64,30 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  apiLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  dataLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
   captureError: jest.fn(),
 }))
 
@@ -130,25 +153,27 @@ describe('GET /api/cron/check-data-freshness', () => {
     const recentTime = new Date().toISOString()
 
     mockFrom.mockImplementation(() => ({
-      select: jest.fn().mockImplementation((_cols: string, opts?: { count?: string; head?: boolean }) => {
-        if (opts?.head) {
-          return {
-            eq: jest.fn().mockResolvedValue({ count: 100, error: null }),
+      select: jest
+        .fn()
+        .mockImplementation((_cols: string, opts?: { count?: string; head?: boolean }) => {
+          if (opts?.head) {
+            return {
+              eq: jest.fn().mockResolvedValue({ count: 100, error: null }),
+            }
           }
-        }
-        return {
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockResolvedValue({
-                  data: { created_at: recentTime },
-                  error: null,
+          return {
+            eq: jest.fn().mockReturnValue({
+              order: jest.fn().mockReturnValue({
+                limit: jest.fn().mockReturnValue({
+                  single: jest.fn().mockResolvedValue({
+                    data: { updated_at: recentTime },
+                    error: null,
+                  }),
                 }),
               }),
             }),
-          }),
-        }
-      }),
+          }
+        }),
     }))
 
     const res = await GET(createRequest('test-secret'))
@@ -167,29 +192,31 @@ describe('GET /api/cron/check-data-freshness', () => {
 
     let callIdx = 0
     mockFrom.mockImplementation(() => ({
-      select: jest.fn().mockImplementation((_cols: string, opts?: { count?: string; head?: boolean }) => {
-        if (opts?.head) {
-          return {
-            eq: jest.fn().mockResolvedValue({ count: 50, error: null }),
+      select: jest
+        .fn()
+        .mockImplementation((_cols: string, opts?: { count?: string; head?: boolean }) => {
+          if (opts?.head) {
+            return {
+              eq: jest.fn().mockResolvedValue({ count: 50, error: null }),
+            }
           }
-        }
-        return {
-          eq: jest.fn().mockReturnValue({
-            order: jest.fn().mockReturnValue({
-              limit: jest.fn().mockReturnValue({
-                single: jest.fn().mockImplementation(() => {
-                  callIdx++
-                  const time = callIdx === 1 ? staleTime : freshTime
-                  return Promise.resolve({
-                    data: { created_at: time },
-                    error: null,
-                  })
+          return {
+            eq: jest.fn().mockReturnValue({
+              order: jest.fn().mockReturnValue({
+                limit: jest.fn().mockReturnValue({
+                  single: jest.fn().mockImplementation(() => {
+                    callIdx++
+                    const time = callIdx === 1 ? staleTime : freshTime
+                    return Promise.resolve({
+                      data: { updated_at: time },
+                      error: null,
+                    })
+                  }),
                 }),
               }),
             }),
-          }),
-        }
-      }),
+          }
+        }),
     }))
 
     const res = await GET(createRequest('test-secret'))
