@@ -134,9 +134,21 @@ export async function fetchEtoroEquityCurve(
       pnl: p.pnL,
     }))
   } catch (err) {
-    logger.warn(
-      `[etoro] Equity curve failed for ${traderId}: ${err instanceof Error ? err.message : String(err)}`
-    )
+    const msg = err instanceof Error ? err.message : String(err)
+    logger.warn(`[etoro] Equity curve failed for ${traderId}: ${msg}`)
+
+    // Detect CopySim IP rate limit (403/429) and set 24h cooldown
+    if (msg.includes('HTTP 403') || msg.includes('HTTP 429')) {
+      try {
+        const { PipelineState } = await import('@/lib/services/pipeline-state')
+        const cooldownMs = 24 * 60 * 60 * 1000 // 24 hours
+        await PipelineState.set('etoro_copysim_blocked_until', Date.now() + cooldownMs)
+        logger.warn(`[etoro] CopySim rate-limited — set 24h IP cooldown`)
+      } catch {
+        // Non-blocking
+      }
+    }
+
     return []
   }
 }
