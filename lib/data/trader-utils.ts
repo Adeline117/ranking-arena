@@ -1,10 +1,7 @@
 /**
- * @deprecated Use `lib/data/unified.ts` (specifically `resolveTrader()`) instead. This file
- * contains legacy trader lookup utilities that query trader_sources directly. They are still
- * used by trader-queries.ts but should not be used in new code.
- *
  * Core utility functions for trader data lookups.
- * Eliminates duplicate code with unified source-finding logic.
+ * Used by trader-queries.ts for source resolution.
+ * Re-exported through lib/data/trader.ts as the public API.
  */
 
 import { supabase } from '@/lib/supabase/client'
@@ -12,11 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('trader-utils')
-import {
-  TRADER_SOURCES,
-  TRADER_SOURCES_WITH_WEB3,
-  type TraderSourceRecord,
-} from './trader-types'
+import { TRADER_SOURCES, TRADER_SOURCES_WITH_WEB3, type TraderSourceRecord } from './trader-types'
 
 // Request-scoped cache for findTraderAcrossSources to eliminate N+1 lookups.
 // On a trader detail page, 8+ functions call findTraderAcrossSources(handle) independently.
@@ -90,10 +83,7 @@ async function findTraderAcrossSourcesInner(
   const sources = includeWeb3 ? TRADER_SOURCES_WITH_WEB3 : TRADER_SOURCES
 
   try {
-    const handleConditions = [
-      `handle.eq.${handle}`,
-      `source_trader_id.eq.${handle}`,
-    ]
+    const handleConditions = [`handle.eq.${handle}`, `source_trader_id.eq.${handle}`]
 
     if (decodedHandle !== handle) {
       handleConditions.push(`handle.eq.${decodedHandle}`)
@@ -118,7 +108,7 @@ async function findTraderAcrossSourcesInner(
 
     // 如果有多个结果，优先返回有排名数据的
     if (data.length > 1) {
-      const traderIds = data.map(d => d.source_trader_id)
+      const traderIds = data.map((d) => d.source_trader_id)
 
       const { data: rankedTraders } = await client
         .from('leaderboard_ranks')
@@ -128,8 +118,8 @@ async function findTraderAcrossSourcesInner(
         .limit(traderIds.length)
 
       if (rankedTraders && rankedTraders.length > 0) {
-        const rankedIds = new Set(rankedTraders.map(s => s.source_trader_id))
-        const withRank = data.find(d => rankedIds.has(d.source_trader_id))
+        const rankedIds = new Set(rankedTraders.map((s) => s.source_trader_id))
+        const withRank = data.find((d) => rankedIds.has(d.source_trader_id))
         if (withRank) {
           return withRank as TraderSourceRecord
         }
@@ -138,7 +128,9 @@ async function findTraderAcrossSourcesInner(
 
     return data[0] as TraderSourceRecord
   } catch (error) {
-    logger.warn('findTraderAcrossSources failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.warn('findTraderAcrossSources failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return null
   }
 }
@@ -161,13 +153,13 @@ export async function findTradersAcrossSources(
 
   try {
     const allHandles = new Set<string>()
-    handles.forEach(h => {
+    handles.forEach((h) => {
       allHandles.add(h)
       const decoded = decodeURIComponent(h)
       if (decoded !== h) allHandles.add(decoded)
     })
     // Sanitize handles to prevent PostgREST filter injection via special chars
-    const handleList = Array.from(allHandles).filter(h => !/[(),"]/.test(h))
+    const handleList = Array.from(allHandles).filter((h) => !/[(),"]/.test(h))
     if (handleList.length === 0) return result
 
     const { data, error } = await client
@@ -180,7 +172,7 @@ export async function findTradersAcrossSources(
       return result
     }
 
-    data.forEach(record => {
+    data.forEach((record) => {
       const rec = record as TraderSourceRecord
       if (rec.handle) result.set(rec.handle, rec)
       result.set(rec.source_trader_id, rec)
@@ -188,7 +180,9 @@ export async function findTradersAcrossSources(
 
     return result
   } catch (error) {
-    logger.warn('findTradersAcrossSources failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.warn('findTradersAcrossSources failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return result
   }
 }
@@ -205,8 +199,7 @@ export async function getTraderArenaFollowersCountBatch(
   if (traderIds.length === 0) return result
 
   try {
-    const { data, error } = await client
-      .rpc('count_trader_followers', { trader_ids: traderIds })
+    const { data, error } = await client.rpc('count_trader_followers', { trader_ids: traderIds })
 
     if (error || !data) return result
 
@@ -216,7 +209,9 @@ export async function getTraderArenaFollowersCountBatch(
 
     return result
   } catch (error) {
-    logger.warn('getTraderArenaFollowersCountBatch failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.warn('getTraderArenaFollowersCountBatch failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return result
   }
 }

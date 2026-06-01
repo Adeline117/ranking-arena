@@ -1,12 +1,12 @@
 /**
  * Exchange Adapter Types
- * Unified interface for fetching trader data from different exchanges
+ * Unified interface for fetching authorized trader data from exchanges.
+ * Used by trader/sync route and batch-5min cron for API-key-based data sync.
  *
- * @deprecated Most types here are superseded by UnifiedTrader in lib/types/unified-trader.ts.
- * New code should import from unified-trader.ts. These types remain for backward compatibility.
+ * Note: These are distinct from lib/connectors/ which handle public leaderboard scraping.
+ * Adapters handle authenticated exchange API access (user-bound API keys).
  */
 
-/** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderData {
   // Identity
   platform: string
