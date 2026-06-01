@@ -97,7 +97,7 @@ export class BybitFuturesConnector extends BaseConnector {
             // batch-fetch-traders-b1 logged "1/1 platforms failed" indefinitely.
             // Without the cutoff we always have *some* seed list to refresh.
             const { data: existingTraders } = await supabase
-              .from('trader_snapshots_v2')
+              .from('trader_latest')
               .select('trader_key, metrics')
               .eq('platform', 'bybit')
               .eq('window', window.toUpperCase())

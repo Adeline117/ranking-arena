@@ -36,7 +36,10 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (!verifiedTrader) {
-      return handleError(new Error('Only verified traders can mint attestations'), 'attestation mint')
+      return handleError(
+        new Error('Only verified traders can mint attestations'),
+        'attestation mint'
+      )
     }
 
     // Look up trader handle and score
@@ -49,14 +52,13 @@ export async function POST(request: NextRequest) {
 
     const traderHandle = traderSource?.handle || verifiedTrader.trader_id
 
-    // Get latest arena score
+    // Get latest arena score (trader_latest = 1 row per platform+trader+window, no ORDER/LIMIT needed)
     const { data: snapshot } = await supabase
-      .from('trader_snapshots_v2')
-      .select('arena_score, roi, pnl')
-      .eq('source_trader_id', verifiedTrader.trader_id)
-      .eq('source', verifiedTrader.source)
-      .order('captured_at', { ascending: false })
-      .limit(1)
+      .from('trader_latest')
+      .select('arena_score, roi_pct, pnl_usd')
+      .eq('trader_key', verifiedTrader.trader_id)
+      .eq('platform', verifiedTrader.source)
+      .eq('window', '90D')
       .maybeSingle()
 
     const arenaScore = snapshot?.arena_score ?? 0
@@ -76,13 +78,14 @@ export async function POST(request: NextRequest) {
       try {
         const { publishAttestation, createDataHash } = await import('@/lib/web3/eas')
         const now = Math.floor(Date.now() / 1000)
-        const recipient = (profile?.wallet_address || '0x0000000000000000000000000000000000000000') as `0x${string}`
+        const recipient = (profile?.wallet_address ||
+          '0x0000000000000000000000000000000000000000') as `0x${string}`
 
         const dataHash = createDataHash({
           handle: traderHandle,
           score: arenaScore,
-          roi: snapshot?.roi ?? 0,
-          pnl: snapshot?.pnl ?? 0,
+          roi: snapshot?.roi_pct ?? 0,
+          pnl: snapshot?.pnl_usd ?? 0,
           timestamp: now,
         })
 
@@ -105,17 +108,20 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabase
       .from('trader_attestations')
-      .upsert({
-        trader_handle: traderHandle,
-        attestation_uid: attestationUid,
-        tx_hash: txHash,
-        arena_score: arenaScore,
-        chain_id: 8453,
-        score_period: 'overall',
-        minted_by: user.id,
-        published_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }, { onConflict: 'trader_handle' })
+      .upsert(
+        {
+          trader_handle: traderHandle,
+          attestation_uid: attestationUid,
+          tx_hash: txHash,
+          arena_score: arenaScore,
+          chain_id: 8453,
+          score_period: 'overall',
+          minted_by: user.id,
+          published_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'trader_handle' }
+      )
       .select()
       .single()
 
@@ -125,7 +131,10 @@ export async function POST(request: NextRequest) {
 
     return success({
       attestation: data,
-      message: txHash !== 'pending' ? 'Attestation published on-chain' : 'Attestation recorded (pending on-chain)',
+      message:
+        txHash !== 'pending'
+          ? 'Attestation published on-chain'
+          : 'Attestation recorded (pending on-chain)',
     })
   } catch (error: unknown) {
     return handleError(error, 'attestation mint')
@@ -150,7 +159,9 @@ export async function GET(request: NextRequest) {
 
     const { data } = await supabase
       .from('trader_attestations')
-      .select('id, trader_handle, attestation_uid, tx_hash, arena_score, chain_id, score_period, minted_by, published_at, updated_at')
+      .select(
+        'id, trader_handle, attestation_uid, tx_hash, arena_score, chain_id, score_period, minted_by, published_at, updated_at'
+      )
       .eq('trader_handle', handle)
       .maybeSingle()
 

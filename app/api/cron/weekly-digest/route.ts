@@ -42,9 +42,9 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
     return { count: 0, reason: 'no subscribers' }
   }
 
-  // 2. Get top movers (biggest rank changes this week)
+  // 2. Get top movers (biggest ROI this week from trader_latest)
   const { data: movers } = await supabase
-    .from('trader_snapshots_v2')
+    .from('trader_latest')
     .select('source_trader_id, platform, display_name, roi_pct, previous_roi_pct:roi_pct')
     .gte('updated_at', weekAgoIso)
     .not('roi_pct', 'is', null)

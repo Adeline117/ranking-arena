@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
       try {
         // Pick a trader that has win_rate (= leaderboard data exists)
         const { data: traders } = await supabase
-          .from('trader_snapshots_v2')
+          .from('trader_latest')
           .select('trader_key')
           .eq('platform', platform)
           .eq('window', '90D')

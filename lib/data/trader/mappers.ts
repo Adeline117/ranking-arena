@@ -117,7 +117,11 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     handle: (row.display_name as string) || (row.handle as string) || null,
     avatarUrl: (row.avatar_url as string) || null,
     profileUrl: (row.profile_url as string) || null,
-    marketType: (row.market_type as string) || (row.source_type as string) || SOURCE_TYPE_MAP[platform] || null,
+    marketType:
+      (row.market_type as string) ||
+      (row.source_type as string) ||
+      SOURCE_TYPE_MAP[platform] ||
+      null,
     sourceType: SOURCE_TYPE_MAP[platform] || null,
 
     // Performance — leaderboard_ranks stores roi as percentage already
@@ -138,11 +142,16 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
     profitabilityScore: row.profitability_score != null ? Number(row.profitability_score) : null,
     riskControlScore: row.risk_control_score != null ? Number(row.risk_control_score) : null,
     executionScore: row.execution_score != null ? Number(row.execution_score) : null,
-    scoreConfidence: typeof row.score_completeness === 'string'
-      ? (row.score_completeness as 'full' | 'partial' | 'minimal')
-      : row.score_completeness != null
-        ? (Number(row.score_completeness) >= 80 ? 'full' : Number(row.score_completeness) >= 50 ? 'partial' : 'minimal')
-        : null,
+    scoreConfidence:
+      typeof row.score_completeness === 'string'
+        ? (row.score_completeness as 'full' | 'partial' | 'minimal')
+        : row.score_completeness != null
+          ? Number(row.score_completeness) >= 80
+            ? 'full'
+            : Number(row.score_completeness) >= 50
+              ? 'partial'
+              : 'minimal'
+          : null,
 
     // Rankings
     rank: row.rank != null ? Number(row.rank) : null,
@@ -168,7 +177,10 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
  * v1 uses: source, source_trader_id, season_id
  * IMPORTANT: v1 roi is stored as a RATIO (0.5 = 50%), must multiply by 100 for percentage.
  */
-export function mapV1Snapshot(row: Record<string, unknown>, period: TradingPeriod): Partial<UnifiedTrader> {
+export function mapV1Snapshot(
+  row: Record<string, unknown>,
+  period: TradingPeriod
+): Partial<UnifiedTrader> {
   return {
     platform: String(row.source || ''),
     traderKey: String(row.source_trader_id || ''),
@@ -202,7 +214,10 @@ export function mapV1Snapshot(row: Record<string, unknown>, period: TradingPerio
  *   roi_pct     → roi (already percentage)
  *   pnl_usd     → pnl (already USD)
  */
-export function mapV2Snapshot(row: Record<string, unknown>, period?: TradingPeriod): Partial<UnifiedTrader> {
+export function mapV2Snapshot(
+  row: Record<string, unknown>,
+  period?: TradingPeriod
+): Partial<UnifiedTrader> {
   return {
     platform: String(row.platform || ''),
     traderKey: String(row.trader_key || ''),
@@ -222,6 +237,6 @@ export function mapV2Snapshot(row: Record<string, unknown>, period?: TradingPeri
     drawdownScore: row.drawdown_score != null ? Number(row.drawdown_score) : null,
     stabilityScore: row.stability_score != null ? Number(row.stability_score) : null,
     period: period || normalizePeriod(row.window as string),
-    lastUpdated: (row.created_at as string) || null,
+    lastUpdated: (row.updated_at as string) || (row.created_at as string) || null,
   }
 }

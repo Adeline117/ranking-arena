@@ -1,16 +1,10 @@
-export type Json =
-  | string
-  | number
-  | boolean
-  | null
-  | { [key: string]: Json | undefined }
-  | Json[]
+export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
   // Allows to automatically instantiate createClient with right options
   // instead of createClient<Database, { PostgrestVersion: 'XX' }>(URL, KEY)
   __InternalSupabase: {
-    PostgrestVersion: "14.5"
+    PostgrestVersion: '14.5'
   }
   public: {
     Tables: {
@@ -119,25 +113,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "advanced_alert_conditions_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: 'advanced_alert_conditions_user_id_fkey'
+            columns: ['user_id']
             isOneToOne: false
-            referencedRelation: "public_user_profiles"
-            referencedColumns: ["id"]
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "advanced_alert_conditions_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: 'advanced_alert_conditions_user_id_fkey'
+            columns: ['user_id']
             isOneToOne: false
-            referencedRelation: "user_follow_counts"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "advanced_alert_conditions_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: 'advanced_alert_conditions_user_id_fkey'
+            columns: ['user_id']
             isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -222,39 +216,39 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "alert_history_alert_id_fkey"
-            columns: ["alert_id"]
+            foreignKeyName: 'alert_history_alert_id_fkey'
+            columns: ['alert_id']
             isOneToOne: false
-            referencedRelation: "trader_alerts"
-            referencedColumns: ["id"]
+            referencedRelation: 'trader_alerts'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "alert_history_condition_id_fkey"
-            columns: ["condition_id"]
+            foreignKeyName: 'alert_history_condition_id_fkey'
+            columns: ['condition_id']
             isOneToOne: false
-            referencedRelation: "advanced_alert_conditions"
-            referencedColumns: ["id"]
+            referencedRelation: 'advanced_alert_conditions'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "alert_history_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: 'alert_history_user_id_fkey'
+            columns: ['user_id']
             isOneToOne: false
-            referencedRelation: "public_user_profiles"
-            referencedColumns: ["id"]
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "alert_history_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: 'alert_history_user_id_fkey'
+            columns: ['user_id']
             isOneToOne: false
-            referencedRelation: "user_follow_counts"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "alert_history_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: 'alert_history_user_id_fkey'
+            columns: ['user_id']
             isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -324,11 +318,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "authorization_sync_logs_authorization_id_fkey"
-            columns: ["authorization_id"]
+            foreignKeyName: 'authorization_sync_logs_authorization_id_fkey'
+            columns: ['authorization_id']
             isOneToOne: false
-            referencedRelation: "trader_authorizations"
-            referencedColumns: ["id"]
+            referencedRelation: 'trader_authorizations'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -410,18 +404,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "book_ratings_library_item_id_fkey"
-            columns: ["library_item_id"]
+            foreignKeyName: 'book_ratings_library_item_id_fkey'
+            columns: ['library_item_id']
             isOneToOne: false
-            referencedRelation: "library_items"
-            referencedColumns: ["id"]
+            referencedRelation: 'library_items'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "book_ratings_user_id_fkey"
-            columns: ["user_id"]
+            foreignKeyName: 'book_ratings_user_id_fkey'
+            columns: ['user_id']
             isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
+            referencedRelation: 'users'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -491,11 +485,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "bot_equity_curve_bot_id_fkey"
-            columns: ["bot_id"]
+            foreignKeyName: 'bot_equity_curve_bot_id_fkey'
+            columns: ['bot_id']
             isOneToOne: false
-            referencedRelation: "bot_sources"
-            referencedColumns: ["id"]
+            referencedRelation: 'bot_sources'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -568,11 +562,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "bot_snapshots_bot_id_fkey"
-            columns: ["bot_id"]
+            foreignKeyName: 'bot_snapshots_bot_id_fkey'
+            columns: ['bot_id']
             isOneToOne: false
-            referencedRelation: "bot_sources"
-            referencedColumns: ["id"]
+            referencedRelation: 'bot_sources'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -711,11 +705,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "channel_members_channel_id_fkey"
-            columns: ["channel_id"]
+            foreignKeyName: 'channel_members_channel_id_fkey'
+            columns: ['channel_id']
             isOneToOne: false
-            referencedRelation: "chat_channels"
-            referencedColumns: ["id"]
+            referencedRelation: 'chat_channels'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -737,11 +731,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "channel_message_reads_channel_id_fkey"
-            columns: ["channel_id"]
+            foreignKeyName: 'channel_message_reads_channel_id_fkey'
+            columns: ['channel_id']
             isOneToOne: false
-            referencedRelation: "chat_channels"
-            referencedColumns: ["id"]
+            referencedRelation: 'chat_channels'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -778,11 +772,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "channel_messages_channel_id_fkey"
-            columns: ["channel_id"]
+            foreignKeyName: 'channel_messages_channel_id_fkey'
+            columns: ['channel_id']
             isOneToOne: false
-            referencedRelation: "chat_channels"
-            referencedColumns: ["id"]
+            referencedRelation: 'chat_channels'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -828,11 +822,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "chat_channels_conversation_id_fkey"
-            columns: ["conversation_id"]
+            foreignKeyName: 'chat_channels_conversation_id_fkey'
+            columns: ['conversation_id']
             isOneToOne: false
-            referencedRelation: "conversations"
-            referencedColumns: ["id"]
+            referencedRelation: 'conversations'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -854,18 +848,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "cluster_members_cluster_id_fkey"
-            columns: ["cluster_id"]
+            foreignKeyName: 'cluster_members_cluster_id_fkey'
+            columns: ['cluster_id']
             isOneToOne: false
-            referencedRelation: "clusters"
-            referencedColumns: ["cluster_id"]
+            referencedRelation: 'clusters'
+            referencedColumns: ['cluster_id']
           },
           {
-            foreignKeyName: "cluster_members_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'cluster_members_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -917,11 +911,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "collection_items_collection_id_fkey"
-            columns: ["collection_id"]
+            foreignKeyName: 'collection_items_collection_id_fkey'
+            columns: ['collection_id']
             isOneToOne: false
-            referencedRelation: "user_collections"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_collections'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -949,11 +943,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "comment_likes_comment_id_fkey"
-            columns: ["comment_id"]
+            foreignKeyName: 'comment_likes_comment_id_fkey'
+            columns: ['comment_id']
             isOneToOne: false
-            referencedRelation: "comments"
-            referencedColumns: ["id"]
+            referencedRelation: 'comments'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -999,18 +993,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "comments_parent_id_fkey"
-            columns: ["parent_id"]
+            foreignKeyName: 'comments_parent_id_fkey'
+            columns: ['parent_id']
             isOneToOne: false
-            referencedRelation: "comments"
-            referencedColumns: ["id"]
+            referencedRelation: 'comments'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "comments_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'comments_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1098,11 +1092,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "conversation_members_conversation_id_fkey"
-            columns: ["conversation_id"]
+            foreignKeyName: 'conversation_members_conversation_id_fkey'
+            columns: ['conversation_id']
             isOneToOne: false
-            referencedRelation: "conversations"
-            referencedColumns: ["id"]
+            referencedRelation: 'conversations'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1202,11 +1196,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "copy_trade_logs_config_id_fkey"
-            columns: ["config_id"]
+            foreignKeyName: 'copy_trade_logs_config_id_fkey'
+            columns: ['config_id']
             isOneToOne: false
-            referencedRelation: "copy_trade_configs"
-            referencedColumns: ["id"]
+            referencedRelation: 'copy_trade_configs'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1342,11 +1336,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "direct_messages_conversation_id_fkey"
-            columns: ["conversation_id"]
+            foreignKeyName: 'direct_messages_conversation_id_fkey'
+            columns: ['conversation_id']
             isOneToOne: false
-            referencedRelation: "conversations"
-            referencedColumns: ["id"]
+            referencedRelation: 'conversations'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1530,18 +1524,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "funding_hubs_cluster_id_fkey"
-            columns: ["cluster_id"]
+            foreignKeyName: 'funding_hubs_cluster_id_fkey'
+            columns: ['cluster_id']
             isOneToOne: false
-            referencedRelation: "clusters"
-            referencedColumns: ["cluster_id"]
+            referencedRelation: 'clusters'
+            referencedColumns: ['cluster_id']
           },
           {
-            foreignKeyName: "funding_hubs_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'funding_hubs_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -1575,7 +1569,7 @@ export type Database = {
       gifts: {
         Row: {
           amount: number
-          asset: Database["public"]["Enums"]["gift_asset"]
+          asset: Database['public']['Enums']['gift_asset']
           created_at: string
           from_user_id: string
           group_id: string
@@ -1584,7 +1578,7 @@ export type Database = {
         }
         Insert: {
           amount: number
-          asset?: Database["public"]["Enums"]["gift_asset"]
+          asset?: Database['public']['Enums']['gift_asset']
           created_at?: string
           from_user_id?: string
           group_id: string
@@ -1593,7 +1587,7 @@ export type Database = {
         }
         Update: {
           amount?: number
-          asset?: Database["public"]["Enums"]["gift_asset"]
+          asset?: Database['public']['Enums']['gift_asset']
           created_at?: string
           from_user_id?: string
           group_id?: string
@@ -1602,25 +1596,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "gifts_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'gifts_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "gifts_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'gifts_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "gifts_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'gifts_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1711,18 +1705,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "group_audit_log_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_audit_log_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "group_audit_log_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_audit_log_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1750,18 +1744,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "group_bans_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_bans_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "group_bans_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_bans_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1825,18 +1819,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "group_edit_applications_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_edit_applications_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "group_edit_applications_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_edit_applications_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1873,18 +1867,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "group_invites_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_invites_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "group_invites_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_invites_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1921,18 +1915,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "group_join_requests_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_join_requests_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "group_join_requests_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_join_requests_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -1944,7 +1938,7 @@ export type Database = {
           muted_by: string | null
           muted_until: string | null
           notifications_muted: boolean | null
-          role: Database["public"]["Enums"]["member_role"]
+          role: Database['public']['Enums']['member_role']
           user_id: string
         }
         Insert: {
@@ -1954,7 +1948,7 @@ export type Database = {
           muted_by?: string | null
           muted_until?: string | null
           notifications_muted?: boolean | null
-          role?: Database["public"]["Enums"]["member_role"]
+          role?: Database['public']['Enums']['member_role']
           user_id?: string
         }
         Update: {
@@ -1964,23 +1958,23 @@ export type Database = {
           muted_by?: string | null
           muted_until?: string | null
           notifications_muted?: boolean | null
-          role?: Database["public"]["Enums"]["member_role"]
+          role?: Database['public']['Enums']['member_role']
           user_id?: string
         }
         Relationships: [
           {
-            foreignKeyName: "group_members_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_members_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "group_members_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_members_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -2005,18 +1999,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "group_rules_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_rules_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "group_rules_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_rules_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -2068,18 +2062,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "group_subscriptions_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_subscriptions_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "group_subscriptions_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'group_subscriptions_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -2110,7 +2104,7 @@ export type Database = {
           subscription_price_yearly: number | null
           trial_days: number | null
           updated_at: string
-          visibility: Database["public"]["Enums"]["group_visibility"]
+          visibility: Database['public']['Enums']['group_visibility']
         }
         Insert: {
           allow_trial?: boolean | null
@@ -2138,7 +2132,7 @@ export type Database = {
           subscription_price_yearly?: number | null
           trial_days?: number | null
           updated_at?: string
-          visibility?: Database["public"]["Enums"]["group_visibility"]
+          visibility?: Database['public']['Enums']['group_visibility']
         }
         Update: {
           allow_trial?: boolean | null
@@ -2166,7 +2160,7 @@ export type Database = {
           subscription_price_yearly?: number | null
           trial_days?: number | null
           updated_at?: string
-          visibility?: Database["public"]["Enums"]["group_visibility"]
+          visibility?: Database['public']['Enums']['group_visibility']
         }
         Relationships: []
       }
@@ -2263,18 +2257,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "interactions_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: 'interactions_project_id_fkey'
+            columns: ['project_id']
             isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["project_id"]
+            referencedRelation: 'projects'
+            referencedColumns: ['project_id']
           },
           {
-            foreignKeyName: "interactions_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'interactions_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -2347,11 +2341,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "labels_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'labels_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -2625,7 +2619,7 @@ export type Database = {
       ledger_entries: {
         Row: {
           amount: number
-          asset: Database["public"]["Enums"]["gift_asset"]
+          asset: Database['public']['Enums']['gift_asset']
           created_at: string
           entry_type: string
           gift_id: string
@@ -2637,7 +2631,7 @@ export type Database = {
         }
         Insert: {
           amount: number
-          asset: Database["public"]["Enums"]["gift_asset"]
+          asset: Database['public']['Enums']['gift_asset']
           created_at?: string
           entry_type: string
           gift_id: string
@@ -2649,7 +2643,7 @@ export type Database = {
         }
         Update: {
           amount?: number
-          asset?: Database["public"]["Enums"]["gift_asset"]
+          asset?: Database['public']['Enums']['gift_asset']
           created_at?: string
           entry_type?: string
           gift_id?: string
@@ -2661,32 +2655,32 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "ledger_entries_gift_id_fkey"
-            columns: ["gift_id"]
+            foreignKeyName: 'ledger_entries_gift_id_fkey'
+            columns: ['gift_id']
             isOneToOne: false
-            referencedRelation: "gifts"
-            referencedColumns: ["id"]
+            referencedRelation: 'gifts'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "ledger_entries_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'ledger_entries_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "ledger_entries_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'ledger_entries_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "ledger_entries_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'ledger_entries_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -2942,18 +2936,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "manipulation_alert_history_alert_id_fkey"
-            columns: ["alert_id"]
+            foreignKeyName: 'manipulation_alert_history_alert_id_fkey'
+            columns: ['alert_id']
             isOneToOne: false
-            referencedRelation: "manipulation_alerts"
-            referencedColumns: ["id"]
+            referencedRelation: 'manipulation_alerts'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "manipulation_alert_history_alert_id_fkey"
-            columns: ["alert_id"]
+            foreignKeyName: 'manipulation_alert_history_alert_id_fkey'
+            columns: ['alert_id']
             isOneToOne: false
-            referencedRelation: "v_recent_alerts"
-            referencedColumns: ["id"]
+            referencedRelation: 'v_recent_alerts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3392,11 +3386,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "poll_votes_poll_id_fkey"
-            columns: ["poll_id"]
+            foreignKeyName: 'poll_votes_poll_id_fkey'
+            columns: ['poll_id']
             isOneToOne: false
-            referencedRelation: "polls"
-            referencedColumns: ["id"]
+            referencedRelation: 'polls'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3433,11 +3427,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "polls_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'polls_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3465,18 +3459,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "post_bookmarks_folder_id_fkey"
-            columns: ["folder_id"]
+            foreignKeyName: 'post_bookmarks_folder_id_fkey'
+            columns: ['folder_id']
             isOneToOne: false
-            referencedRelation: "bookmark_folders"
-            referencedColumns: ["id"]
+            referencedRelation: 'bookmark_folders'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "post_bookmarks_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'post_bookmarks_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3516,32 +3510,32 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "post_comments_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'post_comments_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "post_comments_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'post_comments_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "post_comments_parent_id_fkey"
-            columns: ["parent_id"]
+            foreignKeyName: 'post_comments_parent_id_fkey'
+            columns: ['parent_id']
             isOneToOne: false
-            referencedRelation: "post_comments"
-            referencedColumns: ["id"]
+            referencedRelation: 'post_comments'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "post_comments_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'post_comments_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3569,11 +3563,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "post_likes_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'post_likes_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3601,11 +3595,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "post_reactions_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'post_reactions_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3633,11 +3627,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "post_votes_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'post_votes_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3683,7 +3677,7 @@ export type Database = {
           report_count: number | null
           repost_count: number | null
           search_hit_count: number | null
-          status: Database["public"]["Enums"]["post_status"]
+          status: Database['public']['Enums']['post_status']
           title: string
           updated_at: string
           velocity_updated_at: string | null
@@ -3731,7 +3725,7 @@ export type Database = {
           report_count?: number | null
           repost_count?: number | null
           search_hit_count?: number | null
-          status?: Database["public"]["Enums"]["post_status"]
+          status?: Database['public']['Enums']['post_status']
           title: string
           updated_at?: string
           velocity_updated_at?: string | null
@@ -3779,7 +3773,7 @@ export type Database = {
           report_count?: number | null
           repost_count?: number | null
           search_hit_count?: number | null
-          status?: Database["public"]["Enums"]["post_status"]
+          status?: Database['public']['Enums']['post_status']
           title?: string
           updated_at?: string
           velocity_updated_at?: string | null
@@ -3788,32 +3782,32 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "posts_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'posts_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "posts_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'posts_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "posts_original_post_id_fkey"
-            columns: ["original_post_id"]
+            foreignKeyName: 'posts_original_post_id_fkey'
+            columns: ['original_post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "posts_poll_id_fkey"
-            columns: ["poll_id"]
+            foreignKeyName: 'posts_poll_id_fkey'
+            columns: ['poll_id']
             isOneToOne: false
-            referencedRelation: "polls"
-            referencedColumns: ["id"]
+            referencedRelation: 'polls'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -3880,18 +3874,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "project_interactions_task_id_fkey"
-            columns: ["task_id"]
+            foreignKeyName: 'project_interactions_task_id_fkey'
+            columns: ['task_id']
             isOneToOne: false
-            referencedRelation: "tasks"
-            referencedColumns: ["task_id"]
+            referencedRelation: 'tasks'
+            referencedColumns: ['task_id']
           },
           {
-            foreignKeyName: "project_interactions_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'project_interactions_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -3934,18 +3928,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "project_labels_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: 'project_labels_project_id_fkey'
+            columns: ['project_id']
             isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["project_id"]
+            referencedRelation: 'projects'
+            referencedColumns: ['project_id']
           },
           {
-            foreignKeyName: "project_labels_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'project_labels_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -3976,18 +3970,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "project_wallets_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: 'project_wallets_project_id_fkey'
+            columns: ['project_id']
             isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["project_id"]
+            referencedRelation: 'projects'
+            referencedColumns: ['project_id']
           },
           {
-            foreignKeyName: "project_wallets_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'project_wallets_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -4159,25 +4153,25 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "ranking_snapshots_created_by_fkey"
-            columns: ["created_by"]
+            foreignKeyName: 'ranking_snapshots_created_by_fkey'
+            columns: ['created_by']
             isOneToOne: false
-            referencedRelation: "public_user_profiles"
-            referencedColumns: ["id"]
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "ranking_snapshots_created_by_fkey"
-            columns: ["created_by"]
+            foreignKeyName: 'ranking_snapshots_created_by_fkey'
+            columns: ['created_by']
             isOneToOne: false
-            referencedRelation: "user_follow_counts"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "ranking_snapshots_created_by_fkey"
-            columns: ["created_by"]
+            foreignKeyName: 'ranking_snapshots_created_by_fkey'
+            columns: ['created_by']
             isOneToOne: false
-            referencedRelation: "user_profiles"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -4331,7 +4325,7 @@ export type Database = {
           group_id: string
           id: string
           note: string | null
-          reason: Database["public"]["Enums"]["report_reason"]
+          reason: Database['public']['Enums']['report_reason']
           reporter_id: string
           target_id: string
           target_type: string
@@ -4341,7 +4335,7 @@ export type Database = {
           group_id: string
           id?: string
           note?: string | null
-          reason?: Database["public"]["Enums"]["report_reason"]
+          reason?: Database['public']['Enums']['report_reason']
           reporter_id?: string
           target_id: string
           target_type: string
@@ -4351,25 +4345,25 @@ export type Database = {
           group_id?: string
           id?: string
           note?: string | null
-          reason?: Database["public"]["Enums"]["report_reason"]
+          reason?: Database['public']['Enums']['report_reason']
           reporter_id?: string
           target_id?: string
           target_type?: string
         }
         Relationships: [
           {
-            foreignKeyName: "reports_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'reports_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "group_subscription_stats"
-            referencedColumns: ["group_id"]
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
           },
           {
-            foreignKeyName: "reports_group_id_fkey"
-            columns: ["group_id"]
+            foreignKeyName: 'reports_group_id_fkey'
+            columns: ['group_id']
             isOneToOne: false
-            referencedRelation: "groups"
-            referencedColumns: ["id"]
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -4397,11 +4391,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "reposts_post_id_fkey"
-            columns: ["post_id"]
+            foreignKeyName: 'reposts_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: "posts"
-            referencedColumns: ["id"]
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -4462,11 +4456,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "risk_scores_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'risk_scores_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -4575,18 +4569,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "signals_trader_id_fkey"
-            columns: ["trader_id"]
+            foreignKeyName: 'signals_trader_id_fkey'
+            columns: ['trader_id']
             isOneToOne: false
-            referencedRelation: "traders_legacy"
-            referencedColumns: ["id"]
+            referencedRelation: 'traders_legacy'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "signals_trader_id_fkey"
-            columns: ["trader_id"]
+            foreignKeyName: 'signals_trader_id_fkey'
+            columns: ['trader_id']
             isOneToOne: false
-            referencedRelation: "view_leaderboard_top10"
-            referencedColumns: ["trader_id"]
+            referencedRelation: 'view_leaderboard_top10'
+            referencedColumns: ['trader_id']
           },
         ]
       }
@@ -4653,11 +4647,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "snapshot_traders_snapshot_id_fkey"
-            columns: ["snapshot_id"]
+            foreignKeyName: 'snapshot_traders_snapshot_id_fkey'
+            columns: ['snapshot_id']
             isOneToOne: false
-            referencedRelation: "ranking_snapshots"
-            referencedColumns: ["id"]
+            referencedRelation: 'ranking_snapshots'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -4691,18 +4685,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "strategies_trader_id_fkey"
-            columns: ["trader_id"]
+            foreignKeyName: 'strategies_trader_id_fkey'
+            columns: ['trader_id']
             isOneToOne: false
-            referencedRelation: "traders_legacy"
-            referencedColumns: ["id"]
+            referencedRelation: 'traders_legacy'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "strategies_trader_id_fkey"
-            columns: ["trader_id"]
+            foreignKeyName: 'strategies_trader_id_fkey'
+            columns: ['trader_id']
             isOneToOne: false
-            referencedRelation: "view_leaderboard_top10"
-            referencedColumns: ["trader_id"]
+            referencedRelation: 'view_leaderboard_top10'
+            referencedColumns: ['trader_id']
           },
         ]
       }
@@ -4811,11 +4805,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "tasks_project_id_fkey"
-            columns: ["project_id"]
+            foreignKeyName: 'tasks_project_id_fkey'
+            columns: ['project_id']
             isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["project_id"]
+            referencedRelation: 'projects'
+            referencedColumns: ['project_id']
           },
         ]
       }
@@ -5830,18 +5824,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "trader_flags_alert_id_fkey"
-            columns: ["alert_id"]
+            foreignKeyName: 'trader_flags_alert_id_fkey'
+            columns: ['alert_id']
             isOneToOne: false
-            referencedRelation: "manipulation_alerts"
-            referencedColumns: ["id"]
+            referencedRelation: 'manipulation_alerts'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "trader_flags_alert_id_fkey"
-            columns: ["alert_id"]
+            foreignKeyName: 'trader_flags_alert_id_fkey'
+            columns: ['alert_id']
             isOneToOne: false
-            referencedRelation: "v_recent_alerts"
-            referencedColumns: ["id"]
+            referencedRelation: 'v_recent_alerts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -5968,32 +5962,32 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "trader_merges_from_trader_id_fkey"
-            columns: ["from_trader_id"]
+            foreignKeyName: 'trader_merges_from_trader_id_fkey'
+            columns: ['from_trader_id']
             isOneToOne: false
-            referencedRelation: "traders_legacy"
-            referencedColumns: ["id"]
+            referencedRelation: 'traders_legacy'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "trader_merges_from_trader_id_fkey"
-            columns: ["from_trader_id"]
+            foreignKeyName: 'trader_merges_from_trader_id_fkey'
+            columns: ['from_trader_id']
             isOneToOne: false
-            referencedRelation: "view_leaderboard_top10"
-            referencedColumns: ["trader_id"]
+            referencedRelation: 'view_leaderboard_top10'
+            referencedColumns: ['trader_id']
           },
           {
-            foreignKeyName: "trader_merges_to_trader_id_fkey"
-            columns: ["to_trader_id"]
+            foreignKeyName: 'trader_merges_to_trader_id_fkey'
+            columns: ['to_trader_id']
             isOneToOne: false
-            referencedRelation: "traders_legacy"
-            referencedColumns: ["id"]
+            referencedRelation: 'traders_legacy'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "trader_merges_to_trader_id_fkey"
-            columns: ["to_trader_id"]
+            foreignKeyName: 'trader_merges_to_trader_id_fkey'
+            columns: ['to_trader_id']
             isOneToOne: false
-            referencedRelation: "view_leaderboard_top10"
-            referencedColumns: ["trader_id"]
+            referencedRelation: 'view_leaderboard_top10'
+            referencedColumns: ['trader_id']
           },
         ]
       }
@@ -6501,18 +6495,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "trader_seasons_trader_id_fkey"
-            columns: ["trader_id"]
+            foreignKeyName: 'trader_seasons_trader_id_fkey'
+            columns: ['trader_id']
             isOneToOne: false
-            referencedRelation: "traders_legacy"
-            referencedColumns: ["id"]
+            referencedRelation: 'traders_legacy'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "trader_seasons_trader_id_fkey"
-            columns: ["trader_id"]
+            foreignKeyName: 'trader_seasons_trader_id_fkey'
+            columns: ['trader_id']
             isOneToOne: false
-            referencedRelation: "view_leaderboard_top10"
-            referencedColumns: ["trader_id"]
+            referencedRelation: 'view_leaderboard_top10'
+            referencedColumns: ['trader_id']
           },
         ]
       }
@@ -6705,13 +6699,88 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "trader_snapshots_authorization_id_fkey"
-            columns: ["authorization_id"]
+            foreignKeyName: 'trader_snapshots_authorization_id_fkey'
+            columns: ['authorization_id']
             isOneToOne: false
-            referencedRelation: "trader_authorizations"
-            referencedColumns: ["id"]
+            referencedRelation: 'trader_authorizations'
+            referencedColumns: ['id']
           },
         ]
+      }
+      trader_latest: {
+        Row: {
+          arena_score: number | null
+          calmar_ratio: number | null
+          copiers: number | null
+          downside_volatility_pct: number | null
+          fetched_at: string
+          followers: number | null
+          market_type: string
+          max_drawdown: number | null
+          metrics: Json
+          platform: string
+          pnl_usd: number | null
+          provenance: Json | null
+          quality_flags: Json | null
+          roi_pct: number | null
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          trader_key: string
+          trades_count: number | null
+          updated_at: string
+          volatility_pct: number | null
+          win_rate: number | null
+          window: string
+        }
+        Insert: {
+          arena_score?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          downside_volatility_pct?: number | null
+          fetched_at?: string
+          followers?: number | null
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json
+          platform: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          trader_key: string
+          trades_count?: number | null
+          updated_at?: string
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window: string
+        }
+        Update: {
+          arena_score?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          downside_volatility_pct?: number | null
+          fetched_at?: string
+          followers?: number | null
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json
+          platform?: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          trader_key?: string
+          trades_count?: number | null
+          updated_at?: string
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window?: string
+        }
+        Relationships: []
       }
       trader_snapshots_v2: {
         Row: {
@@ -7739,18 +7808,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "trader_sources_trader_id_fkey"
-            columns: ["trader_id"]
+            foreignKeyName: 'trader_sources_trader_id_fkey'
+            columns: ['trader_id']
             isOneToOne: false
-            referencedRelation: "traders_legacy"
-            referencedColumns: ["id"]
+            referencedRelation: 'traders_legacy'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "trader_sources_trader_id_fkey"
-            columns: ["trader_id"]
+            foreignKeyName: 'trader_sources_trader_id_fkey'
+            columns: ['trader_id']
             isOneToOne: false
-            referencedRelation: "view_leaderboard_top10"
-            referencedColumns: ["trader_id"]
+            referencedRelation: 'view_leaderboard_top10'
+            referencedColumns: ['trader_id']
           },
         ]
       }
@@ -8054,18 +8123,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "traders_merged_to_fkey"
-            columns: ["merged_to"]
+            foreignKeyName: 'traders_merged_to_fkey'
+            columns: ['merged_to']
             isOneToOne: false
-            referencedRelation: "traders_legacy"
-            referencedColumns: ["id"]
+            referencedRelation: 'traders_legacy'
+            referencedColumns: ['id']
           },
           {
-            foreignKeyName: "traders_merged_to_fkey"
-            columns: ["merged_to"]
+            foreignKeyName: 'traders_merged_to_fkey'
+            columns: ['merged_to']
             isOneToOne: false
-            referencedRelation: "view_leaderboard_top10"
-            referencedColumns: ["trader_id"]
+            referencedRelation: 'view_leaderboard_top10'
+            referencedColumns: ['trader_id']
           },
         ]
       }
@@ -8111,11 +8180,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "transactions_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'transactions_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -8152,18 +8221,18 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "transfers_from_wallet_id_fkey"
-            columns: ["from_wallet_id"]
+            foreignKeyName: 'transfers_from_wallet_id_fkey'
+            columns: ['from_wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
           {
-            foreignKeyName: "transfers_to_wallet_id_fkey"
-            columns: ["to_wallet_id"]
+            foreignKeyName: 'transfers_to_wallet_id_fkey'
+            columns: ['to_wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -8539,11 +8608,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "user_portfolio_snapshots_portfolio_id_fkey"
-            columns: ["portfolio_id"]
+            foreignKeyName: 'user_portfolio_snapshots_portfolio_id_fkey'
+            columns: ['portfolio_id']
             isOneToOne: false
-            referencedRelation: "user_portfolios"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_portfolios'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -8619,11 +8688,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "user_positions_portfolio_id_fkey"
-            columns: ["portfolio_id"]
+            foreignKeyName: 'user_positions_portfolio_id_fkey'
+            columns: ['portfolio_id']
             isOneToOne: false
-            referencedRelation: "user_portfolios"
-            referencedColumns: ["id"]
+            referencedRelation: 'user_portfolios'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -8981,11 +9050,11 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "wallet_metadata_wallet_id_fkey"
-            columns: ["wallet_id"]
+            foreignKeyName: 'wallet_metadata_wallet_id_fkey'
+            columns: ['wallet_id']
             isOneToOne: false
-            referencedRelation: "wallets"
-            referencedColumns: ["wallet_id"]
+            referencedRelation: 'wallets'
+            referencedColumns: ['wallet_id']
           },
         ]
       }
@@ -9536,8 +9605,8 @@ export type Database = {
           window: string | null
         }[]
         SetofOptions: {
-          from: "*"
-          to: "refresh_jobs"
+          from: '*'
+          to: 'refresh_jobs'
           isOneToOne: false
           isSetofReturn: true
         }
@@ -9706,8 +9775,8 @@ export type Database = {
           win_rate: number | null
         }[]
         SetofOptions: {
-          from: "*"
-          to: "leaderboard_ranks"
+          from: '*'
+          to: 'leaderboard_ranks'
           isOneToOne: false
           isSetofReturn: true
         }
@@ -9759,7 +9828,7 @@ export type Database = {
           report_count: number | null
           repost_count: number | null
           search_hit_count: number | null
-          status: Database["public"]["Enums"]["post_status"]
+          status: Database['public']['Enums']['post_status']
           title: string
           updated_at: string
           velocity_updated_at: string | null
@@ -9767,8 +9836,8 @@ export type Database = {
           visibility: string
         }[]
         SetofOptions: {
-          from: "*"
-          to: "posts"
+          from: '*'
+          to: 'posts'
           isOneToOne: false
           isSetofReturn: true
         }
@@ -9950,11 +10019,11 @@ export type Database = {
         Returns: boolean
       }
       http: {
-        Args: { request: Database["public"]["CompositeTypes"]["http_request"] }
-        Returns: Database["public"]["CompositeTypes"]["http_response"]
+        Args: { request: Database['public']['CompositeTypes']['http_request'] }
+        Returns: Database['public']['CompositeTypes']['http_response']
         SetofOptions: {
-          from: "http_request"
-          to: "http_response"
+          from: 'http_request'
+          to: 'http_response'
           isOneToOne: true
           isSetofReturn: false
         }
@@ -9962,20 +10031,20 @@ export type Database = {
       http_delete:
         | {
             Args: { uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
+            Returns: Database['public']['CompositeTypes']['http_response']
             SetofOptions: {
-              from: "*"
-              to: "http_response"
+              from: '*'
+              to: 'http_response'
               isOneToOne: true
               isSetofReturn: false
             }
           }
         | {
             Args: { content: string; content_type: string; uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
+            Returns: Database['public']['CompositeTypes']['http_response']
             SetofOptions: {
-              from: "*"
-              to: "http_response"
+              from: '*'
+              to: 'http_response'
               isOneToOne: true
               isSetofReturn: false
             }
@@ -9983,40 +10052,40 @@ export type Database = {
       http_get:
         | {
             Args: { uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
+            Returns: Database['public']['CompositeTypes']['http_response']
             SetofOptions: {
-              from: "*"
-              to: "http_response"
+              from: '*'
+              to: 'http_response'
               isOneToOne: true
               isSetofReturn: false
             }
           }
         | {
             Args: { data: Json; uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
+            Returns: Database['public']['CompositeTypes']['http_response']
             SetofOptions: {
-              from: "*"
-              to: "http_response"
+              from: '*'
+              to: 'http_response'
               isOneToOne: true
               isSetofReturn: false
             }
           }
       http_head: {
         Args: { uri: string }
-        Returns: Database["public"]["CompositeTypes"]["http_response"]
+        Returns: Database['public']['CompositeTypes']['http_response']
         SetofOptions: {
-          from: "*"
-          to: "http_response"
+          from: '*'
+          to: 'http_response'
           isOneToOne: true
           isSetofReturn: false
         }
       }
       http_header: {
         Args: { field: string; value: string }
-        Returns: Database["public"]["CompositeTypes"]["http_header"]
+        Returns: Database['public']['CompositeTypes']['http_header']
         SetofOptions: {
-          from: "*"
-          to: "http_header"
+          from: '*'
+          to: 'http_header'
           isOneToOne: true
           isSetofReturn: false
         }
@@ -10030,10 +10099,10 @@ export type Database = {
       }
       http_patch: {
         Args: { content: string; content_type: string; uri: string }
-        Returns: Database["public"]["CompositeTypes"]["http_response"]
+        Returns: Database['public']['CompositeTypes']['http_response']
         SetofOptions: {
-          from: "*"
-          to: "http_response"
+          from: '*'
+          to: 'http_response'
           isOneToOne: true
           isSetofReturn: false
         }
@@ -10041,30 +10110,30 @@ export type Database = {
       http_post:
         | {
             Args: { content: string; content_type: string; uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
+            Returns: Database['public']['CompositeTypes']['http_response']
             SetofOptions: {
-              from: "*"
-              to: "http_response"
+              from: '*'
+              to: 'http_response'
               isOneToOne: true
               isSetofReturn: false
             }
           }
         | {
             Args: { data: Json; uri: string }
-            Returns: Database["public"]["CompositeTypes"]["http_response"]
+            Returns: Database['public']['CompositeTypes']['http_response']
             SetofOptions: {
-              from: "*"
-              to: "http_response"
+              from: '*'
+              to: 'http_response'
               isOneToOne: true
               isSetofReturn: false
             }
           }
       http_put: {
         Args: { content: string; content_type: string; uri: string }
-        Returns: Database["public"]["CompositeTypes"]["http_response"]
+        Returns: Database['public']['CompositeTypes']['http_response']
         SetofOptions: {
-          from: "*"
-          to: "http_response"
+          from: '*'
+          to: 'http_response'
           isOneToOne: true
           isSetofReturn: false
         }
@@ -10154,8 +10223,8 @@ export type Database = {
           view_count: number | null
         }[]
         SetofOptions: {
-          from: "*"
-          to: "library_items"
+          from: '*'
+          to: 'library_items'
           isOneToOne: false
           isSetofReturn: true
         }
@@ -10306,13 +10375,13 @@ export type Database = {
             Args: { string: string }
             Returns: {
               error: true
-            } & "Could not choose the best candidate function between: public.urlencode(string => bytea), public.urlencode(string => varchar). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+            } & 'Could not choose the best candidate function between: public.urlencode(string => bytea), public.urlencode(string => varchar). Try renaming the parameters or the function itself in the database so function overloading can be resolved'
           }
         | {
             Args: { string: string }
             Returns: {
               error: true
-            } & "Could not choose the best candidate function between: public.urlencode(string => bytea), public.urlencode(string => varchar). Try renaming the parameters or the function itself in the database so function overloading can be resolved"
+            } & 'Could not choose the best candidate function between: public.urlencode(string => bytea), public.urlencode(string => varchar). Try renaming the parameters or the function itself in the database so function overloading can be resolved'
           }
       verify_group_member_counts: {
         Args: never
@@ -10330,11 +10399,11 @@ export type Database = {
       }
     }
     Enums: {
-      gift_asset: "fiat" | "token"
-      group_visibility: "open" | "apply"
-      member_role: "owner" | "admin" | "member"
-      post_status: "active" | "locked" | "deleted"
-      report_reason: "spam" | "scam" | "harassment" | "illegal" | "other"
+      gift_asset: 'fiat' | 'token'
+      group_visibility: 'open' | 'apply'
+      member_role: 'owner' | 'admin' | 'member'
+      post_status: 'active' | 'locked' | 'deleted'
+      report_reason: 'spam' | 'scam' | 'harassment' | 'illegal' | 'other'
     }
     CompositeTypes: {
       http_header: {
@@ -10344,47 +10413,45 @@ export type Database = {
       http_request: {
         method: unknown
         uri: string | null
-        headers: Database["public"]["CompositeTypes"]["http_header"][] | null
+        headers: Database['public']['CompositeTypes']['http_header'][] | null
         content_type: string | null
         content: string | null
       }
       http_response: {
         status: number | null
         content_type: string | null
-        headers: Database["public"]["CompositeTypes"]["http_header"][] | null
+        headers: Database['public']['CompositeTypes']['http_header'][] | null
         content: string | null
       }
     }
   }
 }
 
-type DatabaseWithoutInternals = Omit<Database, "__InternalSupabase">
+type DatabaseWithoutInternals = Omit<Database, '__InternalSupabase'>
 
-type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, "public">]
+type DefaultSchema = DatabaseWithoutInternals[Extract<keyof Database, 'public'>]
 
 export type Tables<
   DefaultSchemaTableNameOrOptions extends
-    | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
+    | keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
+    ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
+        DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
-      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])[TableName] extends {
+  ? (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'] &
+      DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Views'])[TableName] extends {
       Row: infer R
     }
     ? R
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])
-    ? (DefaultSchema["Tables"] &
-        DefaultSchema["Views"])[DefaultSchemaTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof (DefaultSchema['Tables'] & DefaultSchema['Views'])
+    ? (DefaultSchema['Tables'] & DefaultSchema['Views'])[DefaultSchemaTableNameOrOptions] extends {
         Row: infer R
       }
       ? R
@@ -10393,23 +10460,23 @@ export type Tables<
 
 export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
+    | keyof DefaultSchema['Tables']
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
       Insert: infer I
     }
     ? I
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
+    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
         Insert: infer I
       }
       ? I
@@ -10418,23 +10485,23 @@ export type TablesInsert<
 
 export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
-    | keyof DefaultSchema["Tables"]
+    | keyof DefaultSchema['Tables']
     | { schema: keyof DatabaseWithoutInternals },
   TableName extends DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables']
     : never = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"][TableName] extends {
+  ? DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions['schema']]['Tables'][TableName] extends {
       Update: infer U
     }
     ? U
     : never
-  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema["Tables"]
-    ? DefaultSchema["Tables"][DefaultSchemaTableNameOrOptions] extends {
+  : DefaultSchemaTableNameOrOptions extends keyof DefaultSchema['Tables']
+    ? DefaultSchema['Tables'][DefaultSchemaTableNameOrOptions] extends {
         Update: infer U
       }
       ? U
@@ -10443,46 +10510,46 @@ export type TablesUpdate<
 
 export type Enums<
   DefaultSchemaEnumNameOrOptions extends
-    | keyof DefaultSchema["Enums"]
+    | keyof DefaultSchema['Enums']
     | { schema: keyof DatabaseWithoutInternals },
   EnumName extends DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
+    ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums']
     : never = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"][EnumName]
-  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema["Enums"]
-    ? DefaultSchema["Enums"][DefaultSchemaEnumNameOrOptions]
+  ? DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions['schema']]['Enums'][EnumName]
+  : DefaultSchemaEnumNameOrOptions extends keyof DefaultSchema['Enums']
+    ? DefaultSchema['Enums'][DefaultSchemaEnumNameOrOptions]
     : never
 
 export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
-    | keyof DefaultSchema["CompositeTypes"]
+    | keyof DefaultSchema['CompositeTypes']
     | { schema: keyof DatabaseWithoutInternals },
   CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
-    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
+    ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes']
     : never = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
-  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"][CompositeTypeName]
-  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema["CompositeTypes"]
-    ? DefaultSchema["CompositeTypes"][PublicCompositeTypeNameOrOptions]
+  ? DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions['schema']]['CompositeTypes'][CompositeTypeName]
+  : PublicCompositeTypeNameOrOptions extends keyof DefaultSchema['CompositeTypes']
+    ? DefaultSchema['CompositeTypes'][PublicCompositeTypeNameOrOptions]
     : never
 
 export const Constants = {
   public: {
     Enums: {
-      gift_asset: ["fiat", "token"],
-      group_visibility: ["open", "apply"],
-      member_role: ["owner", "admin", "member"],
-      post_status: ["active", "locked", "deleted"],
-      report_reason: ["spam", "scam", "harassment", "illegal", "other"],
+      gift_asset: ['fiat', 'token'],
+      group_visibility: ['open', 'apply'],
+      member_role: ['owner', 'admin', 'member'],
+      post_status: ['active', 'locked', 'deleted'],
+      report_reason: ['spam', 'scam', 'harassment', 'illegal', 'other'],
     },
   },
 } as const

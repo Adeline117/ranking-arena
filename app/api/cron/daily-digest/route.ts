@@ -36,13 +36,13 @@ export const GET = withCron('daily-digest', async (_request: NextRequest, { supa
   const alertCount24h =
     logs?.filter((l) => l.status === 'error' || l.status === 'timeout').length || 0
 
-  // Platform freshness — query latest updated_at per platform efficiently
+  // Platform freshness — query latest updated_at per platform from trader_latest
   const latestByPlatform = new Map<string, string>()
   const freshnessChecks = activePlatforms.map(async (platform) => {
     try {
       const { data } = await Promise.race([
         supabase
-          .from('trader_snapshots_v2')
+          .from('trader_latest')
           .select('updated_at')
           .eq('platform', platform)
           .order('updated_at', { ascending: false })
@@ -74,18 +74,18 @@ export const GET = withCron('daily-digest', async (_request: NextRequest, { supa
     }
   })
 
-  // Snapshot counts — estimated to avoid full scans
+  // Snapshot counts — traders updated in window (trader_latest has 1 row per key)
   const { count: snapshotCount24h } = await supabase
-    .from('trader_snapshots_v2')
+    .from('trader_latest')
     .select('*', { count: 'estimated', head: true })
-    .gte('as_of_ts', oneDayAgo)
+    .gte('updated_at', oneDayAgo)
 
   const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
   const { count: snapshotCountYesterday } = await supabase
-    .from('trader_snapshots_v2')
+    .from('trader_latest')
     .select('*', { count: 'estimated', head: true })
-    .gte('as_of_ts', twoDaysAgo)
-    .lt('as_of_ts', oneDayAgo)
+    .gte('updated_at', twoDaysAgo)
+    .lt('updated_at', oneDayAgo)
 
   // Top errors
   const { data: errorLogs } = await supabase

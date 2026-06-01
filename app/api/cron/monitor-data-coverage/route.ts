@@ -89,16 +89,15 @@ export async function GET(req: NextRequest) {
     // Load previous baseline
     const baseline = await PipelineState.get<CoverageBaseline>('coverage:baseline')
 
-    // Sample-based coverage: fetch 500 rows per platform and compute fill rate.
-    // Previous approach (105 exact counts on 8M rows) caused 504 timeouts.
-    // Sampling is instant and ±3% accurate at n=500.
+    // Coverage check from trader_latest (~45K rows total, 1 per key).
+    // No sampling needed — trader_latest is already deduplicated.
     const cutoff = new Date(Date.now() - 3 * 86400000).toISOString()
     const SAMPLE_SIZE = 500
 
     for (const platform of MONITORED_PLATFORMS) {
       try {
         const { data: rows } = await supabase
-          .from('trader_snapshots_v2')
+          .from('trader_latest')
           .select('win_rate, sharpe_ratio, roi_pct, max_drawdown')
           .eq('platform', platform)
           .eq('window', '90D')

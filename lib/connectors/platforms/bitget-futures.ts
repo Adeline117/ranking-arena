@@ -7,10 +7,7 @@
 
 import { BaseConnector } from '../base'
 import { warnValidate } from '../schemas'
-import {
-  BitgetFuturesDetailResponseSchema,
-  BitgetFuturesTimeseriesResponseSchema,
-} from './schemas'
+import { BitgetFuturesDetailResponseSchema, BitgetFuturesTimeseriesResponseSchema } from './schemas'
 import type {
   LeaderboardPlatform,
   DiscoverResult,
@@ -77,9 +74,15 @@ export class BitgetFuturesConnector extends BaseConnector {
       // retry (2 attempts × 2 strategies × timeout), 60s meant 243s worst case before
       // falling back to direct API. 35s gives ~143s worst case, leaving room for the
       // direct API fallback within the 200s platform budget.
-      const vpsData = await this.fetchViaVPS<Record<string, unknown>>('/bitget/leaderboard', {
-        period: VPS_PERIOD_MAP[window], pageNo: String(currentPage), pageSize: String(pageSize),
-      }, 35000)
+      const vpsData = await this.fetchViaVPS<Record<string, unknown>>(
+        '/bitget/leaderboard',
+        {
+          period: VPS_PERIOD_MAP[window],
+          pageNo: String(currentPage),
+          pageSize: String(pageSize),
+        },
+        35000
+      )
       if (vpsData) {
         _rawLb = vpsData
       } else {
@@ -92,12 +95,14 @@ export class BitgetFuturesConnector extends BaseConnector {
           // 2026-04-20: if both VPS and direct API fail on page 1, use DB seed fallback
           if (currentPage === Math.floor(offset / 100) + 1 && allTraders.length === 0) {
             const msg = directErr instanceof Error ? directErr.message : String(directErr)
-            this.logger.warn(`[bitget_futures] VPS + direct API both failed: ${msg} — trying DB seed`)
+            this.logger.warn(
+              `[bitget_futures] VPS + direct API both failed: ${msg} — trying DB seed`
+            )
             try {
               const { getSupabaseAdmin } = await import('@/lib/supabase/server')
               const supabase = getSupabaseAdmin()
               const { data: existingTraders } = await supabase
-                .from('trader_snapshots_v2')
+                .from('trader_latest')
                 .select('trader_key')
                 .eq('platform', 'bitget_futures')
                 .eq('window', window.toUpperCase())
@@ -105,7 +110,9 @@ export class BitgetFuturesConnector extends BaseConnector {
                 .limit(limit)
 
               if (existingTraders && existingTraders.length > 0) {
-                this.logger.info(`[bitget_futures] DB seed fallback: ${existingTraders.length} traders for ${window}`)
+                this.logger.info(
+                  `[bitget_futures] DB seed fallback: ${existingTraders.length} traders for ${window}`
+                )
                 const seedTraders: TraderSource[] = existingTraders.map((t) => ({
                   platform: 'bitget_futures' as const,
                   market_type: 'futures' as const,
@@ -117,10 +124,18 @@ export class BitgetFuturesConnector extends BaseConnector {
                   is_active: true,
                   raw: { _source: 'db_seed' } as Record<string, unknown>,
                 }))
-                return { traders: seedTraders, total_available: seedTraders.length, window, fetched_at: new Date().toISOString() }
+                return {
+                  traders: seedTraders,
+                  total_available: seedTraders.length,
+                  window,
+                  fetched_at: new Date().toISOString(),
+                }
               }
             } catch (seedErr) {
-              this.logger.warn('[bitget_futures] DB seed fallback failed:', seedErr instanceof Error ? seedErr.message : String(seedErr))
+              this.logger.warn(
+                '[bitget_futures] DB seed fallback failed:',
+                seedErr instanceof Error ? seedErr.message : String(seedErr)
+              )
             }
             throw directErr
           }
@@ -131,7 +146,10 @@ export class BitgetFuturesConnector extends BaseConnector {
       const dataObj = (_rawLb?.data ?? {}) as Record<string, unknown>
       if (totalAvailable === null && dataObj?.total) totalAvailable = Number(dataObj.total)
 
-      const list = (dataObj?.list || dataObj?.traderList || dataObj?.rows || []) as Record<string, unknown>[]
+      const list = (dataObj?.list || dataObj?.traderList || dataObj?.rows || []) as Record<
+        string,
+        unknown
+      >[]
       if (!Array.isArray(list) || list.length === 0) break
 
       const traders: TraderSource[] = list.map((item: Record<string, unknown>) => ({
@@ -149,7 +167,7 @@ export class BitgetFuturesConnector extends BaseConnector {
 
       if (list.length < pageSize) break
       currentPage++
-      await new Promise(r => setTimeout(r, 500))
+      await new Promise((r) => setTimeout(r, 500))
     }
 
     return {
@@ -165,7 +183,11 @@ export class BitgetFuturesConnector extends BaseConnector {
       `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}`,
       { method: 'GET' }
     )
-    const data = warnValidate(BitgetFuturesDetailResponseSchema, _rawProfile, 'bitget-futures/profile')
+    const data = warnValidate(
+      BitgetFuturesDetailResponseSchema,
+      _rawProfile,
+      'bitget-futures/profile'
+    )
 
     const info = data?.data
 
@@ -204,7 +226,11 @@ export class BitgetFuturesConnector extends BaseConnector {
       `https://www.bitget.com/v1/trigger/trace/public/trader/detail?traderId=${traderKey}&timeRange=${timeRange}`,
       { method: 'GET' }
     )
-    const data = warnValidate(BitgetFuturesDetailResponseSchema, _rawSnap, 'bitget-futures/snapshot')
+    const data = warnValidate(
+      BitgetFuturesDetailResponseSchema,
+      _rawSnap,
+      'bitget-futures/snapshot'
+    )
 
     const info = data?.data
 
@@ -243,7 +269,11 @@ export class BitgetFuturesConnector extends BaseConnector {
       `https://www.bitget.com/v1/trigger/trace/public/trader/profitList?traderId=${traderKey}`,
       { method: 'GET' }
     )
-    const data = warnValidate(BitgetFuturesTimeseriesResponseSchema, _rawTs, 'bitget-futures/timeseries')
+    const data = warnValidate(
+      BitgetFuturesTimeseriesResponseSchema,
+      _rawTs,
+      'bitget-futures/timeseries'
+    )
 
     const profitList = data?.data || []
 
@@ -320,11 +350,15 @@ export class BitgetFuturesConnector extends BaseConnector {
       display_name: raw.traderName ?? raw.traderNickName ?? raw.nickName ?? null,
       avatar_url: raw.headUrl ?? raw.headPic ?? raw.avatar ?? null,
       roi,
-      pnl: this.parseNumber(raw.profit ?? raw.totalProfit ?? raw.totalFollowProfit ?? raw.allTotalRevenue),
+      pnl: this.parseNumber(
+        raw.profit ?? raw.totalProfit ?? raw.totalFollowProfit ?? raw.allTotalRevenue
+      ),
       win_rate: winRate,
       max_drawdown: maxDrawdown,
       trades_count: this.parseNumber(raw.tradeTimes) ?? null,
-      followers: this.parseNumber(raw.followerNum ?? raw.followerCount ?? raw.copyUserNum ?? raw.traceNum),
+      followers: this.parseNumber(
+        raw.followerNum ?? raw.followerCount ?? raw.copyUserNum ?? raw.traceNum
+      ),
       copiers: this.parseNumber(raw.copyTraderNum),
       aum: this.parseNumber(raw.totalFollowAssets),
       sharpe_ratio: null,

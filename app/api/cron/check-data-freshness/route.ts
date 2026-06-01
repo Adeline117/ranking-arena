@@ -116,12 +116,12 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
   // 检查每个平台的数据新鲜度
   for (const platform of platforms) {
     try {
-      // 查询该平台最新的 v2 快照记录
+      // 查询该平台最新的快照记录（trader_latest = 1 row per platform+trader+window）
       const { data, error } = await supabase
-        .from('trader_snapshots_v2')
-        .select('created_at')
+        .from('trader_latest')
+        .select('updated_at')
         .eq('platform', platform)
-        .order('created_at', { ascending: false })
+        .order('updated_at', { ascending: false })
         .limit(1)
         .single()
 
@@ -129,15 +129,13 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         logger.dbError('query-platform-freshness', error, { platform })
       }
 
-      // 获取记录数量 — estimated to avoid full scans of trader_snapshots_v2
-      // (~70M rows). This is a health check; approximate count is sufficient
-      // to decide "stale vs fresh" and the job runs every 3h.
+      // 获取记录数量 — trader_latest is small (~45K rows), estimated still fine
       const { count } = await supabase
-        .from('trader_snapshots_v2')
-        .select('id', { count: 'estimated', head: true })
+        .from('trader_latest')
+        .select('platform', { count: 'estimated', head: true })
         .eq('platform', platform)
 
-      const lastUpdate = data?.created_at || null
+      const lastUpdate = data?.updated_at || null
       let ageMs: number | null = null
       let ageHours: number | null = null
       let status: 'fresh' | 'stale' | 'critical' | 'unknown' = 'unknown'
@@ -166,10 +164,10 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         if (status === 'fresh' && typeof count === 'number') {
           try {
             const { count: recentCount } = await supabase
-              .from('trader_snapshots_v2')
-              .select('id', { count: 'estimated', head: true })
+              .from('trader_latest')
+              .select('platform', { count: 'estimated', head: true })
               .eq('platform', platform)
-              .gte('created_at', new Date(now - staleThreshold).toISOString())
+              .gte('updated_at', new Date(now - staleThreshold).toISOString())
             if (typeof recentCount === 'number' && recentCount < 5) {
               status = 'stale'
               stalePlatforms.push(platform)

@@ -16,10 +16,10 @@ import { logger } from '@/lib/logger'
 // ============================================
 
 export enum DataSourcePriority {
-  AUTHORIZED = 1,  // User's API key/wallet data (real-time, highest trust)
-  PUBLIC_API = 2,   // Public exchange API data (scraped leaderboards)
-  ENRICHMENT = 3,   // Computed from equity curves (derived metrics)
-  HISTORICAL = 4,   // Old snapshot data (stale fallback)
+  AUTHORIZED = 1, // User's API key/wallet data (real-time, highest trust)
+  PUBLIC_API = 2, // Public exchange API data (scraped leaderboards)
+  ENRICHMENT = 3, // Computed from equity curves (derived metrics)
+  HISTORICAL = 4, // Old snapshot data (stale fallback)
 }
 
 export interface TraderData {
@@ -165,7 +165,9 @@ async function getAuthorizedData(
   // and mark it as authorized since the data pipeline handles syncing.
   const { data: snapshot } = await supabase
     .from('leaderboard_ranks')
-    .select('roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at')
+    .select(
+      'roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at'
+    )
     .eq('source', platform)
     .eq('source_trader_id', traderKey)
     .eq('season_id', '90D')
@@ -204,7 +206,9 @@ async function getPublicApiData(
 ): Promise<TraderDataWithSource | null> {
   const { data, error } = await supabase
     .from('leaderboard_ranks')
-    .select('roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at')
+    .select(
+      'roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at'
+    )
     .eq('source', platform)
     .eq('source_trader_id', traderKey)
     .eq('season_id', '90D')
@@ -241,14 +245,15 @@ async function getEnrichmentData(
   platform: string,
   traderKey: string
 ): Promise<TraderDataWithSource | null> {
+  // trader_latest = 1 row per (platform, trader_key, window), no ORDER/LIMIT needed
   const { data, error } = await supabase
-    .from('trader_snapshots_v2')
-    .select('roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, created_at')
+    .from('trader_latest')
+    .select(
+      'roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, updated_at'
+    )
     .eq('platform', platform)
     .eq('trader_key', traderKey)
     .eq('window', '90D')
-    .order('created_at', { ascending: false })
-    .limit(1)
     .maybeSingle()
 
   if (error || !data) {
@@ -267,7 +272,7 @@ async function getEnrichmentData(
       sharpeRatio: data.sharpe_ratio,
       followers: data.followers,
       arenaScore: data.arena_score,
-      updatedAt: data.created_at,
+      updatedAt: data.updated_at,
     },
     source: DataSourcePriority.ENRICHMENT,
     sourceLabel: 'enrichment',
@@ -282,14 +287,15 @@ async function getHistoricalData(
   platform: string,
   traderKey: string
 ): Promise<TraderDataWithSource> {
-  // Last resort: grab any snapshot we have
+  // Last resort: grab any snapshot we have (trader_latest has 1 row per window)
   const { data } = await supabase
-    .from('trader_snapshots_v2')
-    .select('roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, created_at')
+    .from('trader_latest')
+    .select(
+      'roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, updated_at'
+    )
     .eq('platform', platform)
     .eq('trader_key', traderKey)
-    .order('created_at', { ascending: false })
-    .limit(1)
+    .eq('window', '90D')
     .maybeSingle()
 
   return {
@@ -304,7 +310,7 @@ async function getHistoricalData(
       sharpeRatio: data?.sharpe_ratio ?? null,
       followers: data?.followers ?? null,
       arenaScore: data?.arena_score ?? null,
-      updatedAt: data?.created_at ?? null,
+      updatedAt: data?.updated_at ?? null,
     },
     source: DataSourcePriority.HISTORICAL,
     sourceLabel: 'historical',

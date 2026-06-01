@@ -51,9 +51,9 @@ export async function GET(req: NextRequest) {
         .order('started_at', { ascending: false })
         .limit(500),
 
-      // 2. Data freshness per platform (latest snapshot per platform)
+      // 2. Data freshness per platform (trader_latest = 1 row per key, latest by definition)
       supabase
-        .from('trader_snapshots_v2')
+        .from('trader_latest')
         .select('platform, updated_at')
         .order('updated_at', { ascending: false })
         .limit(200),
@@ -70,7 +70,7 @@ export async function GET(req: NextRequest) {
 
       // 4. Table sizes (estimated counts) — added after season queries
       ...(
-        ['traders', 'trader_snapshots_v2', 'leaderboard_ranks', 'trader_daily_snapshots'] as const
+        ['trader_sources', 'trader_latest', 'leaderboard_ranks', 'trader_daily_snapshots'] as const
       ).map((table) => supabase.from(table).select('*', { count: 'estimated', head: true })),
     ])
 
@@ -142,8 +142,8 @@ export async function GET(req: NextRequest) {
 
     // --- Table sizes ---
     const tableNames = [
-      'traders',
-      'trader_snapshots_v2',
+      'trader_sources',
+      'trader_latest',
       'leaderboard_ranks',
       'trader_daily_snapshots',
     ] as const
