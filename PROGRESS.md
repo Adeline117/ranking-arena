@@ -2,6 +2,32 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Deprecated Type Migration + Final Root Cause Fixes (2026-06-01)
+
+### Root cause: lib/types/trader.ts fully eliminated
+
+The 622-line deprecated `lib/types/trader.ts` was the last legacy type file. Migration path:
+
+1. TradingStyle/VALID_TRADING_STYLES/TRADING_STYLE_LEGACY_MAP → already moved to `lib/utils/trading-style.ts` (2026-05-28)
+2. `lib/types/index.ts` re-exported TradingStyle through trader.ts → updated to re-export directly from `@/lib/utils/trading-style`
+3. BotCategory re-export in index.ts → removed (BotsClient defines its own local type, never imported shared one)
+4. Zero imports remaining → **deleted lib/types/trader.ts**
+
+### Syntax fix
+
+Fixed extra closing brace in `app/(app)/trader/[handle]/page.tsx` — `cachedFindUserHandleByTrader` had malformed try/catch from a concurrent edit. Build was broken.
+
+### Remaining architectural debt (documented, not fixable in single session)
+
+| Debt                                                  | Blocker                                                                                    |
+| ----------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| SSR dual rendering (SSRRankingTable + HomePageClient) | Major architecture change, needs streaming SSR/Suspense, high regression risk              |
+| Session expiry draft persistence                      | Needs `useDraftPersistence` hook wired into 5+ form components, >200 lines                 |
+| `lib/adapters/` duplicates `lib/connectors/`          | Actively used by trader/sync route + batch-5min cron. Migration needs real API key testing |
+| `lib/data/trader-queries.ts` deprecated but live      | Re-exported by trader.ts to 13+ consumers. Needs function-by-function inline migration     |
+
+---
+
 ## Search UX + Code Quality + Dead Code Purge (2026-05-30)
 
 ### Search UX
