@@ -32,7 +32,7 @@ const STALE_THRESHOLD_MS = 48 * 3600 * 1000
  */
 export async function checkPlatformFreshness(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  traderMap: Map<string, TraderRow>,
+  traderMap: Map<string, TraderRow>
 ): Promise<FreshnessResult> {
   const now = Date.now()
   const freshPlatforms: string[] = []
@@ -40,9 +40,11 @@ export async function checkPlatformFreshness(
   const queryFailedPlatforms: string[] = []
 
   for (const source of SOURCES_WITH_DATA) {
-    const sourceTraders = Array.from(traderMap.values()).filter(t => t.source === source)
+    const sourceTraders = Array.from(traderMap.values()).filter((t) => t.source === source)
     if (sourceTraders.length > 0) {
-      const latestCaptured = Math.max(...sourceTraders.map(t => new Date(t.captured_at).getTime()))
+      const latestCaptured = Math.max(
+        ...sourceTraders.map((t) => new Date(t.captured_at).getTime())
+      )
       if (now - latestCaptured > STALE_THRESHOLD_MS) {
         stalePlatforms.push(source)
       } else {
@@ -53,8 +55,8 @@ export async function checkPlatformFreshness(
     // traderMap empty for this source — check DB directly to distinguish
     // "query failed" (retry later) from "actually stale" (really no data)
     try {
-      const { data: dbCheck } = await supabase
-        .from('trader_snapshots_v2')
+      const { data: dbCheck } = await (supabase as any)
+        .from('trader_latest')
         .select('updated_at')
         .eq('platform', source)
         .gte('updated_at', new Date(now - STALE_THRESHOLD_MS).toISOString())

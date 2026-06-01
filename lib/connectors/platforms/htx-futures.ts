@@ -7,9 +7,16 @@ import { warnValidate } from '../schemas'
 import { safeNumber, safeStr, safeMdd } from '../utils'
 import { HtxFuturesLeaderboardResponseSchema, HtxFuturesDetailResponseSchema } from './schemas'
 import type {
-  DiscoverResult, ProfileResult, SnapshotResult, TimeseriesResult,
-  TraderSource, TraderProfile, SnapshotMetrics, QualityFlags,
-  PlatformCapabilities, Window,
+  DiscoverResult,
+  ProfileResult,
+  SnapshotResult,
+  TimeseriesResult,
+  TraderSource,
+  TraderProfile,
+  SnapshotMetrics,
+  QualityFlags,
+  PlatformCapabilities,
+  Window,
 } from '../../types/leaderboard'
 
 export class HtxFuturesConnector extends BaseConnector {
@@ -41,7 +48,11 @@ export class HtxFuturesConnector extends BaseConnector {
     // Platform budget is 120s, and we typically only need 1-3 pages, so 40s/page is safe.
     const PAGE_TIMEOUT_MS = 40000
 
-    for (let page = Math.floor(offset / pageSize) + 1; page <= maxPages + Math.floor(offset / pageSize); page++) {
+    for (
+      let page = Math.floor(offset / pageSize) + 1;
+      page <= maxPages + Math.floor(offset / pageSize);
+      page++
+    ) {
       // Bail out early if we're running close to budget
       if (Date.now() - startedAt > PAGE_TIMEOUT_MS * (page - Math.floor(offset / pageSize))) break
 
@@ -77,7 +88,7 @@ export class HtxFuturesConnector extends BaseConnector {
             const { getSupabaseAdmin } = await import('@/lib/supabase/server')
             const supabase = getSupabaseAdmin()
             const { data: existingTraders } = await supabase
-              .from('trader_snapshots_v2')
+              .from('trader_latest')
               .select('trader_key')
               .eq('platform', 'htx')
               .eq('window', window.toUpperCase())
@@ -85,7 +96,9 @@ export class HtxFuturesConnector extends BaseConnector {
               .limit(limit)
 
             if (existingTraders && existingTraders.length > 0) {
-              this.logger.info(`[htx_futures] All routes failed — falling back to DB seed list (${existingTraders.length} traders)`)
+              this.logger.info(
+                `[htx_futures] All routes failed — falling back to DB seed list (${existingTraders.length} traders)`
+              )
               const seedTraders: TraderSource[] = existingTraders.map((t) => ({
                 platform: 'htx' as const,
                 market_type: 'futures' as const,
@@ -97,29 +110,44 @@ export class HtxFuturesConnector extends BaseConnector {
                 is_active: true,
                 raw: { _source: 'db_seed' } as Record<string, unknown>,
               }))
-              return { traders: seedTraders, total_available: seedTraders.length, window, fetched_at: new Date().toISOString() }
+              return {
+                traders: seedTraders,
+                total_available: seedTraders.length,
+                window,
+                fetched_at: new Date().toISOString(),
+              }
             }
           } catch (seedErr) {
-            this.logger.warn('[htx_futures] DB seed fallback failed:', seedErr instanceof Error ? seedErr.message : String(seedErr))
+            this.logger.warn(
+              '[htx_futures] DB seed fallback failed:',
+              seedErr instanceof Error ? seedErr.message : String(seedErr)
+            )
           }
           throw new Error(`HTX leaderboard fetch failed on page ${page}: ${msg}`)
         }
         break // Later page failure: return what we have (partial success)
       }
 
-      const data = warnValidate(HtxFuturesLeaderboardResponseSchema, _rawLb, 'htx-futures/leaderboard')
+      const data = warnValidate(
+        HtxFuturesLeaderboardResponseSchema,
+        _rawLb,
+        'htx-futures/leaderboard'
+      )
       // New endpoint returns { code: 200, data: { itemList: [...], totalPage, totalNum } }
       const list = data?.data?.itemList || data?.data?.list || []
       const items = Array.isArray(list) ? list : []
 
       for (const item of items) {
         allTraders.push({
-          platform: 'htx' as const, market_type: 'futures' as const,
+          platform: 'htx' as const,
+          market_type: 'futures' as const,
           trader_key: String((item as Record<string, unknown>).uid || ''),
           display_name: ((item as Record<string, unknown>).nickName as string) || null,
           profile_url: `https://www.htx.com/copy-trading/trader/${(item as Record<string, unknown>).uid}`,
-          discovered_at: new Date().toISOString(), last_seen_at: new Date().toISOString(),
-          is_active: true, raw: item as Record<string, unknown>,
+          discovered_at: new Date().toISOString(),
+          last_seen_at: new Date().toISOString(),
+          is_active: true,
+          raw: item as Record<string, unknown>,
         })
       }
 
@@ -127,7 +155,12 @@ export class HtxFuturesConnector extends BaseConnector {
       if (allTraders.length >= limit) break
     }
 
-    return { traders: allTraders.slice(0, limit), total_available: null, window, fetched_at: new Date().toISOString() }
+    return {
+      traders: allTraders.slice(0, limit),
+      total_available: null,
+      window,
+      fetched_at: new Date().toISOString(),
+    }
   }
 
   async fetchTraderProfile(traderKey: string): Promise<ProfileResult | null> {
@@ -140,13 +173,26 @@ export class HtxFuturesConnector extends BaseConnector {
     if (!info) return null
 
     const profile: TraderProfile = {
-      platform: 'htx', market_type: 'futures', trader_key: traderKey,
-      display_name: (info.nickName as string) || null, avatar_url: (info.avatar as string) || null,
-      bio: null, tags: [],
+      platform: 'htx',
+      market_type: 'futures',
+      trader_key: traderKey,
+      display_name: (info.nickName as string) || null,
+      avatar_url: (info.avatar as string) || null,
+      bio: null,
+      tags: [],
       profile_url: `https://www.htx.com/copy-trading/trader/${traderKey}`,
-      followers: safeNumber(info.followerCount), copiers: safeNumber(info.copyCount), aum: null,
-      updated_at: new Date().toISOString(), last_enriched_at: new Date().toISOString(),
-      provenance: { source_platform: 'htx', acquisition_method: 'api', fetched_at: new Date().toISOString(), source_url: null, scraper_version: '1.0.0' },
+      followers: safeNumber(info.followerCount),
+      copiers: safeNumber(info.copyCount),
+      aum: null,
+      updated_at: new Date().toISOString(),
+      last_enriched_at: new Date().toISOString(),
+      provenance: {
+        source_platform: 'htx',
+        acquisition_method: 'api',
+        fetched_at: new Date().toISOString(),
+        source_url: null,
+        scraper_version: '1.0.0',
+      },
     }
     return { profile, fetched_at: new Date().toISOString() }
   }
@@ -161,16 +207,27 @@ export class HtxFuturesConnector extends BaseConnector {
     if (!info) return null
 
     const metrics: SnapshotMetrics = {
-      roi: safeNumber(info.roi), pnl: safeNumber(info.pnl),
-      win_rate: safeNumber(info.winRate), max_drawdown: safeNumber(info.maxDrawdown),
-      sharpe_ratio: null, sortino_ratio: null, trades_count: null,
-      followers: safeNumber(info.followerCount), copiers: safeNumber(info.copyCount),
-      aum: null, platform_rank: null,
-      arena_score: null, return_score: null, drawdown_score: null, stability_score: null,
+      roi: safeNumber(info.roi),
+      pnl: safeNumber(info.pnl),
+      win_rate: safeNumber(info.winRate),
+      max_drawdown: safeNumber(info.maxDrawdown),
+      sharpe_ratio: null,
+      sortino_ratio: null,
+      trades_count: null,
+      followers: safeNumber(info.followerCount),
+      copiers: safeNumber(info.copyCount),
+      aum: null,
+      platform_rank: null,
+      arena_score: null,
+      return_score: null,
+      drawdown_score: null,
+      stability_score: null,
     }
     const quality_flags: QualityFlags = {
       missing_fields: ['sharpe_ratio', 'sortino_ratio', 'trades_count'],
-      non_standard_fields: {}, window_native: true, notes: [],
+      non_standard_fields: {},
+      window_native: true,
+      notes: [],
     }
     return { metrics, quality_flags, fetched_at: new Date().toISOString() }
   }
@@ -190,7 +247,11 @@ export class HtxFuturesConnector extends BaseConnector {
   normalize(raw: Record<string, unknown>): Record<string, unknown> {
     const rawWr = safeNumber(raw.winRate)
     const winRate = rawWr != null ? (rawWr <= 1 ? rawWr * 100 : rawWr) : null
-    const maxDrawdown = safeMdd(raw.mdd ?? raw.maxDrawdown, safeNumber(raw.mdd ?? raw.maxDrawdown) != null && Math.abs(safeNumber(raw.mdd ?? raw.maxDrawdown)!) <= 1)
+    const maxDrawdown = safeMdd(
+      raw.mdd ?? raw.maxDrawdown,
+      safeNumber(raw.mdd ?? raw.maxDrawdown) != null &&
+        Math.abs(safeNumber(raw.mdd ?? raw.maxDrawdown)!) <= 1
+    )
 
     return {
       trader_key: raw.uid ?? raw.userSign ?? null,
@@ -207,7 +268,7 @@ export class HtxFuturesConnector extends BaseConnector {
       sharpe_ratio: (() => {
         const profitList = raw.profitList as string[] | number[] | undefined
         if (!Array.isArray(profitList) || profitList.length < 7) return null
-        const values = profitList.map(Number).filter(n => !isNaN(n))
+        const values = profitList.map(Number).filter((n) => !isNaN(n))
         if (values.length < 7) return null
         const returns = values.slice(1).map((v, i) => v - values[i])
         const mean = returns.reduce((a, b) => a + b, 0) / returns.length
@@ -221,5 +282,4 @@ export class HtxFuturesConnector extends BaseConnector {
       _profit_list: raw.profitList,
     }
   }
-
 }

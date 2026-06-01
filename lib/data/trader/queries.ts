@@ -237,7 +237,7 @@ export async function getLeaderboard(
  *
  * Data resolution uses a fallback chain:
  * 1. leaderboard_ranks (precomputed, has all periods)
- * 2. trader_snapshots_v2 (Connector path, fallback)
+ * 2. trader_latest (1 row per window, fallback)
  *
  * Enrichment data (equity curve, asset breakdown, positions, stats) comes from
  * dedicated tables that use v1 naming (source + source_trader_id).
@@ -276,18 +276,16 @@ export async function getTraderDetail(
           .limit(5)
           .abortSignal(phase1Signal)
       ),
-      // trader_snapshots_v2: all windows (fallback)
+      // trader_latest: all windows (fallback, 1 row per window — no ORDER/LIMIT needed)
       // Uses v2 column names: platform, trader_key, window
       safeQuery(() =>
         supabase
-          .from('trader_snapshots_v2')
+          .from('trader_latest')
           .select(
-            `${V2.platform}, ${V2.trader_key}, ${V2.window}, ${V2.roi_pct}, ${V2.pnl_usd}, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, sortino_ratio, calmar_ratio, return_score, drawdown_score, stability_score, ${V2.arena_score}, created_at`
+            `${V2.platform}, ${V2.trader_key}, ${V2.window}, ${V2.roi_pct}, ${V2.pnl_usd}, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, sortino_ratio, calmar_ratio, return_score, drawdown_score, stability_score, ${V2.arena_score}, updated_at`
           )
           .eq(V2.platform, platform)
           .eq(V2.trader_key, traderKey)
-          .order('created_at', { ascending: false })
-          .limit(5)
           .abortSignal(phase1Signal)
       ),
       // Profile from trader_sources table
@@ -1042,7 +1040,7 @@ export async function resolveTrader(
     }
   }
 
-  // Steps 3+4+5 in parallel: leaderboard_ranks, trader_profiles_v2, trader_snapshots_v2
+  // Steps 3+4+5 in parallel: leaderboard_ranks, trader_profiles_v2, trader_latest
   // Previously sequential (3+4 → 5), now parallel to save 200-400ms for traders
   // not found in the trader_sources table (~10-15% of detail page loads).
   {
@@ -1061,10 +1059,9 @@ export async function resolveTrader(
       .or(`trader_key.eq.${sanitizedForFilter},display_name.eq.${sanitizedForFilter}`)
 
     let svQuery = supabase
-      .from('trader_snapshots_v2')
+      .from('trader_latest')
       .select('platform, trader_key')
       .eq(V2.trader_key, decodedHandle)
-      .order('updated_at', { ascending: false })
 
     if (platformFilter) {
       lbQuery = lbQuery.eq(LR.source, platformFilter)

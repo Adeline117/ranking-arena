@@ -108,17 +108,15 @@ export async function getTraderPerformance(
           return success({ roi_90d: 0 })
         }
 
-        // Single query for all 3 windows from v2
+        // trader_latest = 1 row per (platform, trader_key, window), no ORDER/LIMIT needed
         const { data: allSnapshots } = await supabase
-          .from('trader_snapshots_v2')
+          .from('trader_latest')
           .select('window, roi_pct, pnl_usd, win_rate, max_drawdown')
           .eq('platform', source.source)
           .eq('trader_key', source.source_trader_id)
           .in('window', ['7D', '30D', '90D'])
-          .order('created_at', { ascending: false })
-          .limit(9) // 3 per window max
 
-        // Pick latest per window
+        // Map by window (trader_latest already has exactly 1 row per window)
         const byWindow = new Map<
           string,
           typeof allSnapshots extends (infer T)[] | null ? T : never
@@ -174,17 +172,17 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           return success({ additionalStats: {} })
         }
 
-        // Phase 1: Get latest snapshot + history in parallel (using v2)
+        // Phase 1: Get latest snapshot + history in parallel
+        // Latest from trader_latest (1 row per window, no ORDER/LIMIT needed)
+        // History from trader_snapshots_v2 (archive, multiple rows over time)
         const [latestSnapshotResult, historySnapshotsResult, monthlyResult, yearlyResult] =
           await Promise.all([
             supabase
-              .from('trader_snapshots_v2')
-              .select('roi_pct, created_at, pnl_usd, win_rate, max_drawdown, trades_count')
+              .from('trader_latest')
+              .select('roi_pct, updated_at, pnl_usd, win_rate, max_drawdown, trades_count')
               .eq('platform', source.source)
               .eq('trader_key', source.source_trader_id)
               .eq('window', '90D')
-              .order('created_at', { ascending: false })
-              .limit(1)
               .maybeSingle(),
             supabase
               .from('trader_snapshots_v2')
@@ -220,7 +218,7 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           return success({ additionalStats: {} })
         }
 
-        // Phase 2: Use captured_at from latestSnapshot (eliminates redundant sub-query)
+        // Phase 2: Use updated_at from latestSnapshot to join with frequently traded
         let frequentlyTradedData: Array<{
           symbol: string
           weight_pct: number | null
@@ -229,13 +227,13 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           avg_loss: number | null
           profitable_pct: number | null
         }> = []
-        if (latestSnapshot?.created_at) {
+        if (latestSnapshot?.updated_at) {
           const { data } = await supabase
             .from('trader_frequently_traded')
             .select('symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct')
             .eq('source', source.source)
             .eq('source_trader_id', source.source_trader_id)
-            .eq('captured_at', latestSnapshot.created_at)
+            .eq('captured_at', latestSnapshot.updated_at)
             .order('weight_pct', { ascending: false })
             .limit(10)
           frequentlyTradedData = data || []
@@ -327,13 +325,13 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<
     const source = await findTraderAcrossSources(handle)
     if (!source) return success([])
 
+    // trader_latest = 1 row per (platform, trader_key, window), no ORDER/LIMIT needed
     const { data: latestSnapshot } = await supabase
-      .from('trader_snapshots_v2')
-      .select('created_at')
+      .from('trader_latest')
+      .select('updated_at')
       .eq('platform', source.source)
       .eq('trader_key', source.source_trader_id)
-      .order('created_at', { ascending: false })
-      .limit(1)
+      .eq('window', '90D')
       .maybeSingle()
 
     if (!latestSnapshot) return success([])
@@ -343,7 +341,7 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<
       .select('symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct')
       .eq('source', source.source)
       .eq('source_trader_id', source.source_trader_id)
-      .eq('captured_at', latestSnapshot.created_at)
+      .eq('captured_at', latestSnapshot.updated_at)
       .order('weight_pct', { ascending: false })
       .limit(10)
 

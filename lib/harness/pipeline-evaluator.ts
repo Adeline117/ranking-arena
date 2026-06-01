@@ -23,7 +23,7 @@ export interface EvaluationCheck {
   name: string
   category: 'completeness' | 'freshness' | 'consistency' | 'anomaly'
   passed: boolean
-  score: number  // 0-100
+  score: number // 0-100
   details: string
 }
 
@@ -37,7 +37,7 @@ export interface EvaluationIssue {
 
 export interface EvaluationResult {
   trace_id: string | null
-  overall_score: number  // 0-100
+  overall_score: number // 0-100
   passed: boolean
   checks: EvaluationCheck[]
   issues: EvaluationIssue[]
@@ -53,7 +53,10 @@ export class PipelineEvaluator {
    * Run all evaluation checks independently.
    * Does NOT trust any upstream reports — queries DB directly.
    */
-  static async evaluate(traceId: string | null, platformsHint?: string[]): Promise<EvaluationResult> {
+  static async evaluate(
+    traceId: string | null,
+    platformsHint?: string[]
+  ): Promise<EvaluationResult> {
     const startTime = Date.now()
     const checks: EvaluationCheck[] = []
     const issues: EvaluationIssue[] = []
@@ -101,12 +104,10 @@ export class PipelineEvaluator {
     // Calculate overall score (weighted average)
     const totalScore = checks.reduce((sum, c) => sum + c.score, 0)
     const overallScore = checks.length > 0 ? Math.round(totalScore / checks.length) : 0
-    const passed = overallScore >= 70 && !issues.some(i => i.severity === 'critical')
+    const passed = overallScore >= 70 && !issues.some((i) => i.severity === 'critical')
 
     // Generate recommendations from issues
-    const recommendations = issues
-      .filter(i => i.severity !== 'info')
-      .map(i => i.recommendation)
+    const recommendations = issues.filter((i) => i.severity !== 'info').map((i) => i.recommendation)
 
     const result: EvaluationResult = {
       trace_id: traceId,
@@ -124,24 +125,24 @@ export class PipelineEvaluator {
 
     // Alert on critical issues
     if (!passed) {
-      const criticalIssues = issues.filter(i => i.severity === 'critical')
+      const criticalIssues = issues.filter((i) => i.severity === 'critical')
       if (criticalIssues.length > 0) {
         sendRateLimitedAlert(
           {
             title: `Pipeline Evaluator: ${criticalIssues.length} critical issues`,
-            message: criticalIssues.map(i => `[${i.platform}] ${i.description}`).join('\n'),
+            message: criticalIssues.map((i) => `[${i.platform}] ${i.description}`).join('\n'),
             level: 'critical',
             details: { trace_id: traceId, score: overallScore, issues: criticalIssues },
           },
           'evaluator:critical',
           6 * 3600 * 1000 // 6h rate limit
-        ).catch(err => logger.warn(`[evaluator] Failed to send alert: ${err}`))
+        ).catch((err) => logger.warn(`[evaluator] Failed to send alert: ${err}`))
       }
     }
 
     logger.info(
       `[evaluator] Evaluation complete: score=${overallScore}/100, passed=${passed}, ` +
-      `checks=${checks.length}, issues=${issues.length}, duration=${result.duration_ms}ms`
+        `checks=${checks.length}, issues=${issues.length}, duration=${result.duration_ms}ms`
     )
 
     return result
@@ -161,13 +162,19 @@ export class PipelineEvaluator {
 
     // Query distinct platforms with their latest computed_at from leaderboard_ranks.
     // Fallback from RPC (may not exist) to direct query.
-    let platformFreshness: Array<{ platform: string; latest_snapshot: string; trader_count: number }> | null = null
+    let platformFreshness: Array<{
+      platform: string
+      latest_snapshot: string
+      trader_count: number
+    }> | null = null
     try {
       const { data: rpcData } = await supabase.rpc('get_platform_freshness')
       if (rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
         platformFreshness = rpcData as unknown as typeof platformFreshness
       }
-    } catch (_err) { /* RPC not available */ }
+    } catch (_err) {
+      /* RPC not available */
+    }
 
     // Fallback: query leaderboard_ranks directly for per-platform freshness
     if (!platformFreshness) {
@@ -210,14 +217,15 @@ export class PipelineEvaluator {
       totalPlatforms = platforms.length
       const now = Date.now()
       const DEX_PLATFORMS = ['hyperliquid', 'gmx', 'drift', 'jupiter_perps', 'aevo', 'gains']
-      const CEX_MAX_STALE_MS = 6 * 3600 * 1000  // 6h for CEX
+      const CEX_MAX_STALE_MS = 6 * 3600 * 1000 // 6h for CEX
       const DEX_MAX_STALE_MS = 12 * 3600 * 1000 // 12h for DEX
 
       for (const p of platforms) {
         const age = now - new Date(p.latest_snapshot).getTime()
-        const maxAge = p.platform?.includes('web3') || DEX_PLATFORMS.includes(p.platform)
-          ? DEX_MAX_STALE_MS
-          : CEX_MAX_STALE_MS
+        const maxAge =
+          p.platform?.includes('web3') || DEX_PLATFORMS.includes(p.platform)
+            ? DEX_MAX_STALE_MS
+            : CEX_MAX_STALE_MS
 
         if (age > maxAge) {
           staleCount++
@@ -232,9 +240,8 @@ export class PipelineEvaluator {
       }
     }
 
-    const score = totalPlatforms > 0
-      ? Math.round(((totalPlatforms - staleCount) / totalPlatforms) * 100)
-      : 50 // Unknown — give neutral score
+    const score =
+      totalPlatforms > 0 ? Math.round(((totalPlatforms - staleCount) / totalPlatforms) * 100) : 50 // Unknown — give neutral score
 
     return {
       check: {
@@ -252,7 +259,10 @@ export class PipelineEvaluator {
    * Check 2: Record Count Consistency
    * Compare current snapshot counts vs 24h ago — flag drops > 20%.
    */
-  private static async checkRecordCounts(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkRecordCounts(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
@@ -271,10 +281,7 @@ export class PipelineEvaluator {
 
     // If count returned null (Supabase plan limit), estimate via sampling
     if (currentCount == null) {
-      const { data: sample } = await supabase
-        .from('leaderboard_ranks')
-        .select('id')
-        .limit(10000)
+      const { data: sample } = await supabase.from('leaderboard_ranks').select('id').limit(10000)
       currentCount = sample?.length ?? 0
     }
 
@@ -284,7 +291,7 @@ export class PipelineEvaluator {
     let score = 100
     if (baseline && currentCount) {
       const changeRatio = currentCount / baseline
-      if (changeRatio < 0.80) {
+      if (changeRatio < 0.8) {
         score = 30
         issues.push({
           platform: 'all',
@@ -326,7 +333,10 @@ export class PipelineEvaluator {
    * Check 3: ROI Anomaly Detection
    * Find traders with impossible ROI values (< -100% or > 50000%).
    */
-  private static async checkROIAnomalies(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkROIAnomalies(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
@@ -345,10 +355,14 @@ export class PipelineEvaluator {
       .or('roi.lt.-100,roi.gt.100000')
       .limit(10)
 
-    const score = (anomalyCount ?? 0) === 0 ? 100
-      : (anomalyCount ?? 0) < 5 ? 80
-      : (anomalyCount ?? 0) < 20 ? 50
-      : 20
+    const score =
+      (anomalyCount ?? 0) === 0
+        ? 100
+        : (anomalyCount ?? 0) < 5
+          ? 80
+          : (anomalyCount ?? 0) < 20
+            ? 50
+            : 20
 
     if (anomalies && anomalies.length > 0) {
       // Group by platform
@@ -384,7 +398,10 @@ export class PipelineEvaluator {
    * Check 4: Arena Score Coverage
    * Ensure >90% of leaderboard traders have non-null Arena Scores.
    */
-  private static async checkArenaScoreCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkArenaScoreCoverage(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
@@ -404,14 +421,14 @@ export class PipelineEvaluator {
     // Handle edge case: totalCount may return null from Supabase count queries
     const total = totalCount ?? scoredCount ?? 0
     const scored = scoredCount ?? 0
-    const coverage = total > 0 ? scored / total : (scored > 0 ? 1 : 0)
+    const coverage = total > 0 ? scored / total : scored > 0 ? 1 : 0
     const score = Math.round(coverage * 100)
 
-    if (coverage < 0.90 && total > 0) {
+    if (coverage < 0.9 && total > 0) {
       issues.push({
         platform: 'all',
         type: 'low_arena_score_coverage',
-        severity: coverage < 0.70 ? 'critical' : 'warning',
+        severity: coverage < 0.7 ? 'critical' : 'warning',
         description: `Arena Score coverage: ${Math.round(coverage * 100)}% (${scored}/${total})`,
         recommendation: 'Run compute-leaderboard manually or check score formula for null inputs.',
       })
@@ -421,7 +438,7 @@ export class PipelineEvaluator {
       check: {
         name: 'arena_score_coverage',
         category: 'completeness',
-        passed: coverage >= 0.90,
+        passed: coverage >= 0.9,
         score,
         details: `${scoredCount ?? 0}/${totalCount ?? 0} traders have Arena Scores (${Math.round(coverage * 100)}%)`,
       },
@@ -433,7 +450,10 @@ export class PipelineEvaluator {
    * Check 5: Leaderboard Integrity
    * Verify no duplicate traders, reasonable rank distribution.
    */
-  private static async checkLeaderboardIntegrity(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkLeaderboardIntegrity(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
@@ -476,7 +496,8 @@ export class PipelineEvaluator {
         type: 'duplicate_ranks',
         severity: 'critical',
         description: `${dupeCount} duplicate entries found in leaderboard_ranks sample (top 1000 rows)`,
-        recommendation: 'Check compute-leaderboard upsert logic — conflict resolution may be broken.',
+        recommendation:
+          'Check compute-leaderboard upsert logic — conflict resolution may be broken.',
       })
     }
 
@@ -496,7 +517,10 @@ export class PipelineEvaluator {
    * Check 6: Enrichment Coverage
    * Verify >60% of top-ranked traders have enrichment data (win_rate, sharpe, etc.)
    */
-  private static async checkEnrichmentCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkEnrichmentCoverage(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
@@ -514,24 +538,29 @@ export class PipelineEvaluator {
     const sampleSize = sample?.length ?? 0
     if (sampleSize === 0) {
       return {
-        check: { name: 'enrichment_coverage', category: 'completeness', passed: true, score: 50,
-          details: 'No sample data available' },
+        check: {
+          name: 'enrichment_coverage',
+          category: 'completeness',
+          passed: true,
+          score: 50,
+          details: 'No sample data available',
+        },
         issues: [],
       }
     }
 
     // Count how many have ANY enrichment field populated
     const enrichedSample = (sample || []).filter(
-      r => r.win_rate != null || r.sharpe_ratio != null || r.trades_count != null
+      (r) => r.win_rate != null || r.sharpe_ratio != null || r.trades_count != null
     ).length
     const coverage = enrichedSample / sampleSize
     const score = Math.min(100, Math.round(coverage * 100 * 1.5))
 
-    if (coverage < 0.50) {
+    if (coverage < 0.5) {
       issues.push({
         platform: 'all',
         type: 'low_enrichment_coverage',
-        severity: coverage < 0.30 ? 'critical' : 'warning',
+        severity: coverage < 0.3 ? 'critical' : 'warning',
         description: `Enrichment coverage: ${Math.round(coverage * 100)}% of top 500 (${enrichedSample}/${sampleSize} have win_rate/sharpe/trades)`,
         recommendation: 'Check batch-enrich cron — some platforms may be failing silently.',
       })
@@ -541,7 +570,7 @@ export class PipelineEvaluator {
       check: {
         name: 'enrichment_coverage',
         category: 'completeness',
-        passed: coverage >= 0.50,
+        passed: coverage >= 0.5,
         score,
         details: `${enrichedSample}/${sampleSize} top traders enriched (${Math.round(coverage * 100)}%)`,
       },
@@ -554,13 +583,29 @@ export class PipelineEvaluator {
   /**
    * Check 7: Platform Coverage — all expected platforms have leaderboard data.
    */
-  private static async checkPlatformCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkPlatformCoverage(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
     const EXPECTED = [
-      'binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'mexc',
-      'hyperliquid', 'gmx', 'dydx', 'drift', 'jupiter_perps',
-      'htx_futures', 'gateio', 'bingx', 'coinex', 'aevo', 'gains',
+      'binance_futures',
+      'bybit',
+      'okx_futures',
+      'bitget_futures',
+      'mexc',
+      'hyperliquid',
+      'gmx',
+      'dydx',
+      'drift',
+      'jupiter_perps',
+      'htx_futures',
+      'gateio',
+      'bingx',
+      'coinex',
+      'aevo',
+      'gains',
     ]
     // Get distinct platforms by checking for at least 1 trader per expected platform.
     // Use .limit(1) + data length check instead of count (more reliable across Supabase plans).
@@ -576,26 +621,42 @@ export class PipelineEvaluator {
         return { platform, hasData: (data?.length ?? 0) > 0 }
       })
     )
-    const active = new Set(platformChecks.filter(p => p.hasData).map(p => p.platform))
-    const missing = EXPECTED.filter(p => !active.has(p))
+    const active = new Set(platformChecks.filter((p) => p.hasData).map((p) => p.platform))
+    const missing = EXPECTED.filter((p) => !active.has(p))
     for (const p of missing) {
-      issues.push({ platform: p, type: 'missing_platform', severity: 'warning',
+      issues.push({
+        platform: p,
+        type: 'missing_platform',
+        severity: 'warning',
         description: `${p} has no traders in 90D leaderboard`,
-        recommendation: `Check batch-fetch-traders for ${p}.` })
+        recommendation: `Check batch-fetch-traders for ${p}.`,
+      })
     }
     const score = Math.round(((EXPECTED.length - missing.length) / EXPECTED.length) * 100)
-    return { check: { name: 'platform_coverage', category: 'completeness', passed: missing.length <= 2, score,
-      details: `${active.size} active, ${missing.length} missing of ${EXPECTED.length} expected` }, issues }
+    return {
+      check: {
+        name: 'platform_coverage',
+        category: 'completeness',
+        passed: missing.length <= 2,
+        score,
+        details: `${active.size} active, ${missing.length} missing of ${EXPECTED.length} expected`,
+      },
+      issues,
+    }
   }
 
   /**
    * Check 8: API Response Time — key endpoints respond within acceptable latency.
    */
-  private static async checkAPIResponseTime(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkAPIResponseTime(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const issues: EvaluationIssue[] = []
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'http://localhost:3000'
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'http://localhost:3000'
     const endpoints = [
       { path: '/api/health', name: 'Health', maxMs: 2000 },
       { path: '/api/traders?timeRange=90D&limit=5', name: 'Rankings', maxMs: 3000 },
@@ -611,24 +672,50 @@ export class PipelineEvaluator {
         })
         const latency = Date.now() - start
         if (res.status >= 500) {
-          issues.push({ platform: 'api', type: 'api_error', severity: 'critical',
+          issues.push({
+            platform: 'api',
+            type: 'api_error',
+            severity: 'critical',
             description: `${ep.name} API returned ${res.status} (${latency}ms)`,
-            recommendation: `Check ${ep.path}.` })
+            recommendation: `Check ${ep.path}.`,
+          })
         } else if (latency > ep.maxMs) {
           totalScore += 50
-          issues.push({ platform: 'api', type: 'api_slow', severity: 'warning',
+          issues.push({
+            platform: 'api',
+            type: 'api_slow',
+            severity: 'warning',
             description: `${ep.name} took ${latency}ms (max: ${ep.maxMs}ms)`,
-            recommendation: `Optimize ${ep.path}.` })
-        } else { totalScore += 100 }
+            recommendation: `Optimize ${ep.path}.`,
+          })
+        } else {
+          totalScore += 100
+        }
       } catch (err) {
-        logger.warn('[evaluator] API check failed:', err instanceof Error ? err.message : String(err))
-        issues.push({ platform: 'api', type: 'api_timeout', severity: 'critical',
-          description: `${ep.name} timed out`, recommendation: `Check ${ep.path}.` })
+        logger.warn(
+          '[evaluator] API check failed:',
+          err instanceof Error ? err.message : String(err)
+        )
+        issues.push({
+          platform: 'api',
+          type: 'api_timeout',
+          severity: 'critical',
+          description: `${ep.name} timed out`,
+          recommendation: `Check ${ep.path}.`,
+        })
       }
     }
     const score = Math.round(totalScore / endpoints.length)
-    return { check: { name: 'api_response_time', category: 'freshness', passed: score >= 70, score,
-      details: `${endpoints.length} endpoints, avg score ${score}/100` }, issues }
+    return {
+      check: {
+        name: 'api_response_time',
+        category: 'freshness',
+        passed: score >= 70,
+        score,
+        details: `${endpoints.length} endpoints, avg score ${score}/100`,
+      },
+      issues,
+    }
   }
 
   /**
@@ -640,11 +727,15 @@ export class PipelineEvaluator {
    * - ssr-controls (time range + pagination) present
    * - Minimum 10 trader rows rendered (not a bare skeleton)
    */
-  private static async checkHomepageSSR(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkHomepageSSR(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const issues: EvaluationIssue[] = []
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'http://localhost:3000'
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'http://localhost:3000'
     const start = Date.now()
     try {
       const checkUrl = process.env.NEXT_PUBLIC_SITE_URL || baseUrl
@@ -652,7 +743,7 @@ export class PipelineEvaluator {
         signal: AbortSignal.timeout(10_000),
         headers: {
           'User-Agent': 'Mozilla/5.0 ArenaHealthCheck/1.0',
-          'Accept': 'text/html',
+          Accept: 'text/html',
         },
         redirect: 'follow',
       })
@@ -667,72 +758,132 @@ export class PipelineEvaluator {
           try {
             const prodRes = await fetch(prodUrl, {
               signal: AbortSignal.timeout(8_000),
-              headers: { 'User-Agent': 'Mozilla/5.0 ArenaHealthCheck/1.0', 'Accept': 'text/html' },
+              headers: { 'User-Agent': 'Mozilla/5.0 ArenaHealthCheck/1.0', Accept: 'text/html' },
               redirect: 'follow',
             })
             if (prodRes.ok) {
               const html = await prodRes.text()
               return PipelineEvaluator.verifySSRContent(html, Date.now() - start)
             }
-          } catch { /* fall through to 95 score */ }
+          } catch {
+            /* fall through to 95 score */
+          }
         }
-        return { check: { name: 'homepage_ssr', category: 'freshness', passed: true, score: 95,
-          details: `${res.status} ${latency}ms (deployment protection — content not verified)` }, issues }
+        return {
+          check: {
+            name: 'homepage_ssr',
+            category: 'freshness',
+            passed: true,
+            score: 95,
+            details: `${res.status} ${latency}ms (deployment protection — content not verified)`,
+          },
+          issues,
+        }
       }
 
       if (res.status >= 500) {
-        issues.push({ platform: 'frontend', type: 'homepage_error', severity: 'critical',
-          description: `Homepage returned ${res.status}`, recommendation: 'Check Next.js build.' })
-        return { check: { name: 'homepage_ssr', category: 'freshness', passed: false, score: 0,
-          details: `${res.status} ${latency}ms` }, issues }
+        issues.push({
+          platform: 'frontend',
+          type: 'homepage_error',
+          severity: 'critical',
+          description: `Homepage returned ${res.status}`,
+          recommendation: 'Check Next.js build.',
+        })
+        return {
+          check: {
+            name: 'homepage_ssr',
+            category: 'freshness',
+            passed: false,
+            score: 0,
+            details: `${res.status} ${latency}ms`,
+          },
+          issues,
+        }
       }
 
       const html = await res.text()
       return PipelineEvaluator.verifySSRContent(html, latency)
     } catch (err) {
-      return { check: { name: 'homepage_ssr', category: 'freshness', passed: false, score: 0,
-        details: `Failed: ${err instanceof Error ? err.message : 'timeout'}` },
-        issues: [{ platform: 'frontend', type: 'homepage_down', severity: 'critical',
-          description: 'Homepage unreachable', recommendation: 'Check Vercel.' }] }
+      return {
+        check: {
+          name: 'homepage_ssr',
+          category: 'freshness',
+          passed: false,
+          score: 0,
+          details: `Failed: ${err instanceof Error ? err.message : 'timeout'}`,
+        },
+        issues: [
+          {
+            platform: 'frontend',
+            type: 'homepage_down',
+            severity: 'critical',
+            description: 'Homepage unreachable',
+            recommendation: 'Check Vercel.',
+          },
+        ],
+      }
     }
   }
 
   /** Verify SSR HTML contains required structural elements */
-  private static verifySSRContent(html: string, latencyMs: number): { check: EvaluationCheck; issues: EvaluationIssue[] } {
+  private static verifySSRContent(
+    html: string,
+    latencyMs: number
+  ): { check: EvaluationCheck; issues: EvaluationIssue[] } {
     const issues: EvaluationIssue[] = []
     let score = 100
     const missing: string[] = []
 
     // 1. h1 headline (LCP element from HomeHeroSSR)
     const hasH1 = /<h1[\s>]/i.test(html)
-    if (!hasH1) { score -= 15; missing.push('h1') }
+    if (!hasH1) {
+      score -= 15
+      missing.push('h1')
+    }
 
     // 2. SSR table container (ssr-t class)
     const hasTable = html.includes('ssr-t')
-    if (!hasTable) { score -= 20; missing.push('ssr-t') }
+    if (!hasTable) {
+      score -= 20
+      missing.push('ssr-t')
+    }
 
     // 3. SSR data rows (ssr-row class — at least 10 traders)
     const rowCount = (html.match(/ssr-row(?=[ "'])/g) || []).length
     if (rowCount === 0) {
-      score -= 25; missing.push('ssr-row(0)')
+      score -= 25
+      missing.push('ssr-row(0)')
     } else if (rowCount < 10) {
-      score -= 10; missing.push(`ssr-row(${rowCount}<10)`)
+      score -= 10
+      missing.push(`ssr-row(${rowCount}<10)`)
     }
 
     // 4. SSR controls (time range + pagination)
     const hasControls = html.includes('ssr-controls')
-    if (!hasControls) { score -= 10; missing.push('ssr-controls') }
+    if (!hasControls) {
+      score -= 10
+      missing.push('ssr-controls')
+    }
 
     // 5. Trader names present (ssr-name class)
     const nameCount = (html.match(/ssr-name/g) || []).length
-    if (nameCount === 0) { score -= 15; missing.push('ssr-name(0)') }
+    if (nameCount === 0) {
+      score -= 15
+      missing.push('ssr-name(0)')
+    }
 
     // 6. Score badges present (ssr-score class)
     const hasScores = html.includes('ssr-score')
-    if (!hasScores) { score -= 10; missing.push('ssr-score') }
+    if (!hasScores) {
+      score -= 10
+      missing.push('ssr-score')
+    }
 
     // 7. Latency check
-    if (latencyMs > 5000) { score -= 5; missing.push(`slow(${latencyMs}ms)`) }
+    if (latencyMs > 5000) {
+      score -= 5
+      missing.push(`slow(${latencyMs}ms)`)
+    }
 
     score = Math.max(0, score)
 
@@ -742,7 +893,8 @@ export class PipelineEvaluator {
         type: 'homepage_ssr_incomplete',
         severity: score < 50 ? 'critical' : 'warning',
         description: `Missing SSR elements: ${missing.join(', ')}`,
-        recommendation: 'Check page.tsx renders HomeHeroSSR + SSRRankingTable with data. Verify critical-css.ts has all .ssr-* classes.',
+        recommendation:
+          'Check page.tsx renders HomeHeroSSR + SSRRankingTable with data. Verify critical-css.ts has all .ssr-* classes.',
       })
     }
 
@@ -763,11 +915,15 @@ export class PipelineEvaluator {
   /**
    * Check 10: Frontend Core Pages — verify multiple key pages load with SSR data.
    */
-  private static async checkFrontendCorePages(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkFrontendCorePages(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const issues: EvaluationIssue[] = []
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'http://localhost:3000'
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'http://localhost:3000'
 
     const pages = [
       { path: '/rankings/binance_futures', name: 'Rankings', expect: 'binance' },
@@ -793,21 +949,38 @@ export class PipelineEvaluator {
         if (res.status < 400 && hasContent) {
           passCount++
         } else {
-          issues.push({ platform: 'frontend', type: 'page_degraded', severity: 'warning',
+          issues.push({
+            platform: 'frontend',
+            type: 'page_degraded',
+            severity: 'warning',
             description: `${page.name}: ${res.status}, content=${hasContent}`,
-            recommendation: `Check ${page.path} SSR rendering.` })
+            recommendation: `Check ${page.path} SSR rendering.`,
+          })
         }
       } catch (err) {
-        logger.warn('[evaluator] frontend page check failed:', err instanceof Error ? err.message : String(err))
-        issues.push({ platform: 'frontend', type: 'page_timeout', severity: 'warning',
-          description: `${page.name} timed out`, recommendation: `Check ${page.path}.` })
+        logger.warn(
+          '[evaluator] frontend page check failed:',
+          err instanceof Error ? err.message : String(err)
+        )
+        issues.push({
+          platform: 'frontend',
+          type: 'page_timeout',
+          severity: 'warning',
+          description: `${page.name} timed out`,
+          recommendation: `Check ${page.path}.`,
+        })
       }
     }
 
     const score = Math.round((passCount / pages.length) * 100)
     return {
-      check: { name: 'frontend_core_pages', category: 'freshness', passed: score >= 70, score,
-        details: `${passCount}/${pages.length} core pages healthy` },
+      check: {
+        name: 'frontend_core_pages',
+        category: 'freshness',
+        passed: score >= 70,
+        score,
+        details: `${passCount}/${pages.length} core pages healthy`,
+      },
       issues,
     }
   }
@@ -815,11 +988,15 @@ export class PipelineEvaluator {
   /**
    * Check 11: Expanded API Latency — test more endpoints with stricter thresholds.
    */
-  private static async checkExpandedAPILatency(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkExpandedAPILatency(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const issues: EvaluationIssue[] = []
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'http://localhost:3000'
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'http://localhost:3000'
 
     const endpoints = [
       { path: '/api/rankings/platform-stats', name: 'Platform Stats', maxMs: 3000 },
@@ -839,26 +1016,49 @@ export class PipelineEvaluator {
         })
         const latency = Date.now() - start
         if (res.status >= 500) {
-          issues.push({ platform: 'api', type: 'api_error', severity: 'warning',
+          issues.push({
+            platform: 'api',
+            type: 'api_error',
+            severity: 'warning',
             description: `${ep.name} returned ${res.status} (${latency}ms)`,
-            recommendation: `Check ${ep.path}.` })
+            recommendation: `Check ${ep.path}.`,
+          })
         } else if (latency > ep.maxMs) {
           totalScore += 50
-          issues.push({ platform: 'api', type: 'api_slow', severity: 'info',
+          issues.push({
+            platform: 'api',
+            type: 'api_slow',
+            severity: 'info',
             description: `${ep.name} took ${latency}ms (max: ${ep.maxMs}ms)`,
-            recommendation: `Optimize ${ep.path}.` })
-        } else { totalScore += 100 }
+            recommendation: `Optimize ${ep.path}.`,
+          })
+        } else {
+          totalScore += 100
+        }
       } catch (err) {
-        logger.warn('[evaluator] expanded API check failed:', err instanceof Error ? err.message : String(err))
-        issues.push({ platform: 'api', type: 'api_timeout', severity: 'warning',
-          description: `${ep.name} timed out`, recommendation: `Check ${ep.path}.` })
+        logger.warn(
+          '[evaluator] expanded API check failed:',
+          err instanceof Error ? err.message : String(err)
+        )
+        issues.push({
+          platform: 'api',
+          type: 'api_timeout',
+          severity: 'warning',
+          description: `${ep.name} timed out`,
+          recommendation: `Check ${ep.path}.`,
+        })
       }
     }
 
     const score = Math.round(totalScore / endpoints.length)
     return {
-      check: { name: 'expanded_api_latency', category: 'freshness', passed: score >= 70, score,
-        details: `${endpoints.length} additional endpoints, avg score ${score}/100` },
+      check: {
+        name: 'expanded_api_latency',
+        category: 'freshness',
+        passed: score >= 70,
+        score,
+        details: `${endpoints.length} additional endpoints, avg score ${score}/100`,
+      },
       issues,
     }
   }
@@ -867,13 +1067,24 @@ export class PipelineEvaluator {
    * Check 12: Per-Platform Data Coverage — verify each platform has sufficient enrichment.
    * Samples top traders per platform and checks field population rates.
    */
-  private static async checkPerPlatformDataCoverage(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkPerPlatformDataCoverage(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
     const PLATFORMS = [
-      'binance_futures', 'bybit', 'okx_futures', 'bitget_futures', 'mexc',
-      'hyperliquid', 'gmx', 'dydx', 'drift', 'jupiter_perps',
+      'binance_futures',
+      'bybit',
+      'okx_futures',
+      'bitget_futures',
+      'mexc',
+      'hyperliquid',
+      'gmx',
+      'dydx',
+      'drift',
+      'jupiter_perps',
     ]
 
     let totalCoverage = 0
@@ -906,11 +1117,11 @@ export class PipelineEvaluator {
       const coverage = fieldsTotal > 0 ? fieldsPopulated / fieldsTotal : 0
       totalCoverage += coverage
 
-      if (coverage < 0.40) {
+      if (coverage < 0.4) {
         issues.push({
           platform,
           type: 'low_field_coverage',
-          severity: coverage < 0.20 ? 'warning' : 'info',
+          severity: coverage < 0.2 ? 'warning' : 'info',
           description: `${platform}: ${Math.round(coverage * 100)}% field coverage (top 50)`,
           recommendation: `Check enrichment config for ${platform}.`,
         })
@@ -924,7 +1135,7 @@ export class PipelineEvaluator {
       check: {
         name: 'per_platform_data_coverage',
         category: 'completeness',
-        passed: avgCoverage >= 0.50,
+        passed: avgCoverage >= 0.5,
         score,
         details: `${platformsChecked} platforms checked, avg field coverage ${Math.round(avgCoverage * 100)}%`,
       },
@@ -938,12 +1149,16 @@ export class PipelineEvaluator {
    * Check 13: Trader Detail Integrity — fetch top 1 trader from 5 key platforms,
    * verify the /api/traders/[handle] endpoint returns complete data.
    */
-  private static async checkTraderDetailIntegrity(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkTraderDetailIntegrity(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'http://localhost:3000'
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'http://localhost:3000'
     const PLATFORMS = ['binance_futures', 'bybit', 'hyperliquid', 'okx_futures', 'mexc']
 
     let passCount = 0
@@ -961,38 +1176,62 @@ export class PipelineEvaluator {
 
       try {
         const handle = `${platform}:${top1[0].source_trader_id}`
-        const res = await fetch(`${baseUrl}/api/traders/${encodeURIComponent(handle)}?timeRange=90D`, {
-          signal: AbortSignal.timeout(8000),
-          headers: { 'User-Agent': 'PipelineEvaluator/1.0' },
-        })
+        const res = await fetch(
+          `${baseUrl}/api/traders/${encodeURIComponent(handle)}?timeRange=90D`,
+          {
+            signal: AbortSignal.timeout(8000),
+            headers: { 'User-Agent': 'PipelineEvaluator/1.0' },
+          }
+        )
         if (res.status === 200) {
           const body = await res.json()
           const hasCore = body.trader?.roi != null && body.trader?.arena_score != null
-          if (hasCore) { passCount++ }
-          else {
-            issues.push({ platform, type: 'trader_detail_incomplete', severity: 'warning',
+          if (hasCore) {
+            passCount++
+          } else {
+            issues.push({
+              platform,
+              type: 'trader_detail_incomplete',
+              severity: 'warning',
               description: `${platform} top trader missing roi or arena_score`,
-              recommendation: `Check /api/traders handler for ${platform}.` })
+              recommendation: `Check /api/traders handler for ${platform}.`,
+            })
           }
         } else if (res.status === 401 || res.status === 403) {
           passCount++ // Vercel auth wall
         } else {
-          issues.push({ platform, type: 'trader_detail_error', severity: 'warning',
+          issues.push({
+            platform,
+            type: 'trader_detail_error',
+            severity: 'warning',
             description: `${platform} trader detail returned ${res.status}`,
-            recommendation: `Check trader detail API.` })
+            recommendation: `Check trader detail API.`,
+          })
         }
       } catch (err) {
-        logger.warn('[evaluator] trader detail check failed:', err instanceof Error ? err.message : String(err))
-        issues.push({ platform, type: 'trader_detail_timeout', severity: 'info',
+        logger.warn(
+          '[evaluator] trader detail check failed:',
+          err instanceof Error ? err.message : String(err)
+        )
+        issues.push({
+          platform,
+          type: 'trader_detail_timeout',
+          severity: 'info',
           description: `${platform} trader detail timed out`,
-          recommendation: `Check API latency.` })
+          recommendation: `Check API latency.`,
+        })
       }
     }
 
     const score = Math.round((passCount / PLATFORMS.length) * 100)
     return {
-      check: { name: 'trader_detail_integrity', category: 'completeness', passed: score >= 70, score,
-        details: `${passCount}/${PLATFORMS.length} trader details complete` },
+      check: {
+        name: 'trader_detail_integrity',
+        category: 'completeness',
+        passed: score >= 70,
+        score,
+        details: `${passCount}/${PLATFORMS.length} trader details complete`,
+      },
       issues,
     }
   }
@@ -1000,18 +1239,29 @@ export class PipelineEvaluator {
   /**
    * Check 14: VPS Health — verify both SG and JP VPS are responding with healthy PM2 processes.
    */
-  private static async checkVPSHealth(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkVPSHealth(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const issues: EvaluationIssue[] = []
     // Only check VPS that are explicitly configured — avoid false negatives
     const vpsHosts = [
-      { name: 'SG', host: process.env.VPS_PROXY_SG || process.env.VPS_SCRAPER_SG?.replace(':3457', ':3456') },
+      {
+        name: 'SG',
+        host: process.env.VPS_PROXY_SG || process.env.VPS_SCRAPER_SG?.replace(':3457', ':3456'),
+      },
       ...(process.env.VPS_PROXY_JP ? [{ name: 'JP', host: process.env.VPS_PROXY_JP }] : []),
-    ].filter(v => v.host)
+    ].filter((v) => v.host)
 
     if (vpsHosts.length === 0) {
       return {
-        check: { name: 'vps_health', category: 'freshness', passed: true, score: 80,
-          details: 'No VPS hosts configured' },
+        check: {
+          name: 'vps_health',
+          category: 'freshness',
+          passed: true,
+          score: 80,
+          details: 'No VPS hosts configured',
+        },
         issues: [],
       }
     }
@@ -1031,22 +1281,37 @@ export class PipelineEvaluator {
             headers: { 'X-Proxy-Key': process.env.VPS_PROXY_KEY?.trim() || '' },
           })
           if (res.ok) {
-            const body = await res.json() as { status?: string }
-            if (body.status === 'ok') { healthyCount++; ok = true; break }
+            const body = (await res.json()) as { status?: string }
+            if (body.status === 'ok') {
+              healthyCount++
+              ok = true
+              break
+            }
           }
-        } catch (_err) { /* try next URL */ }
+        } catch (_err) {
+          /* try next URL */
+        }
       }
       if (!ok) {
-        issues.push({ platform: `vps_${vps.name.toLowerCase()}`, type: 'vps_unreachable', severity: 'critical',
+        issues.push({
+          platform: `vps_${vps.name.toLowerCase()}`,
+          type: 'vps_unreachable',
+          severity: 'critical',
           description: `VPS ${vps.name} unreachable on ${urls.join(' and ')}`,
-          recommendation: `VPS ${vps.name} is down. Check PM2 and Vultr console.` })
+          recommendation: `VPS ${vps.name} is down. Check PM2 and Vultr console.`,
+        })
       }
     }
 
     const score = vpsHosts.length > 0 ? Math.round((healthyCount / vpsHosts.length) * 100) : 80
     return {
-      check: { name: 'vps_health', category: 'freshness', passed: healthyCount === vpsHosts.length, score,
-        details: `${healthyCount}/${vpsHosts.length} VPS healthy` },
+      check: {
+        name: 'vps_health',
+        category: 'freshness',
+        passed: healthyCount === vpsHosts.length,
+        score,
+        details: `${healthyCount}/${vpsHosts.length} VPS healthy`,
+      },
       issues,
     }
   }
@@ -1054,7 +1319,10 @@ export class PipelineEvaluator {
   /**
    * Check 15: Cron Success Rate — past 1h success rate across all cron jobs.
    */
-  private static async checkCronSuccessRate(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkCronSuccessRate(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const issues: EvaluationIssue[] = []
 
@@ -1067,15 +1335,20 @@ export class PipelineEvaluator {
 
     if (!logs || logs.length === 0) {
       return {
-        check: { name: 'cron_success_rate', category: 'consistency', passed: true, score: 80,
-          details: 'No cron runs in past 1h' },
+        check: {
+          name: 'cron_success_rate',
+          category: 'consistency',
+          passed: true,
+          score: 80,
+          details: 'No cron runs in past 1h',
+        },
         issues: [],
       }
     }
 
     const total = logs.length
-    const successes = logs.filter(l => l.status === 'success').length
-    const errors = logs.filter(l => l.status === 'error').length
+    const successes = logs.filter((l) => l.status === 'success').length
+    const errors = logs.filter((l) => l.status === 'error').length
     const rate = successes / total
 
     // Find worst-performing jobs
@@ -1102,8 +1375,13 @@ export class PipelineEvaluator {
 
     const score = Math.round(rate * 100)
     return {
-      check: { name: 'cron_success_rate', category: 'consistency', passed: rate >= 0.90, score,
-        details: `${successes}/${total} succeeded (${Math.round(rate * 100)}%), ${errors} errors` },
+      check: {
+        name: 'cron_success_rate',
+        category: 'consistency',
+        passed: rate >= 0.9,
+        score,
+        details: `${successes}/${total} succeeded (${Math.round(rate * 100)}%), ${errors} errors`,
+      },
       issues,
     }
   }
@@ -1111,11 +1389,15 @@ export class PipelineEvaluator {
   /**
    * Check 16: Frontend Page Speed — core pages must respond under 3s.
    */
-  private static async checkFrontendPageSpeed(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkFrontendPageSpeed(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const issues: EvaluationIssue[] = []
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'http://localhost:3000'
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'http://localhost:3000'
 
     const pages = [
       { path: '/', name: 'Homepage', maxMs: 3000 },
@@ -1141,27 +1423,49 @@ export class PipelineEvaluator {
         }
 
         if (res.status >= 500) {
-          issues.push({ platform: 'frontend', type: 'page_error', severity: 'critical',
-            description: `${page.name}: ${res.status}`, recommendation: `Check ${page.path}.` })
+          issues.push({
+            platform: 'frontend',
+            type: 'page_error',
+            severity: 'critical',
+            description: `${page.name}: ${res.status}`,
+            recommendation: `Check ${page.path}.`,
+          })
         } else if (latency > page.maxMs) {
           totalScore += 50
-          issues.push({ platform: 'frontend', type: 'page_slow', severity: 'warning',
+          issues.push({
+            platform: 'frontend',
+            type: 'page_slow',
+            severity: 'warning',
             description: `${page.name}: ${latency}ms (max: ${page.maxMs}ms)`,
-            recommendation: `Optimize ${page.path}. Check ISR/SSG cache.` })
+            recommendation: `Optimize ${page.path}. Check ISR/SSG cache.`,
+          })
         } else {
           totalScore += 100
         }
       } catch (err) {
-        logger.warn('[evaluator] page speed check failed:', err instanceof Error ? err.message : String(err))
-        issues.push({ platform: 'frontend', type: 'page_timeout', severity: 'warning',
-          description: `${page.name} timed out`, recommendation: `Check ${page.path}.` })
+        logger.warn(
+          '[evaluator] page speed check failed:',
+          err instanceof Error ? err.message : String(err)
+        )
+        issues.push({
+          platform: 'frontend',
+          type: 'page_timeout',
+          severity: 'warning',
+          description: `${page.name} timed out`,
+          recommendation: `Check ${page.path}.`,
+        })
       }
     }
 
     const score = Math.round(totalScore / pages.length)
     return {
-      check: { name: 'frontend_page_speed', category: 'freshness', passed: score >= 70, score,
-        details: `${pages.length} pages, avg score ${score}/100` },
+      check: {
+        name: 'frontend_page_speed',
+        category: 'freshness',
+        passed: score >= 70,
+        score,
+        details: `${pages.length} pages, avg score ${score}/100`,
+      },
       issues,
     }
   }
@@ -1169,11 +1473,15 @@ export class PipelineEvaluator {
   /**
    * Check 17: Trader Search Accuracy — verify search returns relevant results.
    */
-  private static async checkTraderSearchAccuracy(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkTraderSearchAccuracy(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const issues: EvaluationIssue[] = []
-    const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-      || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-      || 'http://localhost:3000'
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+      'http://localhost:3000'
 
     try {
       const res = await fetch(`${baseUrl}/api/search?q=bitcoin&limit=5`, {
@@ -1181,32 +1489,83 @@ export class PipelineEvaluator {
         headers: { 'User-Agent': 'PipelineEvaluator/1.0' },
       })
       if (res.status === 401 || res.status === 403) {
-        return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: true, score: 95,
-          details: 'Auth wall — skipped' }, issues }
+        return {
+          check: {
+            name: 'trader_search_accuracy',
+            category: 'completeness',
+            passed: true,
+            score: 95,
+            details: 'Auth wall — skipped',
+          },
+          issues,
+        }
       }
       if (!res.ok) {
-        return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: false, score: 0,
-          details: `Search API returned ${res.status}` },
-          issues: [{ platform: 'api', type: 'search_error', severity: 'critical',
-            description: `Search API returned ${res.status}`, recommendation: 'Check /api/search.' }] }
+        return {
+          check: {
+            name: 'trader_search_accuracy',
+            category: 'completeness',
+            passed: false,
+            score: 0,
+            details: `Search API returned ${res.status}`,
+          },
+          issues: [
+            {
+              platform: 'api',
+              type: 'search_error',
+              severity: 'critical',
+              description: `Search API returned ${res.status}`,
+              recommendation: 'Check /api/search.',
+            },
+          ],
+        }
       }
       const body = await res.json()
       const results = body.results || body.data || []
       const hasResults = Array.isArray(results) && results.length > 0
       const score = hasResults ? 100 : 50
       if (!hasResults) {
-        issues.push({ platform: 'api', type: 'search_empty', severity: 'warning',
+        issues.push({
+          platform: 'api',
+          type: 'search_empty',
+          severity: 'warning',
           description: 'Search for "bitcoin" returned 0 results',
-          recommendation: 'Check search index or trigram matching.' })
+          recommendation: 'Check search index or trigram matching.',
+        })
       }
-      return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: hasResults, score,
-        details: `Search "bitcoin": ${results.length} results` }, issues }
+      return {
+        check: {
+          name: 'trader_search_accuracy',
+          category: 'completeness',
+          passed: hasResults,
+          score,
+          details: `Search "bitcoin": ${results.length} results`,
+        },
+        issues,
+      }
     } catch (err) {
-      logger.warn('[evaluator] search accuracy check failed:', err instanceof Error ? err.message : String(err))
-      return { check: { name: 'trader_search_accuracy', category: 'completeness', passed: false, score: 0,
-        details: 'Search timed out' },
-        issues: [{ platform: 'api', type: 'search_timeout', severity: 'warning',
-          description: 'Search API timed out', recommendation: 'Check /api/search.' }] }
+      logger.warn(
+        '[evaluator] search accuracy check failed:',
+        err instanceof Error ? err.message : String(err)
+      )
+      return {
+        check: {
+          name: 'trader_search_accuracy',
+          category: 'completeness',
+          passed: false,
+          score: 0,
+          details: 'Search timed out',
+        },
+        issues: [
+          {
+            platform: 'api',
+            type: 'search_timeout',
+            severity: 'warning',
+            description: 'Search API timed out',
+            recommendation: 'Check /api/search.',
+          },
+        ],
+      }
     }
   }
 
@@ -1214,7 +1573,10 @@ export class PipelineEvaluator {
    * Check #18: Cross-source data consistency (LR vs V2 vs API)
    * Samples 3 traders and verifies ROI/PnL match across leaderboard_ranks and trader_snapshots_v2.
    */
-  private static async checkCrossSourceConsistency(): Promise<{ check: EvaluationCheck; issues: EvaluationIssue[] }> {
+  private static async checkCrossSourceConsistency(): Promise<{
+    check: EvaluationCheck
+    issues: EvaluationIssue[]
+  }> {
     const issues: EvaluationIssue[] = []
     const TOLERANCE = 0.001 // 0.1% — LR and V2 should have same source data
 
@@ -1232,22 +1594,29 @@ export class PipelineEvaluator {
         .limit(50)
 
       if (!sample?.length) {
-        return { check: { name: 'cross_source_consistency', category: 'consistency', passed: true, score: 80,
-          details: 'No sample data available' }, issues }
+        return {
+          check: {
+            name: 'cross_source_consistency',
+            category: 'consistency',
+            passed: true,
+            score: 80,
+            details: 'No sample data available',
+          },
+          issues,
+        }
       }
 
       const shuffled = sample.sort(() => Math.random() - 0.5).slice(0, 3)
       let mismatches = 0
 
       for (const trader of shuffled) {
+        // trader_latest = 1 row per (platform, trader_key, window), no ORDER/LIMIT needed
         const { data: v2Row } = await supabase
-          .from('trader_snapshots_v2')
+          .from('trader_latest')
           .select('roi_pct, pnl_usd')
           .eq('platform', trader.source)
           .eq('trader_key', trader.source_trader_id)
           .eq('window', '90D')
-          .order('created_at', { ascending: false })
-          .limit(1)
           .maybeSingle()
 
         if (!v2Row) continue
@@ -1272,15 +1641,25 @@ export class PipelineEvaluator {
       const score = mismatches === 0 ? 100 : mismatches === 1 ? 70 : 30
       return {
         check: {
-          name: 'cross_source_consistency', category: 'consistency',
-          passed: mismatches === 0, score,
+          name: 'cross_source_consistency',
+          category: 'consistency',
+          passed: mismatches === 0,
+          score,
           details: `${shuffled.length} traders sampled, ${mismatches} ROI mismatches`,
         },
         issues,
       }
     } catch (err) {
-      return { check: { name: 'cross_source_consistency', category: 'consistency', passed: false, score: 0,
-        details: `Error: ${err instanceof Error ? err.message : String(err)}` }, issues }
+      return {
+        check: {
+          name: 'cross_source_consistency',
+          category: 'consistency',
+          passed: false,
+          score: 0,
+          details: `Error: ${err instanceof Error ? err.message : String(err)}`,
+        },
+        issues,
+      }
     }
   }
 
@@ -1297,16 +1676,22 @@ export class PipelineEvaluator {
       passed: result.passed,
       checks_count: result.checks.length,
       issue_count: result.issues.length,
-      critical_count: result.issues.filter(i => i.severity === 'critical').length,
+      critical_count: result.issues.filter((i) => i.severity === 'critical').length,
       evaluated_at: result.evaluated_at,
       trace_id: result.trace_id,
     })
 
     // ── History: append to rolling window (last 50 evaluations) ──
     const historyKey = 'evaluator:history'
-    const existing = await PipelineState.get<Array<{
-      score: number; passed: boolean; checks: number; issues: number; at: string
-    }>>(historyKey)
+    const existing = await PipelineState.get<
+      Array<{
+        score: number
+        passed: boolean
+        checks: number
+        issues: number
+        at: string
+      }>
+    >(historyKey)
     const history = Array.isArray(existing) ? existing : []
     history.push({
       score: result.overall_score,

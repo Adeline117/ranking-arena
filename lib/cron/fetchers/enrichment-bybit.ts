@@ -20,7 +20,9 @@ import { type Result, Ok, Err } from '@/lib/types'
 // ---------------------------------------------------------------------------
 
 const VPS_SCRAPER_URL = () => {
-  const raw = (process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG || '').replace(/\n$/, '').trim()
+  const raw = (process.env.VPS_SCRAPER_SG || process.env.VPS_PROXY_SG || '')
+    .replace(/\n$/, '')
+    .trim()
   return raw || null
 }
 const VPS_PROXY_KEY = () => (process.env.VPS_PROXY_KEY || '').trim() || null
@@ -66,7 +68,10 @@ interface VpsTraderDetailResponse {
   error?: string
 }
 
-async function fetchBybitViaVPS(leaderMark: string, timeoutMs = 60000): Promise<VpsTraderDetailResponse | null> {
+async function fetchBybitViaVPS(
+  leaderMark: string,
+  timeoutMs = 60000
+): Promise<VpsTraderDetailResponse | null> {
   const host = VPS_SCRAPER_URL()
   const key = VPS_PROXY_KEY()
   if (!host || !key) {
@@ -77,16 +82,18 @@ async function fetchBybitViaVPS(leaderMark: string, timeoutMs = 60000): Promise<
   const url = `${host}/bybit/trader-detail?leaderMark=${encodeURIComponent(leaderMark)}`
   try {
     const res = await fetch(url, {
-      headers: { 'X-Proxy-Key': key, 'Accept': 'application/json' },
+      headers: { 'X-Proxy-Key': key, Accept: 'application/json' },
       signal: AbortSignal.timeout(timeoutMs),
     })
     if (!res.ok) {
       logger.warn(`[bybit-enrichment] VPS returned ${res.status} for ${leaderMark}`)
       return null
     }
-    return await res.json() as VpsTraderDetailResponse
+    return (await res.json()) as VpsTraderDetailResponse
   } catch (err) {
-    logger.warn(`[bybit-enrichment] VPS fetch failed for ${leaderMark}: ${err instanceof Error ? err.message : String(err)}`)
+    logger.warn(
+      `[bybit-enrichment] VPS fetch failed for ${leaderMark}: ${err instanceof Error ? err.message : String(err)}`
+    )
     return null
   }
 }
@@ -131,9 +138,7 @@ export async function fetchBybitPositionHistory(
   return []
 }
 
-export async function fetchBybitStatsDetail(
-  traderId: string
-): Promise<StatsDetail | null> {
+export async function fetchBybitStatsDetail(traderId: string): Promise<StatsDetail | null> {
   try {
     const data = await fetchBybitViaVPS(traderId)
     if (!data?.detail?.result) return null
@@ -171,17 +176,18 @@ export async function fetchBybitStatsDetail(
 async function enrichSingleBybitTrader(
   supabase: SupabaseClient,
   traderId: string,
-  platformOverride: string = 'bybit',
+  platformOverride: string = 'bybit'
 ): Promise<Result<string>> {
   try {
     // Single VPS call — extract both equity curve AND PnL/stats
-    const data = await withRetry(
-      () => fetchBybitViaVPS(traderId),
-      { maxRetries: 2, initialDelay: 2000, isRetryable: (e) => {
+    const data = await withRetry(() => fetchBybitViaVPS(traderId), {
+      maxRetries: 2,
+      initialDelay: 2000,
+      isRetryable: (e) => {
         const msg = e instanceof Error ? e.message : ''
         return msg.includes('timeout') || msg.includes('429') || msg.includes('ECONNRESET')
-      }}
-    )
+      },
+    })
 
     if (!data) return Ok(traderId)
 
@@ -199,7 +205,7 @@ async function enrichSingleBybitTrader(
       }
     }
 
-    // 2. Write per-period PnL back to trader_snapshots_v2
+    // 2. Write per-period PnL back to trader_latest (primary hot table)
     // v17: VPS scraper now returns pnl7d/pnl30d/pnl90d from leader-income API
     const detail = data.detail?.result
     if (detail) {
@@ -212,8 +218,8 @@ async function enrichSingleBybitTrader(
       for (const [window, pnl] of Object.entries(periodPnl)) {
         if (pnl != null) {
           await supabase
-            .from('trader_snapshots_v2')
-            .update({ pnl_usd: pnl })
+            .from('trader_latest')
+            .update({ pnl_usd: pnl, updated_at: new Date().toISOString() })
             .eq('platform', platformOverride)
             .eq('trader_key', traderId)
             .eq('window', window)
@@ -261,9 +267,10 @@ export async function enrichBybitTraders(
         }
       } else {
         failed++
-        const errorMsg = settledResult.reason instanceof Error
-          ? settledResult.reason.message
-          : String(settledResult.reason)
+        const errorMsg =
+          settledResult.reason instanceof Error
+            ? settledResult.reason.message
+            : String(settledResult.reason)
         if (errors.length < 10) errors.push(errorMsg)
       }
     }

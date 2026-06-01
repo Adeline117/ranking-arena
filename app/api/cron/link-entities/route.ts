@@ -29,8 +29,9 @@ export const GET = withCron('link-entities', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin() as SupabaseClient
 
   // Fetch all traders with 0x wallet addresses (DEX traders)
+  // trader_latest = 1 row per (platform, trader_key, window), no dedup needed
   const { data, error } = await supabase
-    .from('trader_snapshots_v2')
+    .from('trader_latest')
     .select('platform, trader_key')
     .like('trader_key', '0x%')
 
@@ -93,7 +94,9 @@ export const GET = withCron('link-entities', async (_request: NextRequest) => {
     logger.warn('linked_entities table not available, returning results as API response only')
   }
 
-  logger.info(`Entity linking complete: ${addressMap.size} addresses, ${linked.length} multi-platform`)
+  logger.info(
+    `Entity linking complete: ${addressMap.size} addresses, ${linked.length} multi-platform`
+  )
   return {
     count: linked.length,
     total_addresses: addressMap.size,

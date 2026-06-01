@@ -87,14 +87,13 @@ async function analyzePlatform(
 
   const total = totalTraders || 0
 
-  // Get snapshot counts per period — run in parallel (safe now that we use
-  // estimated counts which don't lock large portions of the table).
+  // Get snapshot counts per period from trader_latest (1 row per key, ~45K total)
   const periodCounts: Record<string, number> = {}
   const periodResults = await Promise.all(
     TIME_PERIODS.map(async (period) => {
       try {
         const { count, error } = await supabase
-          .from('trader_snapshots_v2')
+          .from('trader_latest')
           .select('*', { count: 'estimated', head: true })
           .eq('platform', platform)
           .eq('window', period)

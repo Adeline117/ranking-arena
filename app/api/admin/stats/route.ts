@@ -35,11 +35,8 @@ export const GET = withAdminAuth(
       { count: pendingGroupApplications },
       { count: totalTraders },
       { count: snapshots24h },
-      // Admin dashboard numbers — approximate is fine. 17 parallel exact
-      // counts on user_profiles/posts/comments/leaderboard_ranks/
-      // trader_snapshots_v2 (~70M rows) can stall the whole dashboard when
-      // the DB is under cron load. pg_class.reltuples / EXPLAIN estimate is
-      // within ~5% which is plenty for an internal metrics tile.
+      // Admin dashboard numbers — approximate is fine. Estimated counts
+      // avoid stalling the dashboard when the DB is under cron load.
       // content_reports pending count kept exact — it's a moderation queue
       // actionable by staff where "3 vs 3000" matters.
     ] = await Promise.all([
@@ -92,9 +89,9 @@ export const GET = withAdminAuth(
         .select('source_trader_id', { count: 'estimated', head: true })
         .eq('season_id', '90D'),
       supabase
-        .from('trader_snapshots_v2')
-        .select('id', { count: 'estimated', head: true })
-        .gte('created_at', yesterday.toISOString()),
+        .from('trader_latest')
+        .select('platform', { count: 'estimated', head: true })
+        .gte('updated_at', yesterday.toISOString()),
     ])
 
     // Scraper health — use leaderboard_count_cache instead of full table scan

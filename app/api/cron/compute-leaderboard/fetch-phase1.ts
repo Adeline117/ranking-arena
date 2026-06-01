@@ -2,7 +2,7 @@
  * compute-leaderboard / fetch-phase1
  *
  * Phase 1: pull every fresh trader for the target season out of
- * `trader_snapshots_v2`, one platform at a time, and stream rows into the
+ * `trader_latest`, one platform at a time, and stream rows into the
  * provided `addToTraderMap` callback. The biggest single block of computeSeason.
  *
  * Sequential per-platform queries (batchSize = 1) — concurrent batches even
@@ -138,8 +138,8 @@ export async function fetchPhase1FromV2(
             { source, window: v2Window }
           )
           await new Promise((r) => setTimeout(r, 2000))
-          const retry = await supabase
-            .from('trader_snapshots_v2')
+          const retry = await (supabase as any)
+            .from('trader_latest')
             .select(
               'platform, trader_key, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, updated_at, sharpe_ratio, sortino_ratio, calmar_ratio, volatility_pct, downside_volatility_pct, metrics'
             )
@@ -225,7 +225,7 @@ export async function fetchPhase1FromV2(
         v2CountBySource.set(rows[0].source, rows.length)
       } else if (batchSource) {
         logger.warn(
-          `[${season}] ${batchSource}: 0 traders fetched from snapshots_v2 (window=${v2Window}, fallback checked)`
+          `[${season}] ${batchSource}: 0 traders fetched from trader_latest (window=${v2Window}, fallback checked)`
         )
       }
       rows.forEach(addToTraderMap)
