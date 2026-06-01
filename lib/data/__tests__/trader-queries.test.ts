@@ -21,10 +21,20 @@ jest.mock('../trader-followers', () => ({
 jest.mock('@/lib/supabase/client', () => {
   const chain: Record<string, jest.Mock> = {}
   const methods = [
-    'from', 'select', 'eq', 'neq', 'in', 'or', 'gte', 'lte',
-    'is', 'order', 'limit', 'range',
+    'from',
+    'select',
+    'eq',
+    'neq',
+    'in',
+    'or',
+    'gte',
+    'lte',
+    'is',
+    'order',
+    'limit',
+    'range',
   ]
-  methods.forEach(m => {
+  methods.forEach((m) => {
     chain[m] = jest.fn(() => chain)
   })
   chain.maybeSingle = jest.fn()
@@ -69,12 +79,22 @@ const mockChain = supabase as unknown as Record<string, jest.Mock>
 
 // ---- Helpers ----
 function resetChain() {
-  Object.values(mockChain).forEach(fn => fn.mockClear())
+  Object.values(mockChain).forEach((fn) => fn.mockClear())
   const chainMethods = [
-    'from', 'select', 'eq', 'neq', 'in', 'or', 'gte', 'lte',
-    'is', 'order', 'limit', 'range',
+    'from',
+    'select',
+    'eq',
+    'neq',
+    'in',
+    'or',
+    'gte',
+    'lte',
+    'is',
+    'order',
+    'limit',
+    'range',
   ]
-  chainMethods.forEach(m => {
+  chainMethods.forEach((m) => {
     mockChain[m].mockReturnValue(mockChain)
   })
 }
@@ -156,8 +176,8 @@ describe('getTraderPerformance', () => {
       source_trader_id: 'TRADER1',
     })
 
-    // Simulate v2 snapshots returning data
-    mockChain.limit.mockResolvedValue({
+    // Simulate trader_latest returning data (query ends with .in(), not .limit())
+    mockChain.in.mockResolvedValue({
       data: [
         { window: '90D', roi_pct: 125.5, pnl_usd: 50000, win_rate: 68.5, max_drawdown: -12 },
         { window: '30D', roi_pct: 45.2, pnl_usd: 20000, win_rate: 72.0, max_drawdown: -8 },
