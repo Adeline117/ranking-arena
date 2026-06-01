@@ -14,6 +14,11 @@ export default function NavLinks() {
     { href: '/', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
     { href: '/market', labelKey: 'market' as const, tooltip: t('navTooltipMarket') },
     { href: '/hot', labelKey: 'hot' as const, tooltip: undefined as string | undefined },
+    {
+      href: '/api-docs',
+      labelKey: 'api' as const,
+      tooltip: t('navTooltipApi') || 'Data API for developers',
+    },
   ]
 
   return (
