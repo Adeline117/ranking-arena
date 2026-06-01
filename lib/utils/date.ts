@@ -1,14 +1,17 @@
 export type Locale = 'en' | 'zh' | 'ja' | 'ko'
 
-const translations: Record<Locale, {
-  justNow: string
-  minutesAgo: (n: number) => string
-  hoursAgo: (n: number) => string
-  daysAgo: (n: number) => string
-  weeksAgo: (n: number) => string
-  monthsAgo: (n: number) => string
-  yearsAgo: (n: number) => string
-}> = {
+const translations: Record<
+  Locale,
+  {
+    justNow: string
+    minutesAgo: (n: number) => string
+    hoursAgo: (n: number) => string
+    daysAgo: (n: number) => string
+    weeksAgo: (n: number) => string
+    monthsAgo: (n: number) => string
+    yearsAgo: (n: number) => string
+  }
+> = {
   zh: {
     justNow: '刚刚',
     minutesAgo: (n: number) => `${n}分钟前`,
@@ -51,15 +54,27 @@ export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'):
   const effectiveLocale = locale
   // 处理无效输入
   if (!dateString) {
-    return effectiveLocale === 'zh' ? '未知时间' : effectiveLocale === 'ja' ? '不明' : effectiveLocale === 'ko' ? '알 수 없음' : 'unknown'
+    return effectiveLocale === 'zh'
+      ? '未知时间'
+      : effectiveLocale === 'ja'
+        ? '不明'
+        : effectiveLocale === 'ko'
+          ? '알 수 없음'
+          : 'unknown'
   }
 
   const date = typeof dateString === 'string' ? new Date(dateString) : dateString
 
   if (isNaN(date.getTime())) {
-    return effectiveLocale === 'zh' ? '未知时间' : effectiveLocale === 'ja' ? '不明' : effectiveLocale === 'ko' ? '알 수 없음' : 'unknown'
+    return effectiveLocale === 'zh'
+      ? '未知时间'
+      : effectiveLocale === 'ja'
+        ? '不明'
+        : effectiveLocale === 'ko'
+          ? '알 수 없음'
+          : 'unknown'
   }
-  
+
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
 
@@ -95,7 +110,7 @@ export function formatDate(
   const date = typeof dateString === 'string' ? new Date(dateString) : dateString
   const localeMap: Record<Locale, string> = { en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' }
   const localeString = localeMap[locale] || 'en-US'
-  
+
   switch (format) {
     case 'short':
       return date.toLocaleDateString(localeString)
@@ -142,13 +157,19 @@ export function isWithinDays(date: Date | string, days: number): boolean {
 }
 
 /**
- * Truncate an ISO timestamp to the hour boundary.
- * The partitioned trader_snapshots_v2 table has as_of_ts in its unique constraint.
- * Without truncation, every upsert creates a new row instead of updating.
+ * Truncate an ISO timestamp to the start of the UTC day.
+ *
+ * Used as the dedup key for trader_snapshots_v2 archive writes
+ * (as_of_ts is part of the unique constraint).
+ *
+ * Changed from hourly → daily (2026-06-01): 24x less archive growth.
+ * trader_latest is the primary hot table (UPSERT, always latest).
+ * snapshots_v2 is archive only — 1 row per trader-window per DAY suffices.
+ *
+ * Name kept as `truncateToHour` to avoid renaming all call sites.
  */
 export function truncateToHour(isoOrDate?: string | Date | null): string {
   const d = isoOrDate ? new Date(isoOrDate) : new Date()
-  d.setUTCMinutes(0, 0, 0)
+  d.setUTCHours(0, 0, 0, 0)
   return d.toISOString()
 }
-
