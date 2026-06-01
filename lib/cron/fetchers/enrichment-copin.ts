@@ -147,7 +147,7 @@ async function buildCopinStatsDetail(
     avgLoss: null,
     largestWin: null,
     largestLoss: null,
-    sharpeRatio: null,
+    sharpeRatio: null, // Cannot compute: Copin stats lack per-trade return distribution
     maxDrawdown,
     currentDrawdown: null,
     volatility: null,
@@ -497,7 +497,7 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
         avgLoss: data.avgLoss ?? data.avg_loss ?? null,
         largestWin: data.largestWin ?? data.bestPnl ?? null,
         largestLoss: data.largestLoss ?? data.worstPnl ?? null,
-        sharpeRatio: null,
+        sharpeRatio: null, // Cannot compute: deprecated native API lacks per-trade data
         maxDrawdown,
         currentDrawdown: null,
         volatility: null,
@@ -562,7 +562,7 @@ async function fetchGainsNativeStats(addr: string): Promise<StatsDetail | null> 
         avgLoss: avgLoss ?? null,
         largestWin: null,
         largestLoss: null,
-        sharpeRatio: null,
+        sharpeRatio: null, // Cannot compute: leaderboard fallback lacks per-trade distribution
         maxDrawdown,
         currentDrawdown: null,
         volatility: null,
