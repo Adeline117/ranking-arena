@@ -20,6 +20,7 @@ export default function Footer() {
         { href: '/market', label: t('footerMarket') },
         { href: '/claim', label: t('claimTrader') },
         { href: '/pricing', label: t('footerPricing') },
+        { href: '/api-docs', label: t('footerApi') || 'API' },
       ],
     },
     {
