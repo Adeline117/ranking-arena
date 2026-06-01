@@ -9,9 +9,24 @@
 [![Traders](https://img.shields.io/badge/traders-34%2C000%2B-blue)]()
 [![Exchanges](https://img.shields.io/badge/exchanges-35%2B-orange)]()
 
-[Live Site](https://www.arenafi.org) · [Features](#features) · [Architecture](#architecture) · [Data Pipeline](#data-pipeline) · [Getting Started](#getting-started)
+[Live Site](https://www.arenafi.org) · [Data API](#data-api) · [Features](#features) · [Architecture](#architecture) · [Data Pipeline](#data-pipeline) · [Getting Started](#getting-started)
 
 </div>
+
+## Data API
+
+Arena provides a REST API for programmatic access to trader rankings, performance data, and search across 35+ exchanges.
+
+**Pricing**: Free (100 req/day) · Starter $49/mo (10K req/day) · Pro $199/mo (unlimited)
+
+```bash
+# Get top traders by Arena Score
+curl "https://www.arenafi.org/api/v3?endpoint=rankings&period=90D&limit=10"
+```
+
+**6 endpoints**: `rankings`, `trader`, `search`, `platforms`, `history`, `bulk`
+
+Full documentation and API keys: [arenafi.org/api-docs](https://www.arenafi.org/api-docs)
 
 ## Overview
 
@@ -118,27 +133,27 @@ Each trader profile includes:
 
 ## Tech Stack
 
-| Layer | Technology | Details |
-|-------|-----------|---------|
-| Framework | Next.js 16 | App Router, React 19, Turbopack dev server |
-| Language | TypeScript 5 | Strict mode, 139 test suites, 2,271 tests |
-| Database | Supabase | PostgreSQL, Auth, Realtime subscriptions, RLS on all tables, 184 migrations |
-| Caching | Upstash Redis | Edge-compatible, used for leaderboard cache, rate limiting, session data |
-| Search | Meilisearch | Full-text search with fuzzy matching (pg_trgm fallback) |
-| Hosting | Vercel | Edge + Serverless functions, primary region hnd1 (Tokyo), ISR for static pages |
-| Payments | Stripe | Checkout, subscriptions, webhooks, customer portal |
-| Auth | Supabase Auth + Privy | Email/password + Web3 wallet login |
-| Styling | Tailwind CSS v4 | Design token system, dark/light theme |
-| Charts | TradingView + lightweight-charts | Interactive charts, WebSocket real-time data |
-| Exchange Data | 42 custom connectors + CCXT | Unified connector framework with BaseConnector abstract class |
-| State | Zustand + React Query + SWR | Zustand for global state, React Query + SWR for server data fetching |
-| Resilience | Cockatiel | Retry with exponential backoff + circuit breaker (ConsecutiveBreaker) |
-| Validation | Zod | Input validation on all write routes, trader snapshot schemas |
-| Monitoring | Sentry + PipelineLogger + Healthchecks.io | Structured JSON logging, correlation IDs, dead man's switch on critical jobs |
-| Alerts | Telegram Bot | Automatic alerts on cron failures and data staleness |
-| Mobile | Capacitor | iOS + Android native apps with push, haptics, biometrics |
-| Web3 | viem + wagmi + RainbowKit + EAS | Wallet login, on-chain attestation |
-| Security | CSP, HSTS, RLS, timingSafeEqual | Full security headers, Upstash rate limiting, input validation |
+| Layer         | Technology                                | Details                                                                        |
+| ------------- | ----------------------------------------- | ------------------------------------------------------------------------------ |
+| Framework     | Next.js 16                                | App Router, React 19, Turbopack dev server                                     |
+| Language      | TypeScript 5                              | Strict mode, 139 test suites, 2,271 tests                                      |
+| Database      | Supabase                                  | PostgreSQL, Auth, Realtime subscriptions, RLS on all tables, 184 migrations    |
+| Caching       | Upstash Redis                             | Edge-compatible, used for leaderboard cache, rate limiting, session data       |
+| Search        | Meilisearch                               | Full-text search with fuzzy matching (pg_trgm fallback)                        |
+| Hosting       | Vercel                                    | Edge + Serverless functions, primary region hnd1 (Tokyo), ISR for static pages |
+| Payments      | Stripe                                    | Checkout, subscriptions, webhooks, customer portal                             |
+| Auth          | Supabase Auth + Privy                     | Email/password + Web3 wallet login                                             |
+| Styling       | Tailwind CSS v4                           | Design token system, dark/light theme                                          |
+| Charts        | TradingView + lightweight-charts          | Interactive charts, WebSocket real-time data                                   |
+| Exchange Data | 42 custom connectors + CCXT               | Unified connector framework with BaseConnector abstract class                  |
+| State         | Zustand + React Query + SWR               | Zustand for global state, React Query + SWR for server data fetching           |
+| Resilience    | Cockatiel                                 | Retry with exponential backoff + circuit breaker (ConsecutiveBreaker)          |
+| Validation    | Zod                                       | Input validation on all write routes, trader snapshot schemas                  |
+| Monitoring    | Sentry + PipelineLogger + Healthchecks.io | Structured JSON logging, correlation IDs, dead man's switch on critical jobs   |
+| Alerts        | Telegram Bot                              | Automatic alerts on cron failures and data staleness                           |
+| Mobile        | Capacitor                                 | iOS + Android native apps with push, haptics, biometrics                       |
+| Web3          | viem + wagmi + RainbowKit + EAS           | Wallet login, on-chain attestation                                             |
+| Security      | CSP, HSTS, RLS, timingSafeEqual           | Full security headers, Upstash rate limiting, input validation                 |
 
 ## Architecture
 
@@ -201,63 +216,63 @@ The data pipeline consists of 53 Vercel cron jobs organized into several categor
 
 ### Trader Data Ingestion
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| `batch-fetch-traders?group=a..l` | Every 3-6 hours | Fetch leaderboard data from all 35+ exchanges, split into 16 batch groups to stay within Vercel function timeout limits |
-| `batch-enrich?period=90D` | Every 4 hours | Enrich top traders with equity curves, position history, and stats detail |
-| `batch-enrich?period=30D/7D` | Every 4 hours | Enrichment for shorter time windows |
-| `fetch-details?tier=hot` | Every 15 minutes | Fetch detailed profiles for high-priority traders (top ranked, recently viewed) |
-| `fetch-details?tier=normal` | Every 4 hours | Fetch detailed profiles for the broader trader set |
+| Job                              | Schedule         | Description                                                                                                             |
+| -------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `batch-fetch-traders?group=a..l` | Every 3-6 hours  | Fetch leaderboard data from all 35+ exchanges, split into 16 batch groups to stay within Vercel function timeout limits |
+| `batch-enrich?period=90D`        | Every 4 hours    | Enrich top traders with equity curves, position history, and stats detail                                               |
+| `batch-enrich?period=30D/7D`     | Every 4 hours    | Enrichment for shorter time windows                                                                                     |
+| `fetch-details?tier=hot`         | Every 15 minutes | Fetch detailed profiles for high-priority traders (top ranked, recently viewed)                                         |
+| `fetch-details?tier=normal`      | Every 4 hours    | Fetch detailed profiles for the broader trader set                                                                      |
 
 ### Scoring and Aggregation
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| `compute-leaderboard` | Every 30 minutes | Recompute Arena Scores and update ranking positions |
-| `precompute-composite` | Every 2 hours | Precompute composite leaderboard views for faster page loads |
-| `aggregate-daily-snapshots` | Daily 00:05 UTC | Roll up point-in-time snapshots into daily aggregates |
-| `compute-derived-metrics` | Daily 00:20 UTC | Compute Sharpe, MDD, win rate from ROI delta |
-| `calculate-advanced-metrics` | Every 4 hours | Derive Sortino, Calmar, profit factor from equity curve data |
-| `snapshot-ranks` | Daily 00:15 UTC | Snapshot ranking positions for historical tracking |
+| Job                          | Schedule         | Description                                                  |
+| ---------------------------- | ---------------- | ------------------------------------------------------------ |
+| `compute-leaderboard`        | Every 30 minutes | Recompute Arena Scores and update ranking positions          |
+| `precompute-composite`       | Every 2 hours    | Precompute composite leaderboard views for faster page loads |
+| `aggregate-daily-snapshots`  | Daily 00:05 UTC  | Roll up point-in-time snapshots into daily aggregates        |
+| `compute-derived-metrics`    | Daily 00:20 UTC  | Compute Sharpe, MDD, win rate from ROI delta                 |
+| `calculate-advanced-metrics` | Every 4 hours    | Derive Sortino, Calmar, profit factor from equity curve data |
+| `snapshot-ranks`             | Daily 00:15 UTC  | Snapshot ranking positions for historical tracking           |
 
 ### Market Data
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| `fetch-market-data?type=prices` | Every hour | Fetch current crypto prices |
-| `fetch-funding-rates` | Every 4 hours | Fetch perpetual futures funding rates |
-| `fetch-open-interest` | Every 2 hours | Fetch open interest data |
-| `flash-news-fetch` | Every 30 minutes | Aggregate crypto news |
-| `snapshot-positions` | Every hour | Snapshot trader positions |
+| Job                             | Schedule         | Description                           |
+| ------------------------------- | ---------------- | ------------------------------------- |
+| `fetch-market-data?type=prices` | Every hour       | Fetch current crypto prices           |
+| `fetch-funding-rates`           | Every 4 hours    | Fetch perpetual futures funding rates |
+| `fetch-open-interest`           | Every 2 hours    | Fetch open interest data              |
+| `flash-news-fetch`              | Every 30 minutes | Aggregate crypto news                 |
+| `snapshot-positions`            | Every hour       | Snapshot trader positions             |
 
 ### Content and Social
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| `auto-post-market-summary` | Daily 10:05 UTC | Auto-generate market summary post |
-| `auto-post-insights` | Daily 08:03 UTC | Auto-generate trading insights |
-| `auto-post-twitter` | Daily 08:06 UTC | Auto-post to Twitter |
-| `sync-meilisearch` | Every 30 minutes | Sync trader data to Meilisearch |
-| `warm-cache` | Every 5 minutes | Warm Redis cache for hot data |
-| `daily-digest` | Daily 00:02 UTC | Generate daily digest |
-| `weekly-report` | Mondays 08:00 UTC | Generate weekly pipeline report |
-| `generate-profiles` | Every 6 hours | Auto-generate trader profile content |
-| `update-competitions` | Every 30 minutes | Update competition standings |
+| Job                        | Schedule          | Description                          |
+| -------------------------- | ----------------- | ------------------------------------ |
+| `auto-post-market-summary` | Daily 10:05 UTC   | Auto-generate market summary post    |
+| `auto-post-insights`       | Daily 08:03 UTC   | Auto-generate trading insights       |
+| `auto-post-twitter`        | Daily 08:06 UTC   | Auto-post to Twitter                 |
+| `sync-meilisearch`         | Every 30 minutes  | Sync trader data to Meilisearch      |
+| `warm-cache`               | Every 5 minutes   | Warm Redis cache for hot data        |
+| `daily-digest`             | Daily 00:02 UTC   | Generate daily digest                |
+| `weekly-report`            | Mondays 08:00 UTC | Generate weekly pipeline report      |
+| `generate-profiles`        | Every 6 hours     | Auto-generate trader profile content |
+| `update-competitions`      | Every 30 minutes  | Update competition standings         |
 
 ### Monitoring and Maintenance
 
-| Job | Schedule | Description |
-|-----|----------|-------------|
-| `check-data-freshness` | Every 3 hours | Alert if any exchange data goes stale |
-| `verify-fetchers` | Every 3 hours | Verify all fetcher modules are responding correctly |
-| `check-data-gaps` | Every 4 hours | Identify missing data windows and trigger backfills |
-| `backfill-data` | Every 2 hours | Auto-backfill detected data gaps |
-| `cleanup-data` | Daily 01:00 UTC | Clean up stale data |
-| `cleanup-deleted-accounts` | Daily 03:00 UTC | Remove data for deleted user accounts |
-| `cleanup-stuck-logs` | Every hour | Clean stuck pipeline log entries |
-| `subscription-expiry` | Daily 00:04 UTC | Process expired Pro subscriptions |
-| `backfill-avatars` | Daily 02:30 UTC | Backfill missing trader avatar images |
-| `check-trader-alerts` | Every 6 hours | Check and send trader rank change alerts |
+| Job                        | Schedule        | Description                                         |
+| -------------------------- | --------------- | --------------------------------------------------- |
+| `check-data-freshness`     | Every 3 hours   | Alert if any exchange data goes stale               |
+| `verify-fetchers`          | Every 3 hours   | Verify all fetcher modules are responding correctly |
+| `check-data-gaps`          | Every 4 hours   | Identify missing data windows and trigger backfills |
+| `backfill-data`            | Every 2 hours   | Auto-backfill detected data gaps                    |
+| `cleanup-data`             | Daily 01:00 UTC | Clean up stale data                                 |
+| `cleanup-deleted-accounts` | Daily 03:00 UTC | Remove data for deleted user accounts               |
+| `cleanup-stuck-logs`       | Every hour      | Clean stuck pipeline log entries                    |
+| `subscription-expiry`      | Daily 00:04 UTC | Process expired Pro subscriptions                   |
+| `backfill-avatars`         | Daily 02:30 UTC | Backfill missing trader avatar images               |
+| `check-trader-alerts`      | Every 6 hours   | Check and send trader rank change alerts            |
 
 All cron jobs use `PipelineLogger` for structured execution logging with three destinations: Supabase `pipeline_logs` table, ClickHouse (dual write), and Healthchecks.io dead man's switch for 5 critical jobs. Failures trigger Telegram alerts via the OpenClaw monitoring system on Mac Mini.
 
@@ -338,43 +353,43 @@ Core tables (all with Row Level Security enabled):
 
 ### Trader Data
 
-| Table | Purpose |
-|-------|---------|
-| `leaderboard_ranks` | Precomputed ranked leaderboard (primary read path, rebuilt every 30 min) |
-| `trader_snapshots_v2` | Point-in-time performance data — sole write table for connectors |
-| `traders` | Trader identity registry, keyed by `(platform, trader_key)` |
-| `trader_profiles_v2` | Enriched profile data (bio, avatar, display name) |
-| `trader_equity_curve` | Historical equity curve data points per period |
-| `trader_position_history` | Past trading positions with PnL |
-| `trader_stats_detail` | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period |
-| `trader_asset_breakdown` | Asset allocation analysis per period |
-| `trader_daily_snapshots` | Daily ROI/PnL rollups (377K+ rows, 142 days depth) |
-| `trader_portfolio` | Current open positions |
-| `trader_sources` | Unique trader identities, keyed by `(source, source_trader_id)` |
+| Table                     | Purpose                                                                  |
+| ------------------------- | ------------------------------------------------------------------------ |
+| `leaderboard_ranks`       | Precomputed ranked leaderboard (primary read path, rebuilt every 30 min) |
+| `trader_snapshots_v2`     | Point-in-time performance data — sole write table for connectors         |
+| `traders`                 | Trader identity registry, keyed by `(platform, trader_key)`              |
+| `trader_profiles_v2`      | Enriched profile data (bio, avatar, display name)                        |
+| `trader_equity_curve`     | Historical equity curve data points per period                           |
+| `trader_position_history` | Past trading positions with PnL                                          |
+| `trader_stats_detail`     | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period  |
+| `trader_asset_breakdown`  | Asset allocation analysis per period                                     |
+| `trader_daily_snapshots`  | Daily ROI/PnL rollups (377K+ rows, 142 days depth)                       |
+| `trader_portfolio`        | Current open positions                                                   |
+| `trader_sources`          | Unique trader identities, keyed by `(source, source_trader_id)`          |
 
 ### User and Social
 
-| Table | Purpose |
-|-------|---------|
-| `user_profiles` | User accounts with level progression and reputation score |
-| `posts` | Community posts with visibility, full-text search, author Arena Score |
-| `comments` | Post comments |
-| `groups` | Trading groups with optional Arena Score threshold |
-| `group_members` | Group membership with roles |
-| `follows` | User following relationships |
-| `trader_claims` | Trader identity claim requests |
-| `verified_traders` | Verified trader identities |
-| `trader_attestations` | EAS on-chain attestation records |
+| Table                 | Purpose                                                               |
+| --------------------- | --------------------------------------------------------------------- |
+| `user_profiles`       | User accounts with level progression and reputation score             |
+| `posts`               | Community posts with visibility, full-text search, author Arena Score |
+| `comments`            | Post comments                                                         |
+| `groups`              | Trading groups with optional Arena Score threshold                    |
+| `group_members`       | Group membership with roles                                           |
+| `follows`             | User following relationships                                          |
+| `trader_claims`       | Trader identity claim requests                                        |
+| `verified_traders`    | Verified trader identities                                            |
+| `trader_attestations` | EAS on-chain attestation records                                      |
 
 ### System
 
-| Table | Purpose |
-|-------|---------|
-| `pipeline_logs` | Cron job execution logs (status, duration, record counts) |
-| `pipeline_job_status` (View) | Latest status per job |
-| `pipeline_job_stats` (View) | 7-day success rate and avg duration per job |
-| `subscriptions` | Pro membership records |
-| `stripe_customers` | Stripe customer mapping |
+| Table                        | Purpose                                                   |
+| ---------------------------- | --------------------------------------------------------- |
+| `pipeline_logs`              | Cron job execution logs (status, duration, record counts) |
+| `pipeline_job_status` (View) | Latest status per job                                     |
+| `pipeline_job_stats` (View)  | 7-day success rate and avg duration per job               |
+| `subscriptions`              | Pro membership records                                    |
+| `stripe_customers`           | Stripe customer mapping                                   |
 
 ## Getting Started
 
@@ -401,29 +416,29 @@ cp .env.example .env.local
 
 Required environment variables:
 
-| Variable | Description |
-|----------|-------------|
-| `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key (client-side) |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side only) |
-| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST endpoint |
-| `UPSTASH_REDIS_REST_TOKEN` | Upstash Redis auth token |
-| `CRON_SECRET` | Bearer token for cron job authentication |
-| `STRIPE_SECRET_KEY` | Stripe API secret key |
-| `STRIPE_WEBHOOK_SECRET` | Stripe webhook signing secret |
+| Variable                        | Description                                  |
+| ------------------------------- | -------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL                         |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anonymous key (client-side)         |
+| `SUPABASE_SERVICE_ROLE_KEY`     | Supabase service role key (server-side only) |
+| `UPSTASH_REDIS_REST_URL`        | Upstash Redis REST endpoint                  |
+| `UPSTASH_REDIS_REST_TOKEN`      | Upstash Redis auth token                     |
+| `CRON_SECRET`                   | Bearer token for cron job authentication     |
+| `STRIPE_SECRET_KEY`             | Stripe API secret key                        |
+| `STRIPE_WEBHOOK_SECRET`         | Stripe webhook signing secret                |
 
 Optional variables for monitoring and proxy:
 
-| Variable | Description |
-|----------|-------------|
-| `CLOUDFLARE_PROXY_URL` | CF Worker proxy URL |
-| `VPS_PROXY_KEY` | API key for VPS proxy authentication |
-| `SENTRY_DSN` | Sentry error tracking |
+| Variable                | Description                                    |
+| ----------------------- | ---------------------------------------------- |
+| `CLOUDFLARE_PROXY_URL`  | CF Worker proxy URL                            |
+| `VPS_PROXY_KEY`         | API key for VPS proxy authentication           |
+| `SENTRY_DSN`            | Sentry error tracking                          |
 | `HEALTHCHECKS_PING_URL` | Healthchecks.io ping URL for dead man's switch |
-| `TELEGRAM_BOT_TOKEN` | Telegram bot token for alerts |
-| `TELEGRAM_CHAT_ID` | Telegram chat ID for alerts |
-| `MEILISEARCH_HOST` | Meilisearch host URL |
-| `MEILISEARCH_API_KEY` | Meilisearch API key |
+| `TELEGRAM_BOT_TOKEN`    | Telegram bot token for alerts                  |
+| `TELEGRAM_CHAT_ID`      | Telegram chat ID for alerts                    |
+| `MEILISEARCH_HOST`      | Meilisearch host URL                           |
+| `MEILISEARCH_API_KEY`   | Meilisearch API key                            |
 
 ### Development
 
@@ -470,13 +485,13 @@ Cron schedules are defined in `vercel.json`. All 53 cron endpoints require an `A
 
 ### Infrastructure
 
-| Component | Details |
-|-----------|---------|
-| **Vercel** | Edge + Serverless, region hnd1, 53 cron jobs |
-| **SG VPS** (45.76.152.169) | Proxy :3456 + Playwright Scraper :3457 (PM2) |
-| **JP VPS** (149.28.27.242) | Polymarket + exchange proxy |
-| **Mac Mini** (OpenClaw) | Health monitor (30min), daily reports, auto-fix, weekly self-check |
-| **Cloudflare Worker** | Geo-block bypass proxy with ALLOWED_HOSTS whitelist |
+| Component                  | Details                                                            |
+| -------------------------- | ------------------------------------------------------------------ |
+| **Vercel**                 | Edge + Serverless, region hnd1, 53 cron jobs                       |
+| **SG VPS** (45.76.152.169) | Proxy :3456 + Playwright Scraper :3457 (PM2)                       |
+| **JP VPS** (149.28.27.242) | Polymarket + exchange proxy                                        |
+| **Mac Mini** (OpenClaw)    | Health monitor (30min), daily reports, auto-fix, weekly self-check |
+| **Cloudflare Worker**      | Geo-block bypass proxy with ALLOWED_HOSTS whitelist                |
 
 ### Monitoring
 
@@ -489,18 +504,18 @@ Cron schedules are defined in `vercel.json`. All 53 cron endpoints require an `A
 
 ### Key Metrics
 
-| Metric | Value |
-|--------|-------|
-| Total Traders | 34,000+ |
-| Active Platforms | 35 |
-| Exchange Connectors | 42 |
-| Enrichment Modules | 26 |
-| Cron Jobs | 53 |
-| API Routes | 292 |
-| SQL Migrations | 184 |
-| Test Suites | 139 (2,271 tests) |
-| Languages | 4 (en/zh/ja/ko, 4,800+ keys each) |
-| Lighthouse | Performance ~65+, Accessibility 97, Best Practices 96, SEO 100 |
+| Metric              | Value                                                          |
+| ------------------- | -------------------------------------------------------------- |
+| Total Traders       | 34,000+                                                        |
+| Active Platforms    | 35                                                             |
+| Exchange Connectors | 42                                                             |
+| Enrichment Modules  | 26                                                             |
+| Cron Jobs           | 53                                                             |
+| API Routes          | 292                                                            |
+| SQL Migrations      | 184                                                            |
+| Test Suites         | 139 (2,271 tests)                                              |
+| Languages           | 4 (en/zh/ja/ko, 4,800+ keys each)                              |
+| Lighthouse          | Performance ~65+, Accessibility 97, Best Practices 96, SEO 100 |
 
 ## License
 
