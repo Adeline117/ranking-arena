@@ -56,8 +56,8 @@ import {
   fetchJupiterPositionHistory,
   fetchJupiterEquityCurve,
   fetchJupiterStatsDetail,
-  fetchGainsOnchainEquityCurve,
-  fetchGainsOnchainPositionHistory,
+  // fetchGainsOnchainEquityCurve,    // Removed: only 3% coverage, replaced by leaderboard stats
+  // fetchGainsOnchainPositionHistory, // Removed: same
   fetchKwentaOnchainEquityCurve,
   fetchKwentaOnchainStatsDetail,
   fetchKwentaOnchainPositionHistory,
@@ -396,32 +396,14 @@ export const ENRICHMENT_PLATFORM_CONFIGS: Record<string, EnrichmentConfig> = {
   },
   gains: {
     platform: 'gains',
-    // 2026-04-22: Copin GNS position endpoints return [] (no data).
-    // Reverted to on-chain primary. Copin only usable for leaderboard stats fallback.
-    // Etherscan is slow but partially works (~3% coverage).
-    fetchEquityCurve: async (traderId: string, days: number) => {
-      const onchain = await fetchGainsOnchainEquityCurve(traderId, days)
-      if (onchain.length > 0) return onchain
-      logger.warn(`[gains] onchain equity curve empty for ${traderId}, falling back to Copin`)
-      const fallback = await fetchGainsEquityCurve(traderId, days)
-      if (fallback.length === 0) {
-        logger.warn(`[gains] Copin fallback also empty for ${traderId} — silent data loss`)
-      }
-      return fallback
-    },
+    // 2026-06-01: All per-trader APIs broken (native 404, Copin [], Etherscan 3% coverage).
+    // Stats now come from leaderboard API directly (fetchGainsStatsDetail → fetchGainsLeaderboardStats).
+    // Equity curve: 2-point from Copin stats fallback. Position history: unavailable.
+    fetchEquityCurve: fetchGainsEquityCurve,
     fetchStatsDetail: fetchGainsStatsDetail,
-    fetchPositionHistory: async (traderId: string) => {
-      const onchain = await fetchGainsOnchainPositionHistory(traderId)
-      if (onchain.length > 0) return onchain
-      logger.warn(`[gains] onchain positions empty for ${traderId}, falling back to Copin`)
-      const fallback = await fetchGainsPositionHistory(traderId)
-      if (fallback.length === 0) {
-        logger.warn(`[gains] Copin fallback also empty for ${traderId} — silent data loss`)
-      }
-      return fallback
-    },
-    concurrency: 2,
-    delayMs: 1500, // Etherscan rate limits
+    fetchPositionHistory: async () => [],
+    concurrency: 5,
+    delayMs: 300, // Leaderboard API is fast (no Etherscan rate limits)
   },
   kwenta: {
     platform: 'kwenta',
