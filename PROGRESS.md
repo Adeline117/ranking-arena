@@ -16,25 +16,37 @@
 | D6  | Sentry: user context in middleware + cron tag                |
 | D7  | Critical alerts: 15min cooldown + subscription-expiry errors |
 
-### Business logic audit findings (pending fix)
+### Business logic fixes shipped (6/6)
 
-| ID  | Sev  | Finding                                                                          |
-| --- | ---- | -------------------------------------------------------------------------------- |
-| P-1 | HIGH | Late `customer.subscription.deleted` for old sub downgrades active new-sub user  |
-| D-5 | CRIT | `subscriptions` table FK to `auth.users` not confirmed — may block GDPR deletion |
-| S-7 | MED  | Raw `notifications.insert` in tip handler (violates mandatory pattern)           |
-| S-8 | MED  | Raw `notifications.insert` in trial-end handler + invalid type                   |
-| R-2 | MED  | `trades_count=0` treated as unknown in filter but gets max penalty in scoring    |
-| D-7 | MED  | Trigger-based `comment_count` violates atomic counter convention                 |
+| ID  | Sev  | Status    | Finding                                                                            | Fix                                                                                               |
+| --- | ---- | --------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| P-1 | HIGH | FIXED     | Late `customer.subscription.deleted` for old sub downgrades active new-sub user    | `handleSubscriptionCanceled` now checks if current sub matches canceled sub ID before downgrading |
+| D-5 | CRIT | FALSE POS | `subscriptions` FK to `auth.users` not confirmed                                   | Already has `ON DELETE CASCADE` FK + UNIQUE index on `user_id`                                    |
+| S-7 | MED  | FIXED     | Raw `notifications.insert` in tip handler                                          | Replaced with `sendNotification()` — gains dedup + fire-and-forget                                |
+| S-8 | MED  | FIXED     | Raw `notifications.insert` in trial-end handler + invalid type `'subscription'`    | Replaced with `sendNotification()` using `type: 'system'`                                         |
+| R-2 | MED  | FIXED     | `trades_count=0` treated as unknown in filter but gets max 0.6x penalty in scoring | Changed `>= 0` to `> 0` so 0 (unknown) skips penalty like null                                    |
+| D-7 | MED  | FIXED     | Trigger-based `comment_count` double-counts with RPC                               | Dropped `on_comment_change` trigger + recalculated all counts from actual rows                    |
+| D-8 | MED  | FALSE POS | Follow count trigger same pattern                                                  | Trigger already dropped from live DB                                                              |
 
-### I18n audit findings (pending fix)
+Bonus fixes discovered during audit:
+
+- `subscriptions.status` CHECK now accepts both `'canceled'` (American/Stripe) and `'cancelled'` (British)
+- `notifications.type` CHECK expanded from 6 to 17 values to match TypeScript union (was silently blocking tip/subscription notifications)
+- Added `tip_received`, `subscription_expiring`, `subscription_expired`, `nft_expired` to TypeScript `NotificationType`
+
+### I18n + E2E audit findings (backlog — not blocking)
 
 | ID  | Sev  | Finding                                                    |
 | --- | ---- | ---------------------------------------------------------- |
 | I2  | HIGH | ja.ts + ko.ts missing 430 keys from en.ts                  |
 | I3  | HIGH | 71 `t()` calls reference keys not in translation files     |
 | I8  | HIGH | Chinese string literals used as i18n keys in VoiceRecorder |
+| I5  | MED  | 51 hardcoded English strings bypassing `t()`               |
+| I6  | MED  | Numbers/dates hardcoded `'en-US'` in 20+ files             |
 | E1  | CRIT | No authenticated E2E tests (OTP login → session)           |
+| E2  | HIGH | No Stripe checkout end-to-end test                         |
+| E3  | HIGH | Like/Bookmark actions never tested                         |
+| E4  | HIGH | Groups write flows (join, post, comment) untested          |
 
 ## SEO + Core Web Vitals Audit (2026-06-02)
 
