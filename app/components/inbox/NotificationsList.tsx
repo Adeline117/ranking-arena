@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -16,10 +17,6 @@ import { logger } from '@/lib/logger'
 type Notification = NotificationWithActor
 
 export default function NotificationsList() {
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const [loading, setLoading] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
   const [typeFilter, setTypeFilter] = useState<'all' | 'follow' | 'like' | 'comment' | 'mention'>(
     'all'
   )
@@ -28,90 +25,73 @@ export default function NotificationsList() {
   const { accessToken } = useAuthSession()
   const setUnreadNotifications = useInboxStore((s) => s.setUnreadNotifications)
   const unreadNotifications = useInboxStore((s) => s.unreadNotifications)
+  const queryClient = useQueryClient()
   const { showToast } = useToast()
   const { t, language } = useLanguage()
   // 用于防止重复请求和回滚
   const pendingMarkAllRef = useRef(false)
   const pendingMarkRef = useRef<Set<string>>(new Set())
 
-  const loadNotifications = useCallback(
-    async (abortSignal?: AbortSignal) => {
-      if (!accessToken) return
-      try {
-        setLoading(true)
-        const response = await fetch('/api/notifications', {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: abortSignal,
-        })
-
-        if (abortSignal?.aborted) return
-
-        if (!response.ok) {
-          const errorMessage =
-            response.status === 401 ? t('authenticationFailed') : t('failedToLoadNotifications')
-          showToast(errorMessage, 'error')
-          return
-        }
-
-        const result = await response.json()
-        const data = result.data || result
-        const notifs = data.notifications || []
-        setNotifications(notifs)
-        setUnreadNotifications(data.unread_count || 0)
-        setHasMore(notifs.length >= PAGE_SIZE)
-      } catch (err) {
-        if (abortSignal?.aborted) return
-
-        logger.error('Failed to load notifications:', err)
-        showToast(t('unexpectedError'), 'error')
-      } finally {
-        if (!abortSignal?.aborted) {
-          setLoading(false)
-        }
+  // React Query infinite scroll for notifications
+  const {
+    data: notifData,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage: loadingMore,
+    isLoading: loading,
+    refetch: refetchNotifications,
+  } = useInfiniteQuery({
+    queryKey: ['notifications', accessToken],
+    queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
+      const res = await fetch(`/api/notifications?offset=${pageParam}&limit=${PAGE_SIZE}`, {
+        headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      const result = await res.json()
+      const data = result.data || result
+      return {
+        notifications: (data.notifications || []) as Notification[],
+        unread_count: (data.unread_count as number) || 0,
+        hasMore: (data.notifications || []).length >= PAGE_SIZE,
       }
     },
-    [accessToken, setUnreadNotifications, showToast, t]
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      if (!lastPage.hasMore) return undefined
+      return allPages.reduce((sum, p) => sum + p.notifications.length, 0)
+    },
+    enabled: !!accessToken,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  })
+
+  const fetchedNotifications = useMemo(
+    () => notifData?.pages.flatMap((p) => p.notifications) ?? [],
+    [notifData]
   )
-
-  const loadMoreNotifications = useCallback(async () => {
-    if (!accessToken || loadingMore || !hasMore) return
-    setLoadingMore(true)
-    try {
-      const response = await fetch(
-        `/api/notifications?offset=${notifications.length}&limit=${PAGE_SIZE}`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-          signal: AbortSignal.timeout(15000),
-        }
-      )
-      if (!response.ok) return
-      const result = await response.json()
-      const data = result.data || result
-      const moreNotifs = data.notifications || []
-      setNotifications((prev) => [...prev, ...moreNotifs])
-      setHasMore(moreNotifs.length >= PAGE_SIZE)
-    } catch (err) {
-      logger.error('Failed to load more notifications:', err)
-    } finally {
-      setLoadingMore(false)
-    }
-  }, [accessToken, loadingMore, hasMore, notifications.length])
-
+  // Local state for optimistic mark-as-read mutations
+  const [notifications, setNotifications] = useState<Notification[]>([])
   useEffect(() => {
-    const abortController = new AbortController()
-    const timeoutId = setTimeout(() => abortController.abort(), 15000)
+    setNotifications(fetchedNotifications)
+  }, [fetchedNotifications])
+  const hasMore = hasNextPage ?? false
 
-    if (accessToken) {
-      loadNotifications(abortController.signal).finally(() => clearTimeout(timeoutId))
-    } else {
-      clearTimeout(timeoutId)
+  // Sync unread count from first page
+  useEffect(() => {
+    if (notifData?.pages[0]) {
+      setUnreadNotifications(notifData.pages[0].unread_count)
     }
+  }, [notifData, setUnreadNotifications])
 
-    return () => {
-      clearTimeout(timeoutId)
-      abortController.abort()
-    }
-  }, [accessToken, loadNotifications])
+  const loadNotifications = useCallback(() => {
+    refetchNotifications()
+  }, [refetchNotifications])
+  const loadMoreNotifications = useCallback(() => {
+    if (hasMore && !loadingMore) fetchNextPage()
+  }, [hasMore, loadingMore, fetchNextPage])
+
+  // useInfiniteQuery handles abort/cleanup internally — no manual effect needed
 
   const markAllAsRead = useCallback(async () => {
     if (!accessToken || pendingMarkAllRef.current) return
