@@ -6,6 +6,7 @@ import { WagmiProvider } from 'wagmi'
 // and @rainbow-me/rainbowkit. Do NOT remove this dependency.
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { RainbowKitProvider, darkTheme } from '@rainbow-me/rainbowkit'
+import { STALE_RELAXED } from '@/lib/hooks/cache-presets'
 import { wagmiConfig } from './config'
 
 import '@rainbow-me/rainbowkit/styles.css'
@@ -13,7 +14,7 @@ import '@rainbow-me/rainbowkit/styles.css'
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      staleTime: 60_000,
+      staleTime: STALE_RELAXED,
       retry: 1,
     },
   },

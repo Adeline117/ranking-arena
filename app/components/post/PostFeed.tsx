@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -153,7 +154,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           }
         : undefined,
     enabled: authInitialized,
-    staleTime: 30_000,
+    staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
   })
 

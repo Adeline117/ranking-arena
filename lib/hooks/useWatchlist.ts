@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useMemo } from 'react'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useAchievements } from '@/lib/hooks/useAchievements'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 
 interface WatchlistItem {
   source: string
@@ -38,7 +39,7 @@ export function useWatchlist() {
     queryFn: fetchWatchlist,
     enabled: isLoggedIn,
     refetchOnWindowFocus: false,
-    staleTime: 30000,
+    staleTime: STALE_STANDARD,
   })
 
   const watchlist = useMemo(() => data || [], [data])

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
@@ -38,18 +39,26 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   const searchParams = useSearchParams()
   const pathname = usePathname()
 
-  useEffect(() => { setMounted(true) }, [])
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   // Trader data - React Query with server fallback
   const isTrader = !!serverProfile?.traderHandle
-  const traderUrl = isTrader ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}` : ''
-  const { data: traderData, error: traderError, isLoading: traderLoading } = useQuery<TraderPageData>({
+  const traderUrl = isTrader
+    ? `/api/traders/${encodeURIComponent(serverProfile!.traderHandle!)}`
+    : ''
+  const {
+    data: traderData,
+    error: traderError,
+    isLoading: traderLoading,
+  } = useQuery<TraderPageData>({
     queryKey: ['user-trader-data', serverProfile?.traderHandle],
     queryFn: () => traderFetcher(traderUrl),
     enabled: isTrader,
     refetchOnWindowFocus: false,
     refetchInterval: 0,
-    staleTime: 5000,
+    staleTime: STALE_STANDARD,
     retry: 2,
     initialData: serverTraderData ?? undefined,
   })
@@ -57,24 +66,32 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   // Tabs
   const urlTab = searchParams.get('tab')
   const [activeProfileTab, setActiveProfileTab] = useState<ProfileTabKey>(
-    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab) ? urlTab as ProfileTabKey : 'overview'
+    urlTab && ['overview', 'stats', 'portfolio'].includes(urlTab)
+      ? (urlTab as ProfileTabKey)
+      : 'overview'
   )
 
-  const updateUrl = useCallback((tab: string) => {
-    const params = new URLSearchParams(searchParams.toString())
-    if (tab === 'overview') {
-      params.delete('tab')
-    } else {
-      params.set('tab', tab)
-    }
-    const qs = params.toString()
-    router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
-  }, [searchParams, pathname, router])
+  const updateUrl = useCallback(
+    (tab: string) => {
+      const params = new URLSearchParams(searchParams.toString())
+      if (tab === 'overview') {
+        params.delete('tab')
+      } else {
+        params.set('tab', tab)
+      }
+      const qs = params.toString()
+      router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+    },
+    [searchParams, pathname, router]
+  )
 
-  const handleProfileTabChange = useCallback((tab: ProfileTabKey) => {
-    setActiveProfileTab(tab)
-    updateUrl(tab)
-  }, [updateUrl])
+  const handleProfileTabChange = useCallback(
+    (tab: ProfileTabKey) => {
+      setActiveProfileTab(tab)
+      updateUrl(tab)
+    },
+    [updateUrl]
+  )
 
   // Sync auth state from useAuthSession (no network call)
   useEffect(() => {
@@ -98,7 +115,9 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     try {
       const { data: existingProfile } = await supabase
         .from('user_profiles')
-        .select('id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, role')
+        .select(
+          'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, role'
+        )
         .eq('id', userId)
         .maybeSingle()
 
@@ -175,9 +194,13 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     supabase
       .from('blocked_users')
       .select('blocker_id')
-      .or(`and(blocker_id.eq.${currentUserId},blocked_id.eq.${profile.id}),and(blocker_id.eq.${profile.id},blocked_id.eq.${currentUserId})`)
+      .or(
+        `and(blocker_id.eq.${currentUserId},blocked_id.eq.${profile.id}),and(blocker_id.eq.${profile.id},blocked_id.eq.${currentUserId})`
+      )
       .limit(1)
-      .then(({ data }) => { if (data && data.length > 0) setIsBlocked(true) })
+      .then(({ data }) => {
+        if (data && data.length > 0) setIsBlocked(true)
+      })
   }, [currentUserId, profile?.id, isOwnProfile])
 
   return {

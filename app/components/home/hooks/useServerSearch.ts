@@ -10,6 +10,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import type { Trader } from '../../ranking/RankingTable'
 import type { TimeRange } from '../hooks/useTraderData'
 
@@ -45,7 +46,7 @@ export function useServerSearch({
     queryKey: ['server-search', q, activeTimeRange],
     queryFn: ({ signal }) => fetchServerSearch(q, activeTimeRange, signal),
     enabled,
-    staleTime: 30_000, // 30s — search results don't change fast
+    staleTime: STALE_STANDARD,
     gcTime: 60_000, // 1min cache
     placeholderData: (prev) => prev ?? [], // Keep previous results during refetch
     retry: false,

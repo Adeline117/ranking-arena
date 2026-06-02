@@ -4,6 +4,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STATIC } from '@/lib/hooks/cache-presets'
 import { Box, Text } from '../base'
 
 interface PlatformStat {
@@ -71,7 +72,7 @@ export default function RankPercentileBadge({ rank, platform }: RankPercentileBa
     queryKey: ['rankings-platform-stats'],
     queryFn: () => fetcher('/api/rankings/platform-stats'),
     refetchOnWindowFocus: false,
-    staleTime: 300_000,
+    staleTime: STALE_STATIC,
     retry: 1,
   })
 

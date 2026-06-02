@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, type MouseEvent as ReactMouseEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
@@ -161,7 +162,7 @@ export default function WatchlistMarket() {
     queryFn: () => marketFetcher(marketUrl!),
     enabled: !!deferredReady && !!marketUrl && typeof window !== 'undefined',
     refetchOnWindowFocus: false,
-    staleTime: 30000,
+    staleTime: STALE_STANDARD,
     refetchInterval: 60000,
     placeholderData: (prev) => prev,
     retry: 3,
