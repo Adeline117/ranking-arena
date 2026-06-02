@@ -2,9 +2,25 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
-## Deep Backend Optimization (2026-06-02)
+## Deep Full-Stack Optimization — 3 Parallel Audits (2026-06-02)
 
-Deep backend audit found 17 issues (6 HIGH). 6 fixed in this session:
+3 parallel deep audits (backend N+1, frontend bundle/renders, DB/infra schema) found 1 CRITICAL + 22 HIGH + 33 MEDIUM issues. 8 fixed this session.
+
+### CRITICAL: precompute-composite querying wrong table (200x scan reduction)
+
+`precompute-composite` was querying `trader_snapshots_v2` (10M+ row archive) instead of `trader_latest` (45K rows). This was the root cause of consistent 300s timeouts since 2026-05-17. Fixed: `FROM trader_snapshots_v2` → `FROM trader_latest`, statement_timeout 150s → 30s. Should now complete in <1s per window.
+
+### Database schema: 3 FK cascades fixed
+
+- `competition_entries.user_id` → ON DELETE CASCADE (was blocking user deletion)
+- `kol_applications.user_id` → ON DELETE SET NULL (audit trail preserved)
+- `user_profiles.referred_by` → ON DELETE SET NULL (prevents deletion deadlock)
+
+### Frontend: Avatar image optimization
+
+Avatar.tsx and CommentAvatar.tsx had global `unoptimized` flag on next/image, bypassing WebP conversion for ALL external avatar URLs. Now only skips optimization for `data:` URIs. Every avatar across the site gets Next.js image optimization.
+
+### Previous backend fixes (same session)
 
 ### N+1 Query Fixes
 
@@ -22,11 +38,28 @@ Deep backend audit found 17 issues (6 HIGH). 6 fixed in this session:
 - **subscription-expiry duplicate notifications**: 3 direct `notifications.insert()` calls replaced with `sendNotification()` which has built-in dedup. Prevents double notifications on cron double-fire.
 - **SSE interval leak**: rankings stream interval callbacks now check `request.signal.aborted` before executing. Added pre-check before registering abort listener to close race window.
 
-### Remaining (next session)
+### Remaining (next session — from 3 audits)
 
-- groups/[id]/notify N+1 (250+ queries for 50-member group)
-- check-trader-alerts push notifications serial loop
+**Backend N+1**:
+
+- groups/[id]/notify (250+ queries for 50-member group)
+- check-trader-alerts push serial loop
 - aggregate-daily-snapshots 32-platform serial fallback
+
+**Frontend** (9 HIGH from audit):
+
+- PostListItem clickable div without keyboard support (a11y)
+- SectorTreemap non-keyboard (a11y)
+- VerifiedTraderEditor + AddExchangeModal unlabelled forms (a11y)
+- AddExchangeModal uses hand-rolled overlay instead of ModalOverlay
+- MobileBottomNav.useUserHandle stale closure + subscription churn
+
+**DB/Infra** (from audit):
+
+- trader_position_history partition cutover never executed (78M row flat table)
+- detect-contracts no RPC circuit breaker, runs 48x/day as no-op
+- precompute-composite schedule mismatch (4h vs leaderboard's 2h)
+- 20 cron routes unmonitored (no PipelineLogger)
 
 ---
 
