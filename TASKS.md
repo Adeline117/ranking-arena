@@ -85,6 +85,8 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 - [x] **M-9** Reduce React Query gcTime 5min→2min (prevent OOM on low-memory devices)
 - [x] **L-2** Zustand `useShallow` in CompareFloatingBar (6 subscriptions → 1)
 - [x] Remove dead devDep `@mathieuc/tradingview` (zero imports)
+- [x] **Social sync audit** — notification delta rollback, UserFollowButton cross-tab sync, bookmark count feed sync, comment like/dislike rollback
+- [x] **ja/ko translation batch** — 433 keys added to both locales (100% parity with en)
 
 ---
 
@@ -93,7 +95,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 ### From Retro 2026-06-02
 
 - [ ] **Authenticated E2E test fixtures** — set up test account with OTP bypass for Playwright + Stripe test mode fixture. Unblocks E1-E4 test coverage gaps.
-- [ ] **ja/ko translation batch** — 430 keys missing from ja.ts + ko.ts vs en.ts. Need full translation run (not a code fix).
+- [x] ~~**ja/ko translation batch**~~ — 433 keys added to ja.ts + ko.ts. All 4 locales at 100% parity (en: 4895, ja: 4896, ko: 4896).
 
 ---
 
