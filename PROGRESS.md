@@ -4,42 +4,42 @@
 
 ## Full Project Optimization — Security + Perf + Frontend (2026-06-01)
 
-3 parallel professional audits (Performance, Security, Frontend Architecture) found 57 issues total. 8 fixed today, 2 confirmed false positives.
+3 parallel professional audits (Performance, Security, Frontend Architecture) found 57 issues total. 14 fixed, 2 confirmed false positives.
 
-### Security
+### Security (5/5 done)
 
-| Fix       | What                                                                                                                                                                    |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S1 (HIGH) | `verifyAdminAuth` now enforces ADMIN_EMAILS whitelist in production. Was DB-role-only — any user with `role='admin'` in user_profiles could access all 8+ admin routes. |
-| S2        | False positive — `createCheckoutSession()` already generates idempotency key internally.                                                                                |
-| S3        | Already correct — all social write POST routes already have `rateLimit: 'write'`.                                                                                       |
+| Fix       | What                                                                                                                                            |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1 (HIGH) | `verifyAdminAuth` enforces ADMIN_EMAILS whitelist in production. Was DB-role-only.                                                              |
+| S2        | False positive — `createCheckoutSession()` already generates idempotency key internally.                                                        |
+| S3        | Already correct — all social write POST routes already have `rateLimit: 'write'`.                                                               |
+| S4        | Manipulation alerts GET: replaced inline DB-role check with `verifyAdminAuth`. Added allowlist validation for `status`/`severity` query params. |
+| S5        | `x-admin-token` now checks `ADMIN_API_KEY` env var first, falls back to `CRON_SECRET`. Separates admin panel auth from cron job auth.           |
 
-### Performance
+### Performance (6/6 done)
 
-| Fix       | What                                                                                                                                                                                                        |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| P1 (HIGH) | Migration: `idx_leaderboard_ranks_non_outlier` partial index on `(season_id, arena_score DESC) WHERE is_outlier IS NOT TRUE`. Eliminates bitmap OR scan on 314K rows for every non-cached rankings request. |
-| P2        | CDN `stale-while-revalidate` for `/api/rankings` fixed from 60s → 300s (was mismatched with app-level intent, causing unnecessary origin hits).                                                             |
-| P3        | Parallelized `blocked_users` + `comments` queries in `lib/data/comments.ts`. Was sequential (15-30ms penalty per load). Now `Promise.all()` with JS post-filter.                                            |
-| P6        | Deleted `app/components/web3/index.ts` barrel export (zero consumers, would pull wagmi ~150KB into unrelated bundles).                                                                                      |
+| Fix       | What                                                                                                                |
+| --------- | ------------------------------------------------------------------------------------------------------------------- |
+| P1 (HIGH) | Migration: `idx_leaderboard_ranks_non_outlier` partial index. Eliminates bitmap OR on 314K rows.                    |
+| P2        | CDN `stale-while-revalidate` for `/api/rankings`: 60s → 300s (matched app-level intent).                            |
+| P3        | Parallelized `blocked_users` + `comments` queries in `comments.ts`. `Promise.all()` + JS post-filter (-15-30ms).    |
+| P4        | Eliminated 3rd sequential query in `posts.ts`: batch ALL author IDs (post + repost) into one `user_profiles` query. |
+| P5        | Removed `html2canvas` (silently failed on Vercel via `webpackIgnore`). Chart export now uses SVG directly.          |
+| P6        | Deleted `web3/index.ts` barrel export (zero consumers, prevented wagmi ~150KB leak).                                |
 
-### Frontend Architecture
+### Frontend Architecture (4/5 done)
 
-| Fix | What                                                                                                                                                                                                                                                               |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| F2  | Deleted deprecated `useUnifiedAuth` hook (76 lines). Migrated 3 consumers to `useAuthSession`: PostDetailModal (`requireAuth()` → `isLoggedIn + accessToken`), PostFeed (`initialized` → `authChecked`), RecommendedGroups. Eliminates auth state divergence risk. |
+| Fix | What                                                                                               |
+| --- | -------------------------------------------------------------------------------------------------- |
+| F1  | Regenerated Supabase TypeScript types from live schema (9,323 lines). Enables type-safe queries.   |
+| F2  | Deleted deprecated `useUnifiedAuth` (76 lines). Migrated 3 consumers to `useAuthSession`.          |
+| F4  | SSR initial trader data now includes `rank` so ranking table renders complete before client fetch. |
 
 ### Remaining (next session)
 
 | Item                                              | Effort |
 | ------------------------------------------------- | ------ |
-| S4: Admin manipulation alerts param validation    | S      |
-| S5: Separate ADMIN_API_KEY from CRON_SECRET       | S      |
-| P4: Batch repost author profiles in posts.ts      | M      |
-| P5: html2canvas silent failure (remove or fix)    | S      |
-| F1: Regenerate Supabase TypeScript types          | S      |
 | F3: Migrate 5 raw-fetch components to React Query | L      |
-| F4: Fix SSR initial trader data completeness      | M      |
 | T1-T3: Tests for messaging, like/bookmark, OAuth  | L      |
 
 ---
