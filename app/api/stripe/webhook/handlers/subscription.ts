@@ -104,30 +104,47 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
     })
   }
 
-  // Only downgrade if the cancelled subscription actually matched the user's active one
-  // AND the user is not a lifetime plan holder
-  const { data: currentProfile } = await getSupabase()
-    .from('user_profiles')
-    .select('pro_plan')
-    .eq('id', profile.id)
+  // P-1 FIX: Only downgrade if the canceled subscription is still the user's
+  // current one. If the user re-subscribed (new stripe_subscription_id replaced
+  // the old one via upsert), a late-delivered `customer.subscription.deleted`
+  // for the old sub must NOT downgrade them.
+  const { data: currentSub } = await getSupabase()
+    .from('subscriptions')
+    .select('stripe_subscription_id, status')
+    .eq('user_id', profile.id)
     .single()
-  if (currentProfile?.pro_plan === 'lifetime') {
-    logger.info('Skipping downgrade for lifetime user on subscription cancel', {
+
+  if (currentSub && currentSub.stripe_subscription_id !== subscription.id) {
+    logger.info('Skipping profile downgrade — user has a newer subscription', {
       userId: profile.id,
+      canceledSubId: subscription.id,
+      currentSubId: currentSub.stripe_subscription_id,
     })
   } else {
-    const { error: profileError } = await getSupabase()
+    // Check lifetime plan holder
+    const { data: currentProfile } = await getSupabase()
       .from('user_profiles')
-      .update({
-        subscription_tier: 'free',
-        updated_at: new Date().toISOString(),
-      })
+      .select('pro_plan')
       .eq('id', profile.id)
-    if (profileError) {
-      logger.error('Failed to downgrade user tier to free', {
+      .single()
+    if (currentProfile?.pro_plan === 'lifetime') {
+      logger.info('Skipping downgrade for lifetime user on subscription cancel', {
         userId: profile.id,
-        error: profileError.message,
       })
+    } else {
+      const { error: profileError } = await getSupabase()
+        .from('user_profiles')
+        .update({
+          subscription_tier: 'free',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id)
+      if (profileError) {
+        logger.error('Failed to downgrade user tier to free', {
+          userId: profile.id,
+          error: profileError.message,
+        })
+      }
     }
   }
 
