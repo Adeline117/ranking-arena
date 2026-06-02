@@ -25,7 +25,7 @@ const EquityCurveSection = dynamic(
     import('@/app/components/trader/stats/components/EquityCurveSection').then((m) => ({
       default: m.EquityCurveSection,
     })),
-  { ssr: false }
+  { ssr: false, loading: () => <div style={{ minHeight: 320 }} /> }
 )
 const TraderFeed = dynamic(() => import('@/app/components/trader/TraderFeed'))
 const SimilarTraders = dynamic(() => import('@/app/components/trader/SimilarTraders'))
@@ -37,9 +37,11 @@ const PortfolioTable = dynamic(() => import('@/app/components/trader/PortfolioTa
 })
 const ExchangeLinksBar = dynamic(() => import('@/app/components/trader/ExchangeLinksBar'), {
   ssr: false,
+  loading: () => <div style={{ minHeight: 40 }} />,
 })
 const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), {
   ssr: false,
+  loading: () => <div style={{ minHeight: 48 }} />,
 })
 const AggregatedStats = dynamic(() => import('@/app/components/trader/AggregatedStats'), {
   ssr: false,
