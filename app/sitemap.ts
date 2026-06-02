@@ -251,7 +251,7 @@ export default async function sitemap({
         priority: 0.7,
       },
       { url: `${BASE_URL}/compare`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
-      { url: `${BASE_URL}/search`, lastModified: now, changeFrequency: 'weekly', priority: 0.6 },
+      // /search excluded: empty without ?q= param, should not be indexed
       {
         url: `${BASE_URL}/flash-news`,
         lastModified: now,
@@ -283,10 +283,30 @@ export default async function sitemap({
     // Exchange landing pages — proper pages with unique content and JSON-LD.
     // Uses hyphenated slugs (binance-futures) as canonical URL format.
     const exchangeSlugs = [
-      'binance-futures', 'hyperliquid', 'okx-futures', 'bybit', 'bitget-futures',
-      'gmx', 'dydx', 'mexc', 'drift', 'htx-futures', 'gateio', 'jupiter-perps',
-      'aevo', 'coinex', 'etoro', 'bingx', 'blofin', 'btcc', 'bitunix', 'bitfinex',
-      'toobit', 'weex', 'kucoin', 'phemex',
+      'binance-futures',
+      'hyperliquid',
+      'okx-futures',
+      'bybit',
+      'bitget-futures',
+      'gmx',
+      'dydx',
+      'mexc',
+      'drift',
+      'htx-futures',
+      'gateio',
+      'jupiter-perps',
+      'aevo',
+      'coinex',
+      'etoro',
+      'bingx',
+      'blofin',
+      'btcc',
+      'bitunix',
+      'bitfinex',
+      'toobit',
+      'weex',
+      'kucoin',
+      'phemex',
     ]
     const exchangePages: MetadataRoute.Sitemap = exchangeSlugs.map((slug) => ({
       url: `${BASE_URL}/exchange/${slug}`,

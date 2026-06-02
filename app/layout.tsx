@@ -214,7 +214,10 @@ export default function RootLayout({
             description: 'Crypto trader rankings across 30+ exchanges.',
             potentialAction: {
               '@type': 'SearchAction',
-              target: { '@type': 'EntryPoint', urlTemplate: `${BASE_URL}/?q={search_term_string}` },
+              target: {
+                '@type': 'EntryPoint',
+                urlTemplate: `${BASE_URL}/search?q={search_term_string}`,
+              },
               'query-input': 'required name=search_term_string',
             },
           }}
