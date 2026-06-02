@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
+import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -71,35 +72,108 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const [posts, setPosts] = useState<Post[]>(
-    // Use server-prefetched posts as initial state to avoid client waterfall
-    (props.initialPosts as Post[]) || []
-  )
-  const postsRef = useRef<Post[]>([])
-  // Keep ref in sync for use in loadMorePosts without adding posts to its deps (#38)
-  postsRef.current = posts
-  const [loading, setLoading] = useState(!props.initialPosts || props.initialPosts.length === 0)
-  const [refreshing, setRefreshing] = useState(false)
-  const [loadingMore, setLoadingMore] = useState(false)
-  const [hasMore, setHasMore] = useState(true)
-  const [offset, setOffset] = useState(0)
-  const [error, setError] = useState<string | null>(null)
   const [sortType, setSortType] = useState<SortType>('time')
   const [openPost, setOpenPost] = useState<Post | null>(null)
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [mobileViewMode, setMobileViewMode] = useState<'list' | 'masonry'>('list')
+  const [refreshing, setRefreshing] = useState(false)
 
   const feedRefreshTrigger = usePostStore((s) => s.feedRefreshTrigger)
-  // Track new posts arriving via realtime
   const [newPostCount, setNewPostCount] = useState(0)
   const auth = useAuthSession()
   const accessToken = auth.accessToken
   const currentUserId = auth.userId
-  const authInitialized = auth.authChecked // true once Supabase auth check completes
-  const abortControllerRef = useRef<AbortController | null>(null)
-  const storeSetPosts = usePostStore((s) => s.setPosts)
+  const authInitialized = auth.authChecked
+  const queryClient = useQueryClient()
+
   const pageSize = props.limit || 20
-  // Track whether we've had a successful first load — used to avoid showing skeleton on re-fetches
+
+  // React Query: infinite scroll for posts
+  const {
+    data: postPages,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage: loadingMore,
+    isLoading: queryLoading,
+    error: queryError,
+    refetch: refetchPosts,
+  } = useInfiniteQuery({
+    queryKey: [
+      'posts',
+      props.groupId,
+      props.authorHandle,
+      props.groupIds,
+      props.sortBy,
+      sortType,
+      accessToken,
+      feedRefreshTrigger,
+    ],
+    queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
+      const params = buildPostQueryParams({
+        pageSize,
+        offset: pageParam,
+        sortBy: props.sortBy,
+        sortType,
+        authorHandle: props.authorHandle,
+        groupId: props.groupId,
+        groupIds: props.groupIds,
+      })
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
+      const response = await fetch(`/api/posts?${params.toString()}`, { headers })
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}))
+        throw new Error(
+          typeof data.error === 'string'
+            ? data.error
+            : data.error?.message || 'Failed to load posts'
+        )
+      }
+      const data = await response.json()
+      const loadedPosts: Post[] = data.data?.posts || []
+      return {
+        posts: loadedPosts,
+        hasMore: data.data?.pagination?.has_more ?? loadedPosts.length >= pageSize,
+        offset: pageParam + loadedPosts.length,
+      }
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage) => (lastPage.hasMore ? lastPage.offset : undefined),
+    initialData:
+      props.initialPosts && props.initialPosts.length > 0
+        ? {
+            pages: [
+              {
+                posts: props.initialPosts as Post[],
+                hasMore: true,
+                offset: (props.initialPosts as Post[]).length,
+              },
+            ],
+            pageParams: [0],
+          }
+        : undefined,
+    enabled: authInitialized,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  })
+
+  // Local posts state — synced from query, mutated by realtime/optimistic updates
+  const fetchedPosts = useMemo(() => postPages?.pages.flatMap((p) => p.posts) ?? [], [postPages])
+  const [posts, setPosts] = useState<Post[]>((props.initialPosts as Post[]) || [])
+  const postsRef = useRef<Post[]>([])
+  postsRef.current = posts
+  useEffect(() => {
+    setPosts(fetchedPosts)
+  }, [fetchedPosts])
+
+  const loading = queryLoading && posts.length === 0
+  const hasMore = hasNextPage ?? false
+  const error = queryError
+    ? queryError instanceof Error
+      ? queryError.message
+      : String(queryError)
+    : null
+  const storeSetPosts = usePostStore((s) => s.setPosts)
   const hasLoadedOnceRef = useRef(false)
 
   // Comments hook
@@ -180,186 +254,76 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   })
 
   // Load posts
-  const loadPosts = useCallback(async () => {
-    if (abortControllerRef.current) abortControllerRef.current.abort()
-    const controller = new AbortController()
-    abortControllerRef.current = controller
-    // Only show the full-page skeleton on the very first load.
-    // Auth-triggered re-fetches (accessToken change) run silently so posts don't flash back to skeleton.
-    const isFirstLoad = !hasLoadedOnceRef.current
-    try {
-      if (isFirstLoad) setLoading(true)
-      setError(null)
-      setOffset(0)
-      setHasMore(true)
-      const params = buildPostQueryParams({
-        pageSize,
-        offset: 0,
-        sortBy: props.sortBy,
-        sortType,
-        authorHandle: props.authorHandle,
-        groupId: props.groupId,
-        groupIds: props.groupIds,
-      })
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-      const response = await fetch(`/api/posts?${params.toString()}`, {
-        headers,
-        signal: controller.signal,
-      })
-      if (controller.signal.aborted) return
-      const data = await response.json()
-      if (!response.ok)
-        throw new Error(
-          typeof data.error === 'string' ? data.error : data.error?.message || t('fetchPostsFailed')
-        )
-      const loadedPosts = data.data?.posts || []
-      setPosts(loadedPosts)
-      setOffset(loadedPosts.length)
-      setHasMore(data.data?.pagination?.has_more ?? loadedPosts.length >= pageSize)
-      const canonicalPosts: PostData[] = loadedPosts.map((p: Post) => ({
-        id: p.id,
-        title: p.title || '',
-        content: p.content || '',
-        author_handle: p.author_handle || 'user',
-        group_id: p.group_id,
-        group_name: p.group_name,
-        created_at: p.created_at,
-        like_count: p.like_count || 0,
-        dislike_count: p.dislike_count || 0,
-        comment_count: p.comment_count || 0,
-        view_count: p.view_count || 0,
-        hot_score: p.hot_score || 0,
-        user_reaction: p.user_reaction,
-        author_avatar_url: p.author_avatar_url,
-      }))
-      storeSetPosts(canonicalPosts)
-      const ibc: Record<string, number> = {}
-      const irc: Record<string, number> = {}
-      loadedPosts.forEach((post: Post) => {
-        ibc[post.id] = post.bookmark_count || 0
-        irc[post.id] = post.repost_count || 0
-      })
-      actions.setBookmarkCounts((prev) => ({ ...prev, ...ibc }))
-      actions.setRepostCounts((prev) => ({ ...prev, ...irc }))
-      // Load bookmarks/reposts in parallel with initial render
-      if (accessToken && loadedPosts.length > 0) {
-        bookmarksLoadedRef.current = true
-        actions.loadUserBookmarksAndReposts(loadedPosts.map((p: Post) => p.id))
-      }
-    } catch (err) {
-      if (err instanceof Error && (err.name === 'AbortError' || controller.signal.aborted)) return
-      setError(err instanceof Error ? err.message : t('loadFailed'))
-    } finally {
-      if (!controller.signal.aborted) {
-        hasLoadedOnceRef.current = true
-        if (isFirstLoad) setLoading(false)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/t/showToast are stable refs; only re-create when query params or auth change
-  }, [
-    props.groupId,
-    props.authorHandle,
-    accessToken,
-    sortType,
-    pageSize,
-    props.groupIds,
-    props.sortBy,
-    storeSetPosts,
-  ])
-
-  // Load more posts
-  const loadMorePosts = useCallback(async () => {
-    if (loadingMore || !hasMore || loading) return
-    const controller = new AbortController()
-    try {
-      setLoadingMore(true)
-      const params = buildPostQueryParams({
-        pageSize,
-        offset,
-        sortBy: props.sortBy,
-        sortType,
-        authorHandle: props.authorHandle,
-        groupId: props.groupId,
-        groupIds: props.groupIds,
-      })
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-      const response = await fetch(`/api/posts?${params.toString()}`, {
-        headers,
-        signal: controller.signal,
-      })
-      if (controller.signal.aborted) return
-      const data = await response.json()
-      if (!response.ok) throw new Error(data.error || t('loadMoreFailed'))
-      const morePosts = data.data?.posts || []
-      const existingIds = new Set(postsRef.current.map((p) => p.id))
-      const newPosts = morePosts.filter((p: Post) => !existingIds.has(p.id))
-      setPosts((prev) => [...prev, ...newPosts])
-      setOffset((prev) => prev + newPosts.length)
-      setHasMore(data.data?.pagination?.has_more ?? morePosts.length >= pageSize)
-      const nbc: Record<string, number> = {}
-      const nrc: Record<string, number> = {}
-      newPosts.forEach((post: Post) => {
-        nbc[post.id] = post.bookmark_count || 0
-        nrc[post.id] = post.repost_count || 0
-      })
-      actions.setBookmarkCounts((prev) => ({ ...prev, ...nbc }))
-      actions.setRepostCounts((prev) => ({ ...prev, ...nrc }))
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') return
-      logger.error('加载更多失败:', err)
-      // Stop infinite retry — IntersectionObserver would keep firing without this
-      setHasMore(false)
-    } finally {
-      setLoadingMore(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/t are stable refs; posts read from postsRef (#38)
-  }, [
-    loadingMore,
-    hasMore,
-    loading,
-    offset,
-    pageSize,
-    props.sortBy,
-    sortType,
-    props.authorHandle,
-    props.groupId,
-    props.groupIds,
-    accessToken,
-  ])
-
+  // Sync bookmark/repost counts from loaded posts + update Zustand store
+  const prevPostIdsRef = useRef<string>('')
   useEffect(() => {
-    return () => {
-      if (abortControllerRef.current) abortControllerRef.current.abort()
+    if (posts.length === 0) return
+    const postIds = posts.map((p) => p.id).join(',')
+    if (postIds === prevPostIdsRef.current) return
+    prevPostIdsRef.current = postIds
+
+    hasLoadedOnceRef.current = true
+    // Update Zustand store
+    const canonicalPosts: PostData[] = posts.map((p) => ({
+      id: p.id,
+      title: p.title || '',
+      content: p.content || '',
+      author_handle: p.author_handle || 'user',
+      group_id: p.group_id || undefined,
+      group_name: p.group_name || undefined,
+      created_at: p.created_at,
+      like_count: p.like_count || 0,
+      dislike_count: p.dislike_count || 0,
+      comment_count: p.comment_count || 0,
+      view_count: p.view_count || 0,
+      hot_score: p.hot_score || 0,
+      user_reaction: p.user_reaction,
+      author_avatar_url: p.author_avatar_url || undefined,
+    }))
+    storeSetPosts(canonicalPosts)
+    // Sync bookmark/repost counts
+    const ibc: Record<string, number> = {}
+    const irc: Record<string, number> = {}
+    posts.forEach((post) => {
+      ibc[post.id] = post.bookmark_count || 0
+      irc[post.id] = post.repost_count || 0
+    })
+    actions.setBookmarkCounts((prev) => ({ ...prev, ...ibc }))
+    actions.setRepostCounts((prev) => ({ ...prev, ...irc }))
+    if (accessToken && !bookmarksLoadedRef.current) {
+      bookmarksLoadedRef.current = true
+      actions.loadUserBookmarksAndReposts(posts.map((p) => p.id))
     }
-  }, [])
+  }, [posts, accessToken]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Wrapper: loadPosts = refetch from scratch
+  const loadPosts = useCallback(async () => {
+    await refetchPosts()
+  }, [refetchPosts])
+
+  // Wrapper: loadMorePosts = fetch next page
+  const loadMorePosts = useCallback(async () => {
+    if (hasMore && !loadingMore && !loading) await fetchNextPage()
+  }, [hasMore, loadingMore, loading, fetchNextPage])
+
+  // useInfiniteQuery handles abort/cleanup internally
 
   const handleRefresh = useCallback(async () => {
     setNewPostCount(0)
     realtimePostIdsRef.current.clear()
     setRefreshing(true)
-    await loadPosts()
+    await refetchPosts()
     setRefreshing(false)
     showToast(t('refreshed'), 'success')
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded; read at call time via language dep instead
-  }, [loadPosts, showToast, language])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refetchPosts, showToast, language])
 
-  // Wait for auth to settle (authInitialized=true) before firing the first fetch.
-  // This prevents double-fetching: once with null token (pre-auth) then again when token arrives.
-  // accessToken stays in deps so logged-in users get a background re-fetch with their token
-  // after the unauthenticated first load — but hasLoadedOnceRef suppresses the skeleton re-flash.
+  // useInfiniteQuery's `enabled: authInitialized` + queryKey deps handle initial load.
+  // This effect is kept ONLY for the feedRefreshTrigger (Zustand store-driven refetch).
   useEffect(() => {
-    if (!authInitialized) return
-    loadPosts()
-  }, [
-    props.groupId,
-    props.authorHandle,
-    accessToken,
-    sortType,
-    feedRefreshTrigger,
-    authInitialized,
-  ]) // eslint-disable-line react-hooks/exhaustive-deps -- loadPosts is excluded to avoid circular dep; effect triggers are the meaningful query params
+    if (!authInitialized || !hasLoadedOnceRef.current) return
+    refetchPosts()
+  }, [feedRefreshTrigger])
 
   useEffect(() => {
     const el = loadMoreRef.current
@@ -490,7 +454,6 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (accessToken && needsContentTranslation) translateContent(post.id, post.content!, language)
       if (accessToken && !hasTranslatedTitle && needsTitleTranslation)
         translateListPosts([post], language as 'zh' | 'en')
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/setters/showingOriginal excluded; only re-create when translation dependencies change
     },
     [
       loadComments,
