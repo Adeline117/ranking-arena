@@ -96,7 +96,13 @@ export async function checkContract(
 ): Promise<ContractCheckResult | null> {
   try {
     const client = getClient(chainId)
-    const bytecode = await client.getBytecode({ address: address as Address })
+    // 5s timeout to prevent slow public RPCs from blocking the batch
+    const bytecode = await Promise.race([
+      client.getBytecode({ address: address as Address }),
+      new Promise<undefined>((_, reject) =>
+        setTimeout(() => reject(new Error('RPC timeout (5s)')), 5000)
+      ),
+    ])
     if (bytecode == null || bytecode === '0x' || bytecode.length <= 2) {
       return { isContract: false, bytecodeSize: 0 }
     }

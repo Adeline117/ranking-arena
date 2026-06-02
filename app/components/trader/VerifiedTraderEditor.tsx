@@ -50,7 +50,9 @@ export default function VerifiedTraderEditor({
   const handleSave = async () => {
     setSaving(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLoginFirst'), 'warning')
         return
@@ -103,7 +105,14 @@ export default function VerifiedTraderEditor({
           color: tokens.colors.accent.primary,
         }}
       >
-        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <svg
+          width={14}
+          height={14}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+        >
           <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7" />
           <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />
         </svg>
@@ -131,25 +140,32 @@ export default function VerifiedTraderEditor({
   }
 
   return (
-    <Box style={{
-      padding: tokens.spacing[4],
-      backgroundColor: tokens.colors.bg.secondary,
-      borderRadius: tokens.radius.lg,
-      border: `1px solid ${tokens.colors.border.primary}`,
-      marginTop: tokens.spacing[3],
-    }}>
-      <Text style={{
-        fontSize: tokens.typography.fontSize.md,
-        fontWeight: 700,
-        marginBottom: tokens.spacing[3],
-      }}>
+    <Box
+      style={{
+        padding: tokens.spacing[4],
+        backgroundColor: tokens.colors.bg.secondary,
+        borderRadius: tokens.radius.lg,
+        border: `1px solid ${tokens.colors.border.primary}`,
+        marginTop: tokens.spacing[3],
+      }}
+    >
+      <Text
+        style={{
+          fontSize: tokens.typography.fontSize.md,
+          fontWeight: 700,
+          marginBottom: tokens.spacing[3],
+        }}
+      >
         {t('verifiedTraderEditProfile')}
       </Text>
 
       <Box style={{ display: 'grid', gap: tokens.spacing[3] }}>
         <Box>
-          <label style={labelStyle}>{t('verifiedTraderDisplayName')}</label>
+          <label htmlFor="vt-display-name" style={labelStyle}>
+            {t('verifiedTraderDisplayName')}
+          </label>
           <input
+            id="vt-display-name"
             type="text"
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
@@ -159,8 +175,11 @@ export default function VerifiedTraderEditor({
         </Box>
 
         <Box>
-          <label style={labelStyle}>{t('verifiedTraderBio')}</label>
+          <label htmlFor="vt-bio" style={labelStyle}>
+            {t('verifiedTraderBio')}
+          </label>
           <textarea
+            id="vt-bio"
             value={bio}
             onChange={(e) => setBio(e.target.value)}
             maxLength={280}
@@ -170,8 +189,11 @@ export default function VerifiedTraderEditor({
         </Box>
 
         <Box>
-          <label style={labelStyle}>{t('verifiedTraderTwitter')}</label>
+          <label htmlFor="vt-twitter" style={labelStyle}>
+            {t('verifiedTraderTwitter')}
+          </label>
           <input
+            id="vt-twitter"
             type="url"
             value={twitter}
             onChange={(e) => setTwitter(e.target.value)}
@@ -181,8 +203,11 @@ export default function VerifiedTraderEditor({
         </Box>
 
         <Box>
-          <label style={labelStyle}>{t('verifiedTraderTelegram')}</label>
+          <label htmlFor="vt-telegram" style={labelStyle}>
+            {t('verifiedTraderTelegram')}
+          </label>
           <input
+            id="vt-telegram"
             type="url"
             value={telegram}
             onChange={(e) => setTelegram(e.target.value)}
@@ -192,8 +217,11 @@ export default function VerifiedTraderEditor({
         </Box>
 
         <Box>
-          <label style={labelStyle}>{t('verifiedTraderDiscord')}</label>
+          <label htmlFor="vt-discord" style={labelStyle}>
+            {t('verifiedTraderDiscord')}
+          </label>
           <input
+            id="vt-discord"
             type="text"
             value={discord}
             onChange={(e) => setDiscord(e.target.value)}
@@ -203,8 +231,11 @@ export default function VerifiedTraderEditor({
         </Box>
 
         <Box>
-          <label style={labelStyle}>{t('verifiedTraderWebsite')}</label>
+          <label htmlFor="vt-website" style={labelStyle}>
+            {t('verifiedTraderWebsite')}
+          </label>
           <input
+            id="vt-website"
             type="url"
             value={website}
             onChange={(e) => setWebsite(e.target.value)}
@@ -214,26 +245,18 @@ export default function VerifiedTraderEditor({
         </Box>
       </Box>
 
-      <Box style={{
-        display: 'flex',
-        gap: tokens.spacing[2],
-        marginTop: tokens.spacing[4],
-        justifyContent: 'flex-end',
-      }}>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => setIsEditing(false)}
-          disabled={saving}
-        >
+      <Box
+        style={{
+          display: 'flex',
+          gap: tokens.spacing[2],
+          marginTop: tokens.spacing[4],
+          justifyContent: 'flex-end',
+        }}
+      >
+        <Button variant="ghost" size="sm" onClick={() => setIsEditing(false)} disabled={saving}>
           {t('cancel')}
         </Button>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={handleSave}
-          disabled={saving}
-        >
+        <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}>
           {saving ? `⏳ ${t('verifiedTraderSaving')}` : t('verifiedTraderSaveChanges')}
         </Button>
       </Box>

@@ -3,7 +3,7 @@
 import React, { useState } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
-
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import PasswordInput from '@/app/components/ui/PasswordInput'
 const SUPPORTED_EXCHANGES = [
   'binance',
@@ -71,111 +71,103 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
   }
 
   return (
-    <div style={styles.overlay} onClick={onClose} role="presentation">
-      <div
-        style={styles.modal}
-        onClick={(e) => e.stopPropagation()}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('connectExchange')}
-      >
-        <div style={styles.header}>
-          <h3 style={styles.title}>{t('connectExchange')}</h3>
-          <button style={styles.closeBtn} onClick={onClose} aria-label={t('close')}>
-            <svg
-              width="18"
-              height="18"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-            >
-              <line x1="18" y1="6" x2="6" y2="18" />
-              <line x1="6" y1="6" x2="18" y2="18" />
-            </svg>
-          </button>
+    <ModalOverlay open={open} onClose={onClose} label={t('connectExchange')} maxWidth={440}>
+      <div style={styles.header}>
+        <h3 style={styles.title}>{t('connectExchange')}</h3>
+        <button style={styles.closeBtn} onClick={onClose} aria-label={t('close')}>
+          <svg
+            width="18"
+            height="18"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
+          </svg>
+        </button>
+      </div>
+
+      <form onSubmit={handleSubmit} style={styles.form}>
+        <div style={styles.field}>
+          <label htmlFor="exchange-select" style={styles.label}>
+            {t('exchange')}
+          </label>
+          <select
+            id="exchange-select"
+            value={exchange}
+            onChange={(e) => setExchange(e.target.value)}
+            style={styles.select}
+          >
+            {SUPPORTED_EXCHANGES.map((ex) => (
+              <option key={ex} value={ex}>
+                {ex.charAt(0).toUpperCase() + ex.slice(1)}
+              </option>
+            ))}
+          </select>
         </div>
 
-        <form onSubmit={handleSubmit} style={styles.form}>
-          <div style={styles.field}>
-            <label htmlFor="exchange-select" style={styles.label}>
-              {t('exchange')}
-            </label>
-            <select
-              id="exchange-select"
-              value={exchange}
-              onChange={(e) => setExchange(e.target.value)}
-              style={styles.select}
-            >
-              {SUPPORTED_EXCHANGES.map((ex) => (
-                <option key={ex} value={ex}>
-                  {ex.charAt(0).toUpperCase() + ex.slice(1)}
-                </option>
-              ))}
-            </select>
-          </div>
+        <div style={styles.field}>
+          <label htmlFor="exchange-label" style={styles.label}>
+            {t('labelOptional')}
+          </label>
+          <input
+            id="exchange-label"
+            type="text"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            placeholder="e.g. Main Account"
+            style={styles.input}
+          />
+        </div>
 
-          <div style={styles.field}>
-            <label htmlFor="exchange-label" style={styles.label}>
-              {t('labelOptional')}
-            </label>
-            <input
-              id="exchange-label"
-              type="text"
-              value={label}
-              onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Main Account"
-              style={styles.input}
-            />
-          </div>
+        <div style={styles.field}>
+          <label htmlFor="exchange-api-key" style={styles.label}>
+            {t('apiKey')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
+          </label>
+          <PasswordInput
+            id="exchange-api-key"
+            value={apiKey}
+            onChange={(e) => setApiKey(e.target.value)}
+            placeholder={t('enterApiKeyPlaceholder')}
+            style={styles.input}
+            autoComplete="off"
+          />
+        </div>
 
-          <div style={styles.field}>
-            <label htmlFor="exchange-api-key" style={styles.label}>
-              {t('apiKey')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
-            </label>
-            <PasswordInput
-              id="exchange-api-key"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              placeholder={t('enterApiKeyPlaceholder')}
-              style={styles.input}
-              autoComplete="off"
-            />
-          </div>
+        <div style={styles.field}>
+          <label htmlFor="exchange-api-secret" style={styles.label}>
+            {t('apiSecret')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
+          </label>
+          <PasswordInput
+            id="exchange-api-secret"
+            value={apiSecret}
+            onChange={(e) => setApiSecret(e.target.value)}
+            placeholder={t('enterApiSecretPlaceholder')}
+            style={styles.input}
+            autoComplete="off"
+          />
+        </div>
 
-          <div style={styles.field}>
-            <label htmlFor="exchange-api-secret" style={styles.label}>
-              {t('apiSecret')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
-            </label>
-            <PasswordInput
-              id="exchange-api-secret"
-              value={apiSecret}
-              onChange={(e) => setApiSecret(e.target.value)}
-              placeholder={t('enterApiSecretPlaceholder')}
-              style={styles.input}
-              autoComplete="off"
-            />
-          </div>
+        {error && <p style={styles.error}>{error}</p>}
 
-          {error && <p style={styles.error}>{error}</p>}
+        <div style={styles.hint}>{t('apiKeyReadOnlyHint')}</div>
 
-          <div style={styles.hint}>{t('apiKeyReadOnlyHint')}</div>
-
-          <button
-            type="submit"
-            disabled={submitting}
-            style={{
-              ...styles.submitBtn,
-              opacity: submitting ? 0.6 : 1,
-              cursor: submitting ? 'not-allowed' : 'pointer',
-            }}
-          >
-            {submitting ? `⏳ ${t('connecting')}` : t('connect')}
-          </button>
-        </form>
-      </div>
-    </div>
+        <button
+          type="submit"
+          disabled={submitting}
+          style={{
+            ...styles.submitBtn,
+            opacity: submitting ? 0.6 : 1,
+            cursor: submitting ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {submitting ? `⏳ ${t('connecting')}` : t('connect')}
+        </button>
+      </form>
+    </ModalOverlay>
   )
 }
 
