@@ -159,24 +159,30 @@ Investigated, already handled: flash-news + compare + claim + competitions all h
 
 ## Deep 6-Direction Root-Cause Audit (2026-06-02 session #2)
 
-6 parallel investigations (pipeline/cron, frontend perf, security, silent failures, dead code, dependencies),
-then social sync audit + ja/ko translation batch.
-24 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
+10 parallel investigations across 2 rounds:
+Round 1: pipeline/cron, frontend perf, security, silent failures, dead code, dependencies
+Round 2: DB indexes, accessibility, worker reliability, SEO/CWV
+Plus: social sync audit, ja/ko translations, health monitor fixes.
+34 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
 
 ### By the numbers
 
 | Metric               | Value                                                                                       |
 | -------------------- | ------------------------------------------------------------------------------------------- |
-| Commits              | 24                                                                                          |
+| Commits              | 34                                                                                          |
 | Dead code removed    | ~2,700 LOC (3 cron routes + trigger.dev files + evaluator split)                            |
 | Dependencies removed | 8 (@trigger.dev/sdk, critters, puppeteer x3, chrome-launcher, redis, @mathieuc/tradingview) |
 | Vercel crons removed | 10 (54→44, worker handles enrich/score/meilisearch)                                         |
 | npm vulnerabilities  | 21→11 (0 high remaining)                                                                    |
 | Social sync bugs     | 5 fixed (notification rollback, UserFollow cross-tab, bookmark feed, comment like rollback) |
 | i18n translations    | 433 keys added to ja + ko (4 locales now at 100% parity)                                    |
+| DB indexes added     | 6 (notifications dedup, trader monthly/yearly, blocked_users, rank_history, retention)      |
+| Retention policies   | 2 new (search_analytics 90d, user_interactions 30d)                                         |
+| Worker fixes         | 5 (retry 3x, throw non-2xx, completed try-catch, crash handlers, failed job logging)        |
 | Files standardized   | 22 (staleTime magic numbers → cache-presets.ts)                                             |
-| N+1 queries fixed    | 1 (hashtag post_count: 10 UPDATEs → 1 RPC)                                                  |
+| N+1 queries fixed    | 2 (hashtag RPC + by-token 6→1 .in() query)                                                  |
 | CLS fixes            | 3 dynamic imports (EquityCurve 320px, ExchangeLinks 40px, LinkedAccounts 48px)              |
+| Health monitor       | Freshness check fixed (trader_latest), etoro threshold adjusted (96h)                       |
 | Pipeline evaluator   | 1,743→236 LOC main + 3 focused check files (709 LOC)                                        |
 
 ### Key changes
@@ -193,6 +199,11 @@ then social sync audit + ja/ko translation batch.
 | Dead code | Deleted batch-fetch-traders/pipeline-fetch/auto-post-insights routes + trigger.dev            |
 | Sync      | Notification delta rollback, UserFollowButton cross-tab, bookmark→feed, comment like rollback |
 | i18n      | 433 keys batch-translated to ja + ko (quiz, gates, errors, tooltips, positions)               |
+| SEO       | Hashtag metadata (canonical, og:image, twitter), 10 learn article URLs in sitemap             |
+| Worker    | BullMQ retry 3x, throw non-2xx, completed try-catch, crash handlers, failed job logging       |
+| DB        | 6 indexes, 2 retention policies, by-token 6→1 query, findTraders .limit() safety              |
+| A11y      | Pagination aria-label, period range aria-pressed, page counter aria-live                      |
+| Health    | Freshness reads trader_latest (was pipeline_logs), etoro 48h→96h threshold                    |
 
 ---
 
