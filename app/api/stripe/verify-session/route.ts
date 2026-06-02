@@ -214,6 +214,7 @@ export async function POST(request: NextRequest) {
     }
 
     // 更新订阅记录
+    // S-2 FIX: Include `plan` to prevent nulling it out when racing with webhook
     const { error: subscriptionError } = await supabaseAdmin.from('subscriptions').upsert(
       {
         user_id: userId,
@@ -221,6 +222,7 @@ export async function POST(request: NextRequest) {
         stripe_subscription_id: subscriptionId,
         tier,
         status: subscriptionStatus,
+        plan: plan || 'monthly',
         current_period_start: periodStart,
         current_period_end: periodEnd,
         updated_at: new Date().toISOString(),
