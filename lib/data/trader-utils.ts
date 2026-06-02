@@ -167,6 +167,7 @@ export async function findTradersAcrossSources(
       .select('source_trader_id, handle, profile_url, source')
       .in('source', sources as unknown as string[])
       .or(`handle.in.(${handleList.join(',')}),source_trader_id.in.(${handleList.join(',')})`)
+      .limit(Math.min(handleList.length * 2, 500))
 
     if (error || !data) {
       return result

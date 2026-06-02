@@ -185,13 +185,48 @@ async function main() {
     }
   })
 
-  worker.on('failed', (job, err) => {
-    const attempt = job?.attemptsMade ?? '?'
-    console.error(`[worker] ✗ ${job?.name} attempt ${attempt} failed:`, err.message)
+  worker.on('failed', async (job, err) => {
+    const attempt = job?.attemptsMade ?? 0
+    const maxAttempts = job?.opts?.attempts ?? 3
+    console.error(`[worker] ✗ ${job?.name} attempt ${attempt}/${maxAttempts} failed:`, err.message)
+
+    // Log to pipeline_logs so health monitoring sees worker failures
+    try {
+      const siteUrl = process.env.SITE_URL || 'https://www.arenafi.org'
+      const secret = process.env.CRON_SECRET
+      if (secret && job) {
+        await fetch(`${siteUrl}/api/health/heartbeat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${secret}` },
+          body: JSON.stringify({
+            source: `worker:${job.name}`,
+            status: attempt >= maxAttempts ? 'failed' : 'retrying',
+            error: err.message,
+            attempt,
+            maxAttempts,
+          }),
+          signal: AbortSignal.timeout(5000),
+        }).catch(() => {}) // best-effort
+      }
+    } catch {
+      /* don't let logging failure crash the worker */
+    }
   })
 
   worker.on('error', (err) => {
     console.error('[worker] Worker error:', err.message)
+  })
+
+  // Crash recovery: prevent silent process death
+  process.on('uncaughtException', (err) => {
+    console.error('[worker] UNCAUGHT EXCEPTION:', err)
+    worker
+      .close()
+      .then(() => closeConnection())
+      .finally(() => process.exit(1))
+  })
+  process.on('unhandledRejection', (reason) => {
+    console.error('[worker] UNHANDLED REJECTION:', reason)
   })
 
   console.log(
