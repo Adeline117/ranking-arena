@@ -78,9 +78,10 @@ export async function scoreTraders(
     const confidenceMultiplier = hasRoi && hasPnl ? 1.0 : hasRoi ? 0.85 : 0.5
     const estimationPenalty = t.metrics_estimated ? 0.92 : 1.0
 
-    // Low trade count penalty: 0 trades → 0.6x, 10+ → 1.0x
+    // Low trade count penalty: 1 trade → 0.64x, 10+ → 1.0x
+    // trades_count=0 means "unknown" (API doesn't provide) — skip penalty (same as null)
     let tradeCountPenalty = 1.0
-    if (t.trades_count != null && t.trades_count >= 0 && t.trades_count < 10) {
+    if (t.trades_count != null && t.trades_count > 0 && t.trades_count < 10) {
       tradeCountPenalty = 0.6 + 0.04 * t.trades_count
     }
 
