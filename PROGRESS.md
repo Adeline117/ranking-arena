@@ -2,6 +2,43 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## P0 GTM + P1 Data Quality + computeSeason Split (2026-06-01)
+
+### API Go-to-Market (P0 — 3 items checked off)
+
+API product was fully built but invisible — zero discovery paths.
+
+- **Nav + footer**: Added "API" link to desktop nav (after Hot) and footer Product column, both pointing to `/api-docs`
+- **README**: New "Data API" section with pricing tiers, curl example, endpoint list, link to docs. Added `STRIPE_API_STARTER_PRICE_ID` / `STRIPE_API_PRO_PRICE_ID` to `.env.example`
+- **Homepage CTA**: Subtle banner below ranking table: "Build with Arena Data — Free API for developers" → `/api-docs`
+
+### Data Quality (P1 — 2 items checked off)
+
+- **eToro CopySim IP cooldown**: When CopySim returns 403/429, `enrichment-etoro.ts` sets `PipelineState('etoro_copysim_blocked_until')` to now+24h. `enrichment-runner.ts` checks this key before processing eToro and skips if cooldown active. Prevents burning all 3 IPs simultaneously.
+- **BloFin staleness alert**: Health monitor now uses 12h threshold for BloFin (vs 48h default). Mac Mini is the sole data source — faster alert means faster recovery.
+
+### computeSeason Split (P1 — complete)
+
+`app/api/cron/compute-leaderboard/route.ts`: **1369 → 889 lines (-480, -35%)**. `computeSeason` function: **~920 → ~420 lines (-54%)**.
+
+5 extractions into 4 new helper files:
+
+| File                   | Lines | What it does                                                                                                             |
+| ---------------------- | ----- | ------------------------------------------------------------------------------------------------------------------------ |
+| `score-traders.ts`     | 156   | Arena score calculation, confidence multiplier, trade count penalty, handle resolution, outlier marking, arena followers |
+| `degradation-guard.ts` | 170   | Expected count RPC, PipelineState fallback, consecutive skip logic, rate-limited alert, stale-row cleanup on skip        |
+| `incremental-diff.ts`  | 120   | Paginated fetch of current leaderboard_ranks, diff against new scores, build rank/prevRank maps                          |
+| `write-leaderboard.ts` | 190   | Batch upsert with parent-row guarantee + validation, source-batched zero-out of excluded traders                         |
+
+### Architectural debt resolution
+
+- Removed false `@deprecated` from `trader-queries.ts`, `trader-utils.ts`, `adapters/types.ts` (functions are active, no replacement exists)
+- Clarified `lib/adapters/` vs `lib/connectors/` distinction (authorized API key sync vs public leaderboard scraping)
+- Confirmed SSR dual rendering architecture is correct (progressive enhancement)
+- Created `useDraftPersistence` hook (comment drafts already use localStorage auto-save)
+
+---
+
 ## Deprecated Type Migration + Final Root Cause Fixes (2026-06-01)
 
 ### Root cause: lib/types/trader.ts fully eliminated
