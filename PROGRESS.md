@@ -159,35 +159,40 @@ Investigated, already handled: flash-news + compare + claim + competitions all h
 
 ## Deep 6-Direction Root-Cause Audit (2026-06-02 session #2)
 
-6 parallel investigations (pipeline/cron, frontend perf, security, silent failures, dead code, dependencies).
-15 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
+6 parallel investigations (pipeline/cron, frontend perf, security, silent failures, dead code, dependencies),
+then social sync audit + ja/ko translation batch.
+24 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
 
 ### By the numbers
 
-| Metric               | Value                                                                          |
-| -------------------- | ------------------------------------------------------------------------------ |
-| Commits              | 15                                                                             |
-| Dead code removed    | ~2,700 LOC (3 cron routes + trigger.dev files + evaluator split)               |
-| Dependencies removed | 7 (@trigger.dev/sdk, critters, puppeteer x3, chrome-launcher, redis)           |
-| Vercel crons removed | 10 (54→44, worker handles enrich/score/meilisearch)                            |
-| npm vulnerabilities  | 21→11 (0 high remaining)                                                       |
-| Files standardized   | 22 (staleTime magic numbers → cache-presets.ts)                                |
-| N+1 queries fixed    | 1 (hashtag post_count: 10 UPDATEs → 1 RPC)                                     |
-| CLS fixes            | 3 dynamic imports (EquityCurve 320px, ExchangeLinks 40px, LinkedAccounts 48px) |
-| Pipeline evaluator   | 1,743→236 LOC main + 3 focused check files (709 LOC)                           |
+| Metric               | Value                                                                                       |
+| -------------------- | ------------------------------------------------------------------------------------------- |
+| Commits              | 24                                                                                          |
+| Dead code removed    | ~2,700 LOC (3 cron routes + trigger.dev files + evaluator split)                            |
+| Dependencies removed | 8 (@trigger.dev/sdk, critters, puppeteer x3, chrome-launcher, redis, @mathieuc/tradingview) |
+| Vercel crons removed | 10 (54→44, worker handles enrich/score/meilisearch)                                         |
+| npm vulnerabilities  | 21→11 (0 high remaining)                                                                    |
+| Social sync bugs     | 5 fixed (notification rollback, UserFollow cross-tab, bookmark feed, comment like rollback) |
+| i18n translations    | 433 keys added to ja + ko (4 locales now at 100% parity)                                    |
+| Files standardized   | 22 (staleTime magic numbers → cache-presets.ts)                                             |
+| N+1 queries fixed    | 1 (hashtag post_count: 10 UPDATEs → 1 RPC)                                                  |
+| CLS fixes            | 3 dynamic imports (EquityCurve 320px, ExchangeLinks 40px, LinkedAccounts 48px)              |
+| Pipeline evaluator   | 1,743→236 LOC main + 3 focused check files (709 LOC)                                        |
 
 ### Key changes
 
-| Category  | Fix                                                                                   |
-| --------- | ------------------------------------------------------------------------------------- |
-| Pipeline  | Removed 10 Vercel crons duplicated by BullMQ worker (Phase 3 complete)                |
-| Deps      | Pinned react 19.2.6, removed 7 dead packages, migrated TokenBucket redis→ioredis      |
-| Perf      | Disabled refetchOnWindowFocus (posts/notifications), trader detail staleTime 10s→2min |
-| Perf      | Centralized staleTime via cache-presets.ts (REALTIME/STANDARD/RELAXED/SLOW/STATIC)    |
-| Perf      | Hashtag N+1 → single RPC, CLS placeholders on 3 dynamic imports                       |
-| Security  | 4 group auth checks now log Supabase query failures, npm audit 0 high vulns           |
-| Refactor  | pipeline-evaluator split into checks/data + checks/infra + checks/frontend            |
-| Dead code | Deleted batch-fetch-traders/pipeline-fetch/auto-post-insights routes + trigger.dev    |
+| Category  | Fix                                                                                           |
+| --------- | --------------------------------------------------------------------------------------------- |
+| Pipeline  | Removed 10 Vercel crons duplicated by BullMQ worker (Phase 3 complete)                        |
+| Deps      | Pinned react 19.2.6, removed 7 dead packages, migrated TokenBucket redis→ioredis              |
+| Perf      | Disabled refetchOnWindowFocus (posts/notifications), trader detail staleTime 10s→2min         |
+| Perf      | Centralized staleTime via cache-presets.ts (REALTIME/STANDARD/RELAXED/SLOW/STATIC)            |
+| Perf      | Hashtag N+1 → single RPC, CLS placeholders on 3 dynamic imports                               |
+| Security  | 4 group auth checks now log Supabase query failures, npm audit 0 high vulns                   |
+| Refactor  | pipeline-evaluator split into checks/data + checks/infra + checks/frontend                    |
+| Dead code | Deleted batch-fetch-traders/pipeline-fetch/auto-post-insights routes + trigger.dev            |
+| Sync      | Notification delta rollback, UserFollowButton cross-tab, bookmark→feed, comment like rollback |
+| i18n      | 433 keys batch-translated to ja + ko (quiz, gates, errors, tooltips, positions)               |
 
 ---
 
