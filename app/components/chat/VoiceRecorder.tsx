@@ -24,14 +24,17 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
   useEffect(() => {
     return () => {
       // Clean up interval
-      if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+      if (timerRef.current) {
+        clearInterval(timerRef.current)
+        timerRef.current = null
+      }
       // Stop recorder
       if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
         mediaRecorderRef.current.stop()
       }
       // Release microphone stream directly (don't wait for onstop callback)
       if (streamRef.current) {
-        streamRef.current.getTracks().forEach(track => track.stop())
+        streamRef.current.getTracks().forEach((track) => track.stop())
         streamRef.current = null
       }
     }
@@ -39,7 +42,10 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
 
   const startRecording = useCallback(async () => {
     // Clear any stale interval from previous recording
-    if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+    if (timerRef.current) {
+      clearInterval(timerRef.current)
+      timerRef.current = null
+    }
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
@@ -56,7 +62,7 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
       }
 
       mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(track => track.stop())
+        stream.getTracks().forEach((track) => track.stop())
         if (timerRef.current) clearInterval(timerRef.current)
 
         const blob = new Blob(chunksRef.current, { type: 'audio/webm' })
@@ -73,9 +79,7 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
 
           if (error) throw error
 
-          const { data: urlData } = supabase.storage
-            .from('voice-messages')
-            .getPublicUrl(data.path)
+          const { data: urlData } = supabase.storage.from('voice-messages').getPublicUrl(data.path)
 
           onVoiceSent(urlData.publicUrl, recordedDuration)
         } catch (err) {
@@ -105,28 +109,33 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
     }
   }, [])
 
-  const formatDuration = (s: number) => `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
+  const formatDuration = (s: number) =>
+    `${Math.floor(s / 60)}:${(s % 60).toString().padStart(2, '0')}`
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
       {recording && (
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[2],
-          padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-          background: 'var(--color-accent-error-15)',
-          borderRadius: tokens.radius.full,
-          fontSize: tokens.typography.fontSize.sm,
-          color: tokens.colors.accent.error,
-        }}>
-          <span style={{
-            width: 8,
-            height: 8,
-            borderRadius: '50%',
-            background: tokens.colors.accent.error,
-            animation: 'pulse 1s infinite',
-          }} />
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+            background: 'var(--color-accent-error-15)',
+            borderRadius: tokens.radius.full,
+            fontSize: tokens.typography.fontSize.sm,
+            color: tokens.colors.accent.error,
+          }}
+        >
+          <span
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: '50%',
+              background: tokens.colors.accent.error,
+              animation: 'pulse 1s infinite',
+            }}
+          />
           {formatDuration(duration)}
         </div>
       )}
@@ -148,18 +157,38 @@ export default function VoiceRecorder({ onVoiceSent, disabled }: VoiceRecorderPr
           opacity: disabled || uploading ? 0.5 : 1,
           flexShrink: 0,
         }}
-        title={recording ? t('停止录音') : t('语音消息')}
+        title={recording ? t('stopRecording') : t('voiceMessage')}
       >
         {uploading ? (
-          <svg width="20" height="20" viewBox="0 0 24 24" style={{ animation: 'spin 1s linear infinite' }}>
-            <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2" fill="none" strokeDasharray="31.4 31.4" />
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            style={{ animation: 'spin 1s linear infinite' }}
+          >
+            <circle
+              cx="12"
+              cy="12"
+              r="10"
+              stroke="currentColor"
+              strokeWidth="2"
+              fill="none"
+              strokeDasharray="31.4 31.4"
+            />
           </svg>
         ) : recording ? (
           <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <rect x="6" y="6" width="12" height="12" rx="2" />
           </svg>
         ) : (
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z" />
             <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
             <line x1="12" y1="19" x2="12" y2="23" />
