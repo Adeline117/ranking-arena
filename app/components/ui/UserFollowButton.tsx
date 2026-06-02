@@ -7,6 +7,7 @@ import { ButtonSpinner } from './LoadingSpinner'
 import { tokens } from '@/lib/design-tokens'
 import { BUTTON_SIZE_STYLES } from './button-styles'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useUserFollowSync, type UserFollowChangePayload } from '@/lib/hooks/useBroadcastSync'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
@@ -46,6 +47,20 @@ export default function UserFollowButton({
   const [initialLoading, setInitialLoading] = useState(true) // 初始加载状态
   const pendingRef = useRef(false)
   const timeoutRef = useRef<NodeJS.Timeout | null>(null)
+
+  // Cross-tab follow sync
+  const { broadcast, on } = useUserFollowSync()
+  useEffect(() => {
+    const unsubscribe = on('FOLLOW_CHANGED', (payload: UserFollowChangePayload) => {
+      if (payload.targetUserId === targetUserId && payload.currentUserId === currentUserId) {
+        if (!pendingRef.current) {
+          setFollowing(payload.following)
+          onFollowChange?.(payload.following, false)
+        }
+      }
+    })
+    return unsubscribe
+  }, [targetUserId, currentUserId, on, onFollowChange])
 
   // 清理超时计时器
   useEffect(() => {
@@ -158,6 +173,11 @@ export default function UserFollowButton({
           setFollowedBy(result.mutual)
         }
         onFollowChange?.(result.following, result.mutual ?? false)
+        broadcast('FOLLOW_CHANGED', {
+          targetUserId,
+          following: result.following,
+          currentUserId: currentUserId!,
+        })
         haptic('success')
         showToast(result.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
       } else if (result.tableNotFound) {
