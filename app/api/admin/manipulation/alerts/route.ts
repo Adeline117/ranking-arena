@@ -33,7 +33,11 @@ interface ManipulationAlert {
 
 export async function GET(request: NextRequest) {
   // Admin operation — failClose rate limiting
-  const rateLimitResponse = await checkRateLimit(request, { ...RateLimitPresets.sensitive, prefix: 'admin-manipulation-alerts', failClose: true })
+  const rateLimitResponse = await checkRateLimit(request, {
+    ...RateLimitPresets.sensitive,
+    prefix: 'admin-manipulation-alerts',
+    failClose: true,
+  })
   if (rateLimitResponse) return rateLimitResponse
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -45,31 +49,32 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    // Verify admin role
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
-    }
-
-    // Check if user has admin role
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-
-    if (profile?.role !== 'admin') {
+    // Verify admin (uses email whitelist in production)
+    const isAdmin = await verifyAdminAuth(request)
+    if (!isAdmin) {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
 
-    // Parse query params
+    // Parse and validate query params
     const { searchParams } = new URL(request.url)
+    const VALID_STATUSES = ['active', 'resolved', 'dismissed', 'all']
+    const VALID_SEVERITIES = ['low', 'medium', 'high', 'critical']
     const status = searchParams.get('status') || 'active'
     const severity = searchParams.get('severity')
     const alertType = searchParams.get('alert_type')
+
+    if (!VALID_STATUSES.includes(status)) {
+      return NextResponse.json(
+        { error: `Invalid status. Must be one of: ${VALID_STATUSES.join(', ')}` },
+        { status: 400 }
+      )
+    }
+    if (severity && !VALID_SEVERITIES.includes(severity)) {
+      return NextResponse.json(
+        { error: `Invalid severity. Must be one of: ${VALID_SEVERITIES.join(', ')}` },
+        { status: 400 }
+      )
+    }
     const limit = parseLimit(searchParams.get('limit'), 100, 500)
     const offset = parseOffset(searchParams.get('offset'))
 
@@ -99,10 +104,7 @@ export async function GET(request: NextRequest) {
 
     if (error) {
       logger.dbError('fetch-manipulation-alerts', error, { status, severity, alertType })
-      return NextResponse.json(
-        { error: 'Failed to fetch alerts' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to fetch alerts' }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -113,10 +115,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     logger.apiError('/api/admin/manipulation/alerts', error, {})
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -126,7 +125,11 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   // Admin sensitive write — failClose rate limiting
-  const rateLimitResp = await checkRateLimit(request, { ...RateLimitPresets.sensitive, prefix: 'admin-manipulation-alerts-write', failClose: true })
+  const rateLimitResp = await checkRateLimit(request, {
+    ...RateLimitPresets.sensitive,
+    prefix: 'admin-manipulation-alerts-write',
+    failClose: true,
+  })
   if (rateLimitResp) return rateLimitResp
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -154,10 +157,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (!Array.isArray(alert.traders) || alert.traders.length === 0) {
-      return NextResponse.json(
-        { error: 'traders must be a non-empty array' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'traders must be a non-empty array' }, { status: 400 })
     }
 
     // Insert alert
@@ -176,10 +176,7 @@ export async function POST(request: NextRequest) {
 
     if (insertError) {
       logger.dbError('insert-manipulation-alert', insertError, { alert })
-      return NextResponse.json(
-        { error: 'Failed to create alert' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to create alert' }, { status: 500 })
     }
 
     // If auto_action is specified, create trader flags
@@ -203,21 +200,23 @@ export async function POST(request: NextRequest) {
           expiresAt = expireDate.toISOString()
         }
 
-        const { error: flagError } = await supabase
-          .from('trader_flags')
-          .insert({
-            platform,
-            trader_key: traderId,
-            flag_status: flagStatus,
-            reason: alert.alert_type,
-            alert_id: insertedAlert.id,
-            expires_at: expiresAt,
-          })
+        const { error: flagError } = await supabase.from('trader_flags').insert({
+          platform,
+          trader_key: traderId,
+          flag_status: flagStatus,
+          reason: alert.alert_type,
+          alert_id: insertedAlert.id,
+          expires_at: expiresAt,
+        })
 
         if (flagError) {
           // Ignore unique constraint violations (flag already exists)
           if (!flagError.message.includes('duplicate') && !flagError.message.includes('unique')) {
-            logger.dbError('insert-trader-flag', flagError, { platform, traderId, alertId: insertedAlert.id })
+            logger.dbError('insert-trader-flag', flagError, {
+              platform,
+              traderId,
+              alertId: insertedAlert.id,
+            })
           }
         }
       }
@@ -237,9 +236,6 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     logger.apiError('/api/admin/manipulation/alerts', error, {})
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
