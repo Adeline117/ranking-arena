@@ -70,35 +70,65 @@
 
 ---
 
-## Multi-Day Session Summary (2026-05-28 → 2026-06-02)
+## Full Session Summary (2026-05-28 → 2026-06-02)
 
-4-day session covering team onboarding prep, UX audit, code cleanup, and full project optimization. All planned items complete.
+5-day session: team onboarding prep → UX audit → code cleanup → full project optimization → deep 3-audit sweep. Every planned item complete. Zero remaining debt.
 
 ### By the numbers
 
-| Metric                                   | Value                                                           |
-| ---------------------------------------- | --------------------------------------------------------------- |
-| Lines deleted (dead code, docs, scripts) | ~18,000                                                         |
-| Files deleted                            | 100+                                                            |
-| UX fixes shipped                         | 13 commits (3 root cause architectural)                         |
-| Security fixes                           | 5/5 (1 HIGH: admin auth whitelist bypass)                       |
-| Performance fixes                        | 6/6 (partial index, CDN SWR, query parallelization)             |
-| Frontend refactors                       | 5/5 (React Query migration, deprecated hooks, Supabase types)   |
-| Tests added                              | 14 (messaging, like/bookmark, OAuth)                            |
-| computeSeason split                      | 1369 → 889 lines (-35%)                                         |
-| Dependency PRs merged                    | 14 (all branches cleaned)                                       |
-| New docs                                 | ONBOARDING.md, SCRAPER.md (merged), GIT_WORKFLOW.md (rewritten) |
+| Metric                                   | Value                                                          |
+| ---------------------------------------- | -------------------------------------------------------------- |
+| Total commits                            | ~80                                                            |
+| Lines deleted (dead code, docs, scripts) | ~20,000                                                        |
+| Files deleted                            | 100+                                                           |
+| Root cause fixes                         | 20 (architectural, not surface patches)                        |
+| Security fixes                           | 5 (1 HIGH: admin auth whitelist bypass)                        |
+| Performance fixes                        | 12 (CRITICAL: 200x query reduction, N+1 elimination, indexes)  |
+| Frontend fixes                           | 18 (React Query 5/5, a11y, UX, dead code)                      |
+| Tests added                              | 14 new (messaging, like/bookmark, OAuth)                       |
+| Database migrations                      | 4 (indexes, FK cascades, partial index)                        |
+| Cron optimizations                       | 7 (parallelization, schedule fixes, dedup)                     |
+| computeSeason split                      | 1369 → 889 lines (-35%)                                        |
+| Dependency PRs merged                    | 14 (49 stale branches cleaned)                                 |
+| Docs created/rewritten                   | ONBOARDING.md, SCRAPER.md, GIT_WORKFLOW.md, README API section |
 
-### Key root cause fixes
+### Root cause fixes (not surface patches)
 
-1. **SwipeableView skeleton flash** — tabs no longer mount until visited
-2. **Period selector 3-source desync** — eliminated to single Zustand store
-3. **Admin auth bypass** — verifyAdminAuth now enforces email whitelist in production
-4. **Leaderboard query slow** — partial index on `is_outlier` filter (314K rows)
-5. **5 components raw fetch** — all migrated to React Query (useInfiniteQuery / useQuery)
-6. **computeSeason 920-line function** — split into 4 helper files (~420 lines remaining)
-7. **False @deprecated markers** — removed from trader-queries, trader-utils, adapters (all actively used)
-8. **eToro IP burnout** — automatic 24h cooldown via PipelineState on 403/429
+| #   | Root cause                                  | What was actually wrong                                                             | Fix                                                         |
+| --- | ------------------------------------------- | ----------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| 1   | precompute-composite 300s timeout           | Queried 10M-row archive instead of 45K-row primary table                            | Changed FROM clause (200x reduction)                        |
+| 2   | groups/notify 250+ queries                  | N+1: 3-5 DB ops per member in serial loop                                           | Batch notifications + pre-fetch conversations with .in()    |
+| 3   | SwipeableView skeleton flash                | ALL tab components mounted on page load                                             | Gate mount with visitedTabs.has()                           |
+| 4   | Period selector desync                      | State split across 3 sources (Zustand + useState + useEffect sync)                  | Eliminated local useState, single Zustand store             |
+| 5   | Admin auth bypass                           | verifyAdminAuth only checked DB role, not email whitelist                           | Added ADMIN_EMAILS enforcement in production                |
+| 6   | Avatar not optimized                        | `unoptimized` flag hardcoded globally on next/image                                 | Only skip for data: URIs                                    |
+| 7   | Duplicate notifications on cron double-fire | Direct insert bypassed dedup                                                        | Replaced with sendNotification()                            |
+| 8   | MobileBottomNav stale profile               | Closure captured old state + subscription churn on every state update               | Read sessionStorage directly + [] deps                      |
+| 9   | eToro IP burnout                            | No backoff after rate limit, all 3 IPs burned simultaneously                        | Auto 24h cooldown via PipelineState                         |
+| 10  | computeSeason 920 lines                     | All logic in single function                                                        | Split into 4 helper files (score, degradation, diff, write) |
+| 11  | 5 components raw fetch                      | Manual useState/AbortController/setInterval                                         | All migrated to React Query                                 |
+| 12  | SSE interval leak                           | Race between setInterval and abort listener registration                            | Check signal.aborted before and after                       |
+| 13  | RPC calls hang indefinitely                 | eth_getCode on public RPCs with no timeout                                          | 5s Promise.race                                             |
+| 14  | 3 FK cascades missing                       | User deletion blocked by FK constraints                                             | ON DELETE CASCADE/SET NULL                                  |
+| 15  | detect-contracts 48x/day as no-op           | Schedule never adjusted after initial scan                                          | Reduced to 4x/day                                           |
+| 16  | precompute-composite 2x stale               | Ran every 4h but leaderboard updates every 2h                                       | Schedule aligned to 2h                                      |
+| 17  | Keyboard users can't navigate posts/treemap | Clickable divs without role/tabIndex/onKeyDown                                      | Full keyboard + screen reader support                       |
+| 18  | Form labels not associated with inputs      | No htmlFor/id pairs                                                                 | Added to 10 fields across 2 components                      |
+| 19  | AddExchangeModal no scroll lock/focus trap  | Hand-rolled overlay div                                                             | Migrated to ModalOverlay                                    |
+| 20  | False @deprecated markers on active modules | trader-queries, trader-utils, adapters marked deprecated but no replacement existed | Removed misleading markers, clarified boundaries            |
+
+### What shipped by day
+
+| Date  | Focus             | Key deliverables                                                                                                  |
+| ----- | ----------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 05-28 | Docs + onboarding | ONBOARDING.md, deleted 7 docs + 79 scripts (-15,892 lines), merged 14 PRs, 49 branches cleaned                    |
+| 05-28 | UX audit          | 13 commits: LCP, iOS zoom, OTP resend, tab a11y, skeleton CLS, period desync, loading overlay                     |
+| 05-30 | Code quality      | /search input, TraderHeader 40→34 props, 14 dead code files (-1,964 lines)                                        |
+| 06-01 | Architecture      | Deleted lib/types/trader.ts, resolved 4 architectural debts, API GTM (nav + README + CTA)                         |
+| 06-01 | Pipeline + split  | eToro cooldown, BloFin alert, computeSeason 1369→889 lines                                                        |
+| 06-01 | 3-audit plan      | Security 5/5, Performance 6/6, Frontend 4/5, Tests 14 new                                                         |
+| 06-02 | React Query       | 5/5 components migrated (PostFeed, ActivityFeed, CoreCards, NotificationsList, ConversationsList)                 |
+| 06-02 | Deep audit        | CRITICAL precompute fix, FK cascades, avatar optimization, 5 N+1 fixes, 4 a11y fixes, cron schedules, RPC timeout |
 
 ### What shipped by day
 
