@@ -59,7 +59,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 ### Code Quality
 
-- [~] computeSeason main loop split: 972 lines → ~600 target
+- [x] computeSeason split: 1369 → 889 lines (-480). Extracted scoreTraders, checkDegradationGuard, fetchCurrentScoreMap + buildChangedTraders, upsertLeaderboard + zeroOutExcluded into 4 helper files
 - [x] TraderHeader 40-prop interface trim (40 → 34: removed uid, following, isPro, maxDrawdown, winRate, profileUrl)
 
 ---
