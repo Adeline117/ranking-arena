@@ -98,11 +98,11 @@ export default function NotificationsList() {
     if (!accessToken || pendingMarkAllRef.current) return
     pendingMarkAllRef.current = true
 
-    // 保存原状态用于回滚
-    const prevNotifications = [...notifications]
-    const prevUnreadCount = unreadNotifications
+    // Delta: capture IDs that were unread (not a full snapshot — just the delta set)
+    const unreadIds = new Set(notifications.filter((n) => !n.read).map((n) => n.id))
+    const unreadCount = unreadIds.size
 
-    // 乐观更新
+    // Optimistic update
     setNotifications((prev) => prev.map((n) => ({ ...n, read: true })))
     setUnreadNotifications(0)
 
@@ -122,9 +122,9 @@ export default function NotificationsList() {
       }
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') return
-      // 回滚
-      setNotifications(prevNotifications)
-      setUnreadNotifications(prevUnreadCount)
+      // Delta rollback: only restore read=false for IDs that were unread before
+      setNotifications((prev) => prev.map((n) => (unreadIds.has(n.id) ? { ...n, read: false } : n)))
+      setUnreadNotifications(unreadCount)
       showToast(t('operationFailed'), 'error')
     } finally {
       pendingMarkAllRef.current = false
@@ -143,7 +143,7 @@ export default function NotificationsList() {
         return
       }
 
-      // 乐观更新
+      // Optimistic update (delta-based)
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)))
       setUnreadNotifications(Math.max(0, unreadNotifications - 1))
 
@@ -163,9 +163,9 @@ export default function NotificationsList() {
         }
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
-        // 回滚
+        // Delta rollback: reverse the -1 from current state
         setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: false } : n)))
-        setUnreadNotifications(unreadNotifications)
+        setUnreadNotifications(useInboxStore.getState().unreadNotifications + 1)
         showToast(t('operationFailed'), 'error')
       } finally {
         pendingMarkRef.current.delete(id)
