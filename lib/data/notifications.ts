@@ -44,6 +44,10 @@ export type NotificationType =
   | 'group_update'
   | 'ranking_change'
   | 'referral_reward'
+  | 'tip_received'
+  | 'subscription_expiring'
+  | 'subscription_expired'
+  | 'nft_expired'
 
 export interface NotificationListOptions {
   limit?: number
