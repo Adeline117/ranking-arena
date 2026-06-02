@@ -38,27 +38,23 @@ Avatar.tsx and CommentAvatar.tsx had global `unoptimized` flag on next/image, by
 - **subscription-expiry duplicate notifications**: 3 direct `notifications.insert()` calls replaced with `sendNotification()` which has built-in dedup. Prevents double notifications on cron double-fire.
 - **SSE interval leak**: rankings stream interval callbacks now check `request.signal.aborted` before executing. Added pre-check before registering abort listener to close race window.
 
-### Remaining (next session — from 3 audits)
+### Additional fixes (same session, continued)
 
-**Backend N+1**:
+- **aggregate-daily-snapshots**: 32 serial platform queries → Promise.all
+- **check-trader-alerts**: push notifications serial → batched Promise.allSettled(10), merged 2 sequential trader_alerts UPDATEs
+- **PostListItem**: role="button", tabIndex={0}, aria-label, onKeyDown for keyboard access
+- **MobileBottomNav.useUserHandle**: fixed stale closure (reads sessionStorage directly) + subscription churn ([] deps instead of [userHandle])
+- **AddExchangeModal**: added htmlFor/id pairs to all 4 form labels
+- **Cron schedules**: precompute-composite 4h → 2h (matches leaderboard), detect-contracts 48x → 4x/day
 
-- groups/[id]/notify (250+ queries for 50-member group)
-- check-trader-alerts push serial loop
-- aggregate-daily-snapshots 32-platform serial fallback
+### Remaining (next session)
 
-**Frontend** (9 HIGH from audit):
-
-- PostListItem clickable div without keyboard support (a11y)
+- groups/[id]/notify N+1 (250+ queries for 50-member group)
 - SectorTreemap non-keyboard (a11y)
-- VerifiedTraderEditor + AddExchangeModal unlabelled forms (a11y)
-- AddExchangeModal uses hand-rolled overlay instead of ModalOverlay
-- MobileBottomNav.useUserHandle stale closure + subscription churn
-
-**DB/Infra** (from audit):
-
-- trader_position_history partition cutover never executed (78M row flat table)
-- detect-contracts no RPC circuit breaker, runs 48x/day as no-op
-- precompute-composite schedule mismatch (4h vs leaderboard's 2h)
+- VerifiedTraderEditor unlabelled form inputs (a11y)
+- AddExchangeModal migrate from hand-rolled overlay to ModalOverlay
+- trader_position_history partition cutover (78M row flat table)
+- detect-contracts RPC circuit breaker
 - 20 cron routes unmonitored (no PipelineLogger)
 
 ---
