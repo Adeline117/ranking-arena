@@ -334,7 +334,7 @@ async function runHealthCheck() {
   // from /api/health/pipeline to reduce DB load). Only use ageHours as signal.
   // Alert if a platform has no lastUpdate (ageHours=null) or is stale >threshold.
   // Default 48h; BloFin uses 12h (Mac Mini only, no fallback — need fast detection).
-  const STALE_THRESHOLD_OVERRIDES = { blofin: 12 }
+  const STALE_THRESHOLD_OVERRIDES = { blofin: 12, etoro: 96 }
   const DEFAULT_STALE_THRESHOLD = 48
   const platforms = pipelineHealth?.platformHealth || pipelineHealth?.platforms || []
   if (Array.isArray(platforms) && platforms.length > 0) {
