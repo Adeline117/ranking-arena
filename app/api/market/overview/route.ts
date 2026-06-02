@@ -395,7 +395,9 @@ export async function GET(request: NextRequest) {
     const fromMarket = await buildOverviewFromMarketCache()
     if (fromMarket !== null) {
       // Cache it so subsequent requests don't need to reconstruct
-      void cacheResult(fromMarket).catch(() => {})
+      void cacheResult(fromMarket).catch((e) =>
+        logger.warn('[market-overview] cache write failed', { error: String(e) })
+      )
       return NextResponse.json(fromMarket, {
         headers: { 'Cache-Control': 'public, s-maxage=30, stale-while-revalidate=60' },
       })

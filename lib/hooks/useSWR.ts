@@ -193,7 +193,7 @@ export function usePosts(options: UsePostsOptions = {}) {
     queryKey: ['posts', groupId, sortBy, limit],
     queryFn: () => fetcher(url),
     enabled,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
     refetchInterval: 5 * 60 * 1000,
   })
 }
@@ -339,7 +339,7 @@ export function useNotifications(userId: string | undefined, token?: string) {
     queryFn: () => fetcherWithAuth(url, token),
     enabled: !!userId,
     refetchInterval: 2 * 60 * 1000,
-    refetchOnWindowFocus: true,
+    refetchOnWindowFocus: false,
   })
 }
 
