@@ -47,7 +47,7 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     .gt('current_period_end', now.toISOString())
 
   if (expiringSubscriptions && expiringSubscriptions.length > 0) {
-    const expiringUserIds = expiringSubscriptions.map(s => s.user_id)
+    const expiringUserIds = expiringSubscriptions.map((s) => s.user_id)
     const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
     const { data: existingNotifs } = await supabase
       .from('notifications')
@@ -55,11 +55,11 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
       .in('user_id', expiringUserIds)
       .eq('type', 'subscription_expiring')
       .gte('created_at', threeDaysAgo)
-    const alreadyNotified = new Set(existingNotifs?.map(n => n.user_id) || [])
+    const alreadyNotified = new Set(existingNotifs?.map((n) => n.user_id) || [])
 
     const toInsert = expiringSubscriptions
-      .filter(sub => !alreadyNotified.has(sub.user_id))
-      .map(sub => {
+      .filter((sub) => !alreadyNotified.has(sub.user_id))
+      .map((sub) => {
         const expiryDate = new Date(sub.current_period_end!).toLocaleDateString('zh-CN')
         return {
           user_id: sub.user_id,
@@ -74,12 +74,24 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
       })
 
     if (toInsert.length > 0) {
-      const { error: insertErr } = await supabase.from('notifications').insert(toInsert)
-      if (insertErr) {
-        results.errors.push(`Batch expiring reminder error: ${insertErr.message}`)
-      } else {
-        results.expiringReminders = toInsert.length
-      }
+      // Use sendNotification for built-in dedup (prevents duplicates on cron double-fire)
+      const { sendNotification } = await import('@/lib/data/notifications')
+      await Promise.allSettled(
+        toInsert.map((n) =>
+          sendNotification(
+            supabase,
+            {
+              user_id: n.user_id,
+              type: n.type as import('@/lib/data/notifications').NotificationType,
+              title: n.title,
+              message: n.body,
+              reference_id: `sub_expiring_${n.user_id}`,
+            },
+            'subscription-expiry'
+          )
+        )
+      )
+      results.expiringReminders = toInsert.length
     }
   }
 
@@ -94,7 +106,7 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     .lt('current_period_end', now.toISOString())
 
   if (expiredSubscriptions && expiredSubscriptions.length > 0) {
-    const expiredUserIds = expiredSubscriptions.map(s => s.user_id)
+    const expiredUserIds = expiredSubscriptions.map((s) => s.user_id)
 
     try {
       // Batch UPDATE subscriptions → expired
@@ -124,18 +136,25 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
         results.errors.push(`Batch profile downgrade error: ${profileErr.message}`)
       }
 
-      // Batch INSERT notifications
-      const notifications = expiredSubscriptions.map(sub => ({
-        user_id: sub.user_id,
-        type: 'subscription_expired',
-        title: 'Pro 会员已到期',
-        body: '您的 Pro 会员已到期，账号已降级为免费用户。如需恢复 Pro 功能，请前往会员中心重新订阅。',
-        data: {},
-      }))
-      const { error: notifErr } = await supabase.from('notifications').insert(notifications)
-      if (notifErr) {
-        results.errors.push(`Batch notification insert error: ${notifErr.message}`)
-      }
+      // Send notifications with dedup (prevents duplicates on cron double-fire)
+      const { sendNotification: sendNotif } = await import('@/lib/data/notifications')
+      await Promise.allSettled(
+        expiredSubscriptions.map((sub) =>
+          sendNotif(
+            supabase,
+            {
+              user_id: sub.user_id,
+              type: 'subscription_expired' as import('@/lib/data/notifications').NotificationType,
+              title: 'Pro 会员已到期',
+              message:
+                '您的 Pro 会员已到期，账号已降级为免费用户。如需恢复 Pro 功能，请前往会员中心重新订阅。',
+              reference_id: `sub_expired_${sub.user_id}`,
+            },
+            'subscription-expiry'
+          )
+        )
+      )
+      // sendNotification handles errors internally (fire-and-forget with dedup)
 
       // Batch DELETE group_members for pro group
       const proGroupId = process.env.PRO_OFFICIAL_GROUP_ID || ''
@@ -152,7 +171,9 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
       }
 
       results.downgraded = expiredSubscriptions.length
-      logger.info(`Batch downgraded ${expiredSubscriptions.length} users due to subscription expiry`)
+      logger.info(
+        `Batch downgraded ${expiredSubscriptions.length} users due to subscription expiry`
+      )
     } catch (err) {
       results.errors.push(`Batch downgrade error: ${err}`)
     }
@@ -168,11 +189,11 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     .eq('subscription_tier', 'pro')
 
   if (nftUsers && nftUsers.length > 0) {
-    const validNftUsers = nftUsers.filter(u => u.wallet_address)
+    const validNftUsers = nftUsers.filter((u) => u.wallet_address)
 
     // Check NFT membership with concurrency limit of 5
     const NFT_CONCURRENCY = 5
-    const nftResults: { user: typeof validNftUsers[number]; hasValidNFT: boolean }[] = []
+    const nftResults: { user: (typeof validNftUsers)[number]; hasValidNFT: boolean }[] = []
 
     for (let i = 0; i < validNftUsers.length; i += NFT_CONCURRENCY) {
       const batch = validNftUsers.slice(i, i + NFT_CONCURRENCY)
@@ -194,7 +215,7 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     }
 
     // Batch query: find which of these users have active subscriptions
-    const nftUserIds = nftResults.filter(r => !r.hasValidNFT).map(r => r.user.id)
+    const nftUserIds = nftResults.filter((r) => !r.hasValidNFT).map((r) => r.user.id)
 
     if (nftUserIds.length > 0) {
       const { data: activeSubUsers } = await supabase
@@ -203,14 +224,15 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
         .in('user_id', nftUserIds)
         .eq('status', 'active')
 
-      const usersWithActiveSub = new Set(activeSubUsers?.map(s => s.user_id) || [])
+      const usersWithActiveSub = new Set(activeSubUsers?.map((s) => s.user_id) || [])
 
       // Users to downgrade: no valid NFT AND no active subscription
-      const toDowngrade = nftResults
-        .filter(r => !r.hasValidNFT && !usersWithActiveSub.has(r.user.id))
+      const toDowngrade = nftResults.filter(
+        (r) => !r.hasValidNFT && !usersWithActiveSub.has(r.user.id)
+      )
 
       if (toDowngrade.length > 0) {
-        const downgradeIds = toDowngrade.map(r => r.user.id)
+        const downgradeIds = toDowngrade.map((r) => r.user.id)
 
         // Batch UPDATE user_profiles → free tier
         const { error: profileErr } = await supabase
@@ -225,18 +247,24 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
           results.errors.push(`Batch NFT profile downgrade error: ${profileErr.message}`)
         }
 
-        // Batch INSERT notifications
-        const nftNotifications = toDowngrade.map(r => ({
-          user_id: r.user.id,
-          type: 'nft_expired',
-          title: 'NFT 会员已过期',
-          body: '您的 NFT 会员证已过期，账号已降级为免费用户。如需继续使用 Pro 功能，请续费或重新购买 NFT。',
-          data: { walletAddress: r.user.wallet_address },
-        }))
-        const { error: notifErr } = await supabase.from('notifications').insert(nftNotifications)
-        if (notifErr) {
-          results.errors.push(`Batch NFT notification insert error: ${notifErr.message}`)
-        }
+        // Send NFT expiry notifications with dedup
+        const { sendNotification: sendNftNotif } = await import('@/lib/data/notifications')
+        await Promise.allSettled(
+          toDowngrade.map((r) =>
+            sendNftNotif(
+              supabase,
+              {
+                user_id: r.user.id,
+                type: 'nft_expired' as import('@/lib/data/notifications').NotificationType,
+                title: 'NFT 会员已过期',
+                message:
+                  '您的 NFT 会员证已过期，账号已降级为免费用户。如需继续使用 Pro 功能，请续费或重新购买 NFT。',
+                reference_id: `nft_expired_${r.user.id}`,
+              },
+              'subscription-expiry'
+            )
+          )
+        )
 
         results.downgraded += toDowngrade.length
         logger.info(`Batch downgraded ${toDowngrade.length} users due to NFT expiry`)
