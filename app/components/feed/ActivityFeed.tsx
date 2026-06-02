@@ -10,7 +10,8 @@
  *   - Real-time feel: newest first
  */
 
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useMemo } from 'react'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
@@ -97,86 +98,62 @@ export default function ActivityFeed({
 
   const [platform, setPlatform] = useState<string | null>(fixedPlatform ?? null)
   const [typeFilter, setTypeFilter] = useState<ActivityType | null>(null)
-  const [activities, setActivities] = useState<TraderActivity[]>(initialActivities)
-  const [hasMore, setHasMore] = useState(initialHasMore)
-  const [cursor, setCursor] = useState<string | null>(initialNextCursor)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
-  // Platform filter changes — reload from scratch
-  const handlePlatformChange = useCallback(
-    async (newPlatform: string | null) => {
-      if (fixedPlatform) return // locked
-      setPlatform(newPlatform)
-      setTypeFilter(null)
-      setActivities([])
-      setHasMore(false)
-      setCursor(null)
-      setLoading(true)
-      setError(null)
-
-      try {
-        const params = new URLSearchParams()
-        params.set('limit', '50')
-        if (newPlatform) params.set('platform', newPlatform)
-        if (fixedHandle) params.set('handle', fixedHandle)
-
-        const res = await fetch(`/api/feed/activities?${params}`)
-        const json = await res.json()
-
-        if (!res.ok) {
-          setError(t('loadFailed'))
-          return
-        }
-
-        const data = json.data
-        setActivities(data.activities ?? [])
-        setHasMore(data.pagination.hasMore)
-        setCursor(data.pagination.nextCursor)
-      } catch {
-        setError(t('networkError'))
-      } finally {
-        setLoading(false)
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [fixedPlatform, fixedHandle]
-  )
-
-  // Load more (cursor pagination)
-  const handleLoadMore = useCallback(async () => {
-    if (!cursor || loading) return
-    setLoading(true)
-    setError(null)
-
-    try {
+  // React Query infinite scroll — replaces manual fetch + useState
+  const {
+    data,
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+    isLoading: loading,
+    error: queryError,
+  } = useInfiniteQuery({
+    queryKey: ['activities', platform, fixedHandle],
+    queryFn: async ({ pageParam }: { pageParam: string | null }) => {
       const params = new URLSearchParams()
       params.set('limit', '50')
       if (platform) params.set('platform', platform)
       if (fixedHandle) params.set('handle', fixedHandle)
-      if (cursor) params.set('cursor', cursor)
-
+      if (pageParam) params.set('cursor', pageParam)
       const res = await fetch(`/api/feed/activities?${params}`)
+      if (!res.ok) throw new Error('Failed to load activities')
       const json = await res.json()
-
-      if (!res.ok) {
-        setError(t('loadFailed'))
-        return
+      return json.data as {
+        activities: TraderActivity[]
+        pagination: { hasMore: boolean; nextCursor: string | null }
       }
+    },
+    initialPageParam: null as string | null,
+    getNextPageParam: (lastPage) =>
+      lastPage.pagination.hasMore ? lastPage.pagination.nextCursor : undefined,
+    initialData: {
+      pages: [
+        {
+          activities: initialActivities,
+          pagination: { hasMore: initialHasMore, nextCursor: initialNextCursor },
+        },
+      ],
+      pageParams: [null],
+    },
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+  })
 
-      const data = json.data
-      setActivities((prev) => [...prev, ...(data.activities ?? [])])
-      setHasMore(data.pagination.hasMore)
-      setCursor(data.pagination.nextCursor)
-    } catch {
-      setError(t('networkError'))
-    } finally {
-      setLoading(false)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cursor, loading, platform, fixedHandle])
+  const error = queryError ? t('loadFailed') : null
+  const activities = data?.pages.flatMap((p) => p.activities) ?? []
+  const hasMore = hasNextPage ?? false
 
-  // Apply local type filter on top of server-fetched data
+  const handlePlatformChange = (newPlatform: string | null) => {
+    if (fixedPlatform) return
+    setPlatform(newPlatform)
+    setTypeFilter(null)
+  }
+
+  const handleLoadMore = () => {
+    if (hasMore && !isFetchingNextPage) fetchNextPage()
+  }
+
+  // Apply local type filter on top of fetched data
   const visibleActivities = typeFilter
     ? activities.filter((a) => a.activity_type === typeFilter)
     : activities
