@@ -52,7 +52,7 @@ async function fetchTopRankings(period: string): Promise<RankingRow[]> {
 
       return (data as RankingRow[] | null) || []
     },
-    { ttl: 120, staleTtl: 300 },
+    { ttl: 120, staleTtl: 300 }
   )
 }
 
@@ -62,7 +62,8 @@ export async function GET(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   const rawPeriod = (request.nextUrl.searchParams.get('period') || '90D').toUpperCase()
-  const period = rawPeriod === '7D' || rawPeriod === '30D' || rawPeriod === '90D' ? rawPeriod : '90D'
+  const period =
+    rawPeriod === '7D' || rawPeriod === '30D' || rawPeriod === '90D' ? rawPeriod : '90D'
   const origin = request.headers.get('Origin')
 
   const encoder = new TextEncoder()
@@ -72,8 +73,14 @@ export async function GET(request: NextRequest) {
 
   const cleanup = () => {
     closed = true
-    if (keepAliveId) { clearInterval(keepAliveId); keepAliveId = null }
-    if (updateCheckId) { clearInterval(updateCheckId); updateCheckId = null }
+    if (keepAliveId) {
+      clearInterval(keepAliveId)
+      keepAliveId = null
+    }
+    if (updateCheckId) {
+      clearInterval(updateCheckId)
+      updateCheckId = null
+    }
   }
 
   const stream = new ReadableStream({
@@ -82,18 +89,25 @@ export async function GET(request: NextRequest) {
       try {
         const traders = await fetchTopRankings(period)
         controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: 'snapshot', period, traders, ts: Date.now() })}\n\n`)
+          encoder.encode(
+            `data: ${JSON.stringify({ type: 'snapshot', period, traders, ts: Date.now() })}\n\n`
+          )
         )
       } catch {
         // If initial fetch fails, send empty snapshot so the client knows the stream is alive
         controller.enqueue(
-          encoder.encode(`data: ${JSON.stringify({ type: 'snapshot', period, traders: [], ts: Date.now() })}\n\n`)
+          encoder.encode(
+            `data: ${JSON.stringify({ type: 'snapshot', period, traders: [], ts: Date.now() })}\n\n`
+          )
         )
       }
 
       // Keep-alive heartbeat every 30s
       keepAliveId = setInterval(() => {
-        if (closed) return
+        if (closed || request.signal.aborted) {
+          cleanup()
+          return
+        }
         try {
           controller.enqueue(encoder.encode(`: keepalive\n\n`))
         } catch {
@@ -103,12 +117,17 @@ export async function GET(request: NextRequest) {
 
       // Push ranking updates every 60s
       updateCheckId = setInterval(async () => {
-        if (closed) return
+        if (closed || request.signal.aborted) {
+          cleanup()
+          return
+        }
         try {
           const traders = await fetchTopRankings(period)
           if (traders.length > 0) {
             controller.enqueue(
-              encoder.encode(`data: ${JSON.stringify({ type: 'update', period, traders, ts: Date.now() })}\n\n`)
+              encoder.encode(
+                `data: ${JSON.stringify({ type: 'update', period, traders, ts: Date.now() })}\n\n`
+              )
             )
           }
         } catch {
@@ -117,9 +136,23 @@ export async function GET(request: NextRequest) {
       }, 60000)
 
       // Cleanup on client disconnect
+      // Check if already aborted (disconnect happened between setInterval and this line)
+      if (request.signal.aborted) {
+        cleanup()
+        try {
+          controller.close()
+        } catch {
+          /* already closed */
+        }
+        return
+      }
       request.signal.addEventListener('abort', () => {
         cleanup()
-        try { controller.close() } catch { /* already closed */ }
+        try {
+          controller.close()
+        } catch {
+          /* already closed */
+        }
       })
     },
     cancel() {
