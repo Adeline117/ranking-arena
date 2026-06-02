@@ -13,7 +13,7 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { isAuthorized } from '@/lib/cron/utils'
-import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
+import { getSupportedPlatforms } from '@/lib/cron/fetchers'
 import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { sendScraperAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
@@ -105,7 +105,7 @@ export interface FreshnessReport {
 export async function buildFreshnessReport(): Promise<FreshnessReport> {
   const supabase = getSupabaseAdmin()
 
-  const allPlatforms = getSupportedInlinePlatforms()
+  const allPlatforms = getSupportedPlatforms()
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
   const platforms = allPlatforms.filter((p) => !deadSet.has(p))
   const results: PlatformFreshnessStatus[] = []
