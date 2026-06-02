@@ -66,12 +66,19 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 ## 🟡 P2 - Should Do Soon
 
-_None currently_
+### From Retro 2026-06-02
+
+- [ ] **Authenticated E2E test fixtures** — set up test account with OTP bypass for Playwright + Stripe test mode fixture. Unblocks E1-E4 test coverage gaps.
+- [ ] **ja/ko translation batch** — 430 keys missing from ja.ts + ko.ts vs en.ts. Need full translation run (not a code fix).
 
 ---
 
 ## 🟢 P3 - Nice to Have
 
+- [ ] **React version consistency CI check** — prevent react/react-dom drift (caused 3 test failures this week)
+- [ ] **Automate weekly retro via OpenClaw** — `/retro` every Friday (carried from May 19 retro)
+- [ ] **Review 5 TODO/FIXME markers** — resolve or convert to tracked issues
+- [ ] **Check transitive npm vulns** — 21 remaining, all transitive (ws/viem/privy). Need upstream releases.
 - [ ] Lighthouse re-audit on production (API quota previously exhausted)
 - [x] Monthly dependency update review (14 dependabot PRs merged 2026-05-28)
 
@@ -80,6 +87,8 @@ _None currently_
 ## ⚪ Backlog
 
 - [ ] US/EU VPS for BloFin + other geo-restricted platforms
+- [ ] I18n: hardcoded English strings in 51 files (I5 — mostly placeholders + admin UI)
+- [ ] I18n: numbers/dates hardcoded `'en-US'` in 20+ files (I6 — cosmetic for current locales)
 
 ---
 
