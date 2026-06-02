@@ -15,7 +15,15 @@ let queue: Queue | null = null
 
 export function getQueue(): Queue {
   if (queue) return queue
-  queue = new Queue(QUEUE_NAME, { connection: getConnection() })
+  queue = new Queue(QUEUE_NAME, {
+    connection: getConnection(),
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 10_000 },
+      removeOnComplete: { age: 24 * 3600, count: 1000 },
+      removeOnFail: { age: 7 * 24 * 3600, count: 5000 },
+    },
+  })
   return queue
 }
 

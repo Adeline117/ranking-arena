@@ -71,6 +71,7 @@ async function main() {
           job.log(
             `compute-leaderboard ${season}: ${resp.status} — ${JSON.stringify(body).slice(0, 200)}`
           )
+          if (!resp.ok) throw new Error(`compute-leaderboard ${season} returned ${resp.status}`)
           return { season, status: resp.status, ...body }
         }
 
@@ -90,6 +91,8 @@ async function main() {
           )
           const enrichBody = await enrichResp.json().catch(() => ({}))
           job.log(`batch-enrich ${period}/${tier}: ${enrichResp.status}`)
+          if (!enrichResp.ok)
+            throw new Error(`batch-enrich ${period}/${tier} returned ${enrichResp.status}`)
           return { period, tier, status: enrichResp.status, ...enrichBody }
         }
 
@@ -105,6 +108,7 @@ async function main() {
           })
           const msBody = await msResp.json().catch(() => ({}))
           job.log(`sync-meilisearch: ${msResp.status}`)
+          if (!msResp.ok) throw new Error(`sync-meilisearch returned ${msResp.status}`)
           return { status: msResp.status, ...msBody }
         }
 
@@ -123,60 +127,61 @@ async function main() {
 
   // 3. Event logging + event-driven score trigger
   worker.on('completed', async (job) => {
-    const duration =
-      job.finishedOn && job.processedOn ? `${job.finishedOn - job.processedOn}ms` : '?ms'
-    console.log(`[worker] ✓ ${job.name} (${JSON.stringify(job.data)}) completed in ${duration}`)
+    try {
+      const duration =
+        job.finishedOn && job.processedOn ? `${job.finishedOn - job.processedOn}ms` : '?ms'
+      console.log(`[worker] ✓ ${job.name} (${JSON.stringify(job.data)}) completed in ${duration}`)
 
-    const q = getQueue()
+      const q = getQueue()
 
-    // Event chain: fetch → score → enrich + meilisearch
-    if (job.name === JOB.FETCH_PLATFORM) {
-      fetchCompletedSinceLastScore++
-      if (fetchCompletedSinceLastScore >= FETCH_BATCH_THRESHOLD) {
-        fetchCompletedSinceLastScore = 0
-        console.log('[worker] Fetch batch threshold reached — triggering enrich + score')
-        // Enrich first (backfills metrics before score calc)
-        for (const period of ['7D', '30D', '90D']) {
-          for (const tier of ['fast', 'slow']) {
+      // Event chain: fetch → score → enrich + meilisearch
+      if (job.name === JOB.FETCH_PLATFORM) {
+        fetchCompletedSinceLastScore++
+        if (fetchCompletedSinceLastScore >= FETCH_BATCH_THRESHOLD) {
+          fetchCompletedSinceLastScore = 0
+          console.log('[worker] Fetch batch threshold reached — triggering enrich + score')
+          for (const period of ['7D', '30D', '90D']) {
+            for (const tier of ['fast', 'slow']) {
+              await q.add(
+                JOB.ENRICH_PLATFORM,
+                { period, tier },
+                {
+                  jobId: `enrich-after-fetch_${period}_${tier}_${Date.now()}`,
+                  priority: 2,
+                }
+              )
+            }
+          }
+          for (const season of ['7D', '30D', '90D'] as const) {
             await q.add(
-              JOB.ENRICH_PLATFORM,
-              { period, tier },
+              JOB.COMPUTE_LEADERBOARD,
+              { season },
               {
-                jobId: `enrich-after-fetch_${period}_${tier}_${Date.now()}`,
-                priority: 2,
+                jobId: `score-after-fetch_${season}_${Date.now()}`,
+                priority: 1,
+                delay: 120_000,
               }
             )
           }
         }
-        // Score after enrich (priority 1 = runs after enrich completes)
-        for (const season of ['7D', '30D', '90D'] as const) {
+      }
+
+      // After score compute → trigger meilisearch sync
+      if (job.name === JOB.COMPUTE_LEADERBOARD) {
+        const { season } = job.data as { season: string }
+        if (season === '90D') {
           await q.add(
-            JOB.COMPUTE_LEADERBOARD,
-            { season },
+            JOB.SYNC_MEILISEARCH,
+            {},
             {
-              jobId: `score-after-fetch_${season}_${Date.now()}`,
+              jobId: `meilisearch-after-score_${Date.now()}`,
               priority: 1,
-              delay: 120_000, // 2 min delay to let enrich finish first
             }
           )
         }
       }
-    }
-
-    // After score compute → trigger meilisearch sync
-    if (job.name === JOB.COMPUTE_LEADERBOARD) {
-      // Only trigger once (after 90D, which runs last)
-      const { season } = job.data as { season: string }
-      if (season === '90D') {
-        await q.add(
-          JOB.SYNC_MEILISEARCH,
-          {},
-          {
-            jobId: `meilisearch-after-score_${Date.now()}`,
-            priority: 1,
-          }
-        )
-      }
+    } catch (err) {
+      console.error(`[worker] Error in completed handler for ${job?.name}:`, err)
     }
   })
 
