@@ -92,8 +92,8 @@ const DEAD_PLATFORMS = new Set([
   'bingx_spot', // no leaderboard API
   'bitget_spot', // permanently disabled (no leaderboard API)
   'lbank', // API 404 since 2026-04 (copy-trading endpoint removed)
+  'weex', // origin 521 since 2026-05-29 (CF origin down, not our bug)
   // 'bingx' — RECOVERED 2026-05-19 via re-enable enrichment
-  // 'weex' — RECOVERED 2026-05-19 via re-enable enrichment
   // 'bybit', 'bybit_spot' — RECOVERED 2026-04-08 via DB seed fallback in connector
   'copin', // not a real platform — dYdX data aggregator, no independent leaderboard
   'gateio', // intermittent — API frequently returns empty, low-priority
