@@ -65,34 +65,51 @@ export function usePostComments({
 
   const getDraftKey = useCallback((postId: string) => `comment-draft-${postId}`, [])
 
-  const setNewComment = useCallback((value: string) => {
-    setNewCommentRaw(value)
-    // Debounced save to localStorage (500ms)
-    if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-    const postId = currentPostIdRef.current
-    if (!postId) return
-    draftTimerRef.current = setTimeout(() => {
-      try {
-        if (value.trim()) {
-          localStorage.setItem(getDraftKey(postId), value)
-        } else {
-          localStorage.removeItem(getDraftKey(postId))
+  const setNewComment = useCallback(
+    (value: string) => {
+      setNewCommentRaw(value)
+      // Debounced save to localStorage (500ms)
+      if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
+      const postId = currentPostIdRef.current
+      if (!postId) return
+      draftTimerRef.current = setTimeout(() => {
+        try {
+          if (value.trim()) {
+            localStorage.setItem(getDraftKey(postId), value)
+          } else {
+            localStorage.removeItem(getDraftKey(postId))
+          }
+        } catch {
+          /* quota exceeded — ignore */
         }
-      } catch { /* quota exceeded — ignore */ }
-    }, 500)
-  }, [getDraftKey])
+      }, 500)
+    },
+    [getDraftKey]
+  )
 
-  const restoreDraft = useCallback((postId: string) => {
-    currentPostIdRef.current = postId
-    try {
-      const saved = localStorage.getItem(getDraftKey(postId))
-      if (saved) setNewCommentRaw(saved)
-    } catch { /* ignore */ }
-  }, [getDraftKey])
+  const restoreDraft = useCallback(
+    (postId: string) => {
+      currentPostIdRef.current = postId
+      try {
+        const saved = localStorage.getItem(getDraftKey(postId))
+        if (saved) setNewCommentRaw(saved)
+      } catch {
+        /* ignore */
+      }
+    },
+    [getDraftKey]
+  )
 
-  const clearDraft = useCallback((postId: string) => {
-    try { localStorage.removeItem(getDraftKey(postId)) } catch { /* ignore */ }
-  }, [getDraftKey])
+  const clearDraft = useCallback(
+    (postId: string) => {
+      try {
+        localStorage.removeItem(getDraftKey(postId))
+      } catch {
+        /* ignore */
+      }
+    },
+    [getDraftKey]
+  )
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; handle: string } | null>(null)
   const [replyContent, setReplyContent] = useState('')
   const [submittingReply, setSubmittingReply] = useState(false)
@@ -116,265 +133,360 @@ export function usePostComments({
     return true
   }, [accessToken, showToast, t])
 
-  const loadComments = useCallback(async (postId: string, sort: 'best' | 'time' = 'best'): Promise<void> => {
-    // Restore any saved draft for this post
-    restoreDraft(postId)
-    setLoadingComments(true)
-    try {
-      const { ok, data } = await authedFetch<{ success: boolean; data?: { comments: Comment[] } }>(
-        `/api/posts/${postId}/comments?sort=${sort}`,
-        'GET',
-        accessToken
-      )
-      const loaded = ok && data?.success ? data.data?.comments || [] : []
-      setComments(loaded)
-      // Sync with postStore as single source of truth
-      usePostStore.getState().setComments(postId, loaded.map(toCommentData))
-    } catch {
-      // Don't clear existing comments on refresh failure — preserve what users already see
-    } finally {
-      setLoadingComments(false)
-    }
-  }, [accessToken, restoreDraft])
+  const loadComments = useCallback(
+    async (postId: string, sort: 'best' | 'time' = 'best'): Promise<void> => {
+      // Restore any saved draft for this post
+      restoreDraft(postId)
+      setLoadingComments(true)
+      try {
+        const { ok, data } = await authedFetch<{
+          success: boolean
+          data?: { comments: Comment[] }
+        }>(`/api/posts/${postId}/comments?sort=${sort}`, 'GET', accessToken)
+        const loaded = ok && data?.success ? data.data?.comments || [] : []
+        setComments(loaded)
+        // Sync with postStore as single source of truth
+        usePostStore.getState().setComments(postId, loaded.map(toCommentData))
+      } catch {
+        // Don't clear existing comments on refresh failure — preserve what users already see
+      } finally {
+        setLoadingComments(false)
+      }
+    },
+    [accessToken, restoreDraft]
+  )
 
-  const submitComment = useCallback(async (postId: string): Promise<void> => {
-    if (!requireAuth() || !newComment.trim()) return
-    if (submittingCommentRef.current) return // Prevent double submission
+  const submitComment = useCallback(
+    async (postId: string): Promise<void> => {
+      if (!requireAuth() || !newComment.trim()) return
+      if (submittingCommentRef.current) return // Prevent double submission
 
-    submittingCommentRef.current = true
-    setSubmittingComment(true)
+      submittingCommentRef.current = true
+      setSubmittingComment(true)
 
-    // Optimistic: show comment immediately with temp ID
-    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
-    const optimisticComment: Comment = {
-      id: tempId,
-      content: newComment.trim(),
-      created_at: new Date().toISOString(),
-    }
-    setComments(prev => [...prev, optimisticComment])
-    const savedContent = newComment.trim()
-    setNewComment('')
-    clearDraft(postId)
-    onCommentCountChange?.(postId, 1)
+      // Optimistic: show comment immediately with temp ID
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      const optimisticComment: Comment = {
+        id: tempId,
+        content: newComment.trim(),
+        created_at: new Date().toISOString(),
+      }
+      setComments((prev) => [...prev, optimisticComment])
+      const savedContent = newComment.trim()
+      setNewComment('')
+      clearDraft(postId)
+      onCommentCountChange?.(postId, 1)
 
-    try {
-      const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
-        `/api/posts/${postId}/comments`,
-        'POST',
-        accessToken,
-        { content: savedContent }
-      )
+      try {
+        const { ok, status, data } = await authedFetch<{
+          success: boolean
+          error?: string
+          data?: { comment: Comment }
+        }>(`/api/posts/${postId}/comments`, 'POST', accessToken, { content: savedContent })
 
-      if (!ok) {
+        if (!ok) {
+          // Rollback optimistic comment
+          setComments((prev) => prev.filter((c) => c.id !== tempId))
+          setNewComment(savedContent)
+          onCommentCountChange?.(postId, -1)
+          showToast(getHttpErrorMessage(status, data?.error || t('commentFailedRetry')), 'error')
+          return
+        }
+
+        if (data?.success && data.data?.comment) {
+          // Replace optimistic comment with server response
+          const serverComment = data.data.comment
+          setComments((prev) => prev.map((c) => (c.id === tempId ? serverComment : c)))
+          usePostStore.getState().addComment(postId, toCommentData(serverComment))
+        } else {
+          // Rollback optimistic comment
+          setComments((prev) => prev.filter((c) => c.id !== tempId))
+          setNewComment(savedContent)
+          onCommentCountChange?.(postId, -1)
+          showToast(data?.error || t('commentFailedRetry'), 'error')
+        }
+      } catch {
         // Rollback optimistic comment
-        setComments(prev => prev.filter(c => c.id !== tempId))
+        setComments((prev) => prev.filter((c) => c.id !== tempId))
         setNewComment(savedContent)
         onCommentCountChange?.(postId, -1)
-        showToast(getHttpErrorMessage(status, data?.error || t('commentFailedRetry')), 'error')
-        return
+        showToast(t('networkError'), 'error')
+      } finally {
+        submittingCommentRef.current = false
+        setSubmittingComment(false)
       }
+    },
+    [
+      accessToken,
+      newComment,
+      requireAuth,
+      showToast,
+      onCommentCountChange,
+      t,
+      clearDraft,
+      setNewComment,
+    ]
+  )
 
-      if (data?.success && data.data?.comment) {
-        // Replace optimistic comment with server response
-        const serverComment = data.data.comment
-        setComments(prev => prev.map(c => c.id === tempId ? serverComment : c))
-        usePostStore.getState().addComment(postId, toCommentData(serverComment))
-      } else {
-        // Rollback optimistic comment
-        setComments(prev => prev.filter(c => c.id !== tempId))
-        setNewComment(savedContent)
-        onCommentCountChange?.(postId, -1)
-        showToast(data?.error || t('commentFailedRetry'), 'error')
-      }
-    } catch {
-      // Rollback optimistic comment
-      setComments(prev => prev.filter(c => c.id !== tempId))
-      setNewComment(savedContent)
-      onCommentCountChange?.(postId, -1)
-      showToast(t('networkError'), 'error')
-    } finally {
-      submittingCommentRef.current = false
-      setSubmittingComment(false)
-    }
-  }, [accessToken, newComment, requireAuth, showToast, onCommentCountChange, t, clearDraft, setNewComment])
+  const toggleCommentLike = useCallback(
+    async (postId: string, commentId: string): Promise<void> => {
+      if (!requireAuth() || commentLikeLoading[commentId]) return
 
-  const toggleCommentLike = useCallback(async (postId: string, commentId: string): Promise<void> => {
-    if (!requireAuth() || commentLikeLoading[commentId]) return
+      setCommentLikeLoading((prev) => ({ ...prev, [commentId]: true }))
 
-    setCommentLikeLoading(prev => ({ ...prev, [commentId]: true }))
+      // Capture prior state for delta rollback
+      const targetComment = comments
+        .flatMap((c) => [c, ...(c.replies || [])])
+        .find((c) => c.id === commentId)
+      const wasLiked = !!targetComment?.user_liked
 
-    // Optimistic update: toggle like immediately
-    const updateOptimistic = (comment: Comment): Comment => {
-      if (comment.id === commentId) {
-        const wasLiked = comment.user_liked
-        return {
-          ...comment,
-          user_liked: !wasLiked,
-          like_count: (comment.like_count || 0) + (wasLiked ? -1 : 1),
-          // If switching from dislike to like, clear dislike
-          ...(comment.user_disliked && !wasLiked ? { user_disliked: false, dislike_count: Math.max(0, (comment.dislike_count || 0) - 1) } : {}),
-        }
-      }
-      if (comment.replies) return { ...comment, replies: comment.replies.map(updateOptimistic) }
-      return comment
-    }
-    setComments(prev => prev.map(updateOptimistic))
-
-    try {
-      const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { like_count: number; liked: boolean } }>(
-        `/api/posts/${postId}/comments/like`,
-        'POST',
-        accessToken,
-        { comment_id: commentId }
-      )
-
-      if (ok && data?.success) {
-        // Reconcile with server counts
-        const d = data.data!
-        const reconcile = (comment: Comment): Comment => {
-          if (comment.id === commentId) {
-            return {
-              ...comment,
-              like_count: d.like_count,
-              user_liked: d.liked,
-              ...('dislike_count' in d ? { dislike_count: (d as Record<string, unknown>).dislike_count as number, user_disliked: (d as Record<string, unknown>).disliked as boolean } : {}),
-            }
+      // Optimistic update: toggle like immediately
+      const updateOptimistic = (comment: Comment): Comment => {
+        if (comment.id === commentId) {
+          return {
+            ...comment,
+            user_liked: !wasLiked,
+            like_count: (comment.like_count || 0) + (wasLiked ? -1 : 1),
+            // If switching from dislike to like, clear dislike
+            ...(comment.user_disliked && !wasLiked
+              ? {
+                  user_disliked: false,
+                  dislike_count: Math.max(0, (comment.dislike_count || 0) - 1),
+                }
+              : {}),
           }
-          if (comment.replies) return { ...comment, replies: comment.replies.map(reconcile) }
-          return comment
         }
-        setComments(prev => prev.map(reconcile))
-      } else {
-        // Rollback: re-fetch to get correct state
-        showToast(getHttpErrorMessage(status, data?.error || t('operationFailed')), status === 429 ? 'warning' : 'error')
+        if (comment.replies) return { ...comment, replies: comment.replies.map(updateOptimistic) }
+        return comment
       }
-    } catch {
-      showToast(t('networkError'), 'error')
-    } finally {
-      setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
-    }
-  }, [accessToken, commentLikeLoading, requireAuth, showToast, t])
+      setComments((prev) => prev.map(updateOptimistic))
 
-  const toggleCommentDislike = useCallback(async (postId: string, commentId: string): Promise<void> => {
-    if (!requireAuth() || commentLikeLoading[commentId]) return
+      try {
+        const { ok, status, data } = await authedFetch<{
+          success: boolean
+          error?: string
+          data?: { like_count: number; liked: boolean }
+        }>(`/api/posts/${postId}/comments/like`, 'POST', accessToken, { comment_id: commentId })
 
-    setCommentLikeLoading(prev => ({ ...prev, [commentId]: true }))
-
-    // Optimistic update: toggle dislike immediately
-    const updateOptimistic = (comment: Comment): Comment => {
-      if (comment.id === commentId) {
-        const wasDisliked = comment.user_disliked
-        return {
-          ...comment,
-          user_disliked: !wasDisliked,
-          dislike_count: (comment.dislike_count || 0) + (wasDisliked ? -1 : 1),
-          // If switching from like to dislike, clear like
-          ...(comment.user_liked && !wasDisliked ? { user_liked: false, like_count: Math.max(0, (comment.like_count || 0) - 1) } : {}),
-        }
-      }
-      if (comment.replies) return { ...comment, replies: comment.replies.map(updateOptimistic) }
-      return comment
-    }
-    setComments(prev => prev.map(updateOptimistic))
-
-    try {
-      const { ok, status, data } = await authedFetch<{ success: boolean; error?: string; data?: { dislike_count: number; disliked: boolean; like_count: number; liked: boolean } }>(
-        `/api/posts/${postId}/comments/like`,
-        'POST',
-        accessToken,
-        { comment_id: commentId, type: 'dislike' }
-      )
-
-      if (ok && data?.success) {
-        // Reconcile with server counts
-        const reconcile = (comment: Comment): Comment => {
-          if (comment.id === commentId) {
-            return {
-              ...comment,
-              dislike_count: data.data!.dislike_count,
-              user_disliked: data.data!.disliked,
-              like_count: data.data!.like_count,
-              user_liked: data.data!.liked,
+        if (ok && data?.success) {
+          // Reconcile with server counts
+          const d = data.data!
+          const reconcile = (comment: Comment): Comment => {
+            if (comment.id === commentId) {
+              return {
+                ...comment,
+                like_count: d.like_count,
+                user_liked: d.liked,
+                ...('dislike_count' in d
+                  ? {
+                      dislike_count: (d as Record<string, unknown>).dislike_count as number,
+                      user_disliked: (d as Record<string, unknown>).disliked as boolean,
+                    }
+                  : {}),
+              }
             }
+            if (comment.replies) return { ...comment, replies: comment.replies.map(reconcile) }
+            return comment
           }
-          if (comment.replies) return { ...comment, replies: comment.replies.map(reconcile) }
-          return comment
+          setComments((prev) => prev.map(reconcile))
+        } else {
+          // Delta rollback: reverse the optimistic update
+          const rollback = (comment: Comment): Comment => {
+            if (comment.id === commentId) {
+              return {
+                ...comment,
+                user_liked: wasLiked,
+                like_count: (comment.like_count || 0) + (wasLiked ? 1 : -1),
+                ...(comment.user_disliked === false && !wasLiked
+                  ? { user_disliked: true, dislike_count: (comment.dislike_count || 0) + 1 }
+                  : {}),
+              }
+            }
+            if (comment.replies) return { ...comment, replies: comment.replies.map(rollback) }
+            return comment
+          }
+          setComments((prev) => prev.map(rollback))
+          showToast(
+            getHttpErrorMessage(status, data?.error || t('operationFailed')),
+            status === 429 ? 'warning' : 'error'
+          )
         }
-        setComments(prev => prev.map(reconcile))
-      } else {
-        showToast(getHttpErrorMessage(status, data?.error || t('operationFailed')), status === 429 ? 'warning' : 'error')
+      } catch {
+        showToast(t('networkError'), 'error')
+      } finally {
+        setCommentLikeLoading((prev) => ({ ...prev, [commentId]: false }))
       }
-    } catch {
-      showToast(t('networkError'), 'error')
-    } finally {
-      setCommentLikeLoading(prev => ({ ...prev, [commentId]: false }))
-    }
-  }, [accessToken, commentLikeLoading, requireAuth, showToast, t])
+    },
+    [accessToken, commentLikeLoading, requireAuth, showToast, t]
+  )
 
-  const submitReply = useCallback(async (postId: string, parentId: string): Promise<void> => {
-    if (!requireAuth() || !replyContent.trim()) return
-    if (submittingReplyRef.current) return // Prevent double submission
+  const toggleCommentDislike = useCallback(
+    async (postId: string, commentId: string): Promise<void> => {
+      if (!requireAuth() || commentLikeLoading[commentId]) return
 
-    submittingReplyRef.current = true
-    setSubmittingReply(true)
+      setCommentLikeLoading((prev) => ({ ...prev, [commentId]: true }))
 
-    // Optimistic: show reply immediately
-    const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
-    const optimisticReply: Comment = {
-      id: tempId,
-      content: replyContent.trim(),
-      created_at: new Date().toISOString(),
-    }
-    const savedContent = replyContent.trim()
-    setComments(prev => prev.map(c =>
-      c.id === parentId ? { ...c, replies: [...(c.replies || []), optimisticReply] } : c
-    ))
-    setReplyContent('')
-    setReplyingTo(null)
-    setExpandedReplies(prev => ({ ...prev, [parentId]: true }))
-    onCommentCountChange?.(postId, 1)
+      // Capture prior state for delta rollback
+      const targetDislike = comments
+        .flatMap((c) => [c, ...(c.replies || [])])
+        .find((c) => c.id === commentId)
+      const wasDisliked = !!targetDislike?.user_disliked
 
-    try {
-      const { ok, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
-        `/api/posts/${postId}/comments`,
-        'POST',
-        accessToken,
-        { content: savedContent, parent_id: parentId }
+      // Optimistic update: toggle dislike immediately
+      const updateOptimistic = (comment: Comment): Comment => {
+        if (comment.id === commentId) {
+          return {
+            ...comment,
+            user_disliked: !wasDisliked,
+            dislike_count: (comment.dislike_count || 0) + (wasDisliked ? -1 : 1),
+            // If switching from like to dislike, clear like
+            ...(comment.user_liked && !wasDisliked
+              ? { user_liked: false, like_count: Math.max(0, (comment.like_count || 0) - 1) }
+              : {}),
+          }
+        }
+        if (comment.replies) return { ...comment, replies: comment.replies.map(updateOptimistic) }
+        return comment
+      }
+      setComments((prev) => prev.map(updateOptimistic))
+
+      try {
+        const { ok, status, data } = await authedFetch<{
+          success: boolean
+          error?: string
+          data?: { dislike_count: number; disliked: boolean; like_count: number; liked: boolean }
+        }>(`/api/posts/${postId}/comments/like`, 'POST', accessToken, {
+          comment_id: commentId,
+          type: 'dislike',
+        })
+
+        if (ok && data?.success) {
+          // Reconcile with server counts
+          const reconcile = (comment: Comment): Comment => {
+            if (comment.id === commentId) {
+              return {
+                ...comment,
+                dislike_count: data.data!.dislike_count,
+                user_disliked: data.data!.disliked,
+                like_count: data.data!.like_count,
+                user_liked: data.data!.liked,
+              }
+            }
+            if (comment.replies) return { ...comment, replies: comment.replies.map(reconcile) }
+            return comment
+          }
+          setComments((prev) => prev.map(reconcile))
+        } else {
+          // Delta rollback: reverse the optimistic dislike toggle
+          const rollback = (comment: Comment): Comment => {
+            if (comment.id === commentId) {
+              return {
+                ...comment,
+                user_disliked: wasDisliked,
+                dislike_count: (comment.dislike_count || 0) + (wasDisliked ? 1 : -1),
+                ...(comment.user_liked === false && !wasDisliked
+                  ? { user_liked: true, like_count: (comment.like_count || 0) + 1 }
+                  : {}),
+              }
+            }
+            if (comment.replies) return { ...comment, replies: comment.replies.map(rollback) }
+            return comment
+          }
+          setComments((prev) => prev.map(rollback))
+          showToast(
+            getHttpErrorMessage(status, data?.error || t('operationFailed')),
+            status === 429 ? 'warning' : 'error'
+          )
+        }
+      } catch {
+        showToast(t('networkError'), 'error')
+      } finally {
+        setCommentLikeLoading((prev) => ({ ...prev, [commentId]: false }))
+      }
+    },
+    [accessToken, commentLikeLoading, requireAuth, showToast, t]
+  )
+
+  const submitReply = useCallback(
+    async (postId: string, parentId: string): Promise<void> => {
+      if (!requireAuth() || !replyContent.trim()) return
+      if (submittingReplyRef.current) return // Prevent double submission
+
+      submittingReplyRef.current = true
+      setSubmittingReply(true)
+
+      // Optimistic: show reply immediately
+      const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
+      const optimisticReply: Comment = {
+        id: tempId,
+        content: replyContent.trim(),
+        created_at: new Date().toISOString(),
+      }
+      const savedContent = replyContent.trim()
+      setComments((prev) =>
+        prev.map((c) =>
+          c.id === parentId ? { ...c, replies: [...(c.replies || []), optimisticReply] } : c
+        )
       )
+      setReplyContent('')
+      setReplyingTo(null)
+      setExpandedReplies((prev) => ({ ...prev, [parentId]: true }))
+      onCommentCountChange?.(postId, 1)
 
-      if (ok && data?.success && data.data?.comment) {
-        // Replace optimistic reply with server response
-        const serverReply = data.data.comment
-        setComments(prev => prev.map(c =>
-          c.id === parentId
-            ? { ...c, replies: (c.replies || []).map(r => r.id === tempId ? serverReply : r) }
-            : c
-        ))
-        showToast(t('replied'), 'success')
-      } else {
+      try {
+        const { ok, data } = await authedFetch<{
+          success: boolean
+          error?: string
+          data?: { comment: Comment }
+        }>(`/api/posts/${postId}/comments`, 'POST', accessToken, {
+          content: savedContent,
+          parent_id: parentId,
+        })
+
+        if (ok && data?.success && data.data?.comment) {
+          // Replace optimistic reply with server response
+          const serverReply = data.data.comment
+          setComments((prev) =>
+            prev.map((c) =>
+              c.id === parentId
+                ? {
+                    ...c,
+                    replies: (c.replies || []).map((r) => (r.id === tempId ? serverReply : r)),
+                  }
+                : c
+            )
+          )
+          showToast(t('replied'), 'success')
+        } else {
+          // Rollback optimistic reply
+          setComments((prev) =>
+            prev.map((c) =>
+              c.id === parentId
+                ? { ...c, replies: (c.replies || []).filter((r) => r.id !== tempId) }
+                : c
+            )
+          )
+          onCommentCountChange?.(postId, -1)
+          showToast(data?.error || t('operationFailed'), 'error')
+        }
+      } catch {
         // Rollback optimistic reply
-        setComments(prev => prev.map(c =>
-          c.id === parentId
-            ? { ...c, replies: (c.replies || []).filter(r => r.id !== tempId) }
-            : c
-        ))
+        setComments((prev) =>
+          prev.map((c) =>
+            c.id === parentId
+              ? { ...c, replies: (c.replies || []).filter((r) => r.id !== tempId) }
+              : c
+          )
+        )
         onCommentCountChange?.(postId, -1)
-        showToast(data?.error || t('operationFailed'), 'error')
+        showToast(t('operationFailed'), 'error')
+      } finally {
+        submittingReplyRef.current = false
+        setSubmittingReply(false)
       }
-    } catch {
-      // Rollback optimistic reply
-      setComments(prev => prev.map(c =>
-        c.id === parentId
-          ? { ...c, replies: (c.replies || []).filter(r => r.id !== tempId) }
-          : c
-      ))
-      onCommentCountChange?.(postId, -1)
-      showToast(t('operationFailed'), 'error')
-    } finally {
-      submittingReplyRef.current = false
-      setSubmittingReply(false)
-    }
-  }, [accessToken, replyContent, requireAuth, showToast, onCommentCountChange, t])
+    },
+    [accessToken, replyContent, requireAuth, showToast, onCommentCountChange, t]
+  )
 
   const startEditComment = useCallback((comment: Comment) => {
     setEditingComment({ id: comment.id, content: comment.content })
@@ -386,79 +498,88 @@ export function usePostComments({
     setEditContent('')
   }, [])
 
-  const submitEditComment = useCallback(async (postId: string): Promise<void> => {
-    if (!editingComment || !editContent.trim() || !requireAuth()) return
+  const submitEditComment = useCallback(
+    async (postId: string): Promise<void> => {
+      if (!editingComment || !editContent.trim() || !requireAuth()) return
 
-    setSubmittingEdit(true)
-    try {
-      const { ok, data } = await authedFetch<{ success: boolean; error?: string; data?: { comment: Comment } }>(
-        `/api/posts/${postId}/comments`,
-        'PUT',
-        accessToken,
-        { comment_id: editingComment.id, content: editContent.trim() }
-      )
+      setSubmittingEdit(true)
+      try {
+        const { ok, data } = await authedFetch<{
+          success: boolean
+          error?: string
+          data?: { comment: Comment }
+        }>(`/api/posts/${postId}/comments`, 'PUT', accessToken, {
+          comment_id: editingComment.id,
+          content: editContent.trim(),
+        })
 
-      if (ok && data?.success) {
-        const updateInList = (c: Comment): Comment => {
-          if (c.id === editingComment.id) {
-            return { ...c, content: editContent.trim() }
-          }
-          if (c.replies) {
-            return { ...c, replies: c.replies.map(updateInList) }
-          }
-          return c
-        }
-        setComments(prev => prev.map(updateInList))
-        setEditingComment(null)
-        setEditContent('')
-        showToast(t('saved'), 'success')
-      } else {
-        showToast(data?.error || t('operationFailed'), 'error')
-      }
-    } catch {
-      showToast(t('networkError'), 'error')
-    } finally {
-      setSubmittingEdit(false)
-    }
-  }, [accessToken, editingComment, editContent, requireAuth, showToast, t])
-
-  const deleteComment = useCallback(async (postId: string, commentId: string): Promise<void> => {
-    if (!requireAuth()) return
-
-    const confirmed = await showDangerConfirm(t('deleteComment'), t('confirmDeleteComment'))
-    if (!confirmed) return
-
-    setDeletingCommentId(commentId)
-    try {
-      const { ok, data } = await authedFetch<{ success: boolean; error?: string }>(
-        `/api/posts/${postId}/comments`,
-        'DELETE',
-        accessToken,
-        { comment_id: commentId }
-      )
-
-      if (ok && data?.success) {
-        setComments(prev => prev
-          .map(c => {
-            if (c.id === commentId) return null
-            if (c.replies?.length) {
-              return { ...c, replies: c.replies.filter(r => r.id !== commentId) }
+        if (ok && data?.success) {
+          const updateInList = (c: Comment): Comment => {
+            if (c.id === editingComment.id) {
+              return { ...c, content: editContent.trim() }
+            }
+            if (c.replies) {
+              return { ...c, replies: c.replies.map(updateInList) }
             }
             return c
-          })
-          .filter((c): c is Comment => c !== null)
-        )
-        onCommentCountChange?.(postId, -1)
-        showToast(t('deleted'), 'success')
-      } else {
-        showToast(data?.error || t('operationFailed'), 'error')
+          }
+          setComments((prev) => prev.map(updateInList))
+          setEditingComment(null)
+          setEditContent('')
+          showToast(t('saved'), 'success')
+        } else {
+          showToast(data?.error || t('operationFailed'), 'error')
+        }
+      } catch {
+        showToast(t('networkError'), 'error')
+      } finally {
+        setSubmittingEdit(false)
       }
-    } catch {
-      showToast(t('operationFailed'), 'error')
-    } finally {
-      setDeletingCommentId(null)
-    }
-  }, [accessToken, requireAuth, showDangerConfirm, showToast, onCommentCountChange, t])
+    },
+    [accessToken, editingComment, editContent, requireAuth, showToast, t]
+  )
+
+  const deleteComment = useCallback(
+    async (postId: string, commentId: string): Promise<void> => {
+      if (!requireAuth()) return
+
+      const confirmed = await showDangerConfirm(t('deleteComment'), t('confirmDeleteComment'))
+      if (!confirmed) return
+
+      setDeletingCommentId(commentId)
+      try {
+        const { ok, data } = await authedFetch<{ success: boolean; error?: string }>(
+          `/api/posts/${postId}/comments`,
+          'DELETE',
+          accessToken,
+          { comment_id: commentId }
+        )
+
+        if (ok && data?.success) {
+          setComments((prev) =>
+            prev
+              .map((c) => {
+                if (c.id === commentId) return null
+                if (c.replies?.length) {
+                  return { ...c, replies: c.replies.filter((r) => r.id !== commentId) }
+                }
+                return c
+              })
+              .filter((c): c is Comment => c !== null)
+          )
+          onCommentCountChange?.(postId, -1)
+          showToast(t('deleted'), 'success')
+        } else {
+          showToast(data?.error || t('operationFailed'), 'error')
+        }
+      } catch {
+        showToast(t('operationFailed'), 'error')
+      } finally {
+        setDeletingCommentId(null)
+      }
+    },
+    [accessToken, requireAuth, showDangerConfirm, showToast, onCommentCountChange, t]
+  )
 
   return {
     comments,
