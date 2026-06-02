@@ -61,6 +61,26 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 - [x] computeSeason split: 1369 → 889 lines (-480). Extracted scoreTraders, checkDegradationGuard, fetchCurrentScoreMap + buildChangedTraders, upsertLeaderboard + zeroOutExcluded into 4 helper files
 - [x] TraderHeader 40-prop interface trim (40 → 34: removed uid, following, isPro, maxDrawdown, winRate, profileUrl)
+- [x] Deep 6-direction root-cause audit (2026-06-02 session #2) — see below
+
+### Deep 6-Direction Audit (2026-06-02 session #2)
+
+15 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
+
+- [x] **C-1** Pin react to exact 19.2.6 (prevent version drift)
+- [x] **C-2** Remove 10 redundant Vercel crons (54→44, BullMQ handles enrich/score/meilisearch)
+- [x] **C-3** Batch hashtag post_count via `recount_hashtag_posts()` RPC (N+1 → 1 query)
+- [x] **H-1** Delete 3 dead cron routes (-1,501 LOC: batch-fetch-traders, pipeline-fetch, auto-post-insights)
+- [x] **H-2** Remove 5 dead deps + trigger.dev files (@trigger.dev/sdk, critters, puppeteer x3, chrome-launcher)
+- [x] **H-3** Migrate TokenBucket from `redis` to `ioredis` (3→2 Redis clients)
+- [x] **H-4** npm prune extraneous trigger.dev deps (21→11 vulns, 0 high)
+- [x] **H-5** Fix silent cache failure logging in market overview
+- [x] **H-6** Disable refetchOnWindowFocus on posts + notifications (tab-switch jank fix)
+- [x] **H-7** Increase trader detail staleTime 10s→2min (match pipeline frequency)
+- [x] **M-1** Handle Supabase errors in 4 group auth checks (security logging)
+- [x] **M-4** Add min-height loading placeholders to dynamic imports (CLS fix: EquityCurve/ExchangeLinks/LinkedAccounts)
+- [x] **M-5** Centralize React Query staleTime via `cache-presets.ts` (5 named tiers, 22 files updated)
+- [x] **M-8** Split pipeline-evaluator.ts (1743→236 LOC + 3 check files)
 
 ---
 
@@ -75,10 +95,10 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 ## 🟢 P3 - Nice to Have
 
-- [ ] **React version consistency CI check** — prevent react/react-dom drift (caused 3 test failures this week)
+- [x] ~~**React version consistency CI check**~~ — fixed: pinned react to exact 19.2.6 (matches react-dom)
 - [ ] **Automate weekly retro via OpenClaw** — `/retro` every Friday (carried from May 19 retro)
-- [ ] **Review 5 TODO/FIXME markers** — resolve or convert to tracked issues
-- [ ] **Check transitive npm vulns** — 21 remaining, all transitive (ws/viem/privy). Need upstream releases.
+- [x] ~~**Review 5 TODO/FIXME markers**~~ — only 2 intentional TODOs remain (HEIC support + 2026-07-01 constant removal)
+- [x] ~~**Check transitive npm vulns**~~ — 21 → 11 (npm prune removed trigger.dev extraneous deps; 0 high remaining, 11 moderate via viem→ws)
 - [ ] Lighthouse re-audit on production (API quota previously exhausted)
 - [x] Monthly dependency update review (14 dependabot PRs merged 2026-05-28)
 
