@@ -27,52 +27,52 @@ export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
   const today = new Date().toISOString().split('T')[0]
   let totalInserted = 0
 
-  for (const period of PERIODS) {
-    // Fetch top 500 traders for this period from leaderboard_ranks
-    const { data: rows, error: fetchError } = await supabase
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, rank, arena_score')
-      .eq('season_id', period)
-      .not('rank', 'is', null)
-      .order('rank', { ascending: true })
-      .limit(TOP_N)
+  // Parallel fetch + upsert across all 3 periods (was serial)
+  const periodResults = await Promise.all(
+    PERIODS.map(async (period) => {
+      const { data: rows, error: fetchError } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, rank, arena_score')
+        .eq('season_id', period)
+        .not('rank', 'is', null)
+        .order('rank', { ascending: true })
+        .limit(TOP_N)
 
-    if (fetchError) {
-      log.error(`Failed to fetch leaderboard_ranks for ${period}`, { error: fetchError.message })
-      continue
-    }
-
-    if (!rows || rows.length === 0) {
-      log.warn(`No rows found for period ${period}`)
-      continue
-    }
-
-    // Build upsert records
-    const records = rows.map(row => ({
-      platform: row.source,
-      trader_key: row.source_trader_id,
-      period,
-      rank: row.rank,
-      arena_score: row.arena_score,
-      snapshot_date: today,
-    }))
-
-    // Batch upsert into rank_history
-    for (let i = 0; i < records.length; i += UPSERT_BATCH) {
-      const batch = records.slice(i, i + UPSERT_BATCH)
-      const { error: upsertError } = await supabase
-        .from('rank_history')
-        .upsert(batch, { onConflict: 'platform,trader_key,period,snapshot_date' })
-
-      if (upsertError) {
-        log.error(`Upsert error for ${period} batch ${i}`, { error: upsertError.message })
-      } else {
-        totalInserted += batch.length
+      if (fetchError) {
+        log.error(`Failed to fetch leaderboard_ranks for ${period}`, { error: fetchError.message })
+        return 0
       }
-    }
+      if (!rows || rows.length === 0) {
+        log.warn(`No rows found for period ${period}`)
+        return 0
+      }
 
-    log.info(`Snapshotted ${records.length} traders for ${period}`)
-  }
+      const records = rows.map((row) => ({
+        platform: row.source,
+        trader_key: row.source_trader_id,
+        period,
+        rank: row.rank,
+        arena_score: row.arena_score,
+        snapshot_date: today,
+      }))
+
+      let inserted = 0
+      for (let i = 0; i < records.length; i += UPSERT_BATCH) {
+        const batch = records.slice(i, i + UPSERT_BATCH)
+        const { error: upsertError } = await supabase
+          .from('rank_history')
+          .upsert(batch, { onConflict: 'platform,trader_key,period,snapshot_date' })
+        if (upsertError) {
+          log.error(`Upsert error for ${period} batch ${i}`, { error: upsertError.message })
+        } else {
+          inserted += batch.length
+        }
+      }
+      log.info(`Snapshotted ${records.length} traders for ${period}`)
+      return inserted
+    })
+  )
+  totalInserted = periodResults.reduce((sum, n) => sum + n, 0)
 
   // Cleanup old rows (>30 days)
   const cutoff = new Date()
