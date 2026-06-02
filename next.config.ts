@@ -449,14 +449,10 @@ const nextConfig = {
   // 某些 route 意外引入后把 ~3MB 的 AWS SDK 打进 client bundle
   serverExternalPackages: [
     'ccxt',
-    'puppeteer',
-    'puppeteer-extra',
-    'puppeteer-extra-plugin-stealth',
     'pg',
     'redis',
     '@aws-sdk/client-s3',
     '@aws-sdk/s3-request-presigner',
-    '@trigger.dev/sdk',
     'sharp',
     'web-push',
     'resend',
