@@ -34,19 +34,26 @@ Bonus fixes discovered during audit:
 - `notifications.type` CHECK expanded from 6 to 17 values to match TypeScript union (was silently blocking tip/subscription notifications)
 - Added `tip_received`, `subscription_expiring`, `subscription_expired`, `nft_expired` to TypeScript `NotificationType`
 
-### I18n + E2E audit findings (backlog — not blocking)
+### I18n fixes shipped (3/3 HIGH fixed)
 
-| ID  | Sev  | Finding                                                    |
-| --- | ---- | ---------------------------------------------------------- |
-| I2  | HIGH | ja.ts + ko.ts missing 430 keys from en.ts                  |
-| I3  | HIGH | 71 `t()` calls reference keys not in translation files     |
-| I8  | HIGH | Chinese string literals used as i18n keys in VoiceRecorder |
-| I5  | MED  | 51 hardcoded English strings bypassing `t()`               |
-| I6  | MED  | Numbers/dates hardcoded `'en-US'` in 20+ files             |
-| E1  | CRIT | No authenticated E2E tests (OTP login → session)           |
-| E2  | HIGH | No Stripe checkout end-to-end test                         |
-| E3  | HIGH | Like/Bookmark actions never tested                         |
-| E4  | HIGH | Groups write flows (join, post, comment) untested          |
+| ID  | Sev  | Status  | Finding                                                    | Fix                                                                         |
+| --- | ---- | ------- | ---------------------------------------------------------- | --------------------------------------------------------------------------- |
+| I8  | HIGH | FIXED   | Chinese string literals used as i18n keys in VoiceRecorder | Changed `t('停止录音')` → `t('stopRecording')`, added keys to all 4 locales |
+| I3  | HIGH | FIXED   | 71 `t()` calls reference keys not in translation files     | Added 66 missing keys to en/zh/ja/ko (2 batches: 36 + 30)                   |
+| I2  | HIGH | BACKLOG | ja.ts + ko.ts missing 430 keys from en.ts                  | Structural gap — needs full translation run, not a code fix                 |
+| I5  | MED  | BACKLOG | 51 hardcoded English strings bypassing `t()`               | Mostly placeholders + admin UI, low user impact                             |
+| I6  | MED  | BACKLOG | Numbers/dates hardcoded `'en-US'` in 20+ files             | Cosmetic — all current locales use same number format                       |
+
+Bonus: fixed React version mismatch (react 19.2.4 → 19.2.6 to match react-dom).
+
+### E2E test coverage gaps (backlog — infrastructure needed)
+
+| ID  | Sev  | Finding                                                             |
+| --- | ---- | ------------------------------------------------------------------- |
+| E1  | CRIT | No authenticated E2E tests (needs test account + OTP bypass)        |
+| E2  | HIGH | No Stripe checkout end-to-end test (needs Stripe test mode fixture) |
+| E3  | HIGH | Like/Bookmark actions never tested                                  |
+| E4  | HIGH | Groups write flows (join, post, comment) untested                   |
 
 ## SEO + Core Web Vitals Audit (2026-06-02)
 
