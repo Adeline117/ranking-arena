@@ -51,10 +51,11 @@ export async function verifyAdminAuth(request: Request): Promise<boolean> {
   // Check cron/service secret first (fast path)
   if (verifyCronSecret(request)) return true
 
-  const cronSecret = env.CRON_SECRET
-  if (cronSecret) {
+  // Check x-admin-token header (prefer ADMIN_API_KEY, fall back to CRON_SECRET)
+  const adminApiKey = process.env.ADMIN_API_KEY || env.CRON_SECRET
+  if (adminApiKey) {
     const adminToken = request.headers.get('x-admin-token')
-    if (adminToken && safeCompare(adminToken, cronSecret)) return true
+    if (adminToken && safeCompare(adminToken, adminApiKey)) return true
   }
 
   // Check admin user JWT — must pass BOTH DB role AND email whitelist in production

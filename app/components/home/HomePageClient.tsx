@@ -39,7 +39,7 @@ export default function HomePageClient({
   // Convert InitialTrader[] to Trader[] for compatibility
   const convertedInitialTraders: Trader[] | undefined = useMemo(
     () =>
-      initialTraders?.map((t) => ({
+      initialTraders?.map((t, idx) => ({
         id: t.id,
         handle: t.handle,
         roi: t.roi,
@@ -51,6 +51,7 @@ export default function HomePageClient({
         avatar_url: t.avatar_url,
         arena_score: t.arena_score,
         score_confidence: t.score_confidence,
+        rank: idx + 1,
       })),
     [initialTraders]
   )
