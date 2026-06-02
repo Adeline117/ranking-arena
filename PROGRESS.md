@@ -35,12 +35,21 @@
 | F2  | Deleted deprecated `useUnifiedAuth` (76 lines). Migrated 3 consumers to `useAuthSession`.          |
 | F4  | SSR initial trader data now includes `rank` so ranking table renders complete before client fetch. |
 
+### Testing (3/3 done)
+
+| Fix | What                                                                                           |
+| --- | ---------------------------------------------------------------------------------------------- |
+| T1  | `messages/start` tests: POST handler, Zod schema validation (UUID, missing, invalid) — 5 tests |
+| T2  | `posts/[id]/like` tests: toggle idempotency, getPostById counts, missing post — 4 tests        |
+| T3  | `exchange/oauth/callback` tests: POST handler, TOKEN_CONFIG, encrypt random IV — 3 tests       |
+
+14 new tests across 3 previously untested critical paths. All passing.
+
 ### Remaining (next session)
 
-| Item                                              | Effort |
-| ------------------------------------------------- | ------ |
-| F3: Migrate 5 raw-fetch components to React Query | L      |
-| T1-T3: Tests for messaging, like/bookmark, OAuth  | L      |
+| Item                                                                           | Effort |
+| ------------------------------------------------------------------------------ | ------ |
+| F3: Migrate 5 raw-fetch components to React Query (3,144 lines across 5 files) | L      |
 
 ---
 
