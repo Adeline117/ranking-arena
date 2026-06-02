@@ -35,6 +35,7 @@ import { fetchPhase1FromV2 } from './fetch-phase1'
 import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank-cleanup'
 import { scoreTraders, type ScoredTrader } from './score-traders'
 import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
+import { fetchCurrentScoreMap, buildChangedTraders } from './incremental-diff'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { PipelineState } from '@/lib/services/pipeline-state'
@@ -741,98 +742,16 @@ async function computeSeason(
   if (degradation.action === 'skip') return -1
 
   // Phase 2: Incremental upsert — only update changed rows to reduce write volume ~40%
-  // Fetch current arena_scores to diff against
-  const currentScoreMap = new Map<
-    string,
-    {
-      arena_score: number
-      rank: number
-      handle: string | null
-      avatar_url: string | null
-      sharpe_ratio: number | null
-      sortino_ratio: number | null
-      calmar_ratio: number | null
-      profit_factor: number | null
-      trading_style: string | null
-    }
-  >()
-  {
-    // Fetch in pages of 1000 to handle large leaderboards
-    let offset = 0
-    const PAGE = 1000
-    const MAX_PAGES = 100
-    let pageCount = 0
-    while (true) {
-      if (++pageCount > MAX_PAGES) {
-        logger.warn(`Reached MAX_PAGES (${MAX_PAGES}) for season ${season}, breaking`)
-        break
-      }
-      if (isOutOfTime(45_000)) {
-        logger.warn(
-          `[${season}] aborting currentScoreMap fetch at page ${pageCount} — only ${Math.round(timeLeftMs() / 1000)}s left`
-        )
-        break
-      }
-      const { data: currentScores } = await supabase
-        .from('leaderboard_ranks')
-        .select(
-          'source, source_trader_id, arena_score, rank, handle, avatar_url, sharpe_ratio, sortino_ratio, calmar_ratio, profit_factor, trading_style'
-        )
-        .eq('season_id', season)
-        .range(offset, offset + PAGE - 1)
-      if (!currentScores?.length) break
-      for (const r of currentScores) {
-        currentScoreMap.set(`${r.source}:${r.source_trader_id}`, {
-          arena_score: r.arena_score ?? 0,
-          rank: r.rank,
-          handle: r.handle,
-          avatar_url: r.avatar_url,
-          sharpe_ratio: r.sharpe_ratio,
-          sortino_ratio: r.sortino_ratio,
-          calmar_ratio: r.calmar_ratio,
-          profit_factor: r.profit_factor,
-          trading_style: r.trading_style,
-        })
-      }
-      if (currentScores.length < PAGE) break
-      offset += PAGE
-    }
-  }
-
-  // Filter to only changed rows: new traders, score changed >0.5%, or rank changed
-  const changedTraders = scoredFiltered.filter((t, idx) => {
-    const current = currentScoreMap.get(`${t.source}:${t.source_trader_id}`)
-    if (current == null) return true // new trader
-    // Always update if handle/avatar changed (backfill)
-    if (t.handle !== current.handle || t.avatar_url !== current.avatar_url) return true
-    const newRank = idx + 1
-    if (current.rank !== newRank) return true // rank changed
-    if (current.arena_score === 0) return t.arena_score !== 0 // was zero, check if now non-zero
-    // Force update if new advanced metrics available (first-time backfill)
-    if (t.sharpe_ratio != null && !current.sharpe_ratio) return true
-    if (t.sortino_ratio != null && !current.sortino_ratio) return true
-    if (t.calmar_ratio != null && !current.calmar_ratio) return true
-    if (t.profit_factor != null && !current.profit_factor) return true
-    if (t.trading_style != null && !current.trading_style) return true
-    return Math.abs(t.arena_score! - current.arena_score) > current.arena_score * 0.005 // >0.5% score change
-  })
-
-  logger.info(
-    `[${season}] Incremental upsert: ${changedTraders.length}/${scoredFiltered.length} changed (${((1 - changedTraders.length / Math.max(1, scoredFiltered.length)) * 100).toFixed(1)}% skipped)`
+  const currentScoreMap = await fetchCurrentScoreMap(
+    supabase as SupabaseClient,
+    season,
+    isOutOfTime
   )
-
-  // Build a rank lookup from the full sorted scoredFiltered array
-  const rankMap = new Map<string, number>()
-  scoredFiltered.forEach((t, idx) => rankMap.set(`${t.source}:${t.source_trader_id}`, idx + 1))
-
-  // Build prev-rank lookup from currentScoreMap (already fetched above with rank column).
-  // Previously this ran a second leaderboard_ranks query for just (source, source_trader_id, rank)
-  // limited to 5000 rows — duplicate work, 200-600ms per cycle, and subtly different coverage
-  // than currentScoreMap. Using the map we already built keeps the data consistent and removes a round trip.
-  const prevRankMap = new Map<string, number>()
-  for (const [key, current] of currentScoreMap) {
-    if (current.rank != null) prevRankMap.set(key, current.rank)
-  }
+  const { changedTraders, rankMap, prevRankMap } = buildChangedTraders(
+    scoredFiltered,
+    currentScoreMap,
+    season
+  )
 
   // Acquire DB-level advisory lock to prevent concurrent upserts for the same season.
   // This is a second layer of protection (Redis lock is first) for cases where Redis
