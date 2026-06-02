@@ -74,7 +74,7 @@ export function useTraderDetailV2({
     enabled: !!traderKey,
     refetchInterval: refreshInterval || false,
     refetchOnWindowFocus: false,
-    staleTime: 10000,
+    staleTime: 120_000, // 2min — data pipeline refreshes every ~5min
     retry: 2,
   })
 
