@@ -45,11 +45,15 @@
 
 14 new tests across 3 previously untested critical paths. All passing.
 
-### Remaining (next session)
+### F3: React Query Migration (4/5 done)
 
-| Item                                                                           | Effort |
-| ------------------------------------------------------------------------------ | ------ |
-| F3: Migrate 5 raw-fetch components to React Query (3,144 lines across 5 files) | L      |
+| Component         | Status   | What changed                                                                                                                                                                                           |
+| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ActivityFeed      | Done     | 2 raw fetch → useInfiniteQuery with cursor pagination, initialData from SSR                                                                                                                            |
+| CoreCards         | Done     | setInterval+fetch → 2 useQuery with refetchInterval=60s, derivation moved to useMemo                                                                                                                   |
+| NotificationsList | Done     | 2 raw fetch → useInfiniteQuery with offset pagination, local state for optimistic mark-as-read                                                                                                         |
+| ConversationsList | Done     | Raw fetch → useQuery, conversations+groups fetched in Promise.all (was sequential)                                                                                                                     |
+| PostFeed          | Deferred | 989 lines, 4 raw fetch calls deeply interleaved with realtime, comments, translations, bookmarks. Needs extraction into 3 hooks (usePostsList, usePostComments, usePostBookmarks) — dedicated session. |
 
 ---
 
