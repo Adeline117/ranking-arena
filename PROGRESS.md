@@ -2,7 +2,57 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
-## Full Project Optimization — Security + Perf + Frontend (2026-06-01)
+## Multi-Day Session Summary (2026-05-28 → 2026-06-02)
+
+4-day session covering team onboarding prep, UX audit, code cleanup, and full project optimization. All planned items complete.
+
+### By the numbers
+
+| Metric                                   | Value                                                           |
+| ---------------------------------------- | --------------------------------------------------------------- |
+| Lines deleted (dead code, docs, scripts) | ~18,000                                                         |
+| Files deleted                            | 100+                                                            |
+| UX fixes shipped                         | 13 commits (3 root cause architectural)                         |
+| Security fixes                           | 5/5 (1 HIGH: admin auth whitelist bypass)                       |
+| Performance fixes                        | 6/6 (partial index, CDN SWR, query parallelization)             |
+| Frontend refactors                       | 5/5 (React Query migration, deprecated hooks, Supabase types)   |
+| Tests added                              | 14 (messaging, like/bookmark, OAuth)                            |
+| computeSeason split                      | 1369 → 889 lines (-35%)                                         |
+| Dependency PRs merged                    | 14 (all branches cleaned)                                       |
+| New docs                                 | ONBOARDING.md, SCRAPER.md (merged), GIT_WORKFLOW.md (rewritten) |
+
+### Key root cause fixes
+
+1. **SwipeableView skeleton flash** — tabs no longer mount until visited
+2. **Period selector 3-source desync** — eliminated to single Zustand store
+3. **Admin auth bypass** — verifyAdminAuth now enforces email whitelist in production
+4. **Leaderboard query slow** — partial index on `is_outlier` filter (314K rows)
+5. **5 components raw fetch** — all migrated to React Query (useInfiniteQuery / useQuery)
+6. **computeSeason 920-line function** — split into 4 helper files (~420 lines remaining)
+7. **False @deprecated markers** — removed from trader-queries, trader-utils, adapters (all actively used)
+8. **eToro IP burnout** — automatic 24h cooldown via PipelineState on 403/429
+
+### What shipped by day
+
+| Date  | Focus                          | Highlights                                                                                                       |
+| ----- | ------------------------------ | ---------------------------------------------------------------------------------------------------------------- |
+| 05-28 | Docs + onboarding + dead files | ONBOARDING.md, deleted 7 outdated docs + 79 dead scripts (-15,892 lines), merged 14 dependabot PRs               |
+| 05-28 | UX audit + fixes               | 13 UX commits: LCP, iOS zoom, OTP resend, tab a11y, skeleton CLS, period desync, loading overlay                 |
+| 05-30 | Search + code quality          | /search page input, TraderHeader 40→34 props, 14 dead code files deleted (-1,964 lines)                          |
+| 06-01 | Type migration + arch debt     | Deleted lib/types/trader.ts (622 lines), resolved 4 architectural debts                                          |
+| 06-01 | GTM + data quality + split     | API nav/footer/README/CTA, eToro cooldown, BloFin alert, computeSeason 1369→889                                  |
+| 06-01 | Security + perf + frontend     | 3 parallel audits → 16 items: admin auth, partial index, CDN SWR, comments parallel, html2canvas, Supabase types |
+| 06-02 | React Query migration          | 5/5 components migrated (PostFeed, ActivityFeed, CoreCards, NotificationsList, ConversationsList)                |
+
+### Zero remaining debt
+
+All items from the 16-item optimization plan are complete. No deferred items.
+
+---
+
+## Detailed Daily Logs (archived)
+
+### Full Project Optimization — Security + Perf + Frontend (2026-06-01)
 
 3 parallel professional audits (Performance, Security, Frontend Architecture) found 57 issues total. 14 fixed, 2 confirmed false positives.
 
