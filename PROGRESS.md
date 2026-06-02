@@ -16,22 +16,35 @@
 | D6  | Sentry: user context in middleware + cron tag                |
 | D7  | Critical alerts: 15min cooldown + subscription-expiry errors |
 
-### Business logic fixes shipped (6/6)
+### Business logic audit — all findings resolved (10 fixed, 3 false pos, 7 accepted)
 
-| ID  | Sev  | Status    | Finding                                                                            | Fix                                                                                               |
-| --- | ---- | --------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| P-1 | HIGH | FIXED     | Late `customer.subscription.deleted` for old sub downgrades active new-sub user    | `handleSubscriptionCanceled` now checks if current sub matches canceled sub ID before downgrading |
-| D-5 | CRIT | FALSE POS | `subscriptions` FK to `auth.users` not confirmed                                   | Already has `ON DELETE CASCADE` FK + UNIQUE index on `user_id`                                    |
-| S-7 | MED  | FIXED     | Raw `notifications.insert` in tip handler                                          | Replaced with `sendNotification()` — gains dedup + fire-and-forget                                |
-| S-8 | MED  | FIXED     | Raw `notifications.insert` in trial-end handler + invalid type `'subscription'`    | Replaced with `sendNotification()` using `type: 'system'`                                         |
-| R-2 | MED  | FIXED     | `trades_count=0` treated as unknown in filter but gets max 0.6x penalty in scoring | Changed `>= 0` to `> 0` so 0 (unknown) skips penalty like null                                    |
-| D-7 | MED  | FIXED     | Trigger-based `comment_count` double-counts with RPC                               | Dropped `on_comment_change` trigger + recalculated all counts from actual rows                    |
-| D-8 | MED  | FALSE POS | Follow count trigger same pattern                                                  | Trigger already dropped from live DB                                                              |
+| ID          | Sev  | Status    | Finding                                                                             |
+| ----------- | ---- | --------- | ----------------------------------------------------------------------------------- |
+| S-1         | HIGH | FIXED     | `handlePaymentSucceeded` now restores Pro tier on past_due → active recovery        |
+| S-2         | MED  | FIXED     | `verify-session` upsert now includes `plan` column (prevents null on race)          |
+| S-5/P-1     | HIGH | FIXED     | Late old-sub cancel no longer downgrades active new-sub user                        |
+| S-6         | MED  | FIXED     | Reconcile NFT skip now calls `checkNFTMembership()` (was just wallet_address check) |
+| S-7         | MED  | FIXED     | Tip handler uses `sendNotification()` (was raw insert)                              |
+| S-8         | MED  | FIXED     | Trial-end handler uses `sendNotification()` with valid type (was `'subscription'`)  |
+| R-2         | MED  | FIXED     | `trades_count=0` skips penalty like null (was getting 0.6x)                         |
+| D-7         | MED  | FIXED     | Dropped duplicate comment count trigger + recalculated counts                       |
+| D-5         | CRIT | FALSE POS | FK + UNIQUE already exist on `subscriptions.user_id`                                |
+| P-2         | HIGH | FALSE POS | UNIQUE index confirmed on live DB                                                   |
+| D-8         | MED  | FALSE POS | Follow count trigger already dropped                                                |
+| S-3         | HIGH | SAFE      | Stripe re-fetch guards against stale event ordering                                 |
+| S-4         | MED  | SAFE      | Lifetime expiry logic correct                                                       |
+| R-4         | MED  | ACCEPTED  | Degradation guard gap when 0 traders pass filters (rare, self-corrects)             |
+| D-1         | MED  | ACCEPTED  | No FK on leaderboard_ranks (5-day stale cleanup handles it)                         |
+| D-3         | MED  | ACCEPTED  | Stale notification actor handle after user deletion (low impact)                    |
+| D-4         | MED  | ACCEPTED  | Notification links to deleted posts (TEXT reference_id by design)                   |
+| P-3/P-4/P-5 | LOW  | SAFE      | Dedup window adequate, verify-session idempotent, API tier by design                |
+| R-1/R-3/R-5 | LOW  | CORRECT   | Scoring edge cases all behave correctly                                             |
+| D-2/D-6/D-9 | LOW  | ACCEPTED  | Stale data cleanup items (minor, non-blocking)                                      |
 
 Bonus fixes discovered during audit:
 
-- `subscriptions.status` CHECK now accepts both `'canceled'` (American/Stripe) and `'cancelled'` (British)
-- `notifications.type` CHECK expanded from 6 to 17 values to match TypeScript union (was silently blocking tip/subscription notifications)
+- `subscriptions.status` CHECK: added `'canceled'` (American spelling, matches Stripe API + code)
+- `notifications.type` CHECK: expanded from 6 to 17 values (was silently blocking tip/subscription notifications)
 - Added `tip_received`, `subscription_expiring`, `subscription_expired`, `nft_expired` to TypeScript `NotificationType`
 
 ### I18n fixes shipped (3/3 HIGH fixed)
