@@ -52,8 +52,10 @@ async function fetchWithRetry(
     }
     if (attempt < maxRetries) {
       const delay = Math.min(1000 * Math.pow(2, attempt), 10_000)
-      logger.warn(`[${source}] Retry ${attempt + 1}/${maxRetries} in ${delay}ms: ${lastError?.message}`)
-      await new Promise(r => setTimeout(r, delay))
+      logger.warn(
+        `[${source}] Retry ${attempt + 1}/${maxRetries} in ${delay}ms: ${lastError?.message}`
+      )
+      await new Promise((r) => setTimeout(r, delay))
     }
   }
   throw lastError ?? new Error('fetchWithRetry: unknown error')
@@ -106,9 +108,10 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
       }
 
       // ── Resolve base URL ─────────────────────────────────────────
-      const baseUrl = process.env.NEXT_PUBLIC_SITE_URL
-        || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
-        || 'http://localhost:3000'
+      const baseUrl =
+        process.env.NEXT_PUBLIC_SITE_URL ||
+        (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null) ||
+        'http://localhost:3000'
       const secret = process.env.CRON_SECRET
       if (!secret) {
         logger.warn('CRON_SECRET not set — cannot trigger downstream jobs')
@@ -119,10 +122,18 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
 
       // ── 1. Trigger compute-leaderboard ───────────────────────────
       const traceId = trace?.trace_id ?? 'no-trace'
-      const traceQs = trace ? `?trace_id=${trace.trace_id}&platforms=${trace.platforms_updated.join(',')}` : ''
+      const traceQs = trace
+        ? `?trace_id=${trace.trace_id}&platforms=${trace.platforms_updated.join(',')}`
+        : ''
       logger.info(`[${source}] Triggering compute-leaderboard (trace=${traceId})...`)
       const computeStart = Date.now()
-      const computeBody = await fetchWithRetry(`${baseUrl}/api/cron/compute-leaderboard${traceQs}`, headers, 240_000, 2, source)
+      const computeBody = await fetchWithRetry(
+        `${baseUrl}/api/cron/compute-leaderboard${traceQs}`,
+        headers,
+        240_000,
+        2,
+        source
+      )
       const rolledBack = computeBody?.rolled_back as string[] | undefined
       logger.info(
         `[${source}] compute-leaderboard: ok (${Date.now() - computeStart}ms, trace=${traceId})${rolledBack?.length ? ` rolled_back=[${rolledBack.join(',')}]` : ''}`
@@ -130,7 +141,9 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
 
       // If ALL seasons rolled back due to degradation, skip downstream — data didn't change
       if (rolledBack && rolledBack.length >= 3) {
-        logger.warn(`[${source}] All seasons rolled back — skipping downstream (warm-cache/evaluate would use stale data)`)
+        logger.warn(
+          `[${source}] All seasons rolled back — skipping downstream (warm-cache/evaluate would use stale data)`
+        )
         return
       }
 
@@ -138,26 +151,32 @@ export function triggerDownstreamRefresh(source: string, trace?: TraceMetadata):
       logger.info(`[${source}] Triggering pipeline-evaluate (trace=${traceId})...`)
       const evalStart = Date.now()
       try {
-        const evalBody = await fetchWithRetry(`${baseUrl}/api/cron/pipeline-evaluate${traceQs}`, headers, 60_000, 1, source)
+        const evalBody = await fetchWithRetry(
+          `${baseUrl}/api/cron/pipeline-evaluate${traceQs}`,
+          headers,
+          60_000,
+          1,
+          source
+        )
         logger.info(
           `[${source}] pipeline-evaluate: score=${evalBody?.score ?? '?'}/100 (${Date.now() - evalStart}ms, trace=${traceId})`
         )
       } catch (evalErr) {
         // Evaluator failure must not block cache warming
-        logger.warn(`[${source}] pipeline-evaluate failed (non-blocking): ${evalErr instanceof Error ? evalErr.message : String(evalErr)}`)
+        logger.warn(
+          `[${source}] pipeline-evaluate failed (non-blocking): ${evalErr instanceof Error ? evalErr.message : String(evalErr)}`
+        )
       }
 
       // ── 3. Trigger warm-cache ────────────────────────────────────
       logger.info(`[${source}] Triggering warm-cache...`)
       const cacheStart = Date.now()
       await fetchWithRetry(`${baseUrl}/api/cron/warm-cache`, headers, 30_000, 1, source)
-      logger.info(
-        `[${source}] warm-cache: ok (${Date.now() - cacheStart}ms)`
-      )
+      logger.info(`[${source}] warm-cache: ok (${Date.now() - cacheStart}ms)`)
 
       logger.info(`[${source}] Downstream refresh complete (trace=${traceId})`)
     } catch (err) {
-      logger.warn(
+      logger.error(
         `[${source}] Downstream refresh failed: ${err instanceof Error ? err.message : String(err)}`
       )
     }
