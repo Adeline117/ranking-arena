@@ -108,6 +108,7 @@ export async function POST(request: NextRequest) {
       successUrl,
       cancelUrl,
       metadata: meta,
+      idempotencyKey: `api_checkout_${user.id}_${plan}_${Math.floor(Date.now() / 60_000)}`,
     })
 
     return NextResponse.json({
