@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { localizedLabel } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import SidebarCard from './SidebarCard'
 
 type Group = {
@@ -108,7 +108,7 @@ async function fetchRecommendedGroups(
 
 export default function RecommendedGroups() {
   const { language, t } = useLanguage()
-  const auth = useUnifiedAuth()
+  const auth = useAuthSession()
 
   const {
     data,
