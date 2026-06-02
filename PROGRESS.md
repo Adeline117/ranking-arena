@@ -2,6 +2,48 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Full Project Optimization — Security + Perf + Frontend (2026-06-01)
+
+3 parallel professional audits (Performance, Security, Frontend Architecture) found 57 issues total. 8 fixed today, 2 confirmed false positives.
+
+### Security
+
+| Fix       | What                                                                                                                                                                    |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1 (HIGH) | `verifyAdminAuth` now enforces ADMIN_EMAILS whitelist in production. Was DB-role-only — any user with `role='admin'` in user_profiles could access all 8+ admin routes. |
+| S2        | False positive — `createCheckoutSession()` already generates idempotency key internally.                                                                                |
+| S3        | Already correct — all social write POST routes already have `rateLimit: 'write'`.                                                                                       |
+
+### Performance
+
+| Fix       | What                                                                                                                                                                                                        |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1 (HIGH) | Migration: `idx_leaderboard_ranks_non_outlier` partial index on `(season_id, arena_score DESC) WHERE is_outlier IS NOT TRUE`. Eliminates bitmap OR scan on 314K rows for every non-cached rankings request. |
+| P2        | CDN `stale-while-revalidate` for `/api/rankings` fixed from 60s → 300s (was mismatched with app-level intent, causing unnecessary origin hits).                                                             |
+| P3        | Parallelized `blocked_users` + `comments` queries in `lib/data/comments.ts`. Was sequential (15-30ms penalty per load). Now `Promise.all()` with JS post-filter.                                            |
+| P6        | Deleted `app/components/web3/index.ts` barrel export (zero consumers, would pull wagmi ~150KB into unrelated bundles).                                                                                      |
+
+### Frontend Architecture
+
+| Fix | What                                                                                                                                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| F2  | Deleted deprecated `useUnifiedAuth` hook (76 lines). Migrated 3 consumers to `useAuthSession`: PostDetailModal (`requireAuth()` → `isLoggedIn + accessToken`), PostFeed (`initialized` → `authChecked`), RecommendedGroups. Eliminates auth state divergence risk. |
+
+### Remaining (next session)
+
+| Item                                              | Effort |
+| ------------------------------------------------- | ------ |
+| S4: Admin manipulation alerts param validation    | S      |
+| S5: Separate ADMIN_API_KEY from CRON_SECRET       | S      |
+| P4: Batch repost author profiles in posts.ts      | M      |
+| P5: html2canvas silent failure (remove or fix)    | S      |
+| F1: Regenerate Supabase TypeScript types          | S      |
+| F3: Migrate 5 raw-fetch components to React Query | L      |
+| F4: Fix SSR initial trader data completeness      | M      |
+| T1-T3: Tests for messaging, like/bookmark, OAuth  | L      |
+
+---
+
 ## P0 GTM + P1 Data Quality + computeSeason Split (2026-06-01)
 
 ### API Go-to-Market (P0 — 3 items checked off)
