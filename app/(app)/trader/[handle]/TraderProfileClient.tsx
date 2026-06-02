@@ -44,6 +44,7 @@ const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
 const SwipeableView = dynamic(() => import('@/app/components/ui/SwipeableView'), { ssr: false })
 const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAccountTabs'), {
   ssr: false,
+  loading: () => <div style={{ minHeight: 48 }} />,
 })
 // ExchangeLinksBar — static import (no client-only deps). Previously dynamic
 // with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
