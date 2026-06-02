@@ -19,7 +19,7 @@ import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
 import { formatTimeAgo } from '@/lib/utils/date'
-import { useUnifiedAuth } from '@/lib/hooks/useUnifiedAuth'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import {
   usePostStore,
   loadPostComments,
@@ -37,9 +37,7 @@ type PostDetailModalProps = {
 export default function PostDetailModal({ postId, onClose }: PostDetailModalProps) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
-  const auth = useUnifiedAuth({
-    onUnauthenticated: () => showToast(t('pleaseLogin'), 'warning'),
-  })
+  const auth = useAuthSession()
 
   // Restore draft comment from localStorage on mount
   const [newComment, setNewCommentRaw] = useState(() => {
@@ -91,7 +89,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
     // Prevent duplicate submissions
     if (commentPendingRef.current) return
 
-    const token = auth.requireAuth()
+    const token = auth.isLoggedIn ? auth.accessToken : null
     if (!token) return
     if (!newComment.trim()) return
 
@@ -122,7 +120,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       // Prevent duplicate reactions
       if (reactionPendingRef.current || reacting) return
 
-      const token = auth.requireAuth()
+      const token = auth.isLoggedIn ? auth.accessToken : null
       if (!token) return
 
       reactionPendingRef.current = true
@@ -366,9 +364,9 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
             <textarea
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder={auth.isAuthenticated ? t('writeComment') : t('loginBeforeComment')}
+              placeholder={auth.isLoggedIn ? t('writeComment') : t('loginBeforeComment')}
               aria-label={t('writeComment')}
-              disabled={!auth.isAuthenticated || submittingComment}
+              disabled={!auth.isLoggedIn || submittingComment}
               style={{
                 width: '100%',
                 minHeight: 80,
@@ -382,7 +380,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                 outline: 'none',
               }}
             />
-            {auth.isAuthenticated && (
+            {auth.isLoggedIn && (
               <button
                 onClick={handleSubmitComment}
                 disabled={!newComment.trim() || submittingComment}
