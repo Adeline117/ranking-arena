@@ -41,7 +41,7 @@ export async function extractAndSyncHashtags(
     const { data: upsertedTags, error: upsertError } = await supabase
       .from('hashtags')
       .upsert(
-        tags.map(tag => ({ tag })),
+        tags.map((tag) => ({ tag })),
         { onConflict: 'tag', ignoreDuplicates: true }
       )
       .select('id, tag')
@@ -78,27 +78,34 @@ export async function extractAndSyncHashtags(
       return
     }
 
-    // Recompute post_count from join table in a single batched pass.
-    // Previous implementation was a double N+1: per-tag RPC increment + per-tag COUNT + per-tag UPDATE.
-    // For a 10-hashtag post: 30 serial round-trips -> 2 parallel batches.
-    const hashtagIds = hashtagRows.map(h => h.id)
-    const { data: counts } = await supabase
-      .from('post_hashtags')
-      .select('hashtag_id')
-      .in('hashtag_id', hashtagIds)
+    // Recompute post_count via single RPC (1 query replaces N+1 updates).
+    // Uses a server-side SQL function that does:
+    //   UPDATE hashtags SET post_count = sub.cnt
+    //   FROM (SELECT hashtag_id, count(*) cnt FROM post_hashtags WHERE hashtag_id = ANY($1) GROUP BY 1) sub
+    //   WHERE hashtags.id = sub.hashtag_id
+    const hashtagIds = hashtagRows.map((h) => h.id)
+    const { error: countError } = await supabase.rpc('recount_hashtag_posts', {
+      hashtag_ids: hashtagIds,
+    })
+    if (countError) {
+      // Fallback: single IN-based read + single batch upsert
+      const { data: counts } = await supabase
+        .from('post_hashtags')
+        .select('hashtag_id')
+        .in('hashtag_id', hashtagIds)
 
-    const countMap = new Map<string, number>()
-    for (const row of counts || []) {
-      const id = row.hashtag_id as string
-      countMap.set(id, (countMap.get(id) || 0) + 1)
+      const countMap = new Map<string, number>()
+      for (const row of counts || []) {
+        const id = row.hashtag_id as string
+        countMap.set(id, (countMap.get(id) || 0) + 1)
+      }
+
+      const updates = hashtagIds.map((id) => ({
+        id,
+        post_count: countMap.get(id) || 0,
+      }))
+      await supabase.from('hashtags').upsert(updates, { onConflict: 'id' })
     }
-
-    // Batch updates in parallel (single IN query read + parallel writes)
-    await Promise.all(
-      hashtagIds.map(id =>
-        supabase.from('hashtags').update({ post_count: countMap.get(id) || 0 }).eq('id', id)
-      )
-    )
   } catch (err) {
     logger.error('[hashtags] sync failed:', err)
   }
