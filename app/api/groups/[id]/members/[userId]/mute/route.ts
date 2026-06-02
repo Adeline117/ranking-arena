@@ -12,12 +12,17 @@ async function getGroupRole(
   groupId: string,
   userId: string
 ): Promise<'owner' | 'admin' | 'member' | null> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('group_members')
     .select('role')
     .eq('group_id', groupId)
     .eq('user_id', userId)
     .maybeSingle()
+
+  if (error) {
+    logger.error('[getGroupRole] query failed', { groupId, userId, error: error.message })
+    return null
+  }
 
   return data?.role as 'owner' | 'admin' | 'member' | null
 }
@@ -166,13 +171,16 @@ export async function POST(
       // Audit log (fire-and-forget)
       const duration = muted_until || 'permanent'
       fireAndForget(
-        supabase.from('group_audit_log').insert({
-          group_id: groupId,
-          actor_id: user.id,
-          action: 'mute',
-          target_id: targetUserId,
-          details: { duration, reason: reason || null },
-        }).then(),
+        supabase
+          .from('group_audit_log')
+          .insert({
+            group_id: groupId,
+            actor_id: user.id,
+            action: 'mute',
+            target_id: targetUserId,
+            details: { duration, reason: reason || null },
+          })
+          .then(),
         'Group audit log: mute'
       )
 
@@ -220,13 +228,16 @@ export async function DELETE(
 
       // Audit log (fire-and-forget)
       fireAndForget(
-        supabase.from('group_audit_log').insert({
-          group_id: groupId,
-          actor_id: user.id,
-          action: 'unmute',
-          target_id: targetUserId,
-          details: {},
-        }).then(),
+        supabase
+          .from('group_audit_log')
+          .insert({
+            group_id: groupId,
+            actor_id: user.id,
+            action: 'unmute',
+            target_id: targetUserId,
+            details: {},
+          })
+          .then(),
         'Group audit log: unmute'
       )
 

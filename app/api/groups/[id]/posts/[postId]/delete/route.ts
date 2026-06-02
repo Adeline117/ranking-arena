@@ -11,12 +11,17 @@ async function canManageGroup(
   groupId: string,
   userId: string
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('group_members')
     .select('role')
     .eq('group_id', groupId)
     .eq('user_id', userId)
     .maybeSingle()
+
+  if (error) {
+    logger.error('[canManageGroup] query failed', { groupId, userId, error: error.message })
+    return false
+  }
 
   return data?.role === 'owner' || data?.role === 'admin'
 }
@@ -74,17 +79,15 @@ export async function POST(
 
       // Notify the post author
       if (postData.author_id && postData.author_id !== user.id) {
-        const { error: notifyError } = await supabase
-          .from('notifications')
-          .insert({
-            user_id: postData.author_id,
-            type: 'system' as const,
-            title: 'Post deleted',
-            message: `Your post "${postData.title || ''}" was deleted by group admin`,
-            link: `/groups/${groupId}`,
-            actor_id: user.id,
-            reference_id: postId,
-          })
+        const { error: notifyError } = await supabase.from('notifications').insert({
+          user_id: postData.author_id,
+          type: 'system' as const,
+          title: 'Post deleted',
+          message: `Your post "${postData.title || ''}" was deleted by group admin`,
+          link: `/groups/${groupId}`,
+          actor_id: user.id,
+          reference_id: postId,
+        })
 
         if (notifyError) {
           logger.error('Notification error:', notifyError)
@@ -93,13 +96,16 @@ export async function POST(
 
       // Audit log (fire-and-forget)
       fireAndForget(
-        supabase.from('group_audit_log').insert({
-          group_id: groupId,
-          actor_id: user.id,
-          action: 'delete_post',
-          target_id: postId,
-          details: { reason: null },
-        }).then(),
+        supabase
+          .from('group_audit_log')
+          .insert({
+            group_id: groupId,
+            actor_id: user.id,
+            action: 'delete_post',
+            target_id: postId,
+            details: { reason: null },
+          })
+          .then(),
         'Group audit log: delete_post'
       )
 

@@ -10,12 +10,17 @@ async function isGroupOwner(
   groupId: string,
   userId: string
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('group_members')
     .select('role')
     .eq('group_id', groupId)
     .eq('user_id', userId)
     .maybeSingle()
+
+  if (error) {
+    logger.error('[isGroupOwner] query failed', { groupId, userId, error: error.message })
+    return false
+  }
 
   return data?.role === 'owner'
 }
@@ -34,7 +39,10 @@ export async function POST(
 
       // 只有组长可以设置角色
       if (!(await isGroupOwner(supabase, groupId, user.id))) {
-        return NextResponse.json({ error: 'Only the group owner can set member roles' }, { status: 403 })
+        return NextResponse.json(
+          { error: 'Only the group owner can set member roles' },
+          { status: 403 }
+        )
       }
 
       // 不能修改自己的角色

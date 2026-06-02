@@ -10,12 +10,17 @@ async function canManageGroup(
   groupId: string,
   userId: string
 ): Promise<boolean> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('group_members')
     .select('role')
     .eq('group_id', groupId)
     .eq('user_id', userId)
     .maybeSingle()
+
+  if (error) {
+    logger.error('[canManageGroup] query failed', { groupId, userId, error: error.message })
+    return false
+  }
 
   return data?.role === 'owner' || data?.role === 'admin'
 }
@@ -60,7 +65,10 @@ export async function POST(
         .single()
 
       if (!postData || postData.group_id !== groupId) {
-        return NextResponse.json({ error: 'Comment does not belong to this group' }, { status: 400 })
+        return NextResponse.json(
+          { error: 'Comment does not belong to this group' },
+          { status: 400 }
+        )
       }
 
       // 软删除评论
