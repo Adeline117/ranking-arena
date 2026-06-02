@@ -6,6 +6,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STANDARD, STALE_RELAXED } from '@/lib/hooks/cache-presets'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { fetcher } from '@/lib/hooks/fetchers'
 import { tokens } from '@/lib/design-tokens'
@@ -206,7 +207,7 @@ export default function TraderProfileClient({
         ? false
         : 5 * 60 * 1000,
     refetchIntervalInBackground: false,
-    staleTime: 5000,
+    staleTime: STALE_STANDARD,
     // Don't retry 404s — trader definitively doesn't exist. Retry transient errors.
     retry: (failureCount, error) => {
       if ((error as Error & { status?: number }).status === 404) return false
@@ -249,7 +250,7 @@ export default function TraderProfileClient({
     queryFn: () => fetcher(claimUrl!),
     enabled: !!claimUrl,
     refetchOnWindowFocus: true,
-    staleTime: 30_000,
+    staleTime: STALE_STANDARD,
   })
 
   // Derive verified/owner state from SWR claim data or bundled claim data
@@ -274,7 +275,7 @@ export default function TraderProfileClient({
     queryFn: () => traderFetcher(rankHistoryUrl!),
     enabled: !!rankHistoryUrl,
     refetchOnWindowFocus: false,
-    staleTime: 60000,
+    staleTime: STALE_RELAXED,
     retry: 1,
   })
   const rankSparklineData =

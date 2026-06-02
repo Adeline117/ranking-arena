@@ -12,6 +12,7 @@
 
 import { useState, useMemo } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
+import { STALE_RELAXED } from '@/lib/hooks/cache-presets'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
@@ -135,7 +136,7 @@ export default function ActivityFeed({
       ],
       pageParams: [null],
     },
-    staleTime: 60_000,
+    staleTime: STALE_RELAXED,
     refetchOnWindowFocus: false,
   })
 

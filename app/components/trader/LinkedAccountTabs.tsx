@@ -2,6 +2,7 @@
 
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { queryClient } from '@/app/components/Providers'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { tokens } from '@/lib/design-tokens'
 import { formatROI } from '@/lib/utils/format'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
@@ -27,7 +28,6 @@ interface LinkedAccountTabsProps {
   activeAccount: string // 'all' or platform:traderKey
   onAccountChange: (account: string) => void
 }
-
 
 export default function LinkedAccountTabs({
   accounts,
@@ -69,7 +69,7 @@ export default function LinkedAccountTabs({
     queryClient.prefetchQuery({
       queryKey: ['trader-profile', url],
       queryFn: () => traderFetcher(url),
-      staleTime: 30_000,
+      staleTime: STALE_STANDARD,
     })
   }, [])
 
@@ -82,19 +82,22 @@ export default function LinkedAccountTabs({
   }, [dropdownOpen])
 
   // #27: Arrow key navigation between tabs (WAI-ARIA tabs pattern)
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
-    const keys = ['all', ...accounts.map(a => `${a.platform}:${a.traderKey}`)]
-    const idx = keys.indexOf(activeAccount)
-    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
-      e.preventDefault()
-      const next = idx < keys.length - 1 ? idx + 1 : 0
-      onAccountChange(keys[next])
-    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
-      e.preventDefault()
-      const prev = idx > 0 ? idx - 1 : keys.length - 1
-      onAccountChange(keys[prev])
-    }
-  }, [accounts, activeAccount, onAccountChange])
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      const keys = ['all', ...accounts.map((a) => `${a.platform}:${a.traderKey}`)]
+      const idx = keys.indexOf(activeAccount)
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        const next = idx < keys.length - 1 ? idx + 1 : 0
+        onAccountChange(keys[next])
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        const prev = idx > 0 ? idx - 1 : keys.length - 1
+        onAccountChange(keys[prev])
+      }
+    },
+    [accounts, activeAccount, onAccountChange]
+  )
 
   const tabStyle = (isActive: boolean): React.CSSProperties => ({
     display: 'flex',
@@ -104,9 +107,7 @@ export default function LinkedAccountTabs({
     minHeight: 44,
     borderRadius: tokens.radius.md,
     border: `1px solid ${isActive ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
-    background: isActive
-      ? `${tokens.colors.accent.primary}15`
-      : tokens.colors.bg.secondary,
+    background: isActive ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.secondary,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     whiteSpace: 'nowrap' as const,
@@ -116,7 +117,7 @@ export default function LinkedAccountTabs({
   // Find active account info for dropdown trigger
   const getActiveLabel = () => {
     if (activeAccount === 'all') return t('linkedAccountAll')
-    const acc = accounts.find(a => `${a.platform}:${a.traderKey}` === activeAccount)
+    const acc = accounts.find((a) => `${a.platform}:${a.traderKey}` === activeAccount)
     if (!acc) return t('linkedAccountAll')
     return acc.label || EXCHANGE_NAMES[acc.platform] || acc.platform
   }
@@ -138,21 +139,47 @@ export default function LinkedAccountTabs({
             width: '100%',
             justifyContent: 'space-between',
           }}
-          onClick={(e) => { e.stopPropagation(); setDropdownOpen(!dropdownOpen) }}
+          onClick={(e) => {
+            e.stopPropagation()
+            setDropdownOpen(!dropdownOpen)
+          }}
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            {activeAccount !== 'all' && (() => {
-              const acc = accounts.find(a => `${a.platform}:${a.traderKey}` === activeAccount)
-              return acc ? <ExchangeLogo exchange={acc.platform} size={18} /> : null
-            })()}
+            {activeAccount !== 'all' &&
+              (() => {
+                const acc = accounts.find((a) => `${a.platform}:${a.traderKey}` === activeAccount)
+                return acc ? <ExchangeLogo exchange={acc.platform} size={18} /> : null
+              })()}
             <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
               {getActiveLabel()}
             </Text>
-            <Text size="xs" style={{ color: tokens.colors.text.tertiary, background: `${tokens.colors.text.tertiary}15`, padding: '1px 6px', borderRadius: 10, fontSize: 10 }}>
+            <Text
+              size="xs"
+              style={{
+                color: tokens.colors.text.tertiary,
+                background: `${tokens.colors.text.tertiary}15`,
+                padding: '1px 6px',
+                borderRadius: 10,
+                fontSize: 10,
+              }}
+            >
               {accounts.length}
             </Text>
           </Box>
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: dropdownOpen ? 'rotate(180deg)' : undefined, transition: 'transform 0.2s' }}>
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.text.tertiary}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              transform: dropdownOpen ? 'rotate(180deg)' : undefined,
+              transition: 'transform 0.2s',
+            }}
+          >
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
@@ -176,21 +203,57 @@ export default function LinkedAccountTabs({
             {/* All option */}
             <button
               style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', width: '100%',
-                background: activeAccount === 'all' ? `${tokens.colors.accent.primary}10` : 'transparent',
-                border: 'none', cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '10px 16px',
+                width: '100%',
+                background:
+                  activeAccount === 'all' ? `${tokens.colors.accent.primary}10` : 'transparent',
+                border: 'none',
+                cursor: 'pointer',
               }}
-              onClick={() => { onAccountChange('all'); setDropdownOpen(false) }}
+              onClick={() => {
+                onAccountChange('all')
+                setDropdownOpen(false)
+              }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={activeAccount === 'all' ? tokens.colors.accent.primary : tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /><rect x="14" y="14" width="7" height="7" />
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={
+                  activeAccount === 'all'
+                    ? tokens.colors.accent.primary
+                    : tokens.colors.text.tertiary
+                }
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <rect x="3" y="3" width="7" height="7" />
+                <rect x="14" y="3" width="7" height="7" />
+                <rect x="3" y="14" width="7" height="7" />
+                <rect x="14" y="14" width="7" height="7" />
               </svg>
-              <Text size="sm" weight={activeAccount === 'all' ? 'bold' : 'medium'} style={{ color: activeAccount === 'all' ? tokens.colors.accent.primary : tokens.colors.text.secondary, flex: 1, textAlign: 'left' }}>
+              <Text
+                size="sm"
+                weight={activeAccount === 'all' ? 'bold' : 'medium'}
+                style={{
+                  color:
+                    activeAccount === 'all'
+                      ? tokens.colors.accent.primary
+                      : tokens.colors.text.secondary,
+                  flex: 1,
+                  textAlign: 'left',
+                }}
+              >
                 {t('linkedAccountAll')}
               </Text>
             </button>
 
-            {accounts.map(account => {
+            {accounts.map((account) => {
               const key = `${account.platform}:${account.traderKey}`
               const isActive = activeAccount === key
               const label = account.label || EXCHANGE_NAMES[account.platform] || account.platform
@@ -199,26 +262,51 @@ export default function LinkedAccountTabs({
                 <button
                   key={key}
                   style={{
-                    display: 'flex', alignItems: 'center', gap: 8, padding: '10px 16px', width: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '10px 16px',
+                    width: '100%',
                     background: isActive ? `${tokens.colors.accent.primary}10` : 'transparent',
-                    border: 'none', cursor: 'pointer',
+                    border: 'none',
+                    cursor: 'pointer',
                     borderTop: `1px solid ${tokens.colors.border.primary}40`,
                   }}
-                  onClick={() => { onAccountChange(key); setDropdownOpen(false) }}
+                  onClick={() => {
+                    onAccountChange(key)
+                    setDropdownOpen(false)
+                  }}
                 >
                   <ExchangeLogo exchange={account.platform} size={18} />
-                  <Text size="sm" weight={isActive ? 'bold' : 'medium'} style={{ color: isActive ? tokens.colors.accent.primary : tokens.colors.text.secondary, flex: 1, textAlign: 'left' }}>
+                  <Text
+                    size="sm"
+                    weight={isActive ? 'bold' : 'medium'}
+                    style={{
+                      color: isActive ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                      flex: 1,
+                      textAlign: 'left',
+                    }}
+                  >
                     {label}
                   </Text>
                   {account.isPrimary && (
-                    <Text size="xs" style={{ color: tokens.colors.accent.warning, fontSize: 10 }}>★</Text>
+                    <Text size="xs" style={{ color: tokens.colors.accent.warning, fontSize: 10 }}>
+                      ★
+                    </Text>
                   )}
                   {account.roi != null && (
-                    <Text size="xs" weight="bold" style={{
-                      color: account.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                      fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                      fontSize: 11,
-                    }}>
+                    <Text
+                      size="xs"
+                      weight="bold"
+                      style={{
+                        color:
+                          account.roi >= 0
+                            ? tokens.colors.accent.success
+                            : tokens.colors.accent.error,
+                        fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        fontSize: 11,
+                      }}
+                    >
                       {formatROI(account.roi)}
                     </Text>
                   )}
@@ -257,7 +345,18 @@ export default function LinkedAccountTabs({
         onClick={() => onAccountChange('all')}
         data-active={activeAccount === 'all'}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={activeAccount === 'all' ? tokens.colors.accent.primary : tokens.colors.text.tertiary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={
+            activeAccount === 'all' ? tokens.colors.accent.primary : tokens.colors.text.tertiary
+          }
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <rect x="3" y="3" width="7" height="7" />
           <rect x="14" y="3" width="7" height="7" />
           <rect x="3" y="14" width="7" height="7" />
@@ -266,7 +365,10 @@ export default function LinkedAccountTabs({
         <Text
           size="sm"
           weight={activeAccount === 'all' ? 'bold' : 'medium'}
-          style={{ color: activeAccount === 'all' ? tokens.colors.accent.primary : tokens.colors.text.secondary }}
+          style={{
+            color:
+              activeAccount === 'all' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+          }}
         >
           {t('linkedAccountAll')}
         </Text>
@@ -305,19 +407,28 @@ export default function LinkedAccountTabs({
             <Text
               size="sm"
               weight={isActive ? 'bold' : 'medium'}
-              style={{ color: isActive ? tokens.colors.accent.primary : tokens.colors.text.secondary }}
+              style={{
+                color: isActive ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+              }}
             >
               {displayLabel}
             </Text>
             {account.isPrimary && (
-              <Text size="xs" style={{ color: tokens.colors.accent.warning, fontSize: 11, lineHeight: 1 }} title={t('traderPrimaryAccount')}>★</Text>
+              <Text
+                size="xs"
+                style={{ color: tokens.colors.accent.warning, fontSize: 11, lineHeight: 1 }}
+                title={t('traderPrimaryAccount')}
+              >
+                ★
+              </Text>
             )}
             {account.roi != null && (
               <Text
                 size="xs"
                 weight="bold"
                 style={{
-                  color: account.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                  color:
+                    account.roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                   fontSize: 11,
                   letterSpacing: '-0.02em',

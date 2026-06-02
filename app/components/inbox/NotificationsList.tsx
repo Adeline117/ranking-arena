@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
@@ -62,7 +63,7 @@ export default function NotificationsList() {
       return allPages.reduce((sum, p) => sum + p.notifications.length, 0)
     },
     enabled: !!accessToken,
-    staleTime: 30_000,
+    staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
   })
 

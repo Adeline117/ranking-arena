@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, memo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
@@ -328,7 +329,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
     },
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
-    staleTime: 30_000,
+    staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
   })
 
@@ -340,7 +341,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
       return Array.isArray(json) ? json.slice(0, 5) : []
     },
     refetchInterval: 60_000,
-    staleTime: 30_000,
+    staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
   })
 

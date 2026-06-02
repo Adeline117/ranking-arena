@@ -4,6 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STATIC } from '@/lib/hooks/cache-presets'
 import { supabase } from '@/lib/supabase/client'
 import { localizedLabel } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
@@ -119,7 +120,7 @@ export default function RecommendedGroups() {
     queryKey: ['recommended-groups', auth.accessToken],
     queryFn: () => fetchRecommendedGroups(auth.accessToken),
     refetchOnWindowFocus: false,
-    staleTime: 300000,
+    staleTime: STALE_STATIC,
     placeholderData: (prev) => prev,
     retry: 3,
     retryDelay: (attempt) => 1000 * Math.pow(2, attempt),

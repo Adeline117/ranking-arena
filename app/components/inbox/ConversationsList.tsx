@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
@@ -286,7 +287,7 @@ export default function ConversationsList(): React.ReactElement {
       return convs
     },
     enabled: !!accessToken,
-    staleTime: 30_000,
+    staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
   })
 

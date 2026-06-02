@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_REALTIME } from '@/lib/hooks/cache-presets'
 // Use plain <img> for crypto icons (SVGs cause 400 on Vercel image optimizer)
 import { tokens } from '@/lib/design-tokens'
 
@@ -48,7 +49,7 @@ export default function PriceTicker() {
     queryFn: () => spotFetcher('/api/market/spot'),
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
-    staleTime: 10_000,
+    staleTime: STALE_REALTIME,
   })
   const [imgErrors, setImgErrors] = useState<Set<string>>(new Set())
   const error = swrError ? (swrError instanceof Error ? swrError.message : 'Failed to load') : null

@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { STALE_RELAXED } from './cache-presets'
 
 export interface LinkedAccountData {
   id: string
@@ -65,7 +66,7 @@ function parseBundledAggregate(
 export function useLinkedAccounts(
   platform: string | undefined,
   traderKey: string | undefined,
-  bundledData?: { aggregated: unknown; accounts: unknown[]; totalAccounts: number } | null,
+  bundledData?: { aggregated: unknown; accounts: unknown[]; totalAccounts: number } | null
 ) {
   const parsedBundled = parseBundledAggregate(bundledData)
 
@@ -75,12 +76,16 @@ export function useLinkedAccounts(
     ? `/api/traders/aggregate?platform=${encodeURIComponent(platform!)}&trader_key=${encodeURIComponent(traderKey!)}`
     : ''
 
-  const { data: queryData, error, isLoading } = useQuery<LinkedAccountsResponse | null>({
+  const {
+    data: queryData,
+    error,
+    isLoading,
+  } = useQuery<LinkedAccountsResponse | null>({
     queryKey: ['linked-accounts', platform, traderKey],
     queryFn: () => linkedAccountsFetcher(url),
     enabled: shouldFetch,
     refetchOnWindowFocus: false,
-    staleTime: 60_000,
+    staleTime: STALE_RELAXED,
     retry: 1,
   })
 

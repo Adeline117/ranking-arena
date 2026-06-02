@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { STALE_SLOW } from '@/lib/hooks/cache-presets'
 // Supabase: dynamic import — only used for auth check in translate call (non-critical)
 const getSb = () =>
   import('@/lib/supabase/client').then(
@@ -199,7 +200,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
     queryFn: () => fetchHotPosts('hot-discussions', limit, targetLang),
     enabled: !!deferredReady,
     refetchOnWindowFocus: false,
-    staleTime: 180000,
+    staleTime: STALE_SLOW,
     retry: 3,
     retryDelay: (attempt) => 1000 * Math.pow(2, attempt),
   })

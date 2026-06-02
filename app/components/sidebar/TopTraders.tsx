@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STATIC } from '@/lib/hooks/cache-presets'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { formatROI } from '@/lib/utils/format'
 import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
@@ -121,7 +122,7 @@ export default function TopTraders() {
     queryKey: ['sidebar-top-traders'],
     queryFn: () => fetcher('/api/sidebar/top-traders'),
     refetchOnWindowFocus: false,
-    staleTime: 300000,
+    staleTime: STALE_STATIC,
     refetchInterval: 600000,
     retry: 2,
   })

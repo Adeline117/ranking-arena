@@ -10,6 +10,7 @@ import type { SourceInfo } from './utils'
 import { formatDisplayName } from './utils'
 import { RankDisplay, ArenaScoreCircle, areTraderPropsEqual } from './shared/TraderDisplay'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { classifyStyle, getStyleInfo, type TradingStyle } from '@/lib/utils/trading-style'
 
 // Sub-components
@@ -121,7 +122,7 @@ export const TraderRow = memo(
           queryClient.prefetchQuery({
             queryKey: ['trader-profile', detailUrl],
             queryFn: () => sharedFetcher(detailUrl),
-            staleTime: 30_000,
+            staleTime: STALE_STANDARD,
           })
         } catch {
           /* prefetch is best-effort */

@@ -3,6 +3,7 @@
 import { useEffect, useState, Suspense, useCallback, useMemo } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { useToast } from '@/app/components/ui/Toast'
@@ -114,7 +115,7 @@ function SearchContent() {
     queryFn: () => searchFetcher(searchKey!),
     enabled: !!searchKey,
     refetchOnWindowFocus: false,
-    staleTime: 30000,
+    staleTime: STALE_STANDARD,
     placeholderData: (prev) => prev,
   })
 

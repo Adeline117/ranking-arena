@@ -6,6 +6,7 @@
 'use client'
 
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { STALE_SLOW } from './cache-presets'
 import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import type { TraderDetailResponse, RefreshResponse, Platform } from '@/lib/types/trading-platform'
 
@@ -74,7 +75,7 @@ export function useTraderDetailV2({
     enabled: !!traderKey,
     refetchInterval: refreshInterval || false,
     refetchOnWindowFocus: false,
-    staleTime: 120_000, // 2min — data pipeline refreshes every ~5min
+    staleTime: STALE_SLOW,
     retry: 2,
   })
 
