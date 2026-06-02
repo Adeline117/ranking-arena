@@ -1,6 +1,7 @@
 'use client'
 
-import { useEffect, useState, memo } from 'react'
+import { useEffect, useState, useMemo, memo } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
@@ -317,101 +318,81 @@ function spotRowsToCoins(spots: SpotCoin[]): CoinRow[] {
 
 export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
   const { t } = useLanguage()
-  const [gainers, setGainers] = useState<CoinRow[]>([])
-  const [losers, setLosers] = useState<CoinRow[]>([])
-  const [marketLoaded, setMarketLoaded] = useState(false)
-  const [exchanges, setExchanges] = useState<ExchangeInfo[]>([])
-  const [lastFetchedAt, setLastFetchedAt] = useState<number | null>(null)
+  // Market data — auto-refreshes every 60s via React Query
+  const { data: marketData, dataUpdatedAt } = useQuery<{ rows: CoinRow[] }>({
+    queryKey: ['market-core'],
+    queryFn: async () => {
+      const res = await fetch('/api/market')
+      if (!res.ok) throw new Error(`market: ${res.status}`)
+      return res.json()
+    },
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  })
 
-  useEffect(() => {
-    let alive = true
-    const controller = new AbortController()
+  // Exchange data — refreshes every 60s
+  const { data: exchangeData } = useQuery<ExchangeInfo[]>({
+    queryKey: ['market-exchanges'],
+    queryFn: async () => {
+      const json = await apiFetch<ExchangeInfo[]>('/api/market/exchanges')
+      return Array.isArray(json) ? json.slice(0, 5) : []
+    },
+    refetchInterval: 60_000,
+    staleTime: 30_000,
+    refetchOnWindowFocus: false,
+  })
 
-    const fetchMarketData = () => {
-      fetch('/api/market', { signal: controller.signal })
-        .then((r) => {
-          if (!r.ok) throw new Error(`market: ${r.status}`)
-          return r.json()
-        })
-        .then((json) => {
-          if (!alive) return
-          const rows: CoinRow[] = json.rows ?? []
-          if (rows.length === 0) throw new Error('empty')
-          const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
-          let primaryLosers = sorted
-            .filter((r) => r.direction === 'down')
-            .slice(-5)
-            .reverse()
-          let primaryGainers = sorted.filter((r) => r.direction === 'up').slice(0, 5)
+  const exchanges = exchangeData ?? []
+  const lastFetchedAt = dataUpdatedAt || null
+  const marketLoaded = !!marketData
 
-          if (
-            (primaryLosers.length < 5 || primaryGainers.length < 5) &&
-            spotData &&
-            spotData.length > 0
-          ) {
-            const spotRows = spotRowsToCoins(spotData)
-            const primarySymbols = new Set(rows.map((r) => r.symbol))
-            const spotSorted = [...spotRows].sort(
-              (a, b) => parseFloat(b.changePct) - parseFloat(a.changePct)
-            )
-            if (primaryGainers.length < 5) {
-              const spotGainers = spotSorted.filter(
-                (r) => r.direction === 'up' && !primarySymbols.has(r.symbol)
-              )
-              primaryGainers = [...primaryGainers, ...spotGainers].slice(0, 5)
-            }
-            if (primaryLosers.length < 5) {
-              const spotLosers = spotSorted
-                .filter((r) => r.direction === 'down' && !primarySymbols.has(r.symbol))
-                .slice(-20)
-                .reverse()
-              primaryLosers = [...primaryLosers, ...spotLosers.slice(0, 5 - primaryLosers.length)]
-              primaryLosers.sort((a, b) => parseFloat(a.changePct) - parseFloat(b.changePct))
-            }
-          }
-          setGainers(primaryGainers)
-          setLosers(primaryLosers)
-          setMarketLoaded(true)
-          setLastFetchedAt(Date.now())
-        })
-        .catch(() => {
-          if (!alive) return
-          if (spotData && spotData.length > 0) {
-            const rows = spotRowsToCoins(spotData)
-            const sorted = [...rows].sort(
-              (a, b) => parseFloat(b.changePct) - parseFloat(a.changePct)
-            )
-            setGainers(sorted.filter((r) => r.direction === 'up').slice(0, 5))
-            setLosers(
-              sorted
-                .filter((r) => r.direction === 'down')
-                .slice(-5)
-                .reverse()
-            )
-            setMarketLoaded(true)
-            setLastFetchedAt(Date.now())
-          } else {
-            setMarketLoaded(true)
-          }
-        })
-
-      apiFetch<ExchangeInfo[]>('/api/market/exchanges', { signal: controller.signal })
-        .then((json) => {
-          if (alive && Array.isArray(json)) setExchanges(json.slice(0, 5))
-        })
-        .catch((err) => console.warn('[CoreCards] fetch failed', err))
+  // Derive gainers/losers from market data + spot fallback
+  const { gainers, losers } = useMemo(() => {
+    const rows: CoinRow[] = marketData?.rows ?? []
+    if (rows.length === 0 && spotData && spotData.length > 0) {
+      const spotRows = spotRowsToCoins(spotData)
+      const sorted = [...spotRows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
+      return {
+        gainers: sorted.filter((r) => r.direction === 'up').slice(0, 5),
+        losers: sorted
+          .filter((r) => r.direction === 'down')
+          .slice(-5)
+          .reverse(),
+      }
     }
-    fetchMarketData()
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'hidden') return
-      fetchMarketData()
-    }, 60000)
-    return () => {
-      alive = false
-      controller.abort()
-      clearInterval(interval)
+    const sorted = [...rows].sort((a, b) => parseFloat(b.changePct) - parseFloat(a.changePct))
+    let g = sorted.filter((r) => r.direction === 'up').slice(0, 5)
+    let l = sorted
+      .filter((r) => r.direction === 'down')
+      .slice(-5)
+      .reverse()
+
+    // Fill from spot data if primary results are sparse
+    if ((g.length < 5 || l.length < 5) && spotData && spotData.length > 0) {
+      const spotRows = spotRowsToCoins(spotData)
+      const primarySymbols = new Set(rows.map((r) => r.symbol))
+      const spotSorted = [...spotRows].sort(
+        (a, b) => parseFloat(b.changePct) - parseFloat(a.changePct)
+      )
+      if (g.length < 5) {
+        g = [
+          ...g,
+          ...spotSorted.filter((r) => r.direction === 'up' && !primarySymbols.has(r.symbol)),
+        ].slice(0, 5)
+      }
+      if (l.length < 5) {
+        const spotLosers = spotSorted
+          .filter((r) => r.direction === 'down' && !primarySymbols.has(r.symbol))
+          .slice(-20)
+          .reverse()
+        l = [...l, ...spotLosers.slice(0, 5 - l.length)]
+        l.sort((a, b) => parseFloat(a.changePct) - parseFloat(b.changePct))
+      }
     }
-  }, [spotData])
+    return { gainers: g, losers: l }
+  }, [marketData, spotData])
 
   const maxVol =
     exchanges.length > 0 ? Math.max(...exchanges.map((e) => e.trade_volume_24h_btc)) : 0
