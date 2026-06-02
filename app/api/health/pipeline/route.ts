@@ -94,39 +94,41 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       },
       'pipeline_logs records_processed'
     ),
-    // Use Supabase RPC with 25s deadline. The RPC itself takes 24ms but PostgREST
-    // needs a connection from its pool, which can take seconds during cron storms.
+    // Query trader_latest for true data freshness per platform (1 sample row per platform).
+    // Previously used leaderboard_ranks.computed_at which only updates on scoring runs,
+    // causing false "stale" alerts for platforms that fetch successfully but haven't been scored.
     withDeadline(
-      supabase.rpc('get_leaderboard_latest_by_source') as unknown as PromiseLike<{
-        data: Array<{ source: string; computed_at: string }> | null
+      (supabase as any).rpc('get_platform_freshness') as unknown as PromiseLike<{
+        data: Array<{ source: string; latest: string }> | null
         error: unknown
       }>,
       25_000,
       emptyResponse as {
-        data: Array<{ source: string; computed_at: string }> | null
+        data: Array<{ source: string; latest: string }> | null
         error: unknown
       },
-      'leaderboard_latest_by_source'
+      'platform_freshness'
     ),
   ])
 
-  // Build platform → latest computed_at map
-  // Debug: track if pg Pool query returned data
+  // Build platform → latest update map from trader_latest freshness
   const pgQueryResult = lbLatestRes as { data: unknown[] | null; error: unknown }
   const platformLastUpdate = new Map<string, string>()
   const lbData = (pgQueryResult.data || []) as Array<{
-    source: string
+    source?: string
+    platform?: string
     computed_at?: string | Date
     latest?: string
+    updated_at?: string | Date
   }>
   for (const row of lbData) {
-    // pg Pool returns Date objects; Supabase REST returns ISO strings
-    const rawTs = row.computed_at || row.latest
+    const platform = row.source || row.platform || ''
+    const rawTs = row.latest || row.updated_at || row.computed_at
     const ts =
       rawTs instanceof Date ? rawTs.toISOString() : typeof rawTs === 'string' ? rawTs : null
-    if (!ts) continue
-    if (!platformLastUpdate.has(row.source) || (platformLastUpdate.get(row.source) ?? '') < ts) {
-      platformLastUpdate.set(row.source, ts)
+    if (!ts || !platform) continue
+    if (!platformLastUpdate.has(platform) || (platformLastUpdate.get(platform) ?? '') < ts) {
+      platformLastUpdate.set(platform, ts)
     }
   }
 
