@@ -2,6 +2,21 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## SEO + Core Web Vitals Audit (2026-06-02)
+
+Audit found 3 HIGH, 7 MEDIUM, 6 LOW. 4 high-impact fixes shipped:
+
+| Fix                                                  | Impact                                                                                                            |
+| ---------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `robots.ts`: `/exchange` → `/exchange/auth`          | Unblocks 24 exchange landing pages (with structured data + unique content) from Google crawling. Biggest SEO win. |
+| `sitemap.ts`: removed `/search`                      | Eliminates thin-content page from sitemap (empty without ?q= param)                                               |
+| `layout.tsx`: SearchAction URL `/?q=` → `/search?q=` | Google sitelinks search box now points to actual search page                                                      |
+| `vercel.json`: homepage SWR 60s → 600s               | CDN serves stale for 10min during revalidation instead of 1min                                                    |
+
+Investigated, already handled: flash-news + compare + claim + competitions all have metadata in layout.tsx.
+
+---
+
 ## Deep Full-Stack Optimization — 3 Parallel Audits (2026-06-02)
 
 3 parallel deep audits (backend perf, frontend bundle/a11y, DB/infra schema) found 1 CRITICAL + 22 HIGH + 33 MEDIUM issues. **All resolved in a single day. Zero remaining.**
