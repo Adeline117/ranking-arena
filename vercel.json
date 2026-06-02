@@ -19,22 +19,6 @@
       "schedule": "0 3 * * 0"
     },
     {
-      "path": "/api/cron/compute-leaderboard?season=90D",
-      "schedule": "1 */2 * * *"
-    },
-    {
-      "path": "/api/cron/compute-leaderboard?season=30D",
-      "schedule": "21 */2 * * *"
-    },
-    {
-      "path": "/api/cron/compute-leaderboard?season=7D",
-      "schedule": "41 */2 * * *"
-    },
-    {
-      "path": "/api/cron/sync-meilisearch",
-      "schedule": "8 */2 * * *"
-    },
-    {
       "path": "/api/cron/daily-digest",
       "schedule": "2 0 * * *"
     },
@@ -125,30 +109,6 @@
     {
       "path": "/api/cron/fetch-open-interest",
       "schedule": "16 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-enrich?period=90D&tier=fast",
-      "schedule": "10 */4 * * *"
-    },
-    {
-      "path": "/api/cron/batch-enrich?period=90D&tier=slow",
-      "schedule": "12 */4 * * *"
-    },
-    {
-      "path": "/api/cron/batch-enrich?period=30D&tier=fast",
-      "schedule": "30 */4 * * *"
-    },
-    {
-      "path": "/api/cron/batch-enrich?period=30D&tier=slow",
-      "schedule": "32 */4 * * *"
-    },
-    {
-      "path": "/api/cron/batch-enrich?period=7D&tier=fast",
-      "schedule": "15 */6 * * *"
-    },
-    {
-      "path": "/api/cron/batch-enrich?period=7D&tier=slow",
-      "schedule": "17 */6 * * *"
     },
     {
       "path": "/api/cron/check-trader-alerts",
