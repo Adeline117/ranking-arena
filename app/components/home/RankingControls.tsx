@@ -190,6 +190,8 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             className={`ssr-range-btn${r === activeRange ? ' ssr-range-active' : ''}`}
             onClick={() => navigate(r, 0)}
             disabled={isPending}
+            aria-pressed={r === activeRange}
+            aria-label={`Show ${r} rankings`}
           >
             {r}
           </button>
@@ -202,7 +204,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             className="ssr-page-btn"
             onClick={() => navigate(activeRange, 0)}
             disabled={page <= 0 || isPending}
-            title="First page"
+            aria-label="First page"
           >
             «
           </button>
@@ -210,16 +212,18 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             className="ssr-page-btn"
             onClick={() => navigate(activeRange, page - 1)}
             disabled={page <= 0 || isPending}
+            aria-label="Previous page"
           >
             ‹ {t('rankingControlsPrev')}
           </button>
-          <span className="ssr-page-info">
+          <span className="ssr-page-info" aria-live="polite" aria-atomic="true">
             {page + 1} / {totalPages}
           </span>
           <button
             className="ssr-page-btn"
             onClick={() => navigate(activeRange, page + 1)}
             disabled={page >= totalPages - 1 || isPending}
+            aria-label="Next page"
           >
             {t('rankingControlsNext')} ›
           </button>
@@ -227,7 +231,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             className="ssr-page-btn"
             onClick={() => navigate(activeRange, totalPages - 1)}
             disabled={page >= totalPages - 1 || isPending}
-            title="Last page"
+            aria-label="Last page"
           >
             »
           </button>
