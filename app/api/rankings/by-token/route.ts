@@ -186,23 +186,17 @@ export async function GET(request: NextRequest) {
           `${token}-PERP`,
         ]
 
-        // Run queries in parallel, each with .eq() for index usage
-        const results = await Promise.allSettled(
-          symbolVariants.map((sym) =>
-            supabase
-              .from('trader_position_history')
-              .select('source, source_trader_id, pnl_usd, pnl_pct')
-              .eq('symbol', sym)
-              .gte('close_time', cutoffISO)
-              .not('pnl_usd', 'is', null)
-              .limit(500)
-          )
-        )
+        // Single query with .in() instead of 6 parallel queries (saves 5 connection pool slots)
+        const { data: positionData } = await supabase
+          .from('trader_position_history')
+          .select('source, source_trader_id, pnl_usd, pnl_pct')
+          .in('symbol', symbolVariants)
+          .gte('close_time', cutoffISO)
+          .not('pnl_usd', 'is', null)
+          .limit(3000)
 
-        for (const r of results) {
-          if (r.status === 'fulfilled' && r.value.data) {
-            allRows.push(...(r.value.data as typeof allRows))
-          }
+        if (positionData) {
+          allRows.push(...(positionData as typeof allRows))
         }
 
         if (allRows.length === 0) {
