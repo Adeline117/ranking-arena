@@ -87,6 +87,13 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 - [x] Remove dead devDep `@mathieuc/tradingview` (zero imports)
 - [x] **Social sync audit** — notification delta rollback, UserFollowButton cross-tab sync, bookmark count feed sync, comment like/dislike rollback
 - [x] **ja/ko translation batch** — 433 keys added to both locales (100% parity with en)
+- [x] **SEO** — hashtag metadata (canonical, og:image, twitter), learn articles in sitemap (10 URLs)
+- [x] **Worker reliability** — BullMQ retry 3x exponential, throw on non-2xx, completed handler try-catch, failed job heartbeat logging, uncaughtException/unhandledRejection handlers
+- [x] **DB indexes** — 6 missing indexes (notifications dedup, trader monthly/yearly, blocked_users blocker, rank_history, user_interactions, search_analytics)
+- [x] **Retention** — search_analytics 90d + user_interactions 30d cleanup in cleanup-data cron
+- [x] **Pipeline** — trigger chain failure → logger.error (was warn), by-token 6 queries → 1 .in()
+- [x] **A11y** — pagination aria-label, period range aria-pressed, page counter aria-live
+- [x] **Health monitor** — freshness check reads trader_latest (was pipeline_logs for deleted batch-fetch-traders), etoro threshold 48h→96h
 
 ---
 
