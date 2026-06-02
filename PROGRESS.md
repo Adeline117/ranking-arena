@@ -45,15 +45,17 @@
 
 14 new tests across 3 previously untested critical paths. All passing.
 
-### F3: React Query Migration (4/5 done)
+### F3: React Query Migration (5/5 complete)
 
-| Component         | Status   | What changed                                                                                                                                                                                           |
-| ----------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ActivityFeed      | Done     | 2 raw fetch → useInfiniteQuery with cursor pagination, initialData from SSR                                                                                                                            |
-| CoreCards         | Done     | setInterval+fetch → 2 useQuery with refetchInterval=60s, derivation moved to useMemo                                                                                                                   |
-| NotificationsList | Done     | 2 raw fetch → useInfiniteQuery with offset pagination, local state for optimistic mark-as-read                                                                                                         |
-| ConversationsList | Done     | Raw fetch → useQuery, conversations+groups fetched in Promise.all (was sequential)                                                                                                                     |
-| PostFeed          | Deferred | 989 lines, 4 raw fetch calls deeply interleaved with realtime, comments, translations, bookmarks. Needs extraction into 3 hooks (usePostsList, usePostComments, usePostBookmarks) — dedicated session. |
+| Component         | What changed                                                                                                                                                                                         |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| ActivityFeed      | 2 raw fetch → useInfiniteQuery with cursor pagination, initialData from SSR                                                                                                                          |
+| CoreCards         | setInterval+fetch → 2 useQuery with refetchInterval=60s, derivation moved to useMemo                                                                                                                 |
+| NotificationsList | 2 raw fetch → useInfiniteQuery with offset pagination, local state for optimistic mark-as-read                                                                                                       |
+| ConversationsList | Raw fetch → useQuery, conversations+groups fetched in Promise.all (was sequential)                                                                                                                   |
+| PostFeed          | 2 raw fetch + 6 useState + AbortController → useInfiniteQuery. Local posts state kept for realtime/optimistic mutations. loadPosts/loadMorePosts kept as thin wrappers for compatibility. -37 lines. |
+
+**All 16/16 optimization items complete. Zero remaining.**
 
 ---
 
