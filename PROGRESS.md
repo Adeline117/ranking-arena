@@ -2,6 +2,12 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Retro 2026-06-02
+
+159 commits / 6 days. Backend overhaul (BullMQ worker, hot/cold split, 32 platforms), 4 parallel audits (56 issues → all resolved), 11 migrations, 66 i18n keys added. See `docs/retros/retro-2026-06-02.md`.
+
+---
+
 ## Full Remaining Audit — Business Logic + DevOps + I18n + E2E (2026-06-02)
 
 ### DevOps fixes shipped (7/7)
