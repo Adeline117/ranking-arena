@@ -11,14 +11,16 @@
 
 // Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
-
 
 const mockFrom = jest.fn()
 const mockSupabaseClient = { from: mockFrom }
@@ -37,9 +39,30 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  apiLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  dataLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
   captureError: jest.fn(),
   captureMessage: jest.fn(),
 }))
@@ -63,21 +86,46 @@ jest.mock('@/lib/logger', () => ({
 jest.mock('@/lib/api/with-cron', () => ({
   withCron: (jobName: string, handler: Function) => async (request: unknown) => {
     const secret = process.env.CRON_SECRET
-    const authHeader = (request as { headers: { get: (k: string) => string | null } }).headers.get('authorization')
+    const authHeader = (request as { headers: { get: (k: string) => string | null } }).headers.get(
+      'authorization'
+    )
     if (!secret || authHeader !== `Bearer ${secret}`) {
       const { NextResponse } = require('next/server')
       return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
     }
     const { getSupabaseAdmin } = require('@/lib/supabase/server')
     try {
-      const result = await handler(request, { plog: { success: jest.fn(), error: jest.fn(), timeout: jest.fn(), partialSuccess: jest.fn(), id: 1 }, supabase: getSupabaseAdmin() })
+      const result = await handler(request, {
+        plog: {
+          success: jest.fn(),
+          error: jest.fn(),
+          timeout: jest.fn(),
+          partialSuccess: jest.fn(),
+          id: 1,
+        },
+        supabase: getSupabaseAdmin(),
+      })
       const { NextResponse } = require('next/server')
       return NextResponse.json({ ok: true, ...result })
     } catch (err: unknown) {
       const { NextResponse } = require('next/server')
-      return NextResponse.json({ ok: false, error: err instanceof Error ? err.message : String(err) }, { status: 500 })
+      return NextResponse.json(
+        { ok: false, error: err instanceof Error ? err.message : String(err) },
+        { status: 500 }
+      )
     }
   },
+}))
+
+jest.mock('@/lib/alerts/send-alert', () => ({
+  sendRateLimitedAlert: jest
+    .fn()
+    .mockResolvedValue({ sent: false, rateLimited: false, channels: [] }),
+  sendAlert: jest.fn().mockResolvedValue({ sent: false, channels: [] }),
+}))
+
+jest.mock('@/lib/data/notifications', () => ({
+  sendNotification: jest.fn().mockResolvedValue(undefined),
 }))
 
 jest.mock('@/lib/services/pipeline-logger', () => ({
@@ -165,9 +213,7 @@ describe('GET /api/cron/subscription-expiry', () => {
   // ---- Downgrade expired subscriptions -------------------------------------
 
   it('downgrades expired subscriptions', async () => {
-    const expiredSubs = [
-      { user_id: 'user1', stripe_subscription_id: 'sub_1' },
-    ]
+    const expiredSubs = [{ user_id: 'user1', stripe_subscription_id: 'sub_1' }]
 
     // Use chainable proxy — handles any method chain (.eq().neq().lt() etc.)
     mockFrom.mockImplementation(() => chainable({ data: expiredSubs, error: null }))
@@ -195,7 +241,10 @@ describe('GET /api/cron/subscription-expiry', () => {
     // Use chainable for most calls but throw on update
     let callCount = 0
     mockFrom.mockImplementation(() => {
-      const proxy = chainable({ data: [{ user_id: 'user1', stripe_subscription_id: 'sub_1', plan: 'monthly' }], error: null })
+      const proxy = chainable({
+        data: [{ user_id: 'user1', stripe_subscription_id: 'sub_1', plan: 'monthly' }],
+        error: null,
+      })
       // Override update to throw on first call
       const origUpdate = proxy.update
       proxy.update = jest.fn().mockImplementation(() => {
