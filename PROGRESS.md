@@ -2,6 +2,40 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Full Remaining Audit — Business Logic + DevOps + I18n + E2E (2026-06-02)
+
+### DevOps fixes shipped (7/7)
+
+| Fix | What                                                         |
+| --- | ------------------------------------------------------------ |
+| D1  | RUNBOOK: Supabase/Redis/Stripe outage procedures             |
+| D2  | CI: migration lint gate (blocks DROP TABLE/COLUMN)           |
+| D3  | CI: npm audit now blocks on critical/high                    |
+| D4  | PII: removed email from welcome email logger                 |
+| D5  | pipeline_logs 30-day retention (already existed)             |
+| D6  | Sentry: user context in middleware + cron tag                |
+| D7  | Critical alerts: 15min cooldown + subscription-expiry errors |
+
+### Business logic audit findings (pending fix)
+
+| ID  | Sev  | Finding                                                                          |
+| --- | ---- | -------------------------------------------------------------------------------- |
+| P-1 | HIGH | Late `customer.subscription.deleted` for old sub downgrades active new-sub user  |
+| D-5 | CRIT | `subscriptions` table FK to `auth.users` not confirmed — may block GDPR deletion |
+| S-7 | MED  | Raw `notifications.insert` in tip handler (violates mandatory pattern)           |
+| S-8 | MED  | Raw `notifications.insert` in trial-end handler + invalid type                   |
+| R-2 | MED  | `trades_count=0` treated as unknown in filter but gets max penalty in scoring    |
+| D-7 | MED  | Trigger-based `comment_count` violates atomic counter convention                 |
+
+### I18n audit findings (pending fix)
+
+| ID  | Sev  | Finding                                                    |
+| --- | ---- | ---------------------------------------------------------- |
+| I2  | HIGH | ja.ts + ko.ts missing 430 keys from en.ts                  |
+| I3  | HIGH | 71 `t()` calls reference keys not in translation files     |
+| I8  | HIGH | Chinese string literals used as i18n keys in VoiceRecorder |
+| E1  | CRIT | No authenticated E2E tests (OTP login → session)           |
+
 ## SEO + Core Web Vitals Audit (2026-06-02)
 
 Audit found 3 HIGH, 7 MEDIUM, 6 LOW. 4 high-impact fixes shipped:
