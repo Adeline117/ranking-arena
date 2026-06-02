@@ -44,12 +44,12 @@ jobs:
             echo "No migrations directory found, skipping check"
           fi
 
-      - name: Security — npm audit
+      - name: Security — npm audit (blocks on critical/high)
         run: |
           npm install --package-lock-only --ignore-scripts 2>/dev/null || true
           npm audit --audit-level=high || {
-            echo "::warning::npm audit found high/critical vulnerabilities"
-            # Don't fail CI — just warn. Upgrade to 'exit 1' when ready to enforce.
+            echo "::error::npm audit found high/critical vulnerabilities — fix before merging"
+            exit 1
           }
 
       - name: Security — no unsafe secret comparison
@@ -112,6 +112,21 @@ jobs:
       - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
       - run: npm run lint
       - run: npx tsc --noEmit
+
+      - name: Migration lint — block dangerous DDL
+        run: |
+          CHANGED=$(git diff --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
+          if [ -n "$CHANGED" ]; then
+            DANGEROUS=$(echo "$CHANGED" | xargs grep -iEn 'DROP TABLE|DROP COLUMN|ALTER.*NOT NULL(?!.*DEFAULT)' 2>/dev/null || true)
+            if [ -n "$DANGEROUS" ]; then
+              echo "::error::Dangerous migration patterns detected (review manually before merging):"
+              echo "$DANGEROUS"
+              exit 1
+            fi
+            echo "Migration lint passed — no dangerous DDL found"
+          else
+            echo "No migration changes to lint"
+          fi
 
   # ─────────────────────────────────────────────
   # Stage 3a: Unit Tests (parallel with build)

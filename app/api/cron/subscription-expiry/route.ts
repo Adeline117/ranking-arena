@@ -15,6 +15,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkNFTMembership } from '@/lib/web3/nft'
 import { withCron } from '@/lib/api/with-cron'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -270,6 +271,19 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
         logger.info(`Batch downgraded ${toDowngrade.length} users due to NFT expiry`)
       }
     }
+  }
+
+  // Alert on errors — payment-critical, uses 15min cooldown via 'critical' level
+  if (results.errors.length > 0) {
+    await sendRateLimitedAlert(
+      {
+        title: '订阅过期处理出错',
+        message: results.errors.join('\n'),
+        level: 'critical',
+        details: { errorCount: results.errors.length, downgraded: results.downgraded },
+      },
+      'subscription-expiry:errors'
+    )
   }
 
   logger.info('Subscription expiry check completed', results)
