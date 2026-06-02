@@ -2,6 +2,34 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## Deep Backend Optimization (2026-06-02)
+
+Deep backend audit found 17 issues (6 HIGH). 6 fixed in this session:
+
+### N+1 Query Fixes
+
+- **auto-post-insights**: 3 functions parallelized — exchange compare (4 serial queries → Promise.all), data fact (3 serial COUNTs → Promise.all), weekly recap (1000-row fetch → server-side COUNT)
+- **snapshot-ranks**: 3 periods processed serially → Promise.all
+
+### Database Indexes (1 migration)
+
+- `idx_trader_alerts_enabled`: partial index WHERE enabled = true (cron scan was full table)
+- `idx_notifications_user_type_created`: composite for dedup queries (was using wrong index)
+- `idx_trader_daily_snapshots_key_date`: trader_key as leading column (alert queries filter by trader_key first)
+
+### Correctness Fixes
+
+- **subscription-expiry duplicate notifications**: 3 direct `notifications.insert()` calls replaced with `sendNotification()` which has built-in dedup. Prevents double notifications on cron double-fire.
+- **SSE interval leak**: rankings stream interval callbacks now check `request.signal.aborted` before executing. Added pre-check before registering abort listener to close race window.
+
+### Remaining (next session)
+
+- groups/[id]/notify N+1 (250+ queries for 50-member group)
+- check-trader-alerts push notifications serial loop
+- aggregate-daily-snapshots 32-platform serial fallback
+
+---
+
 ## Multi-Day Session Summary (2026-05-28 → 2026-06-02)
 
 4-day session covering team onboarding prep, UX audit, code cleanup, and full project optimization. All planned items complete.
