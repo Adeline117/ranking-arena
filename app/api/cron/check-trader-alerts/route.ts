@@ -1,7 +1,7 @@
 /**
  * 交易员变动检测 Cron
  * Pro 会员功能：检测关注交易员的变动并发送提醒
- * 
+ *
  * GET /api/cron/check-trader-alerts - 健康检查
  * POST /api/cron/check-trader-alerts - 执行检测
  */
@@ -94,7 +94,9 @@ export async function GET(req: Request) {
     const MAX_ALERTS_PER_RUN = 1000
     const { data: alerts, error: alertsError } = await supabase
       .from('trader_alerts')
-      .select('id, user_id, trader_id, source, alert_roi_change, roi_change_threshold, alert_drawdown, drawdown_threshold, alert_pnl_change, pnl_change_threshold, alert_score_change, score_change_threshold, alert_rank_change, rank_change_threshold, alert_new_position, alert_price_above, price_above_value, alert_price_below, price_below_value, price_symbol, one_time')
+      .select(
+        'id, user_id, trader_id, source, alert_roi_change, roi_change_threshold, alert_drawdown, drawdown_threshold, alert_pnl_change, pnl_change_threshold, alert_score_change, score_change_threshold, alert_rank_change, rank_change_threshold, alert_new_position, alert_price_above, price_above_value, alert_price_below, price_below_value, price_symbol, one_time'
+      )
       .eq('enabled', true)
       .limit(MAX_ALERTS_PER_RUN)
 
@@ -129,15 +131,16 @@ export async function GET(req: Request) {
     }
 
     // Map leaderboard_ranks data to TraderData shape for compatibility
-    const tradersData: TraderData[] | null = lrData?.map(lr => ({
-      source_trader_id: lr.source_trader_id,
-      source: lr.source,
-      roi: lr.roi ?? 0,
-      pnl: lr.pnl ?? undefined,
-      max_drawdown: lr.max_drawdown ?? undefined,
-      win_rate: lr.win_rate ?? undefined,
-      arena_score: lr.arena_score ?? undefined,
-    })) ?? null
+    const tradersData: TraderData[] | null =
+      lrData?.map((lr) => ({
+        source_trader_id: lr.source_trader_id,
+        source: lr.source,
+        roi: lr.roi ?? 0,
+        pnl: lr.pnl ?? undefined,
+        max_drawdown: lr.max_drawdown ?? undefined,
+        win_rate: lr.win_rate ?? undefined,
+        arena_score: lr.arena_score ?? undefined,
+      })) ?? null
 
     // 4. 获取昨天的快照数据 (from trader_daily_snapshots)
     const yesterday = new Date()
@@ -190,22 +193,23 @@ export async function GET(req: Request) {
 
     // 5. Save today's snapshot to trader_daily_snapshots for tomorrow's comparison
     const today = new Date().toISOString().split('T')[0]
-    const snapshotsToInsert = tradersData?.map((t: TraderData) => ({
-      platform: t.source,
-      trader_key: t.source_trader_id,
-      date: today,
-      roi: t.roi,
-      pnl: t.pnl ?? null,
-      max_drawdown: t.max_drawdown ?? null,
-      win_rate: t.win_rate ?? null,
-    })) || []
+    const snapshotsToInsert =
+      tradersData?.map((t: TraderData) => ({
+        platform: t.source,
+        trader_key: t.source_trader_id,
+        date: today,
+        roi: t.roi,
+        pnl: t.pnl ?? null,
+        max_drawdown: t.max_drawdown ?? null,
+        win_rate: t.win_rate ?? null,
+      })) || []
 
     if (snapshotsToInsert.length > 0) {
       const { error: insertError } = await supabase
         .from('trader_daily_snapshots')
         .upsert(snapshotsToInsert, {
           onConflict: 'platform,trader_key,date',
-          ignoreDuplicates: true
+          ignoreDuplicates: true,
         })
 
       if (insertError) {
@@ -238,9 +242,10 @@ export async function GET(req: Request) {
 
     for (const alert of alerts as AlertConfig[]) {
       const key = `${alert.trader_id}_${alert.source || ''}`
-      const currentData = traderDataMap.get(key) ||
+      const currentData =
+        traderDataMap.get(key) ||
         // 尝试不带 source 的匹配
-        Array.from(traderDataMap.values()).find(t => t.source_trader_id === alert.trader_id)
+        Array.from(traderDataMap.values()).find((t) => t.source_trader_id === alert.trader_id)
 
       if (!currentData) continue
 
@@ -303,7 +308,11 @@ export async function GET(req: Request) {
       }
 
       // 检查 Score 变动
-      if (alert.alert_score_change && prevSnapshot.arena_score != null && currentData.arena_score != null) {
+      if (
+        alert.alert_score_change &&
+        prevSnapshot.arena_score != null &&
+        currentData.arena_score != null
+      ) {
         const change = Math.abs(currentData.arena_score - prevSnapshot.arena_score)
         if (change >= alert.score_change_threshold) {
           const direction = currentData.arena_score > prevSnapshot.arena_score ? '上升' : '下降'
@@ -343,7 +352,7 @@ export async function GET(req: Request) {
 
     // 批量插入 alert_history
     if (alertLogsToInsert.length > 0) {
-      const historyToInsert = alertLogsToInsert.map(log => ({
+      const historyToInsert = alertLogsToInsert.map((log) => ({
         alert_id: log.alert_id,
         user_id: log.user_id,
         alert_type: log.alert_type,
@@ -357,39 +366,43 @@ export async function GET(req: Request) {
         },
       }))
 
-      const { error: historyError } = await supabase
-        .from('alert_history')
-        .insert(historyToInsert)
+      const { error: historyError } = await supabase.from('alert_history').insert(historyToInsert)
 
       if (historyError) {
         logger.error('[TraderAlerts Cron] 保存 alert_history Failed:', historyError)
       }
     }
 
-    // 更新 last_triggered_at 并处理一次性提醒
-    const triggeredAlertIds = [...new Set(alertLogsToInsert.map(l => l.alert_id))]
+    // Update last_triggered_at + disable one-time alerts (merged into fewer queries)
+    const triggeredAlertIds = [...new Set(alertLogsToInsert.map((l) => l.alert_id))]
     if (triggeredAlertIds.length > 0) {
-      await supabase
-        .from('trader_alerts')
-        .update({ last_triggered_at: new Date().toISOString() })
-        .in('id', triggeredAlertIds)
-
-      // 禁用一次性提醒
       const oneTimeAlertIds = (alerts as AlertConfig[])
-        .filter(a => a.one_time && triggeredAlertIds.includes(a.id))
-        .map(a => a.id)
+        .filter((a) => a.one_time && triggeredAlertIds.includes(a.id))
+        .map((a) => a.id)
+      const nonOneTimeIds = triggeredAlertIds.filter((id) => !oneTimeAlertIds.includes(id))
+      const now = new Date().toISOString()
 
+      // One-time alerts: update both last_triggered_at + enabled=false in single query
+      const updates = []
       if (oneTimeAlertIds.length > 0) {
-        await supabase
-          .from('trader_alerts')
-          .update({ enabled: false })
-          .in('id', oneTimeAlertIds)
+        updates.push(
+          supabase
+            .from('trader_alerts')
+            .update({ last_triggered_at: now, enabled: false })
+            .in('id', oneTimeAlertIds)
+        )
       }
+      if (nonOneTimeIds.length > 0) {
+        updates.push(
+          supabase.from('trader_alerts').update({ last_triggered_at: now }).in('id', nonOneTimeIds)
+        )
+      }
+      await Promise.all(updates)
     }
 
     // 7. 批量发送通知
     if (alertsToSend.length > 0) {
-      const notifications = alertsToSend.map(a => ({
+      const notifications = alertsToSend.map((a) => ({
         user_id: a.user_id,
         type: a.type,
         title: a.title,
@@ -397,9 +410,7 @@ export async function GET(req: Request) {
         link: a.link,
       }))
 
-      const { error: notifyError } = await supabase
-        .from('notifications')
-        .insert(notifications)
+      const { error: notifyError } = await supabase.from('notifications').insert(notifications)
 
       if (notifyError) {
         logger.error('[TraderAlerts Cron] 发送通知Failed:', notifyError)
@@ -407,17 +418,23 @@ export async function GET(req: Request) {
         alertsSent = alertsToSend.length
       }
 
-      // Send push notifications (fire-and-forget)
+      // Send push notifications in parallel (was serial — 100 alerts = 100 sequential HTTP calls)
       try {
         const pushService = getPushNotificationService()
+        const PUSH_BATCH = 10
         let pushSent = 0
-        for (const alert of alertsToSend) {
-          await pushService.sendToUser(alert.user_id, {
-            title: alert.title,
-            body: alert.message,
-            data: { url: alert.link || '/notifications', type: 'rank_change' },
-          })
-          pushSent++
+        for (let i = 0; i < alertsToSend.length; i += PUSH_BATCH) {
+          const batch = alertsToSend.slice(i, i + PUSH_BATCH)
+          const results = await Promise.allSettled(
+            batch.map((alert) =>
+              pushService.sendToUser(alert.user_id, {
+                title: alert.title,
+                body: alert.message,
+                data: { url: alert.link || '/notifications', type: 'rank_change' },
+              })
+            )
+          )
+          pushSent += results.filter((r) => r.status === 'fulfilled').length
         }
         logger.info(`[TraderAlerts Cron] Push notifications sent: ${pushSent}`)
       } catch (pushError) {
@@ -452,7 +469,7 @@ export async function GET(req: Request) {
             if (!userAlerts || userAlerts.length === 0) continue
 
             const html = buildTraderAlertEmail(
-              userAlerts.map(a => ({
+              userAlerts.map((a) => ({
                 title: a.title,
                 message: a.message,
                 link: a.link,
@@ -478,7 +495,10 @@ export async function GET(req: Request) {
 
     const duration = Date.now() - startTime
 
-    await plog.success(alertsSent, { alertsChecked: alerts.length, tradersChecked: traderIds.length })
+    await plog.success(alertsSent, {
+      alertsChecked: alerts.length,
+      tradersChecked: traderIds.length,
+    })
 
     return NextResponse.json({
       ok: true,

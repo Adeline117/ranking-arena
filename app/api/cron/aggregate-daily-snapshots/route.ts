@@ -152,48 +152,50 @@ async function aggregateForDate(
     // of their traders. Bumped to 10000 to cover top-ranked traders on large
     // platforms while keeping query time reasonable (~3s/platform at 10K).
     const PER_PLATFORM_LIMIT = 10000
-    for (const platform of distinctPlatforms) {
-      try {
-        // Read from trader_latest (hot path, ~45K rows) instead of
-        // trader_snapshots_v2 (10M+ rows). Already deduplicated — 1 row per trader per window.
-        const { data: platformData, error: platformError } = await (readDb as any)
-          .from('trader_latest')
-          .select(
-            'platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, updated_at'
-          )
-          .eq('platform', platform)
-          .eq('window', '90D')
-          .gte('updated_at', recentCutoffStr)
-          .order('updated_at', { ascending: false })
-          .limit(PER_PLATFORM_LIMIT)
+    // Parallel fetch — was 32 serial queries, one per platform
+    await Promise.all(
+      distinctPlatforms.map(async (platform) => {
+        try {
+          const { data: platformData, error: platformError } = await (readDb as any)
+            .from('trader_latest')
+            .select(
+              'platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, updated_at'
+            )
+            .eq('platform', platform)
+            .eq('window', '90D')
+            .gte('updated_at', recentCutoffStr)
+            .order('updated_at', { ascending: false })
+            .limit(PER_PLATFORM_LIMIT)
 
-        if (platformError || !platformData) {
-          logger.warn(`[aggregate] Failed to fetch platform ${platform}: ${platformError?.message}`)
-          continue
-        }
-
-        // Deduplicate: keep latest per (platform, trader_key)
-        for (const s of platformData) {
-          const key = `${s.platform}:${s.trader_key}`
-          if (!snapshotMap.has(key)) {
-            snapshotMap.set(key, {
-              source: s.platform,
-              source_trader_id: s.trader_key,
-              roi: s.roi_pct,
-              pnl: s.pnl_usd,
-              win_rate: s.win_rate,
-              max_drawdown: s.max_drawdown,
-              followers: s.followers,
-              trades_count: s.trades_count,
-            })
+          if (platformError || !platformData) {
+            logger.warn(
+              `[aggregate] Failed to fetch platform ${platform}: ${platformError?.message}`
+            )
+            return
           }
+
+          for (const s of platformData) {
+            const key = `${s.platform}:${s.trader_key}`
+            if (!snapshotMap.has(key)) {
+              snapshotMap.set(key, {
+                source: s.platform,
+                source_trader_id: s.trader_key,
+                roi: s.roi_pct,
+                pnl: s.pnl_usd,
+                win_rate: s.win_rate,
+                max_drawdown: s.max_drawdown,
+                followers: s.followers,
+                trades_count: s.trades_count,
+              })
+            }
+          }
+        } catch (err) {
+          logger.warn(
+            `[aggregate] Platform ${platform} query failed: ${err instanceof Error ? err.message : String(err)}`
+          )
         }
-      } catch (err) {
-        logger.warn(
-          `[aggregate] Platform ${platform} query failed: ${err instanceof Error ? err.message : String(err)}`
-        )
-      }
-    }
+      })
+    )
 
     if (snapshotMap.size > 0) {
       logger.info(
