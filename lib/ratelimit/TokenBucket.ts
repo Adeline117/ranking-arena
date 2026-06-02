@@ -1,23 +1,23 @@
 /**
  * Distributed Token Bucket Rate Limiter
- * 
- * 使用 Redis 实现分布式令牌桶，针对不同交易所 API 限流
- * 确保多节点部署时不会因单个节点过快导致所有节点被封禁 IP
+ *
+ * Uses ioredis (same client as BullMQ worker) for distributed token bucket.
+ * Ensures multi-node deployments don't exceed exchange API rate limits.
  */
 
-import { createClient, RedisClientType } from 'redis'
+import Redis from 'ioredis'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('RateLimiter')
 
 export interface RateLimitConfig {
-  /** 令牌桶容量 */
+  /** Token bucket capacity */
   capacity: number
-  /** 每秒补充令牌数 */
+  /** Tokens refilled per second */
   refillRate: number
-  /** Redis key 前缀 */
+  /** Redis key prefix */
   keyPrefix: string
-  /** 令牌过期时间 (秒) */
+  /** Token expiry (seconds) */
   ttl: number
 }
 
@@ -25,11 +25,11 @@ export interface ExchangeRateLimits {
   [exchange: string]: RateLimitConfig
 }
 
-// 各交易所默认限流配置
+// Per-exchange default rate limit configs
 export const DEFAULT_EXCHANGE_LIMITS: ExchangeRateLimits = {
   binance: {
-    capacity: 1200,      // 每分钟 1200 请求
-    refillRate: 20,      // 每秒 20 令牌
+    capacity: 1200,
+    refillRate: 20,
     keyPrefix: 'rl:binance',
     ttl: 60,
   },
@@ -83,7 +83,7 @@ export const DEFAULT_EXCHANGE_LIMITS: ExchangeRateLimits = {
   },
 }
 
-// Redis Lua 脚本: 原子性获取令牌
+// Redis Lua script: atomic token acquisition
 const TOKEN_BUCKET_SCRIPT = `
 local key = KEYS[1]
 local capacity = tonumber(ARGV[1])
@@ -92,41 +92,33 @@ local now = tonumber(ARGV[3])
 local requested = tonumber(ARGV[4])
 local ttl = tonumber(ARGV[5])
 
--- 获取当前桶状态
 local bucket = redis.call('HMGET', key, 'tokens', 'lastRefill')
 local tokens = tonumber(bucket[1]) or capacity
 local lastRefill = tonumber(bucket[2]) or now
 
--- 计算补充的令牌
 local elapsed = math.max(0, now - lastRefill)
 local refill = math.floor(elapsed * refillRate / 1000)
 tokens = math.min(capacity, tokens + refill)
 
--- 检查是否有足够令牌
 if tokens >= requested then
   tokens = tokens - requested
   redis.call('HMSET', key, 'tokens', tokens, 'lastRefill', now)
   redis.call('EXPIRE', key, ttl)
-  return {1, tokens, 0}  -- 成功, 剩余令牌, 等待时间
+  return {1, tokens, 0}
 else
-  -- 计算需要等待的时间
   local needed = requested - tokens
   local waitTime = math.ceil(needed * 1000 / refillRate)
-  return {0, tokens, waitTime}  -- 失败, 剩余令牌, 等待时间
+  return {0, tokens, waitTime}
 end
 `
 
 export class TokenBucketRateLimiter {
-  private redis: RedisClientType | null = null
+  private redis: Redis | null = null
   private exchangeLimits: ExchangeRateLimits
   private localFallback: Map<string, { tokens: number; lastRefill: number }> = new Map()
   private connected = false
 
-  constructor(
-    redisUrl?: string,
-    exchangeLimits: Partial<ExchangeRateLimits> = {}
-  ) {
-    // Merge with defaults, filtering out undefined values
+  constructor(redisUrl?: string, exchangeLimits: Partial<ExchangeRateLimits> = {}) {
     const merged: ExchangeRateLimits = { ...DEFAULT_EXCHANGE_LIMITS }
     for (const [key, value] of Object.entries(exchangeLimits)) {
       if (value !== undefined) {
@@ -134,7 +126,7 @@ export class TokenBucketRateLimiter {
       }
     }
     this.exchangeLimits = merged
-    
+
     if (redisUrl) {
       this.initRedis(redisUrl)
     } else {
@@ -142,9 +134,12 @@ export class TokenBucketRateLimiter {
     }
   }
 
-  private async initRedis(url: string): Promise<void> {
+  private initRedis(url: string): void {
     try {
-      this.redis = createClient({ url })
+      this.redis = new Redis(url, {
+        maxRetriesPerRequest: 3,
+        lazyConnect: false,
+      })
       this.redis.on('error', (err) => {
         logger.error('Redis error:', err)
         this.connected = false
@@ -153,17 +148,12 @@ export class TokenBucketRateLimiter {
         logger.info('Redis connected')
         this.connected = true
       })
-      await this.redis.connect()
     } catch (err) {
       logger.error('Failed to connect to Redis:', err)
       this.redis = null
     }
   }
 
-  /**
-   * 请求令牌
-   * @returns { allowed: boolean, remaining: number, retryAfter?: number }
-   */
   async acquire(
     exchange: string,
     tokens = 1
@@ -171,15 +161,13 @@ export class TokenBucketRateLimiter {
     const config = this.exchangeLimits[exchange] || this.exchangeLimits.default
     const key = `${config.keyPrefix}:global`
 
-    const result = (this.redis && this.connected)
-      ? await this.acquireFromRedis(key, config, tokens)
-      : this.acquireLocal(key, config, tokens)
+    const result =
+      this.redis && this.connected
+        ? await this.acquireFromRedis(key, config, tokens)
+        : this.acquireLocal(key, config, tokens)
 
-    // Observability: record every decision so we know when we start hitting
-    // upstream rate limits before cascading failures happen downstream.
     recordRateLimitDecision(exchange, result.allowed)
 
-    // Warn on denial — surfaces in logs + Sentry fingerprinted by exchange.
     if (!result.allowed) {
       logger.warn(`[RateLimit] denied for ${exchange}`, {
         exchange,
@@ -197,16 +185,16 @@ export class TokenBucketRateLimiter {
     requested: number
   ): Promise<{ allowed: boolean; remaining: number; retryAfter?: number }> {
     try {
-      const result = await this.redis!.eval(TOKEN_BUCKET_SCRIPT, {
-        keys: [key],
-        arguments: [
-          config.capacity.toString(),
-          config.refillRate.toString(),
-          Date.now().toString(),
-          requested.toString(),
-          config.ttl.toString(),
-        ],
-      }) as [number, number, number]
+      const result = (await this.redis!.eval(
+        TOKEN_BUCKET_SCRIPT,
+        1,
+        key,
+        config.capacity.toString(),
+        config.refillRate.toString(),
+        Date.now().toString(),
+        requested.toString(),
+        config.ttl.toString()
+      )) as [number, number, number]
 
       const [allowed, remaining, waitTime] = result
 
@@ -217,7 +205,6 @@ export class TokenBucketRateLimiter {
       }
     } catch (err) {
       logger.error('Redis acquire error:', err)
-      // 降级到本地
       return this.acquireLocal(key, config, requested)
     }
   }
@@ -235,26 +222,21 @@ export class TokenBucketRateLimiter {
       this.localFallback.set(key, bucket)
     }
 
-    // 补充令牌
     const elapsed = now - bucket.lastRefill
-    const refill = Math.floor(elapsed * config.refillRate / 1000)
+    const refill = Math.floor((elapsed * config.refillRate) / 1000)
     bucket.tokens = Math.min(config.capacity, bucket.tokens + refill)
     bucket.lastRefill = now
 
-    // 检查令牌
     if (bucket.tokens >= requested) {
       bucket.tokens -= requested
       return { allowed: true, remaining: bucket.tokens }
     } else {
       const needed = requested - bucket.tokens
-      const waitTime = Math.ceil(needed * 1000 / config.refillRate)
+      const waitTime = Math.ceil((needed * 1000) / config.refillRate)
       return { allowed: false, remaining: bucket.tokens, retryAfter: waitTime }
     }
   }
 
-  /**
-   * 获取当前限流状态
-   */
   async getStatus(exchange: string): Promise<{
     exchange: string
     config: RateLimitConfig
@@ -268,30 +250,20 @@ export class TokenBucketRateLimiter {
 
     if (this.redis && this.connected) {
       try {
-        const tokens = await this.redis.hGet(key, 'tokens')
+        const tokens = await this.redis.hget(key, 'tokens')
         if (tokens) remaining = parseInt(tokens, 10)
-      } catch (_err) { /* Redis read failed; fall through to return default remaining count */ }
+      } catch (_err) {
+        /* Redis read failed; fall through to default */
+      }
     } else {
       const bucket = this.localFallback.get(key)
       if (bucket) remaining = bucket.tokens
     }
 
-    return {
-      exchange,
-      config,
-      remaining,
-      capacity: config.capacity,
-    }
+    return { exchange, config, remaining, capacity: config.capacity }
   }
 
-  /**
-   * 带重试的请求包装器
-   */
-  async withRateLimit<T>(
-    exchange: string,
-    fn: () => Promise<T>,
-    maxRetries = 3
-  ): Promise<T> {
+  async withRateLimit<T>(exchange: string, fn: () => Promise<T>, maxRetries = 3): Promise<T> {
     for (let attempt = 0; attempt < maxRetries; attempt++) {
       const { allowed, retryAfter } = await this.acquire(exchange)
 
@@ -301,16 +273,13 @@ export class TokenBucketRateLimiter {
 
       if (retryAfter && attempt < maxRetries - 1) {
         logger.info(`Rate limited for ${exchange}, waiting ${retryAfter}ms`)
-        await new Promise(r => setTimeout(r, retryAfter))
+        await new Promise((r) => setTimeout(r, retryAfter))
       }
     }
 
     throw new Error(`Rate limit exceeded for ${exchange} after ${maxRetries} retries`)
   }
 
-  /**
-   * 关闭连接
-   */
   async close(): Promise<void> {
     if (this.redis) {
       await this.redis.quit()
@@ -320,7 +289,7 @@ export class TokenBucketRateLimiter {
   }
 }
 
-// 单例
+// Singleton
 let rateLimiter: TokenBucketRateLimiter | null = null
 
 export function getRateLimiter(): TokenBucketRateLimiter {
@@ -333,16 +302,6 @@ export function getRateLimiter(): TokenBucketRateLimiter {
 // ---------------------------------------------------------------------------
 // Rate-limit hit tracking (observability)
 // ---------------------------------------------------------------------------
-//
-// Previously, `acquire()` silently returned `{ allowed: false }` when the
-// bucket was empty. There was no counter, log, or alert — meaning if Binance
-// started rate-limiting us, we'd only find out when downstream fetchers
-// failed. This tracker surfaces denials per-exchange so /api/health/pipeline
-// and monitor scripts can see them.
-//
-// In-memory only (resets on cold start) — acceptable because cron jobs run
-// every 5-30min and Binance-type rate limits are on the order of 1200/min,
-// so a single instance sees meaningful data within one request window.
 
 interface RateLimitStats {
   allowed: number
@@ -352,7 +311,6 @@ interface RateLimitStats {
 
 const _rateLimitStats = new Map<string, RateLimitStats>()
 
-/** Record an allow/deny decision for observability. */
 export function recordRateLimitDecision(exchange: string, allowed: boolean): void {
   const existing = _rateLimitStats.get(exchange) ?? { allowed: 0, denied: 0, lastDeniedAt: null }
   if (allowed) {
@@ -364,22 +322,24 @@ export function recordRateLimitDecision(exchange: string, allowed: boolean): voi
   _rateLimitStats.set(exchange, existing)
 }
 
-/**
- * Snapshot of rate-limit stats per exchange since process start.
- * Denial ratio > 10% indicates we're hitting rate limits and should back off.
- */
-export function getRateLimitStats(): Record<string, {
-  allowed: number
-  denied: number
-  denialRate: number
-  lastDeniedAt: string | null
-}> {
-  const out: Record<string, {
+export function getRateLimitStats(): Record<
+  string,
+  {
     allowed: number
     denied: number
     denialRate: number
     lastDeniedAt: string | null
-  }> = {}
+  }
+> {
+  const out: Record<
+    string,
+    {
+      allowed: number
+      denied: number
+      denialRate: number
+      lastDeniedAt: string | null
+    }
+  > = {}
   for (const [exchange, s] of _rateLimitStats.entries()) {
     const total = s.allowed + s.denied
     out[exchange] = {
