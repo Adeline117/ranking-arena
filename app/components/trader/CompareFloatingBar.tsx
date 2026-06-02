@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { X, BarChart3, ChevronUp, ChevronDown } from 'lucide-react'
 import { tokens } from '@/lib/design-tokens'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
+import { useShallow } from 'zustand/react/shallow'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
@@ -14,12 +15,17 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
  */
 function CompareFloatingBar() {
   const { t } = useLanguage()
-  const selectedTraders = useComparisonStore(s => s.selectedTraders)
-  const isBarExpanded = useComparisonStore(s => s.isBarExpanded)
-  const removeTrader = useComparisonStore(s => s.removeTrader)
-  const clearAll = useComparisonStore(s => s.clearAll)
-  const toggleBar = useComparisonStore(s => s.toggleBar)
-  const getCompareUrl = useComparisonStore(s => s.getCompareUrl)
+  const { selectedTraders, isBarExpanded, removeTrader, clearAll, toggleBar, getCompareUrl } =
+    useComparisonStore(
+      useShallow((s) => ({
+        selectedTraders: s.selectedTraders,
+        isBarExpanded: s.isBarExpanded,
+        removeTrader: s.removeTrader,
+        clearAll: s.clearAll,
+        toggleBar: s.toggleBar,
+        getCompareUrl: s.getCompareUrl,
+      }))
+    )
 
   // Don't render if no traders selected
   if (selectedTraders.length === 0) {
@@ -64,21 +70,25 @@ function CompareFloatingBar() {
           <BarChart3 size={20} color={tokens.colors.accent.primary} />
           {isBarExpanded && (
             <>
-              <span style={{
-                fontSize: 14,
-                fontWeight: 700,
-                color: tokens.colors.text.primary,
-              }}>
+              <span
+                style={{
+                  fontSize: 14,
+                  fontWeight: 700,
+                  color: tokens.colors.text.primary,
+                }}
+              >
                 {t('compare') || 'Compare'}
               </span>
-              <span style={{
-                padding: '2px 6px',
-                borderRadius: tokens.radius.sm,
-                background: tokens.colors.accent.primary,
-                color: tokens.colors.white,
-                fontSize: 11,
-                fontWeight: 700,
-              }}>
+              <span
+                style={{
+                  padding: '2px 6px',
+                  borderRadius: tokens.radius.sm,
+                  background: tokens.colors.accent.primary,
+                  color: tokens.colors.white,
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
                 {selectedTraders.length}/10
               </span>
             </>
@@ -96,11 +106,13 @@ function CompareFloatingBar() {
       {isBarExpanded && (
         <>
           {/* Trader list */}
-          <div style={{
-            padding: '8px 12px',
-            maxHeight: 200,
-            overflowY: 'auto',
-          }}>
+          <div
+            style={{
+              padding: '8px 12px',
+              maxHeight: 200,
+              overflowY: 'auto',
+            }}
+          >
             {selectedTraders.map((trader) => (
               <div
                 key={trader.id}
@@ -112,39 +124,47 @@ function CompareFloatingBar() {
                   borderBottom: `1px solid ${tokens.colors.border.secondary}`,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                <div
+                  style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}
+                >
                   {/* Avatar placeholder */}
-                  <div style={{
-                    width: 28,
-                    height: 28,
-                    borderRadius: tokens.radius.md,
-                    background: tokens.gradient.primarySubtle,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 12,
-                    fontWeight: 700,
-                    color: tokens.colors.accent.primary,
-                    flexShrink: 0,
-                  }}>
+                  <div
+                    style={{
+                      width: 28,
+                      height: 28,
+                      borderRadius: tokens.radius.md,
+                      background: tokens.gradient.primarySubtle,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      color: tokens.colors.accent.primary,
+                      flexShrink: 0,
+                    }}
+                  >
                     {trader.handle?.[0]?.toUpperCase() || 'T'}
                   </div>
 
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: tokens.colors.text.primary,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                    }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: tokens.colors.text.primary,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}
+                    >
                       {trader.handle}
                     </div>
-                    <div style={{
-                      fontSize: 11,
-                      color: tokens.colors.text.tertiary,
-                    }}>
+                    <div
+                      style={{
+                        fontSize: 11,
+                        color: tokens.colors.text.tertiary,
+                      }}
+                    >
                       {EXCHANGE_NAMES[trader.source] || trader.source}
                     </div>
                   </div>
@@ -177,12 +197,14 @@ function CompareFloatingBar() {
           </div>
 
           {/* Actions */}
-          <div style={{
-            padding: '10px 12px',
-            display: 'flex',
-            gap: 8,
-            borderTop: tokens.glass.border.light,
-          }}>
+          <div
+            style={{
+              padding: '10px 12px',
+              display: 'flex',
+              gap: 8,
+              borderTop: tokens.glass.border.light,
+            }}
+          >
             <button
               onClick={clearAll}
               className="btn-press"

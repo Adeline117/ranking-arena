@@ -21,7 +21,7 @@ export function createQueryClient() {
         refetchOnWindowFocus: false,
         refetchOnReconnect: true,
         staleTime: 5_000, // SWR dedupingInterval: 5000
-        gcTime: 5 * 60 * 1000, // 5 min garbage collection
+        gcTime: 2 * 60 * 1000, // 2 min — prevents OOM on low-memory devices after visiting many traders
         retry: (failureCount, error) => {
           if (failureCount >= 2) return false // SWR errorRetryCount: 2
           const status = (error as { status?: number })?.status
