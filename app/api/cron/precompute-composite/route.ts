@@ -37,10 +37,11 @@ const _FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failu
 // Statement timeout for the heavy per-window queries. Root cause fix: 90s was
 // too short for 7D — the largest partition grew past what 90s could scan,
 // causing 22+ "canceling statement due to statement timeout" alerts.
-// 150s gives headroom. With 3 sequential queries + display name fetch + cache
+// 30s per window — trader_latest (45K rows) should complete in <1s.
+// Previous value was 150s when querying trader_snapshots_v2 (10M+ rows).
 // write, total max is ~500s — still within 300s maxDuration since actual p95
 // for 90D+30D is <10s each, only 7D is slow at ~60-120s.
-const WINDOW_QUERY_TIMEOUT_S = 150
+const WINDOW_QUERY_TIMEOUT_S = 30
 
 interface SnapshotRow {
   platform: string
@@ -104,14 +105,16 @@ export async function GET(request: NextRequest) {
         await client.query('BEGIN')
         await client.query(`SET LOCAL statement_timeout = '${WINDOW_QUERY_TIMEOUT_S}s'`)
 
+        // Use trader_latest (45K rows, PRIMARY) instead of trader_snapshots_v2 (10M+ archive).
+        // This was the root cause of consistent 300s timeouts since 2026-05-17.
         const result = await client.query<SnapshotRow>(
-          `SELECT platform, trader_key, as_of_ts, arena_score,
+          `SELECT platform, trader_key, updated_at AS as_of_ts, arena_score,
                   roi_pct, pnl_usd, max_drawdown, win_rate,
                   trades_count, followers
-           FROM trader_snapshots_v2
+           FROM trader_latest
            WHERE "window" = $1
              AND arena_score IS NOT NULL
-             AND as_of_ts >= $2
+             AND updated_at >= $2
            ORDER BY arena_score DESC NULLS LAST
            LIMIT 2500`,
           [seasonId, freshnessThreshold]
