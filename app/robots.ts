@@ -25,7 +25,7 @@ export default function robots(): MetadataRoute.Robots {
           '/notifications',
           '/channels',
           '/user-center',
-          '/exchange',
+          '/exchange/auth',
           '/auth',
           '/reset-password',
           '/tip',
