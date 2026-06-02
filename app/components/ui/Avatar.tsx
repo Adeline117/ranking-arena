@@ -104,7 +104,7 @@ export default function Avatar({
             width={size}
             height={size}
             sizes={`${size}px`}
-            unoptimized
+            unoptimized={finalAvatarUrl?.startsWith('data:') || false}
             style={{
               width: '100%',
               height: '100%',
