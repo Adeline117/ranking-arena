@@ -327,20 +327,30 @@ export async function getPosts(
     ...new Set(data.map((p) => p.original_post_id).filter((id): id is string => !!id)),
   ]
 
-  const [profilesResult, originalPostsResult] = await Promise.all([
-    authorIds.length > 0
-      ? supabase
-          .from('user_profiles')
-          .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
-          .in('id', authorIds)
-      : Promise.resolve({ data: null }),
+  // Fetch original posts first to discover their author_ids, then batch ALL
+  // author profiles in a single query (eliminates the 3rd sequential query
+  // that previously fetched missing original-post author profiles).
+  const originalPostsResult =
     originalPostIds.length > 0
-      ? supabase
+      ? await supabase
           .from('posts')
           .select('id, title, content, author_id, author_handle, images, created_at')
           .in('id', originalPostIds)
-      : Promise.resolve({ data: null }),
-  ])
+      : { data: null }
+
+  // Combine post author IDs + original post author IDs into one batch
+  const originalAuthorIds = originalPostsResult.data
+    ? originalPostsResult.data.map((p: { author_id: string }) => p.author_id).filter(Boolean)
+    : []
+  const allAuthorIds = [...new Set([...authorIds, ...originalAuthorIds])]
+
+  const profilesResult =
+    allAuthorIds.length > 0
+      ? await supabase
+          .from('user_profiles')
+          .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
+          .in('id', allAuthorIds)
+      : { data: null }
 
   const authorProfileMap = profilesResult.data
     ? buildAuthorProfileMap(profilesResult.data)
@@ -348,31 +358,6 @@ export async function getPosts(
 
   const originalPostMap = new Map<string, OriginalPost>()
   if (originalPostsResult.data && originalPostsResult.data.length > 0) {
-    const originalAuthorIds = [
-      ...new Set(
-        originalPostsResult.data.map((p: { author_id: string }) => p.author_id).filter(Boolean)
-      ),
-    ]
-    const missingIds = originalAuthorIds.filter((id) => !authorProfileMap.has(id))
-
-    if (missingIds.length > 0) {
-      const { data: originalProfiles } = await supabase
-        .from('user_profiles')
-        .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
-        .in('id', missingIds)
-
-      if (originalProfiles) {
-        for (const p of originalProfiles) {
-          authorProfileMap.set(p.id, {
-            handle: p.handle,
-            avatar_url: p.avatar_url,
-            is_pro: p.subscription_tier === 'pro',
-            show_pro_badge: p.show_pro_badge !== false,
-          })
-        }
-      }
-    }
-
     for (const op of originalPostsResult.data) {
       const opProfile = authorProfileMap.get(op.author_id)
       originalPostMap.set(op.id, {
