@@ -168,6 +168,12 @@ export interface TraderDataPayload {
   lastUpdated: string
 }
 
+export interface UserFollowChangePayload {
+  targetUserId: string
+  following: boolean
+  currentUserId: string
+}
+
 export interface AuthChangePayload {
   userId: string | null
   handle: string | null
@@ -182,6 +188,13 @@ export interface AuthChangePayload {
  */
 export function useFollowSync() {
   return useBroadcastSync<FollowChangePayload>('follow-state')
+}
+
+/**
+ * 用户关注状态同步 Hook (user-to-user follow)
+ */
+export function useUserFollowSync() {
+  return useBroadcastSync<UserFollowChangePayload>('user-follow-state')
 }
 
 /**
