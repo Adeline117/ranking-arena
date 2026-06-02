@@ -28,9 +28,9 @@ const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<
       source: '系统告警',
       title: payload.title,
       message: payload.message,
-      details: payload.details ? Object.fromEntries(
-        Object.entries(payload.details).map(([k, v]) => [k, String(v)])
-      ) : undefined,
+      details: payload.details
+        ? Object.fromEntries(Object.entries(payload.details).map(([k, v]) => [k, String(v)]))
+        : undefined,
     })
   },
   slack: async (_payload) => {
@@ -57,10 +57,13 @@ const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<
         if (res.ok) return true
         if (res.status >= 400 && res.status < 500) return false // Don't retry 4xx
       } catch (err) {
-        logger.error('[send-alert] webhook request failed:', err instanceof Error ? err.message : String(err))
+        logger.error(
+          '[send-alert] webhook request failed:',
+          err instanceof Error ? err.message : String(err)
+        )
       }
       if (attempt < maxRetries - 1) {
-        await new Promise(r => setTimeout(r, 1000 * Math.pow(2, attempt))) // 1s, 2s, 4s
+        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt))) // 1s, 2s, 4s
       }
     }
     return false
@@ -71,7 +74,9 @@ const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<
 // 核心发送 — 多渠道并发
 // ============================================
 
-export async function sendAlert(payload: AlertPayload): Promise<{ sent: boolean; channels: string[] }> {
+export async function sendAlert(
+  payload: AlertPayload
+): Promise<{ sent: boolean; channels: string[] }> {
   const channels = payload.channels || ['telegram']
   const sentChannels: string[] = []
 
@@ -91,7 +96,7 @@ export async function sendAlert(payload: AlertPayload): Promise<{ sent: boolean;
     })
   )
 
-  const anySent = results.some(r => r.status === 'fulfilled' && r.value)
+  const anySent = results.some((r) => r.status === 'fulfilled' && r.value)
   return { sent: anySent, channels: sentChannels }
 }
 
@@ -111,8 +116,8 @@ export async function sendScraperAlert(
   const isCritical = criticalPlatforms.length > 0
   const level = isCritical ? 'critical' : 'warning'
 
-  const criticalList = criticalPlatforms.map(p => platformNames[p] || p).join(', ')
-  const staleList = stalePlatforms.map(p => platformNames[p] || p).join(', ')
+  const criticalList = criticalPlatforms.map((p) => platformNames[p] || p).join(', ')
+  const staleList = stalePlatforms.map((p) => platformNames[p] || p).join(', ')
 
   let message = ''
   if (criticalPlatforms.length > 0) {
@@ -127,9 +132,9 @@ export async function sendScraperAlert(
     message: message.trim(),
     level,
     details: {
-      '严重过期平台数': criticalPlatforms.length,
-      '陈旧平台数': stalePlatforms.length,
-      '检查时间': new Date().toLocaleString('zh-CN'),
+      严重过期平台数: criticalPlatforms.length,
+      陈旧平台数: stalePlatforms.length,
+      检查时间: new Date().toLocaleString('zh-CN'),
     },
   })
 }
@@ -152,10 +157,7 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null
 const FLUSH_INTERVAL = 60000
 const MIN_AGGREGATE_COUNT = 3
 
-export async function sendSmartAlert(
-  payload: AlertPayload,
-  aggregateKey?: string
-): Promise<void> {
+export async function sendSmartAlert(payload: AlertPayload, aggregateKey?: string): Promise<void> {
   const key = aggregateKey || `${payload.level}:${payload.title}`
 
   const existing = alertBuffer.get(key)
@@ -194,14 +196,12 @@ async function flushAlertBuffer(): Promise<void> {
   for (const alert of toSend) {
     const aggregatedPayload: AlertPayload = {
       ...alert.payload,
-      title: alert.count > 1
-        ? `${alert.payload.title} (x${alert.count})`
-        : alert.payload.title,
+      title: alert.count > 1 ? `${alert.payload.title} (x${alert.count})` : alert.payload.title,
       details: {
         ...alert.payload.details,
-        '聚合数量': alert.count,
-        '首次发生': new Date(alert.firstSeen).toLocaleString('zh-CN'),
-        '最后发生': new Date(alert.lastSeen).toLocaleString('zh-CN'),
+        聚合数量: alert.count,
+        首次发生: new Date(alert.firstSeen).toLocaleString('zh-CN'),
+        最后发生: new Date(alert.lastSeen).toLocaleString('zh-CN'),
       },
     }
     await sendAlert(aggregatedPayload)
@@ -221,9 +221,7 @@ export async function flushAllAlerts(): Promise<void> {
   for (const [, alert] of alertBuffer.entries()) {
     const aggregatedPayload: AlertPayload = {
       ...alert.payload,
-      title: alert.count > 1
-        ? `${alert.payload.title} (x${alert.count})`
-        : alert.payload.title,
+      title: alert.count > 1 ? `${alert.payload.title} (x${alert.count})` : alert.payload.title,
     }
     await sendAlert(aggregatedPayload)
   }
@@ -237,17 +235,28 @@ export async function flushAllAlerts(): Promise<void> {
 // In-memory fallback only — Redis is preferred for cross-instance dedup
 const rateLimitCache: Map<string, number> = new Map()
 
+/** Default cooldowns by alert level. Critical alerts use 15min instead of 1h. */
+const COOLDOWN_BY_LEVEL: Record<AlertPayload['level'], number> = {
+  info: 3600000, // 1 hour
+  warning: 3600000, // 1 hour
+  critical: 900000, // 15 minutes
+}
+
 /**
  * Rate-limited alert sending.
  * Uses Redis for rate limiting (survives Vercel cold starts),
  * falls back to in-memory Map.
+ *
+ * If rateLimitMs is not provided, defaults based on payload.level:
+ *   critical = 15min, warning/info = 1h.
  */
 export async function sendRateLimitedAlert(
   payload: AlertPayload,
   rateLimitKey: string,
-  rateLimitMs: number = 300000
+  rateLimitMs?: number
 ): Promise<{ sent: boolean; rateLimited: boolean; channels: string[] }> {
   const now = Date.now()
+  const effectiveCooldown = rateLimitMs ?? COOLDOWN_BY_LEVEL[payload.level] ?? 300000
 
   // Try Redis first (survives cold starts)
   try {
@@ -255,22 +264,25 @@ export async function sendRateLimitedAlert(
     if (redis) {
       const redisKey = `alert:ratelimit:${rateLimitKey}`
       const existing = await redis.get<number>(redisKey)
-      if (existing && now - existing < rateLimitMs) {
+      if (existing && now - existing < effectiveCooldown) {
         return { sent: false, rateLimited: true, channels: [] }
       }
       const result = await sendAlert(payload)
       if (result.sent) {
-        await redis.set(redisKey, now, { ex: Math.ceil(rateLimitMs / 1000) })
+        await redis.set(redisKey, now, { ex: Math.ceil(effectiveCooldown / 1000) })
       }
       return { ...result, rateLimited: false }
     }
   } catch (err) {
-    logger.error('[send-alert] Redis rate limit failed:', err instanceof Error ? err.message : String(err))
+    logger.error(
+      '[send-alert] Redis rate limit failed:',
+      err instanceof Error ? err.message : String(err)
+    )
   }
 
   // In-memory fallback
   const lastSent = rateLimitCache.get(rateLimitKey)
-  if (lastSent && now - lastSent < rateLimitMs) {
+  if (lastSent && now - lastSent < effectiveCooldown) {
     return { sent: false, rateLimited: true, channels: [] }
   }
 
@@ -279,7 +291,7 @@ export async function sendRateLimitedAlert(
   if (result.sent) {
     rateLimitCache.set(rateLimitKey, now)
     for (const [key, time] of rateLimitCache.entries()) {
-      if (now - time > rateLimitMs * 2) {
+      if (now - time > effectiveCooldown * 2) {
         rateLimitCache.delete(key)
       }
     }
@@ -307,18 +319,20 @@ export interface ScrapeBatchSummary {
 }
 
 export async function sendScrapeBatchSummary(summary: ScrapeBatchSummary): Promise<void> {
-  const { totalPlatforms, successPlatforms, failedPlatforms, totalDuration, platformResults } = summary
+  const { totalPlatforms, successPlatforms, failedPlatforms, totalDuration, platformResults } =
+    summary
 
   const failureRate = failedPlatforms.length / totalPlatforms
-  const level: AlertPayload['level'] = failureRate > 0.3 ? 'critical' : failureRate > 0.1 ? 'warning' : 'info'
+  const level: AlertPayload['level'] =
+    failureRate > 0.3 ? 'critical' : failureRate > 0.1 ? 'warning' : 'info'
 
   if (level === 'info' && failedPlatforms.length === 0) {
     return
   }
 
   const failedDetails = platformResults
-    .filter(r => !r.success)
-    .map(r => `${r.platform}: ${r.error?.substring(0, 50) || '未知错误'}`)
+    .filter((r) => !r.success)
+    .map((r) => `${r.platform}: ${r.error?.substring(0, 50) || '未知错误'}`)
     .join('\n')
 
   await sendAlert({
@@ -326,9 +340,9 @@ export async function sendScrapeBatchSummary(summary: ScrapeBatchSummary): Promi
     message: `成功: ${successPlatforms}/${totalPlatforms} 平台\n耗时: ${Math.round(totalDuration / 1000)}s\n\n${failedDetails || '无失败'}`,
     level,
     details: {
-      '成功率': `${((successPlatforms / totalPlatforms) * 100).toFixed(1)}%`,
-      '失败平台': failedPlatforms.join(', ') || '无',
-      '总耗时': `${Math.round(totalDuration / 1000)}s`,
+      成功率: `${((successPlatforms / totalPlatforms) * 100).toFixed(1)}%`,
+      失败平台: failedPlatforms.join(', ') || '无',
+      总耗时: `${Math.round(totalDuration / 1000)}s`,
     },
   })
 }

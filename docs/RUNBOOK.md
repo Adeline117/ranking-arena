@@ -22,6 +22,7 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 ### Symptom: Platform has no fresh data
 
 1. **Diagnose** which platform is stale:
+
    ```bash
    node scripts/pipeline-health-check.mjs
    # or quick mode:
@@ -29,25 +30,27 @@ Emergency operations manual for the Arena crypto trader ranking platform.
    ```
 
 2. **Check pipeline logs** for the failing job:
+
    ```bash
    npx tsx scripts/pipeline-report.ts
    ```
 
 3. **Check Vercel function logs** for errors:
+
    ```bash
    vercel logs --since 2h
    ```
 
 4. **Common causes and fixes**:
 
-   | Cause | Fix |
-   |-------|-----|
-   | Exchange API changed format | Update the fetcher/connector to match new response shape |
-   | VPS scraper down | SSH to VPS, check PM2: `pm2 status`, `pm2 restart arena-scraper` |
-   | Rate limited (429) | Wait for cooldown or increase delay in connector config |
-   | Geo-blocked | Route through VPS proxy or Cloudflare Worker |
-   | Timeout (524/504) | Reduce batch size or increase `timeoutMs` in connector config |
-   | Supabase error 42P10 | Missing unique constraint on target table -- check ON CONFLICT clause |
+   | Cause                       | Fix                                                                   |
+   | --------------------------- | --------------------------------------------------------------------- |
+   | Exchange API changed format | Update the fetcher/connector to match new response shape              |
+   | VPS scraper down            | SSH to VPS, check PM2: `pm2 status`, `pm2 restart arena-scraper`      |
+   | Rate limited (429)          | Wait for cooldown or increase delay in connector config               |
+   | Geo-blocked                 | Route through VPS proxy or Cloudflare Worker                          |
+   | Timeout (524/504)           | Reduce batch size or increase `timeoutMs` in connector config         |
+   | Supabase error 42P10        | Missing unique constraint on target table -- check ON CONFLICT clause |
 
 5. **Generate automated fix script**:
    ```bash
@@ -70,6 +73,7 @@ WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes';
 ### Symptom: Trader with impossibly high ROI
 
 1. Check the raw data:
+
    ```sql
    SELECT source, source_trader_id, roi, pnl, arena_score, captured_at
    FROM trader_snapshots
@@ -88,6 +92,7 @@ WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes';
 ### Symptom: Leaderboard shows stale data
 
 1. Check freshness of the compute-leaderboard cron:
+
    ```sql
    SELECT * FROM pipeline_logs
    WHERE job_name = 'compute-leaderboard'
@@ -108,11 +113,11 @@ WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes';
 
 Alerts are sent via `lib/alerts/send-alert.ts` with 5-minute rate limiting per platform:level.
 
-| Alert Level | Action |
-|-------------|--------|
-| `info` | No action needed, informational |
-| `warning` | Monitor -- check within 1 hour. Examples: 0 results returned, slow response |
-| `critical` | Act immediately. Examples: 3+ consecutive failures, database unreachable |
+| Alert Level | Action                                                                      |
+| ----------- | --------------------------------------------------------------------------- |
+| `info`      | No action needed, informational                                             |
+| `warning`   | Monitor -- check within 1 hour. Examples: 0 results returned, slow response |
+| `critical`  | Act immediately. Examples: 3+ consecutive failures, database unreachable    |
 
 ### Common alert patterns
 
@@ -175,6 +180,7 @@ The cron normally runs every 30 minutes (`0,30 * * * *`).
 ## Arena Score Recalculation
 
 The Arena Score formula:
+
 - `ReturnScore = 60 * tanh(coeff * ROI)^exponent` (0-60 points)
 - `PnlScore = 40 * tanh(coeff * ln(1 + PnL/base))` (0-40 points)
 - `ArenaScore = (ReturnScore + PnlScore) * confidenceMultiplier * trustWeight`
@@ -268,28 +274,109 @@ VACUUM (VERBOSE) trader_snapshots;
 
 ## Common Errors and Solutions
 
-| Error | Cause | Solution |
-|-------|-------|----------|
-| `42P10` in upsert | Missing unique constraint on ON CONFLICT columns | Add the constraint via migration |
-| `PGRST301` | JWT expired or invalid | Check Supabase keys in env vars |
-| `524` from Cloudflare | Request took > 100s | Reduce batch size, use inline calls instead of HTTP sub-calls |
-| `401` from VERCEL_URL | Deployment protection blocking internal calls | Use inline (in-process) calls, never HTTP sub-calls in crons |
-| `429` from exchange | Rate limited | Increase backoff, use VPS proxy |
-| `CircuitOpenError` | Too many consecutive failures | Wait for circuit breaker reset (60s default) |
-| Redis `WRONGTYPE` | Key type mismatch from old data | Delete the key: `await redis.del(key)` |
-| Build OOM | Not enough memory | Set `--max-old-space-size=3584` (already in npm scripts) |
+| Error                 | Cause                                            | Solution                                                      |
+| --------------------- | ------------------------------------------------ | ------------------------------------------------------------- |
+| `42P10` in upsert     | Missing unique constraint on ON CONFLICT columns | Add the constraint via migration                              |
+| `PGRST301`            | JWT expired or invalid                           | Check Supabase keys in env vars                               |
+| `524` from Cloudflare | Request took > 100s                              | Reduce batch size, use inline calls instead of HTTP sub-calls |
+| `401` from VERCEL_URL | Deployment protection blocking internal calls    | Use inline (in-process) calls, never HTTP sub-calls in crons  |
+| `429` from exchange   | Rate limited                                     | Increase backoff, use VPS proxy                               |
+| `CircuitOpenError`    | Too many consecutive failures                    | Wait for circuit breaker reset (60s default)                  |
+| Redis `WRONGTYPE`     | Key type mismatch from old data                  | Delete the key: `await redis.del(key)`                        |
+| Build OOM             | Not enough memory                                | Set `--max-old-space-size=3584` (already in npm scripts)      |
+
+---
+
+## Supabase Outage
+
+**Status page**: https://status.supabase.com
+
+### What breaks
+
+| Feature               | Impact                                   | Fallback                                                                     |
+| --------------------- | ---------------------------------------- | ---------------------------------------------------------------------------- |
+| Auth (GoTrue)         | Login/signup fails, JWT refresh fails    | Users with unexpired JWTs can still browse public pages                      |
+| Database (PostgreSQL) | All API routes returning DB data fail    | Redis cache serves stale data for cached endpoints (rankings, trader detail) |
+| Realtime              | Live chat, live leaderboard updates stop | App remains functional, just not live                                        |
+| Storage               | Avatar/image uploads fail                | Existing images served from CDN cache                                        |
+
+### Response steps
+
+1. Confirm outage on https://status.supabase.com or Supabase Dashboard > Project Health
+2. If total outage (DB unreachable):
+   - The app auto-degrades: Redis-cached endpoints continue serving stale data
+   - Cron jobs will fail and log errors — this is expected, no manual intervention needed
+   - Monitor `pipeline_logs` for mass failures once DB recovers
+3. If prolonged (>1 hour):
+   - Consider enabling read-only mode via feature flag: set `FEATURE_READ_ONLY=true` in Vercel env
+   - This disables write operations (posts, comments, follows) while keeping rankings browsable
+4. PITR restore (nuclear option):
+   - Supabase Dashboard > Project Settings > Database > Point in Time Recovery
+   - Select a timestamp before the incident
+   - **WARNING**: This rolls back ALL data changes after that timestamp
+
+---
+
+## Redis (Upstash) Outage
+
+**Dashboard**: https://console.upstash.com
+
+### Fail-open behavior
+
+Redis is non-critical — all Redis consumers fail-open:
+
+| Feature                | Without Redis                                                            |
+| ---------------------- | ------------------------------------------------------------------------ |
+| Cron distributed locks | Disabled — concurrent cron execution possible (harmless, idempotent)     |
+| API cache              | Cache miss → direct DB query (higher latency, more Supabase load)        |
+| Rate limiting          | Falls back to in-memory Map (per-instance, less accurate but functional) |
+| Alert rate limiting    | Falls back to in-memory Map                                              |
+
+### Response steps
+
+1. Verify status: Upstash Dashboard > your database > Metrics tab
+2. No immediate action needed — the app auto-degrades
+3. Monitor Supabase connection count (`SELECT count(*) FROM pg_stat_activity`) — without cache, DB load increases
+4. If DB connection count exceeds 80% of pool: consider adding `Cache-Control: stale-while-revalidate` headers to high-traffic API routes temporarily
+
+---
+
+## Stripe Webhook Outage / Backup
+
+**Dashboard**: https://dashboard.stripe.com/webhooks
+
+### Checking queued events
+
+1. Stripe Dashboard > Developers > Webhooks > select endpoint
+2. Check "Attempted events" tab for failed deliveries
+3. Stripe retries failed webhooks for up to 3 days with exponential backoff
+
+### Response steps
+
+1. **Check dedup table**: Events are deduplicated via `stripe_events` table (30-day retention). Even if a webhook is replayed, it won't double-process.
+2. **Force replay**: Stripe Dashboard > Developers > Webhooks > select endpoint > "Resend" on specific events
+3. **Bulk replay**: Use Stripe CLI:
+   ```bash
+   stripe events resend evt_xxx --webhook-endpoint we_xxx
+   ```
+4. **Disable handler temporarily** (if handler is crashing):
+   - Stripe Dashboard > Webhooks > endpoint > "Disable endpoint"
+   - Fix the handler code, deploy, then re-enable
+   - Stripe will replay all queued events from the disabled period
+5. **Verify `stripe_events` dedup**: Events older than 30 days are cleaned up automatically. Within 30 days, reprocessing is safely idempotent.
+6. **Backup path**: Users who completed checkout but webhook failed can recover via `POST /api/stripe/verify-session` (called automatically from the success page)
 
 ---
 
 ## Key Infrastructure
 
-| Resource | Value |
-|----------|-------|
-| **Supabase Project** | `iknktzifjdyujdccyhsv` |
-| **Vercel Region** | `hnd1` (Tokyo) |
-| **VPS Singapore** | `45.76.152.169` (scraper port 3456, proxy port 3001) |
-| **VPS Japan** | `149.28.27.242` (proxy port 3001) |
-| **CF Worker** | `ranking-arena-proxy.broosbook.workers.dev` |
-| **Live Site** | `https://www.arenafi.org` |
-| **Cron Schedule** | 42 active jobs, staggered across groups A-I |
-| **Scraper PM2 name** | `arena-scraper` |
+| Resource             | Value                                                |
+| -------------------- | ---------------------------------------------------- |
+| **Supabase Project** | `iknktzifjdyujdccyhsv`                               |
+| **Vercel Region**    | `hnd1` (Tokyo)                                       |
+| **VPS Singapore**    | `45.76.152.169` (scraper port 3456, proxy port 3001) |
+| **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
+| **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
+| **Live Site**        | `https://www.arenafi.org`                            |
+| **Cron Schedule**    | 42 active jobs, staggered across groups A-I          |
+| **Scraper PM2 name** | `arena-scraper`                                      |

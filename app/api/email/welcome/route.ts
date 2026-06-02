@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
     })
 
     if (sent) {
-      logger.info('Welcome email sent', { userId: user.id, email })
+      logger.info('Welcome email sent', { userId: user.id })
     }
 
     return NextResponse.json({ ok: true, sent })

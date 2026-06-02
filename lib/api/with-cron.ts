@@ -24,6 +24,7 @@ import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { logger } from '@/lib/logger'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
+import * as Sentry from '@sentry/nextjs'
 
 interface CronContext {
   plog: PipelineLogHandle
@@ -93,6 +94,8 @@ export function withCron(jobName: string, handler: CronHandler, options: CronOpt
       // Redis error — proceed without lock (fail-open for locks is correct)
       logger.warn(`[${jobName}] Redis lock failed, proceeding without lock:`, lockErr)
     }
+
+    Sentry.setTag('cron', jobName)
 
     // 3. Extract metadata from search params
     const searchParams = Object.fromEntries(request.nextUrl.searchParams.entries())
