@@ -65,7 +65,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 ### Deep 6-Direction Audit (2026-06-02 session #2)
 
-15 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
+19 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
 
 - [x] **C-1** Pin react to exact 19.2.6 (prevent version drift)
 - [x] **C-2** Remove 10 redundant Vercel crons (54→44, BullMQ handles enrich/score/meilisearch)
@@ -80,7 +80,11 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 - [x] **M-1** Handle Supabase errors in 4 group auth checks (security logging)
 - [x] **M-4** Add min-height loading placeholders to dynamic imports (CLS fix: EquityCurve/ExchangeLinks/LinkedAccounts)
 - [x] **M-5** Centralize React Query staleTime via `cache-presets.ts` (5 named tiers, 22 files updated)
+- [x] **M-7** Remove deprecated `getSupportedInlinePlatforms` alias + dead `InlineFetcherFn` type
 - [x] **M-8** Split pipeline-evaluator.ts (1743→236 LOC + 3 check files)
+- [x] **M-9** Reduce React Query gcTime 5min→2min (prevent OOM on low-memory devices)
+- [x] **L-2** Zustand `useShallow` in CompareFloatingBar (6 subscriptions → 1)
+- [x] Remove dead devDep `@mathieuc/tradingview` (zero imports)
 
 ---
 
