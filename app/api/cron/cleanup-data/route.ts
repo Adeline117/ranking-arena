@@ -428,6 +428,61 @@ export async function GET(request: NextRequest) {
       skippedSteps.push('analyze_tables')
     }
 
+    // Cleanup old search_analytics (>90 days) — unbounded growth from search tracking
+    let searchAnalyticsCleaned = 0
+    if (hasTimeBudget()) {
+      try {
+        const searchCutoff = new Date(Date.now() - 90 * 24 * 3600_000).toISOString()
+        const { count, error: searchErr } = await supabase
+          .from('search_analytics')
+          .delete({ count: 'exact' })
+          .lt('created_at', searchCutoff)
+          .limit(DELETE_BATCH_SIZE)
+        if (!searchErr) searchAnalyticsCleaned = count ?? 0
+        if (searchAnalyticsCleaned > 0)
+          logger.info(
+            `[cleanup-data] Cleaned ${searchAnalyticsCleaned} old search_analytics (>90d)`
+          )
+      } catch (err) {
+        logger.warn(`[cleanup-data] search_analytics cleanup failed: ${err}`)
+      }
+    } else {
+      skippedSteps.push('search_analytics')
+    }
+
+    // Cleanup old user_interactions (>30 days) — behavioral tracking, highest growth table
+    let userInteractionsCleaned = 0
+    if (hasTimeBudget()) {
+      try {
+        const interactionsCutoff = new Date(Date.now() - 30 * 24 * 3600_000).toISOString()
+        let batchDeleted = 0
+        let batchCount = 0
+        do {
+          if (!hasTimeBudget()) break
+          const { count, error: intErr } = await supabase
+            .from('user_interactions')
+            .delete({ count: 'exact' })
+            .lt('created_at', interactionsCutoff)
+            .limit(DELETE_BATCH_SIZE)
+          if (intErr) {
+            logger.warn(`[cleanup-data] user_interactions cleanup error: ${intErr.message}`)
+            break
+          }
+          batchDeleted = count ?? 0
+          userInteractionsCleaned += batchDeleted
+          batchCount++
+        } while (batchDeleted === DELETE_BATCH_SIZE && batchCount < 10)
+        if (userInteractionsCleaned > 0)
+          logger.info(
+            `[cleanup-data] Cleaned ${userInteractionsCleaned} old user_interactions (>30d)`
+          )
+      } catch (err) {
+        logger.warn(`[cleanup-data] user_interactions cleanup failed: ${err}`)
+      }
+    } else {
+      skippedSteps.push('user_interactions')
+    }
+
     const duration = Date.now() - startTime
     const hasErrors = stepErrors.length > 0
 
@@ -440,7 +495,9 @@ export async function GET(request: NextRequest) {
       authSyncLogsCleaned +
       stripeEventsCleaned +
       liquidationsCleaned +
-      pipelineStateCleaned
+      pipelineStateCleaned +
+      searchAnalyticsCleaned +
+      userInteractionsCleaned
 
     if (skippedSteps.length > 0) {
       logger.warn(
