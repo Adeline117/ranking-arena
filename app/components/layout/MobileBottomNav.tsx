@@ -170,9 +170,9 @@ function useUserHandle(): string | null {
     }
   })
 
+  // Run once on mount — no [userHandle] dep to avoid subscription churn
   useEffect(() => {
     let alive = true
-
     let subscriptionRef: { unsubscribe: () => void } | null = null
 
     getSb().then((sb) => {
@@ -180,7 +180,12 @@ function useUserHandle(): string | null {
 
       function loadHandle(userId: string, email?: string | null) {
         const emailHandle = email?.split('@')[0] || null
-        if (userHandle) return // already cached
+        // Read from sessionStorage directly (not React state) to avoid stale closure
+        try {
+          if (sessionStorage.getItem(USER_HANDLE_CACHE_KEY)) return
+        } catch {
+          /* ignore */
+        }
         sb.from('user_profiles')
           .select('handle')
           .eq('id', userId)
@@ -199,14 +204,12 @@ function useUserHandle(): string | null {
           })
       }
 
-      // Initial load from local session (no network)
       sb.auth.getSession().then(({ data, error }) => {
         if (!alive || error) return
         const userId = data.session?.user?.id
         if (userId) loadHandle(userId, data.session?.user?.email)
       })
 
-      // Listen for auth changes (login/logout) — clear handle on logout
       const {
         data: { subscription },
       } = sb.auth.onAuthStateChange((_event, session) => {
@@ -229,7 +232,7 @@ function useUserHandle(): string | null {
       alive = false
       subscriptionRef?.unsubscribe()
     }
-  }, [userHandle])
+  }, [])
 
   return userHandle
 }

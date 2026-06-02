@@ -188,7 +188,7 @@
     },
     {
       "path": "/api/cron/precompute-composite",
-      "schedule": "24 */4 * * *"
+      "schedule": "27 */2 * * *"
     },
     {
       "path": "/api/cron/backfill-avatars?platform=drift,toobit,bitfinex,etoro,gains&limit=400",
@@ -196,7 +196,7 @@
     },
     {
       "path": "/api/cron/detect-contracts?limit=500",
-      "schedule": "10,40 * * * *"
+      "schedule": "10 */6 * * *"
     },
     {
       "path": "/api/cron/snapshot-positions",
