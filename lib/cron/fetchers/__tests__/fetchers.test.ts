@@ -9,7 +9,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  *   - Light health-check: API endpoints reachable (HTTP status only)
  */
 
-import { getSupportedInlinePlatforms } from '../index'
+import { getSupportedPlatforms } from '../index'
 import { calculateArenaScore, parseNum, normalizeWinRate } from '../shared'
 
 // ============================================
@@ -18,10 +18,10 @@ import { calculateArenaScore, parseNum, normalizeWinRate } from '../shared'
 
 describe('Fetcher Registry', () => {
   // Inline fetchers removed (2026-03-13). All platforms use ConnectorRegistry.
-  // getSupportedInlinePlatforms() returns the active platform list (for monitoring).
+  // getSupportedPlatforms() returns the active platform list (for monitoring).
 
-  test('getSupportedInlinePlatforms returns active platform list', () => {
-    const platforms = getSupportedInlinePlatforms()
+  test('getSupportedPlatforms returns active platform list', () => {
+    const platforms = getSupportedPlatforms()
     expect(platforms.length).toBeGreaterThan(0)
 
     // Should contain known active platforms
@@ -31,7 +31,7 @@ describe('Fetcher Registry', () => {
   })
 
   test('fetcher count matches expected (at least 25 active platforms)', () => {
-    const platforms = getSupportedInlinePlatforms()
+    const platforms = getSupportedPlatforms()
     expect(platforms.length).toBeGreaterThanOrEqual(25)
   })
 })

@@ -7,7 +7,7 @@
  */
 
 import { NextResponse } from 'next/server'
-import { getSupportedInlinePlatforms } from '@/lib/cron/fetchers'
+import { getSupportedPlatforms } from '@/lib/cron/fetchers'
 import { createSupabaseAdmin, getSupabaseEnv } from '@/lib/cron/utils'
 import { logger } from '@/lib/logger'
 import { recordFetchResult } from '@/lib/utils/pipeline-monitor'
@@ -106,7 +106,7 @@ export async function GET(request: Request, { params }: Params) {
       return NextResponse.json(
         {
           error: `No connector for platform: ${platform}`,
-          supported: getSupportedInlinePlatforms(),
+          supported: getSupportedPlatforms(),
         },
         { status: 400 }
       )

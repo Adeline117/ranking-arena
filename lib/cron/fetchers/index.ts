@@ -57,16 +57,3 @@ const ACTIVE_PLATFORMS = [
 export function getSupportedPlatforms(): string[] {
   return [...ACTIVE_PLATFORMS]
 }
-
-/** @deprecated Renamed to getSupportedPlatforms */
-export const getSupportedInlinePlatforms = getSupportedPlatforms
-
-/** Inline fetcher function signature (for type compatibility) */
-type InlineFetcherFn = (
-  supabase: unknown,
-  periods: string[]
-) => Promise<{
-  source: string
-  duration: number
-  periods: Record<string, { total: number; saved: number; error?: string }>
-}>
