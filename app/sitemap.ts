@@ -260,6 +260,24 @@ export default async function sitemap({
       },
       { url: `${BASE_URL}/market`, lastModified: now, changeFrequency: 'hourly', priority: 0.8 },
       { url: `${BASE_URL}/learn`, lastModified: now, changeFrequency: 'weekly', priority: 0.75 },
+      // Learn articles (static content, high SEO value)
+      ...[
+        'how-arena-score-works',
+        'understanding-trader-rankings',
+        'cex-vs-dex',
+        'reading-risk-metrics',
+        'getting-started',
+        'top-traders-by-exchange',
+        'what-is-copy-trading',
+        'trading-styles-explained',
+        'how-to-read-equity-curves',
+        'arena-pro-features',
+      ].map((slug) => ({
+        url: `${BASE_URL}/learn/${slug}`,
+        lastModified: now,
+        changeFrequency: 'monthly' as const,
+        priority: 0.7,
+      })),
       {
         url: `${BASE_URL}/competitions`,
         lastModified: now,
