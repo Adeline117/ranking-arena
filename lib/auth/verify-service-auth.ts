@@ -57,19 +57,33 @@ export async function verifyAdminAuth(request: Request): Promise<boolean> {
     if (adminToken && safeCompare(adminToken, cronSecret)) return true
   }
 
-  // Check admin user JWT
+  // Check admin user JWT — must pass BOTH DB role AND email whitelist in production
   const authHeader = request.headers.get('authorization')
   if (authHeader?.startsWith('Bearer ')) {
     try {
       const token = authHeader.substring(7)
-      const { data: { user }, error } = await getSupabaseAdmin().auth.getUser(token)
+      const {
+        data: { user },
+        error,
+      } = await getSupabaseAdmin().auth.getUser(token)
       if (error || !user) return false
       const { data: profile } = await getSupabaseAdmin()
         .from('user_profiles')
         .select('role')
         .eq('id', user.id)
         .maybeSingle()
-      return profile?.role === 'admin'
+      const isAdminByRole = profile?.role === 'admin'
+      if (!isAdminByRole) return false
+
+      // Production: enforce email whitelist (same as lib/admin/auth.ts)
+      const adminEmails = (process.env.ADMIN_EMAILS || '')
+        .split(',')
+        .map((e) => e.trim())
+        .filter((e) => e.length > 0)
+      if (process.env.NODE_ENV === 'production' && adminEmails.length > 0) {
+        if (!user.email || !adminEmails.includes(user.email)) return false
+      }
+      return true
     } catch {
       return false
     }
