@@ -446,6 +446,12 @@ export function usePostActions({
           // Reconcile with server state
           setUserBookmarks((prev) => ({ ...prev, [postId]: result.bookmarked }))
           setBookmarkCounts((prev) => ({ ...prev, [postId]: result.bookmark_count }))
+          // Sync bookmark count to feed posts array
+          setPosts((prev) =>
+            prev.map((p) => (p.id === postId ? { ...p, bookmark_count: result.bookmark_count } : p))
+          )
+          if (openPost?.id === postId)
+            setOpenPost({ ...openPost, bookmark_count: result.bookmark_count } as Post)
           showToast(result.bookmarked ? t('bookmarked') : t('unbookmarked'), 'success')
         } else {
           // Rollback on server error
