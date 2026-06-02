@@ -3,6 +3,7 @@ import { SUBSCRIPTION_STATUS_MAP, STRIPE_API_PRICE_IDS, API_TIER_LIMITS } from '
 import { env } from '@/lib/env'
 import { leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
+import { sendNotification } from '@/lib/data/notifications'
 
 export async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string
@@ -174,25 +175,23 @@ export async function handleTrialWillEnd(subscription: Stripe.Subscription) {
     return
   }
 
-  try {
-    const trialEndDate = subscription.trial_end
-      ? new Date(subscription.trial_end * 1000).toLocaleDateString('zh-CN')
-      : '即将'
+  const trialEndDate = subscription.trial_end
+    ? new Date(subscription.trial_end * 1000).toLocaleDateString('zh-CN')
+    : '即将'
 
-    await getSupabase()
-      .from('notifications')
-      .insert({
-        user_id: profile.id,
-        type: 'subscription',
-        title: '试用期即将结束',
-        body: `您的 Pro 会员试用期将于 ${trialEndDate} 结束。届时将开始正式计费，如需取消请前往设置页面。`,
-        data: { subscriptionId: subscription.id },
-      })
+  sendNotification(
+    getSupabase(),
+    {
+      user_id: profile.id,
+      type: 'system',
+      title: '试用期即将结束',
+      message: `您的 Pro 会员试用期将于 ${trialEndDate} 结束。届时将开始正式计费，如需取消请前往设置页面。`,
+      reference_id: `trial_ending_${subscription.id}`,
+    },
+    'stripe-trial-ending'
+  )
 
-    logger.info(`Trial ending notification sent to user ${profile.id}`)
-  } catch (err: unknown) {
-    logger.error('Failed to send trial ending notification', { error: err })
-  }
+  logger.info(`Trial ending notification sent to user ${profile.id}`)
 }
 
 export async function updateUserSubscription(

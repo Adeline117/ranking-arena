@@ -6,6 +6,7 @@ import { updateUserSubscription } from './subscription'
 import { mintNFTForUser } from './nft'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { fireAndForget } from '@/lib/utils/logger'
+import { sendNotification } from '@/lib/data/notifications'
 
 export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
   const userId = session.metadata?.userId || session.metadata?.supabase_user_id
@@ -190,25 +191,25 @@ export async function handleTipPaymentCompleted(session: Stripe.Checkout.Session
   }
 
   if (toUserId && fromUserId && postId) {
-    try {
-      const { data: fromProfile } = await getSupabase()
-        .from('user_profiles')
-        .select('handle')
-        .eq('id', fromUserId)
-        .single()
+    const { data: fromProfile } = await getSupabase()
+      .from('user_profiles')
+      .select('handle')
+      .eq('id', fromUserId)
+      .single()
 
-      await getSupabase()
-        .from('notifications')
-        .insert({
-          user_id: toUserId,
-          type: 'tip_received',
-          title: '收到打赏',
-          body: `${fromProfile?.handle || '用户'} 给你的帖子打赏了 $${(Number(amountCents) / 100).toFixed(2)}`,
-          data: { tipId, postId, fromUserId, amount: amountCents },
-        })
-    } catch (notifError) {
-      logger.warn('Failed to send tip notification', { error: notifError })
-    }
+    sendNotification(
+      getSupabase(),
+      {
+        user_id: toUserId,
+        type: 'tip_received',
+        title: '收到打赏',
+        message: `${fromProfile?.handle || '用户'} 给你的帖子打赏了 $${(Number(amountCents) / 100).toFixed(2)}`,
+        actor_id: fromUserId,
+        link: `/post/${postId}`,
+        reference_id: tipId,
+      },
+      'stripe-tip'
+    )
   }
 
   logger.info('Tip recorded successfully', { tipId, amountCents })
