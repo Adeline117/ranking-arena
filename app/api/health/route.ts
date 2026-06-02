@@ -136,12 +136,11 @@ export async function GET() {
     // where Supabase client init + query could take 3-5s.
     const result = await Promise.race([
       getSupabaseAdmin()
-        .from('pipeline_logs')
-        .select('started_at, job_name')
-        // Any successful fetcher is enough to prove data pipeline is flowing
-        .like('job_name', 'batch-fetch-traders%')
-        .eq('status', 'success')
-        .order('started_at', { ascending: false })
+        .from('trader_latest')
+        .select('updated_at')
+        // Any recently updated trader proves data pipeline is flowing
+        // (BullMQ worker writes here, not to pipeline_logs)
+        .order('updated_at', { ascending: false })
         .limit(1)
         .maybeSingle()
         .then((r) => r),
@@ -155,19 +154,19 @@ export async function GET() {
     const latency = Date.now() - t1
     if (result.error) {
       freshness = { status: 'fail', message: result.error.message, latency }
-    } else if (!result.data?.started_at) {
-      freshness = { status: 'fail', message: 'No batch-fetch-traders success found', latency }
+    } else if (!result.data?.updated_at) {
+      freshness = { status: 'fail', message: 'No trader_latest data found', latency }
     } else {
-      const ageMs = Date.now() - new Date(result.data.started_at).getTime()
+      const ageMs = Date.now() - new Date(result.data.updated_at).getTime()
       const ageHours = ageMs / (1000 * 60 * 60)
-      // 4h threshold: most fetchers run every 15-30min. 4h = ~8-16 missed runs,
-      // which is a real problem worth alerting on.
+      // 4h threshold: BullMQ worker fetches every 2-8h per platform.
+      // 4h = at least 1 platform should have updated within this window.
       freshness =
         ageHours <= 4
           ? {
               status: 'pass',
               latency,
-              message: `${ageHours.toFixed(1)}h old (${result.data.job_name})`,
+              message: `${ageHours.toFixed(1)}h old (trader_latest)`,
             }
           : {
               status: 'fail',
