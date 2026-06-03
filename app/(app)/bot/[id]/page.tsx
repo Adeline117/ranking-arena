@@ -15,7 +15,7 @@ import { useBotDetail } from '@/lib/hooks/useBotRankings'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { Box } from '@/app/components/base'
-import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
+import { getScoreColor, scoreColorAlpha } from '@/lib/utils/score-colors'
 
 function formatLargeNumber(n: number | null): string {
   if (n == null) return NULL_DISPLAY
@@ -279,7 +279,7 @@ function BotDetailContent({ id }: { id: string }) {
                   color: getScoreColor(snap.arena_score),
                   textShadow:
                     snap.arena_score >= 80
-                      ? `0 0 12px ${getScoreColorHex(snap.arena_score)}40`
+                      ? `0 0 12px ${scoreColorAlpha(snap.arena_score, 25)}`
                       : 'none',
                 }}
               >

@@ -17,7 +17,7 @@ import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { Box } from '@/app/components/base'
-import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
+import { getScoreColor, scoreColorAlpha } from '@/lib/utils/score-colors'
 import { NULL_DISPLAY } from '@/lib/utils/format'
 
 type BotCategory = 'all' | 'tg_bot' | 'ai_agent' | 'vault'
@@ -63,17 +63,19 @@ function ChainBadge({ chain }: { chain: string | null }) {
   if (!chain) return null
   const color = CHAIN_COLORS[chain] || 'var(--color-text-tertiary)'
   return (
-    <span style={{
-      display: 'inline-block',
-      padding: '1px 6px',
-      borderRadius: tokens.radius.sm,
-      fontSize: 10,
-      fontWeight: 600,
-      background: `color-mix(in srgb, ${color} 15%, transparent)`,
-      color,
-      textTransform: 'capitalize',
-      letterSpacing: '0.3px',
-    }}>
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '1px 6px',
+        borderRadius: tokens.radius.sm,
+        fontSize: 10,
+        fontWeight: 600,
+        background: `color-mix(in srgb, ${color} 15%, transparent)`,
+        color,
+        textTransform: 'capitalize',
+        letterSpacing: '0.3px',
+      }}
+    >
       {chain}
     </span>
   )
@@ -90,15 +92,17 @@ function CategoryTag({ category }: { category: string }) {
   }
   const cfg = TAG_KEYS[category] || { key: category, color: 'var(--color-text-tertiary)' }
   return (
-    <span style={{
-      display: 'inline-block',
-      padding: '1px 6px',
-      borderRadius: tokens.radius.sm,
-      fontSize: 10,
-      fontWeight: 600,
-      background: `color-mix(in srgb, ${cfg.color} 15%, transparent)`,
-      color: cfg.color,
-    }}>
+    <span
+      style={{
+        display: 'inline-block',
+        padding: '1px 6px',
+        borderRadius: tokens.radius.sm,
+        fontSize: 10,
+        fontWeight: 600,
+        background: `color-mix(in srgb, ${cfg.color} 15%, transparent)`,
+        color: cfg.color,
+      }}
+    >
       {t(cfg.key)}
     </span>
   )
@@ -106,24 +110,26 @@ function CategoryTag({ category }: { category: string }) {
 
 /** Score badge */
 function ScoreBadge({ score }: { score: number | null }) {
-  if (score == null) return <span style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>--</span>
-  const hex = getScoreColorHex(score)
+  if (score == null)
+    return <span style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>--</span>
   const cssColor = getScoreColor(score)
   return (
-    <span style={{
-      display: 'inline-flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '3px 10px',
-      borderRadius: tokens.radius.md,
-      fontSize: 13,
-      fontWeight: 700,
-      fontFamily: tokens.typography.fontFamily.mono.join(','),
-      background: `linear-gradient(135deg, ${hex}25, ${hex}10)`,
-      color: cssColor,
-      border: `1px solid ${hex}45`,
-      minWidth: 56,
-    }}>
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '3px 10px',
+        borderRadius: tokens.radius.md,
+        fontSize: 13,
+        fontWeight: 700,
+        fontFamily: tokens.typography.fontFamily.mono.join(','),
+        background: `linear-gradient(135deg, ${scoreColorAlpha(score, 15)}, ${scoreColorAlpha(score, 6)})`,
+        color: cssColor,
+        border: `1px solid ${scoreColorAlpha(score, 27)}`,
+        minWidth: 56,
+      }}
+    >
       {score.toFixed(1)}
     </span>
   )
@@ -139,13 +145,22 @@ function BotAvatar({ bot }: { bot: BotEntry }) {
     strategy: 'linear-gradient(135deg, var(--color-chart-blue), var(--color-chart-indigo))',
   }
   return (
-    <div style={{
-      width: 36, height: 36, minWidth: 36, borderRadius: '50%',
-      background: colors[bot.category] || colors.strategy,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      color: 'var(--color-on-accent)', fontSize: 14, fontWeight: 700,
-      border: '2px solid var(--color-border-primary)',
-    }}>
+    <div
+      style={{
+        width: 36,
+        height: 36,
+        minWidth: 36,
+        borderRadius: '50%',
+        background: colors[bot.category] || colors.strategy,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        color: 'var(--color-on-accent)',
+        fontSize: 14,
+        fontWeight: 700,
+        border: '2px solid var(--color-border-primary)',
+      }}
+    >
       {initial}
     </div>
   )
@@ -162,27 +177,43 @@ function BotRow({ bot }: { bot: BotEntry }) {
         borderColor: `${tokens.colors.border.primary}30`,
         textDecoration: 'none',
         transition: `all ${tokens.transition.base}`,
-        minHeight: 56, paddingTop: 10, paddingBottom: 10,
+        minHeight: 56,
+        paddingTop: 10,
+        paddingBottom: 10,
         background: bot.rank % 2 === 0 ? 'var(--overlay-hover, rgba(255,255,255,0.02))' : undefined,
       }}
     >
       {/* Rank */}
-      <div className="text-sm font-medium" style={{ color: 'var(--color-text-secondary)', textAlign: 'center' }}>
+      <div
+        className="text-sm font-medium"
+        style={{ color: 'var(--color-text-secondary)', textAlign: 'center' }}
+      >
         {bot.rank <= 3 ? (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-            width: 28, height: 28, borderRadius: '50%', fontSize: 12, fontWeight: 700,
-            background: bot.rank === 1
-              ? 'linear-gradient(135deg, var(--color-medal-gold), var(--color-medal-gold-end))'
-              : bot.rank === 2
-              ? 'linear-gradient(135deg, var(--color-medal-silver), #A0A0A0)'
-              : 'linear-gradient(135deg, var(--color-medal-bronze), #A0522D)',
-            color: bot.rank === 1 ? 'var(--color-bg-primary)' : 'var(--color-text-primary)',
-          }}>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              fontSize: 12,
+              fontWeight: 700,
+              background:
+                bot.rank === 1
+                  ? 'linear-gradient(135deg, var(--color-medal-gold), var(--color-medal-gold-end))'
+                  : bot.rank === 2
+                    ? 'linear-gradient(135deg, var(--color-medal-silver), #A0A0A0)'
+                    : 'linear-gradient(135deg, var(--color-medal-bronze), #A0522D)',
+              color: bot.rank === 1 ? 'var(--color-bg-primary)' : 'var(--color-text-primary)',
+            }}
+          >
             {bot.rank}
           </span>
         ) : (
-          <span className="tabular-nums" style={{ fontSize: 13 }}>{bot.rank}</span>
+          <span className="tabular-nums" style={{ fontSize: 13 }}>
+            {bot.rank}
+          </span>
         )}
       </div>
 
@@ -190,7 +221,10 @@ function BotRow({ bot }: { bot: BotEntry }) {
       <div className="flex items-center gap-3 min-w-0">
         <BotAvatar bot={bot} />
         <div className="min-w-0 flex-1">
-          <div className="text-sm font-semibold truncate" style={{ color: 'var(--color-text-primary)', lineHeight: 1.3 }}>
+          <div
+            className="text-sm font-semibold truncate"
+            style={{ color: 'var(--color-text-primary)', lineHeight: 1.3 }}
+          >
             {bot.name}
           </div>
           <div className="flex items-center gap-1.5" style={{ marginTop: 2 }}>
@@ -206,24 +240,47 @@ function BotRow({ bot }: { bot: BotEntry }) {
       </div>
 
       {/* TVL */}
-      <div className="text-right text-sm tabular-nums" style={{ color: m.tvl != null ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)', fontWeight: 500 }} title={m.tvl == null ? 'Data not yet available' : undefined}>
+      <div
+        className="text-right text-sm tabular-nums"
+        style={{
+          color: m.tvl != null ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
+          fontWeight: 500,
+        }}
+        title={m.tvl == null ? 'Data not yet available' : undefined}
+      >
         {formatLargeNumber(m.tvl)}
       </div>
 
       {/* Users */}
-      <div className="text-right text-sm tabular-nums" style={{ color: m.unique_users != null ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)' }} title={m.unique_users == null ? 'Data not yet available' : undefined}>
+      <div
+        className="text-right text-sm tabular-nums"
+        style={{
+          color:
+            m.unique_users != null ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)',
+        }}
+        title={m.unique_users == null ? 'Data not yet available' : undefined}
+      >
         {formatUsers(m.unique_users)}
       </div>
 
       {/* APY/ROI */}
-      <div className="text-right text-sm font-bold tabular-nums" style={{
-        color: (m.apy ?? m.roi ?? 0) >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
-      }}>
+      <div
+        className="text-right text-sm font-bold tabular-nums"
+        style={{
+          color:
+            (m.apy ?? m.roi ?? 0) >= 0
+              ? 'var(--color-accent-success)'
+              : 'var(--color-accent-error)',
+        }}
+      >
         {m.apy != null ? formatPercent(m.apy) : m.roi != null ? formatPercent(m.roi) : '\u2014'}
       </div>
 
       {/* Volume */}
-      <div className="text-right text-sm tabular-nums col-volume" style={{ color: 'var(--color-text-secondary)' }}>
+      <div
+        className="text-right text-sm tabular-nums col-volume"
+        style={{ color: 'var(--color-text-secondary)' }}
+      >
         {formatLargeNumber(m.total_volume)}
       </div>
 
@@ -272,38 +329,62 @@ function BotsContent({ initialBots }: BotsClientProps) {
 
   const [searchQuery, setSearchQueryRaw] = useState(() => searchParams.get('q') || '')
   const searchSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const setSearchQuery = useCallback((q: string) => {
-    setSearchQueryRaw(q)
-    // Sync search to URL (debounced 300ms)
-    if (searchSyncRef.current) clearTimeout(searchSyncRef.current)
-    searchSyncRef.current = setTimeout(() => {
-      const params = new URLSearchParams(searchParams.toString())
-      if (q.trim()) params.set('q', q.trim())
-      else params.delete('q')
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false })
-    }, 300)
-  }, [searchParams, router, pathname])
+  const setSearchQuery = useCallback(
+    (q: string) => {
+      setSearchQueryRaw(q)
+      // Sync search to URL (debounced 300ms)
+      if (searchSyncRef.current) clearTimeout(searchSyncRef.current)
+      searchSyncRef.current = setTimeout(() => {
+        const params = new URLSearchParams(searchParams.toString())
+        if (q.trim()) params.set('q', q.trim())
+        else params.delete('q')
+        router.replace(`${pathname}?${params.toString()}`, { scroll: false })
+      }, 300)
+    },
+    [searchParams, router, pathname]
+  )
   const filteredBots = useMemo(() => {
     if (!data?.bots) return []
     if (!searchQuery.trim()) return data.bots
     const q = searchQuery.toLowerCase()
-    return data.bots.filter(b =>
-      b.name.toLowerCase().includes(q) ||
-      (b.token_symbol && b.token_symbol.toLowerCase().includes(q))
+    return data.bots.filter(
+      (b) =>
+        b.name.toLowerCase().includes(q) ||
+        (b.token_symbol && b.token_symbol.toLowerCase().includes(q))
     )
   }, [data, searchQuery])
 
   return (
-    <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)', color: 'var(--color-text-primary)' }}>
-
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: 'var(--color-bg-primary)',
+        color: 'var(--color-text-primary)',
+      }}
+    >
       <div className="feed-main-content max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 80 }}>
         {/* Header */}
-        <div className="flex items-center justify-between" style={{ marginBottom: tokens.spacing[4] }}>
+        <div
+          className="flex items-center justify-between"
+          style={{ marginBottom: tokens.spacing[4] }}
+        >
           <div>
-            <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: tokens.typography.fontWeight.black, letterSpacing: '-0.3px' }}>
+            <h1
+              style={{
+                fontSize: tokens.typography.fontSize['2xl'],
+                fontWeight: tokens.typography.fontWeight.black,
+                letterSpacing: '-0.3px',
+              }}
+            >
               {t('botsTitle')}
             </h1>
-            <p style={{ fontSize: tokens.typography.fontSize.sm, color: 'var(--color-text-tertiary)', marginTop: 4 }}>
+            <p
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: 'var(--color-text-tertiary)',
+                marginTop: 4,
+              }}
+            >
               {t('botsSubtitle')}
             </p>
           </div>
@@ -321,7 +402,7 @@ function BotsContent({ initialBots }: BotsClientProps) {
 
         {/* Time window */}
         <div className="flex flex-wrap gap-2 mb-4">
-          {(['7D', '30D', '90D'] as WindowOption[]).map(w => (
+          {(['7D', '30D', '90D'] as WindowOption[]).map((w) => (
             <button
               key={w}
               onClick={() => handleWindowChange(w)}
@@ -332,8 +413,12 @@ function BotsContent({ initialBots }: BotsClientProps) {
                 borderRadius: tokens.radius.lg,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: activeWindow === w ? 700 : 500,
-                background: activeWindow === w ? tokens.gradient.purpleGold : 'var(--glass-bg-light, rgba(255,255,255,0.04))',
-                color: activeWindow === w ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
+                background:
+                  activeWindow === w
+                    ? tokens.gradient.purpleGold
+                    : 'var(--glass-bg-light, rgba(255,255,255,0.04))',
+                color:
+                  activeWindow === w ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
                 border: activeWindow === w ? 'none' : `1px solid var(--color-border-primary)`,
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.base}`,
@@ -347,7 +432,7 @@ function BotsContent({ initialBots }: BotsClientProps) {
 
         {/* Category filter */}
         <div className="flex flex-wrap gap-2 mb-4">
-          {(['all', 'tg_bot', 'ai_agent', 'vault'] as BotCategory[]).map(cat => (
+          {(['all', 'tg_bot', 'ai_agent', 'vault'] as BotCategory[]).map((cat) => (
             <button
               key={cat}
               onClick={() => handleCategoryChange(cat)}
@@ -358,8 +443,12 @@ function BotsContent({ initialBots }: BotsClientProps) {
                 borderRadius: tokens.radius.lg,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: activeCategory === cat ? 700 : 500,
-                background: activeCategory === cat ? tokens.gradient.purpleGold : 'var(--glass-bg-light, rgba(255,255,255,0.04))',
-                color: activeCategory === cat ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
+                background:
+                  activeCategory === cat
+                    ? tokens.gradient.purpleGold
+                    : 'var(--glass-bg-light, rgba(255,255,255,0.04))',
+                color:
+                  activeCategory === cat ? 'var(--color-on-accent)' : 'var(--color-text-secondary)',
                 border: activeCategory === cat ? 'none' : `1px solid var(--color-border-primary)`,
                 cursor: 'pointer',
                 transition: `all ${tokens.transition.base}`,
@@ -376,10 +465,11 @@ function BotsContent({ initialBots }: BotsClientProps) {
           <input
             type="text"
             value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
+            onChange={(e) => setSearchQuery(e.target.value)}
             placeholder={t('botsSearchPlaceholder')}
             style={{
-              width: '100%', padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              width: '100%',
+              padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
               borderRadius: tokens.radius.lg,
               border: `1px solid var(--color-border-primary)`,
               background: 'var(--glass-bg-light, rgba(255,255,255,0.04))',
@@ -398,11 +488,14 @@ function BotsContent({ initialBots }: BotsClientProps) {
           emptyMessage={t('botsNoData')}
           loadingComponent={<RankingSkeleton />}
         >
-          <div className="rounded-xl overflow-hidden" style={{
-            background: 'var(--glass-bg-secondary, rgba(255,255,255,0.03))',
-            border: `1px solid var(--color-border-primary)`,
-            boxShadow: tokens.shadow.md,
-          }}>
+          <div
+            className="rounded-xl overflow-hidden"
+            style={{
+              background: 'var(--glass-bg-secondary, rgba(255,255,255,0.03))',
+              border: `1px solid var(--color-border-primary)`,
+              boxShadow: tokens.shadow.md,
+            }}
+          >
             {/* Header row */}
             <div
               className="grid gap-2 px-4 py-3 text-xs font-semibold border-b"
@@ -413,7 +506,9 @@ function BotsContent({ initialBots }: BotsClientProps) {
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
                 fontSize: 11,
-                position: 'sticky', top: 0, zIndex: tokens.zIndex.sticky,
+                position: 'sticky',
+                top: 0,
+                zIndex: tokens.zIndex.sticky,
                 background: 'var(--color-bg-secondary, var(--color-bg-primary))',
               }}
             >
@@ -422,15 +517,23 @@ function BotsContent({ initialBots }: BotsClientProps) {
               <div style={{ textAlign: 'right' }}>TVL</div>
               <div style={{ textAlign: 'right' }}>{t('botsUsers')}</div>
               <div style={{ textAlign: 'right' }}>APY/ROI</div>
-              <div className="col-volume" style={{ textAlign: 'right' }}>{t('botsVolume')}</div>
+              <div className="col-volume" style={{ textAlign: 'right' }}>
+                {t('botsVolume')}
+              </div>
               <div style={{ textAlign: 'right' }}>Score</div>
             </div>
 
-            {filteredBots.map(bot => (
+            {filteredBots.map((bot) => (
               <BotRow key={bot.id} bot={bot} />
             ))}
 
-            <div className="px-4 py-3 text-xs text-center border-t" style={{ color: 'var(--color-text-tertiary)', borderColor: 'var(--color-border-primary)' }}>
+            <div
+              className="px-4 py-3 text-xs text-center border-t"
+              style={{
+                color: 'var(--color-text-tertiary)',
+                borderColor: 'var(--color-border-primary)',
+              }}
+            >
               {t('botsTotalCount').replace('{count}', String(filteredBots.length))}
             </div>
           </div>
@@ -441,16 +544,18 @@ function BotsContent({ initialBots }: BotsClientProps) {
   )
 }
 
-
 export default function BotsClient({ initialBots }: BotsClientProps) {
   return (
     <ErrorBoundary pageType="rankings">
-      <Suspense fallback={
-        <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
-
-          <div className="max-w-5xl mx-auto px-4 py-6"><RankingSkeleton /></div>
-        </Box>
-      }>
+      <Suspense
+        fallback={
+          <Box style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
+            <div className="max-w-5xl mx-auto px-4 py-6">
+              <RankingSkeleton />
+            </div>
+          </Box>
+        }
+      >
         <BotsContent initialBots={initialBots} />
       </Suspense>
     </ErrorBoundary>
