@@ -1,7 +1,7 @@
 'use client'
 
 import React, { memo } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 
@@ -15,7 +15,11 @@ export interface PaginationProps {
  * Pagination component with prev/next buttons and numbered page buttons with ellipsis.
  * Uses CSS classes for hover effects instead of JS onMouseEnter/Leave.
  */
-export default memo(function Pagination({ currentPage, totalPages, onPageChange }: PaginationProps) {
+export default memo(function Pagination({
+  currentPage,
+  totalPages,
+  onPageChange,
+}: PaginationProps) {
   const { t, language: _language } = useLanguage()
 
   // Guard: non-positive or non-finite totalPages means no pagination needed
@@ -72,8 +76,8 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
         style={{
           padding: `6px ${tokens.spacing[3]}`,
           minHeight: 44,
-          background: safePage === 1 ? 'transparent' : `${tokens.colors.accent.primary}10`,
-          border: `1px solid ${safePage === 1 ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
+          background: safePage === 1 ? 'transparent' : alpha(tokens.colors.accent.primary, 6),
+          border: `1px solid ${safePage === 1 ? tokens.colors.border.primary : alpha(tokens.colors.accent.primary, 19)}`,
           borderRadius: tokens.radius.md,
           color: safePage === 1 ? tokens.colors.text.disabled : tokens.colors.accent.primary,
           cursor: safePage === 1 ? 'not-allowed' : 'pointer',
@@ -86,11 +90,25 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
       </button>
 
       {/* Page number buttons */}
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1], flexWrap: 'wrap', justifyContent: 'center', minWidth: 0 }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[1],
+          flexWrap: 'wrap',
+          justifyContent: 'center',
+          minWidth: 0,
+        }}
+      >
         {pages.map((page, idx) => {
           if (page === '...') {
             return (
-              <Text key={`ellipsis-${idx}`} size="sm" color="tertiary" style={{ padding: `0 ${tokens.spacing[1]}` }}>
+              <Text
+                key={`ellipsis-${idx}`}
+                size="sm"
+                color="tertiary"
+                style={{ padding: `0 ${tokens.spacing[1]}` }}
+              >
                 ...
               </Text>
             )
@@ -110,13 +128,15 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
                 minWidth: 44,
                 height: 44,
                 padding: `0 ${tokens.spacing[1]}`,
-                background: isActive ? `${tokens.colors.accent.primary}20` : 'transparent',
-                border: `1px solid ${isActive ? `${tokens.colors.accent.primary}60` : 'transparent'}`,
+                background: isActive ? alpha(tokens.colors.accent.primary, 12) : 'transparent',
+                border: `1px solid ${isActive ? alpha(tokens.colors.accent.primary, 38) : 'transparent'}`,
                 borderRadius: tokens.radius.sm,
                 color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
-                fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+                fontWeight: isActive
+                  ? tokens.typography.fontWeight.bold
+                  : tokens.typography.fontWeight.medium,
                 transition: `all ${tokens.transition.fast}`,
               }}
             >
@@ -134,10 +154,12 @@ export default memo(function Pagination({ currentPage, totalPages, onPageChange 
         style={{
           padding: `6px ${tokens.spacing[3]}`,
           minHeight: 44,
-          background: safePage === totalPages ? 'transparent' : `${tokens.colors.accent.primary}10`,
-          border: `1px solid ${safePage === totalPages ? tokens.colors.border.primary : `${tokens.colors.accent.primary}30`}`,
+          background:
+            safePage === totalPages ? 'transparent' : alpha(tokens.colors.accent.primary, 6),
+          border: `1px solid ${safePage === totalPages ? tokens.colors.border.primary : alpha(tokens.colors.accent.primary, 19)}`,
           borderRadius: tokens.radius.md,
-          color: safePage === totalPages ? tokens.colors.text.disabled : tokens.colors.accent.primary,
+          color:
+            safePage === totalPages ? tokens.colors.text.disabled : tokens.colors.accent.primary,
           cursor: safePage === totalPages ? 'not-allowed' : 'pointer',
           fontSize: tokens.typography.fontSize.sm,
           fontWeight: tokens.typography.fontWeight.semibold,

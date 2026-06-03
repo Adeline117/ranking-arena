@@ -1,4 +1,4 @@
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 
 // ─── Source / Category Helpers ────────────────────────────────────────────────
@@ -171,8 +171,12 @@ export function ActionButton({
   children,
 }: ActionButtonProps): React.ReactElement {
   const isAccent = variant === 'accent'
-  const baseBackground = isAccent ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.tertiary
-  const baseBorder = isAccent ? `${tokens.colors.accent.primary}40` : tokens.colors.border.primary
+  const baseBackground = isAccent
+    ? alpha(tokens.colors.accent.primary, 8)
+    : tokens.colors.bg.tertiary
+  const baseBorder = isAccent
+    ? alpha(tokens.colors.accent.primary, 25)
+    : tokens.colors.border.primary
   const textColor = isAccent ? tokens.colors.text.primary : tokens.colors.text.tertiary
 
   return (
@@ -194,11 +198,11 @@ export function ActionButton({
       }}
       onMouseEnter={(e) => {
         if (isAccent) {
-          e.currentTarget.style.background = `${tokens.colors.accent.primary}25`
+          e.currentTarget.style.background = alpha(tokens.colors.accent.primary, 15)
           e.currentTarget.style.borderColor = tokens.colors.accent.primary
         } else {
           e.currentTarget.style.background = tokens.colors.bg.secondary
-          e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}40`
+          e.currentTarget.style.borderColor = alpha(tokens.colors.accent.primary, 25)
         }
       }}
       onMouseLeave={(e) => {
