@@ -206,6 +206,7 @@ const en = {
   userReviews: 'reviews',
   // Claim trader
   claimTrader: 'Claim Account',
+  referral: 'Referral',
   claiming: 'Claiming...',
   claimSubmitted: 'Claim Submitted',
   claimSuccess: 'Claim successful! Your account has been linked to this trader.',

@@ -185,7 +185,7 @@ export default function ReferralClient() {
               Create an account or log in to start inviting friends.
             </p>
             <Link
-              href="/auth/login"
+              href="/login"
               style={{
                 display: 'inline-block',
                 padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
