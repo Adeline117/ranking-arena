@@ -98,6 +98,10 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 - [x] **RLS PII** — user_profiles SELECT: column-level REVOKE from authenticated, SECURITY DEFINER RPC for own sensitive data
 - [x] **Page audit** — Stripe checkout error toast (was infinite loading), trader tab scroll-to-top on switch
 - [x] **Post UI unification** — hot page avatar+timestamp+counts aligned; group timestamp→formatTimeAgo; shared PostContent component; feed PostListItem wired (-133 LOC)
+- [x] **A11y color contrast** — dark theme error #FF4D4D→#FF8E8E, warning #FFB800→#FFCC44 (all exceed WCAG AA 4.5:1)
+- [x] **Empty states** — ranking table + equity curve empty state messages; 5 i18n keys in 4 locales
+- [x] **RLS verification** — notifications INSERT leaked to users (fixed); exchange_connections zero policies (fixed, restored 4 CRUD policies)
+- [x] **UX polish** — login rate limit 30s countdown; avatar/cover rollback on save failure
 
 ---
 

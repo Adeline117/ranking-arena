@@ -162,14 +162,15 @@ Investigated, already handled: flash-news + compare + claim + competitions all h
 10 parallel investigations across 2 rounds:
 Round 1: pipeline/cron, frontend perf, security, silent failures, dead code, dependencies
 Round 2: DB indexes, accessibility, worker reliability, SEO/CWV
-Plus: social sync, ja/ko translations, health monitor, RLS audit, page-by-page audit, post UI unification.
-43 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
+Plus: social sync, ja/ko translations, health monitor, RLS audit, page-by-page audit, post UI unification,
+a11y contrast, empty states, RLS policy verification, UX polish.
+48 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
 
 ### By the numbers
 
 | Metric               | Value                                                                                       |
 | -------------------- | ------------------------------------------------------------------------------------------- |
-| Commits              | 43                                                                                          |
+| Commits              | 48                                                                                          |
 | Dead code removed    | ~2,700 LOC (3 cron routes + trigger.dev files + evaluator split)                            |
 | Dependencies removed | 8 (@trigger.dev/sdk, critters, puppeteer x3, chrome-launcher, redis, @mathieuc/tradingview) |
 | Vercel crons removed | 10 (54→44, worker handles enrich/score/meilisearch)                                         |
@@ -208,6 +209,10 @@ Plus: social sync, ja/ko translations, health monitor, RLS audit, page-by-page a
 | RLS PII   | user_profiles SELECT column-level REVOKE + get_own_profile_sensitive() SECURITY DEFINER RPC    |
 | Page UX   | Stripe checkout error toast, trader tab scroll-to-top on switch                                |
 | Post UI   | Shared PostContent component; feed PostListItem wired (-133 LOC); hot/group timestamps unified |
+| A11y      | Dark theme error/warning colors brightened to WCAG AA 4.5:1                                    |
+| Empty     | Ranking table + equity curve empty states; 5 i18n keys in 4 locales                            |
+| RLS fix   | notifications INSERT leaked (fixed); exchange_connections zero policies (restored 4 CRUD)      |
+| UX        | Login rate limit 30s countdown; avatar/cover rollback on save failure                          |
 
 ---
 
