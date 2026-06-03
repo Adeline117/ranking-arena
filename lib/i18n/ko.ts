@@ -205,6 +205,7 @@ const ko = {
   userReviews: '리뷰',
   // Claim trader
   claimTrader: '계정 인증',
+  referral: '추천',
   claiming: '인증 중...',
   claimSubmitted: '인증 요청 제출됨',
   claimSuccess: '인증 성공! 이 트레이더에 계정이 연결되었습니다.',

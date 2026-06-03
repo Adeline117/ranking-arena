@@ -200,6 +200,7 @@ const zh = {
   userReviews: '条用户评价',
   // 认领交易员
   claimTrader: '申请认领',
+  referral: '推荐邀请',
   claiming: '申请中...',
   claimSubmitted: '已提交认领申请',
   claimSuccess: '认领成功！您的账号已与此交易员账号合并。',

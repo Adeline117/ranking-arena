@@ -198,6 +198,7 @@ const ja = {
   userNumber: 'ユーザー番号',
   userReviews: 'レビュー',
   claimTrader: 'アカウント申請',
+  referral: '紹介',
   claiming: '申請中...',
   claimSubmitted: '申請が送信されました',
   claimSuccess: '申請に成功しました！アカウントがこのトレーダーにリンクされました。',
