@@ -162,14 +162,14 @@ Investigated, already handled: flash-news + compare + claim + competitions all h
 10 parallel investigations across 2 rounds:
 Round 1: pipeline/cron, frontend perf, security, silent failures, dead code, dependencies
 Round 2: DB indexes, accessibility, worker reliability, SEO/CWV
-Plus: social sync audit, ja/ko translations, health monitor fixes, RLS audit.
-37 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
+Plus: social sync, ja/ko translations, health monitor, RLS audit, page-by-page audit.
+39 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
 
 ### By the numbers
 
 | Metric               | Value                                                                                       |
 | -------------------- | ------------------------------------------------------------------------------------------- |
-| Commits              | 37                                                                                          |
+| Commits              | 39                                                                                          |
 | Dead code removed    | ~2,700 LOC (3 cron routes + trigger.dev files + evaluator split)                            |
 | Dependencies removed | 8 (@trigger.dev/sdk, critters, puppeteer x3, chrome-launcher, redis, @mathieuc/tradingview) |
 | Vercel crons removed | 10 (54→44, worker handles enrich/score/meilisearch)                                         |
@@ -205,6 +205,8 @@ Plus: social sync audit, ja/ko translations, health monitor fixes, RLS audit.
 | A11y      | Pagination aria-label, period range aria-pressed, page counter aria-live                       |
 | Health    | Freshness reads trader_latest (was pipeline_logs), etoro 48h→96h threshold                     |
 | RLS       | 3 CRITICAL: trader_claims + verified_traders → service_role; user_profiles UPDATE 13-col guard |
+| RLS PII   | user_profiles SELECT column-level REVOKE + get_own_profile_sensitive() SECURITY DEFINER RPC    |
+| Page UX   | Stripe checkout error toast, trader tab scroll-to-top on switch                                |
 
 ---
 
