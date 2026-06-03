@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
+import { formatTimeAgo } from '@/lib/utils/date'
 import { CommentIcon, ThumbsUpIcon } from '@/app/components/ui/icons'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import type { Post } from '../types'
@@ -250,51 +251,60 @@ export function PostCard({
           borderTop: 'none',
         }}
       >
-        {p.author_handle ? (
-          <Link
-            href={`/u/${encodeURIComponent(p.author_handle)}`}
-            onClick={(e) => e.stopPropagation()}
-            style={{
-              fontSize: tokens.typography.fontSize.xs,
-              color: 'var(--color-text-secondary)',
-              textDecoration: 'none',
-              fontWeight: 700,
-            }}
-          >
-            @{p.author}
-          </Link>
-        ) : (
-          <Text size="xs" color="tertiary">
-            {p.author}
-          </Text>
-        )}
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          {p.author_avatar_url && (
+            <img
+              src={p.author_avatar_url}
+              alt=""
+              width={16}
+              height={16}
+              style={{ borderRadius: '50%', objectFit: 'cover' }}
+            />
+          )}
+          {p.author_handle ? (
+            <Link
+              href={`/u/${encodeURIComponent(p.author_handle)}`}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: 'var(--color-text-secondary)',
+                textDecoration: 'none',
+                fontWeight: 700,
+              }}
+            >
+              @{p.author}
+            </Link>
+          ) : (
+            <Text size="xs" color="tertiary">
+              {p.author}
+            </Text>
+          )}
+        </span>
         <Text size="xs" color="tertiary">
-          {p.time}
+          {p.created_at
+            ? formatTimeAgo(p.created_at, (t('locale') || 'en') as 'en' | 'zh' | 'ja' | 'ko')
+            : p.time}
         </Text>
-        {p.comments > 0 && (
-          <span
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
-            <CommentIcon size={12} /> {p.comments}
-          </span>
-        )}
-        {p.likes > 0 && (
-          <span
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 4,
-              color: 'var(--color-text-tertiary)',
-            }}
-          >
-            <ThumbsUpIcon size={12} /> {p.likes}
-          </span>
-        )}
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            color: 'var(--color-text-tertiary)',
+          }}
+        >
+          <CommentIcon size={12} /> {p.comments}
+        </span>
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            color: 'var(--color-text-tertiary)',
+          }}
+        >
+          <ThumbsUpIcon size={12} /> {p.likes}
+        </span>
         {(p.views ?? 0) > 0 && (
           <Text size="xs" color="tertiary" style={{ marginLeft: 'auto' }}>
             {(p.views ?? 0).toLocaleString('en-US')} {t('views')}
