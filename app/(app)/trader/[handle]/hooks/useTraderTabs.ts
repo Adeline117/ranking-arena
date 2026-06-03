@@ -39,13 +39,9 @@ export function useTraderTabs(claimedUser: unknown): UseTraderTabsResult {
 
   const urlTab = searchParams.get('tab')
   const initialTab: TraderTabKey =
-    urlTab && tabKeys.includes(urlTab as TraderTabKey)
-      ? (urlTab as TraderTabKey)
-      : 'overview'
+    urlTab && tabKeys.includes(urlTab as TraderTabKey) ? (urlTab as TraderTabKey) : 'overview'
   const [activeTab, setActiveTab] = useState<TraderTabKey>(initialTab)
-  const [visitedTabs, setVisitedTabs] = useState<Set<TraderTabKey>>(
-    () => new Set([initialTab])
-  )
+  const [visitedTabs, setVisitedTabs] = useState<Set<TraderTabKey>>(() => new Set([initialTab]))
 
   const handleTabChange = useCallback(
     (tab: TraderTabKey) => {
@@ -64,6 +60,12 @@ export function useTraderTabs(claimedUser: unknown): UseTraderTabsResult {
       }
       const qs = params.toString()
       router.replace(`${pathname}${qs ? `?${qs}` : ''}`, { scroll: false })
+      // Scroll tab content into view on tab change (prevents seeing previous tab's scroll position)
+      requestAnimationFrame(() => {
+        document
+          .getElementById('trader-tab-content')
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      })
     },
     [searchParams, pathname, router]
   )

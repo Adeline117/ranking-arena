@@ -97,6 +97,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
   const {
     checkout: directCheckout,
     isLoading: checkoutLoading,
+    error: checkoutError,
     alreadySubscribed,
   } = useDirectCheckout()
 
@@ -113,6 +114,14 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
       )
     }
   }, [alreadySubscribed, showToast, t])
+
+  // Show toast on checkout error (Stripe API failure, network error)
+  useEffect(() => {
+    if (checkoutError) {
+      showToast(checkoutError, 'error')
+    }
+  }, [checkoutError, showToast])
+
   // Logged-in users go directly to Stripe checkout; anonymous users go to login
   // Already-subscribed users go to settings to manage their subscription
   const ctaHref = email ? (alreadySubscribed ? '/settings' : undefined) : '/login'
