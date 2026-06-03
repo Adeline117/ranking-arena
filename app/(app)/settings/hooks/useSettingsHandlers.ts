@@ -439,6 +439,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
     submittingRef.current = true
     setSaving(true)
+    // Capture previous URLs for rollback on any failure path
+    const previousAvatarUrl = avatarUrl
+    const previousCoverUrl = coverUrl
     try {
       const { data: currentProfile } = await supabase
         .from('user_profiles')
@@ -503,6 +506,11 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
       if (saveError) {
         uiLogger.error('Error saving profile:', JSON.stringify(saveError, null, 2))
+        // Revert avatar/cover preview on DB save failure
+        setPreviewUrl(previousAvatarUrl)
+        setAvatarFile(null)
+        setCoverPreviewUrl(previousCoverUrl)
+        setCoverFile(null)
         if (
           saveError.code === '23505' ||
           saveError.message?.includes('unique') ||
@@ -554,6 +562,11 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       router.refresh()
     } catch (error) {
       uiLogger.error('Error saving:', error)
+      // Revert avatar/cover preview on unexpected failure
+      setPreviewUrl(previousAvatarUrl)
+      setAvatarFile(null)
+      setCoverPreviewUrl(previousCoverUrl)
+      setCoverFile(null)
       showToast(t('saveFailedRetry'), 'error')
     } finally {
       setSaving(false)
