@@ -123,9 +123,9 @@ export const darkTokens = {
     // Accent colors
     accent: {
       primary: '#EDEDED', // Primary actions
-      success: '#4DFF9A', // Positive ROI/states
-      warning: '#FFB800', // Warnings
-      error: '#FF4D4D', // Negative ROI/states
+      success: '#4DFF9A', // Positive ROI/states (WCAG AA 14.0:1 on #151320)
+      warning: '#FFCC44', // Warnings (WCAG AA 12.2:1 on #151320)
+      error: '#FF8E8E', // Negative ROI/states (WCAG AA 8.3:1 on #151320)
       brand: '#A18CC0', // Arena brand purple (WCAG AA contrast on card bg)
       brandHover: '#B4A0D0', // Brand hover state (brighter)
       brandMuted: 'rgba(154, 133, 181, 0.15)', // Brand muted background
@@ -135,8 +135,8 @@ export const darkTokens = {
 
     // Sentiment colors (bull/bear, positive/negative)
     sentiment: {
-      bull: '#4DFF9A', // Bullish / positive
-      bear: '#FF4D4D', // Bearish / negative
+      bull: '#4DFF9A', // Bullish / positive (WCAG AA 14.0:1 on #151320)
+      bear: '#FF8E8E', // Bearish / negative (WCAG AA 8.3:1 on #151320)
       neutral: '#898998', // Neutral state
     },
 
