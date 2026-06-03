@@ -12,18 +12,19 @@ interface ExchangeLogoProps {
 }
 
 // Local logo files in /public/icons/exchanges/
-// All logos downloaded locally for reliability (CoinGecko CDN often 403s)
+// All logos sourced from official exchange favicons via scripts/sync-exchange-logos.sh
+// NEVER use CoinGecko CDN — it returns wrong images (caused 17 wrong logos)
 const LOCAL_LOGOS: Record<string, string> = {
-  binance: '/icons/exchanges/binance.jpg',
+  binance: '/icons/exchanges/binance.png',
   bybit: '/icons/exchanges/bybit.png',
   bitget: '/icons/exchanges/bitget.png',
-  mexc: '/icons/exchanges/mexc.jpeg',
+  mexc: '/icons/exchanges/mexc.png',
   htx: '/icons/exchanges/htx.png',
   weex: '/icons/exchanges/weex.png',
-  coinex: '/icons/exchanges/coinex.jpg',
+  coinex: '/icons/exchanges/coinex.png',
   okx: '/icons/exchanges/okx.png',
   kucoin: '/icons/exchanges/kucoin.png',
-  gate: '/icons/exchanges/gate.jpg',
+  gate: '/icons/exchanges/gate.png',
   bingx: '/icons/exchanges/bingx.png',
   phemex: '/icons/exchanges/phemex.png',
   hyperliquid: '/icons/exchanges/hyperliquid.png',
@@ -35,7 +36,7 @@ const LOCAL_LOGOS: Record<string, string> = {
   vertex: '/icons/exchanges/vertex.png',
   toobit: '/icons/exchanges/toobit.png',
   btse: '/icons/exchanges/btse.png',
-  cryptocom: '/icons/exchanges/cryptocom.jpg',
+  cryptocom: '/icons/exchanges/cryptocom.png',
   bitfinex: '/icons/exchanges/bitfinex.png',
   whitebit: '/icons/exchanges/whitebit.png',
   lbank: '/icons/exchanges/lbank.png',
@@ -43,7 +44,7 @@ const LOCAL_LOGOS: Record<string, string> = {
   blofin: '/icons/exchanges/blofin.png',
   xt: '/icons/exchanges/xt.png',
   uniswap: '/icons/exchanges/uniswap.png',
-  pancakeswap: '/icons/exchanges/pancakeswap.jpeg',
+  pancakeswap: '/icons/exchanges/pancakeswap.png',
   kwenta: '/icons/exchanges/kwenta.png',
   synthetix: '/icons/exchanges/synthetix.png',
   mux: '/icons/exchanges/mux.png',
@@ -56,9 +57,9 @@ const LOCAL_LOGOS: Record<string, string> = {
   polymarket: '/icons/exchanges/polymarket.png',
   copin: '/icons/exchanges/copin.png',
   // Aliases for DB source names (e.g. "binance_futures" -> binance logo)
-  binance_futures: '/icons/exchanges/binance.jpg',
-  binance_spot: '/icons/exchanges/binance.jpg',
-  binance_web3: '/icons/exchanges/binance.jpg',
+  binance_futures: '/icons/exchanges/binance.png',
+  binance_spot: '/icons/exchanges/binance.png',
+  binance_web3: '/icons/exchanges/binance.png',
   bybit_spot: '/icons/exchanges/bybit.png',
   bitget_futures: '/icons/exchanges/bitget.png',
   bitget_spot: '/icons/exchanges/bitget.png',
@@ -67,7 +68,7 @@ const LOCAL_LOGOS: Record<string, string> = {
   okx_web3: '/icons/exchanges/okx.png',
   okx_wallet: '/icons/exchanges/okx.png',
   htx_futures: '/icons/exchanges/htx.png',
-  gateio: '/icons/exchanges/gate.jpg',
+  gateio: '/icons/exchanges/gate.png',
   jupiter_perps: '/icons/exchanges/jupiter.png',
   dune_gmx: '/icons/exchanges/gmx.png',
   dune_hyperliquid: '/icons/exchanges/hyperliquid.png',
@@ -79,52 +80,12 @@ const LOCAL_LOGOS: Record<string, string> = {
   paradex: '/icons/exchanges/dydx.png', // Paradex is built on StarkEx (dYdX ecosystem)
 }
 
-// CoinGecko CDN fallback URLs
-const CDN_FALLBACK: Record<string, string> = {
-  binance: 'https://assets.coingecko.com/markets/images/52/small/binance.jpg',
-  bybit: 'https://assets.coingecko.com/markets/images/698/small/bybit_spot.png',
-  mexc: 'https://assets.coingecko.com/markets/images/409/small/MEXC_logo_square.jpeg',
-  htx: 'https://assets.coingecko.com/markets/images/25/small/logo_V_colour_black.png',
-  coinex: 'https://assets.coingecko.com/markets/images/135/small/coinex.jpg',
-  okx: 'https://assets.coingecko.com/markets/images/96/small/WeChat_Image_20220117220452.png',
-  kucoin: 'https://assets.coingecko.com/markets/images/61/small/kucoin.png',
-  gate: 'https://assets.coingecko.com/markets/images/60/small/gate_io_logo1.jpg',
-  cryptocom: 'https://assets.coingecko.com/markets/images/589/small/crypto_com.jpg',
-}
-
-// React SVG fallback components for when both local and CDN fail
-function BinanceSvg({ size }: { size: number }) {
-  return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      width={size}
-      height={size}
-    >
-      <rect width="24" height="24" rx="4" fill="var(--color-chart-amber)" />
-      <path d="M12 2L7.5 6.5L9 8L12 5L15 8L16.5 6.5L12 2Z" fill="white" />
-      <path d="M2 12L6.5 7.5L8 9L5 12L8 15L6.5 16.5L2 12Z" fill="white" />
-      <path d="M22 12L17.5 16.5L16 15L19 12L16 9L17.5 7.5L22 12Z" fill="white" />
-      <path d="M12 19L9 16L7.5 17.5L12 22L16.5 17.5L15 16L12 19Z" fill="white" />
-    </svg>
-  )
-}
-
-const EXCHANGE_SVG_COMPONENTS: Record<string, React.FC<{ size: number }>> = {
-  binance: BinanceSvg,
-}
-
 export default function ExchangeLogo({ exchange, size = 24, className }: ExchangeLogoProps) {
-  const [fallbackLevel, setFallbackLevel] = useState(0)
-  // 0 = local, 1 = CDN, 2 = SVG
+  const [failed, setFailed] = useState(false)
 
-  const localUrl = LOCAL_LOGOS[exchange]
-  const cdnUrl = CDN_FALLBACK[exchange]
+  const logoUrl = LOCAL_LOGOS[exchange]
 
-  const currentUrl = fallbackLevel === 0 ? localUrl : fallbackLevel === 1 ? cdnUrl : null
-
-  if (currentUrl) {
+  if (logoUrl && !failed) {
     return (
       <Box
         style={{
@@ -136,7 +97,7 @@ export default function ExchangeLogo({ exchange, size = 24, className }: Exchang
         className={className}
       >
         <Image
-          src={currentUrl}
+          src={logoUrl}
           alt={`${exchange} logo`}
           width={size}
           height={size}
@@ -145,33 +106,8 @@ export default function ExchangeLogo({ exchange, size = 24, className }: Exchang
             objectFit: 'contain',
             borderRadius: tokens.radius.sm,
           }}
-          onError={() => {
-            if (fallbackLevel === 0 && cdnUrl) {
-              setFallbackLevel(1)
-            } else {
-              setFallbackLevel(2)
-            }
-          }}
+          onError={() => setFailed(true)}
         />
-      </Box>
-    )
-  }
-
-  // SVG fallback
-  const SvgComponent = EXCHANGE_SVG_COMPONENTS[exchange]
-  if (SvgComponent) {
-    return (
-      <Box
-        style={{
-          width: size,
-          height: size,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-        className={className}
-      >
-        <SvgComponent size={size} />
       </Box>
     )
   }
