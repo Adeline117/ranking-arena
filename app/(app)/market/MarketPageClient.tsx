@@ -1,6 +1,7 @@
 'use client'
 
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, memo } from 'react'
+import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 // MobileBottomNav is rendered by root layout — do not duplicate here
@@ -336,6 +337,47 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
       }}
     >
       <h1 className="sr-only">Crypto Market Overview</h1>
+
+      {/* Quick links to sub-pages */}
+      <div
+        style={{
+          display: 'flex',
+          gap: 8,
+          padding: '8px 20px 0',
+          maxWidth: 1400,
+          margin: '0 auto',
+          justifyContent: 'flex-end',
+        }}
+      >
+        <Link
+          href="/market/funding-rates"
+          style={{
+            fontSize: 13,
+            color: tokens.colors.text.secondary,
+            textDecoration: 'none',
+            padding: '4px 10px',
+            borderRadius: tokens.radius.sm,
+            background: tokens.colors.bg.secondary,
+            fontWeight: 600,
+          }}
+        >
+          {t('fundingRates') || 'Funding Rates'}
+        </Link>
+        <Link
+          href="/market/open-interest"
+          style={{
+            fontSize: 13,
+            color: tokens.colors.text.secondary,
+            textDecoration: 'none',
+            padding: '4px 10px',
+            borderRadius: tokens.radius.sm,
+            background: tokens.colors.bg.secondary,
+            fontWeight: 600,
+          }}
+        >
+          {t('openInterest') || 'Open Interest'}
+        </Link>
+      </div>
 
       {/* L0: Scrolling Price Ticker */}
       <SectionErrorBoundary fallbackMessage="Failed to load price ticker">
