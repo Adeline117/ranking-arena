@@ -9,6 +9,7 @@ import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../../ui/icons'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import { ARENA_PURPLE, renderContentWithLinks, truncateText } from '@/lib/utils/content'
 import { AvatarLink, ReactButton } from '../components'
+import { PostContent } from '../shared/PostContent'
 import { type PostWithUserState } from '@/lib/types'
 
 type Post = PostWithUserState
@@ -158,151 +159,21 @@ export const PostListItem = memo(
           />
         </div>
 
-        {/* Title + Tags */}
-        <div
-          style={{
-            marginTop: 6,
-            fontWeight: 900,
-            lineHeight: 1.25,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            flexWrap: 'wrap',
-            minWidth: 0,
-          }}
-        >
-          <span
-            style={{
-              color: translatedListPosts[p.id]?.title
-                ? tokens.colors.accent.translated
-                : tokens.colors.text.primary,
-              ...(isMasonry
-                ? {
-                    flex: 1,
-                    minWidth: 0,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }
-                : {}),
-            }}
-          >
-            {translatedListPosts[p.id]?.title || p.title}
-          </span>
-          {/* Poll tag */}
-          {p.poll_id && (
-            <span
-              style={{
-                fontSize: 11,
-                color: ARENA_PURPLE,
-                fontWeight: 700,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                padding: '2px 8px',
-                borderRadius: tokens.radius.full,
-                background: 'var(--color-accent-primary-10)',
-              }}
-            >
-              {t('poll')}
-            </span>
-          )}
-          {/* Image count tag */}
-          {p.images && p.images.length > 0 && (
-            <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600 }}>
-              {p.images.length} {t('img')}
-            </span>
-          )}
-        </div>
-
-        {/* Content preview */}
-        {p.content && (
-          <div
-            style={{
-              marginTop: 8,
-              fontSize: 13,
-              color: translatedListPosts[p.id]?.body
-                ? tokens.colors.accent.translated
-                : tokens.colors.text.secondary,
-              lineHeight: 1.5,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              display: '-webkit-box',
-              WebkitLineClamp: 2,
-              WebkitBoxOrient: 'vertical',
-            }}
-          >
-            {renderContentWithLinks(
-              truncateText(
-                removeImagesFromContent(translatedListPosts[p.id]?.body || p.content),
-                150
-              )
-            )}
-          </div>
-        )}
-
-        {/* Image preview — single image as card, multiple as scroll-snap gallery */}
-        {p.images &&
-          p.images.length > 0 &&
-          (p.images.length === 1 ? (
-            <div style={{ marginTop: 10 }}>
-              <div
-                style={{
-                  width: 200,
-                  height: 150,
-                  borderRadius: tokens.radius.md,
-                  overflow: 'hidden',
-                  background: tokens.colors.bg.tertiary,
-                }}
-              >
-                <img
-                  src={p.images[0]}
-                  alt="Image 1"
-                  loading="lazy"
-                  style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                  onError={(e) => {
-                    ;(e.target as HTMLImageElement).style.display = 'none'
-                  }}
-                />
-              </div>
-            </div>
-          ) : (
-            <div
-              className="scroll-snap-x fade-edges"
-              style={{
-                marginTop: 10,
-                display: 'flex',
-                gap: 8,
-                overflowX: 'auto',
-                scrollSnapType: 'x mandatory',
-                paddingBottom: 4,
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {p.images.map((imgUrl, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    width: 120,
-                    height: 90,
-                    borderRadius: tokens.radius.md,
-                    overflow: 'hidden',
-                    background: tokens.colors.bg.tertiary,
-                    flexShrink: 0,
-                    scrollSnapAlign: 'start',
-                  }}
-                >
-                  <img
-                    src={imgUrl}
-                    alt={`Image ${idx + 1}`}
-                    loading="lazy"
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
-                    onError={(e) => {
-                      ;(e.target as HTMLImageElement).style.display = 'none'
-                    }}
-                  />
-                </div>
-              ))}
-            </div>
-          ))}
+        {/* Title + Content + Images — shared component */}
+        <PostContent
+          post={p}
+          language={language}
+          maxChars={150}
+          maxLines={2}
+          showGroup={false}
+          translatedTitle={translatedListPosts[p.id]?.title}
+          translatedBody={
+            translatedListPosts[p.id]?.body
+              ? removeImagesFromContent(translatedListPosts[p.id]!.body!)
+              : undefined
+          }
+          t={t}
+        />
 
         {/* Original post quote (for reposts) */}
         {p.original_post && (
