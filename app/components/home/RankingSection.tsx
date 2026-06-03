@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
+import { tokens } from '@/lib/design-tokens'
 import { apiFetch } from '@/lib/utils/api-fetch'
 import type { Trader } from '../ranking/RankingTableTypes'
 import type { TimeRange } from './hooks/useTraderData'
@@ -214,15 +215,15 @@ export default function RankingSection({
       {!loading && !premiumLoading && error && filteredTraders.length === 0 && (
         <div
           style={{
-            padding: '32px 16px',
+            padding: tokens.spacing[6],
             textAlign: 'center',
-            color: 'var(--color-text-secondary)',
+            color: tokens.colors.text.tertiary,
             fontSize: 14,
             lineHeight: 1.6,
           }}
         >
           <div style={{ marginBottom: 8, color: 'var(--color-error, #e53935)' }}>
-            {language === 'zh' ? '加载失败' : 'Failed to load rankings'}
+            {t('failedToLoadRankings')}
           </div>
           <div style={{ fontSize: 13, marginBottom: 12 }}>{error}</div>
           {onRetry && (
@@ -238,7 +239,7 @@ export default function RankingSection({
                 cursor: 'pointer',
               }}
             >
-              {language === 'zh' ? '重试' : 'Retry'}
+              {t('retry')}
             </button>
           )}
         </div>
@@ -247,20 +248,14 @@ export default function RankingSection({
       {!loading && !premiumLoading && filteredTraders.length === 0 && !error && (
         <div
           style={{
-            padding: '32px 16px',
+            padding: tokens.spacing[6],
             textAlign: 'center',
-            color: 'var(--color-text-secondary)',
+            color: tokens.colors.text.tertiary,
             fontSize: 14,
             lineHeight: 1.6,
           }}
         >
-          {hasActiveFilters
-            ? language === 'zh'
-              ? '没有交易员匹配当前筛选条件'
-              : 'No traders match the current filters'
-            : language === 'zh'
-              ? '排名数据加载中，请稍后刷新...'
-              : 'Rankings loading, please refresh shortly...'}
+          {hasActiveFilters ? t('noTradersMatchFilters') : t('rankingsLoadingRefresh')}
           {hasActiveFilters && (
             <button
               onClick={handleResetFilters}
@@ -276,7 +271,7 @@ export default function RankingSection({
                 cursor: 'pointer',
               }}
             >
-              {language === 'zh' ? '重置筛选' : 'Reset Filters'}
+              {t('resetFilters')}
             </button>
           )}
         </div>

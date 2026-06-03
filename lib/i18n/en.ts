@@ -4976,6 +4976,11 @@ const en = {
   feedFollowingTab: 'Following',
   tradersOnExchange: '{count} traders on this exchange',
   allTradersFilteredOut: 'All traders have been filtered out',
+  noTradersForPeriod: 'No traders found for this period',
+  noTradersMatchFilters: 'No traders match the current filters',
+  rankingsLoadingRefresh: 'Rankings loading, please refresh shortly...',
+  failedToLoadRankings: 'Failed to load rankings',
+  noChartDataAvailable: 'No chart data available',
   resetFilters: 'Reset Filters',
   showingTopFreeLimit:
     'Showing Top {limit} \u00b7 Unlock all traders, advanced filters & CSV export',
