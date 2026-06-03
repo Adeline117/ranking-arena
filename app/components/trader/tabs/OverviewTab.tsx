@@ -210,7 +210,7 @@ const OverviewTab = React.memo(function OverviewTab({
         )}
 
         {/* Equity Curve Chart */}
-        {traderEquityCurve && (
+        {traderEquityCurve ? (
           <SectionErrorBoundary>
             <EquityCurveSection
               equityCurve={traderEquityCurve}
@@ -218,6 +218,21 @@ const OverviewTab = React.memo(function OverviewTab({
               delay={0}
             />
           </SectionErrorBoundary>
+        ) : (
+          <Box
+            style={{
+              padding: tokens.spacing[6],
+              textAlign: 'center',
+              color: tokens.colors.text.tertiary,
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.xl,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
+            <Text size="sm" color="tertiary">
+              {t('noChartDataAvailable')}
+            </Text>
+          </Box>
         )}
 
         {/* Drawdown Chart */}

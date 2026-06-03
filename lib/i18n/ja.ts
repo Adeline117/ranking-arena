@@ -4650,6 +4650,11 @@ const ja = {
   feedFollowingTab: 'フォロー中',
   tradersOnExchange: 'この取引所のトレーダー {count} 人',
   allTradersFilteredOut: 'すべてのトレーダーがフィルターされました',
+  noTradersForPeriod: 'この期間のトレーダーが見つかりません',
+  noTradersMatchFilters: '現在のフィルターに一致するトレーダーがいません',
+  rankingsLoadingRefresh: 'ランキングを読み込み中です。しばらくしてから更新してください...',
+  failedToLoadRankings: 'ランキングの読み込みに失敗しました',
+  noChartDataAvailable: 'チャートデータがありません',
   resetFilters: 'フィルターをリセット',
   showingTopFreeLimit:
     'Top {limit} を表示中 · すべてのトレーダー、高度なフィルター、CSVエクスポートをアンロック',
