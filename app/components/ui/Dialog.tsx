@@ -10,7 +10,7 @@ import {
   useEffect,
   useRef,
 } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
@@ -195,13 +195,13 @@ export function DialogProvider({ children }: { children: ReactNode }) {
     if (state.options?.type === 'danger') {
       return {
         gradient: tokens.gradient.error,
-        shadowColor: `${tokens.colors.accent.error}40`,
+        shadowColor: alpha(tokens.colors.accent.error, 25),
         hoverShadow: tokens.shadow.glowError,
       }
     }
     return {
       gradient: tokens.gradient.primary,
-      shadowColor: `${tokens.colors.accent.primary}40`,
+      shadowColor: alpha(tokens.colors.accent.primary, 25),
       hoverShadow: tokens.shadow.glow,
     }
   }
@@ -283,8 +283,8 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                   marginBottom: tokens.spacing[4],
                   border: `1px solid ${
                     state.options.type === 'danger'
-                      ? `${tokens.colors.accent.error}30`
-                      : `${tokens.colors.accent.primary}30`
+                      ? alpha(tokens.colors.accent.error, 19)
+                      : alpha(tokens.colors.accent.primary, 19)
                   }`,
                 }}
               >

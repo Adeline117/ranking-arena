@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback, useRef, useEffect } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 
 /* ── Module-level style constants ──
    Avoids recreating these static objects on every Button render. */
@@ -24,7 +24,7 @@ const BTN_VARIANT_STYLES: Record<string, React.CSSProperties> = {
     background: `linear-gradient(135deg, var(--color-brand-hover, ${tokens.colors.accent.brandHover}) 0%, var(--color-brand, ${tokens.colors.accent.brand}) 100%)`,
     color: tokens.colors.white,
     border: 'none',
-    boxShadow: `0 4px 14px ${tokens.colors.accent.brand}35`,
+    boxShadow: `0 4px 14px ${alpha(tokens.colors.accent.brand, 21)}`,
   },
   secondary: {
     background: tokens.glass.bg.light,
@@ -48,13 +48,13 @@ const BTN_VARIANT_STYLES: Record<string, React.CSSProperties> = {
     background: tokens.gradient.success,
     color: tokens.colors.white,
     border: 'none',
-    boxShadow: `0 4px 12px ${tokens.colors.accent.success}40`,
+    boxShadow: `0 4px 12px ${alpha(tokens.colors.accent.success, 25)}`,
   },
   danger: {
     background: tokens.gradient.error,
     color: tokens.colors.white,
     border: 'none',
-    boxShadow: `0 4px 12px ${tokens.colors.accent.error}40`,
+    boxShadow: `0 4px 12px ${alpha(tokens.colors.accent.error, 25)}`,
   },
 }
 
@@ -157,7 +157,7 @@ export default function Button({
   const errorStyles: React.CSSProperties = hasError
     ? {
         borderColor: tokens.colors.accent.error,
-        boxShadow: `0 0 0 2px ${tokens.colors.accent.error}30`,
+        boxShadow: `0 0 0 2px ${alpha(tokens.colors.accent.error, 19)}`,
         animation: 'shake 0.5s ease-in-out',
       }
     : {}

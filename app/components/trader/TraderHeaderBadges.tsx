@@ -13,7 +13,7 @@
  */
 
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import ExchangeLogo from '../ui/ExchangeLogo'
@@ -167,13 +167,12 @@ export function TraderHeaderBadges({
           key="confidence"
           color={
             scoreConfidence === 'minimal'
-              ? tokens.colors.accent.error + '20'
-              : tokens.colors.accent.warning + '20'
+              ? tokens.colors.accent.error
+              : tokens.colors.accent.warning
           }
           style={{
             padding: '2px 8px',
             flexShrink: 0,
-            border: `1px solid ${scoreConfidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning}40`,
           }}
           title={
             scoreConfidence === 'minimal'
@@ -226,11 +225,10 @@ export function TraderHeaderBadges({
       {tradingStyleCfg && (
         <Badge
           key="trading-style"
-          color={`${tradingStyleCfg.color}20`}
+          color={tradingStyleCfg.color}
           style={{
             padding: '2px 8px',
             flexShrink: 0,
-            border: `1px solid ${tradingStyleCfg.color}40`,
           }}
           title={tradingStyleCfg.label}
         >

@@ -399,6 +399,22 @@ export const tokens = {
   },
 } as const
 
+/**
+ * Apply alpha transparency to any CSS color (variables, hex, named colors).
+ * Uses color-mix() — works with CSS variables unlike hex+alpha concatenation.
+ *
+ * @example
+ *   alpha(tokens.colors.accent.primary, 20)
+ *   // => "color-mix(in srgb, var(--color-accent-primary) 20%, transparent)"
+ *
+ *   // WRONG (produces invalid CSS with CSS variables):
+ *   `${tokens.colors.accent.primary}20`
+ *   // => "var(--color-accent-primary)20" — INVALID!
+ */
+export function alpha(color: string, percent: number): string {
+  return `color-mix(in srgb, ${color} ${percent}%, transparent)`
+}
+
 // Helper functions
 export function getSpacing(value: keyof typeof tokens.spacing): string {
   return tokens.spacing[value]
