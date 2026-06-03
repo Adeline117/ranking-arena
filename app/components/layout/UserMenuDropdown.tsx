@@ -104,7 +104,11 @@ export default function UserMenuDropdown({
       >
         {myAvatarUrl && !avatarError ? (
           <Image
-            src={myAvatarUrl.startsWith('data:') ? myAvatarUrl : `/api/avatar?url=${encodeURIComponent(myAvatarUrl)}`}
+            src={
+              myAvatarUrl.startsWith('data:')
+                ? myAvatarUrl
+                : `/api/avatar?url=${encodeURIComponent(myAvatarUrl)}`
+            }
             alt="Avatar"
             width={36}
             height={36}
@@ -165,7 +169,14 @@ export default function UserMenuDropdown({
           <div role="group" aria-label="Account switcher">
             <AccountSwitcher onClose={() => setShowUserMenu(false)} />
           </div>
-          <Box style={{ height: 1, background: 'var(--color-border-primary)', margin: `${tokens.spacing[1]} 0` }} role="separator" />
+          <Box
+            style={{
+              height: 1,
+              background: 'var(--color-border-primary)',
+              margin: `${tokens.spacing[1]} 0`,
+            }}
+            role="separator"
+          />
 
           <Link
             href={myHandle ? `/u/${encodeURIComponent(myHandle)}` : '/'}
@@ -191,7 +202,16 @@ export default function UserMenuDropdown({
             style={MENU_LINK_STYLE}
             onClick={() => setShowUserMenu(false)}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
             <span>{t('userCenter')}</span>
@@ -239,11 +259,42 @@ export default function UserMenuDropdown({
             style={MENU_LINK_STYLE}
             onClick={() => setShowUserMenu(false)}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
               <polyline points="9 12 11 14 15 10" />
             </svg>
             <span>{t('claimTrader')}</span>
+          </Link>
+          <Link
+            href="/api-docs"
+            role="menuitem"
+            className="top-nav-menu-link"
+            style={MENU_LINK_STYLE}
+            onClick={() => setShowUserMenu(false)}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M16 18l6-6-6-6" />
+              <path d="M8 6l-6 6 6 6" />
+            </svg>
+            <span>API</span>
           </Link>
           <Link
             href="/settings"
@@ -252,7 +303,16 @@ export default function UserMenuDropdown({
             style={MENU_LINK_STYLE}
             onClick={() => setShowUserMenu(false)}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <circle cx="12" cy="12" r="3" />
               <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
             </svg>

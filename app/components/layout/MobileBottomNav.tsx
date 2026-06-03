@@ -53,7 +53,7 @@ function _HomeIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
-function _GroupsIcon({ active }: IconProps): React.ReactElement {
+function GroupsIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
       <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
@@ -84,7 +84,7 @@ function _NewsIcon({ active }: IconProps): React.ReactElement {
   )
 }
 
-function _FireIcon({ active }: IconProps): React.ReactElement {
+function FireIcon({ active }: IconProps): React.ReactElement {
   return (
     <NavIcon active={active}>
       <path d="M12 12c2-2.96 0-7-1-8 0 3.038-1.773 4.741-3 6-1.226 1.26-2 3.24-2 5a6 6 0 1 0 12 0c0-1.532-1.056-3.94-2-5-1.786 3-2.791 3-4 2z" />
@@ -415,6 +415,8 @@ export default function MobileBottomNav(): React.ReactElement {
     const items: NavItem[] = [
       { href: '/', labelKey: 'rankings', Icon: RankingsIcon },
       { href: '/market', labelKey: 'market', Icon: MarketIcon },
+      { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
+      { href: '/hot', labelKey: 'hot', Icon: FireIcon },
       {
         href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
         labelKey: 'me',
