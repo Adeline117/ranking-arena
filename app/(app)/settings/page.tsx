@@ -1,6 +1,7 @@
 'use client'
 
 import React, { Suspense, useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -429,6 +430,24 @@ function SettingsContent() {
                 onConfirm={(title, msg) => showConfirm(title, msg)}
               />
             </LazyWeb3Boundary>
+          </SectionCard>
+
+          {/* Linked Accounts (social logins, OAuth connections) */}
+          <SectionCard
+            id="linked-accounts"
+            title={t('linkedAccounts') || 'Linked Accounts'}
+            description={t('linkedAccountsDesc') || 'Manage your connected social accounts'}
+          >
+            <Link
+              href="/settings/linked-accounts"
+              style={{
+                color: tokens.colors.accent.primary,
+                fontWeight: 600,
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
+              {t('manageLinkedAccounts') || 'Manage linked accounts →'}
+            </Link>
           </SectionCard>
 
           {/* Exchange Connections */}
