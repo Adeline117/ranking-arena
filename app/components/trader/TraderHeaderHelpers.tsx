@@ -81,7 +81,9 @@ export function getActiveDays(activeSince?: string): number | null {
 }
 
 export function formatActiveDays(days: number, t: (key: string) => string): string {
-  return days > 365 ? `${Math.floor(days / 365)}${t('activeYears')}` : `${days}${t('activeDaysUnit')}`
+  return days > 365
+    ? `${Math.floor(days / 365)}${t('activeYears')}`
+    : `${days}${t('activeDaysUnit')}`
 }
 
 // ─── Sub-Components ───────────────────────────────────────────────────────────
@@ -100,9 +102,9 @@ export function Badge({ children, color, style, title }: BadgeProps): React.Reac
         display: 'inline-flex',
         alignItems: 'center',
         padding: `4px ${tokens.spacing[3]}`,
-        background: `${color}18`,
+        background: `color-mix(in srgb, ${color} 9%, transparent)`,
         borderRadius: tokens.radius.full,
-        border: `1px solid ${color}40`,
+        border: `1px solid color-mix(in srgb, ${color} 25%, transparent)`,
         ...style,
       }}
       title={title}
@@ -162,7 +164,12 @@ interface ActionButtonProps {
   children: React.ReactNode
 }
 
-export function ActionButton({ onClick, variant, icon, children }: ActionButtonProps): React.ReactElement {
+export function ActionButton({
+  onClick,
+  variant,
+  icon,
+  children,
+}: ActionButtonProps): React.ReactElement {
   const isAccent = variant === 'accent'
   const baseBackground = isAccent ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.tertiary
   const baseBorder = isAccent ? `${tokens.colors.accent.primary}40` : tokens.colors.border.primary

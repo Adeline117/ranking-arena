@@ -1,7 +1,9 @@
 /**
  * Shared score color grading utility
  * 5-tier color system for arena_score display
- * Uses CSS variables for theme support
+ *
+ * SINGLE SOURCE OF TRUTH: CSS variables (--color-score-*) in globals.css.
+ * All alpha/gradient variants derived via color-mix() — no hex duplication.
  */
 
 export type ScoreGrade = 'legendary' | 'great' | 'average' | 'below' | 'low'
@@ -15,45 +17,12 @@ export interface ScoreColorInfo {
   fillColor: string
 }
 
-// IMPORTANT: fallback hex values MUST match --color-score-* CSS variables in globals.css (dark theme).
-// These are used by getScoreColorInfo() for rgba() computation in badge gradients/borders.
-// If you change CSS variables, update these fallbacks too — they are the same source of truth.
-const SCORE_TIERS: {
-  min: number
-  cssVar: string
-  fallback: string
-  grade: ScoreGrade
-  label: string
-}[] = [
-  {
-    min: 90,
-    cssVar: 'var(--color-score-legendary)',
-    fallback: '#8b5cf6',
-    grade: 'legendary',
-    label: 'Legendary',
-  },
-  {
-    min: 70,
-    cssVar: 'var(--color-score-great)',
-    fallback: '#10b981',
-    grade: 'great',
-    label: 'Great',
-  },
-  {
-    min: 50,
-    cssVar: 'var(--color-score-average)',
-    fallback: '#f59e0b',
-    grade: 'average',
-    label: 'Average',
-  },
-  {
-    min: 30,
-    cssVar: 'var(--color-score-below)',
-    fallback: '#f97316',
-    grade: 'below',
-    label: 'Below Avg',
-  },
-  { min: 0, cssVar: 'var(--color-score-low)', fallback: '#8891a0', grade: 'low', label: 'Low' },
+const SCORE_TIERS: { min: number; cssVar: string; grade: ScoreGrade; label: string }[] = [
+  { min: 90, cssVar: 'var(--color-score-legendary)', grade: 'legendary', label: 'Legendary' },
+  { min: 70, cssVar: 'var(--color-score-great)', grade: 'great', label: 'Great' },
+  { min: 50, cssVar: 'var(--color-score-average)', grade: 'average', label: 'Average' },
+  { min: 30, cssVar: 'var(--color-score-below)', grade: 'below', label: 'Below Avg' },
+  { min: 0, cssVar: 'var(--color-score-low)', grade: 'low', label: 'Low' },
 ]
 
 function getTier(score: number) {
@@ -71,29 +40,26 @@ export function getScoreGrade(score: number): ScoreGrade {
 }
 
 /**
- * Returns the resolved hex fallback for contexts that need raw hex
- * (e.g. canvas drawing, rgba computation). Prefer getScoreColor() for CSS.
+ * Returns the score color at a given opacity via color-mix().
+ * Replaces getScoreColorHex() + hex-alpha concatenation pattern.
+ *
+ * Usage: scoreColorAlpha(85, 25) => "color-mix(in srgb, var(--color-score-great) 25%, transparent)"
  */
-export function getScoreColorHex(score: number): string {
-  return getTier(score).fallback
+export function scoreColorAlpha(score: number, percent: number): string {
+  return `color-mix(in srgb, ${getScoreColor(score)} ${percent}%, transparent)`
 }
 
-/** Returns full color info including gradients for badges */
+/** Returns full color info including gradients for badges — all derived from CSS variables */
 export function getScoreColorInfo(score: number): ScoreColorInfo {
   const tier = getTier(score)
-  const c = tier.fallback
-
-  // Parse hex to rgba components
-  const r = parseInt(c.slice(1, 3), 16)
-  const g = parseInt(c.slice(3, 5), 16)
-  const b = parseInt(c.slice(5, 7), 16)
+  const v = tier.cssVar
 
   return {
-    color: tier.cssVar,
+    color: v,
     grade: tier.grade,
     label: tier.label,
-    bgGradient: `linear-gradient(135deg, rgba(${r},${g},${b},0.18), rgba(${r},${g},${b},0.10))`,
-    borderColor: `rgba(${r},${g},${b},0.55)`,
-    fillColor: `rgba(${r},${g},${b},0.15)`,
+    bgGradient: `linear-gradient(135deg, color-mix(in srgb, ${v} 18%, transparent), color-mix(in srgb, ${v} 10%, transparent))`,
+    borderColor: `color-mix(in srgb, ${v} 55%, transparent)`,
+    fillColor: `color-mix(in srgb, ${v} 15%, transparent)`,
   }
 }

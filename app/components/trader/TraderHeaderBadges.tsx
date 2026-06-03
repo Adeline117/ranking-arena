@@ -18,11 +18,11 @@ import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import { Badge, getSourceCategory } from './TraderHeaderHelpers'
-import { getScoreColor, getScoreColorHex } from '@/lib/utils/score-colors'
+import { getScoreColor } from '@/lib/utils/score-colors'
 
 const Web3VerifiedBadge = dynamic(
   () => import('./Web3VerifiedBadge').then((m) => ({ default: m.Web3VerifiedBadge })),
-  { ssr: false },
+  { ssr: false }
 )
 const VerifiedBadge = dynamic(() => import('./VerifiedBadge'), { ssr: false })
 const RankTrendSparkline = dynamic(() => import('./RankTrendSparkline'), { ssr: false })
@@ -73,9 +73,8 @@ export function TraderHeaderBadges({
   linkedPlatforms,
   t,
 }: TraderHeaderBadgesProps): React.ReactElement {
-  const tradingStyleCfg = tradingStyle && tradingStyle !== 'unknown'
-    ? TRADING_STYLE_CONFIG[tradingStyle]
-    : undefined
+  const tradingStyleCfg =
+    tradingStyle && tradingStyle !== 'unknown' ? TRADING_STYLE_CONFIG[tradingStyle] : undefined
 
   return (
     <>
@@ -95,7 +94,16 @@ export function TraderHeaderBadges({
           }}
           title={t('verifiedUser')}
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="white"
+            strokeWidth="3"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="20 6 9 17 4 12" />
           </svg>
         </Box>
@@ -104,7 +112,15 @@ export function TraderHeaderBadges({
       {/* Exchange badge */}
       {source && EXCHANGE_NAMES[source.toLowerCase()] && (
         <Badge key="exchange" color={tokens.colors.accent.primary}>
-          <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>
+          <Text
+            size="xs"
+            weight="bold"
+            style={{
+              color: tokens.colors.accent.primary,
+              letterSpacing: '0.3px',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {EXCHANGE_NAMES[source.toLowerCase()]}
           </Text>
         </Badge>
@@ -112,11 +128,34 @@ export function TraderHeaderBadges({
 
       {/* Arena score */}
       {arenaScore != null && arenaScore > 0 && (
-        <Badge key="score" color={getScoreColorHex(arenaScore)} style={{ padding: '2px 8px', flexShrink: 0 }} title={`Arena Score: ${arenaScore.toFixed(1)}`}>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={getScoreColor(arenaScore)} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
+        <Badge
+          key="score"
+          color={getScoreColor(arenaScore)}
+          style={{ padding: '2px 8px', flexShrink: 0 }}
+          title={`Arena Score: ${arenaScore.toFixed(1)}`}
+        >
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={getScoreColor(arenaScore)}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ marginRight: 2 }}
+          >
             <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
           </svg>
-          <Text size="xs" weight="black" style={{ color: getScoreColor(arenaScore), fontFamily: tokens.typography.fontFamily.mono.join(', '), letterSpacing: '-0.02em' }}>
+          <Text
+            size="xs"
+            weight="black"
+            style={{
+              color: getScoreColor(arenaScore),
+              fontFamily: tokens.typography.fontFamily.mono.join(', '),
+              letterSpacing: '-0.02em',
+            }}
+          >
             {arenaScore.toFixed(0)}
           </Text>
         </Badge>
@@ -126,40 +165,81 @@ export function TraderHeaderBadges({
       {scoreConfidence && scoreConfidence !== 'full' && (
         <Badge
           key="confidence"
-          color={scoreConfidence === 'minimal' ? tokens.colors.accent.error + '20' : tokens.colors.accent.warning + '20'}
-          style={{ padding: '2px 8px', flexShrink: 0, border: `1px solid ${scoreConfidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning}40` }}
-          title={scoreConfidence === 'minimal'
-            ? `Low confidence: only ${tradesCount ?? '?'} trades`
-            : `Partial confidence: limited trade history`}
+          color={
+            scoreConfidence === 'minimal'
+              ? tokens.colors.accent.error + '20'
+              : tokens.colors.accent.warning + '20'
+          }
+          style={{
+            padding: '2px 8px',
+            flexShrink: 0,
+            border: `1px solid ${scoreConfidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning}40`,
+          }}
+          title={
+            scoreConfidence === 'minimal'
+              ? `Low confidence: only ${tradesCount ?? '?'} trades`
+              : `Partial confidence: limited trade history`
+          }
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={scoreConfidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={
+              scoreConfidence === 'minimal'
+                ? tokens.colors.accent.error
+                : tokens.colors.accent.warning
+            }
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ marginRight: 2 }}
+          >
             <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
             <line x1="12" y1="9" x2="12" y2="13" />
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-          <Text size="xs" weight="bold" style={{ color: scoreConfidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning }}>
+          <Text
+            size="xs"
+            weight="bold"
+            style={{
+              color:
+                scoreConfidence === 'minimal'
+                  ? tokens.colors.accent.error
+                  : tokens.colors.accent.warning,
+            }}
+          >
             {tradesCount != null && tradesCount < 10
               ? `${tradesCount} trades`
-              : scoreConfidence === 'minimal' ? 'Low data' : 'Partial'}
+              : scoreConfidence === 'minimal'
+                ? 'Low data'
+                : 'Partial'}
           </Text>
         </Badge>
       )}
 
       {/* Rank Percentile Badge */}
-      {rank != null && rank > 0 && source && (
-        <RankPercentileBadge rank={rank} platform={source} />
-      )}
+      {rank != null && rank > 0 && source && <RankPercentileBadge rank={rank} platform={source} />}
 
       {/* Trading Style Tag */}
       {tradingStyleCfg && (
         <Badge
           key="trading-style"
           color={`${tradingStyleCfg.color}20`}
-          style={{ padding: '2px 8px', flexShrink: 0, border: `1px solid ${tradingStyleCfg.color}40` }}
+          style={{
+            padding: '2px 8px',
+            flexShrink: 0,
+            border: `1px solid ${tradingStyleCfg.color}40`,
+          }}
           title={tradingStyleCfg.label}
         >
           <span style={{ fontSize: 10, marginRight: 2 }}>{tradingStyleCfg.icon}</span>
-          <Text size="xs" weight="bold" style={{ color: tradingStyleCfg.color, fontSize: 11, letterSpacing: '0.3px' }}>
+          <Text
+            size="xs"
+            weight="bold"
+            style={{ color: tradingStyleCfg.color, fontSize: 11, letterSpacing: '0.3px' }}
+          >
             {tradingStyleCfg.label}
           </Text>
         </Badge>
@@ -167,9 +247,16 @@ export function TraderHeaderBadges({
 
       {/* Bot badge */}
       {isBot && (
-        <Badge key="bot" color="var(--color-brand)" style={{ padding: '2px 8px', flexShrink: 0 }} title={t('botTooltip')}>
+        <Badge
+          key="bot"
+          color="var(--color-brand)"
+          style={{ padding: '2px 8px', flexShrink: 0 }}
+          title={t('botTooltip')}
+        >
           <span style={{ fontSize: 11, marginRight: 2 }}>{'⚡'}</span>
-          <Text size="xs" weight="bold" style={{ color: 'var(--color-brand)' }}>{t('botLabel')}</Text>
+          <Text size="xs" weight="bold" style={{ color: 'var(--color-brand)' }}>
+            {t('botLabel')}
+          </Text>
         </Badge>
       )}
 
@@ -179,15 +266,30 @@ export function TraderHeaderBadges({
           key="data-source"
           color={tokens.colors.accent.primary}
           style={{ padding: '2px 8px', flexShrink: 0 }}
-          title={authorizedSince
-            ? `${t('dataSourceVerifiedTooltip')} · ${t('verifiedSince')} ${new Date(authorizedSince).toLocaleDateString()}`
-            : t('dataSourceVerifiedTooltip')
+          title={
+            authorizedSince
+              ? `${t('dataSourceVerifiedTooltip')} · ${t('verifiedSince')} ${new Date(authorizedSince).toLocaleDateString()}`
+              : t('dataSourceVerifiedTooltip')
           }
         >
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ marginRight: 2 }}>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.accent.primary}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ marginRight: 2 }}
+          >
             <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
-          <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.primary, letterSpacing: '0.3px' }}>
+          <Text
+            size="xs"
+            weight="bold"
+            style={{ color: tokens.colors.accent.primary, letterSpacing: '0.3px' }}
+          >
             {t('dataSourceVerified')}
           </Text>
         </Badge>
@@ -199,7 +301,11 @@ export function TraderHeaderBadges({
           style={{ padding: '2px 8px', flexShrink: 0 }}
           title={t('dataSourcePublicTooltip')}
         >
-          <Text size="xs" weight="bold" style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.3px' }}>
+          <Text
+            size="xs"
+            weight="bold"
+            style={{ color: tokens.colors.text.tertiary, letterSpacing: '0.3px' }}
+          >
             {t('dataSourcePublic')}
           </Text>
         </Badge>
@@ -230,7 +336,16 @@ export function TraderHeaderBadges({
           title={`${linkedPlatforms.length} linked accounts`}
         >
           {[...new Set(linkedPlatforms)].slice(0, 5).map((p) => (
-            <Box key={p} style={{ width: 14, height: 14, borderRadius: '50%', overflow: 'hidden', flexShrink: 0 }}>
+            <Box
+              key={p}
+              style={{
+                width: 14,
+                height: 14,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                flexShrink: 0,
+              }}
+            >
               <ExchangeLogo exchange={p} size={14} />
             </Box>
           ))}
