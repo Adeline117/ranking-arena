@@ -97,6 +97,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 - [x] **RLS audit** — 3 CRITICAL fixes: trader_claims + verified_traders open to public → service_role only; user_profiles UPDATE privilege escalation blocked (13 columns guarded)
 - [x] **RLS PII** — user_profiles SELECT: column-level REVOKE from authenticated, SECURITY DEFINER RPC for own sensitive data
 - [x] **Page audit** — Stripe checkout error toast (was infinite loading), trader tab scroll-to-top on switch
+- [x] **Post UI unification** — hot page avatar+timestamp+counts aligned; group timestamp→formatTimeAgo; shared PostContent component; feed PostListItem wired (-133 LOC)
 
 ---
 
