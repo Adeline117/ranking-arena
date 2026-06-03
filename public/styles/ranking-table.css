@@ -86,18 +86,10 @@
 }
 
 /* ============================================================
-   Active sort column highlight — subtle bg tint on data cells
+   Active sort column highlight — header-only (underline + color)
+   Data cell bg tint removed: created a visible gray rectangle
+   around score circles that looked out of place.
    ============================================================ */
-.ranking-table-container[data-sort-col='score'] .col-score,
-.ranking-table-container[data-sort-col='roi'] .roi-cell,
-.ranking-table-container[data-sort-col='pnl'] .col-pnl,
-.ranking-table-container[data-sort-col='winrate'] .col-winrate,
-.ranking-table-container[data-sort-col='mdd'] .col-mdd,
-.ranking-table-container[data-sort-col='sortino'] .col-sortino,
-.ranking-table-container[data-sort-col='alpha'] .col-alpha {
-  background: var(--color-accent-primary-08);
-  border-radius: 6px;
-}
 
 /* ============================================================
    Row Base — The fundamental visual unit
