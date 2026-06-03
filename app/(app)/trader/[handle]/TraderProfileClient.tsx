@@ -640,121 +640,133 @@ export default function TraderProfileClient({
             pointerEvents: traderLoading && !isPrimaryAccount ? 'none' : 'auto',
           }}
         >
-          <SwipeableView
-            activeIndex={tabKeys.indexOf(activeTab)}
-            onIndexChange={(i) => handleTabChange(tabKeys[i])}
-          >
-            {/* Overview Tab — always mounted (primary tab, avoids skeleton flash on swipe-back) */}
-            <Box
-              id="panel-overview"
-              role="tabpanel"
-              aria-labelledby="tab-overview"
-              style={{ minHeight: 200 }}
-              className="tab-pane-enter"
+          <div id="trader-tab-content">
+            <SwipeableView
+              activeIndex={tabKeys.indexOf(activeTab)}
+              onIndexChange={(i) => handleTabChange(tabKeys[i])}
             >
-              <OverviewTab
-                data={data}
-                traderProfile={traderProfile}
-                traderPerformance={traderPerformance}
-                traderEquityCurve={
-                  traderEquityCurve as
-                    | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
-                    | undefined
-                }
-                traderSimilar={traderSimilar}
-                positionSummary={
-                  traderData?.positionSummary as
-                    | {
-                        avgLeverage: number | null
-                        longPositions: number | null
-                        shortPositions: number | null
-                      }
-                    | null
-                    | undefined
-                }
-                selectedPeriod={selectedPeriod}
-                hasMultipleAccounts={hasMultipleAccounts}
-                activeAccount={activeAccount}
-                aggregatedData={aggregatedData}
-                linkedAccounts={linkedAccounts}
-                currentUserId={currentUserId}
-                isOwner={isOwner}
-                isVerifiedTrader={isVerifiedTrader}
-                claimedUser={claimedUser}
-              />
-            </Box>
-
-            {/* Stats Tab — not mounted until first visit (prevents skeleton flash in SwipeableView) */}
-            <Box
-              id="panel-stats"
-              role="tabpanel"
-              aria-labelledby="tab-stats"
-              style={{ minHeight: 200 }}
-              className="tab-pane-enter"
-            >
-              {visitedTabs.has('stats') ? (
-                <StatsTab
-                  visited
-                  stats={traderStats}
-                  traderHandle={traderProfile?.handle || data.handle}
-                  assetBreakdown={traderAssetBreakdown}
-                  equityCurve={traderEquityCurve}
-                  positionHistory={traderPositionHistory}
-                  isPro={isPro}
-                  onUnlock={handlePricingRedirect}
-                />
-              ) : null}
-            </Box>
-
-            {/* Portfolio Tab — not mounted until first visit (prevents skeleton flash in SwipeableView) */}
-            <Box
-              id="panel-portfolio"
-              role="tabpanel"
-              aria-labelledby="tab-portfolio"
-              style={{ minHeight: 200 }}
-              className="tab-pane-enter"
-            >
-              {visitedTabs.has('portfolio') ? (
-                <PortfolioTab
-                  visited
-                  portfolio={traderPortfolio}
-                  positionHistory={traderPositionHistory}
-                  source={data.source}
-                  isPro={isPro}
-                  onUnlock={handlePricingRedirect}
-                />
-              ) : null}
-            </Box>
-
-            {/* Posts Tab (only for claimed traders) — lazy mount on first visit */}
-            {claimedUser && (
+              {/* Overview Tab — always mounted (primary tab, avoids skeleton flash on swipe-back) */}
               <Box
-                id="panel-posts"
+                id="panel-overview"
                 role="tabpanel"
-                aria-labelledby="tab-posts"
+                aria-labelledby="tab-overview"
                 style={{ minHeight: 200 }}
                 className="tab-pane-enter"
               >
-                {visitedTabs.has('posts') && (
-                  <Box bg="secondary" p={4} radius="lg" border="primary" style={{ maxWidth: 900 }}>
-                    <Box
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        marginBottom: tokens.spacing[4],
-                      }}
-                    >
-                      <Text size="lg" weight="black">
-                        {t('posts')}
-                      </Text>
-                    </Box>
-                    <PostFeed authorHandle={claimedUser.handle} variant="compact" showSortButtons />
-                  </Box>
-                )}
+                <OverviewTab
+                  data={data}
+                  traderProfile={traderProfile}
+                  traderPerformance={traderPerformance}
+                  traderEquityCurve={
+                    traderEquityCurve as
+                      | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
+                      | undefined
+                  }
+                  traderSimilar={traderSimilar}
+                  positionSummary={
+                    traderData?.positionSummary as
+                      | {
+                          avgLeverage: number | null
+                          longPositions: number | null
+                          shortPositions: number | null
+                        }
+                      | null
+                      | undefined
+                  }
+                  selectedPeriod={selectedPeriod}
+                  hasMultipleAccounts={hasMultipleAccounts}
+                  activeAccount={activeAccount}
+                  aggregatedData={aggregatedData}
+                  linkedAccounts={linkedAccounts}
+                  currentUserId={currentUserId}
+                  isOwner={isOwner}
+                  isVerifiedTrader={isVerifiedTrader}
+                  claimedUser={claimedUser}
+                />
               </Box>
-            )}
-          </SwipeableView>
+
+              {/* Stats Tab — not mounted until first visit (prevents skeleton flash in SwipeableView) */}
+              <Box
+                id="panel-stats"
+                role="tabpanel"
+                aria-labelledby="tab-stats"
+                style={{ minHeight: 200 }}
+                className="tab-pane-enter"
+              >
+                {visitedTabs.has('stats') ? (
+                  <StatsTab
+                    visited
+                    stats={traderStats}
+                    traderHandle={traderProfile?.handle || data.handle}
+                    assetBreakdown={traderAssetBreakdown}
+                    equityCurve={traderEquityCurve}
+                    positionHistory={traderPositionHistory}
+                    isPro={isPro}
+                    onUnlock={handlePricingRedirect}
+                  />
+                ) : null}
+              </Box>
+
+              {/* Portfolio Tab — not mounted until first visit (prevents skeleton flash in SwipeableView) */}
+              <Box
+                id="panel-portfolio"
+                role="tabpanel"
+                aria-labelledby="tab-portfolio"
+                style={{ minHeight: 200 }}
+                className="tab-pane-enter"
+              >
+                {visitedTabs.has('portfolio') ? (
+                  <PortfolioTab
+                    visited
+                    portfolio={traderPortfolio}
+                    positionHistory={traderPositionHistory}
+                    source={data.source}
+                    isPro={isPro}
+                    onUnlock={handlePricingRedirect}
+                  />
+                ) : null}
+              </Box>
+
+              {/* Posts Tab (only for claimed traders) — lazy mount on first visit */}
+              {claimedUser && (
+                <Box
+                  id="panel-posts"
+                  role="tabpanel"
+                  aria-labelledby="tab-posts"
+                  style={{ minHeight: 200 }}
+                  className="tab-pane-enter"
+                >
+                  {visitedTabs.has('posts') && (
+                    <Box
+                      bg="secondary"
+                      p={4}
+                      radius="lg"
+                      border="primary"
+                      style={{ maxWidth: 900 }}
+                    >
+                      <Box
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          marginBottom: tokens.spacing[4],
+                        }}
+                      >
+                        <Text size="lg" weight="black">
+                          {t('posts')}
+                        </Text>
+                      </Box>
+                      <PostFeed
+                        authorHandle={claimedUser.handle}
+                        variant="compact"
+                        showSortButtons
+                      />
+                    </Box>
+                  )}
+                </Box>
+              )}
+            </SwipeableView>
+          </div>
         </div>
 
         <style>{`
