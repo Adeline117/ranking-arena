@@ -21,13 +21,13 @@ const LOCAL_LOGOS: Record<string, string> = {
   htx: '/icons/exchanges/htx.png',
   weex: '/icons/exchanges/weex.png',
   coinex: '/icons/exchanges/coinex.jpg',
-  okx: '/icons/exchanges/okx.svg',
+  okx: '/icons/exchanges/okx.png',
   kucoin: '/icons/exchanges/kucoin.png',
   gate: '/icons/exchanges/gate.jpg',
   bingx: '/icons/exchanges/bingx.png',
-  phemex: '/icons/exchanges/phemex.svg',
+  phemex: '/icons/exchanges/phemex.png',
   hyperliquid: '/icons/exchanges/hyperliquid.png',
-  gmx: '/icons/exchanges/gmx.svg',
+  gmx: '/icons/exchanges/gmx.png',
   dydx: '/icons/exchanges/dydx.png',
   jupiter: '/icons/exchanges/jupiter.png',
   drift: '/icons/exchanges/drift.png',
@@ -47,11 +47,11 @@ const LOCAL_LOGOS: Record<string, string> = {
   kwenta: '/icons/exchanges/kwenta.png',
   synthetix: '/icons/exchanges/synthetix.png',
   mux: '/icons/exchanges/mux.png',
-  gains: '/icons/exchanges/gains.svg',
+  gains: '/icons/exchanges/gains.png',
   btcc: '/icons/exchanges/btcc.png',
   bitunix: '/icons/exchanges/bitunix.png',
   bitmart: '/icons/exchanges/bitmart.png',
-  etoro: '/icons/exchanges/etoro.svg',
+  etoro: '/icons/exchanges/etoro.png',
   woox: '/icons/exchanges/woox.svg',
   polymarket: '/icons/exchanges/polymarket.svg',
   copin: '/icons/exchanges/copin.svg',
@@ -62,14 +62,14 @@ const LOCAL_LOGOS: Record<string, string> = {
   bybit_spot: '/icons/exchanges/bybit.png',
   bitget_futures: '/icons/exchanges/bitget.png',
   bitget_spot: '/icons/exchanges/bitget.png',
-  okx_futures: '/icons/exchanges/okx.svg',
-  okx_spot: '/icons/exchanges/okx.svg',
-  okx_web3: '/icons/exchanges/okx.svg',
-  okx_wallet: '/icons/exchanges/okx.svg',
+  okx_futures: '/icons/exchanges/okx.png',
+  okx_spot: '/icons/exchanges/okx.png',
+  okx_web3: '/icons/exchanges/okx.png',
+  okx_wallet: '/icons/exchanges/okx.png',
   htx_futures: '/icons/exchanges/htx.png',
   gateio: '/icons/exchanges/gate.jpg',
   jupiter_perps: '/icons/exchanges/jupiter.png',
-  dune_gmx: '/icons/exchanges/gmx.svg',
+  dune_gmx: '/icons/exchanges/gmx.png',
   dune_hyperliquid: '/icons/exchanges/hyperliquid.png',
   dune_uniswap: '/icons/exchanges/uniswap.png',
   dune_defi: '/icons/exchanges/uniswap.png',
@@ -95,7 +95,13 @@ const CDN_FALLBACK: Record<string, string> = {
 // React SVG fallback components for when both local and CDN fail
 function BinanceSvg({ size }: { size: number }) {
   return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width={size} height={size}>
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+    >
       <rect width="24" height="24" rx="4" fill="var(--color-chart-amber)" />
       <path d="M12 2L7.5 6.5L9 8L12 5L15 8L16.5 6.5L12 2Z" fill="white" />
       <path d="M2 12L6.5 7.5L8 9L5 12L8 15L6.5 16.5L2 12Z" fill="white" />
