@@ -25,6 +25,7 @@ interface LoginFormProps {
   onSwitchToCode: () => void
   onSwitchToPassword: () => void
   t: (key: string) => string
+  rateLimitCountdown?: number
 }
 
 export default function LoginForm({
@@ -48,8 +49,10 @@ export default function LoginForm({
   onSwitchToCode,
   onSwitchToPassword,
   t,
+  rateLimitCountdown = 0,
 }: LoginFormProps) {
   const passwordValidation = validatePassword(password)
+  const rateLimited = rateLimitCountdown > 0
 
   if (!loginWithCode) {
     return (
@@ -127,7 +130,7 @@ export default function LoginForm({
 
         <button
           type="submit"
-          disabled={loading || !email || !password}
+          disabled={loading || !email || !password || rateLimited}
           className="login-button"
           style={{
             width: '100%',
@@ -135,13 +138,13 @@ export default function LoginForm({
             borderRadius: tokens.radius.lg,
             border: 'none',
             background:
-              loading || !email || !password
+              loading || !email || !password || rateLimited
                 ? 'var(--color-accent-primary-20)'
                 : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
             color: tokens.colors.white,
             fontWeight: 700,
             fontSize: 16,
-            cursor: loading || !email || !password ? 'not-allowed' : 'pointer',
+            cursor: loading || !email || !password || rateLimited ? 'not-allowed' : 'pointer',
             marginBottom: 12,
             display: 'flex',
             alignItems: 'center',
