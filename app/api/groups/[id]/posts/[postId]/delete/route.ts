@@ -3,6 +3,7 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
+import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 
 // 检查用户是否是小组管理员或组长
@@ -79,19 +80,19 @@ export async function POST(
 
       // Notify the post author
       if (postData.author_id && postData.author_id !== user.id) {
-        const { error: notifyError } = await supabase.from('notifications').insert({
-          user_id: postData.author_id,
-          type: 'system' as const,
-          title: 'Post deleted',
-          message: `Your post "${postData.title || ''}" was deleted by group admin`,
-          link: `/groups/${groupId}`,
-          actor_id: user.id,
-          reference_id: postId,
-        })
-
-        if (notifyError) {
-          logger.error('Notification error:', notifyError)
-        }
+        sendNotification(
+          supabase,
+          {
+            user_id: postData.author_id,
+            type: 'system',
+            title: 'Post deleted',
+            message: `Your post "${postData.title || ''}" was deleted by group admin`,
+            link: `/groups/${groupId}`,
+            actor_id: user.id,
+            reference_id: postId,
+          },
+          'group-post-delete'
+        )
       }
 
       // Audit log (fire-and-forget)
