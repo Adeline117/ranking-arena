@@ -39,6 +39,7 @@ export default function LoginPage() {
   const [mounted, setMounted] = useState(false)
   const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false)
   const [recovering, setRecovering] = useState(false)
+  const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
 
   const [touchedFields, setTouchedFields] = useState<{
     email: boolean
@@ -199,6 +200,24 @@ export default function LoginPage() {
       return () => clearTimeout(timer)
     }
   }, [countdown])
+
+  useEffect(() => {
+    if (rateLimitCountdown > 0) {
+      const timer = setTimeout(() => setRateLimitCountdown(rateLimitCountdown - 1), 1000)
+      return () => clearTimeout(timer)
+    } else if (rateLimitCountdown === 0) {
+      // Clear rate limit error when countdown reaches 0
+      setError((prev) =>
+        prev &&
+        (prev.includes('Too many attempts') ||
+          prev.includes('操作过于频繁') ||
+          prev.includes('Try again in') ||
+          prev.includes('秒后重试'))
+          ? null
+          : prev
+      )
+    }
+  }, [rateLimitCountdown])
 
   // Auth handlers
   const handleSendCode = async () => {
@@ -542,13 +561,15 @@ export default function LoginPage() {
               ? '邮箱尚未验证，请检查收件箱'
               : 'Email not yet verified. Please check your inbox.'
           )
-        else if (msg.includes('Too many requests') || msg.includes('rate limit'))
+        else if (msg.includes('Too many requests') || msg.includes('rate limit')) {
+          const RATE_LIMIT_SECONDS = 30
+          setRateLimitCountdown(RATE_LIMIT_SECONDS)
           setError(
             lang === 'zh'
-              ? '操作过于频繁，请稍后重试'
-              : 'Too many attempts. Please wait a moment and try again.'
+              ? `操作过于频繁，请 ${RATE_LIMIT_SECONDS} 秒后重试`
+              : `Too many attempts. Try again in ${RATE_LIMIT_SECONDS}s.`
           )
-        else if (msg.toLowerCase().includes('banned')) {
+        } else if (msg.toLowerCase().includes('banned')) {
           setError(
             lang === 'zh'
               ? '此账号已申请注销。如需恢复账号，请点击下方按钮。'
@@ -890,6 +911,7 @@ export default function LoginPage() {
               setError(null)
             }}
             t={t}
+            rateLimitCountdown={rateLimitCountdown}
           />
         )}
 
@@ -1011,7 +1033,11 @@ export default function LoginPage() {
                 <line x1="12" y1="8" x2="12" y2="12" />
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
-              {error}
+              {rateLimitCountdown > 0
+                ? lang === 'zh'
+                  ? `操作过于频繁，请 ${rateLimitCountdown} 秒后重试`
+                  : `Too many attempts. Try again in ${rateLimitCountdown}s.`
+                : error}
             </div>
             {showRecoveryPrompt && (
               <button
