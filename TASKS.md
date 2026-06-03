@@ -94,6 +94,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 - [x] **Pipeline** — trigger chain failure → logger.error (was warn), by-token 6 queries → 1 .in()
 - [x] **A11y** — pagination aria-label, period range aria-pressed, page counter aria-live
 - [x] **Health monitor** — freshness check reads trader_latest (was pipeline_logs for deleted batch-fetch-traders), etoro threshold 48h→96h
+- [x] **RLS audit** — 3 CRITICAL fixes: trader_claims + verified_traders open to public → service_role only; user_profiles UPDATE privilege escalation blocked (13 columns guarded)
 
 ---
 

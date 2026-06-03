@@ -162,14 +162,14 @@ Investigated, already handled: flash-news + compare + claim + competitions all h
 10 parallel investigations across 2 rounds:
 Round 1: pipeline/cron, frontend perf, security, silent failures, dead code, dependencies
 Round 2: DB indexes, accessibility, worker reliability, SEO/CWV
-Plus: social sync audit, ja/ko translations, health monitor fixes.
-34 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
+Plus: social sync audit, ja/ko translations, health monitor fixes, RLS audit.
+37 commits, all type-check + 2,612 tests passing. Post-deploy 5/5 healthy.
 
 ### By the numbers
 
 | Metric               | Value                                                                                       |
 | -------------------- | ------------------------------------------------------------------------------------------- |
-| Commits              | 34                                                                                          |
+| Commits              | 37                                                                                          |
 | Dead code removed    | ~2,700 LOC (3 cron routes + trigger.dev files + evaluator split)                            |
 | Dependencies removed | 8 (@trigger.dev/sdk, critters, puppeteer x3, chrome-launcher, redis, @mathieuc/tradingview) |
 | Vercel crons removed | 10 (54→44, worker handles enrich/score/meilisearch)                                         |
@@ -187,23 +187,24 @@ Plus: social sync audit, ja/ko translations, health monitor fixes.
 
 ### Key changes
 
-| Category  | Fix                                                                                           |
-| --------- | --------------------------------------------------------------------------------------------- |
-| Pipeline  | Removed 10 Vercel crons duplicated by BullMQ worker (Phase 3 complete)                        |
-| Deps      | Pinned react 19.2.6, removed 7 dead packages, migrated TokenBucket redis→ioredis              |
-| Perf      | Disabled refetchOnWindowFocus (posts/notifications), trader detail staleTime 10s→2min         |
-| Perf      | Centralized staleTime via cache-presets.ts (REALTIME/STANDARD/RELAXED/SLOW/STATIC)            |
-| Perf      | Hashtag N+1 → single RPC, CLS placeholders on 3 dynamic imports                               |
-| Security  | 4 group auth checks now log Supabase query failures, npm audit 0 high vulns                   |
-| Refactor  | pipeline-evaluator split into checks/data + checks/infra + checks/frontend                    |
-| Dead code | Deleted batch-fetch-traders/pipeline-fetch/auto-post-insights routes + trigger.dev            |
-| Sync      | Notification delta rollback, UserFollowButton cross-tab, bookmark→feed, comment like rollback |
-| i18n      | 433 keys batch-translated to ja + ko (quiz, gates, errors, tooltips, positions)               |
-| SEO       | Hashtag metadata (canonical, og:image, twitter), 10 learn article URLs in sitemap             |
-| Worker    | BullMQ retry 3x, throw non-2xx, completed try-catch, crash handlers, failed job logging       |
-| DB        | 6 indexes, 2 retention policies, by-token 6→1 query, findTraders .limit() safety              |
-| A11y      | Pagination aria-label, period range aria-pressed, page counter aria-live                      |
-| Health    | Freshness reads trader_latest (was pipeline_logs), etoro 48h→96h threshold                    |
+| Category  | Fix                                                                                            |
+| --------- | ---------------------------------------------------------------------------------------------- |
+| Pipeline  | Removed 10 Vercel crons duplicated by BullMQ worker (Phase 3 complete)                         |
+| Deps      | Pinned react 19.2.6, removed 7 dead packages, migrated TokenBucket redis→ioredis               |
+| Perf      | Disabled refetchOnWindowFocus (posts/notifications), trader detail staleTime 10s→2min          |
+| Perf      | Centralized staleTime via cache-presets.ts (REALTIME/STANDARD/RELAXED/SLOW/STATIC)             |
+| Perf      | Hashtag N+1 → single RPC, CLS placeholders on 3 dynamic imports                                |
+| Security  | 4 group auth checks now log Supabase query failures, npm audit 0 high vulns                    |
+| Refactor  | pipeline-evaluator split into checks/data + checks/infra + checks/frontend                     |
+| Dead code | Deleted batch-fetch-traders/pipeline-fetch/auto-post-insights routes + trigger.dev             |
+| Sync      | Notification delta rollback, UserFollowButton cross-tab, bookmark→feed, comment like rollback  |
+| i18n      | 433 keys batch-translated to ja + ko (quiz, gates, errors, tooltips, positions)                |
+| SEO       | Hashtag metadata (canonical, og:image, twitter), 10 learn article URLs in sitemap              |
+| Worker    | BullMQ retry 3x, throw non-2xx, completed try-catch, crash handlers, failed job logging        |
+| DB        | 6 indexes, 2 retention policies, by-token 6→1 query, findTraders .limit() safety               |
+| A11y      | Pagination aria-label, period range aria-pressed, page counter aria-live                       |
+| Health    | Freshness reads trader_latest (was pipeline_logs), etoro 48h→96h threshold                     |
+| RLS       | 3 CRITICAL: trader_claims + verified_traders → service_role; user_profiles UPDATE 13-col guard |
 
 ---
 
