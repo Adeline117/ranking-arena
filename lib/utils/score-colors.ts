@@ -15,16 +15,49 @@ export interface ScoreColorInfo {
   fillColor: string
 }
 
-const SCORE_TIERS: { min: number; cssVar: string; fallback: string; grade: ScoreGrade; label: string }[] = [
-  { min: 90, cssVar: 'var(--color-score-legendary)', fallback: '#8b5cf6', grade: 'legendary', label: 'Legendary' },
-  { min: 70, cssVar: 'var(--color-score-great)', fallback: '#10b981', grade: 'great', label: 'Great' },
-  { min: 50, cssVar: 'var(--color-score-average)', fallback: '#eab308', grade: 'average', label: 'Average' },
-  { min: 30, cssVar: 'var(--color-score-below)', fallback: '#f97316', grade: 'below', label: 'Below Avg' },
-  { min: 0, cssVar: 'var(--color-score-low)', fallback: '#ef4444', grade: 'low', label: 'Low' },
+// IMPORTANT: fallback hex values MUST match --color-score-* CSS variables in globals.css (dark theme).
+// These are used by getScoreColorInfo() for rgba() computation in badge gradients/borders.
+// If you change CSS variables, update these fallbacks too — they are the same source of truth.
+const SCORE_TIERS: {
+  min: number
+  cssVar: string
+  fallback: string
+  grade: ScoreGrade
+  label: string
+}[] = [
+  {
+    min: 90,
+    cssVar: 'var(--color-score-legendary)',
+    fallback: '#8b5cf6',
+    grade: 'legendary',
+    label: 'Legendary',
+  },
+  {
+    min: 70,
+    cssVar: 'var(--color-score-great)',
+    fallback: '#10b981',
+    grade: 'great',
+    label: 'Great',
+  },
+  {
+    min: 50,
+    cssVar: 'var(--color-score-average)',
+    fallback: '#f59e0b',
+    grade: 'average',
+    label: 'Average',
+  },
+  {
+    min: 30,
+    cssVar: 'var(--color-score-below)',
+    fallback: '#f97316',
+    grade: 'below',
+    label: 'Below Avg',
+  },
+  { min: 0, cssVar: 'var(--color-score-low)', fallback: '#8891a0', grade: 'low', label: 'Low' },
 ]
 
 function getTier(score: number) {
-  return SCORE_TIERS.find(t => score >= t.min) || SCORE_TIERS[SCORE_TIERS.length - 1]
+  return SCORE_TIERS.find((t) => score >= t.min) || SCORE_TIERS[SCORE_TIERS.length - 1]
 }
 
 /** Returns the CSS variable color for a given score (theme-aware) */
