@@ -33,6 +33,9 @@ export interface TraderFirstScreen {
   nickname: string | null
   avatarMirrorUrl: string | null
   avatarOriginUrl: string | null
+  /** Final renderable src (spec §1.4): mirror direct → proxied origin → null
+   *  (null = caller renders gradient + initial fallback). */
+  avatarSrc: string | null
   walletAddress: string | null
   traderKind: 'human' | 'bot'
   botStrategy: 'martingale' | 'grid' | 'ai' | null
