@@ -479,6 +479,60 @@ export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string
 }
 
 /**
+ * Serving-layer avatar chain (ARENA_DATA_SPEC v1.2 §1.4).
+ *
+ * Resolution order:
+ *   1. `avatarMirrorUrl` — our own Supabase Storage mirror (`trader-avatars`
+ *      public bucket, written by the ingest worker). No CORS/Referrer issues,
+ *      CDN-cacheable — use directly.
+ *   2. `avatarOriginUrl` — exchange CDN original. Routed through the
+ *      `/api/avatar` proxy (CORS/Referrer/SSRF-safe, edge-cached).
+ *   3. `null` — caller renders the gradient + initial fallback
+ *      (`getAvatarGradient` + `getAvatarInitial`).
+ */
+export function getTraderAvatarSrc({
+  avatarMirrorUrl,
+  avatarOriginUrl,
+}: {
+  avatarMirrorUrl: string | null | undefined
+  avatarOriginUrl: string | null | undefined
+}): string | null {
+  const mirror = avatarMirrorUrl?.trim()
+  if (mirror) return mirror
+
+  const origin = avatarOriginUrl?.trim()
+  if (origin) {
+    // Inline data URIs and already-local paths need no proxy hop.
+    if (origin.startsWith('data:') || origin.startsWith('/')) return origin
+    return `/api/avatar?url=${encodeURIComponent(origin)}`
+  }
+
+  return null
+}
+
+/**
+ * Render-time guard for the avatar chain: returns true when `src` is already
+ * final and must be used as-is in an <img>/<Image> — i.e. it must NOT be
+ * re-wrapped in `/api/avatar?url=` (double-proxying breaks the request).
+ *
+ * Direct srcs: data URIs, rooted local paths (`/api/avatar?...`, `/icons/...`),
+ * and our own Supabase Storage host (avatar mirror + user uploads).
+ */
+export function isDirectAvatarSrc(src: string): boolean {
+  if (src.startsWith('data:') || src.startsWith('/')) return true
+  try {
+    const host = new URL(src).hostname.toLowerCase()
+    const ownHost = new URL(
+      process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://invalid.local'
+    ).hostname.toLowerCase()
+    return host === ownHost
+  } catch (_err) {
+    /* invalid URL — let the proxy reject it */
+    return false
+  }
+}
+
+/**
  * Get exchange platform logo URL for traders without a profile avatar.
  * Used by compute-leaderboard as fallback instead of identicon SVGs.
  * Returns an absolute path to the local logo file in /public/icons/exchanges/.

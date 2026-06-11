@@ -7,6 +7,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { money } from '@/lib/utils/money'
+import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import { projectBoardExtras } from './board-extras'
 import type { ServingCurrency, TraderFirstScreen } from './types'
 
@@ -48,13 +49,16 @@ export async function getFirstScreen(
 
   const sourceCurrency = asCurrency(d.currency)
   const rawEntries = Array.isArray(d.entries) ? (d.entries as RpcEntry[]) : []
+  const avatarMirrorUrl = typeof d.avatarMirrorUrl === 'string' ? d.avatarMirrorUrl : null
+  const avatarOriginUrl = typeof d.avatarOriginUrl === 'string' ? d.avatarOriginUrl : null
 
   return {
     source: d.source,
     exchangeTraderId: d.exchangeTraderId,
     nickname: typeof d.nickname === 'string' ? d.nickname : null,
-    avatarMirrorUrl: typeof d.avatarMirrorUrl === 'string' ? d.avatarMirrorUrl : null,
-    avatarOriginUrl: typeof d.avatarOriginUrl === 'string' ? d.avatarOriginUrl : null,
+    avatarMirrorUrl,
+    avatarOriginUrl,
+    avatarSrc: getTraderAvatarSrc({ avatarMirrorUrl, avatarOriginUrl }),
     walletAddress: typeof d.walletAddress === 'string' ? d.walletAddress : null,
     traderKind: d.traderKind === 'bot' ? 'bot' : 'human',
     botStrategy:

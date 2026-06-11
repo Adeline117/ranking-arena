@@ -7,6 +7,7 @@ import { Box, Text } from '../base'
 import {
   getAvatarGradient,
   getAvatarInitial,
+  isDirectAvatarSrc,
   isWalletAddress,
   generateBlockieSvg,
 } from '@/lib/utils/avatar'
@@ -101,7 +102,7 @@ export function TraderHeaderAvatar({
         {effectiveAvatarUrl && !errored ? (
           <Image
             src={
-              effectiveAvatarUrl.startsWith('data:')
+              isDirectAvatarSrc(effectiveAvatarUrl)
                 ? effectiveAvatarUrl
                 : `/api/avatar?url=${encodeURIComponent(effectiveAvatarUrl)}`
             }

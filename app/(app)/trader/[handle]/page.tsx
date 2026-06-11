@@ -13,6 +13,7 @@ import { getDataMode } from '@/lib/constants/serving-cutover'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getFirstScreen } from '@/lib/data/serving/first-screen'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
+import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
 import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -480,11 +481,14 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
     const servingTraderData: UnregisteredTraderData = {
       handle: firstScreen?.nickname ?? servingResolved.nickname ?? decodedHandle,
+      // Spec §1.4 avatar chain: mirror direct → proxied origin → null
+      // (null → client renders gradient + initial fallback).
       avatar_url:
-        firstScreen?.avatarMirrorUrl ??
-        firstScreen?.avatarOriginUrl ??
-        servingResolved.avatarMirrorUrl ??
-        servingResolved.avatarOriginUrl,
+        firstScreen?.avatarSrc ??
+        getTraderAvatarSrc({
+          avatarMirrorUrl: servingResolved.avatarMirrorUrl,
+          avatarOriginUrl: servingResolved.avatarOriginUrl,
+        }),
       source: servingResolved.source,
       source_trader_id: servingResolved.exchangeTraderId,
       rank: best?.rank ?? null,
