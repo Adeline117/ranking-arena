@@ -80,13 +80,21 @@ describe('parseMexcLeaderboardPage', () => {
       botStrategy: 'ai',
       headlineRoi: 1, // roi 0.01 fraction
     })
-    // traderType='AI' rows flagged bot even without roster membership
+    // AI-tab rows are bot even WITHOUT roster membership: the live roster
+    // (traders/ai) only lists enabled agents while aiDetail returns the
+    // full competition set (16 vs 10 divergence observed 2026-06-11).
     const inline = parseMexcLeaderboardPage(
       { aiDetail: fixture('ai-detail.json'), aiUids: [] },
       ctx
     )
-    const pulse = inline.rows.find((r) => r.exchangeTraderId === '25052940')
-    expect(pulse?.traderKind).toBe('bot')
+    expect(inline.rows.length).toBe(16)
+    expect(inline.rows.every((r) => r.traderKind === 'bot' && r.botStrategy === 'ai')).toBe(true)
+  })
+
+  it('roster marking never leaks into main-board rows of other traders', () => {
+    // main-list shape keeps per-row signals only (roster uids + traderType)
+    const page = parseMexcLeaderboardPage({ list: fixture('leaderboard-p1.json'), aiUids: [] }, ctx)
+    expect(page.rows.every((r) => r.traderKind === 'human')).toBe(true)
   })
 
   it('handles empty/malformed payloads', () => {

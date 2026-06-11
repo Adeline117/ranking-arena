@@ -77,11 +77,12 @@ interface LeaderboardComposite {
 function cardRow(
   item: Dict,
   positionalRank: number,
-  aiUids: ReadonlySet<string>
+  aiUids: ReadonlySet<string>,
+  forceAi: boolean
 ): ParsedLeaderboardRow | null {
   const uid = item.uid
   if (!uid) return null
-  const isAi = aiUids.has(String(uid)) || item.traderType === 'AI'
+  const isAi = forceAi || aiUids.has(String(uid)) || item.traderType === 'AI'
   return {
     exchangeTraderId: String(uid),
     // Positional in-page rank; re-anchored across pages by the caller.
@@ -115,7 +116,13 @@ export function parseMexcLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
 
   let items: Dict[] = []
   let reportedTotal: number | null = null
-  if (composite.aiDetail !== undefined) {
+  // Rows from the AI-tab page are bot/ai UNCONDITIONALLY: aiDetail returns
+  // the full competition set while the traders/ai roster only lists the
+  // currently-enabled agents (live divergence observed 2026-06-11 — 16
+  // aiDetail rows vs 10 roster uids). The roster only widens marking for
+  // main-board rows.
+  const forceAi = composite.aiDetail !== undefined
+  if (forceAi) {
     const d = data(composite.aiDetail)
     items = Array.isArray(d?.traders) ? (d.traders as Dict[]) : []
   } else {
@@ -126,7 +133,7 @@ export function parseMexcLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
 
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < items.length; i++) {
-    const row = cardRow(items[i], i + 1, aiUids)
+    const row = cardRow(items[i], i + 1, aiUids, forceAi)
     if (row) rows.push(row)
   }
   return { rows, reportedTotal }
