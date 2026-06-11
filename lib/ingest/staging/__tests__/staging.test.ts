@@ -75,6 +75,13 @@ describe('count-check', () => {
     expect(v.baselineUsed).toBeNull()
   })
 
+  it('bootstrap tolerance (±30%) accepts survey-count drift, rejects garbage', () => {
+    // bitget_futures 30d real case: 1536 vs stale survey 1860 = 17.4% drift
+    expect(evaluateCount(1536, 1860, 30).passed).toBe(true)
+    // truly degenerate crawl still gated even at bootstrap tolerance
+    expect(evaluateCount(50, 1860, 30).passed).toBe(false)
+  })
+
   it('records baselineUsed and deviation for auditability', () => {
     const v = evaluateCount(2000, 1860)
     expect(v.baselineUsed).toBe(1860)

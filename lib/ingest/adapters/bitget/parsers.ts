@@ -44,8 +44,22 @@ function pct(item: Dict, pctKey: string, decimalKeys: string[]): number | null {
 
 function listOf(payload: unknown): Dict[] {
   const data = ((payload as Dict)?.data ?? {}) as Dict
-  const list = data.list ?? data.traderList ?? data.rows ?? []
+  // UTA traderView puts the board in data.rows; legacy shapes use list/traderList.
+  const list = data.rows ?? data.list ?? data.traderList ?? []
   return Array.isArray(list) ? (list as Dict[]) : []
+}
+
+/** UTA itemVoList → metric map: [{showColumnCode, comparedValue}, ...]. */
+function utaColumns(item: Dict): Record<string, number | null> {
+  const out: Record<string, number | null> = {}
+  const cols = item.itemVoList
+  if (Array.isArray(cols)) {
+    for (const col of cols as Dict[]) {
+      const code = col.showColumnCode
+      if (typeof code === 'string') out[code] = num(col.comparedValue)
+    }
+  }
+  return out
 }
 
 export function parseBitgetLeaderboardPage(
@@ -53,27 +67,34 @@ export function parseBitgetLeaderboardPage(
   _ctx: ParseCtx
 ): ParsedLeaderboardPage {
   const data = ((payload as Dict)?.data ?? {}) as Dict
-  const reportedTotal = int(data.total)
+  // UTA: data.totals is the PAGE row count and nextFlag drives pagination —
+  // there is no global total, so reportedTotal stays null for that shape.
+  const reportedTotal = data.nextFlag === undefined ? int(data.total) : null
   const items = listOf(payload)
 
   const rows: ParsedLeaderboardRow[] = []
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
-    const id = item.traderId ?? item.traderUid
+    // traderUid = the trader identity (UTA); portfolioId stays in raw.
+    const id = item.traderUid ?? item.traderId
     if (!id) continue
+    const cols = utaColumns(item)
     rows.push({
       exchangeTraderId: String(id),
-      // The API returns rows in requested sort order; rank is positional and
-      // re-anchored across pages by the caller (pageOffset in raw).
+      // Sort order is the rank; re-anchored across pages by the caller.
       rank: int(item.rank) ?? i + 1,
-      nickname: (item.traderName as string) ?? (item.traderNickName as string) ?? null,
-      avatarUrlOrigin: (item.headUrl as string) ?? (item.headPic as string) ?? null,
+      nickname:
+        (item.displayName as string) ??
+        (item.traderName as string) ??
+        (item.traderNickName as string) ??
+        null,
+      avatarUrlOrigin: (item.headPic as string) ?? (item.headUrl as string) ?? null,
       walletAddress: null,
       traderKind: 'human',
       botStrategy: null,
-      headlineRoi: pct(item, 'roi', ['profitRate', 'returnRate']),
-      headlinePnl: num(item.profit ?? item.totalProfit),
-      headlineWinRate: pct(item, 'winRate', ['winningRate']),
+      headlineRoi: cols.profit_rate ?? pct(item, 'roi', ['profitRate', 'returnRate']),
+      headlinePnl: cols.total_income ?? num(item.profit ?? item.totalProfit),
+      headlineWinRate: cols.winning_rate ?? pct(item, 'winRate', ['winningRate']),
       raw: item,
     })
   }

@@ -20,7 +20,13 @@ import type {
   SourceRow,
 } from '../core/types'
 import type { RejectedRow } from '../staging/validate'
-import { evaluateCount, getCountBaseline, type CountVerdict } from '../staging/count-check'
+import {
+  BOOTSTRAP_DEVIATION_PCT,
+  ROLLING_DEVIATION_PCT,
+  evaluateCount,
+  getCountBaseline,
+  type CountVerdict,
+} from '../staging/count-check'
 
 export interface PublishSnapshotInput {
   src: SourceRow
@@ -109,8 +115,12 @@ export async function publishLeaderboardSnapshot(
   input: PublishSnapshotInput
 ): Promise<PublishSnapshotResult> {
   const { src, timeframe, rows, rejects, rawObjectId } = input
-  const baseline = await getCountBaseline(src.id, timeframe, src.expected_count)
-  const verdict = evaluateCount(rows.length, baseline)
+  const { baseline, isBootstrap } = await getCountBaseline(src.id, timeframe, src.expected_count)
+  const verdict = evaluateCount(
+    rows.length,
+    baseline,
+    isBootstrap ? BOOTSTRAP_DEVIATION_PCT : ROLLING_DEVIATION_PCT
+  )
 
   const client = await getIngestPool().connect()
   try {
