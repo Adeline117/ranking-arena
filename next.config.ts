@@ -699,7 +699,7 @@ const nextConfig = {
       // /rankings/bots → /?exchange=bots, making the real /rankings/bots and
       // /rankings/tokens pages unreachable. Negative lookahead fixes it.
       {
-        source: '/rankings/:exchange((?!bots|tokens|traders)[^/]+)',
+        source: '/rankings/:exchange((?!bots|tokens|traders|exchanges)[^/]+)',
         destination: '/?ex=:exchange',
         permanent: false,
       },
