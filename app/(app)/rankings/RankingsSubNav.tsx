@@ -9,6 +9,7 @@ const TAB_KEYS = [
   { href: '/', key: 'rankingsSubNavTraders' as const },
   { href: '/rankings/tokens', key: 'rankingsSubNavTokens' as const },
   { href: '/rankings/bots', key: 'rankingsSubNavBots' as const },
+  { href: '/rankings/exchanges', key: 'rankingsSubNavExchanges' as const },
 ]
 
 export default function RankingsSubNav() {
@@ -25,9 +26,15 @@ export default function RankingsSubNav() {
       }}
     >
       {TAB_KEYS.map((tab) => {
-        const isActive = tab.href === '/'
-          ? pathname === '/' || pathname === '/rankings' || (pathname.startsWith('/rankings/') && !pathname.startsWith('/rankings/tokens') && !pathname.startsWith('/rankings/bots'))
-          : pathname.startsWith(tab.href)
+        const isActive =
+          tab.href === '/'
+            ? pathname === '/' ||
+              pathname === '/rankings' ||
+              (pathname.startsWith('/rankings/') &&
+                !pathname.startsWith('/rankings/tokens') &&
+                !pathname.startsWith('/rankings/bots') &&
+                !pathname.startsWith('/rankings/exchanges'))
+            : pathname.startsWith(tab.href)
         return (
           <Link
             key={tab.href}
