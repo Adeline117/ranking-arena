@@ -15,7 +15,6 @@ import type {
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
-  ParsedPosition,
   RankingTimeframe,
   RawBundle,
   RawPage,
@@ -25,7 +24,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
-import { parseBitgetLeaderboardPage, parseBitgetProfile } from './parsers'
+import { parseBitgetLeaderboardPage, parseBitgetPositions, parseBitgetProfile } from './parsers'
 
 const BASE = 'https://www.bitget.com/v1/trigger/trace/public'
 
@@ -94,10 +93,12 @@ const bitgetAdapter: SourceAdapter = {
   slug: 'bitget',
   capabilities: {
     profile: true,
-    positions: false, // wired in the positions commit
+    positions: true, // POST public/traderPosition (1h-delayed for non-copiers)
     positionHistory: false,
     orders: false,
-    transfers: false, // Bitget balance history — wired in the histories commit
+    // 余额历史 no longer exists in the UTA profile UI (2026-06-11): all
+    // balance/transfer endpoint candidates demand an auth token (00005).
+    transfers: false,
     copiers: false,
   },
 
@@ -184,8 +185,22 @@ const bitgetAdapter: SourceAdapter = {
     }
   },
 
-  async getPositions(): Promise<RawBundle> {
-    throw new Error('[bitget] positions surface not implemented yet')
+  async getPositions(
+    session: FetchSession,
+    src: SourceRow,
+    exchangeTraderId: string
+  ): Promise<RawBundle> {
+    await warmSession(session, src)
+    const fetcher = pageFetcher(session)
+    const url = endpoint(src, 'positions', `${BASE}/traderPosition`)
+    const payload = await replayJson(session, fetcher, {
+      url,
+      method: 'POST',
+      headers: UTA_HEADERS,
+      body: { traderUid: exchangeTraderId },
+    })
+    const fetchedAt = new Date().toISOString()
+    return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
   },
 
   async *getHistory(
@@ -200,9 +215,7 @@ const bitgetAdapter: SourceAdapter = {
   parseLeaderboard: parseBitgetLeaderboardPage,
   parseProfile: parseBitgetProfile,
 
-  parsePositions(): ParsedPosition[] {
-    throw new Error('[bitget] positions parser not implemented yet')
-  },
+  parsePositions: parseBitgetPositions,
 
   parseHistory(_raw: unknown, kind: HistoryKind): ParsedHistoryRow[] {
     throw new Error(`[bitget] history parser ${kind} not implemented yet`)
