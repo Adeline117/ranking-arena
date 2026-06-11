@@ -49,3 +49,14 @@ export async function getSourceBySlug(slug: string): Promise<SourceRowWithCadenc
 export function nativeRankingTimeframes(src: SourceRow): Array<7 | 30 | 90> {
   return src.timeframes_native.filter((tf): tf is 7 | 30 | 90 => tf === 7 || tf === 30 || tf === 90)
 }
+
+/**
+ * TFs profile crawls must cover: native ∪ derived (spec §1.1-C). Derived
+ * boards (MEXC/BTCC 30/90) are synthesized FROM trader_stats rows, so
+ * Tier-B must crawl profiles for the derived TFs too — they are the
+ * derived boards' only substrate. Tier A still crawls native TFs only.
+ */
+export function profileTimeframes(src: SourceRow): Array<7 | 30 | 90> {
+  const wanted = new Set([...src.timeframes_native, ...src.timeframes_derived])
+  return ([7, 30, 90] as const).filter((tf) => wanted.has(tf))
+}
