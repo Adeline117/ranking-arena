@@ -18,17 +18,17 @@ interface PlatformSchedule {
 }
 
 const FETCH_SCHEDULES: PlatformSchedule[] = [
+  // RETIRED → arena-ingest-worker (ARENA_DATA_SPEC rebuild): bybit (→
+  // bybit_copytrade), bitget_futures, hyperliquid, mexc are fetched by the
+  // new unified pipeline. Re-adding them here would double-fetch.
   // Fast direct APIs — every 2h
   { platform: 'binance_futures', intervalMs: 2 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'binance_spot', intervalMs: 2 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'okx_futures', intervalMs: 2 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'okx_spot', intervalMs: 3 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'bybit', intervalMs: 3 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'bybit_spot', intervalMs: 3 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'bitget_futures', intervalMs: 3 * 3600_000, windows: ['7d', '30d', '90d'] },
 
   // DEX — every 4h
-  { platform: 'hyperliquid', intervalMs: 4 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'gmx', intervalMs: 4 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'gains', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'dydx', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
@@ -37,7 +37,6 @@ const FETCH_SCHEDULES: PlatformSchedule[] = [
   { platform: 'jupiter_perps', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
 
   // Medium CEX — every 4-6h
-  { platform: 'mexc', intervalMs: 4 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'htx_futures', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'bitfinex', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'coinex', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
@@ -110,7 +109,7 @@ export async function registerSchedules(): Promise<void> {
         {
           name: JOB.ENRICH_PLATFORM,
           data: { period, tier, limit: 200 },
-        },
+        }
       )
     }
   }
@@ -119,7 +118,7 @@ export async function registerSchedules(): Promise<void> {
   await queue.upsertJobScheduler(
     'meilisearch-sync',
     { every: 2 * 3600_000 }, // every 2h fallback
-    { name: JOB.SYNC_MEILISEARCH, data: {} },
+    { name: JOB.SYNC_MEILISEARCH, data: {} }
   )
 
   const enrichSchedules = 6 // 3 periods × 2 tiers
