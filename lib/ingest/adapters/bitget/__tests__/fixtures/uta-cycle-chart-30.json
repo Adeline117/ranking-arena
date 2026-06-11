@@ -1,0 +1,265 @@
+{
+  "code": "200",
+  "data": {
+    "cycleProfit": "7415.46",
+    "cycleProfitRate": "503183.61",
+    "pnlRows": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "0.00",
+          "dataTime": 1778601600000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1778688000000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1778774400000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1778860800000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1778947200000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779033600000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779120000000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779206400000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779292800000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779379200000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779465600000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779552000000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779638400000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779724800000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779811200000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779897600000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1779984000000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1780070400000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1780156800000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1780243200000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1780329600000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1780416000000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1780502400000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "3617.27",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "6605.76",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "6857.47",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "7417.43",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "7245.57",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "7415.46",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "roiRows": {
+      "chartDataTime": null,
+      "dataCycle": 30,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "0",
+          "dataTime": 1778601600000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1778688000000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1778774400000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1778860800000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1778947200000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779033600000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779120000000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779206400000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779292800000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779379200000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779465600000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779552000000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779638400000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779724800000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779811200000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779897600000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1779984000000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1780070400000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1780156800000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1780243200000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1780329600000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1780416000000
+        },
+        {
+          "amount": "0",
+          "dataTime": 1780502400000
+        },
+        {
+          "amount": "39.28",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "90.39",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "1186.22",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "3453.52",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "176109.54",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "167595.25",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "503183.61",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "symbolDistributeDetail": null
+  },
+  "params": []
+}

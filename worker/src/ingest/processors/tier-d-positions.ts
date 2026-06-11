@@ -19,6 +19,7 @@ import type { TierJobData } from '../queues'
 interface TargetTrader {
   id: number
   exchange_trader_id: string
+  meta: Record<string, unknown> | null
 }
 
 /**
@@ -34,7 +35,7 @@ async function getPositionTargets(sourceId: number, topN: number): Promise<Targe
         WHERE source_id = $1 AND count_check_passed
         ORDER BY timeframe, scraped_at DESC
      )
-     SELECT DISTINCT t.id, t.exchange_trader_id
+     SELECT DISTINCT t.id, t.exchange_trader_id, t.meta
        FROM latest l
        JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
        JOIN arena.traders t ON t.id = e.trader_id
@@ -83,7 +84,12 @@ export async function processTierD(job: Job<TierJobData>): Promise<TierDResult> 
     for (const trader of targets) {
       try {
         const scrapedAt = new Date()
-        const bundle = await adapter.getPositions(session, src, trader.exchange_trader_id)
+        const bundle = await adapter.getPositions(
+          session,
+          src,
+          trader.exchange_trader_id,
+          trader.meta
+        )
 
         await writeRawObject({
           sourceId: src.id,

@@ -75,16 +75,18 @@ async function upsertTraders(
   const { rows: out } = await client.query<{ id: number; exchange_trader_id: string }>(
     `INSERT INTO arena.traders
        (source_id, exchange_trader_id, nickname, avatar_url_origin, wallet_address,
-        trader_kind, bot_strategy, last_seen_at)
+        trader_kind, bot_strategy, meta, last_seen_at)
      SELECT $1, r.exchange_trader_id, r.nickname, r.avatar_url_origin, r.wallet_address,
-            r.trader_kind, r.bot_strategy, now()
+            r.trader_kind, r.bot_strategy, COALESCE(r.trader_meta, '{}'::jsonb), now()
        FROM jsonb_to_recordset($2::jsonb) AS r(
          exchange_trader_id text, nickname text, avatar_url_origin text,
-         wallet_address text, trader_kind text, bot_strategy text)
+         wallet_address text, trader_kind text, bot_strategy text, trader_meta jsonb)
      ON CONFLICT (source_id, exchange_trader_id) DO UPDATE SET
        nickname          = COALESCE(EXCLUDED.nickname, arena.traders.nickname),
        avatar_url_origin = COALESCE(EXCLUDED.avatar_url_origin, arena.traders.avatar_url_origin),
        wallet_address    = COALESCE(EXCLUDED.wallet_address, arena.traders.wallet_address),
+       -- merge, never erase: adapter routing facts (e.g. UTA portfolio_id)
+       meta              = arena.traders.meta || EXCLUDED.meta,
        last_seen_at      = now()
      RETURNING id, exchange_trader_id`,
     [
@@ -97,6 +99,7 @@ async function upsertTraders(
           wallet_address: r.walletAddress,
           trader_kind: r.traderKind,
           bot_strategy: r.botStrategy,
+          trader_meta: r.traderMeta ?? null,
         }))
       ),
     ]

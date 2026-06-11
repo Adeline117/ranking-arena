@@ -20,6 +20,7 @@ import type { TierJobData } from '../queues'
 interface TopTrader {
   id: number
   exchange_trader_id: string
+  meta: Record<string, unknown> | null
 }
 
 /**
@@ -37,7 +38,7 @@ async function getTopTraders(sourceId: number, topN: number): Promise<TopTrader[
         WHERE source_id = $1 AND count_check_passed
         ORDER BY timeframe, scraped_at DESC
      )
-     SELECT DISTINCT t.id, t.exchange_trader_id
+     SELECT DISTINCT t.id, t.exchange_trader_id, t.meta
        FROM latest l
        JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
        JOIN arena.traders t ON t.id = e.trader_id
@@ -98,7 +99,8 @@ async function crawlTraderHistories(
       src,
       trader.exchange_trader_id,
       kind,
-      cursor
+      cursor,
+      trader.meta
     )) {
       rawPages.push(page)
       rows.push(...adapter.parseHistory(page.payload, kind, ctx))
@@ -162,7 +164,8 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
             session,
             src,
             trader.exchange_trader_id,
-            timeframe
+            timeframe,
+            trader.meta
           )
 
           await writeRawObject({

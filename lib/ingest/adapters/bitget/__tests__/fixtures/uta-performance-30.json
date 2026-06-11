@@ -1,0 +1,15 @@
+{
+  "code": "200",
+  "data": {
+    "followProfit": "1204.17",
+    "lastOrderTime": 1781155669195,
+    "maxDrawDown": "0.0483191240798688",
+    "profit": "7415.46",
+    "profitTrades": 23,
+    "roi": "503183.61",
+    "totalEquity": "****",
+    "totalTrades": 38,
+    "winRate": "0.6052"
+  },
+  "params": []
+}

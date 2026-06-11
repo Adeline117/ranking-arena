@@ -41,16 +41,25 @@ export interface SourceAdapter {
   ): AsyncIterable<RawPage>
 
   /** Tier B/C: the main profile surface (stats blocks + charts) for one TF.
-   *  Must be a small number of replayed JSON requests (spec §2.4: 1-3s). */
+   *  Must be a small number of replayed JSON requests (spec §2.4: 1-3s).
+   *  `traderMeta` = arena.traders.meta — adapters that route profile calls
+   *  by an id other than exchange_trader_id (e.g. Bitget UTA portfolio_id)
+   *  read it from here; omitting it degrades gracefully. */
   getProfile(
     session: FetchSession,
     src: SourceRow,
     exchangeTraderId: string,
-    timeframe: Timeframe
+    timeframe: Timeframe,
+    traderMeta?: Record<string, unknown> | null
   ): Promise<RawBundle>
 
   /** Tier D: current open positions (snapshot semantics). */
-  getPositions(session: FetchSession, src: SourceRow, exchangeTraderId: string): Promise<RawBundle>
+  getPositions(
+    session: FetchSession,
+    src: SourceRow,
+    exchangeTraderId: string,
+    traderMeta?: Record<string, unknown> | null
+  ): Promise<RawBundle>
 
   /** Append-only histories: yield newest→older pages; the caller stops
    *  consuming once rows overlap the stored cursor (spec §2.3). */
@@ -59,7 +68,8 @@ export interface SourceAdapter {
     src: SourceRow,
     exchangeTraderId: string,
     kind: HistoryKind,
-    cursor: string | null
+    cursor: string | null,
+    traderMeta?: Record<string, unknown> | null
   ): AsyncIterable<RawPage>
 
   // ── Pure parsers ──

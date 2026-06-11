@@ -114,6 +114,10 @@ export interface ParsedLeaderboardRow {
   headlineRoi: number | null
   headlinePnl: number | null
   headlineWinRate: number | null
+  /** Durable per-trader routing facts merged into arena.traders.meta —
+   *  e.g. Bitget UTA portfolio_id, which profile endpoints are keyed by.
+   *  Distinct from `raw` (entry-scoped, never queried for fetch routing). */
+  traderMeta?: Record<string, unknown> | null
   /** Board-card extras (sparkline, MDD, copier count, AUM, style tags...) —
    *  kept verbatim; never thrown away (spec §3 raw JSONB note). */
   raw: Record<string, unknown>

@@ -260,3 +260,51 @@ describe('parseBitgetHistory (live-captured fixtures, 2026-06-11)', () => {
     expect(parseBitgetHistory({ data: {} }, 'copiers', ctx)).toHaveLength(0)
   })
 })
+
+describe('parseBitgetProfile UTA branch (live-captured fixtures, 2026-06-11)', () => {
+  it('parses uta details + performance + chart into a stats block', () => {
+    const raw = {
+      utaDetails: fixture('uta-details.json'),
+      utaPerformance: fixture('uta-performance-30.json'),
+      utaChart: fixture('uta-cycle-chart-30.json'),
+      timeframe: 30,
+    }
+    const profile = parseBitgetProfile(raw, ctx)
+    expect(profile.nickname).toBe('AI-HUB')
+    expect(profile.stats).toHaveLength(1)
+    expect(profile.stats[0]).toMatchObject({
+      timeframe: 30,
+      roi: 503183.61, // perf.roi is already percent
+      pnl: 7415.46,
+      winPositions: 23,
+      totalPositions: 38,
+      copierPnl: 1204.17,
+      copierCount: 70,
+      aum: 1400.02,
+      profitShareRate: 10,
+      sharpe: null,
+    })
+    expect(profile.stats[0].winRate).toBeCloseTo(60.52, 6) // DECIMAL 0.6052 → ×100
+    expect(profile.stats[0].mdd).toBeCloseTo(4.8319, 3) // decimal 0.0483 → percent
+    expect(profile.stats[0].extras).toMatchObject({ bitget_trader_type: 2, trading_days: 7 })
+    const roi = profile.series.find((s) => s.metric === 'roi')
+    const pnl = profile.series.find((s) => s.metric === 'pnl')
+    expect(roi?.points).toHaveLength(30)
+    expect(pnl?.points).toHaveLength(30)
+  })
+
+  it('tags UTA board rows with portfolio_id routing meta', () => {
+    const payload = {
+      data: {
+        nextFlag: true,
+        rows: [
+          { traderUid: 'u1', type: 2, portfolioId: 'p123', displayName: 'X', itemVoList: [] },
+          { traderUid: 'u2', type: 1, displayName: 'Y', itemVoList: [] },
+        ],
+      },
+    }
+    const page = parseBitgetLeaderboardPage(payload, ctx)
+    expect(page.rows[0].traderMeta).toEqual({ bitget_trader_type: 2, portfolio_id: 'p123' })
+    expect(page.rows[1].traderMeta).toEqual({ bitget_trader_type: 1 })
+  })
+})
