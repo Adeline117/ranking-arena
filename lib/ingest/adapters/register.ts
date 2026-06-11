@@ -10,5 +10,6 @@ import './bitget/bots'
 
 // Phase 1
 import './bybit-mt5'
+import './mexc'
 
 export {}
