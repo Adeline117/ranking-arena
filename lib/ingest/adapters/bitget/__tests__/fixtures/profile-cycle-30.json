@@ -1,0 +1,633 @@
+{
+  "code": "00000",
+  "data": {
+    "cycleFollowNetProfitKlineDTOs": [],
+    "cycleNetProfitKlineDTOs": [],
+    "followNetProfitKlineDTO": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "124.04",
+          "dataTime": 1778601600000
+        },
+        {
+          "amount": "332.56",
+          "dataTime": 1778688000000
+        },
+        {
+          "amount": "68.05",
+          "dataTime": 1778774400000
+        },
+        {
+          "amount": "-18.26",
+          "dataTime": 1778860800000
+        },
+        {
+          "amount": "68.70",
+          "dataTime": 1778947200000
+        },
+        {
+          "amount": "46.49",
+          "dataTime": 1779033600000
+        },
+        {
+          "amount": "29.09",
+          "dataTime": 1779120000000
+        },
+        {
+          "amount": "-960.00",
+          "dataTime": 1779206400000
+        },
+        {
+          "amount": "-242.96",
+          "dataTime": 1779292800000
+        },
+        {
+          "amount": "-221.53",
+          "dataTime": 1779379200000
+        },
+        {
+          "amount": "-197.82",
+          "dataTime": 1779465600000
+        },
+        {
+          "amount": "-681.90",
+          "dataTime": 1779552000000
+        },
+        {
+          "amount": "-56.81",
+          "dataTime": 1779638400000
+        },
+        {
+          "amount": "-421.72",
+          "dataTime": 1779724800000
+        },
+        {
+          "amount": "-780.75",
+          "dataTime": 1779811200000
+        },
+        {
+          "amount": "125.84",
+          "dataTime": 1779897600000
+        },
+        {
+          "amount": "-95.03",
+          "dataTime": 1779984000000
+        },
+        {
+          "amount": "-1341.51",
+          "dataTime": 1780070400000
+        },
+        {
+          "amount": "-40.86",
+          "dataTime": 1780156800000
+        },
+        {
+          "amount": "160.26",
+          "dataTime": 1780243200000
+        },
+        {
+          "amount": "601.25",
+          "dataTime": 1780329600000
+        },
+        {
+          "amount": "1024.60",
+          "dataTime": 1780416000000
+        },
+        {
+          "amount": "-39610.48",
+          "dataTime": 1780502400000
+        },
+        {
+          "amount": "-13243.86",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "-2302.25",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "-10600.80",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "-5725.57",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "-1964.39",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "185.54",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "-5851.46",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "netProfitKlineDTO": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "0.51",
+          "dataTime": 1778601600000
+        },
+        {
+          "amount": "1.22",
+          "dataTime": 1778688000000
+        },
+        {
+          "amount": "0.26",
+          "dataTime": 1778774400000
+        },
+        {
+          "amount": "0.00",
+          "dataTime": 1778860800000
+        },
+        {
+          "amount": "0.26",
+          "dataTime": 1778947200000
+        },
+        {
+          "amount": "0.21",
+          "dataTime": 1779033600000
+        },
+        {
+          "amount": "0.13",
+          "dataTime": 1779120000000
+        },
+        {
+          "amount": "-3.29",
+          "dataTime": 1779206400000
+        },
+        {
+          "amount": "-0.91",
+          "dataTime": 1779292800000
+        },
+        {
+          "amount": "-0.83",
+          "dataTime": 1779379200000
+        },
+        {
+          "amount": "-0.71",
+          "dataTime": 1779465600000
+        },
+        {
+          "amount": "-2.32",
+          "dataTime": 1779552000000
+        },
+        {
+          "amount": "-0.23",
+          "dataTime": 1779638400000
+        },
+        {
+          "amount": "-1.41",
+          "dataTime": 1779724800000
+        },
+        {
+          "amount": "-2.69",
+          "dataTime": 1779811200000
+        },
+        {
+          "amount": "0.49",
+          "dataTime": 1779897600000
+        },
+        {
+          "amount": "-0.14",
+          "dataTime": 1779984000000
+        },
+        {
+          "amount": "-4.72",
+          "dataTime": 1780070400000
+        },
+        {
+          "amount": "-0.32",
+          "dataTime": 1780156800000
+        },
+        {
+          "amount": "0.47",
+          "dataTime": 1780243200000
+        },
+        {
+          "amount": "2.03",
+          "dataTime": 1780329600000
+        },
+        {
+          "amount": "3.38",
+          "dataTime": 1780416000000
+        },
+        {
+          "amount": "-130.85",
+          "dataTime": 1780502400000
+        },
+        {
+          "amount": "-48.29",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "-11.32",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "-39.86",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "-21.00",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "-6.53",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "0.76",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "-19.26",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "pageScoreDTO": {
+      "avgProfitFactor": "0.55",
+      "avgWinLossRate": "0.46",
+      "avgWinRate": "50.00",
+      "followUserDetail": {
+        "averageLoss": "209.75",
+        "averageWin": "31.81",
+        "loss": 478,
+        "profitFactor": "0.21",
+        "profitRate": "0.15",
+        "totalLoss": "-100258.62",
+        "totalProfit": "20613.53",
+        "win": 648,
+        "winRate": "57.55"
+      },
+      "profitFactorDenominator": "5.00",
+      "profitRateDenominator": "5.00",
+      "showRankingDetail": {
+        "isShowRanking": true,
+        "ranking": 2763,
+        "score": "0.08",
+        "scoreRate": 1,
+        "totalScore": 100,
+        "totalTraderCount": 150000
+      },
+      "traderUserDetail": {
+        "averageLoss": "1.89",
+        "averageWin": "0.25",
+        "loss": 180,
+        "profitFactor": "0.20",
+        "profitRate": "0.13",
+        "totalLoss": "-339.80",
+        "totalProfit": "66.73",
+        "win": 267,
+        "winRate": "59.73"
+      },
+      "winRateDenominator": "100.00"
+    },
+    "pnlRows": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "0.51",
+          "dataTime": 1778601600000
+        },
+        {
+          "amount": "1.72",
+          "dataTime": 1778688000000
+        },
+        {
+          "amount": "1.98",
+          "dataTime": 1778774400000
+        },
+        {
+          "amount": "1.98",
+          "dataTime": 1778860800000
+        },
+        {
+          "amount": "2.24",
+          "dataTime": 1778947200000
+        },
+        {
+          "amount": "2.46",
+          "dataTime": 1779033600000
+        },
+        {
+          "amount": "2.58",
+          "dataTime": 1779120000000
+        },
+        {
+          "amount": "-0.70",
+          "dataTime": 1779206400000
+        },
+        {
+          "amount": "-1.61",
+          "dataTime": 1779292800000
+        },
+        {
+          "amount": "-2.44",
+          "dataTime": 1779379200000
+        },
+        {
+          "amount": "-3.14",
+          "dataTime": 1779465600000
+        },
+        {
+          "amount": "-5.47",
+          "dataTime": 1779552000000
+        },
+        {
+          "amount": "-5.69",
+          "dataTime": 1779638400000
+        },
+        {
+          "amount": "-7.11",
+          "dataTime": 1779724800000
+        },
+        {
+          "amount": "-9.80",
+          "dataTime": 1779811200000
+        },
+        {
+          "amount": "-9.31",
+          "dataTime": 1779897600000
+        },
+        {
+          "amount": "-9.45",
+          "dataTime": 1779984000000
+        },
+        {
+          "amount": "-14.18",
+          "dataTime": 1780070400000
+        },
+        {
+          "amount": "-14.50",
+          "dataTime": 1780156800000
+        },
+        {
+          "amount": "-14.03",
+          "dataTime": 1780243200000
+        },
+        {
+          "amount": "-12.00",
+          "dataTime": 1780329600000
+        },
+        {
+          "amount": "-8.62",
+          "dataTime": 1780416000000
+        },
+        {
+          "amount": "-139.47",
+          "dataTime": 1780502400000
+        },
+        {
+          "amount": "-187.76",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "-199.07",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "-238.94",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "-259.94",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "-266.47",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "-265.71",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "-284.97",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "positionTimeDTO": {
+      "averageHoldingTime": 225888,
+      "longestHoldingTime": 24035715,
+      "rows": [
+        {
+          "endTime": "6677",
+          "startTime": "0",
+          "totalPnl": "20.06",
+          "trades": 90
+        },
+        {
+          "endTime": "17715",
+          "startTime": "6737",
+          "totalPnl": "13.83",
+          "trades": 90
+        },
+        {
+          "endTime": "69989",
+          "startTime": "17849",
+          "totalPnl": "1.54",
+          "trades": 89
+        },
+        {
+          "endTime": "240242",
+          "startTime": "70946",
+          "totalPnl": "-44.89",
+          "trades": 89
+        },
+        {
+          "endTime": "0",
+          "startTime": "249212",
+          "totalPnl": "-275.61",
+          "trades": 89
+        }
+      ]
+    },
+    "roiRows": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "-0.25",
+          "dataTime": 1778601600000
+        },
+        {
+          "amount": "0.36",
+          "dataTime": 1778688000000
+        },
+        {
+          "amount": "-0.31",
+          "dataTime": 1778774400000
+        },
+        {
+          "amount": "-3.10",
+          "dataTime": 1778860800000
+        },
+        {
+          "amount": "-3.77",
+          "dataTime": 1778947200000
+        },
+        {
+          "amount": "-10.21",
+          "dataTime": 1779033600000
+        },
+        {
+          "amount": "-9.63",
+          "dataTime": 1779120000000
+        },
+        {
+          "amount": "-4.86",
+          "dataTime": 1779206400000
+        },
+        {
+          "amount": "-4.16",
+          "dataTime": 1779292800000
+        },
+        {
+          "amount": "-4.76",
+          "dataTime": 1779379200000
+        },
+        {
+          "amount": "-10.26",
+          "dataTime": 1779465600000
+        },
+        {
+          "amount": "-6.18",
+          "dataTime": 1779552000000
+        },
+        {
+          "amount": "-3.10",
+          "dataTime": 1779638400000
+        },
+        {
+          "amount": "-6.91",
+          "dataTime": 1779724800000
+        },
+        {
+          "amount": "-8.42",
+          "dataTime": 1779811200000
+        },
+        {
+          "amount": "-17.46",
+          "dataTime": 1779897600000
+        },
+        {
+          "amount": "-13.09",
+          "dataTime": 1779984000000
+        },
+        {
+          "amount": "-12.83",
+          "dataTime": 1780070400000
+        },
+        {
+          "amount": "-14.33",
+          "dataTime": 1780156800000
+        },
+        {
+          "amount": "-22.03",
+          "dataTime": 1780243200000
+        },
+        {
+          "amount": "-34.64",
+          "dataTime": 1780329600000
+        },
+        {
+          "amount": "-40.23",
+          "dataTime": 1780416000000
+        },
+        {
+          "amount": "-51.70",
+          "dataTime": 1780502400000
+        },
+        {
+          "amount": "-59.41",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "-61.82",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "-59.92",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "-57.65",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "-58.80",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "-58.01",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "-57.48",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "statisticsDTO": {
+      "aum": "75085.31",
+      "distributeRatio": "10",
+      "largestLoss": "-14.06",
+      "largestProfit": "0.98",
+      "longShortRatio": {
+        "longOrder": "181",
+        "shortOrder": "266"
+      },
+      "lossTrades": 180,
+      "maxRetracement": "63.76",
+      "profit": "-284.97",
+      "profitRate": "-57.48",
+      "profitTrades": 267,
+      "totalFollowProfit": "-81591.52",
+      "totalFollowers": 4,
+      "totalTrades": 447,
+      "tradeFrequency": "15",
+      "winningRate": "59.73"
+    },
+    "symbolDistributeDetail": {
+      "totalAmount": 447,
+      "webSymbolDistributeVOs": [
+        {
+          "amount": "124",
+          "displayName": "BTCUSDT"
+        },
+        {
+          "amount": "1",
+          "displayName": "ETHUSDT"
+        },
+        {
+          "amount": "322",
+          "displayName": "SOLUSDT"
+        }
+      ]
+    }
+  },
+  "msg": "success",
+  "requestTime": "1781160566226",
+  "success": true
+}
