@@ -5028,6 +5028,27 @@ const ko = {
   tokenRankingNext: '다음',
   rankingsSubNavTokens: '토큰',
   rankingsSubNavBots: '봇',
+  rankingsSubNavExchanges: '거래소',
+
+  // Exchange Rankings (spec §6.1)
+  exchangeRankingsTitle: '거래소 랭킹',
+  exchangeRankingsSubtitle:
+    '어느 거래소의 카피 트레이더가 실제로 수익을 내는가 — 실시간 리더보드 데이터로 계산',
+  exchangeRankingsColExchange: '거래소',
+  exchangeRankingsColTraders: '랭크인 트레이더',
+  exchangeRankingsColMedianRoi: '중앙값 ROI',
+  exchangeRankingsColTopDecileRoi: '상위 10% ROI',
+  exchangeRankingsColProfitable: '수익 비율',
+  exchangeRankingsColCopierPnl: '카피 손익',
+  exchangeRankingsColBotShare: '봇 비율',
+  exchangeRankingsColAsOf: '데이터 기준',
+  exchangeRankingsEmpty: '이 기간의 거래소 데이터가 아직 없습니다. 잠시 후 다시 확인해 주세요.',
+  exchangeRankingsNote:
+    '각 거래소의 최신 검증된 리더보드 스냅샷으로 계산합니다. 카피 손익은 거래소 통화별로 집계하며, 통화 간 합산은 절대 하지 않습니다.',
+  exchangeRankingsProductSpot: '현물',
+  exchangeRankingsProductFutures: '선물',
+  exchangeRankingsProductCfd: 'CFD',
+  exchangeRankingsProductOnchain: '온체인',
 
   // Achievements
   achievementUnlocked: '업적 달성',

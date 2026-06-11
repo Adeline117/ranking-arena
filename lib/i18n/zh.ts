@@ -5045,6 +5045,26 @@ const zh = {
   tokenRankingNext: '下一页',
   rankingsSubNavTokens: '币种',
   rankingsSubNavBots: '机器人',
+  rankingsSubNavExchanges: '交易所',
+
+  // Exchange Rankings (spec §6.1)
+  exchangeRankingsTitle: '交易所排行',
+  exchangeRankingsSubtitle: '哪家交易所的跟单交易员真的赚钱——基于实时榜单数据计算',
+  exchangeRankingsColExchange: '交易所',
+  exchangeRankingsColTraders: '上榜交易员',
+  exchangeRankingsColMedianRoi: '中位 ROI',
+  exchangeRankingsColTopDecileRoi: '前 10% ROI',
+  exchangeRankingsColProfitable: '盈利占比',
+  exchangeRankingsColCopierPnl: '跟单盈亏',
+  exchangeRankingsColBotShare: '机器人占比',
+  exchangeRankingsColAsOf: '数据时间',
+  exchangeRankingsEmpty: '该周期暂无交易所数据，请稍后再来。',
+  exchangeRankingsNote:
+    '基于各交易所最新通过校验的榜单快照计算。跟单盈亏按交易所币种分别统计，绝不跨币种相加。',
+  exchangeRankingsProductSpot: '现货',
+  exchangeRankingsProductFutures: '合约',
+  exchangeRankingsProductCfd: 'CFD',
+  exchangeRankingsProductOnchain: '链上',
 
   // Achievements
   achievementUnlocked: '成就解锁',
