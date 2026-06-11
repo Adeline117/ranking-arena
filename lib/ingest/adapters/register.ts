@@ -12,5 +12,6 @@ import './bitget/bots'
 import './bybit-mt5'
 import './bybit-copytrade'
 import './mexc'
+import './hyperliquid'
 
 export {}
