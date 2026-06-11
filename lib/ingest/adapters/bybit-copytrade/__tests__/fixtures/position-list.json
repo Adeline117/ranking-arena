@@ -1,0 +1,55 @@
+{
+  "retCode": 0,
+  "retMsg": "success",
+  "result": {
+    "data": [
+      {
+        "symbol": "UNIUSDT",
+        "entryPrice": "5.67055827",
+        "sizeX": "30420000000",
+        "createdAtE3": "1698921955951",
+        "side": "Buy",
+        "leverageE2": "1000",
+        "isIsolated": false,
+        "transactTimeE3": "0",
+        "stopLossPrice": "",
+        "takeProfitPrice": "",
+        "takeProfitOrderId": "",
+        "stopLossOrderId": "",
+        "orderCostE8": "0",
+        "reCalcEntryPrice": "5.84431164",
+        "positionEntryPrice": "5.67055827",
+        "positionCycleVersion": "5",
+        "crossSeq": "327292653186",
+        "closeFreeQtyX": "0",
+        "minPositionCostE8": "7912348545",
+        "positionBalanceE8": "102839731018"
+      },
+      {
+        "symbol": "POLUSDT",
+        "entryPrice": "0.15994501",
+        "sizeX": "1144200000000",
+        "createdAtE3": "1725535246771",
+        "side": "Buy",
+        "leverageE2": "1000",
+        "isIsolated": false,
+        "transactTimeE3": "0",
+        "stopLossPrice": "",
+        "takeProfitPrice": "",
+        "takeProfitOrderId": "",
+        "stopLossOrderId": "",
+        "orderCostE8": "0",
+        "reCalcEntryPrice": "0.16069504",
+        "positionEntryPrice": "0.15994501",
+        "positionCycleVersion": "11",
+        "crossSeq": "266135496713",
+        "closeFreeQtyX": "0",
+        "minPositionCostE8": "8607759977",
+        "positionBalanceE8": "107186326772"
+      }
+    ],
+    "openTradeInfoProtection": 0
+  },
+  "retExtInfo": {},
+  "time": 1781212486591
+}

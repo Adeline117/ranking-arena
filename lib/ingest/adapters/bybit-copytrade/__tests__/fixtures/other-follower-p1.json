@@ -1,0 +1,161 @@
+{
+  "retCode": 0,
+  "retMsg": "success",
+  "result": {
+    "data": [
+      {
+        "nickName": "GoldenFaucet",
+        "cumYieldE8": "127296743908",
+        "cumYieldRateE4": "191",
+        "cumFollowCostE8": "6663439119288",
+        "cumFollowDays": "50",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "dsm**@***",
+        "cumYieldE8": "63148479328",
+        "cumYieldRateE4": "638",
+        "cumFollowCostE8": "988795561103",
+        "cumFollowDays": "42",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "evi**@***",
+        "cumYieldE8": "39486912702",
+        "cumYieldRateE4": "470",
+        "cumFollowCostE8": "839291560033",
+        "cumFollowDays": "50",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "nataBybit",
+        "cumYieldE8": "34520797568",
+        "cumYieldRateE4": "478",
+        "cumFollowCostE8": "720834428251",
+        "cumFollowDays": "69",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "Zoom73",
+        "cumYieldE8": "27222488874",
+        "cumYieldRateE4": "477",
+        "cumFollowCostE8": "570167154457",
+        "cumFollowDays": "117",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "hir**@***",
+        "cumYieldE8": "25622256038",
+        "cumYieldRateE4": "410",
+        "cumFollowCostE8": "623462294563",
+        "cumFollowDays": "101",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "did**@***",
+        "cumYieldE8": "25003139222",
+        "cumYieldRateE4": "576",
+        "cumFollowCostE8": "433745534869",
+        "cumFollowDays": "97",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "Subaru",
+        "cumYieldE8": "22003144847",
+        "cumYieldRateE4": "1613",
+        "cumFollowCostE8": "136372330223",
+        "cumFollowDays": "25",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "ann**@***",
+        "cumYieldE8": "21788683405",
+        "cumYieldRateE4": "344",
+        "cumFollowCostE8": "632113695349",
+        "cumFollowDays": "59",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "mal**@***",
+        "cumYieldE8": "12487054909",
+        "cumYieldRateE4": "83",
+        "cumFollowCostE8": "1503009121630",
+        "cumFollowDays": "856",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "kat**@***",
+        "cumYieldE8": "12196027932",
+        "cumYieldRateE4": "114",
+        "cumFollowCostE8": "1062963706203",
+        "cumFollowDays": "168",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "kuz**@***",
+        "cumYieldE8": "10532944914",
+        "cumYieldRateE4": "2487",
+        "cumFollowCostE8": "42341563647",
+        "cumFollowDays": "12",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "955**@***",
+        "cumYieldE8": "8704566136",
+        "cumYieldRateE4": "756",
+        "cumFollowCostE8": "115086680480",
+        "cumFollowDays": "75",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "Rolex",
+        "cumYieldE8": "8582707958",
+        "cumYieldRateE4": "620",
+        "cumFollowCostE8": "138341317984",
+        "cumFollowDays": "3",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "Superdomi",
+        "cumYieldE8": "8083125773",
+        "cumYieldRateE4": "508",
+        "cumFollowCostE8": "158983393379",
+        "cumFollowDays": "36",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "lyu**@***",
+        "cumYieldE8": "7728308232",
+        "cumYieldRateE4": "23",
+        "cumFollowCostE8": "3321935467698",
+        "cumFollowDays": "323",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "Stas11",
+        "cumYieldE8": "6651521625",
+        "cumYieldRateE4": "403",
+        "cumFollowCostE8": "164970087112",
+        "cumFollowDays": "43",
+        "coin": "UNKNOWN"
+      },
+      {
+        "nickName": "and**@***",
+        "cumYieldE8": "6365066108",
+        "cumYieldRateE4": "845",
+        "cumFollowCostE8": "75261812627",
+        "cumFollowDays": "18",
+        "coin": "UNKNOWN"
+      }
+    ],
+    "currentPage": "1",
+    "totalCount": "0",
+    "cursor": "KED4bUABNd",
+    "isFirstPage": true,
+    "hasPrev": false,
+    "hasNext": true,
+    "isLastPage": false
+  },
+  "retExtInfo": {},
+  "time": 1781212492800
+}

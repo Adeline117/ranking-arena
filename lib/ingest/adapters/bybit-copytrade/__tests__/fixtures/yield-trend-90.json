@@ -1,0 +1,3317 @@
+{
+  "retCode": 0,
+  "retMsg": "success",
+  "result": {
+    "metricList": [
+      {
+        "line": "cumResetRoi",
+        "showType": "percent",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "-222"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "-167"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "968"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "3176"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "1805"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "-489"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "-925"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "-578"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "-1206"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "-1300"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "-832"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "-910"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "-399"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "-1480"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "-2193"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "-2072"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "-2049"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "-2091"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "-2167"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "-2108"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "-2941"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "-3121"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "-3211"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "-3352"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "-3500"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "-2835"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "-3633"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "-3965"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "-3786"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "-3899"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "-4646"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "-3899"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "-4453"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "-3971"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "-3164"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "-3031"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "-3588"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "-4101"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "-3677"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "-3715"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "-3453"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "-3437"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "-3856"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "-3900"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "-3760"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "-3858"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "-4017"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "-4058"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "-3984"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "-3662"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "-3438"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "-3683"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "-3495"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "-3173"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "-2783"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "-3008"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "-1769"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "-1477"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "-141"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "-452"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "-1741"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "-2497"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "-2377"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "-3029"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "-3298"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "-3412"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "-3206"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "-3519"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "-2986"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "-3029"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "-2798"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "-2262"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "-2538"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "-2503"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "-3171"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "-3440"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "-3643"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "-3435"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "-3520"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "-3247"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "-2867"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "-2120"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "-1138"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "-1418"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "-1501"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "-1324"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "-1809"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "-1949"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "-2259"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "-2861"
+          }
+        ]
+      },
+      {
+        "line": "cumResetPnl",
+        "showType": "num",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "-2771022140"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "-2083269385"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "12064013957"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "39567956555"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "22496734922"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "-6097961960"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "-11524809572"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "-7205783636"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "-15030087647"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "-16207078699"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "-10371756468"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "-11348995871"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "-4978055939"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "-18450127629"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "-27321911220"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "-25823392327"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "-25531575691"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "-26056126269"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "-27007272704"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "-26269453064"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "-36645654093"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "-38884654548"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "-40013431829"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "-41766863441"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "-43606076910"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "-35321903978"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "-45264739993"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "-49400536674"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "-47173262815"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "-48586019853"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "-57890781477"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "-48582900028"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "-55488329785"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "-49482761790"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "-39427795701"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "-37770918531"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "-44701074283"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "-51096785602"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "-45815338011"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "-46286481162"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "-43027856005"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "-42830266914"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "-48048138828"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "-48591082015"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "-46847066867"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "-48065255608"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "-50049586511"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "-50559623365"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "-49639154611"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "-45624005661"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "-42837341639"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "-45891122110"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "-43544364952"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "-39533243806"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "-34679029902"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "-37483126303"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "-22047586790"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "-18407324681"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "-1764134751"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "-5641027044"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "-21695881835"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "-31117558928"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "-29621736857"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "-37737420357"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "-41088789951"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "-42511809291"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "-39951857282"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "-43850331284"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "-37204291473"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "-37736333915"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "-34868095136"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "-28185001586"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "-31627283419"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "-31191193959"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "-39513496543"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "-42865373591"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "-45388137916"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "-42797879822"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "-43862462305"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "-40462224006"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "-35719846459"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "-26420795556"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "-14181287723"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "-17665711118"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "-18704190984"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "-16503623339"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "-22548333704"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "-24281527780"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "-28146266902"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "-35653843912"
+          }
+        ]
+      },
+      {
+        "line": "yieldRate",
+        "showType": "percent",
+        "isCurve": false,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "-222"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "56"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "1154"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "2012"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "-1039"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "-1944"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "-458"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "382"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "-666"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "-107"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "538"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "-85"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "562"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "-1126"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "-835"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "154"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "29"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "-52"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "-96"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "75"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "-1055"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "-254"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "-131"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "-207"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "-222"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "1023"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "-1113"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "-521"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "296"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "-182"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "-1224"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "1395"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "-908"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "869"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "1338"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "194"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "-798"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "-800"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "718"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "-59"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "416"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "24"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "-638"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "-70"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "229"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "-156"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "-259"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "-68"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "124"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "535"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "352"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "-373"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "298"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "494"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "570"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "-311"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "1772"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "355"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "1567"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "-315"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "-1349"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "-915"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "160"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "-854"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "-385"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "-170"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "311"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "-460"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "823"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "-60"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "330"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "744"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "-357"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "46"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "-891"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "-394"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "-308"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "327"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "-130"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "421"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "563"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "1046"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "1246"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "-315"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "-97"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "207"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "-559"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "-169"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "-385"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "-778"
+          }
+        ]
+      }
+    ],
+    "metricListBot": [
+      {
+        "line": "cumResetRoi",
+        "showType": "percent",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "line": "cumResetPnl",
+        "showType": "num",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "line": "yieldRate",
+        "showType": "percent",
+        "isCurve": false,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "0"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "0"
+          }
+        ]
+      }
+    ],
+    "metricListAll": [
+      {
+        "line": "cumResetRoi",
+        "showType": "percent",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "-222"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "-167"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "968"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "3176"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "1805"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "-489"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "-925"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "-578"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "-1206"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "-1300"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "-832"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "-910"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "-399"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "-1480"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "-2193"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "-2072"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "-2049"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "-2091"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "-2167"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "-2108"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "-2941"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "-3121"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "-3211"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "-3352"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "-3500"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "-2835"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "-3633"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "-3965"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "-3786"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "-3899"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "-4646"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "-3899"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "-4453"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "-3971"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "-3164"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "-3031"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "-3588"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "-4101"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "-3677"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "-3715"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "-3453"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "-3437"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "-3856"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "-3900"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "-3760"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "-3858"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "-4017"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "-4058"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "-3984"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "-3662"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "-3438"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "-3683"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "-3495"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "-3173"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "-2783"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "-3008"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "-1769"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "-1477"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "-141"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "-452"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "-1741"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "-2497"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "-2377"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "-3029"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "-3298"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "-3412"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "-3206"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "-3519"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "-2986"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "-3029"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "-2798"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "-2262"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "-2538"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "-2503"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "-3171"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "-3440"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "-3643"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "-3435"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "-3520"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "-3247"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "-2867"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "-2120"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "-1138"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "-1418"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "-1501"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "-1324"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "-1809"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "-1949"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "-2259"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "-2861"
+          }
+        ]
+      },
+      {
+        "line": "cumResetPnl",
+        "showType": "num",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "-2771022140"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "-2083269385"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "12064013957"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "39567956555"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "22496734922"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "-6097961960"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "-11524809572"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "-7205783636"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "-15030087647"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "-16207078699"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "-10371756468"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "-11348995871"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "-4978055939"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "-18450127629"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "-27321911220"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "-25823392327"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "-25531575691"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "-26056126269"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "-27007272704"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "-26269453064"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "-36645654093"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "-38884654548"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "-40013431829"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "-41766863441"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "-43606076910"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "-35321903978"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "-45264739993"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "-49400536674"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "-47173262815"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "-48586019853"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "-57890781477"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "-48582900028"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "-55488329785"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "-49482761790"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "-39427795701"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "-37770918531"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "-44701074283"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "-51096785602"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "-45815338011"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "-46286481162"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "-43027856005"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "-42830266914"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "-48048138828"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "-48591082015"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "-46847066867"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "-48065255608"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "-50049586511"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "-50559623365"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "-49639154611"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "-45624005661"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "-42837341639"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "-45891122110"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "-43544364952"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "-39533243806"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "-34679029902"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "-37483126303"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "-22047586790"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "-18407324681"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "-1764134751"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "-5641027044"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "-21695881835"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "-31117558928"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "-29621736857"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "-37737420357"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "-41088789951"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "-42511809291"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "-39951857282"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "-43850331284"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "-37204291473"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "-37736333915"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "-34868095136"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "-28185001586"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "-31627283419"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "-31191193959"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "-39513496543"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "-42865373591"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "-45388137916"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "-42797879822"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "-43862462305"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "-40462224006"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "-35719846459"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "-26420795556"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "-14181287723"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "-17665711118"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "-18704190984"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "-16503623339"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "-22548333704"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "-24281527780"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "-28146266902"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "-35653843912"
+          }
+        ]
+      },
+      {
+        "line": "yieldRate",
+        "showType": "percent",
+        "isCurve": false,
+        "metricLineValue": [
+          {
+            "statisticDate": "1773360000000",
+            "value": "-222"
+          },
+          {
+            "statisticDate": "1773446400000",
+            "value": "56"
+          },
+          {
+            "statisticDate": "1773532800000",
+            "value": "1154"
+          },
+          {
+            "statisticDate": "1773619200000",
+            "value": "2012"
+          },
+          {
+            "statisticDate": "1773705600000",
+            "value": "-1039"
+          },
+          {
+            "statisticDate": "1773792000000",
+            "value": "-1944"
+          },
+          {
+            "statisticDate": "1773878400000",
+            "value": "-458"
+          },
+          {
+            "statisticDate": "1773964800000",
+            "value": "382"
+          },
+          {
+            "statisticDate": "1774051200000",
+            "value": "-666"
+          },
+          {
+            "statisticDate": "1774137600000",
+            "value": "-107"
+          },
+          {
+            "statisticDate": "1774224000000",
+            "value": "538"
+          },
+          {
+            "statisticDate": "1774310400000",
+            "value": "-85"
+          },
+          {
+            "statisticDate": "1774396800000",
+            "value": "562"
+          },
+          {
+            "statisticDate": "1774483200000",
+            "value": "-1126"
+          },
+          {
+            "statisticDate": "1774569600000",
+            "value": "-835"
+          },
+          {
+            "statisticDate": "1774656000000",
+            "value": "154"
+          },
+          {
+            "statisticDate": "1774742400000",
+            "value": "29"
+          },
+          {
+            "statisticDate": "1774828800000",
+            "value": "-52"
+          },
+          {
+            "statisticDate": "1774915200000",
+            "value": "-96"
+          },
+          {
+            "statisticDate": "1775001600000",
+            "value": "75"
+          },
+          {
+            "statisticDate": "1775088000000",
+            "value": "-1055"
+          },
+          {
+            "statisticDate": "1775174400000",
+            "value": "-254"
+          },
+          {
+            "statisticDate": "1775260800000",
+            "value": "-131"
+          },
+          {
+            "statisticDate": "1775347200000",
+            "value": "-207"
+          },
+          {
+            "statisticDate": "1775433600000",
+            "value": "-222"
+          },
+          {
+            "statisticDate": "1775520000000",
+            "value": "1023"
+          },
+          {
+            "statisticDate": "1775606400000",
+            "value": "-1113"
+          },
+          {
+            "statisticDate": "1775692800000",
+            "value": "-521"
+          },
+          {
+            "statisticDate": "1775779200000",
+            "value": "296"
+          },
+          {
+            "statisticDate": "1775865600000",
+            "value": "-182"
+          },
+          {
+            "statisticDate": "1775952000000",
+            "value": "-1224"
+          },
+          {
+            "statisticDate": "1776038400000",
+            "value": "1395"
+          },
+          {
+            "statisticDate": "1776124800000",
+            "value": "-908"
+          },
+          {
+            "statisticDate": "1776211200000",
+            "value": "869"
+          },
+          {
+            "statisticDate": "1776297600000",
+            "value": "1338"
+          },
+          {
+            "statisticDate": "1776384000000",
+            "value": "194"
+          },
+          {
+            "statisticDate": "1776470400000",
+            "value": "-798"
+          },
+          {
+            "statisticDate": "1776556800000",
+            "value": "-800"
+          },
+          {
+            "statisticDate": "1776643200000",
+            "value": "718"
+          },
+          {
+            "statisticDate": "1776729600000",
+            "value": "-59"
+          },
+          {
+            "statisticDate": "1776816000000",
+            "value": "416"
+          },
+          {
+            "statisticDate": "1776902400000",
+            "value": "24"
+          },
+          {
+            "statisticDate": "1776988800000",
+            "value": "-638"
+          },
+          {
+            "statisticDate": "1777075200000",
+            "value": "-70"
+          },
+          {
+            "statisticDate": "1777161600000",
+            "value": "229"
+          },
+          {
+            "statisticDate": "1777248000000",
+            "value": "-156"
+          },
+          {
+            "statisticDate": "1777334400000",
+            "value": "-259"
+          },
+          {
+            "statisticDate": "1777420800000",
+            "value": "-68"
+          },
+          {
+            "statisticDate": "1777507200000",
+            "value": "124"
+          },
+          {
+            "statisticDate": "1777593600000",
+            "value": "535"
+          },
+          {
+            "statisticDate": "1777680000000",
+            "value": "352"
+          },
+          {
+            "statisticDate": "1777766400000",
+            "value": "-373"
+          },
+          {
+            "statisticDate": "1777852800000",
+            "value": "298"
+          },
+          {
+            "statisticDate": "1777939200000",
+            "value": "494"
+          },
+          {
+            "statisticDate": "1778025600000",
+            "value": "570"
+          },
+          {
+            "statisticDate": "1778112000000",
+            "value": "-311"
+          },
+          {
+            "statisticDate": "1778198400000",
+            "value": "1772"
+          },
+          {
+            "statisticDate": "1778284800000",
+            "value": "355"
+          },
+          {
+            "statisticDate": "1778371200000",
+            "value": "1567"
+          },
+          {
+            "statisticDate": "1778457600000",
+            "value": "-315"
+          },
+          {
+            "statisticDate": "1778544000000",
+            "value": "-1349"
+          },
+          {
+            "statisticDate": "1778630400000",
+            "value": "-915"
+          },
+          {
+            "statisticDate": "1778716800000",
+            "value": "160"
+          },
+          {
+            "statisticDate": "1778803200000",
+            "value": "-854"
+          },
+          {
+            "statisticDate": "1778889600000",
+            "value": "-385"
+          },
+          {
+            "statisticDate": "1778976000000",
+            "value": "-170"
+          },
+          {
+            "statisticDate": "1779062400000",
+            "value": "311"
+          },
+          {
+            "statisticDate": "1779148800000",
+            "value": "-460"
+          },
+          {
+            "statisticDate": "1779235200000",
+            "value": "823"
+          },
+          {
+            "statisticDate": "1779321600000",
+            "value": "-60"
+          },
+          {
+            "statisticDate": "1779408000000",
+            "value": "330"
+          },
+          {
+            "statisticDate": "1779494400000",
+            "value": "744"
+          },
+          {
+            "statisticDate": "1779580800000",
+            "value": "-357"
+          },
+          {
+            "statisticDate": "1779667200000",
+            "value": "46"
+          },
+          {
+            "statisticDate": "1779753600000",
+            "value": "-891"
+          },
+          {
+            "statisticDate": "1779840000000",
+            "value": "-394"
+          },
+          {
+            "statisticDate": "1779926400000",
+            "value": "-308"
+          },
+          {
+            "statisticDate": "1780012800000",
+            "value": "327"
+          },
+          {
+            "statisticDate": "1780099200000",
+            "value": "-130"
+          },
+          {
+            "statisticDate": "1780185600000",
+            "value": "421"
+          },
+          {
+            "statisticDate": "1780272000000",
+            "value": "563"
+          },
+          {
+            "statisticDate": "1780358400000",
+            "value": "1046"
+          },
+          {
+            "statisticDate": "1780444800000",
+            "value": "1246"
+          },
+          {
+            "statisticDate": "1780531200000",
+            "value": "-315"
+          },
+          {
+            "statisticDate": "1780617600000",
+            "value": "-97"
+          },
+          {
+            "statisticDate": "1780704000000",
+            "value": "207"
+          },
+          {
+            "statisticDate": "1780790400000",
+            "value": "-559"
+          },
+          {
+            "statisticDate": "1780876800000",
+            "value": "-169"
+          },
+          {
+            "statisticDate": "1780963200000",
+            "value": "-385"
+          },
+          {
+            "statisticDate": "1781049600000",
+            "value": "-778"
+          }
+        ]
+      }
+    ]
+  },
+  "retExtInfo": {},
+  "time": 1781212479872
+}
