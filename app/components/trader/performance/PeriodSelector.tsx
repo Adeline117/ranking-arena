@@ -40,11 +40,22 @@ export const DATA_SOURCE_NOTES: Record<
   },
 }
 
+/** Serving-mode TF availability (spec §6): native | derived | absent. */
+export type PeriodAvailability = Partial<Record<Period, 'native' | 'derived' | 'absent'>>
+
 export interface PeriodSelectorProps {
   period: Period
   onPeriodChange: (period: Period) => void
   source?: string
   lastUpdated?: string
+  /** Capability-driven availability — 'absent' disables the tab with a
+   *  "Not provided by this exchange" tooltip, 'derived' shows the
+   *  derived-board chip (spec §6). Legacy callers omit this. */
+  availability?: PeriodAvailability
+  /** Bots expose a 4th "since inception" timeframe (spec §1.1-B). */
+  showInception?: boolean
+  inceptionSelected?: boolean
+  onInceptionSelect?: () => void
 }
 
 export function PeriodSelector({
@@ -52,6 +63,10 @@ export function PeriodSelector({
   onPeriodChange,
   source,
   lastUpdated,
+  availability,
+  showInception,
+  inceptionSelected,
+  onInceptionSelect,
 }: PeriodSelectorProps) {
   const { t, language } = useLanguage()
   const containerRef = useRef<HTMLDivElement>(null)
@@ -63,7 +78,7 @@ export function PeriodSelector({
   const updateIndicator = useCallback(() => {
     if (!containerRef.current) return
     const periods: Period[] = ['7D', '30D', '90D']
-    const idx = periods.indexOf(period)
+    const idx = showInception && inceptionSelected ? periods.length : periods.indexOf(period)
     const buttons = containerRef.current.querySelectorAll<HTMLButtonElement>('button')
     const btn = buttons[idx]
     if (btn) {
@@ -72,7 +87,7 @@ export function PeriodSelector({
         width: btn.offsetWidth,
       })
     }
-  }, [period])
+  }, [period, showInception, inceptionSelected])
 
   useEffect(() => {
     const raf = requestAnimationFrame(updateIndicator)
@@ -106,6 +121,37 @@ export function PeriodSelector({
 
       {/* Period Selector */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        {/* Serving-mode derived timeframe disclosure (spec §6) */}
+        {availability?.[period] === 'derived' && !inceptionSelected && (
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[1],
+              padding: '4px 8px',
+              background: 'color-mix(in srgb, var(--color-text-tertiary) 8%, transparent)',
+              borderRadius: tokens.radius.md,
+            }}
+            title={t('derivedBoardTooltip')}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-text-tertiary)"
+              strokeWidth="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <line x1="12" y1="16" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <Text size="xs" style={{ color: 'var(--color-text-tertiary)', fontWeight: 500 }}>
+              {t('derivedBoardBadge')}
+            </Text>
+          </Box>
+        )}
+
         {/* Hyperliquid 90D = allTime disclosure */}
         {source && ALLTIME_90D_PLATFORMS.has(source.toLowerCase()) && period === '90D' && (
           <Box
@@ -272,7 +318,9 @@ export function PeriodSelector({
           )}
           {(['7D', '30D', '90D'] as Period[]).map((p) => {
             const sourceNote = source && DATA_SOURCE_NOTES[source.toLowerCase()]
-            const isDisabled = !!(sourceNote && sourceNote.periods[p] === '--')
+            const isAbsent = availability?.[p] === 'absent'
+            const isDisabled = !!(sourceNote && sourceNote.periods[p] === '--') || isAbsent
+            const isActive = period === p && !inceptionSelected
             const label = p === '7D' ? '7D' : p === '30D' ? '30D' : '90D'
             return (
               <button
@@ -281,7 +329,7 @@ export function PeriodSelector({
                   if (!isDisabled) onPeriodChange(p)
                 }}
                 disabled={isDisabled}
-                aria-pressed={period === p}
+                aria-pressed={isActive}
                 aria-label={`${label} period`}
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
@@ -291,11 +339,11 @@ export function PeriodSelector({
                   background: 'transparent',
                   color: isDisabled
                     ? tokens.colors.text.tertiary
-                    : period === p
+                    : isActive
                       ? tokens.colors.text.primary
                       : tokens.colors.text.secondary,
                   fontSize: 13,
-                  fontWeight: period === p ? 600 : 400,
+                  fontWeight: isActive ? 600 : 400,
                   cursor: isDisabled ? 'not-allowed' : 'pointer',
                   transition: 'all 0.2s ease',
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
@@ -304,20 +352,57 @@ export function PeriodSelector({
                   zIndex: 1,
                 }}
                 onMouseEnter={(e) => {
-                  if (!isDisabled && period !== p)
+                  if (!isDisabled && !isActive)
                     e.currentTarget.style.background =
                       'var(--color-bg-tertiary, rgba(255,255,255,0.05))'
                 }}
                 onMouseLeave={(e) => {
-                  if (!isDisabled && period !== p) e.currentTarget.style.background = 'transparent'
+                  if (!isDisabled && !isActive) e.currentTarget.style.background = 'transparent'
                 }}
-                title={isDisabled ? t('noDataForPeriod') : undefined}
+                title={
+                  isDisabled ? (isAbsent ? t('tfNotProvided') : t('noDataForPeriod')) : undefined
+                }
                 aria-disabled={isDisabled || undefined}
               >
                 {label}
               </button>
             )
           })}
+          {/* Bots: 4th "since inception" tab (spec §1.1-B; never ranked on) */}
+          {showInception && onInceptionSelect && (
+            <button
+              onClick={onInceptionSelect}
+              aria-pressed={Boolean(inceptionSelected)}
+              aria-label={`${t('tfInception')} period`}
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                minHeight: 44,
+                borderRadius: tokens.radius.md,
+                border: 'none',
+                background: 'transparent',
+                color: inceptionSelected
+                  ? tokens.colors.text.primary
+                  : tokens.colors.text.secondary,
+                fontSize: 13,
+                fontWeight: inceptionSelected ? 600 : 400,
+                cursor: 'pointer',
+                transition: 'all 0.2s ease',
+                fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                position: 'relative',
+                zIndex: 1,
+              }}
+              onMouseEnter={(e) => {
+                if (!inceptionSelected)
+                  e.currentTarget.style.background =
+                    'var(--color-bg-tertiary, rgba(255,255,255,0.05))'
+              }}
+              onMouseLeave={(e) => {
+                if (!inceptionSelected) e.currentTarget.style.background = 'transparent'
+              }}
+            >
+              {t('tfInception')}
+            </button>
+          )}
         </Box>
 
         {/* Always-visible note when selected period has no data for this platform */}
