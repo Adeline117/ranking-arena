@@ -7,7 +7,7 @@
 
 import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
-import { getSourceBySlug, nativeRankingTimeframes } from '@/lib/ingest/sources'
+import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
 import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
@@ -150,7 +150,9 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
     return empty
   }
 
-  const timeframes = nativeRankingTimeframes(src)
+  // native ∪ derived: derived 30/90 boards are synthesized from these
+  // profile stats (spec §1.1-C), so Tier-B must crawl their TFs too.
+  const timeframes = profileTimeframes(src)
   const session = await openSession(src)
   const result: TierBResult = { ...empty }
 
