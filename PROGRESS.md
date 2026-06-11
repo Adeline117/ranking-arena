@@ -19,9 +19,11 @@ Spec: `~/Desktop/ARENA_DATA_SPEC.md`；计划: `~/.claude/plans/snug-squishing-h
 - `arena-ingest-worker` PM2 已运行：DB 驱动调度、maintenance/freshness/digest/avatar-mirror、告警纪律（仅 phase≤1 Tier-A page）
 - **实跑验证**：bitget futures/spot/cfd Tier-A 全部 PUBLISHED，RAW→STAGING→SERVING 链路 + 质量门双向验证
 
-**进行中**：Bitget profile/positions/历史/bots surface（Agent A）、前端 serving 层 /core /records + 分层加载 UI（Agent B）
+**Phase 0 完成（2026-06-11）**：Bitget 全 surface（profile/positions/历史/UTA/350 bots）、前端分层加载（首屏 SSR/core/records/70×4 i18n）、shadow-diff 三源全 PASS → **serving 已切**（legacy bitget 数据 06-01 起已死，跳过观察期）。Exchange Rankings 页上线（/rankings/exchanges，重定向 bug 已修）。
 
-**后续**：Bitget 切 shadow→diff→serving（Phase 0 完）→ Phase 1 六大源（Bybit MT5/MEXC/Binance×2/Bybit classic/Hyperliquid）→ Phase 2 长尾 → 删除 36 connector + 36 enrichment + batch crons
+**Phase 1 完成（2026-06-11/12）**：六大源 adapter 全部上线 —— Bybit MT5（USDx/browser_channel 反 TLS）、MEXC（真实 URL 修正 + 衍生板 derive-boards 通用机制闭环 + AI bot 标记）、Bybit classic（beehive 端点族/bot scope series/8781 行 0.2% 偏差）、Hyperliquid（纯 HTTP/BUILD 判定/board_depth 10k 体量控制/90d 衍生）、Binance×2（SG VPS 远程浏览器经 SSH 隧道零公网暴露/Sharpe 映射/双排序去重）。**管道：11 活跃源 / 39 调度自治运行**。legacy 调度已摘除 4 个被接管源。
+
+**后续**：Phase 2 长尾 ~20 源批量复制（每源 1 adapter + 1 seed 行，零 UI 代码）→ Phase 3（OKX CEX/Toobit 待 VPS 验证、Bitfinex API）→ 终局删除清单（36 connector + 36 enrichment + batch crons + compat writer）
 
 ---
 
