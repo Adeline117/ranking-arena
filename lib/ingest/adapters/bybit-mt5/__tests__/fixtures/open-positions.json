@@ -1,0 +1,110 @@
+{
+  "retCode": 0,
+  "retMsg": "success",
+  "result": {
+    "openPositionList": [
+      {
+        "symbol": "UKOUSD",
+        "side": "Buy",
+        "positionValueE8": "90003000000",
+        "entryPrice": "90.796",
+        "marketPrice": "90.003",
+        "stopLossPrice": "0.000",
+        "takeProfitPrice": "0.000",
+        "profitE8": "-793000000"
+      },
+      {
+        "symbol": "GBPUSD+",
+        "side": "Sell",
+        "positionValueE8": "134265000000",
+        "entryPrice": "1.34194",
+        "marketPrice": "1.34265",
+        "stopLossPrice": "0.00000",
+        "takeProfitPrice": "0.00000",
+        "profitE8": "-71000000"
+      },
+      {
+        "symbol": "EURUSD+",
+        "side": "Sell",
+        "positionValueE8": "115845000000",
+        "entryPrice": "1.15762",
+        "marketPrice": "1.15845",
+        "stopLossPrice": "0.00000",
+        "takeProfitPrice": "0.00000",
+        "profitE8": "-83000000"
+      },
+      {
+        "symbol": "AUDUSD+",
+        "side": "Sell",
+        "positionValueE8": "70518000000",
+        "entryPrice": "0.70446",
+        "marketPrice": "0.70518",
+        "stopLossPrice": "0.00000",
+        "takeProfitPrice": "0.00000",
+        "profitE8": "-72000000"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Sell",
+        "positionValueE8": "421501000000",
+        "entryPrice": "4190.05",
+        "marketPrice": "4215.01",
+        "stopLossPrice": "0.00",
+        "takeProfitPrice": "0.00",
+        "profitE8": "-2496000000"
+      },
+      {
+        "symbol": "GBPUSD+",
+        "side": "Sell",
+        "positionValueE8": "134265000000",
+        "entryPrice": "1.34120",
+        "marketPrice": "1.34265",
+        "stopLossPrice": "0.00000",
+        "takeProfitPrice": "0.00000",
+        "profitE8": "-145000000"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Sell",
+        "positionValueE8": "421501000000",
+        "entryPrice": "4177.63",
+        "marketPrice": "4215.01",
+        "stopLossPrice": "0.00",
+        "takeProfitPrice": "0.00",
+        "profitE8": "-3738000000"
+      },
+      {
+        "symbol": "AUDUSD+",
+        "side": "Sell",
+        "positionValueE8": "70518000000",
+        "entryPrice": "0.70402",
+        "marketPrice": "0.70518",
+        "stopLossPrice": "0.00000",
+        "takeProfitPrice": "0.00000",
+        "profitE8": "-116000000"
+      },
+      {
+        "symbol": "EURUSD+",
+        "side": "Sell",
+        "positionValueE8": "115845000000",
+        "entryPrice": "1.15697",
+        "marketPrice": "1.15845",
+        "stopLossPrice": "0.00000",
+        "takeProfitPrice": "0.00000",
+        "profitE8": "-148000000"
+      },
+      {
+        "symbol": "UKOUSD",
+        "side": "Buy",
+        "positionValueE8": "90003000000",
+        "entryPrice": "91.756",
+        "marketPrice": "90.003",
+        "stopLossPrice": "0.000",
+        "takeProfitPrice": "0.000",
+        "profitE8": "-1753000000"
+      }
+    ]
+  },
+  "retExtInfo": {},
+  "time": 1781206941820
+}

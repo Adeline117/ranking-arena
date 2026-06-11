@@ -1,0 +1,113 @@
+{
+  "retCode": 0,
+  "retMsg": "success",
+  "result": {
+    "historyPositionList": [
+      {
+        "symbol": "USOUSD",
+        "side": "Buy",
+        "positionValueE8": "90098000000",
+        "entryPrice": "90.421",
+        "closingPrice": "90.098",
+        "closedProfitE8": "-326000000",
+        "openTime": "2026-06-11 12:44:59",
+        "closeTime": "2026-06-11 12:53:13"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Sell",
+        "positionValueE8": "409089000000",
+        "entryPrice": "4085.47",
+        "closingPrice": "4090.89",
+        "closedProfitE8": "-548000000",
+        "openTime": "2026-06-11 12:17:25",
+        "closeTime": "2026-06-11 12:44:10"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Buy",
+        "positionValueE8": "408572000000",
+        "entryPrice": "4088.16",
+        "closingPrice": "4085.72",
+        "closedProfitE8": "-250000000",
+        "openTime": "2026-06-11 12:16:51",
+        "closeTime": "2026-06-11 12:17:18"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Sell",
+        "positionValueE8": "408823000000",
+        "entryPrice": "4086.46",
+        "closingPrice": "4088.23",
+        "closedProfitE8": "-183000000",
+        "openTime": "2026-06-11 12:14:46",
+        "closeTime": "2026-06-11 12:16:48"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Buy",
+        "positionValueE8": "408555000000",
+        "entryPrice": "4087.29",
+        "closingPrice": "4085.55",
+        "closedProfitE8": "-180000000",
+        "openTime": "2026-06-11 12:13:43",
+        "closeTime": "2026-06-11 12:14:11"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Sell",
+        "positionValueE8": "408636000000",
+        "entryPrice": "4087.44",
+        "closingPrice": "4086.36",
+        "closedProfitE8": "102000000",
+        "openTime": "2026-06-11 11:54:03",
+        "closeTime": "2026-06-11 12:13:11"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Sell",
+        "positionValueE8": "408636000000",
+        "entryPrice": "4082.07",
+        "closingPrice": "4086.36",
+        "closedProfitE8": "-435000000",
+        "openTime": "2026-06-11 12:09:22",
+        "closeTime": "2026-06-11 12:13:11"
+      },
+      {
+        "symbol": "XAUUSD+",
+        "side": "Sell",
+        "positionValueE8": "408636000000",
+        "entryPrice": "4089.83",
+        "closingPrice": "4086.36",
+        "closedProfitE8": "341000000",
+        "openTime": "2026-06-11 11:51:25",
+        "closeTime": "2026-06-11 12:13:11"
+      },
+      {
+        "symbol": "USOUSD",
+        "side": "Sell",
+        "positionValueE8": "89998000000",
+        "entryPrice": "91.338",
+        "closingPrice": "89.998",
+        "closedProfitE8": "1337000000",
+        "openTime": "2026-06-11 09:32:09",
+        "closeTime": "2026-06-11 11:25:22"
+      },
+      {
+        "symbol": "USOUSD",
+        "side": "Sell",
+        "positionValueE8": "91381000000",
+        "entryPrice": "91.238",
+        "closingPrice": "91.381",
+        "closedProfitE8": "-146000000",
+        "openTime": "2026-06-11 09:43:30",
+        "closeTime": "2026-06-11 09:49:31"
+      }
+    ],
+    "cursor": "Y76jYvc6D3Y8",
+    "isFirstPage": false,
+    "isLastPage": false
+  },
+  "retExtInfo": {},
+  "time": 1781207007060
+}

@@ -1,0 +1,115 @@
+{
+  "retCode": 0,
+  "retMsg": "success",
+  "result": {
+    "metricList": [
+      {
+        "line": "cumRoe",
+        "showType": "percent",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDateE3": "1780531200000",
+            "value": "7879"
+          },
+          {
+            "statisticDateE3": "1780617600000",
+            "value": "1256"
+          },
+          {
+            "statisticDateE3": "1780704000000",
+            "value": "1256"
+          },
+          {
+            "statisticDateE3": "1780790400000",
+            "value": "1256"
+          },
+          {
+            "statisticDateE3": "1780876800000",
+            "value": "66604"
+          },
+          {
+            "statisticDateE3": "1780963200000",
+            "value": "49826"
+          },
+          {
+            "statisticDateE3": "1781049600000",
+            "value": "44484"
+          }
+        ]
+      },
+      {
+        "line": "cumProfit",
+        "showType": "num",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDateE3": "1780531200000",
+            "value": "12888000000"
+          },
+          {
+            "statisticDateE3": "1780617600000",
+            "value": "2029000000"
+          },
+          {
+            "statisticDateE3": "1780704000000",
+            "value": "2029000000"
+          },
+          {
+            "statisticDateE3": "1780790400000",
+            "value": "2029000000"
+          },
+          {
+            "statisticDateE3": "1780876800000",
+            "value": "105749000000"
+          },
+          {
+            "statisticDateE3": "1780963200000",
+            "value": "82284000000"
+          },
+          {
+            "statisticDateE3": "1781049600000",
+            "value": "72471000000"
+          }
+        ]
+      },
+      {
+        "line": "dailyRoe",
+        "showType": "percent",
+        "isCurve": false,
+        "metricLineValue": [
+          {
+            "statisticDateE3": "1780531200000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780617600000",
+            "value": "-9921"
+          },
+          {
+            "statisticDateE3": "1780704000000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780790400000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780876800000",
+            "value": "103720"
+          },
+          {
+            "statisticDateE3": "1780963200000",
+            "value": "-9979"
+          },
+          {
+            "statisticDateE3": "1781049600000",
+            "value": "-9813"
+          }
+        ]
+      }
+    ]
+  },
+  "retExtInfo": {},
+  "time": 1781206495034
+}
