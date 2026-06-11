@@ -1,0 +1,391 @@
+{
+  "retCode": 0,
+  "retMsg": "success",
+  "result": {
+    "metricList": [
+      {
+        "line": "cumRoe",
+        "showType": "percent",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDateE3": "1778544000000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1778630400000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1778716800000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1778803200000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1778889600000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1778976000000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779062400000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779148800000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779235200000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779321600000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779408000000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779494400000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779580800000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779667200000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779753600000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779840000000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1779926400000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1780012800000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1780099200000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1780185600000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1780272000000",
+            "value": "-3758"
+          },
+          {
+            "statisticDateE3": "1780358400000",
+            "value": "54693"
+          },
+          {
+            "statisticDateE3": "1780444800000",
+            "value": "7879"
+          },
+          {
+            "statisticDateE3": "1780531200000",
+            "value": "7879"
+          },
+          {
+            "statisticDateE3": "1780617600000",
+            "value": "1256"
+          },
+          {
+            "statisticDateE3": "1780704000000",
+            "value": "1256"
+          },
+          {
+            "statisticDateE3": "1780790400000",
+            "value": "1256"
+          },
+          {
+            "statisticDateE3": "1780876800000",
+            "value": "66604"
+          },
+          {
+            "statisticDateE3": "1780963200000",
+            "value": "49826"
+          },
+          {
+            "statisticDateE3": "1781049600000",
+            "value": "44484"
+          }
+        ]
+      },
+      {
+        "line": "cumProfit",
+        "showType": "num",
+        "isCurve": true,
+        "metricLineValue": [
+          {
+            "statisticDateE3": "1778544000000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1778630400000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1778716800000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1778803200000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1778889600000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1778976000000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779062400000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779148800000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779235200000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779321600000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779408000000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779494400000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779580800000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779667200000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779753600000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779840000000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1779926400000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1780012800000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1780099200000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1780185600000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1780272000000",
+            "value": "-3765000000"
+          },
+          {
+            "statisticDateE3": "1780358400000",
+            "value": "56195000000"
+          },
+          {
+            "statisticDateE3": "1780444800000",
+            "value": "12888000000"
+          },
+          {
+            "statisticDateE3": "1780531200000",
+            "value": "12888000000"
+          },
+          {
+            "statisticDateE3": "1780617600000",
+            "value": "2029000000"
+          },
+          {
+            "statisticDateE3": "1780704000000",
+            "value": "2029000000"
+          },
+          {
+            "statisticDateE3": "1780790400000",
+            "value": "2029000000"
+          },
+          {
+            "statisticDateE3": "1780876800000",
+            "value": "105749000000"
+          },
+          {
+            "statisticDateE3": "1780963200000",
+            "value": "82284000000"
+          },
+          {
+            "statisticDateE3": "1781049600000",
+            "value": "72471000000"
+          }
+        ]
+      },
+      {
+        "line": "dailyRoe",
+        "showType": "percent",
+        "isCurve": false,
+        "metricLineValue": [
+          {
+            "statisticDateE3": "1778544000000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1778630400000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1778716800000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1778803200000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1778889600000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1778976000000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779062400000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779148800000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779235200000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779321600000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779408000000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779494400000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779580800000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779667200000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779753600000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779840000000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1779926400000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780012800000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780099200000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780185600000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780272000000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780358400000",
+            "value": "44362"
+          },
+          {
+            "statisticDateE3": "1780444800000",
+            "value": "-9961"
+          },
+          {
+            "statisticDateE3": "1780531200000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780617600000",
+            "value": "-9921"
+          },
+          {
+            "statisticDateE3": "1780704000000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780790400000",
+            "value": "0"
+          },
+          {
+            "statisticDateE3": "1780876800000",
+            "value": "103720"
+          },
+          {
+            "statisticDateE3": "1780963200000",
+            "value": "-9979"
+          },
+          {
+            "statisticDateE3": "1781049600000",
+            "value": "-9813"
+          }
+        ]
+      }
+    ]
+  },
+  "retExtInfo": {},
+  "time": 1781206827465
+}

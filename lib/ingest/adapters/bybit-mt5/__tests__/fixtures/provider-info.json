@@ -1,0 +1,23 @@
+{
+  "retCode": 0,
+  "retMsg": "success",
+  "result": {
+    "providerUserName": "make.M",
+    "providerMark": "vN9v1pLXrRLELNwMF0Ppeg==",
+    "providerUserAvatar": "https://s1.bycsi.com/user/avatars/default14.png",
+    "providerUserIntroduction": "forex",
+    "followers": "0",
+    "tradingDays": "209",
+    "marginLevelE4": "0",
+    "shareProfitRateE2": "15",
+    "opStatus": 0,
+    "providerUserId": "525121896",
+    "followMaxUpperLimit": false,
+    "totalAssetsE8": "86000000",
+    "aumE8": "0",
+    "externalId": "1896409",
+    "linkStatus": 0
+  },
+  "retExtInfo": {},
+  "time": 1781206494729
+}
