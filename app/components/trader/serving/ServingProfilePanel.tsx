@@ -1,0 +1,301 @@
+'use client'
+
+/**
+ * Serving-mode profile body (ARENA_DATA_SPEC v1.2 §2.4).
+ *
+ * Replaces the legacy tabs+content block when the source reads from
+ * arena.* — the page header/hero above it already rendered from Tier-A
+ * first-screen data with zero on-demand fetching. This panel owns:
+ *
+ *   2. Core modules — ONE request per timeframe (useTraderCore), local
+ *      skeletons, module-level degradation only.
+ *   3. Heavy record tabs — fetched ONLY when the tab is opened
+ *      (capability-driven sub-tabs; copiers is aggregate-only).
+ *   4. Timeframe lazy — query key includes tf; switching fetches just
+ *      the newly selected timeframe.
+ */
+
+import { useState } from 'react'
+import { tokens } from '@/lib/design-tokens'
+import { Box, Text } from '@/app/components/base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useTraderCore } from '@/lib/hooks/useTraderCore'
+import { useTraderRecords, useCopierAggregate } from '@/lib/hooks/useTraderRecords'
+import { PeriodSelector, type Period } from '@/app/components/trader/performance/PeriodSelector'
+import MetricGrid from './MetricGrid'
+import CoreCharts from './CoreCharts'
+import ModuleDegraded from './ModuleDegraded'
+import RecordsTable, { type RecordColumn } from './RecordsTable'
+import CopierAggregatePanel from './CopierAggregatePanel'
+import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
+import type {
+  RecordKind,
+  ServingTimeframe,
+  SourceCapability,
+  TraderFirstScreen,
+} from '@/lib/data/serving/types'
+
+const RECORD_COLUMNS: Record<Exclude<RecordKind, 'copiers'>, RecordColumn[]> = {
+  positions: [
+    { key: 'symbol', i18nKey: 'colSymbol' },
+    { key: 'side', i18nKey: 'colSide' },
+    { key: 'leverage', i18nKey: 'colLeverage', format: 'number', align: 'right' },
+    { key: 'size', i18nKey: 'colSize', format: 'number', align: 'right' },
+    { key: 'entry_price', i18nKey: 'colEntryPrice', format: 'number', align: 'right' },
+    { key: 'mark_price', i18nKey: 'colMarkPrice', format: 'number', align: 'right' },
+    { key: 'unrealized_pnl', i18nKey: 'colUnrealizedPnl', format: 'money', align: 'right' },
+  ],
+  position_history: [
+    { key: 'symbol', i18nKey: 'colSymbol' },
+    { key: 'side', i18nKey: 'colSide' },
+    { key: 'leverage', i18nKey: 'colLeverage', format: 'number', align: 'right' },
+    { key: 'entry_price', i18nKey: 'colEntryPrice', format: 'number', align: 'right' },
+    { key: 'exit_price', i18nKey: 'colExitPrice', format: 'number', align: 'right' },
+    { key: 'realized_pnl', i18nKey: 'colRealizedPnl', format: 'money', align: 'right' },
+    { key: 'opened_at', i18nKey: 'colOpenedAt', format: 'datetime' },
+    { key: 'closed_at', i18nKey: 'colClosedAt', format: 'datetime' },
+  ],
+  orders: [
+    { key: 'ts', i18nKey: 'colTime', format: 'datetime' },
+    { key: 'kind', i18nKey: 'colType' },
+    { key: 'symbol', i18nKey: 'colSymbol' },
+    { key: 'side', i18nKey: 'colSide' },
+    { key: 'price', i18nKey: 'colPrice', format: 'number', align: 'right' },
+    { key: 'qty', i18nKey: 'colQty', format: 'number', align: 'right' },
+  ],
+  transfers: [
+    { key: 'ts', i18nKey: 'colTime', format: 'datetime' },
+    { key: 'direction', i18nKey: 'colDirection' },
+    { key: 'asset', i18nKey: 'colAsset' },
+    { key: 'amount', i18nKey: 'colAmount', format: 'money', align: 'right' },
+  ],
+}
+
+const KIND_TAB_I18N: Record<RecordKind, string> = {
+  positions: 'tabPositions',
+  position_history: 'tabPositionHistory',
+  orders: 'tabOrders',
+  transfers: 'tabTransfers',
+  copiers: 'tabCopiers',
+}
+
+function ModuleSkeleton({ height }: { height: number }) {
+  return (
+    <div
+      style={{
+        height,
+        borderRadius: tokens.radius.lg,
+        background:
+          'linear-gradient(90deg, var(--color-bg-tertiary) 25%, var(--color-bg-secondary) 50%, var(--color-bg-tertiary) 75%)',
+        backgroundSize: '200% 100%',
+        animation: 'servingPulse 1.4s ease infinite',
+      }}
+    />
+  )
+}
+
+/** One heavy record tab — own component so its hook mounts lazily. */
+function RecordKindPanel({
+  source,
+  exchangeTraderId,
+  kind,
+  tf,
+  exchangeName,
+}: {
+  source: string
+  exchangeTraderId: string
+  kind: Exclude<RecordKind, 'copiers'>
+  tf: ServingTimeframe
+  exchangeName?: string
+}) {
+  const records = useTraderRecords({ source, exchangeTraderId, kind, tf, enabled: true })
+
+  if (records.isLoading) return <ModuleSkeleton height={160} />
+  if (records.error) return <ModuleDegraded onRetry={() => records.refetch()} />
+  if (records.isPendingUpstream && records.rows.length === 0) {
+    return <ModuleDegraded onRetry={() => records.refetch()} />
+  }
+
+  return (
+    <Box>
+      <RecordsTable
+        columns={RECORD_COLUMNS[kind]}
+        rows={records.rows}
+        hasNextPage={records.hasNextPage}
+        isFetchingNextPage={records.isFetchingNextPage}
+        onLoadMore={() => records.fetchNextPage()}
+      />
+      {records.provenance && (
+        <ProvenanceFooter provenance={records.provenance} exchangeName={exchangeName} />
+      )}
+    </Box>
+  )
+}
+
+function CopiersPanel({
+  source,
+  exchangeTraderId,
+  exchangeName,
+}: {
+  source: string
+  exchangeTraderId: string
+  exchangeName?: string
+}) {
+  const { aggregate, isLoading, refetch } = useCopierAggregate({
+    source,
+    exchangeTraderId,
+    enabled: true,
+  })
+  if (isLoading) return <ModuleSkeleton height={160} />
+  return (
+    <CopierAggregatePanel
+      aggregate={aggregate}
+      isLoading={isLoading}
+      exchangeName={exchangeName}
+      onRetry={() => refetch()}
+    />
+  )
+}
+
+export interface ServingProfilePanelProps {
+  firstScreen: TraderFirstScreen
+  capability: SourceCapability | null
+}
+
+export default function ServingProfilePanel({ firstScreen, capability }: ServingProfilePanelProps) {
+  const { t } = useLanguage()
+  const { source, exchangeTraderId } = firstScreen
+
+  const [period, setPeriod] = useState<Period>('90D')
+  const [inceptionSelected, setInceptionSelected] = useState(false)
+  const tf: ServingTimeframe = inceptionSelected
+    ? 'inception'
+    : (Number(period.replace('D', '')) as 7 | 30 | 90)
+
+  const core = useTraderCore({ source, exchangeTraderId, tf })
+
+  // Record sub-tabs: capability-driven; only opened tabs ever fetch.
+  const kinds: RecordKind[] = capability
+    ? (Object.keys(KIND_TAB_I18N) as RecordKind[]).filter((k) => capability.surfaces[k])
+    : []
+  const [activeKind, setActiveKind] = useState<RecordKind | null>(null)
+
+  const availability = capability
+    ? {
+        '7D': capability.timeframes['7'],
+        '30D': capability.timeframes['30'],
+        '90D': capability.timeframes['90'],
+      }
+    : undefined
+
+  const showInception = Boolean(capability?.inceptionTf && firstScreen.traderKind === 'bot')
+
+  return (
+    <Box style={{ marginTop: tokens.spacing[4] }}>
+      <style>{`@keyframes servingPulse { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
+
+      {/* ── Core modules (spec §2.4-2): one request per timeframe ── */}
+      <PeriodSelector
+        period={period}
+        onPeriodChange={(p) => {
+          setInceptionSelected(false)
+          setPeriod(p)
+        }}
+        source={source}
+        lastUpdated={core.modules?.provenance.asOf}
+        availability={availability}
+        showInception={showInception}
+        inceptionSelected={inceptionSelected}
+        onInceptionSelect={() => setInceptionSelected(true)}
+      />
+
+      {core.modules ? (
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+          {core.isPendingUpstream && (
+            <Text size="xs" color="tertiary" style={{ opacity: 0.7 }}>
+              {t('moduleDataPending')}
+            </Text>
+          )}
+          <MetricGrid
+            stats={core.modules.stats}
+            capabilityMetrics={capability?.metrics ?? Object.keys(core.modules.stats)}
+            currency={core.modules.currency}
+          />
+          <CoreCharts series={core.modules.series} timeframe={tf} />
+          <ProvenanceFooter
+            provenance={core.modules.provenance}
+            exchangeName={capability?.exchangeName}
+          />
+        </Box>
+      ) : core.isDegraded ? (
+        <ModuleDegraded onRetry={() => core.refetch()} />
+      ) : (
+        <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+          <ModuleSkeleton height={120} />
+          <ModuleSkeleton height={220} />
+        </Box>
+      )}
+
+      {/* ── Heavy record tabs (spec §2.4-3): lazy, only if opened ── */}
+      {kinds.length > 0 && (
+        <Box style={{ marginTop: tokens.spacing[6] }}>
+          <Box
+            style={{
+              display: 'flex',
+              gap: tokens.spacing[1],
+              borderBottom: '1px solid ' + tokens.colors.border.primary,
+              marginBottom: tokens.spacing[4],
+              overflowX: 'auto',
+            }}
+          >
+            {kinds.map((kind) => (
+              <button
+                key={kind}
+                onClick={() => setActiveKind(kind)}
+                aria-pressed={activeKind === kind}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  border: 'none',
+                  background: 'transparent',
+                  borderBottom:
+                    activeKind === kind
+                      ? '2px solid var(--color-accent-primary, #6366f1)'
+                      : '2px solid transparent',
+                  color:
+                    activeKind === kind ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                  fontSize: 13,
+                  fontWeight: activeKind === kind ? 600 : 400,
+                  cursor: 'pointer',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {t(KIND_TAB_I18N[kind])}
+              </button>
+            ))}
+          </Box>
+
+          {activeKind === 'copiers' ? (
+            <CopiersPanel
+              source={source}
+              exchangeTraderId={exchangeTraderId}
+              exchangeName={capability?.exchangeName}
+            />
+          ) : activeKind ? (
+            <RecordKindPanel
+              key={activeKind}
+              source={source}
+              exchangeTraderId={exchangeTraderId}
+              kind={activeKind}
+              tf={tf}
+              exchangeName={capability?.exchangeName}
+            />
+          ) : (
+            <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
+              {t('recordsEmpty')}
+            </Text>
+          )}
+        </Box>
+      )}
+    </Box>
+  )
+}
