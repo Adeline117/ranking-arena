@@ -14,7 +14,6 @@
 import type {
   HistoryKind,
   ParseCtx,
-  ParsedHistoryRow,
   RankingTimeframe,
   RawBundle,
   RawPage,
@@ -24,9 +23,15 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
-import { parseBitgetLeaderboardPage, parseBitgetPositions, parseBitgetProfile } from './parsers'
+import {
+  parseBitgetHistory,
+  parseBitgetLeaderboardPage,
+  parseBitgetPositions,
+  parseBitgetProfile,
+} from './parsers'
 
 const BASE = 'https://www.bitget.com/v1/trigger/trace/public'
+const TRACE_BASE = 'https://www.bitget.com/v1/trigger/trace'
 
 /** UTA board-list endpoints per boardKey (verified by live capture 2026-06). */
 const UTA_LIST_ENDPOINTS: Record<string, string> = {
@@ -94,12 +99,12 @@ const bitgetAdapter: SourceAdapter = {
   capabilities: {
     profile: true,
     positions: true, // POST public/traderPosition (1h-delayed for non-copiers)
-    positionHistory: false,
+    positionHistory: true, // POST trace/order/historyList (历史带单)
     orders: false,
     // 余额历史 no longer exists in the UTA profile UI (2026-06-11): all
     // balance/transfer endpoint candidates demand an auth token (00005).
     transfers: false,
-    copiers: false,
+    copiers: true, // POST trace/trader/followerList (top-50 only, PII rules apply)
   },
 
   async *listLeaderboard(
@@ -203,13 +208,56 @@ const bitgetAdapter: SourceAdapter = {
     return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
   },
 
+  /**
+   * Incremental history pages, newest→oldest (spec §2.3).
+   *   position_history: POST trace/order/historyList (sorted by closeTime
+   *     desc) — stops on cursor overlap (oldest closeTime ≤ stored cursor).
+   *   copiers: POST trace/trader/followerList — small (top-50), always full.
+   * NOT replayPaged: its completeness assertion treats an early cursor stop
+   * as a truncated crawl; incremental stops are the point here.
+   */
   async *getHistory(
-    _session: FetchSession,
-    _src: SourceRow,
-    _exchangeTraderId: string,
-    kind: HistoryKind
+    session: FetchSession,
+    src: SourceRow,
+    exchangeTraderId: string,
+    kind: HistoryKind,
+    cursor: string | null
   ): AsyncIterable<RawPage> {
-    throw new Error(`[bitget] history surface ${kind} not implemented yet`)
+    if (kind !== 'position_history' && kind !== 'copiers') {
+      throw new Error(`[bitget] history surface ${kind} not supported`)
+    }
+    await warmSession(session, src)
+    const fetcher = pageFetcher(session)
+    const url =
+      kind === 'position_history'
+        ? endpoint(src, 'positionHistory', `${TRACE_BASE}/order/historyList`)
+        : endpoint(src, 'copiers', `${TRACE_BASE}/trader/followerList`)
+    const pageSize = kind === 'copiers' ? 10 : 20
+    // First-sight backfill depth cap (configurable per source); incremental
+    // runs stop on cursor overlap long before hitting it.
+    const maxPages = Number(src.meta.history_max_pages ?? 25) || 25
+    const cursorMs = cursor ? Date.parse(cursor) : NaN
+
+    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+      const payload = await replayJson(session, fetcher, {
+        url,
+        method: 'POST',
+        headers: UTA_HEADERS,
+        body: { pageNo, pageSize, traderUid: exchangeTraderId },
+      })
+      const data = ((payload as Record<string, unknown>)?.data ?? {}) as Record<string, unknown>
+      const rows = Array.isArray(data.rows) ? (data.rows as Array<Record<string, unknown>>) : []
+      if (rows.length === 0) break
+
+      yield { pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() }
+
+      if (data.nextFlag === false || rows.length < pageSize) break
+      if (kind === 'position_history' && Number.isFinite(cursorMs)) {
+        const closeTimes = rows.map((r) => Number(r.closeTime)).filter((t) => Number.isFinite(t))
+        // Overlap reached: this page already dips into stored history.
+        if (closeTimes.length > 0 && Math.min(...closeTimes) <= cursorMs) break
+      }
+    }
   },
 
   parseLeaderboard: parseBitgetLeaderboardPage,
@@ -217,9 +265,7 @@ const bitgetAdapter: SourceAdapter = {
 
   parsePositions: parseBitgetPositions,
 
-  parseHistory(_raw: unknown, kind: HistoryKind): ParsedHistoryRow[] {
-    throw new Error(`[bitget] history parser ${kind} not implemented yet`)
-  },
+  parseHistory: parseBitgetHistory,
 }
 
 /** Parse-time ctx for extractMeta inside the replay loop (counts only). */

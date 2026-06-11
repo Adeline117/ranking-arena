@@ -8,12 +8,13 @@
 import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, nativeRankingTimeframes } from '@/lib/ingest/sources'
-import { getAdapter } from '@/lib/ingest/core/adapter'
-import type { ParseCtx } from '@/lib/ingest/core/types'
+import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
+import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/ingest/core/types'
+import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { validateStats } from '@/lib/ingest/staging/validate'
-import { publishProfile } from '@/lib/ingest/serving/publish'
+import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
 
 interface TopTrader {
@@ -59,29 +60,97 @@ function shuffle<T>(arr: T[]): T[] {
 export interface TierBResult {
   tradersCrawled: number
   surfacesFetched: number
+  historyRowsWritten: number
   rejects: number
   errors: number
 }
 
+/** History kinds this source can serve, per adapter capabilities. */
+function historyKinds(adapter: SourceAdapter): HistoryKind[] {
+  const kinds: HistoryKind[] = []
+  if (adapter.capabilities.positionHistory) kinds.push('position_history')
+  if (adapter.capabilities.orders) kinds.push('orders')
+  if (adapter.capabilities.transfers) kinds.push('transfers')
+  if (adapter.capabilities.copiers) kinds.push('copiers')
+  return kinds
+}
+
+/**
+ * Incremental history pass for ONE trader within the same session (spec
+ * §2.3 Histories): newest pages until cursor overlap, idempotent upsert by
+ * dedupe_hash, cursor advanced to the newest row seen.
+ */
+async function crawlTraderHistories(
+  session: FetchSession,
+  adapter: SourceAdapter,
+  src: SourceRow,
+  trader: TopTrader,
+  ctx: ParseCtx
+): Promise<number> {
+  let written = 0
+  for (const kind of historyKinds(adapter)) {
+    const cursor = await getHistoryCursor(trader.id, kind)
+    const rows: ParsedHistoryRow[] = []
+    const rawPages: unknown[] = []
+
+    for await (const page of adapter.getHistory(
+      session,
+      src,
+      trader.exchange_trader_id,
+      kind,
+      cursor
+    )) {
+      rawPages.push(page)
+      rows.push(...adapter.parseHistory(page.payload, kind, ctx))
+    }
+    if (rawPages.length === 0) continue
+
+    await writeRawObject({
+      sourceId: src.id,
+      sourceSlug: src.slug,
+      jobType: `history:${kind}`,
+      traderId: trader.id,
+      timeframe: null,
+      payload: rawPages,
+    })
+
+    // New cursor = newest event ts seen (closed_at for positions, ts else);
+    // never move it backwards.
+    let newest: string | null = null
+    for (const row of rows) {
+      const ts = row.kind === 'position_history' ? row.closedAt : row.ts
+      if (ts && (newest === null || ts > newest)) newest = ts
+    }
+    const newCursor = newest !== null && (cursor === null || newest > cursor) ? newest : null
+
+    written += await publishHistoryRows(src, trader.id, kind, rows, newCursor)
+  }
+  return written
+}
+
 export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> {
+  const empty: TierBResult = {
+    tradersCrawled: 0,
+    surfacesFetched: 0,
+    historyRowsWritten: 0,
+    rejects: 0,
+    errors: 0,
+  }
   const src = await getSourceBySlug(job.data.sourceSlug)
-  if (src.status !== 'active')
-    return { tradersCrawled: 0, surfacesFetched: 0, rejects: 0, errors: 0 }
+  if (src.status !== 'active') return empty
 
   const adapter = getAdapter(src.adapter_slug)
-  if (!adapter.capabilities.profile) {
-    return { tradersCrawled: 0, surfacesFetched: 0, rejects: 0, errors: 0 }
-  }
+  if (!adapter.capabilities.profile) return empty
 
   const topTraders = shuffle(await getTopTraders(src.id, src.deep_profile_topn))
   if (topTraders.length === 0) {
     console.log(`[tier-b] ${src.slug}: no passed snapshots yet — nothing to crawl`)
-    return { tradersCrawled: 0, surfacesFetched: 0, rejects: 0, errors: 0 }
+    return empty
   }
 
   const timeframes = nativeRankingTimeframes(src)
   const session = await openSession(src)
-  const result: TierBResult = { tradersCrawled: 0, surfacesFetched: 0, rejects: 0, errors: 0 }
+  const result: TierBResult = { ...empty }
 
   try {
     for (const trader of topTraders) {
@@ -136,7 +205,33 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
           )
         }
       }
-      if (traderOk) result.tradersCrawled += 1
+      if (traderOk) {
+        result.tradersCrawled += 1
+        // Histories ride the same session right after the profile (spec
+        // §2.3): incremental, cursor-overlap stop, idempotent upserts.
+        try {
+          const ctx: ParseCtx = {
+            sourceSlug: src.slug,
+            currency: src.currency,
+            tfLabelMap: src.tf_label_map,
+            scrapedAt: new Date().toISOString(),
+            meta: src.meta,
+          }
+          result.historyRowsWritten += await crawlTraderHistories(
+            session,
+            adapter,
+            src,
+            trader,
+            ctx
+          )
+        } catch (err) {
+          result.errors += 1
+          console.warn(
+            `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} histories failed:`,
+            err instanceof Error ? err.message : err
+          )
+        }
+      }
     }
   } finally {
     await session.close()
@@ -144,7 +239,8 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
 
   console.log(
     `[tier-b] ${src.slug}: ${result.tradersCrawled}/${topTraders.length} traders, ` +
-      `${result.surfacesFetched} surfaces, ${result.rejects} rejects, ${result.errors} errors`
+      `${result.surfacesFetched} surfaces, ${result.historyRowsWritten} history rows, ` +
+      `${result.rejects} rejects, ${result.errors} errors`
   )
   return result
 }
