@@ -19,7 +19,7 @@ config({ path: resolve(__dirname, '..', '.env') })
 
 import { Worker, type Job } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
-import { INGEST_QUEUE_NAME, INGEST_JOB } from './ingest/queues'
+import { INGEST_QUEUE_NAME, INGEST_JOB, ingestConnection } from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
 
 // Playwright sessions are heavy on a Mac Mini; per-source serialization
@@ -76,7 +76,7 @@ async function main(): Promise<void> {
   await import('@/lib/ingest/adapters/register')
 
   const worker = new Worker(INGEST_QUEUE_NAME, route, {
-    connection: getConnection(),
+    connection: ingestConnection(),
     concurrency: INGEST_CONCURRENCY,
   })
 
