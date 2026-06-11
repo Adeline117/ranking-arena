@@ -91,6 +91,21 @@ export async function compatWriteTraderLatest(
     trades_count: r.total_positions,
   }))
 
+  // Legacy identity table — resolution, search and UI lists read it.
+  await getIngestPool().query(
+    `INSERT INTO public.trader_sources (source, source_trader_id, handle, avatar_url, is_active)
+     SELECT $1, t.exchange_trader_id, NULLIF(t.nickname, ''), t.avatar_url_origin, true
+       FROM arena.traders t
+       JOIN arena.sources s ON s.id = t.source_id
+      WHERE s.id = $2 AND t.last_seen_at > now() - interval '1 day'
+     ON CONFLICT (source, source_trader_id) DO UPDATE SET
+       handle = COALESCE(EXCLUDED.handle, public.trader_sources.handle),
+       avatar_url = COALESCE(EXCLUDED.avatar_url, public.trader_sources.avatar_url),
+       is_active = true,
+       updated_at = now()`,
+    [platform, src.id]
+  )
+
   const result = await getIngestPool().query(
     `INSERT INTO public.trader_latest
        (platform, market_type, trader_key, "window", roi_pct, pnl_usd, win_rate,
