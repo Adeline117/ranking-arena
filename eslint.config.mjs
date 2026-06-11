@@ -121,10 +121,12 @@ const eslintConfig = defineConfig([
                 '@/lib/ingest/fetch/fetcher',
                 '@/lib/ingest/fetch/capture',
                 '@/lib/ingest/db',
+                '@/lib/ingest/raw',
                 '@/lib/ingest/adapters/*',
                 '**/lib/ingest/fetch/fetcher',
                 '**/lib/ingest/fetch/capture',
                 '**/lib/ingest/db',
+                '**/lib/ingest/raw',
               ],
               message:
                 'Worker-only ingest module (Playwright/pg). app code may only import lib/ingest/core/* and lib/ingest/fetch/types.',
