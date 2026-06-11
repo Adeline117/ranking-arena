@@ -63,6 +63,13 @@ export interface TraderCoreModules {
   cacheState: CoreCacheState
 }
 
+/** /core route payload: full modules, or a pending shell while Tier-C runs.
+ *  A stale hit returns the stale TraderCoreModules with cacheState 'pending'
+ *  (data renders immediately, the client keeps polling for fresh). */
+export type TraderCoreResponse =
+  | TraderCoreModules
+  | { timeframe: ServingTimeframe; cacheState: 'pending' }
+
 export type RecordKind = 'positions' | 'position_history' | 'orders' | 'transfers' | 'copiers'
 
 export interface RecordsPage<T = Record<string, unknown>> {
