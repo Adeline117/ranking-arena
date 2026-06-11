@@ -120,9 +120,18 @@ class PlaywrightFetchSession implements FetchSession {
 
     if (this.src.fetch_region === 'local') {
       const userDataDir = path.join(process.cwd(), '.arena-ingest', 'profiles', this.src.slug)
+      // Some Akamai-fronted sources (Bybit: net::ERR_HTTP2_PROTOCOL_ERROR)
+      // TLS-fingerprint-block the bundled Chromium even on page loads, but
+      // accept an installed branded browser headless. Per-source opt-in via
+      // sources.meta.browser_channel (e.g. 'chrome').
+      const channel =
+        typeof this.src.meta.browser_channel === 'string'
+          ? this.src.meta.browser_channel
+          : undefined
       this.context = await chromium.launchPersistentContext(userDataDir, {
         ...CONTEXT_OPTIONS,
         headless: true,
+        channel,
       })
     } else {
       const browser = await chromium.connect(remoteWsEndpoint(this.src.fetch_region))
