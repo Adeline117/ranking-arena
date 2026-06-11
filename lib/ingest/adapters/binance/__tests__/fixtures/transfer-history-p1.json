@@ -1,0 +1,196 @@
+{
+  "code": "000000",
+  "message": null,
+  "messageDetail": null,
+  "data": {
+    "indexValue": "1426887",
+    "total": 23,
+    "list": [
+      {
+        "time": 1780811081546,
+        "coin": "USDT",
+        "amount": 1452.91948368,
+        "from": "Fiat and Spot",
+        "to": "Lead Trading Account",
+        "transType": "LEAD_DEPOSIT"
+      },
+      {
+        "time": 1780455409683,
+        "coin": "USDT",
+        "amount": 15200,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1779924812090,
+        "coin": "USDT",
+        "amount": 1600,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1779836725729,
+        "coin": "USDT",
+        "amount": 1600,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1779710595908,
+        "coin": "USDT",
+        "amount": 2000,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1779426950320,
+        "coin": "USDT",
+        "amount": 500,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1779233075711,
+        "coin": "USDT",
+        "amount": 1000,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1779147538560,
+        "coin": "USDT",
+        "amount": 2000,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1778723596317,
+        "coin": "USDT",
+        "amount": 300,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1778306315924,
+        "coin": "USDT",
+        "amount": 300,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1777871719724,
+        "coin": "USDT",
+        "amount": 423,
+        "from": "Fiat and Spot",
+        "to": "Lead Trading Account",
+        "transType": "LEAD_DEPOSIT"
+      },
+      {
+        "time": 1777627471882,
+        "coin": "USDT",
+        "amount": 704,
+        "from": "Fiat and Spot",
+        "to": "Lead Trading Account",
+        "transType": "LEAD_DEPOSIT"
+      },
+      {
+        "time": 1777512278223,
+        "coin": "USDT",
+        "amount": 500,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1777333216855,
+        "coin": "USDT",
+        "amount": 600,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1777276795857,
+        "coin": "USDT",
+        "amount": 100,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1777202227830,
+        "coin": "USDT",
+        "amount": 1418,
+        "from": "Fiat and Spot",
+        "to": "Lead Trading Account",
+        "transType": "LEAD_DEPOSIT"
+      },
+      {
+        "time": 1777035192762,
+        "coin": "USDT",
+        "amount": 1418,
+        "from": "Fiat and Spot",
+        "to": "Lead Trading Account",
+        "transType": "LEAD_DEPOSIT"
+      },
+      {
+        "time": 1776854688341,
+        "coin": "USDT",
+        "amount": 494,
+        "from": "Fiat and Spot",
+        "to": "Lead Trading Account",
+        "transType": "LEAD_DEPOSIT"
+      },
+      {
+        "time": 1776756427753,
+        "coin": "USDT",
+        "amount": 300,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1776505496634,
+        "coin": "USDT",
+        "amount": 900,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1776177613320,
+        "coin": "USDT",
+        "amount": 704.00200645,
+        "from": "Fiat and Spot",
+        "to": "Lead Trading Account",
+        "transType": "LEAD_DEPOSIT"
+      },
+      {
+        "time": 1775391358005,
+        "coin": "USDT",
+        "amount": 1000,
+        "from": "Lead Trading Account",
+        "to": "Fiat and Spot",
+        "transType": "LEAD_WITHDRAW"
+      },
+      {
+        "time": 1775300938400,
+        "coin": "USDT",
+        "amount": 7777.08,
+        "from": "Fiat and Spot",
+        "to": "Lead Trading Account",
+        "transType": "LEAD_INVEST"
+      }
+    ]
+  },
+  "success": true
+}

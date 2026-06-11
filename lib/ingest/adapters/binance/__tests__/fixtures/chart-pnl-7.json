@@ -1,0 +1,43 @@
+{
+  "code": "000000",
+  "message": null,
+  "messageDetail": null,
+  "data": [
+    {
+      "value": -1782.460953,
+      "dataType": "PNL",
+      "dateTime": 1780617600000
+    },
+    {
+      "value": -3199.031711,
+      "dataType": "PNL",
+      "dateTime": 1780704000000
+    },
+    {
+      "value": 5110.83803,
+      "dataType": "PNL",
+      "dateTime": 1780790400000
+    },
+    {
+      "value": 4035.098662,
+      "dataType": "PNL",
+      "dateTime": 1780876800000
+    },
+    {
+      "value": 6626.738671,
+      "dataType": "PNL",
+      "dateTime": 1780963200000
+    },
+    {
+      "value": 7068.744493,
+      "dataType": "PNL",
+      "dateTime": 1781049600000
+    },
+    {
+      "value": 6269.17835034,
+      "dataType": "PNL",
+      "dateTime": 1781218800000
+    }
+  ],
+  "success": true
+}

@@ -1,0 +1,142 @@
+{
+  "code": "000000",
+  "message": null,
+  "messageDetail": null,
+  "data": {
+    "indexValue": "1781017565299",
+    "total": 117,
+    "list": [
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "SELL",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 10,
+        "avgPrice": 1657.3,
+        "totalPnl": 0,
+        "orderUpdateTime": 1781158716398,
+        "orderTime": 1781158716398
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "SELL",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 10,
+        "avgPrice": 1653,
+        "totalPnl": 0,
+        "orderUpdateTime": 1781150437178,
+        "orderTime": 1781150436415
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "SELL",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 10,
+        "avgPrice": 1641,
+        "totalPnl": 0,
+        "orderUpdateTime": 1781146904067,
+        "orderTime": 1781146904067
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "SELL",
+        "type": "MARKET",
+        "positionSide": "BOTH",
+        "executedQty": 40,
+        "avgPrice": 1645.4,
+        "totalPnl": 368.88331987,
+        "orderUpdateTime": 1781103903331,
+        "orderTime": 1781103903331
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "BUY",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 10,
+        "avgPrice": 1619.19,
+        "totalPnl": 0,
+        "orderUpdateTime": 1781083841061,
+        "orderTime": 1781083841061
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "BUY",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 10,
+        "avgPrice": 1636.35,
+        "totalPnl": 0,
+        "orderUpdateTime": 1781056111599,
+        "orderTime": 1781056111599
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "BUY",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 20,
+        "avgPrice": 1644.58583,
+        "totalPnl": 0,
+        "orderUpdateTime": 1781018763608,
+        "orderTime": 1781018763608
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "BUY",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 5,
+        "avgPrice": 1643.67,
+        "totalPnl": 159.5883994,
+        "orderUpdateTime": 1781017576469,
+        "orderTime": 1781017576469
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "BUY",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 5,
+        "avgPrice": 1643.12,
+        "totalPnl": 162.33839947,
+        "orderUpdateTime": 1781017571255,
+        "orderTime": 1781017571255
+      },
+      {
+        "symbol": "ETHUSDT",
+        "baseAsset": "ETH",
+        "quoteAsset": "USDT",
+        "side": "BUY",
+        "type": "LIMIT",
+        "positionSide": "BOTH",
+        "executedQty": 5,
+        "avgPrice": 1642.09,
+        "totalPnl": 167.4883995,
+        "orderUpdateTime": 1781017565299,
+        "orderTime": 1781017565299
+      }
+    ]
+  },
+  "success": true
+}

@@ -1,0 +1,16 @@
+{
+  "code": "000000",
+  "message": null,
+  "messageDetail": null,
+  "data": {
+    "timeRange": "7D",
+    "updateTime": 1781212400000,
+    "data": [
+      {
+        "asset": "ETH",
+        "volume": 100
+      }
+    ]
+  },
+  "success": true
+}
