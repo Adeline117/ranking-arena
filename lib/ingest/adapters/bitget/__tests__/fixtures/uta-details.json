@@ -1,0 +1,38 @@
+{
+  "code": "200",
+  "data": {
+    "detail": {
+      "aum": "1400.02",
+      "curFollowCount": 70,
+      "followProfit30d": "1204.17",
+      "isFollow": false,
+      "maxFollowCount": 500,
+      "portfolioId": "1446487090121363456",
+      "portfolioType": 1,
+      "sharingRatio": "10",
+      "showBalance": false,
+      "tradingDays": 7
+    },
+    "displayName": "AI-HUB",
+    "focusRelation": false,
+    "headPic": "https://qrc.bgstatic.com/otc/images/20260609/1780990070919.png",
+    "introduction": {
+      "remarkModifyStatus": true,
+      "remarkStatus": 1
+    },
+    "publicDetail": {
+      "aum": "1400.02",
+      "curFollowCount": 70,
+      "followProfit30d": "1204.17",
+      "isFollow": false,
+      "maxFollowCount": 500,
+      "portfolioId": "1446487090121363456",
+      "portfolioType": 1,
+      "sharingRatio": "10",
+      "showBalance": false,
+      "tradingDays": 7
+    },
+    "traderAccountId": "beb24d718eb23b54ac91"
+  },
+  "params": []
+}

@@ -83,7 +83,15 @@ export function parseBitgetLeaderboardPage(
     const id = item.traderUid ?? item.traderId
     if (!id) continue
     const cols = utaColumns(item)
+    // type 1 = classic copy-trading expert (trigger/trace profile family);
+    // type 2 = UTA portfolio trader — profile endpoints are keyed by
+    // portfolioId, so persist it as a routing fact on the trader row.
+    const traderType = num(item.type)
+    const traderMeta: Record<string, unknown> = {}
+    if (traderType !== null) traderMeta.bitget_trader_type = traderType
+    if (item.portfolioId) traderMeta.portfolio_id = String(item.portfolioId)
     rows.push({
+      traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       exchangeTraderId: String(id),
       // Sort order is the rank; re-anchored across pages by the caller.
       rank: int(item.rank) ?? i + 1,
@@ -130,7 +138,15 @@ function klinePoints(node: unknown): Array<{ ts: string; value: number }> {
  * roiRows last point == statisticsDTO.profitRate (both already percent/quote).
  */
 export function parseBitgetProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
-  const bundle = (raw ?? {}) as { detailV2?: Dict; cycleData?: Dict; timeframe?: number }
+  const bundle = (raw ?? {}) as {
+    detailV2?: Dict
+    cycleData?: Dict
+    utaDetails?: Dict
+    utaPerformance?: Dict
+    utaChart?: Dict
+    timeframe?: number
+  }
+  if (bundle.utaPerformance || bundle.utaDetails) return parseBitgetUtaProfile(bundle, ctx)
   const tf = (bundle.timeframe ?? 90) as Timeframe
   const info = ((bundle.detailV2 as Dict)?.data ?? null) as Dict | null
   const cycle = ((bundle.cycleData as Dict)?.data ?? null) as Dict | null
@@ -324,5 +340,72 @@ export function parseBitgetHistory(
       // orders: no public endpoint; transfers: 余额历史 removed from the UTA
       // UI and all candidates are auth-gated (verified 2026-06-11).
       throw new Error(`[bitget] history surface ${kind} not supported`)
+  }
+}
+
+/**
+ * UTA portfolio trader profile (board rows with type=2; verified by live
+ * capture 2026-06-11). Endpoints keyed by portfolio_id (traders.meta):
+ *   uta/details {portfolioId}                  → identity + 跟单者 block
+ *   uta/performance {portfolioId, cycleTime}   → per-TF stats
+ *   uta/cycleChartData {portfolioId, cycleTime}→ roiRows/pnlRows klines
+ * UNIT QUIRK: roi is already percent but winRate/maxDrawDown are DECIMALS
+ * (0.6052 = 60.52%) — unlike the trace family where all three are percent.
+ */
+function parseBitgetUtaProfile(
+  bundle: { utaDetails?: Dict; utaPerformance?: Dict; utaChart?: Dict; timeframe?: number },
+  ctx: ParseCtx
+): ParsedProfile {
+  const tf = (bundle.timeframe ?? 90) as Timeframe
+  const det = ((bundle.utaDetails as Dict)?.data ?? null) as Dict | null
+  const inner = (det?.detail ?? det?.publicDetail ?? null) as Dict | null
+  const perf = ((bundle.utaPerformance as Dict)?.data ?? null) as Dict | null
+  const chart = ((bundle.utaChart as Dict)?.data ?? null) as Dict | null
+
+  const stats: ParsedStats[] = []
+  if (perf) {
+    const winRateDec = num(perf.winRate)
+    const mddDec = num(perf.maxDrawDown)
+    const extras: Record<string, unknown> = { bitget_trader_type: 2 }
+    if (inner?.tradingDays !== undefined) extras.trading_days = int(inner.tradingDays)
+    if (perf.lastOrderTime !== undefined) {
+      const t = num(perf.lastOrderTime)
+      if (t !== null) extras.last_order_time = new Date(t).toISOString()
+    }
+    if (inner?.curFollowCount !== undefined) extras.copier_count_current = int(inner.curFollowCount)
+    if (inner?.maxFollowCount !== undefined) extras.copier_count_max = int(inner.maxFollowCount)
+
+    stats.push({
+      timeframe: tf,
+      asOf: ctx.scrapedAt,
+      roi: num(perf.roi), // already percent
+      pnl: num(perf.profit),
+      sharpe: null,
+      mdd: mddDec === null ? null : mddDec * 100, // decimal → percent
+      winRate: winRateDec === null ? null : winRateDec * 100, // decimal → percent
+      winPositions: int(perf.profitTrades),
+      totalPositions: int(perf.totalTrades),
+      copierPnl: num(perf.followProfit),
+      copierCount: int(inner?.curFollowCount),
+      aum: num(inner?.aum),
+      volume: null,
+      profitShareRate: num(inner?.sharingRatio),
+      holdingDurationAvgHours: null,
+      tradingPreferences: (chart?.symbolDistributeDetail ?? null) as Dict | null,
+      extras,
+    })
+  }
+
+  const series: ParsedProfile['series'] = []
+  const roiPoints = klinePoints(chart?.roiRows)
+  if (roiPoints.length > 0) series.push({ timeframe: tf, metric: 'roi', points: roiPoints })
+  const pnlPoints = klinePoints(chart?.pnlRows)
+  if (pnlPoints.length > 0) series.push({ timeframe: tf, metric: 'pnl', points: pnlPoints })
+
+  return {
+    stats,
+    series,
+    nickname: det ? ((det.displayName as string) ?? null) : null,
+    avatarUrlOrigin: det ? ((det.headPic as string) ?? null) : null,
   }
 }

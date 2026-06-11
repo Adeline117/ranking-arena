@@ -32,6 +32,10 @@ import {
 
 const BASE = 'https://www.bitget.com/v1/trigger/trace/public'
 const TRACE_BASE = 'https://www.bitget.com/v1/trigger/trace'
+/** UTA portfolio-trader profile family (board rows with type=2; keyed by
+ *  portfolioId from traders.meta — traderUid is rejected). Profile page:
+ *  /zh-CN/copy-trading/futures-trader/{portfolioId} (verified 2026-06-11). */
+const UTA_BASE = 'https://www.bitget.com/v1/trigger/public/uta'
 
 /** UTA board-list endpoints per boardKey (verified by live capture 2026-06). */
 const UTA_LIST_ENDPOINTS: Record<string, string> = {
@@ -151,11 +155,54 @@ const bitgetAdapter: SourceAdapter = {
     session: FetchSession,
     src: SourceRow,
     exchangeTraderId: string,
-    timeframe: Timeframe
+    timeframe: Timeframe,
+    traderMeta?: Record<string, unknown> | null
   ): Promise<RawBundle> {
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
     const tf = (timeframe === 0 ? 90 : timeframe) as RankingTimeframe
+
+    // UTA portfolio traders (type=2): different endpoint family keyed by
+    // portfolioId — the trace family rejects their traderUid with 30081.
+    const portfolioId =
+      Number(traderMeta?.bitget_trader_type) === 2 && traderMeta?.portfolio_id
+        ? String(traderMeta.portfolio_id)
+        : null
+    if (portfolioId !== null) {
+      const utaDetails = await cachedDetailV2(session, `uta:${portfolioId}`, () =>
+        replayJson(session, fetcher, {
+          url: endpoint(src, 'utaDetails', `${UTA_BASE}/details`),
+          method: 'POST',
+          headers: UTA_HEADERS,
+          body: { portfolioId },
+        })
+      )
+      const utaPerformance = await replayJson(session, fetcher, {
+        url: endpoint(src, 'utaPerformance', `${UTA_BASE}/performance`),
+        method: 'POST',
+        headers: UTA_HEADERS,
+        body: { portfolioId, cycleTime: tf },
+      })
+      const utaChart = await replayJson(session, fetcher, {
+        url: endpoint(src, 'utaChart', `${UTA_BASE}/cycleChartData`),
+        method: 'POST',
+        headers: UTA_HEADERS,
+        body: { portfolioId, cycleTime: tf },
+      })
+      const fetchedAt = new Date().toISOString()
+      return {
+        pages: [
+          {
+            pageIndex: 1,
+            payload: { utaDetails, utaPerformance, utaChart, timeframe: tf },
+            url: `${UTA_BASE}/performance`,
+            fetchedAt,
+          },
+        ],
+        fetchedAt,
+      }
+    }
+
     const detailUrl = endpoint(src, 'profile', `${BASE}/traderDetailPageV2`)
     const cycleUrl = endpoint(src, 'cycleData', `${BASE}/cycleData`)
 
