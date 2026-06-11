@@ -5,7 +5,7 @@
  */
 
 // Phase 0
-// import './bitget'        — registered in the Bitget adapter commit
-// import './bitget/bots'
+import './bitget'
+// import './bitget/bots'  — registered in the bots adapter commit
 
 export {}
