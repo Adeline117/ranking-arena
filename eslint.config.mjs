@@ -103,6 +103,37 @@ const eslintConfig = defineConfig([
       'no-restricted-syntax': 'off',
     },
   },
+  // ============================================
+  // Ingest framework boundary (ARENA_DATA_SPEC §2.1)
+  // app/** may import lib/ingest contracts (core/*, fetch/types) but never
+  // the Playwright-touching implementations or the direct-PG pool — those
+  // are worker-only and would break the Vercel bundle.
+  // ============================================
+  {
+    files: ['app/**/*.ts', 'app/**/*.tsx', 'lib/data/**/*.ts', 'lib/hooks/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/lib/ingest/fetch/fetcher',
+                '@/lib/ingest/fetch/capture',
+                '@/lib/ingest/db',
+                '@/lib/ingest/adapters/*',
+                '**/lib/ingest/fetch/fetcher',
+                '**/lib/ingest/fetch/capture',
+                '**/lib/ingest/db',
+              ],
+              message:
+                'Worker-only ingest module (Playwright/pg). app code may only import lib/ingest/core/* and lib/ingest/fetch/types.',
+            },
+          ],
+        },
+      ],
+    },
+  },
   // Override default ignores of eslint-config-next.
   globalIgnores([
     // Tooling / docs / vendor - don't block app lint

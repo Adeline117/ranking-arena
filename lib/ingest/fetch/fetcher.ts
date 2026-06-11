@@ -1,0 +1,263 @@
+/**
+ * FetchSession implementation (spec §2.1 fetcher pool, §4 anti-bot, §5.9 UTC).
+ *
+ * WORKER-ONLY MODULE — imports Playwright. app/** must never import this.
+ *
+ * Region routing (sources.fetch_region):
+ *   local  → chromium.launchPersistentContext on this machine (Mac Mini);
+ *            warm cookies persist on disk under .arena-ingest/profiles/.
+ *   vps_sg / vps_jp → chromium.connect() to a remote `playwright run-server`
+ *            (PLAYWRIGHT_WS_SG / PLAYWRIGHT_WS_JP). The VPS is a dumb
+ *            region-pinned browser: all adapter code runs here, and JSON
+ *            replay uses the browser-context APIRequestContext so replay
+ *            egress IP == session IP automatically.
+ *
+ * Every context is created with timezoneId 'UTC' + locale 'en-US' — a
+ * worker machine's local timezone must never shift parsed daily series
+ * (spec §5.9 hard rule).
+ */
+
+import path from 'node:path'
+import { chromium } from 'playwright'
+import type { APIRequestContext, BrowserContext, Page, Request } from 'playwright'
+import type { SourceRow } from '../core/types'
+import type {
+  CapturedExchange,
+  EndpointCapture,
+  FetchSession,
+  ReplayRequestTemplate,
+} from './types'
+import { BlockedUpstreamError, PacedGate } from './rate-limiter'
+import { Circuit, type CircuitState } from './circuit'
+import { getIngestPool } from '../db'
+
+const CONTEXT_OPTIONS = {
+  timezoneId: 'UTC',
+  locale: 'en-US',
+  viewport: { width: 1440, height: 900 },
+  userAgent:
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
+    '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+} as const
+
+/** Circuits are per-source and shared across sessions/restarts of this process. */
+const circuits = new Map<string, Circuit>()
+
+export function getCircuit(sourceSlug: string): Circuit {
+  let c = circuits.get(sourceSlug)
+  if (!c) {
+    c = new Circuit(sourceSlug)
+    circuits.set(sourceSlug, c)
+  }
+  return c
+}
+
+export function getCircuitState(sourceSlug: string): CircuitState {
+  return getCircuit(sourceSlug).getState()
+}
+
+function remoteWsEndpoint(region: 'vps_sg' | 'vps_jp'): string {
+  const env = region === 'vps_sg' ? 'PLAYWRIGHT_WS_SG' : 'PLAYWRIGHT_WS_JP'
+  const ws = process.env[env]
+  if (!ws) {
+    throw new Error(
+      `[ingest] ${env} not set — required for fetch_region=${region}. ` +
+        `Run \`npx playwright run-server --port 3458\` on the VPS (firewalled!).`
+    )
+  }
+  return ws
+}
+
+/** Headers that must not be replayed verbatim. */
+const SKIP_REPLAY_HEADERS = new Set([
+  'host',
+  'content-length',
+  'connection',
+  'accept-encoding',
+  'cookie',
+])
+
+function toTemplate(req: Request): ReplayRequestTemplate {
+  const headers: Record<string, string> = {}
+  for (const [k, v] of Object.entries(req.headers())) {
+    if (!SKIP_REPLAY_HEADERS.has(k.toLowerCase()) && !k.startsWith(':')) {
+      headers[k] = v
+    }
+  }
+  let body: unknown
+  const postData = req.postData()
+  if (postData) {
+    try {
+      body = JSON.parse(postData)
+    } catch {
+      body = postData
+    }
+  }
+  return {
+    url: req.url(),
+    method: req.method() === 'POST' ? 'POST' : 'GET',
+    headers,
+    body,
+  }
+}
+
+class PlaywrightFetchSession implements FetchSession {
+  private context: BrowserContext | null = null
+  private pageInstance: Page | null = null
+  private readonly gate: PacedGate
+  private readonly circuit: Circuit
+
+  constructor(
+    readonly sourceSlug: string,
+    private readonly src: SourceRow
+  ) {
+    this.gate = new PacedGate({ budgetMs: src.rate_budget_ms })
+    this.circuit = getCircuit(src.slug)
+  }
+
+  private async ensureContext(): Promise<BrowserContext> {
+    if (this.context) return this.context
+
+    if (this.src.fetch_region === 'local') {
+      const userDataDir = path.join(process.cwd(), '.arena-ingest', 'profiles', this.src.slug)
+      this.context = await chromium.launchPersistentContext(userDataDir, {
+        ...CONTEXT_OPTIONS,
+        headless: true,
+      })
+    } else {
+      const browser = await chromium.connect(remoteWsEndpoint(this.src.fetch_region))
+      const storageState = await this.loadState()
+      this.context = await browser.newContext({
+        ...CONTEXT_OPTIONS,
+        storageState: storageState ?? undefined,
+      })
+    }
+    return this.context
+  }
+
+  async page(): Promise<Page> {
+    if (this.pageInstance && !this.pageInstance.isClosed()) return this.pageInstance
+    const ctx = await this.ensureContext()
+    this.pageInstance = ctx.pages()[0] ?? (await ctx.newPage())
+    return this.pageInstance
+  }
+
+  async api(): Promise<APIRequestContext> {
+    const ctx = await this.ensureContext()
+    return ctx.request
+  }
+
+  async capture(matcher: RegExp | ((url: string) => boolean)): Promise<EndpointCapture> {
+    const page = await this.page()
+    const matches = (url: string) => (matcher instanceof RegExp ? matcher.test(url) : matcher(url))
+
+    const captured: CapturedExchange[] = []
+    const waiters: Array<(ex: CapturedExchange) => void> = []
+
+    const onResponse = async (response: import('playwright').Response) => {
+      try {
+        const req = response.request()
+        const type = req.resourceType()
+        if (type !== 'xhr' && type !== 'fetch') return
+        if (!matches(response.url())) return
+        let responseJson: unknown
+        try {
+          responseJson = await response.json()
+        } catch {
+          return // non-JSON response — not a replayable endpoint
+        }
+        const exchange: CapturedExchange = {
+          template: toTemplate(req),
+          responseJson,
+          status: response.status(),
+        }
+        captured.push(exchange)
+        while (waiters.length > 0) waiters.shift()!(exchange)
+      } catch {
+        // page navigated away mid-read — ignore
+      }
+    }
+
+    page.on('response', onResponse)
+
+    return {
+      first: (timeoutMs = 30_000) => {
+        if (captured.length > 0) return Promise.resolve(captured[0])
+        return new Promise<CapturedExchange>((resolve, reject) => {
+          const timer = setTimeout(
+            () => reject(new Error(`[ingest] capture timeout (${this.sourceSlug})`)),
+            timeoutMs
+          )
+          waiters.push((ex) => {
+            clearTimeout(timer)
+            resolve(ex)
+          })
+        })
+      },
+      all: () => [...captured],
+      dispose: () => {
+        page.off('response', onResponse)
+      },
+    }
+  }
+
+  async paced<T>(fn: () => Promise<T>): Promise<T> {
+    this.circuit.assertCanProceed()
+    try {
+      const result = await this.gate.run(fn)
+      this.circuit.recordSuccess()
+      return result
+    } catch (err) {
+      this.circuit.recordFailure(err instanceof BlockedUpstreamError)
+      throw err
+    }
+  }
+
+  async saveState(): Promise<void> {
+    if (!this.context) return
+    const state = await this.context.storageState()
+    await getIngestPool().query(
+      `INSERT INTO arena.source_secrets (source_id, storage_state, updated_at)
+       VALUES ($1, $2, now())
+       ON CONFLICT (source_id)
+       DO UPDATE SET storage_state = EXCLUDED.storage_state, updated_at = now()`,
+      [this.src.id, JSON.stringify(state)]
+    )
+  }
+
+  private async loadState(): Promise<Awaited<ReturnType<BrowserContext['storageState']>> | null> {
+    const { rows } = await getIngestPool().query<{ storage_state: unknown }>(
+      `SELECT storage_state FROM arena.source_secrets WHERE source_id = $1`,
+      [this.src.id]
+    )
+    const state = rows[0]?.storage_state
+    return state ? (state as Awaited<ReturnType<BrowserContext['storageState']>>) : null
+  }
+
+  async close(): Promise<void> {
+    try {
+      await this.saveState()
+    } catch (err) {
+      console.error(`[ingest] saveState failed for ${this.sourceSlug}:`, err)
+    }
+    const logCloseError = (what: string) => (err: unknown) =>
+      console.warn(`[ingest] ${this.sourceSlug}: ${what} close failed:`, err)
+    if (this.pageInstance && !this.pageInstance.isClosed()) {
+      await this.pageInstance.close().catch(logCloseError('page'))
+    }
+    if (this.context) {
+      const browser = this.context.browser()
+      await this.context.close().catch(logCloseError('context'))
+      // Remote connections own a browser handle; persistent contexts do not.
+      if (browser && this.src.fetch_region !== 'local') {
+        await browser.close().catch(logCloseError('browser'))
+      }
+      this.context = null
+      this.pageInstance = null
+    }
+  }
+}
+
+export async function openSession(src: SourceRow): Promise<FetchSession> {
+  return new PlaywrightFetchSession(src.slug, src)
+}
