@@ -10,6 +10,11 @@
 !.yarn/releases
 !.yarn/versions
 
+# ARENA ingest worker — local Playwright browser profiles (never commit;
+# also keeps Tailwind v4 auto content-detection from scanning cached
+# exchange HTML and generating broken bg-[url(...)] utilities)
+.arena-ingest/
+
 # testing
 /coverage
 /test-results/
