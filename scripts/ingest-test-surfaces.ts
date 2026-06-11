@@ -88,25 +88,29 @@ async function main() {
         }
       }
 
-      // positions
-      const posBundle = await adapter.getPositions(
-        session,
-        src,
-        trader.exchange_trader_id,
-        trader.meta
-      )
-      const positions = posBundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctxOf()))
-      const delayH = Number(src.meta.positions_delay_hours ?? 0) || 0
-      await publishPositions(
-        src,
-        trader.id,
-        positions,
-        new Date(Date.now() - delayH * 3_600_000).toISOString()
-      )
-      console.log(`[positions] ${trader.exchange_trader_id}: ${positions.length} open`)
+      // positions (capability-gated, like Tier-D)
+      if (adapter.capabilities.positions) {
+        const posBundle = await adapter.getPositions(
+          session,
+          src,
+          trader.exchange_trader_id,
+          trader.meta
+        )
+        const positions = posBundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctxOf()))
+        const delayH = Number(src.meta.positions_delay_hours ?? 0) || 0
+        await publishPositions(
+          src,
+          trader.id,
+          positions,
+          new Date(Date.now() - delayH * 3_600_000).toISOString()
+        )
+        console.log(`[positions] ${trader.exchange_trader_id}: ${positions.length} open`)
+      }
 
-      // histories
+      // histories (capability-gated, like Tier-B)
       for (const kind of ['position_history', 'copiers'] as const) {
+        if (kind === 'position_history' && !adapter.capabilities.positionHistory) continue
+        if (kind === 'copiers' && !adapter.capabilities.copiers) continue
         const cursor = await getHistoryCursor(trader.id, kind)
         const rows: import('@/lib/ingest/core/types').ParsedHistoryRow[] = []
         let pages = 0

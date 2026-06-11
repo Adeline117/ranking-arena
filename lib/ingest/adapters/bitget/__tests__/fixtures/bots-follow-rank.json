@@ -1,0 +1,90 @@
+{
+  "code": "200",
+  "data": {
+    "followers": [
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "400.09",
+        "followerProfitAmount": "8492.85",
+        "followerTime": "1722725316",
+        "followerUserName": "BGUSER-RMQF5JP0",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "300.00",
+        "followerProfitAmount": "6274.25",
+        "followerTime": "1749788356",
+        "followerUserName": "BGUSER-RB6WRQQ8",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "745.00",
+        "followerProfitAmount": "4048.82",
+        "followerTime": "870696812",
+        "followerUserName": "BGUSER-192ET8KK",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "238.71",
+        "followerProfitAmount": "3784.99",
+        "followerTime": "771427169",
+        "followerUserName": "BGUSER-7X7EEFEA",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "2859.00",
+        "followerProfitAmount": "3290.58",
+        "followerTime": "847787878",
+        "followerUserName": "BGUSER-ERPAY35P",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "205.45",
+        "followerProfitAmount": "2465.31",
+        "followerTime": "1005253340",
+        "followerUserName": "BGUSER-LFEKUBDM",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "100.00",
+        "followerProfitAmount": "2394.59",
+        "followerTime": "6802640892",
+        "followerUserName": "BGUSER-XERLBCR2",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://qrc.bgstatic.com/otc/images/20260116/1768553648561.png",
+        "followerInvestmentAmount": "16833.39",
+        "followerProfitAmount": "1810.67",
+        "followerTime": "10526187810",
+        "followerUserDisplayName": "",
+        "followerUserName": "BGUSER-GFRXRK5A",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "5236.10",
+        "followerProfitAmount": "1690.32",
+        "followerTime": "269582515",
+        "followerUserName": "BGUSER-93P6K5VR",
+        "lastUpdateTime": "1781163064838"
+      },
+      {
+        "followerAvatarUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "followerInvestmentAmount": "650.03",
+        "followerProfitAmount": "1627.46",
+        "followerTime": "1407238326",
+        "followerUserName": "BGUSER-H3RJ3B1J",
+        "lastUpdateTime": "1781163064838"
+      }
+    ],
+    "lastUpdateTime": "1781163064838"
+  },
+  "params": []
+}

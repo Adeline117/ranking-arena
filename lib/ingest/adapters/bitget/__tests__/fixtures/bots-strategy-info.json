@@ -1,0 +1,628 @@
+{
+  "code": "200",
+  "data": {
+    "accountUrl": "https://qrc.bgstatic.com/otc/images/20251204/1764843928063.png",
+    "alreadyFollow": false,
+    "businessLine": 10,
+    "chartData": [],
+    "createTime": "1765894424850",
+    "direction": 1,
+    "followInvestCurrentAmount": "11773.84",
+    "followerInvestmentAmount": "1166032.09",
+    "followerTotalProfit": "67453.95",
+    "investmentAmount": "51.03",
+    "isFully": false,
+    "isOwner": false,
+    "leverage": 20,
+    "outOfGrid": false,
+    "performances": [
+      {
+        "createTime": "1765894424850",
+        "investmentAmount": "51.03",
+        "performanceType": 7,
+        "profitAmount": "-29.05",
+        "profitRate": "-56.92",
+        "strategyId": "1384827077603221504"
+      },
+      {
+        "createTime": "1765894424850",
+        "investmentAmount": "51.03",
+        "performanceType": 30,
+        "profitAmount": "-146.93",
+        "profitRate": "-287.89",
+        "strategyId": "1384827077603221504"
+      },
+      {
+        "createTime": "1765894424850",
+        "investmentAmount": "51.03",
+        "performanceType": 90,
+        "profitAmount": "11672.44",
+        "profitRate": "22869.74",
+        "strategyId": "1384827077603221504"
+      }
+    ],
+    "productId": "1384827078261649409",
+    "profitAmount": "11673.13",
+    "profitChartDto": {
+      "profitData": [
+        {
+          "amount": "112607.92",
+          "dateTime": "03/14",
+          "fullTime": "2026-03-14 00:00:00",
+          "investmentAmount": "784341.73"
+        },
+        {
+          "amount": "112969.11",
+          "dateTime": "03/15",
+          "fullTime": "2026-03-15 00:00:00",
+          "investmentAmount": "800619.42"
+        },
+        {
+          "amount": "107640.09",
+          "dateTime": "03/16",
+          "fullTime": "2026-03-16 00:00:00",
+          "investmentAmount": "814625.25"
+        },
+        {
+          "amount": "107514.61",
+          "dateTime": "03/17",
+          "fullTime": "2026-03-17 00:00:00",
+          "investmentAmount": "829508.02"
+        },
+        {
+          "amount": "113716.29",
+          "dateTime": "03/18",
+          "fullTime": "2026-03-18 00:00:00",
+          "investmentAmount": "852141.99"
+        },
+        {
+          "amount": "117313.73",
+          "dateTime": "03/19",
+          "fullTime": "2026-03-19 00:00:00",
+          "investmentAmount": "872845.98"
+        },
+        {
+          "amount": "107344.04",
+          "dateTime": "03/20",
+          "fullTime": "2026-03-20 00:00:00",
+          "investmentAmount": "886820.93"
+        },
+        {
+          "amount": "112702.81",
+          "dateTime": "03/21",
+          "fullTime": "2026-03-21 00:00:00",
+          "investmentAmount": "896857.82"
+        },
+        {
+          "amount": "116321.31",
+          "dateTime": "03/22",
+          "fullTime": "2026-03-22 00:00:00",
+          "investmentAmount": "905581.1"
+        },
+        {
+          "amount": "114570.53",
+          "dateTime": "03/23",
+          "fullTime": "2026-03-23 00:00:00",
+          "investmentAmount": "923419.12"
+        },
+        {
+          "amount": "111080.63",
+          "dateTime": "03/24",
+          "fullTime": "2026-03-24 00:00:00",
+          "investmentAmount": "933638.85"
+        },
+        {
+          "amount": "105497.15",
+          "dateTime": "03/25",
+          "fullTime": "2026-03-25 00:00:00",
+          "investmentAmount": "943677.36"
+        },
+        {
+          "amount": "100631.15",
+          "dateTime": "03/26",
+          "fullTime": "2026-03-26 00:00:00",
+          "investmentAmount": "954066.2"
+        },
+        {
+          "amount": "93858.65",
+          "dateTime": "03/27",
+          "fullTime": "2026-03-27 00:00:00",
+          "investmentAmount": "956221.48"
+        },
+        {
+          "amount": "95644.52",
+          "dateTime": "03/28",
+          "fullTime": "2026-03-28 00:00:00",
+          "investmentAmount": "958976.9"
+        },
+        {
+          "amount": "95711.42",
+          "dateTime": "03/29",
+          "fullTime": "2026-03-29 00:00:00",
+          "investmentAmount": "960939.22"
+        },
+        {
+          "amount": "95919.66",
+          "dateTime": "03/30",
+          "fullTime": "2026-03-30 00:00:00",
+          "investmentAmount": "963146.59"
+        },
+        {
+          "amount": "100402.02",
+          "dateTime": "03/31",
+          "fullTime": "2026-03-31 00:00:00",
+          "investmentAmount": "966200.09"
+        },
+        {
+          "amount": "94782.76",
+          "dateTime": "04/01",
+          "fullTime": "2026-04-01 00:00:00",
+          "investmentAmount": "967657.16"
+        },
+        {
+          "amount": "92406.77",
+          "dateTime": "04/02",
+          "fullTime": "2026-04-02 00:00:00",
+          "investmentAmount": "968857.48"
+        },
+        {
+          "amount": "92072.94",
+          "dateTime": "04/03",
+          "fullTime": "2026-04-03 00:00:00",
+          "investmentAmount": "970304.87"
+        },
+        {
+          "amount": "91310.63",
+          "dateTime": "04/04",
+          "fullTime": "2026-04-04 00:00:00",
+          "investmentAmount": "971657.98"
+        },
+        {
+          "amount": "89885",
+          "dateTime": "04/05",
+          "fullTime": "2026-04-05 00:00:00",
+          "investmentAmount": "973250.67"
+        },
+        {
+          "amount": "90290.65",
+          "dateTime": "04/06",
+          "fullTime": "2026-04-06 00:00:00",
+          "investmentAmount": "974759.95"
+        },
+        {
+          "amount": "89153.89",
+          "dateTime": "04/07",
+          "fullTime": "2026-04-07 00:00:00",
+          "investmentAmount": "978002.2"
+        },
+        {
+          "amount": "88343.38",
+          "dateTime": "04/08",
+          "fullTime": "2026-04-08 00:00:00",
+          "investmentAmount": "980343.34"
+        },
+        {
+          "amount": "88484.68",
+          "dateTime": "04/09",
+          "fullTime": "2026-04-09 00:00:00",
+          "investmentAmount": "982201.69"
+        },
+        {
+          "amount": "84910.51",
+          "dateTime": "04/10",
+          "fullTime": "2026-04-10 00:00:00",
+          "investmentAmount": "984216.45"
+        },
+        {
+          "amount": "84876.09",
+          "dateTime": "04/11",
+          "fullTime": "2026-04-11 00:00:00",
+          "investmentAmount": "986139.37"
+        },
+        {
+          "amount": "84501.51",
+          "dateTime": "04/12",
+          "fullTime": "2026-04-12 00:00:00",
+          "investmentAmount": "987392.68"
+        },
+        {
+          "amount": "82404.28",
+          "dateTime": "04/13",
+          "fullTime": "2026-04-13 00:00:00",
+          "investmentAmount": "989470.84"
+        },
+        {
+          "amount": "83876.26",
+          "dateTime": "04/14",
+          "fullTime": "2026-04-14 00:00:00",
+          "investmentAmount": "992050.77"
+        },
+        {
+          "amount": "82231.43",
+          "dateTime": "04/15",
+          "fullTime": "2026-04-15 00:00:00",
+          "investmentAmount": "994510.46"
+        },
+        {
+          "amount": "82206.88",
+          "dateTime": "04/16",
+          "fullTime": "2026-04-16 00:00:00",
+          "investmentAmount": "997144.33"
+        },
+        {
+          "amount": "81813.68",
+          "dateTime": "04/17",
+          "fullTime": "2026-04-17 00:00:00",
+          "investmentAmount": "999292.47"
+        },
+        {
+          "amount": "79343.8",
+          "dateTime": "04/18",
+          "fullTime": "2026-04-18 00:00:00",
+          "investmentAmount": "1003064.57"
+        },
+        {
+          "amount": "78099.06",
+          "dateTime": "04/19",
+          "fullTime": "2026-04-19 00:00:00",
+          "investmentAmount": "1006075.14"
+        },
+        {
+          "amount": "77165.88",
+          "dateTime": "04/20",
+          "fullTime": "2026-04-20 00:00:00",
+          "investmentAmount": "1008661.7"
+        },
+        {
+          "amount": "78560.41",
+          "dateTime": "04/21",
+          "fullTime": "2026-04-21 00:00:00",
+          "investmentAmount": "1014597.64"
+        },
+        {
+          "amount": "80187.78",
+          "dateTime": "04/22",
+          "fullTime": "2026-04-22 00:00:00",
+          "investmentAmount": "1018181.3"
+        },
+        {
+          "amount": "78353.61",
+          "dateTime": "04/23",
+          "fullTime": "2026-04-23 00:00:00",
+          "investmentAmount": "1020981.25"
+        },
+        {
+          "amount": "80051.65",
+          "dateTime": "04/24",
+          "fullTime": "2026-04-24 00:00:00",
+          "investmentAmount": "1023620.55"
+        },
+        {
+          "amount": "79301.35",
+          "dateTime": "04/25",
+          "fullTime": "2026-04-25 00:00:00",
+          "investmentAmount": "1025740.31"
+        },
+        {
+          "amount": "80319.39",
+          "dateTime": "04/26",
+          "fullTime": "2026-04-26 00:00:00",
+          "investmentAmount": "1029698.53"
+        },
+        {
+          "amount": "79942.32",
+          "dateTime": "04/27",
+          "fullTime": "2026-04-27 00:00:00",
+          "investmentAmount": "1032216.2"
+        },
+        {
+          "amount": "78265.04",
+          "dateTime": "04/28",
+          "fullTime": "2026-04-28 00:00:00",
+          "investmentAmount": "1035930.33"
+        },
+        {
+          "amount": "76799.17",
+          "dateTime": "04/29",
+          "fullTime": "2026-04-29 00:00:00",
+          "investmentAmount": "1038060.27"
+        },
+        {
+          "amount": "79438.01",
+          "dateTime": "04/30",
+          "fullTime": "2026-04-30 00:00:00",
+          "investmentAmount": "1043872.79"
+        },
+        {
+          "amount": "80217.54",
+          "dateTime": "05/01",
+          "fullTime": "2026-05-01 00:00:00",
+          "investmentAmount": "1047510.93"
+        },
+        {
+          "amount": "80456.48",
+          "dateTime": "05/02",
+          "fullTime": "2026-05-02 00:00:00",
+          "investmentAmount": "1051406.39"
+        },
+        {
+          "amount": "78666.31",
+          "dateTime": "05/03",
+          "fullTime": "2026-05-03 00:00:00",
+          "investmentAmount": "1054776.28"
+        },
+        {
+          "amount": "76376.17",
+          "dateTime": "05/04",
+          "fullTime": "2026-05-04 00:00:00",
+          "investmentAmount": "1057481.56"
+        },
+        {
+          "amount": "75538.95",
+          "dateTime": "05/05",
+          "fullTime": "2026-05-05 00:00:00",
+          "investmentAmount": "1059970.26"
+        },
+        {
+          "amount": "75436.82",
+          "dateTime": "05/06",
+          "fullTime": "2026-05-06 00:00:00",
+          "investmentAmount": "1061125.72"
+        },
+        {
+          "amount": "75382.85",
+          "dateTime": "05/07",
+          "fullTime": "2026-05-07 00:00:00",
+          "investmentAmount": "1063376"
+        },
+        {
+          "amount": "76362.05",
+          "dateTime": "05/08",
+          "fullTime": "2026-05-08 00:00:00",
+          "investmentAmount": "1066018.03"
+        },
+        {
+          "amount": "77830.74",
+          "dateTime": "05/09",
+          "fullTime": "2026-05-09 00:00:00",
+          "investmentAmount": "1073006.72"
+        },
+        {
+          "amount": "76580.93",
+          "dateTime": "05/10",
+          "fullTime": "2026-05-10 00:00:00",
+          "investmentAmount": "1074141.04"
+        },
+        {
+          "amount": "75813.3",
+          "dateTime": "05/11",
+          "fullTime": "2026-05-11 00:00:00",
+          "investmentAmount": "1075678.67"
+        },
+        {
+          "amount": "74514.51",
+          "dateTime": "05/12",
+          "fullTime": "2026-05-12 00:00:00",
+          "investmentAmount": "1078384.52"
+        },
+        {
+          "amount": "77729.48",
+          "dateTime": "05/13",
+          "fullTime": "2026-05-13 00:00:00",
+          "investmentAmount": "1085162.52"
+        },
+        {
+          "amount": "84017.22",
+          "dateTime": "05/14",
+          "fullTime": "2026-05-14 00:00:00",
+          "investmentAmount": "1093773.17"
+        },
+        {
+          "amount": "82044.83",
+          "dateTime": "05/15",
+          "fullTime": "2026-05-15 00:00:00",
+          "investmentAmount": "1102058.72"
+        },
+        {
+          "amount": "82965.85",
+          "dateTime": "05/16",
+          "fullTime": "2026-05-16 00:00:00",
+          "investmentAmount": "1106938.4"
+        },
+        {
+          "amount": "82494.05",
+          "dateTime": "05/17",
+          "fullTime": "2026-05-17 00:00:00",
+          "investmentAmount": "1111508.9"
+        },
+        {
+          "amount": "83526.65",
+          "dateTime": "05/18",
+          "fullTime": "2026-05-18 00:00:00",
+          "investmentAmount": "1115954.6"
+        },
+        {
+          "amount": "73687.58",
+          "dateTime": "05/19",
+          "fullTime": "2026-05-19 00:00:00",
+          "investmentAmount": "1118940.4"
+        },
+        {
+          "amount": "73639.65",
+          "dateTime": "05/20",
+          "fullTime": "2026-05-20 00:00:00",
+          "investmentAmount": "1122013.84"
+        },
+        {
+          "amount": "74194.41",
+          "dateTime": "05/21",
+          "fullTime": "2026-05-21 00:00:00",
+          "investmentAmount": "1125060.24"
+        },
+        {
+          "amount": "78729.19",
+          "dateTime": "05/22",
+          "fullTime": "2026-05-22 00:00:00",
+          "investmentAmount": "1129429.26"
+        },
+        {
+          "amount": "76788.05",
+          "dateTime": "05/23",
+          "fullTime": "2026-05-23 00:00:00",
+          "investmentAmount": "1133008.05"
+        },
+        {
+          "amount": "74465.09",
+          "dateTime": "05/24",
+          "fullTime": "2026-05-24 00:00:00",
+          "investmentAmount": "1134219.43"
+        },
+        {
+          "amount": "75024.23",
+          "dateTime": "05/25",
+          "fullTime": "2026-05-25 00:00:00",
+          "investmentAmount": "1136749.44"
+        },
+        {
+          "amount": "78494.89",
+          "dateTime": "05/26",
+          "fullTime": "2026-05-26 00:00:00",
+          "investmentAmount": "1139506.4"
+        },
+        {
+          "amount": "77618.81",
+          "dateTime": "05/27",
+          "fullTime": "2026-05-27 00:00:00",
+          "investmentAmount": "1141115.45"
+        },
+        {
+          "amount": "76172.6",
+          "dateTime": "05/28",
+          "fullTime": "2026-05-28 00:00:00",
+          "investmentAmount": "1143535.83"
+        },
+        {
+          "amount": "77002.61",
+          "dateTime": "05/29",
+          "fullTime": "2026-05-29 00:00:00",
+          "investmentAmount": "1144882.39"
+        },
+        {
+          "amount": "76200.91",
+          "dateTime": "05/30",
+          "fullTime": "2026-05-30 00:00:00",
+          "investmentAmount": "1146392.21"
+        },
+        {
+          "amount": "76463.69",
+          "dateTime": "05/31",
+          "fullTime": "2026-05-31 00:00:00",
+          "investmentAmount": "1150640.43"
+        },
+        {
+          "amount": "74495.71",
+          "dateTime": "06/01",
+          "fullTime": "2026-06-01 00:00:00",
+          "investmentAmount": "1153548"
+        },
+        {
+          "amount": "69150.29",
+          "dateTime": "06/02",
+          "fullTime": "2026-06-02 00:00:00",
+          "investmentAmount": "1155134.82"
+        },
+        {
+          "amount": "68523.25",
+          "dateTime": "06/03",
+          "fullTime": "2026-06-03 00:00:00",
+          "investmentAmount": "1157286.7"
+        },
+        {
+          "amount": "68336.43",
+          "dateTime": "06/04",
+          "fullTime": "2026-06-04 00:00:00",
+          "investmentAmount": "1158516.19"
+        },
+        {
+          "amount": "66965.88",
+          "dateTime": "06/05",
+          "fullTime": "2026-06-05 00:00:00",
+          "investmentAmount": "1159249.42"
+        },
+        {
+          "amount": "67547.14",
+          "dateTime": "06/06",
+          "fullTime": "2026-06-06 00:00:00",
+          "investmentAmount": "1160127.47"
+        },
+        {
+          "amount": "67878.19",
+          "dateTime": "06/07",
+          "fullTime": "2026-06-07 00:00:00",
+          "investmentAmount": "1162321.9"
+        },
+        {
+          "amount": "68157.49",
+          "dateTime": "06/08",
+          "fullTime": "2026-06-08 00:00:00",
+          "investmentAmount": "1163815.52"
+        },
+        {
+          "amount": "67266.47",
+          "dateTime": "06/09",
+          "fullTime": "2026-06-09 00:00:00",
+          "investmentAmount": "1164649.39"
+        },
+        {
+          "amount": "66852.32",
+          "dateTime": "06/10",
+          "fullTime": "2026-06-10 00:00:00",
+          "investmentAmount": "1165462.66"
+        },
+        {
+          "amount": "67453.95",
+          "dateTime": "06/11",
+          "fullTime": "2026-06-11 00:00:00",
+          "investmentAmount": "1166032.09"
+        }
+      ],
+      "timeType": 2
+    },
+    "profitRate": "22871.10",
+    "runTime": "15268637032",
+    "secondStrategyType": 3,
+    "status": 2,
+    "strAccountId": "b9bd4f738bb4315ea792",
+    "strategyId": "1384827077603221504",
+    "strategySelfProfitChartDto": null,
+    "strategyType": 2,
+    "symbolDtos": [
+      {
+        "baseCoinId": 1946,
+        "baseTokenId": "RIVER",
+        "businessLine": 10,
+        "quoteCoinId": 2,
+        "quoteTokenId": "USDT",
+        "symbolDisplayName": "RIVERUSDT",
+        "symbolId": "RIVERUSDT_UMCBL"
+      }
+    ],
+    "symbolGold": false,
+    "symbolId": "RIVERUSDT_UMCBL",
+    "symbolRWA": false,
+    "symbolSuspend": false,
+    "tickers": [
+      {
+        "businessLine": 10,
+        "change": "2.44",
+        "price": "5.114",
+        "symbolId": "RIVERUSDT_UMCBL"
+      }
+    ],
+    "tokenName": "USDT",
+    "traceTotalCount": 22749,
+    "userDisplayName": "今晚夜色最美",
+    "userName": "BGUSER-YKGVKKVG"
+  },
+  "params": []
+}

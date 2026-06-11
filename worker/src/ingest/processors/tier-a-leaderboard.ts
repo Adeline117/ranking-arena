@@ -105,6 +105,15 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         )
       }
 
+      // Bot boards (spec §11.5): shadow trader rows are published above
+      // like any board; additionally upsert arena.bots from the
+      // adapter-normalized fields (traderMeta.bot).
+      if (src.trader_kind_scope === 'bot') {
+        const { publishBots } = await import('@/lib/ingest/serving/publish-bots')
+        const bots = await publishBots(src, valid, result.traderIds)
+        console.log(`[tier-a] ${src.slug} ${timeframe}d bots upserted: ${bots.written}`)
+      }
+
       // Cutover shadow/serving: keep the legacy downstream chain alive
       // (Arena Score → leaderboard_ranks → Redis → Meilisearch).
       if (src.serving_mode !== 'legacy') {
