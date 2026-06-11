@@ -4,8 +4,14 @@
  * (parallel-build requirement). Shares the Redis connection module.
  */
 
-import { Queue } from 'bullmq'
+import { Queue, type ConnectionOptions } from 'bullmq'
 import { getConnection } from '../connection'
+
+/** bullmq ships a nested ioredis copy whose types fork from ours — the
+ *  runtime client is compatible, so bridge the nominal mismatch once. */
+export function ingestConnection(): ConnectionOptions {
+  return getConnection() as unknown as ConnectionOptions
+}
 
 export const INGEST_QUEUE_NAME = 'arena-ingest'
 
@@ -14,7 +20,7 @@ let queue: Queue | null = null
 export function getIngestQueue(): Queue {
   if (queue) return queue
   queue = new Queue(INGEST_QUEUE_NAME, {
-    connection: getConnection(),
+    connection: ingestConnection(),
     defaultJobOptions: {
       attempts: 3,
       backoff: { type: 'exponential', delay: 30_000 },
