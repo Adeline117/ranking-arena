@@ -8,6 +8,23 @@
 
 ---
 
+## 数据层重建 — ARENA_DATA_SPEC v1.2 Phase 0（2026-06-10 启动，进行中）
+
+Spec: `~/Desktop/ARENA_DATA_SPEC.md`；计划: `~/.claude/plans/snug-squishing-hamming.md`；记忆: `memory/data-layer-rebuild.md`
+
+**已落地（25+ commits）**：
+
+- `arena.*` 规范 schema M1-M7 生产上线（32 源配置入库、月分区、RLS、public 读 RPC）
+- `lib/ingest/` 统一框架：SourceAdapter + 纯 parser、PacedGate/Circuit、UTC FetchSession、pageFetch 页内回放（破 Bitget 签名头）、replayPaged 完整性断言、滚动 median count-check（bootstrap ±30%）、事务发布门、compat 双写
+- `arena-ingest-worker` PM2 已运行：DB 驱动调度、maintenance/freshness/digest/avatar-mirror、告警纪律（仅 phase≤1 Tier-A page）
+- **实跑验证**：bitget futures/spot/cfd Tier-A 全部 PUBLISHED，RAW→STAGING→SERVING 链路 + 质量门双向验证
+
+**进行中**：Bitget profile/positions/历史/bots surface（Agent A）、前端 serving 层 /core /records + 分层加载 UI（Agent B）
+
+**后续**：Bitget 切 shadow→diff→serving（Phase 0 完）→ Phase 1 六大源（Bybit MT5/MEXC/Binance×2/Bybit classic/Hyperliquid）→ Phase 2 长尾 → 删除 36 connector + 36 enrichment + batch crons
+
+---
+
 ## Full Remaining Audit — Business Logic + DevOps + I18n + E2E (2026-06-02)
 
 ### DevOps fixes shipped (7/7)
