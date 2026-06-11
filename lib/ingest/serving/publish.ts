@@ -131,7 +131,10 @@ export async function publishLeaderboardSnapshot(
          (source_id, timeframe, expected_count, actual_count, baseline_used,
           count_check_passed, is_derived, raw_object_id)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING id, scraped_at`,
+       RETURNING id, scraped_at::text AS scraped_at`,
+      // ::text — node-pg would otherwise hydrate a JS Date (ms precision),
+      // truncating pg's microseconds; entries.scraped_at must round-trip
+      // losslessly so it stays exactly equal to the snapshot row's value.
       [
         src.id,
         timeframe,
