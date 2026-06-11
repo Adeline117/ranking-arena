@@ -1,0 +1,43 @@
+{
+  "code": "000000",
+  "message": null,
+  "messageDetail": null,
+  "data": [
+    {
+      "value": 14.57688063,
+      "dataType": "ROI",
+      "dateTime": 1780617629931
+    },
+    {
+      "value": -25.78858833,
+      "dataType": "ROI",
+      "dateTime": 1780704034837
+    },
+    {
+      "value": -12.02800305,
+      "dataType": "ROI",
+      "dateTime": 1780790429608
+    },
+    {
+      "value": 4.7920612,
+      "dataType": "ROI",
+      "dateTime": 1780876830057
+    },
+    {
+      "value": 30.54306935,
+      "dataType": "ROI",
+      "dateTime": 1780963230630
+    },
+    {
+      "value": 48.09353235,
+      "dataType": "ROI",
+      "dateTime": 1781049629407
+    },
+    {
+      "value": 57.96655022,
+      "dataType": "ROI",
+      "dateTime": 1781136032490
+    }
+  ],
+  "success": true
+}

@@ -1,0 +1,1172 @@
+{
+  "code": "000000",
+  "message": null,
+  "messageDetail": null,
+  "data": {
+    "total": 2509,
+    "list": [
+      {
+        "leadPortfolioId": "3993275764606430465",
+        "nickname": "bmakeew",
+        "avatarUrl": "https://bin.bnbstatic.com/static/images/copytrading/default-avatar.png",
+        "currentCopyCount": 1,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 67.57008843,
+        "pnl": 19.27858136,
+        "aum": 58.80414241,
+        "mdd": 9.634565,
+        "apiKeyTag": null,
+        "sharpRatio": -0.73468874,
+        "chartItems": [
+          {
+            "value": -1.61712718,
+            "dataType": "ROI",
+            "dateTime": 1780617625481
+          },
+          {
+            "value": 5.44833783,
+            "dataType": "ROI",
+            "dateTime": 1780704025567
+          },
+          {
+            "value": 10.18764812,
+            "dataType": "ROI",
+            "dateTime": 1780790425526
+          },
+          {
+            "value": 8.81731075,
+            "dataType": "ROI",
+            "dateTime": 1780876825318
+          },
+          {
+            "value": 15.90290468,
+            "dataType": "ROI",
+            "dateTime": 1780963225777
+          },
+          {
+            "value": 67.82786733,
+            "dataType": "ROI",
+            "dateTime": 1781049625006
+          },
+          {
+            "value": 67.57008843,
+            "dataType": "ROI",
+            "dateTime": 1781136028133
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 755,
+        "startTime": 1715976183538
+      },
+      {
+        "leadPortfolioId": "4163883351504751104",
+        "nickname": "纸上谈兵xh",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202409/c8ad1b7b33d1b95c7d07f3538b905952.png",
+        "currentCopyCount": 160,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 57.96655022,
+        "pnl": 1008.11475165,
+        "aum": 40073.17838603,
+        "mdd": 8.528591,
+        "apiKeyTag": null,
+        "sharpRatio": 0.09533622,
+        "chartItems": [
+          {
+            "value": 14.57688063,
+            "dataType": "ROI",
+            "dateTime": 1780617629931
+          },
+          {
+            "value": -25.78858833,
+            "dataType": "ROI",
+            "dateTime": 1780704034837
+          },
+          {
+            "value": -12.02800305,
+            "dataType": "ROI",
+            "dateTime": 1780790429608
+          },
+          {
+            "value": 4.7920612,
+            "dataType": "ROI",
+            "dateTime": 1780876830057
+          },
+          {
+            "value": 30.54306935,
+            "dataType": "ROI",
+            "dateTime": 1780963230630
+          },
+          {
+            "value": 48.09353235,
+            "dataType": "ROI",
+            "dateTime": 1781049629407
+          },
+          {
+            "value": 57.96655022,
+            "dataType": "ROI",
+            "dateTime": 1781136032490
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 637,
+        "startTime": 1726145188117
+      },
+      {
+        "leadPortfolioId": "4324852954171617024",
+        "nickname": "vbscryptoseer ",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202603/03212c98cc1a704c71455fca6e17f479.jpg",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 45.81946326,
+        "pnl": 22.85044539,
+        "aum": 72.71751168,
+        "mdd": 9.597714,
+        "apiKeyTag": null,
+        "sharpRatio": -20.04295723,
+        "chartItems": [
+          {
+            "value": -22.36721603,
+            "dataType": "ROI",
+            "dateTime": 1780617638105
+          },
+          {
+            "value": -29.341575,
+            "dataType": "ROI",
+            "dateTime": 1780704049582
+          },
+          {
+            "value": -24.82915867,
+            "dataType": "ROI",
+            "dateTime": 1780790438235
+          },
+          {
+            "value": -24.35058199,
+            "dataType": "ROI",
+            "dateTime": 1780876838246
+          },
+          {
+            "value": -24.68858035,
+            "dataType": "ROI",
+            "dateTime": 1780963239362
+          },
+          {
+            "value": 30.07662785,
+            "dataType": "ROI",
+            "dateTime": 1781049637053
+          },
+          {
+            "value": 45.81946326,
+            "dataType": "ROI",
+            "dateTime": 1781136040320
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 526,
+        "startTime": 1735739724122
+      },
+      {
+        "leadPortfolioId": "4605580075153441537",
+        "nickname": "8YearTrader",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202507/b55ac4594cdb416da57691369a2a6f31.jpeg",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 39.01547999,
+        "pnl": 267.2010488,
+        "aum": 952.02319926,
+        "mdd": 0,
+        "apiKeyTag": null,
+        "sharpRatio": -0.44424031,
+        "chartItems": [
+          {
+            "value": -15.25314165,
+            "dataType": "ROI",
+            "dateTime": 1780617644699
+          },
+          {
+            "value": -13.57269139,
+            "dataType": "ROI",
+            "dateTime": 1780704062132
+          },
+          {
+            "value": -8.90730694,
+            "dataType": "ROI",
+            "dateTime": 1780790444409
+          },
+          {
+            "value": -0.7030063,
+            "dataType": "ROI",
+            "dateTime": 1780876844998
+          },
+          {
+            "value": -1.32272821,
+            "dataType": "ROI",
+            "dateTime": 1780963246318
+          },
+          {
+            "value": 9.20065444,
+            "dataType": "ROI",
+            "dateTime": 1781049644776
+          },
+          {
+            "value": 39.01547999,
+            "dataType": "ROI",
+            "dateTime": 1781136046345
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 332,
+        "startTime": 1752472364431
+      },
+      {
+        "leadPortfolioId": "4085484703530247680",
+        "nickname": "Crypto Live Trading ",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202411/04ee1d6521c66477c8adabafde667b68.jpg",
+        "currentCopyCount": 2,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 38.80709077,
+        "pnl": 27.44298954,
+        "aum": 128.83488344,
+        "mdd": 0,
+        "apiKeyTag": null,
+        "sharpRatio": -0.66339449,
+        "chartItems": [
+          {
+            "value": -15.2382942,
+            "dataType": "ROI",
+            "dateTime": 1780617628900
+          },
+          {
+            "value": -13.51319165,
+            "dataType": "ROI",
+            "dateTime": 1780704032885
+          },
+          {
+            "value": -8.99114414,
+            "dataType": "ROI",
+            "dateTime": 1780790428722
+          },
+          {
+            "value": -0.90152875,
+            "dataType": "ROI",
+            "dateTime": 1780876829413
+          },
+          {
+            "value": -1.32094355,
+            "dataType": "ROI",
+            "dateTime": 1780963229076
+          },
+          {
+            "value": 9.18662983,
+            "dataType": "ROI",
+            "dateTime": 1781049627729
+          },
+          {
+            "value": 38.80709077,
+            "dataType": "ROI",
+            "dateTime": 1781136030911
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 691,
+        "startTime": 1721472264554
+      },
+      {
+        "leadPortfolioId": "4219504624662011648",
+        "nickname": "KING3 6TRADERS",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1698378494921_hzo78p3h172tc2i4b6pygoz5p3sahd9a.png",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 31.99492828,
+        "pnl": 416.95353386,
+        "aum": 1720.01622692,
+        "mdd": 1.316806,
+        "apiKeyTag": null,
+        "sharpRatio": -0.9154654,
+        "chartItems": [
+          {
+            "value": -14.56513369,
+            "dataType": "ROI",
+            "dateTime": 1780617631705
+          },
+          {
+            "value": -23.90006394,
+            "dataType": "ROI",
+            "dateTime": 1780704036768
+          },
+          {
+            "value": -18.08095613,
+            "dataType": "ROI",
+            "dateTime": 1780790431439
+          },
+          {
+            "value": -9.70426998,
+            "dataType": "ROI",
+            "dateTime": 1780876831401
+          },
+          {
+            "value": -3.81298707,
+            "dataType": "ROI",
+            "dateTime": 1780963232760
+          },
+          {
+            "value": 7.62222696,
+            "dataType": "ROI",
+            "dateTime": 1781049630471
+          },
+          {
+            "value": 31.99492828,
+            "dataType": "ROI",
+            "dateTime": 1781136034005
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 599,
+        "startTime": 1729460474340
+      },
+      {
+        "leadPortfolioId": "5019484762839063808",
+        "nickname": "Mr Wong",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202406/ccf286513d19260fa6a0da4d809a557a.png",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 30.79536052,
+        "pnl": 89.84620875,
+        "aum": 381.58173698,
+        "mdd": 6.61129,
+        "apiKeyTag": null,
+        "sharpRatio": -2.94113744,
+        "chartItems": [
+          {
+            "value": -24.39762216,
+            "dataType": "ROI",
+            "dateTime": 1780617658687
+          },
+          {
+            "value": -21.34786184,
+            "dataType": "ROI",
+            "dateTime": 1780704082686
+          },
+          {
+            "value": -18.75061639,
+            "dataType": "ROI",
+            "dateTime": 1780790458048
+          },
+          {
+            "value": -16.87330915,
+            "dataType": "ROI",
+            "dateTime": 1780876858694
+          },
+          {
+            "value": -19.65462469,
+            "dataType": "ROI",
+            "dateTime": 1780963260214
+          },
+          {
+            "value": -15.72766975,
+            "dataType": "ROI",
+            "dateTime": 1781049657527
+          },
+          {
+            "value": 30.79536052,
+            "dataType": "ROI",
+            "dateTime": 1781136060598
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 47,
+        "startTime": 1777143006300
+      },
+      {
+        "leadPortfolioId": "4275499460850006017",
+        "nickname": "The BigShot",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202412/b86a404668e1922dd88442683f83383b.jpg",
+        "currentCopyCount": 9,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 28.19756989,
+        "pnl": 10.28921804,
+        "aum": 805.12615116,
+        "mdd": 19.927024,
+        "apiKeyTag": null,
+        "sharpRatio": -0.56099207,
+        "chartItems": [
+          {
+            "value": -26.24548123,
+            "dataType": "ROI",
+            "dateTime": 1780617634339
+          },
+          {
+            "value": -7.34265289,
+            "dataType": "ROI",
+            "dateTime": 1780704042299
+          },
+          {
+            "value": 7.98799083,
+            "dataType": "ROI",
+            "dateTime": 1780790434157
+          },
+          {
+            "value": 1.68292551,
+            "dataType": "ROI",
+            "dateTime": 1780876833970
+          },
+          {
+            "value": 1.61493629,
+            "dataType": "ROI",
+            "dateTime": 1780963235330
+          },
+          {
+            "value": 1.43381727,
+            "dataType": "ROI",
+            "dateTime": 1781049633033
+          },
+          {
+            "value": 28.19756989,
+            "dataType": "ROI",
+            "dateTime": 1781136036759
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 560,
+        "startTime": 1732798026659
+      },
+      {
+        "leadPortfolioId": "5019911961031629312",
+        "nickname": "Lang Elgert bJ0z",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 27.59008217,
+        "pnl": 69.67201473,
+        "aum": 322.18200909,
+        "mdd": 16.625101,
+        "apiKeyTag": null,
+        "sharpRatio": -1.63699432,
+        "chartItems": [
+          {
+            "value": -30.79786335,
+            "dataType": "ROI",
+            "dateTime": 1780617658539
+          },
+          {
+            "value": -18.47775881,
+            "dataType": "ROI",
+            "dateTime": 1780704082559
+          },
+          {
+            "value": 9.01979205,
+            "dataType": "ROI",
+            "dateTime": 1780790457954
+          },
+          {
+            "value": 1.38720902,
+            "dataType": "ROI",
+            "dateTime": 1780876859016
+          },
+          {
+            "value": 7.51952405,
+            "dataType": "ROI",
+            "dateTime": 1780963260200
+          },
+          {
+            "value": 6.0466584,
+            "dataType": "ROI",
+            "dateTime": 1781049657539
+          },
+          {
+            "value": 27.59008217,
+            "dataType": "ROI",
+            "dateTime": 1781136060547
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 46,
+        "startTime": 1777168469316
+      },
+      {
+        "leadPortfolioId": "4701852999572190209",
+        "nickname": "Ebrahimalfareh",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202509/10e909ebfc297b68b36cc357c37d3319.jpg",
+        "currentCopyCount": 69,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 25.34550382,
+        "pnl": 394.22433178,
+        "aum": 27329.07574589,
+        "mdd": 0.72769,
+        "apiKeyTag": null,
+        "sharpRatio": 0.32087859,
+        "chartItems": [
+          {
+            "value": -14.357567,
+            "dataType": "ROI",
+            "dateTime": 1780617648493
+          },
+          {
+            "value": -15.68793082,
+            "dataType": "ROI",
+            "dateTime": 1780704067479
+          },
+          {
+            "value": -8.96766856,
+            "dataType": "ROI",
+            "dateTime": 1780790448127
+          },
+          {
+            "value": 8.52186653,
+            "dataType": "ROI",
+            "dateTime": 1780876848574
+          },
+          {
+            "value": 8.07300872,
+            "dataType": "ROI",
+            "dateTime": 1780963249407
+          },
+          {
+            "value": 13.12681359,
+            "dataType": "ROI",
+            "dateTime": 1781049647582
+          },
+          {
+            "value": 25.34550382,
+            "dataType": "ROI",
+            "dateTime": 1781136050333
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 266,
+        "startTime": 1758210677885
+      },
+      {
+        "leadPortfolioId": "4329543364490457601",
+        "nickname": "不懂模型",
+        "avatarUrl": "https://public.bnbstatic.com/image/common_notification/20211230/f6305dee-e00e-4bfe-9d13-3073ad8eb565.png",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 22.87495523,
+        "pnl": 10.42948807,
+        "aum": 55.99839394,
+        "mdd": 3.745641,
+        "apiKeyTag": null,
+        "sharpRatio": -0.90259359,
+        "chartItems": [
+          {
+            "value": -26.14620753,
+            "dataType": "ROI",
+            "dateTime": 1780617638413
+          },
+          {
+            "value": -22.91927699,
+            "dataType": "ROI",
+            "dateTime": 1780704050317
+          },
+          {
+            "value": -17.62728837,
+            "dataType": "ROI",
+            "dateTime": 1780790438382
+          },
+          {
+            "value": -10.98272639,
+            "dataType": "ROI",
+            "dateTime": 1780876838604
+          },
+          {
+            "value": -10.22870864,
+            "dataType": "ROI",
+            "dateTime": 1780963239173
+          },
+          {
+            "value": 0.4696057,
+            "dataType": "ROI",
+            "dateTime": 1781049637911
+          },
+          {
+            "value": 22.87495523,
+            "dataType": "ROI",
+            "dateTime": 1781136040973
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 523,
+        "startTime": 1736019294362
+      },
+      {
+        "leadPortfolioId": "4103048631731076865",
+        "nickname": "ETH现货",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202407/7561d6b8f300f3f5677ff4cf27e3aaf9.jpg",
+        "currentCopyCount": 1,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 22.58823205,
+        "pnl": 18.48008633,
+        "aum": 112.0463989,
+        "mdd": 3.87589,
+        "apiKeyTag": null,
+        "sharpRatio": -0.91161203,
+        "chartItems": [
+          {
+            "value": -25.87343428,
+            "dataType": "ROI",
+            "dateTime": 1780617630008
+          },
+          {
+            "value": -22.93447782,
+            "dataType": "ROI",
+            "dateTime": 1780704033547
+          },
+          {
+            "value": -17.60475511,
+            "dataType": "ROI",
+            "dateTime": 1780790429787
+          },
+          {
+            "value": -10.95528687,
+            "dataType": "ROI",
+            "dateTime": 1780876829104
+          },
+          {
+            "value": -10.10941554,
+            "dataType": "ROI",
+            "dateTime": 1780963229852
+          },
+          {
+            "value": 0.42908267,
+            "dataType": "ROI",
+            "dateTime": 1781049628726
+          },
+          {
+            "value": 22.58823205,
+            "dataType": "ROI",
+            "dateTime": 1781136031529
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 679,
+        "startTime": 1722519156253
+      },
+      {
+        "leadPortfolioId": "4998465575799245313",
+        "nickname": "BITTRADO  SYSTEM",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202604/21a94503cb304c83a45f72b5e132590e.jpeg",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 22.47502455,
+        "pnl": 93.54946224,
+        "aum": 509.76382425,
+        "mdd": 1.715027,
+        "apiKeyTag": "API_KEY_TRADE",
+        "sharpRatio": 0.69761456,
+        "chartItems": [
+          {
+            "value": -26.25182045,
+            "dataType": "ROI",
+            "dateTime": 1780617658155
+          },
+          {
+            "value": -23.02931417,
+            "dataType": "ROI",
+            "dateTime": 1780704081925
+          },
+          {
+            "value": -17.56802487,
+            "dataType": "ROI",
+            "dateTime": 1780790456671
+          },
+          {
+            "value": 1.10206763,
+            "dataType": "ROI",
+            "dateTime": 1780876858008
+          },
+          {
+            "value": -1.78538623,
+            "dataType": "ROI",
+            "dateTime": 1780963258925
+          },
+          {
+            "value": 7.59244613,
+            "dataType": "ROI",
+            "dateTime": 1781049657061
+          },
+          {
+            "value": 22.47502455,
+            "dataType": "ROI",
+            "dateTime": 1781136059997
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 61,
+        "startTime": 1775890165131
+      },
+      {
+        "leadPortfolioId": "4661954963298956544",
+        "nickname": "福公主",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202408/699306d808f1bcf99e9529a4d739918a.jpeg",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 22.45364107,
+        "pnl": 253.55335111,
+        "aum": 1382.69104123,
+        "mdd": 5.026743,
+        "apiKeyTag": null,
+        "sharpRatio": -0.97123775,
+        "chartItems": [
+          {
+            "value": -30.21712471,
+            "dataType": "ROI",
+            "dateTime": 1780617647030
+          },
+          {
+            "value": -29.78606575,
+            "dataType": "ROI",
+            "dateTime": 1780704064758
+          },
+          {
+            "value": -25.32166783,
+            "dataType": "ROI",
+            "dateTime": 1780790446475
+          },
+          {
+            "value": -3.74073776,
+            "dataType": "ROI",
+            "dateTime": 1780876847762
+          },
+          {
+            "value": -2.52090926,
+            "dataType": "ROI",
+            "dateTime": 1780963248616
+          },
+          {
+            "value": 5.20507471,
+            "dataType": "ROI",
+            "dateTime": 1781049646043
+          },
+          {
+            "value": 22.45364107,
+            "dataType": "ROI",
+            "dateTime": 1781136048279
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 293,
+        "startTime": 1755832569615
+      },
+      {
+        "leadPortfolioId": "5081428501782945536",
+        "nickname": "Elite Spot Trade Signals",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202403/6a35c9d367440962dc5d4e53eb708ee3.jpg",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 22.22230954,
+        "pnl": 179.61403909,
+        "aum": 513.07742692,
+        "mdd": 4.2968648,
+        "apiKeyTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 14.39727649,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 9.48178024,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 10.26047274,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 21.06549142,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 22.22230954,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 4,
+        "startTime": 1780835140867
+      },
+      {
+        "leadPortfolioId": "4664384314592817921",
+        "nickname": "Ugspottrader",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1695716378565_p7gg128kqzin6mp0ezo3tlwjbbmqblp9.png",
+        "currentCopyCount": 1,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 21.95287047,
+        "pnl": 5.50339519,
+        "aum": 459.4877227,
+        "mdd": 1.653407,
+        "apiKeyTag": null,
+        "sharpRatio": -1.95731146,
+        "chartItems": [
+          {
+            "value": -25.9930482,
+            "dataType": "ROI",
+            "dateTime": 1780617647164
+          },
+          {
+            "value": -22.89426602,
+            "dataType": "ROI",
+            "dateTime": 1780704064940
+          },
+          {
+            "value": -17.33965053,
+            "dataType": "ROI",
+            "dateTime": 1780790446515
+          },
+          {
+            "value": 0.60015818,
+            "dataType": "ROI",
+            "dateTime": 1780876847696
+          },
+          {
+            "value": -2.19781423,
+            "dataType": "ROI",
+            "dateTime": 1780963248603
+          },
+          {
+            "value": 7.16851502,
+            "dataType": "ROI",
+            "dateTime": 1781049646959
+          },
+          {
+            "value": 21.95287047,
+            "dataType": "ROI",
+            "dateTime": 1781136048984
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 292,
+        "startTime": 1755977370229
+      },
+      {
+        "leadPortfolioId": "4708996951733477633",
+        "nickname": "MrE621",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202509/a0f7c73ae4a6588178ab05cc0d126b50.jpeg",
+        "currentCopyCount": 24,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 21.47827731,
+        "pnl": 18.31633083,
+        "aum": 5090.63305705,
+        "mdd": 8.10718,
+        "apiKeyTag": null,
+        "sharpRatio": -0.75811013,
+        "chartItems": [
+          {
+            "value": -14.02035688,
+            "dataType": "ROI",
+            "dateTime": 1780617648437
+          },
+          {
+            "value": -15.56033999,
+            "dataType": "ROI",
+            "dateTime": 1780704067782
+          },
+          {
+            "value": -10.29279575,
+            "dataType": "ROI",
+            "dateTime": 1780790448199
+          },
+          {
+            "value": -4.19208001,
+            "dataType": "ROI",
+            "dateTime": 1780876848657
+          },
+          {
+            "value": -10.46806733,
+            "dataType": "ROI",
+            "dateTime": 1780963249597
+          },
+          {
+            "value": 0.47140247,
+            "dataType": "ROI",
+            "dateTime": 1781049648041
+          },
+          {
+            "value": 21.47827731,
+            "dataType": "ROI",
+            "dateTime": 1781136051132
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 261,
+        "startTime": 1758636490609
+      },
+      {
+        "leadPortfolioId": "4265838826266641409",
+        "nickname": "TarasKot",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202409/6a42e7151371442cabdf53fd41023784.jpg",
+        "currentCopyCount": 0,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 20.71685562,
+        "pnl": 32.99997186,
+        "aum": 192.27241018,
+        "mdd": 3.633103,
+        "apiKeyTag": null,
+        "sharpRatio": -0.12514262,
+        "chartItems": [
+          {
+            "value": -21.71276449,
+            "dataType": "ROI",
+            "dateTime": 1780617633580
+          },
+          {
+            "value": -21.97503244,
+            "dataType": "ROI",
+            "dateTime": 1780704039946
+          },
+          {
+            "value": -16.54748842,
+            "dataType": "ROI",
+            "dateTime": 1780790433748
+          },
+          {
+            "value": -3.49224164,
+            "dataType": "ROI",
+            "dateTime": 1780876833896
+          },
+          {
+            "value": -2.36995827,
+            "dataType": "ROI",
+            "dateTime": 1780963234500
+          },
+          {
+            "value": 2.24588769,
+            "dataType": "ROI",
+            "dateTime": 1781049632542
+          },
+          {
+            "value": 20.71685562,
+            "dataType": "ROI",
+            "dateTime": 1781136035521
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 567,
+        "startTime": 1732222207961
+      },
+      {
+        "leadPortfolioId": "4796680300296614912",
+        "nickname": "富豪lunc",
+        "avatarUrl": "https://public.tylhh.net/image/pgc/202511/efb6f4d41e97be9f7beb0504d5403f55.png",
+        "currentCopyCount": 34,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 19.04839186,
+        "pnl": 217.88034069,
+        "aum": 5403.0254016,
+        "mdd": 4.973751,
+        "apiKeyTag": null,
+        "sharpRatio": 1.76038819,
+        "chartItems": [
+          {
+            "value": -25.78281312,
+            "dataType": "ROI",
+            "dateTime": 1780617651078
+          },
+          {
+            "value": -27.99220634,
+            "dataType": "ROI",
+            "dateTime": 1780704072611
+          },
+          {
+            "value": -17.4161594,
+            "dataType": "ROI",
+            "dateTime": 1780790451450
+          },
+          {
+            "value": 0.72902644,
+            "dataType": "ROI",
+            "dateTime": 1780876852176
+          },
+          {
+            "value": 1.93385402,
+            "dataType": "ROI",
+            "dateTime": 1780963253021
+          },
+          {
+            "value": 3.1758037,
+            "dataType": "ROI",
+            "dateTime": 1781049650731
+          },
+          {
+            "value": 19.04839186,
+            "dataType": "ROI",
+            "dateTime": 1781136053718
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 200,
+        "startTime": 1763862825457
+      },
+      {
+        "leadPortfolioId": "4819853923229438977",
+        "nickname": "带单大姐",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1698378463269_ey7flvme4x13pukzmbqtwu41odbouxkc.png",
+        "currentCopyCount": 3,
+        "maxCopyCount": 300,
+        "riskControlMaxCopyCount": 0,
+        "finalEffectiveMaxCopyCount": 300,
+        "roi": 19.04490985,
+        "pnl": 105.22428235,
+        "aum": 1057.69825297,
+        "mdd": 4.945268,
+        "apiKeyTag": null,
+        "sharpRatio": 0.80939609,
+        "chartItems": [
+          {
+            "value": -25.7797622,
+            "dataType": "ROI",
+            "dateTime": 1780617651827
+          },
+          {
+            "value": -27.98916063,
+            "dataType": "ROI",
+            "dateTime": 1780704073775
+          },
+          {
+            "value": -17.41419447,
+            "dataType": "ROI",
+            "dateTime": 1780790451959
+          },
+          {
+            "value": 0.72867915,
+            "dataType": "ROI",
+            "dateTime": 1780876852447
+          },
+          {
+            "value": 1.93333342,
+            "dataType": "ROI",
+            "dateTime": 1780963253667
+          },
+          {
+            "value": 3.20533218,
+            "dataType": "ROI",
+            "dateTime": 1781049652059
+          },
+          {
+            "value": 19.04490985,
+            "dataType": "ROI",
+            "dateTime": 1781136053871
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "tradingDays": 184,
+        "startTime": 1765244081016
+      }
+    ],
+    "indexValue": null
+  },
+  "success": true
+}

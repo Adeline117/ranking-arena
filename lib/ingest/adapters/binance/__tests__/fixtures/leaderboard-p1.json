@@ -1,0 +1,1192 @@
+{
+  "code": "000000",
+  "message": null,
+  "messageDetail": null,
+  "data": {
+    "indexValue": null,
+    "total": 9806,
+    "list": [
+      {
+        "leadPortfolioId": "5079642847105446401",
+        "nickname": "阳光算力",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/20260609/ddb9a50860b642f2af94396e1f4fee4d.jpg",
+        "currentCopyCount": 342,
+        "maxCopyCount": 400,
+        "roi": 1712.04936591,
+        "pnl": 8560.24682956,
+        "aum": 85079.66905633,
+        "mdd": 0,
+        "winRate": 77.2727,
+        "copierPnl": 2972.33098562,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 18.5071648,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 287.8472854,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 518.9565208,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 1484.924805,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 1650.5805438,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1712.04936591,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "CHAMPION",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 600,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780728707624,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5082335633088625664",
+        "nickname": "Armandino",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/20260611/37bed5d4ccde48ffa494d743dc759291.jpg",
+        "currentCopyCount": 32,
+        "maxCopyCount": 200,
+        "roi": 1446.89608684,
+        "pnl": 7234.48043424,
+        "aum": 12264.51403045,
+        "mdd": 0,
+        "winRate": 88.8889,
+        "copierPnl": 184.63101519,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 55.4265274,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 150.6788568,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 784.450328,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1446.89608684,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780889210171,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5076490769406674432",
+        "nickname": "Lilibetabel",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202604/07653f7431182d50f6035b5aefa034fd.jpeg",
+        "currentCopyCount": 14,
+        "maxCopyCount": 200,
+        "roi": 1422.63482253,
+        "pnl": 7113.17411269,
+        "aum": 12396.11536413,
+        "mdd": 0.0116843,
+        "winRate": 90,
+        "copierPnl": 1093.88827522,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 186.5422082,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 1422.8127526,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1422.63482253,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "CHAMPION",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 600,
+        "portfolioType": "PRIVATE",
+        "startTime": 1780540829128,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5079444308377421057",
+        "nickname": "静思合约",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202602/af2081ee35f69c58c5f30868aad07e4e.jpg",
+        "currentCopyCount": 275,
+        "maxCopyCount": 400,
+        "roi": 1399.32094433,
+        "pnl": 6996.60472166,
+        "aum": 51044.44525474,
+        "mdd": 0,
+        "winRate": 75,
+        "copierPnl": 3874.68667771,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 424.318988,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 1044.0415824,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 1046.380003,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 1196.1057098,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 1391.8883054,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1399.32094433,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "CHAMPION",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 600,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780716873794,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5079739832931819521",
+        "nickname": "比野猫资本",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/20260609/a737533a770d460dbd1876247d866cef.jpg",
+        "currentCopyCount": 54,
+        "maxCopyCount": 200,
+        "roi": 1392.68138762,
+        "pnl": 6963.4069381,
+        "aum": 12821.10607283,
+        "mdd": 13.556168,
+        "winRate": 81.8182,
+        "copierPnl": 164.80425794,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": -17.6364414,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 291.5912416,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 731.3358406,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 1085.5350708,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 924.82194,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1392.68138762,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "EXPERT",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 400,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780734488432,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5079663556947616768",
+        "nickname": "交易员星狐",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202605/7324d83b0cebf5672a9c5c2ab247624f.jpg",
+        "currentCopyCount": 4,
+        "maxCopyCount": 200,
+        "roi": 1378.9837586,
+        "pnl": 6894.91879302,
+        "aum": 7916.72919758,
+        "mdd": 0,
+        "winRate": 71.4286,
+        "copierPnl": 327.29894289,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": -6.8495072,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 141.2733568,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 176.984746,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 609.6419734,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 1136.126944,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1378.9837586,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "EXPERT",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 400,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780729942024,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5079390823970882304",
+        "nickname": "比特慧财经",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202606/49914aa54ddb07d863adfe973a4f1899.jpg",
+        "currentCopyCount": 150,
+        "maxCopyCount": 200,
+        "roi": 1378.02389871,
+        "pnl": 6890.11949358,
+        "aum": 19991.88238955,
+        "mdd": 0,
+        "winRate": 77.2727,
+        "copierPnl": 1054.29470455,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 407.1778798,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 1037.0300376,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 1040.556306,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 1126.4303676,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 1197.7146664,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1378.02389871,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "EXPERT",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 400,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780713685869,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5079451489425475073",
+        "nickname": "BTC荣主席",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/20260608/0a7abd55d08a43cb8a786e7634d4b9b2.jpg",
+        "currentCopyCount": 53,
+        "maxCopyCount": 200,
+        "roi": 1287.09074425,
+        "pnl": 6435.45372129,
+        "aum": 10166.9176927,
+        "mdd": 38.776595,
+        "winRate": 85.7143,
+        "copierPnl": 168.91660195,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 99.325222,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 394.39217,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 1123.5245564,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 963.313335,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 649.0833898,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1287.09074425,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780717301812,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5077500547713310721",
+        "nickname": "小侠基金",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202604/f0225e189bc180db5c7d5b1e33901286.jpg",
+        "currentCopyCount": 400,
+        "maxCopyCount": 400,
+        "roi": 1046.01079328,
+        "pnl": 9945.80519641,
+        "aum": 218501.81636128,
+        "mdd": 0.07831251,
+        "winRate": 94.4444,
+        "copierPnl": 4126.13939681,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 1004.31864983,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 1008.08311722,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 1009.69574702,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 1015.50188931,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 1041.08163869,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 1046.90896653,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 1046.01079328,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "EXPERT",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 400,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780601016624,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5087538278637564161",
+        "nickname": "難哄",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "currentCopyCount": 0,
+        "maxCopyCount": 200,
+        "roi": 1006.82584015,
+        "pnl": 9023.47522722,
+        "aum": 9446.66271671,
+        "mdd": 0,
+        "winRate": 0,
+        "copierPnl": 0,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780700400000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780786800000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780873200000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780959600000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1781046000000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1781132400000
+          },
+          {
+            "value": 1006.82584015,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1781199312020,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5085327417628805121",
+        "nickname": "马踏东京赏樱花",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202601/2b001b2cb83bf1e548b182ae0df30e61.jpg",
+        "currentCopyCount": 4,
+        "maxCopyCount": 200,
+        "roi": 950.00567406,
+        "pnl": 4750.02837031,
+        "aum": 5552.14079461,
+        "mdd": 0,
+        "winRate": 50,
+        "copierPnl": 925.18098919,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 144.4856776,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 950.00567406,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1781067534429,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "4595446298064098049",
+        "nickname": "聪明的韭菜",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202509/3afc1e7c63962a578cf8b81348af1ac1.png",
+        "currentCopyCount": 0,
+        "maxCopyCount": 400,
+        "roi": 874.12649351,
+        "pnl": 1443.19480409,
+        "aum": 1539.39237269,
+        "mdd": 0,
+        "winRate": 33.3333,
+        "copierPnl": 0,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": 0.82993287,
+        "chartItems": [
+          {
+            "value": -14.30727691,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 2.73839886,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 38.25770163,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 77.18315061,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 125.34530074,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 439.85482443,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 874.12649351,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1751868344353,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5081117808098197249",
+        "nickname": "铁牛集团",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202601/fcaeda1f42318dda1ab830e2d92d0739.jpg",
+        "currentCopyCount": 1,
+        "maxCopyCount": 200,
+        "roi": 842.08189392,
+        "pnl": 4210.4094696,
+        "aum": 5433.76949266,
+        "mdd": 35.95141,
+        "winRate": 87.5,
+        "copierPnl": 55.02497626,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 96.2113884,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 90.5590514,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 312.371191,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 164.1179328,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 842.08189392,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780816622129,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5079550102422639105",
+        "nickname": "迪亚马特",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "currentCopyCount": 162,
+        "maxCopyCount": 200,
+        "roi": 697.08763534,
+        "pnl": 3485.43817674,
+        "aum": 31197.82804439,
+        "mdd": 50.480845,
+        "winRate": 90.3226,
+        "copierPnl": -13790.55264832,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 86.1227916,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 454.3530334,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 714.4850258,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 895.0175562,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 1509.6551558,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 697.08763534,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "EXPERT",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 400,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780723179595,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5082433579076297728",
+        "nickname": "百佳品牌代言人",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202603/6edb6051e28eb9c3675f86bae5906dca.jpg",
+        "currentCopyCount": 1,
+        "maxCopyCount": 200,
+        "roi": 647.55115997,
+        "pnl": 3237.75579987,
+        "aum": 3799.27035123,
+        "mdd": 0,
+        "winRate": 83.3333,
+        "copierPnl": -32.67864864,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 80.0388904,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 94.4351834,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 420.9951014,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 647.55115997,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780895048223,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5078170548927943169",
+        "nickname": "牙医反买别墅靠海",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/20260610/db91cc45fbc346cf9bd0d1c1b6cdd6e2.jpg",
+        "currentCopyCount": 83,
+        "maxCopyCount": 200,
+        "roi": 618.60121859,
+        "pnl": 3093.00609297,
+        "aum": 16488.70677183,
+        "mdd": 31.484269,
+        "winRate": 92.3077,
+        "copierPnl": 726.53475199,
+        "apiKeyTag": "API_KEY_TRADE",
+        "tradFiTag": "Tradfi",
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 197.5298288,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 437.8458152,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 268.5089946,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 318.2429436,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 591.4886642,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 544.086865,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 618.60121859,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "EXPERT",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 400,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780640951812,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5079549332020650752",
+        "nickname": "BTC熬鹰资本",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202606/f8e184b8888509d598c8d07ccd7f079d.jpg",
+        "currentCopyCount": 9,
+        "maxCopyCount": 200,
+        "roi": 594.78156597,
+        "pnl": 2973.90782989,
+        "aum": 7620.72537548,
+        "mdd": 48.376921,
+        "winRate": 75,
+        "copierPnl": -17.16214308,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": -13.1488028,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 196.7097936,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 252.986468,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 495.09229,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 207.2049632,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 594.78156597,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780723133678,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5081103022938154497",
+        "nickname": "卢国福",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202603/72953f315ff8c83c83ca26a5313239f6.jpg",
+        "currentCopyCount": 1,
+        "maxCopyCount": 200,
+        "roi": 593.7880657,
+        "pnl": 2968.94032854,
+        "aum": 3815.97575131,
+        "mdd": 7.0415909,
+        "winRate": 87.5,
+        "copierPnl": -2.15014713,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 59.1296276,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 61.974583,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 243.3841344,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 646.3424478,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 593.7880657,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780815740893,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5079547243842291200",
+        "nickname": "Bitclub追梦人交易日记",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202604/65801a2372595e3d966ec3cd71b9b0a2.jpg",
+        "currentCopyCount": 3,
+        "maxCopyCount": 200,
+        "roi": 538.43929584,
+        "pnl": 2692.19647924,
+        "aum": 4407.83324062,
+        "mdd": 37.774912,
+        "winRate": 75,
+        "copierPnl": 14.44865017,
+        "apiKeyTag": null,
+        "tradFiTag": null,
+        "sharpRatio": null,
+        "chartItems": [
+          {
+            "value": 0,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": -15.4821274,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": 194.4075176,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": 250.9425988,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": 638.1285718,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": 926.0158986,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 538.43929584,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": "EXPERT",
+        "badgeModifyTime": 1781138735000,
+        "badgeCopierCount": 400,
+        "portfolioType": "PUBLIC",
+        "startTime": 1780723009205,
+        "aiSummary": null
+      },
+      {
+        "leadPortfolioId": "5011194359301530625",
+        "nickname": "JoeMua",
+        "avatarUrl": "https://public-1306379396.file.myqcloud.com/image/avatar/202510/ac112a7e0a59b9288609e3f752e80035.jpg",
+        "currentCopyCount": 0,
+        "maxCopyCount": 200,
+        "roi": 519.38113073,
+        "pnl": 5193.81130739,
+        "aum": 791.65695583,
+        "mdd": 9.7952224,
+        "winRate": 60,
+        "copierPnl": -10.06896158,
+        "apiKeyTag": null,
+        "tradFiTag": "Tradfi",
+        "sharpRatio": 2.3273087,
+        "chartItems": [
+          {
+            "value": -81.2170881,
+            "dataType": "ROI",
+            "dateTime": 1780617600000
+          },
+          {
+            "value": -69.9081751,
+            "dataType": "ROI",
+            "dateTime": 1780704000000
+          },
+          {
+            "value": -58.5374589,
+            "dataType": "ROI",
+            "dateTime": 1780790400000
+          },
+          {
+            "value": -42.5848771,
+            "dataType": "ROI",
+            "dateTime": 1780876800000
+          },
+          {
+            "value": -48.2088161,
+            "dataType": "ROI",
+            "dateTime": 1780963200000
+          },
+          {
+            "value": -46.0404775,
+            "dataType": "ROI",
+            "dateTime": 1781049600000
+          },
+          {
+            "value": 519.38113073,
+            "dataType": "ROI",
+            "dateTime": 1781218800000
+          }
+        ],
+        "badgeName": null,
+        "badgeModifyTime": null,
+        "badgeCopierCount": null,
+        "portfolioType": "PUBLIC",
+        "startTime": 1776648859808,
+        "aiSummary": null
+      }
+    ]
+  },
+  "success": true
+}

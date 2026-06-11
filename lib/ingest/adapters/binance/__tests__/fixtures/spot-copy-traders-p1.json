@@ -1,0 +1,512 @@
+{
+  "code": "000000",
+  "message": null,
+  "messageDetail": null,
+  "data": {
+    "total": 160,
+    "list": [
+      {
+        "nickname": "Éde**********************ULC",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 324.49230431,
+        "balanceAsset": "USDT",
+        "totalPnl": 224.49230431,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 224.485714,
+        "startTime": 1768670172000
+      },
+      {
+        "nickname": "Use****1b5",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 3038.08725689,
+        "balanceAsset": "USDT",
+        "totalPnl": 38.08725689,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 1.269517,
+        "startTime": 1781188379000
+      },
+      {
+        "nickname": "Use****b23",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 1030.4411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 30.4411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043978,
+        "startTime": 1781080032000
+      },
+      {
+        "nickname": "be***ga",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202606/fb64f8b242e9f1a20e5554f14f295a08.jpg",
+        "balanceAmount": 4558.51269892,
+        "balanceAsset": "USDT",
+        "totalPnl": 29.07269892,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.641783,
+        "startTime": 1781172520000
+      },
+      {
+        "nickname": "Jus**apu",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 2017.94205533,
+        "balanceAsset": "USDT",
+        "totalPnl": 17.94205533,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.89705,
+        "startTime": 1781185525000
+      },
+      {
+        "nickname": "Use****0f4",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 25.68759378,
+        "balanceAsset": "USDT",
+        "totalPnl": 15.88820292,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 152.093854,
+        "startTime": 1769055801000
+      },
+      {
+        "nickname": "ahm******wad",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/20260525/c7a51dfae58a410bba3f2d5914b4ec79.jpg",
+        "balanceAmount": 515.2205858,
+        "balanceAsset": "USDT",
+        "totalPnl": 15.2205858,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043976,
+        "startTime": 1781109524000
+      },
+      {
+        "nickname": "bem**r16",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 515.2205858,
+        "balanceAsset": "USDT",
+        "totalPnl": 15.2205858,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043977,
+        "startTime": 1781126956000
+      },
+      {
+        "nickname": "mal**********wan",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 372.98821918,
+        "balanceAsset": "USDT",
+        "totalPnl": 11.01821918,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043811,
+        "startTime": 1781114391000
+      },
+      {
+        "nickname": "DV***68",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/20260610/91273efd873d40ab8b8188a275b6290b.jpg",
+        "balanceAmount": 1028.79865627,
+        "balanceAsset": "USDT",
+        "totalPnl": 9.79865627,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.961506,
+        "startTime": 1781162106000
+      },
+      {
+        "nickname": "thi**********ldt",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202409/a09e7e28a761478bf2b3a9d5abad2fd9.jpg",
+        "balanceAmount": 251.96952535,
+        "balanceAsset": "USDT",
+        "totalPnl": 7.43952535,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.042227,
+        "startTime": 1781105527000
+      },
+      {
+        "nickname": "Ai***78",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202603/3bb3d5d9e2dced35053375cda440550c.jpg",
+        "balanceAmount": 227.3019071,
+        "balanceAsset": "USDT",
+        "totalPnl": 6.7119071,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.042553,
+        "startTime": 1781112452000
+      },
+      {
+        "nickname": "Use****f0c",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1695716378565_p7gg128kqzin6mp0ezo3tlwjbbmqblp9.png",
+        "balanceAmount": 208.70278237,
+        "balanceAsset": "USDT",
+        "totalPnl": 6.13278237,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.027335,
+        "startTime": 1781127256000
+      },
+      {
+        "nickname": "NAT**bcd",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202604/2ec80c42ced6060d661d4d268376ef6b.jpg",
+        "balanceAmount": 205.78096505,
+        "balanceAsset": "USDT",
+        "totalPnl": 5.78096505,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 2.890332,
+        "startTime": 1781136248000
+      },
+      {
+        "nickname": "KU**11",
+        "avatarUrl": "https://public.bnbstatic.com/image/common_notification/20211230/f6305dee-e00e-4bfe-9d13-3073ad8eb565.png",
+        "balanceAmount": 193.55700052,
+        "balanceAsset": "USDT",
+        "totalPnl": 5.71700052,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043392,
+        "startTime": 1781116751000
+      },
+      {
+        "nickname": "Use****b0d",
+        "avatarUrl": "https://bin.bnbstatic.com/static/live-miniprogram/default-avatar.png",
+        "balanceAmount": 505.44466249,
+        "balanceAsset": "USDT",
+        "totalPnl": 5.44466249,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 1.088892,
+        "startTime": 1781194681000
+      },
+      {
+        "nickname": "Use****016",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1695716378565_p7gg128kqzin6mp0ezo3tlwjbbmqblp9.png",
+        "balanceAmount": 307.90085743,
+        "balanceAsset": "USDT",
+        "totalPnl": 5.19085743,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 1.714661,
+        "startTime": 1781142313000
+      },
+      {
+        "nickname": "Use****032",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1695716378565_p7gg128kqzin6mp0ezo3tlwjbbmqblp9.png",
+        "balanceAmount": 151.85455421,
+        "balanceAsset": "USDT",
+        "totalPnl": 4.81455421,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.274176,
+        "startTime": 1781132759000
+      },
+      {
+        "nickname": "Use****cf4",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 122.70324188,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.62324188,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.04255,
+        "startTime": 1781131482000
+      },
+      {
+        "nickname": "Use****10a",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 114.58070247,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.38070247,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.040057,
+        "startTime": 1781123124000
+      },
+      {
+        "nickname": "Use****bbf",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202403/7b3de5588a23ba6e2197c743fbd0cc36.png",
+        "balanceAmount": 111.09170679,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.28170679,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043826,
+        "startTime": 1781103781000
+      },
+      {
+        "nickname": "Kan*****  P",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 103.17703449,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.17703449,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.176879,
+        "startTime": 1781124713000
+      },
+      {
+        "nickname": "Use****c7b",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1722849446495_6ig9lo4jc4xkoifa1zwmiexm4y421dw9.png",
+        "balanceAmount": 104.69866521,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.08866521,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.03958,
+        "startTime": 1781103944000
+      },
+      {
+        "nickname": "大漂**PL",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202606/7d2336686902425653103db0101543ce.jpeg",
+        "balanceAmount": 103.04411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.04411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043978,
+        "startTime": 1781082786000
+      },
+      {
+        "nickname": "Tah*****ail",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202506/ed97142308eea6df0e0d35503a1c95e5.jpg",
+        "balanceAmount": 103.04411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.04411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043976,
+        "startTime": 1781119464000
+      },
+      {
+        "nickname": "fa **i来财",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 103.04411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.04411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043976,
+        "startTime": 1781118740000
+      },
+      {
+        "nickname": "Eza*******er ",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202606/359a1a5cc08f88ff5b985012ca3d3960.jpg",
+        "balanceAmount": 103.04411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.04411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043977,
+        "startTime": 1781092211000
+      },
+      {
+        "nickname": "Use****ae6",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1698378523448_0c240g0hdps1wx5wvu4inkpyz9jqzpth.png",
+        "balanceAmount": 103.04411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.04411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043978,
+        "startTime": 1781074189000
+      },
+      {
+        "nickname": "Ha***zz",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 103.04411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.04411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043976,
+        "startTime": 1781115938000
+      },
+      {
+        "nickname": "Dan*********nov",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 103.05411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.04411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043668,
+        "startTime": 1781085054000
+      },
+      {
+        "nickname": "淡***商",
+        "avatarUrl": "https://public-1306379396.file.myqcloud.com/image/common_notification/20211230/555ac257-584e-40a6-9adb-f96a603820f3.png",
+        "balanceAmount": 103.04411716,
+        "balanceAsset": "USDT",
+        "totalPnl": 3.04411716,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.043978,
+        "startTime": 1781084832000
+      },
+      {
+        "nickname": "RAB************NI ",
+        "avatarUrl": "https://bin.bnbstatic.com/static/live-miniprogram/default-avatar.png",
+        "balanceAmount": 62.60252082,
+        "balanceAsset": "USDT",
+        "totalPnl": 2.74211582,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 4.590488,
+        "startTime": 1781130790000
+      },
+      {
+        "nickname": "BOS**uyi",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202505/b2806adafe7ea9f80ca4658e0a01f6ee.jpg",
+        "balanceAmount": 199.15138285,
+        "balanceAsset": "USDT",
+        "totalPnl": 2.40138285,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 1.220412,
+        "startTime": 1781152490000
+      },
+      {
+        "nickname": "Use****fc9",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 100.836315,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.836315,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.836238,
+        "startTime": 1781174402000
+      },
+      {
+        "nickname": "Mu***86",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202604/d1a396419171f2d3eff4ce1d901746e8.jpg",
+        "balanceAmount": 43.44013192,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.60882343,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.796543,
+        "startTime": 1781098848000
+      },
+      {
+        "nickname": "Use****5ee",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 80.45538012,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.45538012,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.569078,
+        "startTime": 1781112873000
+      },
+      {
+        "nickname": "Use****764",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 100.43692289,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.43692289,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.436852,
+        "startTime": 1781179458000
+      },
+      {
+        "nickname": "Ous******_18",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202606/b58516f8fee4f7be91a595f80e533f8d.jpg",
+        "balanceAmount": 28.42568142,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.42568142,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 1.520143,
+        "startTime": 1781126267000
+      },
+      {
+        "nickname": "Use****d7c",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1722849356326_tnqjoo65x6aqo2wwtuxqqtys1f3wc6uj.png",
+        "balanceAmount": 100.30767266,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30767266,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.307605,
+        "startTime": 1781177545000
+      },
+      {
+        "nickname": "Abz***d55",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202407/866c2f3d1a129143358af09e28492e07.png",
+        "balanceAmount": 10.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.019224,
+        "startTime": 1781111027000
+      },
+      {
+        "nickname": "Kin**xzy",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 20.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 1.509535,
+        "startTime": 1781082182000
+      },
+      {
+        "nickname": "ZK_******786",
+        "avatarUrl": "https://public.bnbstatic.com/image/common_notification/20211230/cbf064c9-e78f-4b13-913e-051dce1d4c16.png",
+        "balanceAmount": 10.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.019224,
+        "startTime": 1781085065000
+      },
+      {
+        "nickname": "mar**899",
+        "avatarUrl": "https://public.nftstatic.com/static/nft/res/nft-cex/S3/1722849356326_tnqjoo65x6aqo2wwtuxqqtys1f3wc6uj.png",
+        "balanceAmount": 22.96193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 1.332323,
+        "startTime": 1781091375000
+      },
+      {
+        "nickname": "Use****2ce",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 10.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.019225,
+        "startTime": 1781102507000
+      },
+      {
+        "nickname": "Use****b63",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 10.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.019224,
+        "startTime": 1781109943000
+      },
+      {
+        "nickname": "Fee**********************aha",
+        "avatarUrl": "https://public.bnbstatic.com/image/pgc/202412/ac6772bdd61d22624b4dab8de04f84bf.png",
+        "balanceAmount": 10.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.019224,
+        "startTime": 1781123058000
+      },
+      {
+        "nickname": "حسن****بار",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202505/b054e6a0f855248483f5fc4893ddf67a.jpg",
+        "balanceAmount": 30.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 1.006304,
+        "startTime": 1781113743000
+      },
+      {
+        "nickname": "Use****921",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 100.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 0.301795,
+        "startTime": 1781114730000
+      },
+      {
+        "nickname": "Moh*************r  ",
+        "avatarUrl": "https://public.bnbstatic.com/image/avatar/202409/b754d6a7cc7299e0bcd7051385ba32f2.jpg",
+        "balanceAmount": 10.30193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 3.019224,
+        "startTime": 1781116544000
+      },
+      {
+        "nickname": "Abe****shi",
+        "avatarUrl": "https://bin.bnbstatic.com/static/content/static-sources/square-default-avatar.png",
+        "balanceAmount": 13.33193682,
+        "balanceAsset": "USDT",
+        "totalPnl": 0.30193682,
+        "totalPnlAsset": "USDT",
+        "totalRoi": 2.317097,
+        "startTime": 1781116704000
+      }
+    ],
+    "indexValue": null
+  },
+  "success": true
+}
