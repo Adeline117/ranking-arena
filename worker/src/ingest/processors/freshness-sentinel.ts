@@ -44,7 +44,13 @@ export async function processFreshness(_job: Job): Promise<{ stale: number }> {
              l.last_good < now() - (e.max_age_hours || ' hours')::interval)`
   )
 
-  for (const s of rows) {
+  for (const raw of rows) {
+    // pg returns numeric columns as strings — coerce before formatting.
+    const s = {
+      ...raw,
+      age_hours: raw.age_hours === null ? null : Number(raw.age_hours),
+      max_age_hours: Number(raw.max_age_hours),
+    }
     // "Never crawled" is a rollout state, not an incident — digest only
     // (tier 'maint' never pages); a stale previously-good board pages
     // per §15 when the source is phase<=1.
