@@ -9,6 +9,7 @@ import './bitget'
 import './bitget/bots'
 
 // Phase 1
+import './binance'
 import './bybit-mt5'
 import './bybit-copytrade'
 import './mexc'
