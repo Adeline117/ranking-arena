@@ -13,6 +13,7 @@ import type {
   ParseCtx,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
+  ParsedPosition,
   ParsedProfile,
   ParsedStats,
   Timeframe,
@@ -189,4 +190,47 @@ export function parseBitgetProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       : null,
     avatarUrlOrigin: info ? ((info.headPic as string) ?? null) : null,
   }
+}
+
+/** holdSide/position: 1 = long (多仓), 2 = short (空仓) — verified against
+ *  positionDesc on historyList rows from the same account. */
+function bitgetSide(v: unknown): 'long' | 'short' | null {
+  const n = num(v)
+  if (n === 1) return 'long'
+  if (n === 2) return 'short'
+  return null
+}
+
+/**
+ * Open positions (verified by live capture 2026-06-11):
+ *   POST /v1/trigger/trace/public/traderPosition {traderUid} → data: [...]
+ * Works without auth even when the trader enables 未结仓位保护 (the blocked
+ * order/currentList variant is the COPIER view, not this public one).
+ * Bitget shows these to non-copiers with a 1h delay (spec §5.7) — the
+ * caller stamps as_of = scraped_at − meta.positions_delay_hours.
+ *
+ * NOTE: the payload exposes margin (openMarginCount, quote units) but not
+ * contract size / mark price / uPnL — those stay NULL (NULL-collapse, §6).
+ */
+export function parseBitgetPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  const data = (raw as Dict)?.data
+  if (!Array.isArray(data)) return []
+  const out: ParsedPosition[] = []
+  for (const item of data as Dict[]) {
+    const symbol = (item.symbolDisplayName ?? item.symbolId) as string | undefined
+    if (!symbol) continue
+    out.push({
+      symbol: String(symbol),
+      side: bitgetSide(item.holdSide ?? item.position),
+      leverage: num(item.openLevel),
+      // size = position margin in quote units (openMarginCount); Bitget does
+      // not expose base-asset quantity on this endpoint.
+      size: num(item.openMarginCount),
+      entryPrice: num(item.avgPrice ?? item.openAvgPrice),
+      markPrice: null,
+      unrealizedPnl: null,
+      raw: item,
+    })
+  }
+  return out
 }

@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { parseBitgetLeaderboardPage, parseBitgetProfile } from '../parsers'
+import { parseBitgetLeaderboardPage, parseBitgetPositions, parseBitgetProfile } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
 
 function fixture(name: string): unknown {
@@ -188,5 +188,30 @@ describe('parseBitgetProfile (live-captured fixtures, 2026-06-11)', () => {
       parseBitgetProfile({ timeframe: 7, cycleData: { data: null } }, ctx).series
     ).toHaveLength(0)
     expect(parseBitgetProfile(null, ctx)).toBeTruthy()
+  })
+})
+
+describe('parseBitgetPositions (live-captured fixture, 2026-06-11)', () => {
+  it('parses public/traderPosition rows', () => {
+    const positions = parseBitgetPositions(fixture('positions.json'), ctx)
+    expect(positions).toHaveLength(2)
+    expect(positions[0]).toMatchObject({
+      symbol: 'SOLUSDT',
+      side: 'short', // holdSide 2
+      leverage: 25,
+      markPrice: null, // not exposed on this endpoint — NULL-collapse
+      unrealizedPnl: null,
+    })
+    // size = openMarginCount (quote-unit margin), entryPrice = avgPrice
+    expect(positions[0].size).toBe(Number(positions[0].raw.openMarginCount))
+    expect(positions[0].entryPrice).toBe(Number(positions[0].raw.avgPrice))
+    expect(positions[0].size).toBeGreaterThan(0)
+    expect(positions[0].raw).toMatchObject({ symbolId: 'SOLUSDT_UMCBL' })
+  })
+
+  it('returns empty for junk/blocked payloads', () => {
+    expect(parseBitgetPositions(null, ctx)).toHaveLength(0)
+    expect(parseBitgetPositions({ code: '30066', msg: '仓位保护' }, ctx)).toHaveLength(0)
+    expect(parseBitgetPositions({ data: null }, ctx)).toHaveLength(0)
   })
 })
