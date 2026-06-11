@@ -48,6 +48,15 @@ export function apiFetcher(api: APIRequestContext): JsonFetcher {
   }
 }
 
+/**
+ * JsonFetcher that executes requests INSIDE the page context (same-origin
+ * fetch). Use when the external APIRequestContext is fingerprint-blocked
+ * but the site accepts its own page's requests (e.g. Bitget UTA API).
+ */
+export function pageFetcher(session: FetchSession): JsonFetcher {
+  return (template) => session.pageFetch(template)
+}
+
 /** One paced replay request; throws BlockedUpstreamError on 401/403/429. */
 export async function replayJson(
   session: FetchSession,

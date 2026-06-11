@@ -201,6 +201,32 @@ class PlaywrightFetchSession implements FetchSession {
     }
   }
 
+  async pageFetch(template: ReplayRequestTemplate): Promise<{ status: number; json: unknown }> {
+    const page = await this.page()
+    return page.evaluate(
+      async (t) => {
+        const resp = await fetch(t.url, {
+          method: t.method,
+          headers: t.headers,
+          body: t.body === undefined ? undefined : JSON.stringify(t.body),
+        })
+        let json: unknown = null
+        try {
+          json = await resp.json()
+        } catch {
+          // non-JSON body — caller decides
+        }
+        return { status: resp.status, json }
+      },
+      {
+        url: template.url,
+        method: template.method,
+        headers: template.headers,
+        body: template.body,
+      }
+    )
+  }
+
   async paced<T>(fn: () => Promise<T>): Promise<T> {
     this.circuit.assertCanProceed()
     try {

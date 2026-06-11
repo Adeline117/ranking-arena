@@ -43,6 +43,15 @@ export interface FetchSession {
   /** APIRequestContext bound to the browser context (same cookies + IP). */
   api(): Promise<import('playwright').APIRequestContext>
 
+  /**
+   * Same-origin JSON request executed INSIDE the page (page.evaluate fetch).
+   * Use when the external APIRequestContext is fingerprint-blocked but the
+   * site accepts requests from its own page context (e.g. Bitget UTA API:
+   * signed headers optional in-page, 403 outside). URL may be relative to
+   * the page origin.
+   */
+  pageFetch(template: ReplayRequestTemplate): Promise<{ status: number; json: unknown }>
+
   /** Start capturing XHR/fetch exchanges whose URL matches. */
   capture(matcher: RegExp | ((url: string) => boolean)): Promise<EndpointCapture>
 

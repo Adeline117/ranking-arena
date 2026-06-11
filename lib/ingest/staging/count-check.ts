@@ -43,16 +43,32 @@ export function evaluateCount(
   }
 }
 
+export interface CountBaseline {
+  baseline: number | null
+  /** true while we are still comparing against the stale survey number. */
+  isBootstrap: boolean
+}
+
 /**
- * Rolling median of the last 7 passing crawls for (source, timeframe);
- * falls back to expectedCount until enough history exists (spec: the
- * survey number is ONLY the day-one floor before 7 crawls exist).
+ * Survey counts age (boards grow/shrink over months) — a 6-month-old
+ * expected_count at ±10% would deadlock a drifted board out of ever
+ * accumulating its 7 passing crawls. So the bootstrap fallback gets a
+ * wider sanity tolerance; the strict ±10% only applies to the rolling
+ * median of real recent crawls.
+ */
+export const BOOTSTRAP_DEVIATION_PCT = 30
+export const ROLLING_DEVIATION_PCT = 10
+
+/**
+ * Rolling median of up to the last 7 passing crawls for (source, TF).
+ * With ≥3 passing crawls the median of real data replaces the survey
+ * number; below that, expectedCount is the (loose) day-one sanity floor.
  */
 export async function getCountBaseline(
   sourceId: number,
   timeframe: number,
   expectedCount: number | null
-): Promise<number | null> {
+): Promise<CountBaseline> {
   const { rows } = await getIngestPool().query<{ actual_count: number }>(
     `SELECT actual_count
        FROM arena.leaderboard_snapshots
@@ -61,8 +77,8 @@ export async function getCountBaseline(
       LIMIT 7`,
     [sourceId, timeframe]
   )
-  if (rows.length >= 7) {
-    return median(rows.map((r) => r.actual_count))
+  if (rows.length >= 3) {
+    return { baseline: median(rows.map((r) => r.actual_count)), isBootstrap: false }
   }
-  return expectedCount
+  return { baseline: expectedCount, isBootstrap: true }
 }

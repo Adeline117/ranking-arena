@@ -71,6 +71,46 @@ describe('parseBitgetLeaderboardPage', () => {
     })
   })
 
+  it('parses the UTA traderView shape (rows + itemVoList, verified live 2026-06)', () => {
+    const payload = {
+      code: '200',
+      data: {
+        containActModel: false,
+        maxShowSizes: 30,
+        nextFlag: true,
+        totals: 30, // page row count, NOT a global total
+        rows: [
+          {
+            traderUid: 'beb24d718eb23b54ac91',
+            portfolioId: '1446487090121363456',
+            userName: 'BGUSER-FFAEKKR0',
+            displayName: 'AI-HUB',
+            headPic: 'https://qrc.bgstatic.com/otc/images/a.png',
+            followCount: 72,
+            itemVoList: [
+              { showColumnCode: 'profit_rate', comparedValue: '305513.07', percentColumn: true },
+              { showColumnCode: 'total_income', comparedValue: '7350.77' },
+              { showColumnCode: 'total_follow_profit', comparedValue: '1209.79' },
+              { showColumnCode: 'max_retracement', comparedValue: '4.83' },
+              { showColumnCode: 'winning_rate', comparedValue: '58.33' },
+            ],
+          },
+        ],
+      },
+    }
+    const page = parseBitgetLeaderboardPage(payload, ctx)
+    expect(page.reportedTotal).toBeNull() // UTA has nextFlag, no global total
+    expect(page.rows[0]).toMatchObject({
+      exchangeTraderId: 'beb24d718eb23b54ac91', // traderUid = identity
+      nickname: 'AI-HUB',
+      avatarUrlOrigin: 'https://qrc.bgstatic.com/otc/images/a.png',
+      headlineRoi: 305513.07,
+      headlinePnl: 7350.77,
+      headlineWinRate: 58.33,
+    })
+    expect(page.rows[0].raw).toMatchObject({ portfolioId: '1446487090121363456' })
+  })
+
   it('skips rows without an id and returns empty for junk payloads', () => {
     expect(parseBitgetLeaderboardPage({ data: { list: [{ roi: 5 }] } }, ctx).rows).toHaveLength(0)
     expect(parseBitgetLeaderboardPage(null, ctx).rows).toHaveLength(0)
