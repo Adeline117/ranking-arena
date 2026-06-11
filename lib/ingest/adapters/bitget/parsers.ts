@@ -101,57 +101,92 @@ export function parseBitgetLeaderboardPage(
   return { rows, reportedTotal }
 }
 
-export const BITGET_TF_PARAM: Record<7 | 30 | 90, number> = { 7: 1, 30: 2, 90: 3 }
+/** Kline rows shared by roiRows/pnlRows/netProfitKlineDTO: {amount, dataTime ms}. */
+function klinePoints(node: unknown): Array<{ ts: string; value: number }> {
+  const rows = (node as Dict)?.rows
+  if (!Array.isArray(rows)) return []
+  const points: Array<{ ts: string; value: number }> = []
+  for (const row of rows as Dict[]) {
+    const ts = num(row.dataTime)
+    const value = num(row.amount)
+    if (ts === null || value === null) continue
+    points.push({ ts: new Date(ts).toISOString(), value })
+  }
+  return points
+}
 
-/** trader/detail payload (one timeframe) + optional profitList payload. */
+/**
+ * Real profile bundle (verified by live capture 2026-06-11):
+ *   detailV2:  POST /v1/trigger/trace/public/traderDetailPageV2 {traderUid}
+ *              → identity, AUM, 分润比例, copier block, labels
+ *   cycleData: POST /v1/trigger/trace/public/cycleData {triggerUserId, cycleTime}
+ *              → statisticsDTO (per-TF 表现 block) + roiRows/pnlRows
+ *                (cumulative 收益率 / 盈亏 chart series, §11.4)
+ * Verified invariants: pnlRows last point == statisticsDTO.profit and
+ * roiRows last point == statisticsDTO.profitRate (both already percent/quote).
+ */
 export function parseBitgetProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
-  const bundle = raw as { detail?: Dict; profitList?: Dict; timeframe?: number }
+  const bundle = (raw ?? {}) as { detailV2?: Dict; cycleData?: Dict; timeframe?: number }
   const tf = (bundle.timeframe ?? 90) as Timeframe
-  const info = ((bundle.detail as Dict)?.data ?? null) as Dict | null
+  const info = ((bundle.detailV2 as Dict)?.data ?? null) as Dict | null
+  const cycle = ((bundle.cycleData as Dict)?.data ?? null) as Dict | null
+  const st = (cycle?.statisticsDTO ?? null) as Dict | null
+  const positionTime = (cycle?.positionTimeDTO ?? null) as Dict | null
+  // averageHoldingTime unit is seconds (bucket boundaries / longestHoldingTime
+  // only make sense as seconds for multi-day swing positions).
+  const avgHoldingSecs = num(positionTime?.averageHoldingTime)
 
   const stats: ParsedStats[] = []
-  if (info) {
+  if (st) {
+    const extras: Record<string, unknown> = {}
+    if (st.tradeFrequency !== undefined) extras.trade_frequency = num(st.tradeFrequency)
+    if (st.largestProfit !== undefined) extras.largest_profit = num(st.largestProfit)
+    if (st.largestLoss !== undefined) extras.largest_loss = num(st.largestLoss)
+    if (st.longShortRatio !== undefined) extras.long_short_ratio = st.longShortRatio
+    if (info) {
+      if (info.settledInDays !== undefined) extras.settled_in_days = int(info.settledInDays)
+      if (info.followerCount !== undefined) extras.copier_count_current = int(info.followerCount)
+      if (info.maxFollowCount !== undefined) extras.copier_count_max = int(info.maxFollowCount)
+      if (Array.isArray(info.labelVos)) {
+        extras.style_labels = (info.labelVos as Dict[])
+          .map((l) => l.name)
+          .filter((n): n is string => typeof n === 'string')
+      }
+    }
+
     stats.push({
       timeframe: tf,
       asOf: ctx.scrapedAt,
-      roi: pct(info, 'roi', ['profitRate', 'returnRate']),
-      pnl: num(info.profit),
+      roi: num(st.profitRate), // already percent
+      pnl: num(st.profit),
       sharpe: null, // Bitget does not expose Sharpe — NULL means "not exposed"
-      mdd: pct(info, 'drawDown', ['maxDrawdown']),
-      winRate: pct(info, 'winRate', ['winningRate']),
-      winPositions: int(info.winOrder),
-      totalPositions: int(info.totalOrder),
-      copierPnl: num(info.copyTraderProfit ?? info.traceProfit),
-      copierCount: int(info.copyTraderNum ?? info.traceUserNum),
-      aum: num(info.totalFollowAssets),
+      mdd: num(st.maxRetracement), // already percent
+      winRate: num(st.winningRate), // already percent
+      winPositions: int(st.profitTrades),
+      totalPositions: int(st.totalTrades),
+      copierPnl: num(st.totalFollowProfit),
+      copierCount: int(st.totalFollowers),
+      aum: num(st.aum),
       volume: null,
-      profitShareRate: num(info.profitShareRate ?? info.shareRatio),
-      holdingDurationAvgHours: null,
-      tradingPreferences: null,
-      extras: {},
+      profitShareRate: num(st.distributeRatio), // percent (e.g. "10")
+      holdingDurationAvgHours: avgHoldingSecs === null ? null : avgHoldingSecs / 3600,
+      tradingPreferences: (cycle?.symbolDistributeDetail ?? null) as Dict | null,
+      extras,
     })
   }
 
-  const profitList = ((bundle.profitList as Dict)?.data ?? []) as Array<Dict>
   const series: ParsedProfile['series'] = []
-  if (Array.isArray(profitList) && profitList.length > 0) {
-    const points = profitList
-      .map((item) => {
-        const ts = num(item.date)
-        const value = num(item.profit)
-        if (ts === null || value === null) return null
-        return { ts: new Date(ts).toISOString(), value }
-      })
-      .filter((p): p is { ts: string; value: number } => p !== null)
-    if (points.length > 0) {
-      series.push({ timeframe: tf, metric: 'pnl', points })
-    }
-  }
+  const roiPoints = klinePoints(cycle?.roiRows) // 收益率 curve (cumulative %)
+  if (roiPoints.length > 0) series.push({ timeframe: tf, metric: 'roi', points: roiPoints })
+  const pnlPoints = klinePoints(cycle?.pnlRows) // 盈亏 toggle (cumulative quote)
+  if (pnlPoints.length > 0) series.push({ timeframe: tf, metric: 'pnl', points: pnlPoints })
 
   return {
     stats,
     series,
-    nickname: info ? ((info.traderName as string) ?? null) : null,
-    avatarUrlOrigin: info ? ((info.headUrl as string) ?? null) : null,
+    nickname: info
+      ? ((info.displayName as string) ?? (info.traderNickName as string) ?? null)
+      : null,
+    avatarUrlOrigin: info ? ((info.headPic as string) ?? null) : null,
   }
 }

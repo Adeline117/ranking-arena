@@ -3,9 +3,10 @@
  * One adapter serves bitget_futures / bitget_spot / bitget_cfd; the board
  * is selected by src.meta.boardKey. Known JSON endpoints (from the legacy
  * connector, overridable per-source via src.meta.endpoints):
- *   list:       GET /v1/trigger/trace/public/currentTrader/list
- *   detail:     GET /v1/trigger/trace/public/trader/detail
- *   profitList: GET /v1/trigger/trace/public/trader/profitList
+ *   list (UTA): POST /v1/trigger/public/uta/traderView (futures; spot/cfd below)
+ *   profile:    POST /v1/trigger/trace/public/traderDetailPageV2 {traderUid}
+ *   charts:     POST /v1/trigger/trace/public/cycleData {triggerUserId, cycleTime}
+ * (legacy trader/detail + profitList endpoints are dead — verified 2026-06-11)
  *
  * WORKER-ONLY MODULE (imported via adapters/register in the worker).
  */
@@ -24,7 +25,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { pageFetcher, replayJson, replayPaged } from '../../fetch/capture'
-import { BITGET_TF_PARAM, parseBitgetLeaderboardPage, parseBitgetProfile } from './parsers'
+import { parseBitgetLeaderboardPage, parseBitgetProfile } from './parsers'
 
 const BASE = 'https://www.bitget.com/v1/trigger/trace/public'
 
@@ -65,6 +66,28 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
     // networkidle is best-effort — a busy page still yields valid cookies
   })
   warmedSessions.add(session)
+}
+
+/** Session-scoped detailV2 cache (LRU-ish: cleared per trader change is
+ *  unnecessary — Tier-B visits each trader once, 3 TFs back to back). */
+const detailV2Cache = new WeakMap<FetchSession, Map<string, unknown>>()
+
+async function cachedDetailV2(
+  session: FetchSession,
+  traderId: string,
+  fetch: () => Promise<unknown>
+): Promise<unknown> {
+  let cache = detailV2Cache.get(session)
+  if (!cache) {
+    cache = new Map()
+    detailV2Cache.set(session, cache)
+  }
+  if (cache.has(traderId)) return cache.get(traderId)
+  const value = await fetch()
+  // Bound memory on long sessions: keep only the most recent traders.
+  if (cache.size > 50) cache.clear()
+  cache.set(traderId, value)
+  return value
 }
 
 const bitgetAdapter: SourceAdapter = {
@@ -127,18 +150,24 @@ const bitgetAdapter: SourceAdapter = {
     await warmSession(session, src)
     const fetcher = pageFetcher(session)
     const tf = (timeframe === 0 ? 90 : timeframe) as RankingTimeframe
-    const detailUrl = endpoint(src, 'detail', `${BASE}/trader/detail`)
-    const profitUrl = endpoint(src, 'profitList', `${BASE}/trader/profitList`)
+    const detailUrl = endpoint(src, 'profile', `${BASE}/traderDetailPageV2`)
+    const cycleUrl = endpoint(src, 'cycleData', `${BASE}/cycleData`)
 
-    const detail = await replayJson(session, fetcher, {
-      url: `${detailUrl}?traderId=${exchangeTraderId}&timeRange=${BITGET_TF_PARAM[tf]}`,
-      method: 'GET',
-      headers: { accept: 'application/json' },
-    })
-    const profitList = await replayJson(session, fetcher, {
-      url: `${profitUrl}?traderId=${exchangeTraderId}`,
-      method: 'GET',
-      headers: { accept: 'application/json' },
+    // detailV2 is timeframe-independent — fetch once per (session, trader)
+    // and reuse across the 3 TF calls Tier-B makes back to back.
+    const detailV2 = await cachedDetailV2(session, exchangeTraderId, () =>
+      replayJson(session, fetcher, {
+        url: detailUrl,
+        method: 'POST',
+        headers: UTA_HEADERS,
+        body: { traderUid: exchangeTraderId },
+      })
+    )
+    const cycleData = await replayJson(session, fetcher, {
+      url: cycleUrl,
+      method: 'POST',
+      headers: UTA_HEADERS,
+      body: { triggerUserId: exchangeTraderId, cycleTime: tf },
     })
 
     const fetchedAt = new Date().toISOString()
@@ -146,8 +175,8 @@ const bitgetAdapter: SourceAdapter = {
       pages: [
         {
           pageIndex: 1,
-          payload: { detail, profitList, timeframe: tf },
-          url: detailUrl,
+          payload: { detailV2, cycleData, timeframe: tf },
+          url: cycleUrl,
           fetchedAt,
         },
       ],

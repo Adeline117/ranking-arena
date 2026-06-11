@@ -1,0 +1,257 @@
+{
+  "code": "00000",
+  "data": {
+    "cycleFollowNetProfitKlineDTOs": [],
+    "cycleNetProfitKlineDTOs": [],
+    "followNetProfitKlineDTO": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "-13243.86",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "-2302.25",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "-10600.80",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "-5725.57",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "-1964.39",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "185.54",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "-5851.46",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "netProfitKlineDTO": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "-48.29",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "-11.32",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "-39.86",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "-21.00",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "-6.53",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "0.76",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "-19.26",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "pageScoreDTO": {
+      "avgProfitFactor": "0.55",
+      "avgWinLossRate": "0.46",
+      "avgWinRate": "50.00",
+      "followUserDetail": {
+        "averageLoss": "231.18",
+        "averageWin": "65.18",
+        "loss": 228,
+        "profitFactor": "0.26",
+        "profitRate": "0.28",
+        "totalLoss": "-52709.92",
+        "totalProfit": "13753.78",
+        "win": 211,
+        "winRate": "48.06"
+      },
+      "profitFactorDenominator": "5.00",
+      "profitRateDenominator": "5.00",
+      "showRankingDetail": {
+        "isShowRanking": true,
+        "ranking": 1260,
+        "score": "0.17",
+        "scoreRate": 1,
+        "totalScore": 100,
+        "totalTraderCount": 150000
+      },
+      "traderUserDetail": {
+        "averageLoss": "1.59",
+        "averageWin": "0.42",
+        "loss": 115,
+        "profitFactor": "0.24",
+        "profitRate": "0.26",
+        "totalLoss": "-182.78",
+        "totalProfit": "43.77",
+        "win": 104,
+        "winRate": "47.49"
+      },
+      "winRateDenominator": "100.00"
+    },
+    "pnlRows": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "-48.29",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "-59.60",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "-99.47",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "-120.47",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "-127.00",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "-126.24",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "-145.50",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "positionTimeDTO": {
+      "averageHoldingTime": 232302,
+      "longestHoldingTime": 24035715,
+      "rows": [
+        {
+          "endTime": "7886",
+          "startTime": "0",
+          "totalPnl": "11.59",
+          "trades": 44
+        },
+        {
+          "endTime": "23946",
+          "startTime": "8038",
+          "totalPnl": "8.62",
+          "trades": 44
+        },
+        {
+          "endTime": "113579",
+          "startTime": "24324",
+          "totalPnl": "-8.30",
+          "trades": 44
+        },
+        {
+          "endTime": "195294",
+          "startTime": "119116",
+          "totalPnl": "-23.05",
+          "trades": 44
+        },
+        {
+          "endTime": "0",
+          "startTime": "198722",
+          "totalPnl": "-134.48",
+          "trades": 43
+        }
+      ]
+    },
+    "roiRows": {
+      "chartDataTime": null,
+      "dataCycle": 0,
+      "klineType": 0,
+      "rows": [
+        {
+          "amount": "-16.13",
+          "dataTime": 1780588800000
+        },
+        {
+          "amount": "-21.17",
+          "dataTime": 1780675200000
+        },
+        {
+          "amount": "-17.19",
+          "dataTime": 1780761600000
+        },
+        {
+          "amount": "-12.46",
+          "dataTime": 1780848000000
+        },
+        {
+          "amount": "-14.86",
+          "dataTime": 1780934400000
+        },
+        {
+          "amount": "-13.20",
+          "dataTime": 1781020800000
+        },
+        {
+          "amount": "-12.10",
+          "dataTime": 1781107200000
+        }
+      ],
+      "weekRows": []
+    },
+    "statisticsDTO": {
+      "aum": "75085.31",
+      "distributeRatio": "10",
+      "largestLoss": "-7.86",
+      "largestProfit": "0.98",
+      "longShortRatio": {
+        "longOrder": "76",
+        "shortOrder": "143"
+      },
+      "lossTrades": 115,
+      "maxRetracement": "12.18",
+      "profit": "-145.50",
+      "profitRate": "-12.10",
+      "profitTrades": 104,
+      "totalFollowProfit": "-39502.78",
+      "totalFollowers": 2,
+      "totalTrades": 219,
+      "tradeFrequency": "32",
+      "winningRate": "47.49"
+    },
+    "symbolDistributeDetail": {
+      "totalAmount": 219,
+      "webSymbolDistributeVOs": [
+        {
+          "amount": "219",
+          "displayName": "SOLUSDT"
+        }
+      ]
+    }
+  },
+  "msg": "success",
+  "requestTime": "1781160563597",
+  "success": true
+}

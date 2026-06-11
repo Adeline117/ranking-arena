@@ -1,5 +1,11 @@
+import { readFileSync } from 'fs'
+import { join } from 'path'
 import { parseBitgetLeaderboardPage, parseBitgetProfile } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+
+function fixture(name: string): unknown {
+  return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
+}
 
 const ctx: ParseCtx = {
   sourceSlug: 'bitget_futures',
@@ -118,56 +124,69 @@ describe('parseBitgetLeaderboardPage', () => {
   })
 })
 
-describe('parseBitgetProfile', () => {
-  it('parses detail + profitList bundle into stats and series', () => {
-    const raw = {
-      timeframe: 30,
-      detail: {
-        data: {
-          traderName: 'Alpha',
-          headUrl: 'https://img.bitgetimg.com/a.png',
-          roi: 22.1,
-          profit: 5000,
-          winRate: 58,
-          drawDown: 12.3,
-          totalOrder: 200,
-          winOrder: 116,
-          followerNum: 150,
-          copyTraderNum: 28,
-          totalFollowAssets: 80000,
-        },
-      },
-      profitList: {
-        data: [
-          { date: 1765411200000, profit: 120.5 },
-          { date: 1765497600000, profit: -30.2 },
-        ],
-      },
-    }
+describe('parseBitgetProfile (live-captured fixtures, 2026-06-11)', () => {
+  const detailV2 = fixture('profile-detail-v2.json')
+
+  it('parses detailV2 + cycleData 30d into a full stats block', () => {
+    const raw = { detailV2, cycleData: fixture('profile-cycle-30.json'), timeframe: 30 }
     const profile = parseBitgetProfile(raw, ctx)
-    expect(profile.nickname).toBe('Alpha')
+
+    expect(profile.nickname).toBe('杰辰资本')
+    expect(profile.avatarUrlOrigin).toContain('bgstatic.com')
     expect(profile.stats).toHaveLength(1)
     expect(profile.stats[0]).toMatchObject({
       timeframe: 30,
-      roi: 22.1,
-      pnl: 5000,
-      mdd: 12.3,
-      winRate: 58,
-      winPositions: 116,
-      totalPositions: 200,
-      copierCount: 28,
-      aum: 80000,
+      roi: -57.48, // statisticsDTO.profitRate, already percent
+      pnl: -284.97, // statisticsDTO.profit
+      mdd: 63.76,
+      winRate: 59.73,
+      winPositions: 267,
+      totalPositions: 447,
+      copierPnl: -81591.52,
+      copierCount: 4,
+      aum: 75085.31,
+      profitShareRate: 10,
       sharpe: null, // Bitget doesn't expose it — NULL-collapse downstream
     })
-    expect(profile.series).toHaveLength(1)
-    expect(profile.series[0].metric).toBe('pnl')
-    expect(profile.series[0].points).toHaveLength(2)
-    expect(profile.series[0].points[0].ts).toBe('2025-12-11T00:00:00.000Z')
+    expect(profile.stats[0].holdingDurationAvgHours).toBeCloseTo(225888 / 3600, 3)
+    expect(profile.stats[0].tradingPreferences).toMatchObject({ totalAmount: 447 })
+    expect(profile.stats[0].extras).toMatchObject({
+      settled_in_days: 891,
+      copier_count_current: 91,
+      copier_count_max: 100,
+    })
+    expect(profile.stats[0].extras.style_labels).toContain('高频')
   })
 
-  it('handles a missing detail payload without throwing', () => {
-    const profile = parseBitgetProfile({ timeframe: 7, detail: { data: null } }, ctx)
-    expect(profile.stats).toHaveLength(0)
-    expect(profile.series).toHaveLength(0)
+  it('parses roi + pnl cumulative chart series consistent with the stats block', () => {
+    const raw = { detailV2, cycleData: fixture('profile-cycle-30.json'), timeframe: 30 }
+    const profile = parseBitgetProfile(raw, ctx)
+
+    const roi = profile.series.find((s) => s.metric === 'roi')
+    const pnl = profile.series.find((s) => s.metric === 'pnl')
+    expect(roi?.points).toHaveLength(30)
+    expect(pnl?.points).toHaveLength(30)
+    // Verified invariant: chart endpoints equal the stats block values.
+    expect(roi?.points.at(-1)?.value).toBe(-57.48)
+    expect(pnl?.points.at(-1)?.value).toBe(-284.97)
+    // dataTime ms → UTC ISO (Bitget daily buckets close at midnight UTC+8 = 16:00Z)
+    expect(roi?.points[0].ts).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:00:00\.000Z$/)
+  })
+
+  it('parses 7d and 90d cycles with the requested timeframe tag', () => {
+    for (const tf of [7, 90] as const) {
+      const raw = { detailV2, cycleData: fixture(`profile-cycle-${tf}.json`), timeframe: tf }
+      const profile = parseBitgetProfile(raw, ctx)
+      expect(profile.stats[0]?.timeframe).toBe(tf)
+      expect(profile.series.find((s) => s.metric === 'roi')?.points.length).toBeGreaterThan(0)
+    }
+  })
+
+  it('handles missing payloads without throwing', () => {
+    expect(parseBitgetProfile({ timeframe: 7 }, ctx).stats).toHaveLength(0)
+    expect(
+      parseBitgetProfile({ timeframe: 7, cycleData: { data: null } }, ctx).series
+    ).toHaveLength(0)
+    expect(parseBitgetProfile(null, ctx)).toBeTruthy()
   })
 })
