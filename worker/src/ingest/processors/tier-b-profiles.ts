@@ -21,19 +21,24 @@ interface TopTrader {
   exchange_trader_id: string
 }
 
-/** Top-ranked traders from the latest PASSED snapshot of each timeframe. */
+/**
+ * Top-ranked traders from the latest PASSED snapshot of each timeframe.
+ * NOTE: join entries on snapshot_id ONLY (indexed) — never on scraped_at
+ * equality: pg timestamptz carries microseconds while values round-tripped
+ * through JS Date are millisecond-truncated, so a ts-equality join silently
+ * matches zero rows (the 2026-06-11 "no passed snapshots yet" bug).
+ */
 async function getTopTraders(sourceId: number, topN: number): Promise<TopTrader[]> {
   const { rows } = await getIngestPool().query<TopTrader>(
     `WITH latest AS (
-       SELECT DISTINCT ON (timeframe) id AS snapshot_id, scraped_at
+       SELECT DISTINCT ON (timeframe) id AS snapshot_id
          FROM arena.leaderboard_snapshots
         WHERE source_id = $1 AND count_check_passed
         ORDER BY timeframe, scraped_at DESC
      )
      SELECT DISTINCT t.id, t.exchange_trader_id
        FROM latest l
-       JOIN arena.leaderboard_entries e
-         ON e.snapshot_id = l.snapshot_id AND e.scraped_at = l.scraped_at
+       JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
        JOIN arena.traders t ON t.id = e.trader_id
       WHERE e.rank <= $2`,
     [sourceId, topN]

@@ -73,7 +73,7 @@ export async function compatWriteTraderLatest(
             st.mdd, st.copier_count, st.total_positions
        FROM latest l
        JOIN arena.leaderboard_entries e
-         ON e.snapshot_id = l.id AND e.scraped_at = l.scraped_at
+         ON e.snapshot_id = l.id -- snapshot_id only: ts-equality joins break on Date ms-truncation
        JOIN arena.traders t ON t.id = e.trader_id
        LEFT JOIN arena.trader_stats st
          ON st.trader_id = t.id AND st.timeframe = $2`,
