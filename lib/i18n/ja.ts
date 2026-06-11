@@ -4783,6 +4783,27 @@ const ja = {
   tokenRankingNext: '次へ',
   rankingsSubNavTokens: 'トークン',
   rankingsSubNavBots: 'ボット',
+  rankingsSubNavExchanges: '取引所',
+
+  // Exchange Rankings (spec §6.1)
+  exchangeRankingsTitle: '取引所ランキング',
+  exchangeRankingsSubtitle:
+    'どの取引所のコピートレーダーが本当に稼いでいるか——リアルタイムのリーダーボードデータから算出',
+  exchangeRankingsColExchange: '取引所',
+  exchangeRankingsColTraders: 'ランクイン数',
+  exchangeRankingsColMedianRoi: '中央値 ROI',
+  exchangeRankingsColTopDecileRoi: '上位 10% ROI',
+  exchangeRankingsColProfitable: '黒字率',
+  exchangeRankingsColCopierPnl: 'コピー損益',
+  exchangeRankingsColBotShare: 'ボット比率',
+  exchangeRankingsColAsOf: 'データ時点',
+  exchangeRankingsEmpty: 'このタイムフレームの取引所データはまだありません。後ほどご確認ください。',
+  exchangeRankingsNote:
+    '各取引所の最新の検証済みリーダーボードスナップショットから算出。コピー損益は取引所の通貨ごとに集計し、通貨をまたいで合算することはありません。',
+  exchangeRankingsProductSpot: '現物',
+  exchangeRankingsProductFutures: '先物',
+  exchangeRankingsProductCfd: 'CFD',
+  exchangeRankingsProductOnchain: 'オンチェーン',
 
   // Achievements
   achievementUnlocked: '実績解除',

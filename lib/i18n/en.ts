@@ -5156,6 +5156,27 @@ const en = {
   tokenRankingNext: 'Next',
   rankingsSubNavTokens: 'Tokens',
   rankingsSubNavBots: 'Bots',
+  rankingsSubNavExchanges: 'Exchanges',
+
+  // Exchange Rankings (spec §6.1)
+  exchangeRankingsTitle: 'Exchange Rankings',
+  exchangeRankingsSubtitle:
+    "Which exchange's copy traders actually make money — computed from live leaderboard data",
+  exchangeRankingsColExchange: 'Exchange',
+  exchangeRankingsColTraders: 'Ranked traders',
+  exchangeRankingsColMedianRoi: 'Median ROI',
+  exchangeRankingsColTopDecileRoi: 'Top 10% ROI',
+  exchangeRankingsColProfitable: 'Profitable',
+  exchangeRankingsColCopierPnl: 'Copier PnL',
+  exchangeRankingsColBotShare: 'Bot share',
+  exchangeRankingsColAsOf: 'As of',
+  exchangeRankingsEmpty: 'No exchange data for this timeframe yet — check back soon.',
+  exchangeRankingsNote:
+    'Computed from the latest verified leaderboard snapshot of each exchange. Copier PnL totals are per exchange currency and are never summed across currencies.',
+  exchangeRankingsProductSpot: 'Spot',
+  exchangeRankingsProductFutures: 'Futures',
+  exchangeRankingsProductCfd: 'CFD',
+  exchangeRankingsProductOnchain: 'On-chain',
 
   // Achievements
   achievementUnlocked: 'Achievement Unlocked',
