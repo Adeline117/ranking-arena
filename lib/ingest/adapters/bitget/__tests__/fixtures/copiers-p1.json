@@ -1,0 +1,33 @@
+{
+  "code": "00000",
+  "data": {
+    "containActModel": false,
+    "extra": null,
+    "nextFlag": false,
+    "rows": [
+      {
+        "displayName": "BGUSER-5BH5P94L",
+        "followerNickName": "BGUSER-5BH5P94L",
+        "headPic": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "header": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "lastCopyTime": null,
+        "totalMargin": "295915.87",
+        "totalProfit": "-31182.53",
+        "userName": "BGUSER-5BH5P94L"
+      },
+      {
+        "displayName": "BGUSER-9R91NP11",
+        "followerNickName": "BGUSER-9R91NP11",
+        "headPic": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "header": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "lastCopyTime": null,
+        "totalMargin": "262823.09",
+        "totalProfit": "-34239.62",
+        "userName": "BGUSER-9R91NP11"
+      }
+    ]
+  },
+  "msg": "success",
+  "requestTime": "1781161083973",
+  "success": true
+}

@@ -1,6 +1,11 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { parseBitgetLeaderboardPage, parseBitgetPositions, parseBitgetProfile } from '../parsers'
+import {
+  parseBitgetHistory,
+  parseBitgetLeaderboardPage,
+  parseBitgetPositions,
+  parseBitgetProfile,
+} from '../parsers'
 import type { ParseCtx } from '../../../core/types'
 
 function fixture(name: string): unknown {
@@ -213,5 +218,45 @@ describe('parseBitgetPositions (live-captured fixture, 2026-06-11)', () => {
     expect(parseBitgetPositions(null, ctx)).toHaveLength(0)
     expect(parseBitgetPositions({ code: '30066', msg: '仓位保护' }, ctx)).toHaveLength(0)
     expect(parseBitgetPositions({ data: null }, ctx)).toHaveLength(0)
+  })
+})
+
+describe('parseBitgetHistory (live-captured fixtures, 2026-06-11)', () => {
+  it('parses position_history rows from order/historyList', () => {
+    const rows = parseBitgetHistory(fixture('position-history-p1.json'), 'position_history', ctx)
+    expect(rows).toHaveLength(20)
+    const first = rows[0]
+    if (first.kind !== 'position_history') throw new Error('wrong kind')
+    expect(first.symbol).toBe('SOLUSDT')
+    expect(first.side).toBe('long') // position: 1 ↔ positionDesc 多仓
+    expect(first.leverage).toBe(25)
+    expect(first.openedAt).toMatch(/Z$/)
+    expect(first.closedAt).toMatch(/Z$/)
+    expect(first.entryPrice).toBe(Number(first.raw.openAvgPrice))
+    expect(first.exitPrice).toBe(Number(first.raw.closeAvgPrice))
+    expect(first.realizedPnl).toBe(Number(first.raw.netProfit))
+    // orderNo-keyed dedupe is deterministic and unique per row
+    expect(new Set(rows.map((r) => r.dedupeHash)).size).toBe(20)
+    const again = parseBitgetHistory(fixture('position-history-p1.json'), 'position_history', ctx)
+    expect(again[0].dedupeHash).toBe(first.dedupeHash)
+  })
+
+  it('parses copiers rows from trader/followerList with scrape-time ts', () => {
+    const rows = parseBitgetHistory(fixture('copiers-p1.json'), 'copiers', ctx)
+    expect(rows.length).toBeGreaterThan(0)
+    const first = rows[0]
+    if (first.kind !== 'copiers') throw new Error('wrong kind')
+    expect(first.ts).toBe(ctx.scrapedAt)
+    expect(first.copierLabel).toMatch(/^BGUSER/)
+    expect(first.copierInvested).toBe(Number(first.raw.totalMargin))
+    expect(first.copierPnl).toBe(Number(first.raw.totalProfit))
+    expect(first.copyDurationDays).toBeNull()
+  })
+
+  it('throws for unsupported kinds and tolerates junk payloads', () => {
+    expect(() => parseBitgetHistory({}, 'transfers', ctx)).toThrow(/not supported/)
+    expect(() => parseBitgetHistory({}, 'orders', ctx)).toThrow(/not supported/)
+    expect(parseBitgetHistory(null, 'position_history', ctx)).toHaveLength(0)
+    expect(parseBitgetHistory({ data: {} }, 'copiers', ctx)).toHaveLength(0)
   })
 })

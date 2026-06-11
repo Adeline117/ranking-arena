@@ -9,8 +9,11 @@
  * Both are handled; raw items are kept verbatim per spec §3.
  */
 
+import { createHash } from 'crypto'
 import type {
+  HistoryKind,
   ParseCtx,
+  ParsedHistoryRow,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
   ParsedPosition,
@@ -233,4 +236,93 @@ export function parseBitgetPositions(raw: unknown, _ctx: ParseCtx): ParsedPositi
     })
   }
   return out
+}
+
+// ── Histories (spec §2.3 incremental) ──
+
+/** Deterministic natural-key hash for idempotent history upserts. */
+export function dedupeHash(...fields: unknown[]): string {
+  return createHash('sha1')
+    .update(fields.map((f) => String(f ?? '')).join('|'))
+    .digest('hex')
+}
+
+/**
+ * 历史带单 rows (POST /v1/trigger/trace/order/historyList, captured
+ * 2026-06-11): orderNo is the stable natural key; openTime/closeTime are ms
+ * epochs; netProfit = realized PnL after fees (achievedProfits = before).
+ */
+export function parseBitgetPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedHistoryRow[] {
+  const rows = ((raw as Dict)?.data as Dict)?.rows
+  if (!Array.isArray(rows)) return []
+  const out: ParsedHistoryRow[] = []
+  for (const item of rows as Dict[]) {
+    const symbol = (item.symbolDisplayName ?? item.productCode ?? item.symbolId) as
+      | string
+      | undefined
+    if (!symbol) continue
+    const openedAt = num(item.openTime)
+    const closedAt = num(item.closeTime)
+    out.push({
+      kind: 'position_history',
+      openedAt: openedAt === null ? null : new Date(openedAt).toISOString(),
+      closedAt: closedAt === null ? null : new Date(closedAt).toISOString(),
+      symbol: String(symbol),
+      side: bitgetSide(item.position ?? item.holdSide),
+      leverage: num(item.openLevel),
+      size: num(item.closeDealCount ?? item.openDealCount), // base-asset quantity
+      entryPrice: num(item.openAvgPrice),
+      exitPrice: num(item.closeAvgPrice),
+      realizedPnl: num(item.netProfit ?? item.achievedProfits),
+      dedupeHash: item.orderNo
+        ? dedupeHash('bitget_ph', item.orderNo)
+        : dedupeHash('bitget_ph', symbol, item.openTime, item.closeTime, item.closeDealCount),
+      raw: item,
+    })
+  }
+  return out
+}
+
+/**
+ * 跟单者 rows (POST /v1/trigger/trace/trader/followerList, captured
+ * 2026-06-11): totalMargin = 累计投资额, totalProfit = 跟单者收益. The API
+ * exposes no last-updated timestamp (the UI label is client-side), so ts =
+ * ctx.scrapedAt. copierLabel is stored for dedupe only — NEVER rendered.
+ */
+export function parseBitgetCopiers(raw: unknown, ctx: ParseCtx): ParsedHistoryRow[] {
+  const rows = ((raw as Dict)?.data as Dict)?.rows
+  if (!Array.isArray(rows)) return []
+  const out: ParsedHistoryRow[] = []
+  for (const item of rows as Dict[]) {
+    const label = (item.userName ?? item.displayName ?? item.followerNickName) as string | undefined
+    if (!label) continue
+    out.push({
+      kind: 'copiers',
+      ts: ctx.scrapedAt,
+      copierLabel: String(label),
+      copierPnl: num(item.totalProfit),
+      copierInvested: num(item.totalMargin),
+      copyDurationDays: null, // not exposed by this endpoint
+      dedupeHash: dedupeHash('bitget_cp', label, item.totalProfit, item.totalMargin),
+      raw: item,
+    })
+  }
+  return out
+}
+
+export function parseBitgetHistory(
+  raw: unknown,
+  kind: HistoryKind,
+  ctx: ParseCtx
+): ParsedHistoryRow[] {
+  switch (kind) {
+    case 'position_history':
+      return parseBitgetPositionHistory(raw, ctx)
+    case 'copiers':
+      return parseBitgetCopiers(raw, ctx)
+    default:
+      // orders: no public endpoint; transfers: 余额历史 removed from the UTA
+      // UI and all candidates are auth-gated (verified 2026-06-11).
+      throw new Error(`[bitget] history surface ${kind} not supported`)
+  }
 }
