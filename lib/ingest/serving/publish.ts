@@ -35,6 +35,11 @@ export interface PublishSnapshotInput {
   rejects: RejectedRow[]
   rawObjectId: number | null
   isDerived?: boolean
+  /** Override sources.expected_count as the day-one baseline. Derived
+   *  boards (spec §1.1-C) have no upstream count — pass null so bootstrap
+   *  cycles pass on actual; once 7 derived snapshots exist the rolling
+   *  median takes over as usual. undefined = use sources.expected_count. */
+  expectedCountOverride?: number | null
 }
 
 export interface PublishSnapshotResult {
@@ -118,7 +123,9 @@ export async function publishLeaderboardSnapshot(
   input: PublishSnapshotInput
 ): Promise<PublishSnapshotResult> {
   const { src, timeframe, rows, rejects, rawObjectId } = input
-  const { baseline, isBootstrap } = await getCountBaseline(src.id, timeframe, src.expected_count)
+  const expectedCount =
+    input.expectedCountOverride !== undefined ? input.expectedCountOverride : src.expected_count
+  const { baseline, isBootstrap } = await getCountBaseline(src.id, timeframe, expectedCount)
   const verdict = evaluateCount(
     rows.length,
     baseline,
@@ -141,7 +148,7 @@ export async function publishLeaderboardSnapshot(
       [
         src.id,
         timeframe,
-        src.expected_count,
+        expectedCount,
         rows.length,
         verdict.baselineUsed,
         verdict.passed,
