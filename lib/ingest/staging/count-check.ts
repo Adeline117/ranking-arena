@@ -78,7 +78,10 @@ export async function getCountBaseline(
     [sourceId, timeframe]
   )
   if (rows.length >= 3) {
-    return { baseline: median(rows.map((r) => r.actual_count)), isBootstrap: false }
+    const m = median(rows.map((r) => r.actual_count))
+    // snapshots.baseline_used is an int column — an even-length median
+    // (e.g. 1663.5) must be rounded before publish.
+    return { baseline: m === null ? null : Math.round(m), isBootstrap: false }
   }
   return { baseline: expectedCount, isBootstrap: true }
 }
