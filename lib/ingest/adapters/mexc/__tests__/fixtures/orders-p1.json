@@ -1,0 +1,47 @@
+{
+  "success": true,
+  "code": 0,
+  "message": "",
+  "data": {
+    "pageSize": 0,
+    "totalPage": 0,
+    "currentPage": 1,
+    "content": [
+      {
+        "id": 134237033,
+        "orderId": "816863623891807808",
+        "traderUid": "02298603",
+        "symbol": "TAO_USDT",
+        "contractId": 531,
+        "baseCoinName": "TAO",
+        "quoteCoinName": "USDT",
+        "leverage": 200,
+        "positionType": 1,
+        "amount": 40.12,
+        "orderAmount": 40.12,
+        "openAvgPrice": 239.6,
+        "openTime": 1780425951901,
+        "margin": 49.9863104,
+        "closeTime": 1780425951901,
+        "closeAvgPrice": 0,
+        "released": 0,
+        "stopLossRatio": 0,
+        "takeProfitRatio": 0,
+        "followers": 30,
+        "copyFollowers": 34,
+        "traderNickName": "02*****3",
+        "positionId": 1402284949,
+        "closing": false,
+        "pageTime": 1780425951901,
+        "closeCategory": 0,
+        "stopLossMode": 0,
+        "takeProfitMode": 0,
+        "openType": 2,
+        "holdFee": 0,
+        "positionFee": 0,
+        "externalOid": "_m_0f25fb56e15b4a7581afe1bd84fa22b5"
+      }
+    ],
+    "offset": 0
+  }
+}

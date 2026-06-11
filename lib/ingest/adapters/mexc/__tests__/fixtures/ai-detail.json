@@ -1,0 +1,2027 @@
+{
+  "success": true,
+  "code": 0,
+  "message": "",
+  "data": {
+    "traders": [
+      {
+        "order": 1,
+        "uid": "35158194",
+        "avatar": "https://public.p2primeglobal.com/banner/F202605251420598863IBdeVNWLADtr7.png",
+        "nickname": "Echo_Agent",
+        "roi": 0.01,
+        "pnl": 115.879,
+        "winRate": 0.7045,
+        "minCopyAmount": 0.01,
+        "followers": 4,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [0.0029, 0.0028, 0.0028, 0.0029, 0.0028, 0.0028, 0.0028],
+        "totalPnl": 1375.53419,
+        "totalRoi": 0.0028,
+        "totalWinRate": 0.6743,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "F20250215193518264H6zzNm9ofQqCcy",
+          "F20250409102238285di8KpfwK2u0ilr",
+          "F202104221745146880dOdh9YlnLZonx"
+        ],
+        "openTimes": 44,
+        "profitRatio": 0.1,
+        "followProfit": 7.848421433,
+        "followCopyFunds": 120.6845,
+        "historyFollowers": 17,
+        "maxDrawdown7": 0.0196,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.98,
+        "contractRateList": [
+          {
+            "contractId": 51,
+            "symbol": "SOLUSDT",
+            "rate": 0.97,
+            "icon": "F20250215193518264H6zzNm9ofQqCcy",
+            "symbolDisplay": "SOL_USDT"
+          },
+          {
+            "contractId": 45,
+            "symbol": "BNBUSDT",
+            "rate": 0.02,
+            "icon": "F20250409102238285di8KpfwK2u0ilr",
+            "symbolDisplay": "BNB_USDT"
+          },
+          {
+            "contractId": 16,
+            "symbol": "XRPUSDT",
+            "rate": 0.01,
+            "icon": "F202104221745146880dOdh9YlnLZonx",
+            "symbolDisplay": "XRP_USDT"
+          },
+          {
+            "contractId": 68,
+            "symbol": "DOGEUSDT",
+            "rate": 0,
+            "icon": "F20230701185052663aGiNzu1AGTZxgU",
+            "symbolDisplay": "DOGE_USDT"
+          },
+          {
+            "contractId": -9999,
+            "symbol": "OTHER",
+            "rate": 0
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "5"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          },
+          {
+            "param": {
+              "winRate": "70.45"
+            },
+            "type": "WINRATE_INCREASE"
+          }
+        ],
+        "singleMaxProfit": 143.12296678,
+        "pnlCurveValues": [
+          1369.19519, 1354.78419, 1375.35719, 1418.62219, 1343.29419, 1356.82219, 1375.53419
+        ],
+        "competitionPnl": 687.2472,
+        "competitionRoi": 0.0687,
+        "competitionTradeAmount": 899619.97,
+        "competitionFollowerCount": 16,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "LOW_PRESSURE",
+            "content": "Low Stress Tolerance",
+            "desc": "This trader can tolerate position losses of 20–40% and shows a moderate tendency to adjust or close positions in unfavorable market conditions"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "BEARS",
+            "content": "Mostly Short",
+            "desc": "Balanced risk-reward profile with moderate volatility"
+          },
+          {
+            "code": "SECONDARY_CRYPTO",
+            "content": "Mid-Cap Tokens",
+            "desc": "Trade only major altcoins such as SOL and XRP"
+          },
+          {
+            "code": "HOT_CRYPTO",
+            "content": "Trending",
+            "desc": "Frequently trade hot pairs on MEXC"
+          }
+        ]
+      },
+      {
+        "order": 2,
+        "uid": "84420810",
+        "avatar": "https://public.mocortech.com/banner/F20260525142127094LLCeIdpLfTLqaI.png",
+        "nickname": "Meme_Seeker",
+        "roi": 0.0154,
+        "pnl": 228.182,
+        "winRate": 0.7441,
+        "minCopyAmount": 0.01,
+        "followers": 1,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [0.0002, 0.0001, 0, 0.0002, 0.0005, 0.001, 0.0007],
+        "totalPnl": 241.75125,
+        "totalRoi": 0.0007,
+        "totalWinRate": 0.6507,
+        "copyTradeContractIds": [],
+        "contractNames": ["https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png"],
+        "openTimes": 43,
+        "profitRatio": 0.1,
+        "followProfit": -0.1422053526,
+        "followCopyFunds": 30.424,
+        "historyFollowers": 2,
+        "maxDrawdown7": 0.0136,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.99,
+        "contractRateList": [
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0.76,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          },
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 0.24,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "8"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          },
+          {
+            "param": {
+              "winRate": "74.41"
+            },
+            "type": "WINRATE_INCREASE"
+          }
+        ],
+        "singleMaxProfit": 135.203,
+        "pnlCurveValues": [
+          75.99334999999999, 46.48505, -15.24085, 64.96525, 161.18115, 323.96715, 241.75125
+        ],
+        "competitionPnl": 395.5872,
+        "competitionRoi": 0,
+        "competitionTradeAmount": 649703.9831,
+        "competitionFollowerCount": 2,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "LOW_PRESSURE",
+            "content": "Low Stress Tolerance",
+            "desc": "This trader can tolerate position losses of 20–40% and shows a moderate tendency to adjust or close positions in unfavorable market conditions"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "MEME_CRYPTO",
+            "content": "Altcoins",
+            "desc": "Trade small to mid-cap altcoins only"
+          },
+          {
+            "code": "GOLD",
+            "content": "GOLD",
+            "desc": ""
+          },
+          {
+            "code": "SILVER",
+            "content": "SILVER",
+            "desc": ""
+          }
+        ]
+      },
+      {
+        "order": 3,
+        "uid": "09233380",
+        "avatar": "https://public.mocortech.com/banner/F20260211111351404vcEFUpTHHKP9Vy.png",
+        "nickname": "Greed_Ninja",
+        "roi": -0.0479,
+        "pnl": -289.487,
+        "winRate": 0.7857,
+        "minCopyAmount": 0.01,
+        "followers": 10,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [-0.0068, -0.007, -0.0071, -0.007, -0.007, -0.0071, -0.0071],
+        "totalPnl": -6415.3386,
+        "totalRoi": -0.0071,
+        "totalWinRate": 0.637,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "F20250215193518264H6zzNm9ofQqCcy",
+          "F20250409102238285di8KpfwK2u0ilr",
+          "F202104221745146880dOdh9YlnLZonx"
+        ],
+        "openTimes": 14,
+        "profitRatio": 0.01,
+        "followProfit": 3.1453372388,
+        "followCopyFunds": 1128.6778,
+        "historyFollowers": 260,
+        "maxDrawdown7": 0.0481,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.98,
+        "contractRateList": [
+          {
+            "contractId": 51,
+            "symbol": "SOLUSDT",
+            "rate": 0.55,
+            "icon": "F20250215193518264H6zzNm9ofQqCcy",
+            "symbolDisplay": "SOL_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.16,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          },
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.11,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          },
+          {
+            "contractId": 45,
+            "symbol": "BNBUSDT",
+            "rate": 0.09,
+            "icon": "F20250409102238285di8KpfwK2u0ilr",
+            "symbolDisplay": "BNB_USDT"
+          },
+          {
+            "contractId": -9999,
+            "symbol": "OTHER",
+            "rate": 0.08
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "winRate": "78.57"
+            },
+            "type": "WINRATE_INCREASE"
+          }
+        ],
+        "singleMaxProfit": 657.25552,
+        "pnlCurveValues": [
+          -6140.4676, -6320.4556, -6462.4866, -6311.1876, -6364.6656, -6443.5806, -6415.3386
+        ],
+        "competitionPnl": 288.2131,
+        "competitionRoi": 0.0288,
+        "competitionTradeAmount": 868981.6497,
+        "competitionFollowerCount": 10,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "HIGH_PRESSURE",
+            "content": "High Stress Tolerance",
+            "desc": "This trader can withstand losses exceeding 40%, staying disciplined through volatile markets with strong drawdown management"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "SECONDARY_CRYPTO",
+            "content": "Mid-Cap Tokens",
+            "desc": "Trade only major altcoins such as SOL and XRP"
+          },
+          {
+            "code": "HOT_CRYPTO",
+            "content": "Trending",
+            "desc": "Frequently trade hot pairs on MEXC"
+          },
+          {
+            "code": "1002",
+            "content": "Low Frequency",
+            "desc": "Traders who hold positions for an extended period and have fewer trades"
+          }
+        ]
+      },
+      {
+        "order": 4,
+        "uid": "25052940",
+        "avatar": "https://public.p2primeglobal.com/banner/F202605251419333422vsPATgRAm3yrm.png",
+        "nickname": "Pulse_Core",
+        "roi": 0.0027,
+        "pnl": 116.381,
+        "winRate": 0.5652,
+        "minCopyAmount": 0.01,
+        "followers": 0,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [0.001, 0.001, 0.0009, 0.001, 0.0011, 0.0011, 0.0011],
+        "totalPnl": 568.4047,
+        "totalRoi": 0.0011,
+        "totalWinRate": 0.543,
+        "copyTradeContractIds": [],
+        "contractNames": [],
+        "openTimes": 91,
+        "profitRatio": 0.1,
+        "followProfit": 0,
+        "followCopyFunds": 0,
+        "historyFollowers": 0,
+        "maxDrawdown7": 0.0735,
+        "copyType": 0,
+        "traderType": "AI",
+        "isReverse": false,
+        "isVvip": false,
+        "matchRate": 0.96,
+        "contractRateList": [
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 1,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "8"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 67.0716,
+        "pnlCurveValues": [462.2394, 452.5042, 455.1531, 481.6533, 527.5805, 553.6603, 568.4047],
+        "competitionPnl": 161.8133,
+        "competitionRoi": 0.0161,
+        "competitionTradeAmount": 1977600.4151,
+        "competitionFollowerCount": 0,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "NO_PRESSURE",
+            "content": "No Stress Tolerance",
+            "desc": "This trader typically keeps position losses strictly below 20%, using tight stop-losses with minimal tolerance for adverse market moves"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "BEARS",
+            "content": "Mostly Short",
+            "desc": "Balanced risk-reward profile with moderate volatility"
+          },
+          {
+            "code": "SECONDARY_CRYPTO",
+            "content": "Mid-Cap Tokens",
+            "desc": "Trade only major altcoins such as SOL and XRP"
+          },
+          {
+            "code": "SILVER",
+            "content": "SILVER",
+            "desc": ""
+          },
+          {
+            "code": "1010",
+            "content": "Isolated Margin",
+            "desc": "Traders currently holding isolated-margin orders"
+          },
+          {
+            "code": "1001",
+            "content": "High Frequency",
+            "desc": "Traders with a high number of trades in the recent 7 days and high overall trade counts"
+          }
+        ]
+      },
+      {
+        "order": 5,
+        "uid": "96765488",
+        "avatar": "https://public.mocortech.com/banner/F20260525142037463xuf0Aeipe2JEvf.png",
+        "nickname": "Direct_Alpha",
+        "roi": -0.0082,
+        "pnl": -445.02375,
+        "winRate": 0.4571,
+        "minCopyAmount": 0.01,
+        "followers": 2,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [-0.0016, -0.0017, -0.0018, -0.0019, -0.0019, -0.0019, -0.0019],
+        "totalPnl": -1207.96991,
+        "totalRoi": -0.0019,
+        "totalWinRate": 0.4653,
+        "copyTradeContractIds": [],
+        "contractNames": ["F20250612182226438Ba037qttKoGcrm", "F20250918112639910U5wBZIUE1wlj5f"],
+        "openTimes": 35,
+        "profitRatio": 0.1,
+        "followProfit": -95.64983532448,
+        "followCopyFunds": 180,
+        "historyFollowers": 12,
+        "maxDrawdown7": 0.2566,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.95,
+        "contractRateList": [
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.53,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.47,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "5"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 399.8982,
+        "pnlCurveValues": [
+          -989.18477, -1039.53759, -1122.47627, -1207.96991, -1207.96991, -1207.96991, -1207.96991
+        ],
+        "competitionPnl": 158.34718,
+        "competitionRoi": 0.0158,
+        "competitionTradeAmount": 2247658.32549,
+        "competitionFollowerCount": 13,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "NO_PRESSURE",
+            "content": "No Stress Tolerance",
+            "desc": "This trader typically keeps position losses strictly below 20%, using tight stop-losses with minimal tolerance for adverse market moves"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "DAY",
+            "content": "~24H entries",
+            "desc": "Low-frequency trading, opening new positions every 8–24 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "MAIN_CRYPTO",
+            "content": "Major Tokens",
+            "desc": "Trade only top market-cap, highly liquid tokens such as BTC and ETH"
+          }
+        ]
+      },
+      {
+        "order": 6,
+        "uid": "47493762",
+        "avatar": "https://public.p2primeglobal.com/banner/F20260525142151858y2ZWCybPPYbM91.png",
+        "nickname": "Surge_Scalper",
+        "roi": -0.0132,
+        "pnl": -68.52114,
+        "winRate": 0.25,
+        "minCopyAmount": 0.01,
+        "followers": 0,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [0.0136, 0.0135, 0.0131, 0.0131, 0.0132, 0.0133, 0.0129],
+        "totalPnl": 2506.79117,
+        "totalRoi": 0.0129,
+        "totalWinRate": 0.3704,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+          "F20250918112639910U5wBZIUE1wlj5f"
+        ],
+        "openTimes": 14,
+        "profitRatio": 0.1,
+        "followProfit": 0,
+        "followCopyFunds": 0,
+        "historyFollowers": 0,
+        "maxDrawdown7": 0.0093,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.99,
+        "contractRateList": [
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.32,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          },
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0.28,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          },
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 0.25,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.15,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "winRate": "100"
+            },
+            "type": "WINRATE_INCREASE"
+          }
+        ],
+        "singleMaxProfit": 430.2040790298,
+        "pnlCurveValues": [
+          2583.47951, 2566.56701, 2518.75821, 2527.86081, 2555.81887, 2582.82337, 2506.79117
+        ],
+        "competitionPnl": 94.94622,
+        "competitionRoi": 0,
+        "competitionTradeAmount": 113786.38123,
+        "competitionFollowerCount": 0,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "NO_PRESSURE",
+            "content": "No Stress Tolerance",
+            "desc": "This trader typically keeps position losses strictly below 20%, using tight stop-losses with minimal tolerance for adverse market moves"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "DAY",
+            "content": "~24H entries",
+            "desc": "Low-frequency trading, opening new positions every 8–24 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "ALL_CRYPTO",
+            "content": "Multi Assets",
+            "desc": "Trade across Futures markets with no specific preference"
+          },
+          {
+            "code": "GOLD",
+            "content": "GOLD",
+            "desc": ""
+          },
+          {
+            "code": "1010",
+            "content": "Isolated Margin",
+            "desc": "Traders currently holding isolated-margin orders"
+          },
+          {
+            "code": "1002",
+            "content": "Low Frequency",
+            "desc": "Traders who hold positions for an extended period and have fewer trades"
+          }
+        ]
+      },
+      {
+        "order": 7,
+        "uid": "70729684",
+        "avatar": "https://public.mocortech.com/banner/F202602111111337800ZxZwKat1rYCL8.png",
+        "nickname": "Volatility_Sniper",
+        "roi": 0,
+        "pnl": 0,
+        "winRate": 0,
+        "minCopyAmount": 0.01,
+        "followers": 2,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [-0.0149, -0.0149, -0.0149, -0.0149, -0.0149, -0.0149, -0.0149],
+        "totalPnl": -18108.74041,
+        "totalRoi": -0.0149,
+        "totalWinRate": 0.4754,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+          "F20250918112639910U5wBZIUE1wlj5f",
+          "F20250612182226438Ba037qttKoGcrm"
+        ],
+        "openTimes": 0,
+        "profitRatio": 0.01,
+        "followProfit": -2.0093906957,
+        "followCopyFunds": 60,
+        "historyFollowers": 86,
+        "maxDrawdown7": 0,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.96,
+        "contractRateList": [
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0.33,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          },
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.29,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          },
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 0.23,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.16,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "winRate": "70.58"
+            },
+            "type": "WINRATE_INCREASE"
+          }
+        ],
+        "singleMaxProfit": 391.891487332,
+        "pnlCurveValues": [
+          -18108.74041, -18108.74041, -18108.74041, -18108.74041, -18108.74041, -18108.74041,
+          -18108.74041
+        ],
+        "competitionPnl": 94.4142,
+        "competitionRoi": 0.0094,
+        "competitionTradeAmount": 195763.2242,
+        "competitionFollowerCount": 3,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "LOW_PRESSURE",
+            "content": "Low Stress Tolerance",
+            "desc": "This trader can tolerate position losses of 20–40% and shows a moderate tendency to adjust or close positions in unfavorable market conditions"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "DAY",
+            "content": "~24H entries",
+            "desc": "Low-frequency trading, opening new positions every 8–24 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "ALL_CRYPTO",
+            "content": "Multi Assets",
+            "desc": "Trade across Futures markets with no specific preference"
+          }
+        ]
+      },
+      {
+        "order": 8,
+        "uid": "37397518",
+        "avatar": "https://public.mocortech.com/banner/F20260525141823002VpBH4obU3AmXvM.png",
+        "nickname": "Melt_Hunter",
+        "roi": -0.0286,
+        "pnl": -274.0071,
+        "winRate": 0.4444,
+        "minCopyAmount": 0.01,
+        "followers": 1,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [-0.0045, -0.0045, -0.0045, -0.0045, -0.0046, -0.0046, -0.0047],
+        "totalPnl": -5931.16803,
+        "totalRoi": -0.0047,
+        "totalWinRate": 0.5502,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+          "F20250918112639910U5wBZIUE1wlj5f"
+        ],
+        "openTimes": 26,
+        "profitRatio": 0.1,
+        "followProfit": -14.9891137225,
+        "followCopyFunds": 332.02,
+        "historyFollowers": 7,
+        "maxDrawdown7": 0.0513,
+        "copyType": 0,
+        "traderType": "AI",
+        "isReverse": false,
+        "isVvip": false,
+        "matchRate": 0.99,
+        "contractRateList": [
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0.36,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.24,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          },
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 0.2,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          },
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.2,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "5"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 907.3562,
+        "pnlCurveValues": [
+          -5667.42083, -5683.38933, -5689.50683, -5644.92723, -5767.22783, -5782.92483, -5931.16803
+        ],
+        "competitionPnl": 13.5435,
+        "competitionRoi": 0.0013,
+        "competitionTradeAmount": 497941.8091,
+        "competitionFollowerCount": 6,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "HIGH_PRESSURE",
+            "content": "High Stress Tolerance",
+            "desc": "This trader can withstand losses exceeding 40%, staying disciplined through volatile markets with strong drawdown management"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "ALL_CRYPTO",
+            "content": "Multi Assets",
+            "desc": "Trade across Futures markets with no specific preference"
+          },
+          {
+            "code": "GOLD",
+            "content": "GOLD",
+            "desc": ""
+          },
+          {
+            "code": "1010",
+            "content": "Isolated Margin",
+            "desc": "Traders currently holding isolated-margin orders"
+          }
+        ]
+      },
+      {
+        "order": 9,
+        "uid": "49632186",
+        "avatar": "https://public.mocortech.com/banner/F20260525142236227ihaaruC2JEHyxh.png",
+        "nickname": "Anchor_Sniper",
+        "roi": 0,
+        "pnl": 0,
+        "winRate": 0,
+        "minCopyAmount": 0.01,
+        "followers": 0,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [0.0011, 0.0011, 0.0011, 0.0011, 0.0011, 0.0011, 0.0011],
+        "totalPnl": 1032.2033099999987,
+        "totalRoi": 0.0011,
+        "totalWinRate": 0.3792,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+          "F20250918112639910U5wBZIUE1wlj5f",
+          "F20250612182226438Ba037qttKoGcrm"
+        ],
+        "openTimes": 0,
+        "profitRatio": 0.1,
+        "followProfit": 0,
+        "followCopyFunds": 0,
+        "historyFollowers": 0,
+        "maxDrawdown7": 0,
+        "copyType": 0,
+        "traderType": "AI",
+        "isReverse": false,
+        "isVvip": false,
+        "matchRate": 0.98,
+        "contractRateList": [
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0.33,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          },
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.29,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          },
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 0.23,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.16,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "winRate": "100"
+            },
+            "type": "WINRATE_INCREASE"
+          }
+        ],
+        "singleMaxProfit": 758.16,
+        "pnlCurveValues": [
+          1032.2033099999987, 1032.2033099999987, 1032.2033099999987, 1032.2033099999987,
+          1032.2033099999987, 1032.2033099999987, 1032.2033099999987
+        ],
+        "competitionPnl": -103.844,
+        "competitionRoi": -0.0102,
+        "competitionTradeAmount": 195762.1957,
+        "competitionFollowerCount": 0,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "LOW_PRESSURE",
+            "content": "Low Stress Tolerance",
+            "desc": "This trader can tolerate position losses of 20–40% and shows a moderate tendency to adjust or close positions in unfavorable market conditions"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "DAY",
+            "content": "~24H entries",
+            "desc": "Low-frequency trading, opening new positions every 8–24 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "ALL_CRYPTO",
+            "content": "Multi Assets",
+            "desc": "Trade across Futures markets with no specific preference"
+          }
+        ]
+      },
+      {
+        "order": 10,
+        "uid": "41215988",
+        "avatar": "https://public.mocortech.com/banner/F20260211111154518wZbvdYXm0h2jnL.png",
+        "nickname": "Reversal_Scalper",
+        "roi": 0.0122,
+        "pnl": 63.32791,
+        "winRate": 0.75,
+        "minCopyAmount": 0.01,
+        "followers": 5,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [-0.0145, -0.0144, -0.014, -0.014, -0.0141, -0.0142, -0.0138],
+        "totalPnl": -2681.91935,
+        "totalRoi": -0.0138,
+        "totalWinRate": 0.6283,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+          "F20250918112639910U5wBZIUE1wlj5f"
+        ],
+        "openTimes": 14,
+        "profitRatio": 0.01,
+        "followProfit": -33.15106695864,
+        "followCopyFunds": 221.5666,
+        "historyFollowers": 199,
+        "maxDrawdown7": 0.0153,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.97,
+        "contractRateList": [
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.32,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          },
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0.28,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          },
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 0.25,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.15,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "winRate": "75"
+            },
+            "type": "WINRATE_INCREASE"
+          }
+        ],
+        "singleMaxProfit": 31.722,
+        "pnlCurveValues": [
+          -2753.57316, -2738.36086, -2693.38966, -2702.60551, -2730.58725, -2757.59175, -2681.91935
+        ],
+        "competitionPnl": -104.90284,
+        "competitionRoi": -0.0104,
+        "competitionTradeAmount": 109069.38986,
+        "competitionFollowerCount": 17,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "HIGH_PRESSURE",
+            "content": "High Stress Tolerance",
+            "desc": "This trader can withstand losses exceeding 40%, staying disciplined through volatile markets with strong drawdown management"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "DAY",
+            "content": "~24H entries",
+            "desc": "Low-frequency trading, opening new positions every 8–24 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "ALL_CRYPTO",
+            "content": "Multi Assets",
+            "desc": "Trade across Futures markets with no specific preference"
+          },
+          {
+            "code": "1010",
+            "content": "Isolated Margin",
+            "desc": "Traders currently holding isolated-margin orders"
+          },
+          {
+            "code": "1002",
+            "content": "Low Frequency",
+            "desc": "Traders who hold positions for an extended period and have fewer trades"
+          }
+        ]
+      },
+      {
+        "order": 11,
+        "uid": "07877722",
+        "avatar": "https://public.mocortech.com/banner/F202602111112361771aAo4YV9tfsqRv.png",
+        "nickname": "Trend_Hunter",
+        "roi": 0.0248,
+        "pnl": 237.5035,
+        "winRate": 0.4814,
+        "minCopyAmount": 0.01,
+        "followers": 257,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [0.0017, 0.0018, 0.0018, 0.0017, 0.0018, 0.0018, 0.0019],
+        "totalPnl": 3074.41684,
+        "totalRoi": 0.0019,
+        "totalWinRate": 0.414,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+          "F20250918112639910U5wBZIUE1wlj5f"
+        ],
+        "openTimes": 26,
+        "profitRatio": 0.01,
+        "followProfit": -27.2309579915,
+        "followCopyFunds": 12001.9751,
+        "historyFollowers": 747,
+        "maxDrawdown7": 0.0427,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.95,
+        "contractRateList": [
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0.34,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.25,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          },
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 0.21,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          },
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.2,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "5"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 2890.30650223,
+        "pnlCurveValues": [
+          2837.07024, 2846.3956399999997, 2847.3857399999997, 2800.77714, 2919.79624, 2927.80114,
+          3074.41684
+        ],
+        "competitionPnl": -111.7966,
+        "competitionRoi": -0.0111,
+        "competitionTradeAmount": 551723.4213,
+        "competitionFollowerCount": 1,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "LOW_PRESSURE",
+            "content": "Low Stress Tolerance",
+            "desc": "This trader can tolerate position losses of 20–40% and shows a moderate tendency to adjust or close positions in unfavorable market conditions"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "ALL_CRYPTO",
+            "content": "Multi Assets",
+            "desc": "Trade across Futures markets with no specific preference"
+          },
+          {
+            "code": "1010",
+            "content": "Isolated Margin",
+            "desc": "Traders currently holding isolated-margin orders"
+          },
+          {
+            "code": "1016",
+            "content": "Most Popular",
+            "desc": "Traders with a large number of followers and outstanding copy trading PNL"
+          }
+        ]
+      },
+      {
+        "order": 12,
+        "uid": "94309820",
+        "avatar": "https://public.mocortech.com/banner/F20260211111114249mupzyR12sNmsth.png",
+        "nickname": "Pair_Trader",
+        "roi": 0.0077,
+        "pnl": 421.50825,
+        "winRate": 0.5428,
+        "minCopyAmount": 0.01,
+        "followers": 67,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [0.0011, 0.0011, 0.0013, 0.0014, 0.0014, 0.0014, 0.0014],
+        "totalPnl": 879.26125,
+        "totalRoi": 0.0014,
+        "totalWinRate": 0.5346,
+        "copyTradeContractIds": [],
+        "contractNames": ["F20250612182226438Ba037qttKoGcrm", "F20250918112639910U5wBZIUE1wlj5f"],
+        "openTimes": 35,
+        "profitRatio": 0.01,
+        "followProfit": -220.11572429582,
+        "followCopyFunds": 4406.8443,
+        "historyFollowers": 280,
+        "maxDrawdown7": 0.0651,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.98,
+        "contractRateList": [
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.53,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.47,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "5"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 357.1934804,
+        "pnlCurveValues": [
+          671.90823, 717.13231, 796.56837, 879.26125, 879.26125, 879.26125, 879.26125
+        ],
+        "competitionPnl": -202.89876,
+        "competitionRoi": -0.0202,
+        "competitionTradeAmount": 2458965.90761,
+        "competitionFollowerCount": 1,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "LOW_PRESSURE",
+            "content": "Low Stress Tolerance",
+            "desc": "This trader can tolerate position losses of 20–40% and shows a moderate tendency to adjust or close positions in unfavorable market conditions"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "DAY",
+            "content": "~24H entries",
+            "desc": "Low-frequency trading, opening new positions every 8–24 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "MAIN_CRYPTO",
+            "content": "Major Tokens",
+            "desc": "Trade only top market-cap, highly liquid tokens such as BTC and ETH"
+          },
+          {
+            "code": "1016",
+            "content": "Most Popular",
+            "desc": "Traders with a large number of followers and outstanding copy trading PNL"
+          }
+        ]
+      },
+      {
+        "order": 13,
+        "uid": "23813526",
+        "avatar": "https://public.mocortech.com/banner/F20260211110941473omY0ELjcSOazXf.png",
+        "nickname": "Ai_Grid",
+        "roi": -0.0036,
+        "pnl": -152.0184,
+        "winRate": 0.413,
+        "minCopyAmount": 0.01,
+        "followers": 1,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [-0.0017, -0.0017, -0.0017, -0.0017, -0.0017, -0.0017, -0.0018],
+        "totalPnl": -1922.17023,
+        "totalRoi": -0.0018,
+        "totalWinRate": 0.475,
+        "copyTradeContractIds": [],
+        "contractNames": [],
+        "openTimes": 91,
+        "profitRatio": 0.01,
+        "followProfit": -1.7462802212,
+        "followCopyFunds": 60.0324,
+        "historyFollowers": 92,
+        "maxDrawdown7": 0.1257,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.98,
+        "contractRateList": [
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 1,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          },
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "7"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 80.7361,
+        "pnlCurveValues": [
+          -1786.83253, -1782.94713, -1792.81033, -1824.07403, -1875.32043, -1906.48313, -1922.17023
+        ],
+        "competitionPnl": -248.2742,
+        "competitionRoi": -0.0198,
+        "competitionTradeAmount": 1898128.4973,
+        "competitionFollowerCount": 0,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "NO_PRESSURE",
+            "content": "No Stress Tolerance",
+            "desc": "This trader typically keeps position losses strictly below 20%, using tight stop-losses with minimal tolerance for adverse market moves"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "BULLS",
+            "content": "Mostly Long",
+            "desc": "High potential gains with significant risks"
+          },
+          {
+            "code": "SECONDARY_CRYPTO",
+            "content": "Mid-Cap Tokens",
+            "desc": "Trade only major altcoins such as SOL and XRP"
+          },
+          {
+            "code": "SILVER",
+            "content": "SILVER",
+            "desc": ""
+          },
+          {
+            "code": "1010",
+            "content": "Isolated Margin",
+            "desc": "Traders currently holding isolated-margin orders"
+          },
+          {
+            "code": "1001",
+            "content": "High Frequency",
+            "desc": "Traders with a high number of trades in the recent 7 days and high overall trade counts"
+          }
+        ]
+      },
+      {
+        "order": 14,
+        "uid": "51977754",
+        "avatar": "https://public.p2primeglobal.com/banner/F20260525142259324ApyJVjtaKNSucJ.png",
+        "nickname": "Hope_Rider",
+        "roi": 0.0484,
+        "pnl": 292.329,
+        "winRate": 0.1333,
+        "minCopyAmount": 0.01,
+        "followers": 1,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [0.0146, 0.015, 0.0152, 0.0149, 0.015, 0.0151, 0.015],
+        "totalPnl": 8503.20498,
+        "totalRoi": 0.015,
+        "totalWinRate": 0.3358,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "F20250215193518264H6zzNm9ofQqCcy",
+          "F20250409102238285di8KpfwK2u0ilr",
+          "F202104221745146880dOdh9YlnLZonx"
+        ],
+        "openTimes": 14,
+        "profitRatio": 0.1,
+        "followProfit": -7.3935468695,
+        "followCopyFunds": 130,
+        "historyFollowers": 4,
+        "maxDrawdown7": 0.021,
+        "copyType": 0,
+        "traderType": "AI",
+        "isReverse": false,
+        "isVvip": false,
+        "matchRate": 0.99,
+        "contractRateList": [
+          {
+            "contractId": 51,
+            "symbol": "SOLUSDT",
+            "rate": 0.55,
+            "icon": "F20250215193518264H6zzNm9ofQqCcy",
+            "symbolDisplay": "SOL_USDT"
+          },
+          {
+            "contractId": 10,
+            "symbol": "BTCUSDT",
+            "rate": 0.16,
+            "icon": "F20250612182226438Ba037qttKoGcrm",
+            "symbolDisplay": "BTC_USDT"
+          },
+          {
+            "contractId": 11,
+            "symbol": "ETHUSDT",
+            "rate": 0.11,
+            "icon": "F20250918112639910U5wBZIUE1wlj5f",
+            "symbolDisplay": "ETH_USDT"
+          },
+          {
+            "contractId": 45,
+            "symbol": "BNBUSDT",
+            "rate": 0.09,
+            "icon": "F20250409102238285di8KpfwK2u0ilr",
+            "symbolDisplay": "BNB_USDT"
+          },
+          {
+            "contractId": -9999,
+            "symbol": "OTHER",
+            "rate": 0.08
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "5"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 1317.38068,
+        "pnlCurveValues": [
+          8222.929979999999, 8402.91798, 8561.96198, 8407.21398, 8455.91898, 8533.50698, 8503.20498
+        ],
+        "competitionPnl": -386.5497,
+        "competitionRoi": -0.0386,
+        "competitionTradeAmount": 873430.6527,
+        "competitionFollowerCount": 3,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "LOW_PRESSURE",
+            "content": "Low Stress Tolerance",
+            "desc": "This trader can tolerate position losses of 20–40% and shows a moderate tendency to adjust or close positions in unfavorable market conditions"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "SECONDARY_CRYPTO",
+            "content": "Mid-Cap Tokens",
+            "desc": "Trade only major altcoins such as SOL and XRP"
+          },
+          {
+            "code": "HOT_CRYPTO",
+            "content": "Trending",
+            "desc": "Frequently trade hot pairs on MEXC"
+          },
+          {
+            "code": "1002",
+            "content": "Low Frequency",
+            "desc": "Traders who hold positions for an extended period and have fewer trades"
+          }
+        ]
+      },
+      {
+        "order": 15,
+        "uid": "10347080",
+        "avatar": "https://public.mocortech.com/banner/F20260211111319501RJRZysHIQgRrVn.png",
+        "nickname": "Silver_Gold_Seeker",
+        "roi": -0.0176,
+        "pnl": -260.1826,
+        "winRate": 0.2325,
+        "minCopyAmount": 0.01,
+        "followers": 9,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [-0.0037, -0.0036, -0.0034, -0.0036, -0.0039, -0.0044, -0.0041],
+        "totalPnl": -1334.2213,
+        "totalRoi": -0.0041,
+        "totalWinRate": 0.3105,
+        "copyTradeContractIds": [],
+        "contractNames": ["https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png"],
+        "openTimes": 43,
+        "profitRatio": 0.01,
+        "followProfit": -30.1296252784,
+        "followCopyFunds": 834.7829,
+        "historyFollowers": 115,
+        "maxDrawdown7": 0.096,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.98,
+        "contractRateList": [
+          {
+            "contractId": 1685,
+            "symbol": "SILVERUSDT",
+            "rate": 0.76,
+            "icon": "https://public.mocortech.com/coin/F20260427185159828fNnETs6aYWSqGi.png",
+            "symbolDisplay": "SILVER_USDT"
+          },
+          {
+            "contractId": 1022,
+            "symbol": "XAUTUSDT",
+            "rate": 0.24,
+            "icon": "",
+            "symbolDisplay": "XAUT_USDT"
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "5"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 174.926,
+        "pnlCurveValues": [
+          -1145.0996, -1117.5263, -1060.9501, -1144.3572, -1245.4319, -1414.6646, -1334.2213
+        ],
+        "competitionPnl": -477.3223,
+        "competitionRoi": 0,
+        "competitionTradeAmount": 625688.6122,
+        "competitionFollowerCount": 0,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "NO_PRESSURE",
+            "content": "No Stress Tolerance",
+            "desc": "This trader typically keeps position losses strictly below 20%, using tight stop-losses with minimal tolerance for adverse market moves"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "RANGE",
+            "content": "Neutral",
+            "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+          },
+          {
+            "code": "MEME_CRYPTO",
+            "content": "Altcoins",
+            "desc": "Trade small to mid-cap altcoins only"
+          }
+        ]
+      },
+      {
+        "order": 16,
+        "uid": "82064252",
+        "avatar": "https://public.mocortech.com/banner/F20260211111255624F4znOSATIW1nwR.png",
+        "nickname": "Claude_Agent",
+        "roi": -0.0129,
+        "pnl": -149.718,
+        "winRate": 0.25,
+        "minCopyAmount": 0.01,
+        "followers": 10,
+        "followersLimit": 1000,
+        "nextFollowersLimit": 2000,
+        "canApplyFollowerNum": 900,
+        "maxFollower": 1,
+        "followable": true,
+        "showTraderFollowed": true,
+        "equity": 0,
+        "currency": "USDT",
+        "curveTime": [
+          1780675200000, 1780761600000, 1780848000000, 1780934400000, 1781020800000, 1781107200000,
+          1781193600000
+        ],
+        "curveValues": [-0.0047, -0.0047, -0.0047, -0.0048, -0.0046, -0.0047, -0.0047],
+        "totalPnl": -2290.32186,
+        "totalRoi": -0.0047,
+        "totalWinRate": 0.3095,
+        "copyTradeContractIds": [],
+        "contractNames": [
+          "F20250215193518264H6zzNm9ofQqCcy",
+          "F20250409102238285di8KpfwK2u0ilr",
+          "F202104221745146880dOdh9YlnLZonx"
+        ],
+        "openTimes": 44,
+        "profitRatio": 0.01,
+        "followProfit": -167.863461794,
+        "followCopyFunds": 1372.4086,
+        "historyFollowers": 293,
+        "maxDrawdown7": 0.0471,
+        "copyType": 0,
+        "traderType": "NORMAL",
+        "isReverse": true,
+        "isVvip": false,
+        "matchRate": 0.99,
+        "contractRateList": [
+          {
+            "contractId": 51,
+            "symbol": "SOLUSDT",
+            "rate": 0.97,
+            "icon": "F20250215193518264H6zzNm9ofQqCcy",
+            "symbolDisplay": "SOL_USDT"
+          },
+          {
+            "contractId": 45,
+            "symbol": "BNBUSDT",
+            "rate": 0.02,
+            "icon": "F20250409102238285di8KpfwK2u0ilr",
+            "symbolDisplay": "BNB_USDT"
+          },
+          {
+            "contractId": 16,
+            "symbol": "XRPUSDT",
+            "rate": 0.01,
+            "icon": "F202104221745146880dOdh9YlnLZonx",
+            "symbolDisplay": "XRP_USDT"
+          },
+          {
+            "contractId": 68,
+            "symbol": "DOGEUSDT",
+            "rate": 0,
+            "icon": "F20230701185052663aGiNzu1AGTZxgU",
+            "symbolDisplay": "DOGE_USDT"
+          },
+          {
+            "contractId": -9999,
+            "symbol": "OTHER",
+            "rate": 0
+          }
+        ],
+        "highlightStats": [
+          {
+            "param": {
+              "count": "5"
+            },
+            "type": "HIGH_FREQUENCY_PROFIT"
+          }
+        ],
+        "singleMaxProfit": 202.206566432,
+        "pnlCurveValues": [
+          -2255.56986, -2246.64186, -2272.61386, -2322.03186, -2250.98686, -2270.85386, -2290.32186
+        ],
+        "competitionPnl": -828.0458,
+        "competitionRoi": 0,
+        "competitionTradeAmount": 911835.295,
+        "competitionFollowerCount": 2,
+        "interested": false,
+        "wait": "CAN_FOLLOW",
+        "tags": [
+          {
+            "code": "NO_PRESSURE",
+            "content": "No Stress Tolerance",
+            "desc": "This trader typically keeps position losses strictly below 20%, using tight stop-losses with minimal tolerance for adverse market moves"
+          },
+          {
+            "code": "LOW_LEVERAGE",
+            "content": "Conservative",
+            "desc": "Prefers choppy, range-bound markets"
+          },
+          {
+            "code": "INTRADAY",
+            "content": "Day Trading",
+            "desc": "Average holding period is under one day, using an intraday strategy that opens and closes positions within the same day"
+          },
+          {
+            "code": "EIGHT_HOUR",
+            "content": "~8H entries",
+            "desc": "Moderate-frequency trading, opening new positions every 1–8 hours"
+          },
+          {
+            "code": "BULLS",
+            "content": "Mostly Long",
+            "desc": "High potential gains with significant risks"
+          },
+          {
+            "code": "SECONDARY_CRYPTO",
+            "content": "Mid-Cap Tokens",
+            "desc": "Trade only major altcoins such as SOL and XRP"
+          },
+          {
+            "code": "HOT_CRYPTO",
+            "content": "Trending",
+            "desc": "Frequently trade hot pairs on MEXC"
+          }
+        ]
+      }
+    ]
+  }
+}
