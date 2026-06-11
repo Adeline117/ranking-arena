@@ -9,6 +9,11 @@ import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfil
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { isDead } from '@/lib/connectors/route-config'
+import { getDataMode } from '@/lib/constants/serving-cutover'
+import { resolveServingTrader } from '@/lib/data/serving/resolve'
+import { getFirstScreen } from '@/lib/data/serving/first-screen'
+import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
+import type { TraderFirstScreen } from '@/lib/data/serving/types'
 import { LR } from '@/lib/types/schema-mapping'
 import { BASE_URL } from '@/lib/constants/urls'
 import {
@@ -135,6 +140,84 @@ const cachedGetTraderDetail = async (platform: string, traderKey: string) => {
   }
 }
 
+// ---------------------------------------------------------------------------
+// ARENA_DATA_SPEC v1.2 serving branch (spec §2.4-1): for sources cut over to
+// the arena.* read path, the first screen comes from ONE RPC (identity +
+// latest passing board entries) instead of the legacy ~11-query detail
+// fetch. Same caching + timeout scaffolding as the legacy path.
+// ---------------------------------------------------------------------------
+
+const cachedServingResolveISR = unstable_cache(
+  async (handle: string, source: string | undefined) => {
+    const result = await resolveServingTrader(getReadReplica(), { handle, source })
+    if (!result) throw new Error('TRADER_RESOLVE_NULL') // never cache null
+    return result
+  },
+  ['trader-serving-resolve'],
+  { revalidate: 300, tags: ['trader-profile'] }
+)
+
+const cachedServingResolve = cache(async (handle: string, source?: string) => {
+  try {
+    return await Promise.race([
+      cachedServingResolveISR(handle, source),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)),
+    ])
+  } catch (err) {
+    if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') return null
+    logger.error(
+      '[trader/page] resolveServingTrader failed:',
+      err instanceof Error ? err.message : err
+    )
+    return null
+  }
+})
+
+const cachedGetFirstScreenISR = unstable_cache(
+  async (source: string, traderId: string) => {
+    const result = await getFirstScreen(getReadReplica(), source, traderId)
+    if (!result) throw new Error('TRADER_DETAIL_NULL') // never cache null
+    return result
+  },
+  ['trader-first-screen'],
+  { revalidate: 300, tags: ['trader-profile'] }
+)
+
+const cachedGetFirstScreen = async (
+  source: string,
+  traderId: string
+): Promise<TraderFirstScreen | null> => {
+  try {
+    return await Promise.race([
+      cachedGetFirstScreenISR(source, traderId),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_DETAIL_TIMEOUT_MS)),
+    ])
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : ''
+    if (msg !== 'TRADER_DETAIL_NULL') {
+      logger.error('[trader/page] getFirstScreen failed:', msg)
+    }
+    return null
+  }
+}
+
+// Capability matrix is near-static (spec §6) — 1h revalidate, best-effort.
+const cachedCapabilitiesISR = unstable_cache(
+  async () => getSourceCapabilities(getReadReplica()),
+  ['arena-source-capabilities'],
+  { revalidate: 3600 }
+)
+const cachedCapabilities = async () => {
+  try {
+    return await Promise.race([
+      cachedCapabilitiesISR(),
+      new Promise<Record<string, never>>((resolve) => setTimeout(() => resolve({}), 2_000)),
+    ])
+  } catch {
+    return {}
+  }
+}
+
 // Cached leaderboard query for OG metadata.
 // Avoids a duplicate DB query between generateMetadata and the page render.
 const cachedLeaderboardMeta = unstable_cache(
@@ -239,8 +322,14 @@ export async function generateMetadata({
   // Only 404 when genuinely not found. Timeout/error → return generic metadata
   // and let client-side retry. This prevents valid traders from being 404'd
   // during cron contention and de-indexed by Google.
+  // Serving-only traders (arena.* read path, spec §2.4) may not exist in the
+  // legacy tables — check the serving resolver before 404ing.
+  let servingMeta: Awaited<ReturnType<typeof cachedServingResolve>> = null
   if (resolved === null) {
-    notFound()
+    servingMeta = await cachedServingResolve(decoded)
+    if (!servingMeta || (await getDataMode(servingMeta.source)) !== 'serving') {
+      notFound()
+    }
   }
 
   const isUnavailable = resolved === RESOLVE_UNAVAILABLE
@@ -248,10 +337,12 @@ export async function generateMetadata({
     ResolveResult,
     typeof RESOLVE_UNAVAILABLE
   >
-  const name = resolvedData?.handle || decoded
+  const name = resolvedData?.handle || servingMeta?.nickname || decoded
   const exchange = resolvedData
     ? EXCHANGE_DISPLAY[resolvedData.platform] || resolvedData.platform || 'Crypto'
-    : 'Crypto'
+    : servingMeta
+      ? EXCHANGE_DISPLAY[servingMeta.source] || servingMeta.source
+      : 'Crypto'
 
   // ---------- fetch leaderboard stats (best-effort, never fails metadata) ----------
   let lr: {
@@ -352,6 +443,94 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     cachedFindUserHandleByTrader(decodedHandle),
     cachedResolveTrader(decodedHandle),
   ])
+
+  // ── ARENA_DATA_SPEC v1.2 serving branch (spec §2.4-1) ──
+  // If the resolved platform is cut over (or legacy resolution failed but the
+  // arena resolver knows this handle), serve the first screen from ONE RPC.
+  let servingResolved: Awaited<ReturnType<typeof cachedServingResolve>> = null
+  if (resolved && resolved !== RESOLVE_UNAVAILABLE) {
+    if ((await getDataMode(resolved.platform)) === 'serving') {
+      servingResolved = await cachedServingResolve(decodedHandle, resolved.platform)
+    }
+  } else {
+    const sr = await cachedServingResolve(decodedHandle)
+    if (sr && (await getDataMode(sr.source)) === 'serving') servingResolved = sr
+  }
+
+  if (servingResolved) {
+    // Claimed traders keep their canonical /u/ URL in serving mode too.
+    if (userHandle) {
+      redirect(`/u/${encodeURIComponent(userHandle)}`)
+    }
+
+    const [firstScreen, capabilities] = await Promise.all([
+      cachedGetFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
+      cachedCapabilities(),
+    ])
+
+    // Tier-A hero numbers: prefer the 90d board entry (matches rankings).
+    const entries = firstScreen?.entries ?? []
+    const best =
+      entries.find((e) => e.timeframe === 90) ??
+      entries.find((e) => e.timeframe === 30) ??
+      entries[0]
+    const bestWinRate =
+      best?.headlineWinRate ??
+      (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null)
+
+    const servingTraderData: UnregisteredTraderData = {
+      handle: firstScreen?.nickname ?? servingResolved.nickname ?? decodedHandle,
+      avatar_url:
+        firstScreen?.avatarMirrorUrl ??
+        firstScreen?.avatarOriginUrl ??
+        servingResolved.avatarMirrorUrl ??
+        servingResolved.avatarOriginUrl,
+      source: servingResolved.source,
+      source_trader_id: servingResolved.exchangeTraderId,
+      rank: best?.rank ?? null,
+      roi: best?.headlineRoi ?? null,
+      pnl: best?.headlinePnl?.value ?? null,
+      win_rate: bestWinRate,
+      max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
+    }
+
+    const servingJsonLd = generateTraderProfilePageSchema({
+      handle: servingTraderData.handle,
+      id: servingResolved.exchangeTraderId,
+      bio: undefined,
+      avatarUrl: servingTraderData.avatar_url ?? undefined,
+      source: servingResolved.source,
+      roi90d: servingTraderData.roi ?? undefined,
+      winRate: servingTraderData.win_rate ?? undefined,
+    })
+    const servingBreadcrumb = generateBreadcrumbSchema([
+      { name: 'Arena', url: BASE_URL },
+      { name: 'Rankings', url: `${BASE_URL}/rankings` },
+      {
+        name: servingTraderData.handle,
+        url: `${BASE_URL}/trader/${encodeURIComponent(decodedHandle)}`,
+      },
+    ])
+
+    // NOTE: if the first screen timed out, servingFirstScreen is null and the
+    // client falls back to its legacy fetch path (graceful, never blank).
+    return (
+      <>
+        <JsonLd data={servingJsonLd} />
+        <JsonLd data={servingBreadcrumb} />
+        <ErrorBoundary pageType="trader-profile">
+          <TraderProfileClient
+            data={servingTraderData}
+            serverTraderData={null}
+            claimedUser={null}
+            dataMode="serving"
+            servingFirstScreen={firstScreen}
+            servingCapability={capabilities[servingResolved.source] ?? null}
+          />
+        </ErrorBoundary>
+      </>
+    )
+  }
 
   // notFound() handled in generateMetadata() — do NOT call here.
   // Calling notFound() inside a page component triggers Next.js Suspense
