@@ -1,0 +1,4064 @@
+{
+  "code": "200",
+  "data": {
+    "data": [
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20250121/1737473632186.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          1.13, 10.23, 13.35, 48.93, 53.21, 45.49, 54.4, 65.66, 66.24, 57.06, 33.99, 19.99
+        ],
+        "createTime": "1780220852990",
+        "direction": 1,
+        "followInvestCurrentAmount": "108.15",
+        "followerInvestmentAmount": "155.31",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1444916472839405569",
+        "profitAmount": "12.06",
+        "profitChartDto": null,
+        "profitRate": "19.99",
+        "profitSharingRate": 30,
+        "runTime": "942081121",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bbb1497789b53f55ac92",
+        "strategyId": "1444916472559448064",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0.58122514",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 2,
+              "profitRate": "1.13"
+            },
+            {
+              "amount": "5.25403139",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 32,
+              "profitRate": "10.23"
+            },
+            {
+              "amount": "6.85845634",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 42,
+              "profitRate": "13.35"
+            },
+            {
+              "amount": "25.12757789",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 106,
+              "profitRate": "48.93"
+            },
+            {
+              "amount": "27.32298078",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 115,
+              "profitRate": "53.21"
+            },
+            {
+              "amount": "23.35750476",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 117,
+              "profitRate": "45.49"
+            },
+            {
+              "amount": "27.93243634",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 120,
+              "profitRate": "54.4"
+            },
+            {
+              "amount": "33.71527605",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 135,
+              "profitRate": "65.66"
+            },
+            {
+              "amount": "34.01126147",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 135,
+              "profitRate": "66.24"
+            },
+            {
+              "amount": "29.30004427",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 135,
+              "profitRate": "57.06"
+            },
+            {
+              "amount": "17.45573578",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 135,
+              "profitRate": "33.99"
+            },
+            {
+              "amount": "12.0668483",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 135,
+              "profitRate": "19.99"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1974,
+            "baseTokenId": "LAB",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "LAB/USDT",
+            "symbolId": "LABNEWUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "LABNEWUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "27.82",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 3,
+        "userDisplayName": "PrimeHorizon",
+        "userName": "zeeshanamjad147"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20250121/1737473632186.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          0, 0.37, 12.33, 4.3, 21.55, 22.73, 21.91, 29.19, 28.98, 33.47, 33.95, 34.17, 34.92, 34.52,
+          35.98, 35.6, 32.99, 30.42, 18.55, 30.31, 34.12, 34.6, 35.17, 36.68
+        ],
+        "createTime": "1779238085820",
+        "direction": 1,
+        "followInvestCurrentAmount": "586.89",
+        "followerInvestmentAmount": "674.92",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1440794448462348289",
+        "profitAmount": "275.23",
+        "profitChartDto": null,
+        "profitRate": "36.67",
+        "profitSharingRate": 10,
+        "runTime": "1924848328",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bbb1497789b53f55ac92",
+        "strategyId": "1440794448289189888",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0",
+              "dateTime": "05/19",
+              "fullTime": "2026-05-19 00:00:00",
+              "profitRate": "0"
+            },
+            {
+              "amount": "1.86138049",
+              "dateTime": "05/20",
+              "fullTime": "2026-05-20 00:00:00",
+              "overCount": 3,
+              "profitRate": "0.37"
+            },
+            {
+              "amount": "61.75488702",
+              "dateTime": "05/21",
+              "fullTime": "2026-05-21 00:00:00",
+              "overCount": 65,
+              "profitRate": "12.33"
+            },
+            {
+              "amount": "21.56056712",
+              "dateTime": "05/22",
+              "fullTime": "2026-05-22 00:00:00",
+              "overCount": 71,
+              "profitRate": "4.3"
+            },
+            {
+              "amount": "107.9068032",
+              "dateTime": "05/23",
+              "fullTime": "2026-05-23 00:00:00",
+              "overCount": 136,
+              "profitRate": "21.55"
+            },
+            {
+              "amount": "113.81111745",
+              "dateTime": "05/24",
+              "fullTime": "2026-05-24 00:00:00",
+              "overCount": 148,
+              "profitRate": "22.73"
+            },
+            {
+              "amount": "109.67118689",
+              "dateTime": "05/25",
+              "fullTime": "2026-05-25 00:00:00",
+              "overCount": 165,
+              "profitRate": "21.91"
+            },
+            {
+              "amount": "146.10091649",
+              "dateTime": "05/26",
+              "fullTime": "2026-05-26 00:00:00",
+              "overCount": 183,
+              "profitRate": "29.19"
+            },
+            {
+              "amount": "145.05793529",
+              "dateTime": "05/27",
+              "fullTime": "2026-05-27 00:00:00",
+              "overCount": 191,
+              "profitRate": "28.98"
+            },
+            {
+              "amount": "167.52502195",
+              "dateTime": "05/28",
+              "fullTime": "2026-05-28 00:00:00",
+              "overCount": 196,
+              "profitRate": "33.47"
+            },
+            {
+              "amount": "169.94661727",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 202,
+              "profitRate": "33.95"
+            },
+            {
+              "amount": "171.02496849",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 204,
+              "profitRate": "34.17"
+            },
+            {
+              "amount": "174.79508355",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 208,
+              "profitRate": "34.92"
+            },
+            {
+              "amount": "172.78369155",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 210,
+              "profitRate": "34.52"
+            },
+            {
+              "amount": "180.11346605",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 212,
+              "profitRate": "35.98"
+            },
+            {
+              "amount": "178.23030886",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 212,
+              "profitRate": "35.6"
+            },
+            {
+              "amount": "165.13691428",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 212,
+              "profitRate": "32.99"
+            },
+            {
+              "amount": "152.27103941",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 212,
+              "profitRate": "30.42"
+            },
+            {
+              "amount": "139.22352219",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 212,
+              "profitRate": "18.55"
+            },
+            {
+              "amount": "227.50015853",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 223,
+              "profitRate": "30.31"
+            },
+            {
+              "amount": "256.14651645",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 230,
+              "profitRate": "34.12"
+            },
+            {
+              "amount": "259.70347351",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 235,
+              "profitRate": "34.6"
+            },
+            {
+              "amount": "263.95890545",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 237,
+              "profitRate": "35.17"
+            },
+            {
+              "amount": "275.30283179",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 239,
+              "profitRate": "36.68"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 2096,
+            "baseTokenId": "BSB",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "BSB/USDT",
+            "symbolId": "BSBUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "BSBUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "12.81",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 2,
+        "userDisplayName": "PrimeHorizon",
+        "userName": "zeeshanamjad147"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20240321/1710969776138.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          1.6, 3.59, 0.34, -1.03, 1.09, 0.56, 6.45, 8.06, 8.33, 8.62, 10.88, 11.77, 12.29, 13.34,
+          13.91, 12.36, 21.2, 19.49, 18.63, 24.72, 22.97, 29.25, 26.55, 2.69, 0.46, 7.64, 17.55,
+          10.47, 10.47, 8.39
+        ],
+        "createTime": "1778094714485",
+        "direction": 1,
+        "followInvestCurrentAmount": "24.98",
+        "followerInvestmentAmount": "88.70",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1435998801968234496",
+        "profitAmount": "36.53",
+        "profitChartDto": null,
+        "profitRate": "8.39",
+        "profitSharingRate": 10,
+        "runTime": "3044031790",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bdb5497e88b33c52ac93",
+        "strategyId": "1435998801264721920",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "6.98142782",
+              "dateTime": "05/13",
+              "fullTime": "2026-05-13 00:00:00",
+              "overCount": 8,
+              "profitRate": "1.6"
+            },
+            {
+              "amount": "15.64332839",
+              "dateTime": "05/14",
+              "fullTime": "2026-05-14 00:00:00",
+              "overCount": 8,
+              "profitRate": "3.59"
+            },
+            {
+              "amount": "1.51223051",
+              "dateTime": "05/15",
+              "fullTime": "2026-05-15 00:00:00",
+              "overCount": 8,
+              "profitRate": "0.34"
+            },
+            {
+              "amount": "-4.45905335",
+              "dateTime": "05/16",
+              "fullTime": "2026-05-16 00:00:00",
+              "overCount": 8,
+              "profitRate": "-1.03"
+            },
+            {
+              "amount": "4.75573897",
+              "dateTime": "05/17",
+              "fullTime": "2026-05-17 00:00:00",
+              "overCount": 8,
+              "profitRate": "1.09"
+            },
+            {
+              "amount": "2.45204089",
+              "dateTime": "05/18",
+              "fullTime": "2026-05-18 00:00:00",
+              "overCount": 8,
+              "profitRate": "0.56"
+            },
+            {
+              "amount": "28.10138203",
+              "dateTime": "05/19",
+              "fullTime": "2026-05-19 00:00:00",
+              "overCount": 10,
+              "profitRate": "6.45"
+            },
+            {
+              "amount": "35.08451658",
+              "dateTime": "05/20",
+              "fullTime": "2026-05-20 00:00:00",
+              "overCount": 13,
+              "profitRate": "8.06"
+            },
+            {
+              "amount": "36.25439222",
+              "dateTime": "05/21",
+              "fullTime": "2026-05-21 00:00:00",
+              "overCount": 15,
+              "profitRate": "8.33"
+            },
+            {
+              "amount": "37.52472003",
+              "dateTime": "05/22",
+              "fullTime": "2026-05-22 00:00:00",
+              "overCount": 17,
+              "profitRate": "8.62"
+            },
+            {
+              "amount": "47.35360279",
+              "dateTime": "05/23",
+              "fullTime": "2026-05-23 00:00:00",
+              "overCount": 18,
+              "profitRate": "10.88"
+            },
+            {
+              "amount": "51.25391546",
+              "dateTime": "05/24",
+              "fullTime": "2026-05-24 00:00:00",
+              "overCount": 21,
+              "profitRate": "11.77"
+            },
+            {
+              "amount": "53.50694128",
+              "dateTime": "05/25",
+              "fullTime": "2026-05-25 00:00:00",
+              "overCount": 23,
+              "profitRate": "12.29"
+            },
+            {
+              "amount": "58.09308005",
+              "dateTime": "05/26",
+              "fullTime": "2026-05-26 00:00:00",
+              "overCount": 25,
+              "profitRate": "13.34"
+            },
+            {
+              "amount": "60.56246834",
+              "dateTime": "05/27",
+              "fullTime": "2026-05-27 00:00:00",
+              "overCount": 25,
+              "profitRate": "13.91"
+            },
+            {
+              "amount": "53.81907744",
+              "dateTime": "05/28",
+              "fullTime": "2026-05-28 00:00:00",
+              "overCount": 26,
+              "profitRate": "12.36"
+            },
+            {
+              "amount": "92.29635317",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 29,
+              "profitRate": "21.2"
+            },
+            {
+              "amount": "84.85064783",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 29,
+              "profitRate": "19.49"
+            },
+            {
+              "amount": "81.08010121",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 29,
+              "profitRate": "18.63"
+            },
+            {
+              "amount": "107.59541811",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 30,
+              "profitRate": "24.72"
+            },
+            {
+              "amount": "99.98295946",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 32,
+              "profitRate": "22.97"
+            },
+            {
+              "amount": "127.29647988",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 36,
+              "profitRate": "29.25"
+            },
+            {
+              "amount": "115.5644349",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 38,
+              "profitRate": "26.55"
+            },
+            {
+              "amount": "11.73606242",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 38,
+              "profitRate": "2.69"
+            },
+            {
+              "amount": "2.0021525",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 38,
+              "profitRate": "0.46"
+            },
+            {
+              "amount": "33.2897201",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 38,
+              "profitRate": "7.64"
+            },
+            {
+              "amount": "76.39703546",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 38,
+              "profitRate": "17.55"
+            },
+            {
+              "amount": "45.57298738",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 38,
+              "profitRate": "10.47"
+            },
+            {
+              "amount": "45.57298738",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 38,
+              "profitRate": "10.47"
+            },
+            {
+              "amount": "36.53435674",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 38,
+              "profitRate": "8.39"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 234,
+            "baseTokenId": "NEAR",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "NEAR/USDT",
+            "symbolId": "NEARUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "NEARUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "22.27",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 2,
+        "userDisplayName": "PostsCRYPTum",
+        "userName": "HitcH"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20250930/1759189555129.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          0, 0.06, -0.29, 0.19, 0.23, 0.27, 0.32, 0.37, 0.33, 0.64, 0.67, 0.66, 0.73, 0.7, 0.43,
+          0.87, 0.88, 0.88, 0.92, 0.92, 0.96, 1.18, 1.24, 1.29, 1.34, 1.42, 1.32, 1.64, 1.7
+        ],
+        "createTime": "1778786144985",
+        "direction": 1,
+        "followInvestCurrentAmount": "309.33",
+        "followerInvestmentAmount": "309.33",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1438898871561400321",
+        "profitAmount": "2.74",
+        "profitChartDto": null,
+        "profitRate": "1.70",
+        "profitSharingRate": 10,
+        "runTime": "2313531730",
+        "secondStrategyType": 5,
+        "status": 1,
+        "strAccountId": "bcbd4a7188b33f50a294",
+        "strategyId": "1438898871040299008",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0",
+              "dateTime": "05/14",
+              "fullTime": "2026-05-14 00:00:00",
+              "profitRate": "0"
+            },
+            {
+              "amount": "0.110229",
+              "dateTime": "05/15",
+              "fullTime": "2026-05-15 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.06"
+            },
+            {
+              "amount": "-0.4645232",
+              "dateTime": "05/16",
+              "fullTime": "2026-05-16 00:00:00",
+              "overCount": 1,
+              "profitRate": "-0.29"
+            },
+            {
+              "amount": "0.3162652",
+              "dateTime": "05/17",
+              "fullTime": "2026-05-17 00:00:00",
+              "overCount": 2,
+              "profitRate": "0.19"
+            },
+            {
+              "amount": "0.3822549",
+              "dateTime": "05/18",
+              "fullTime": "2026-05-18 00:00:00",
+              "overCount": 3,
+              "profitRate": "0.23"
+            },
+            {
+              "amount": "0.4460169",
+              "dateTime": "05/19",
+              "fullTime": "2026-05-19 00:00:00",
+              "overCount": 4,
+              "profitRate": "0.27"
+            },
+            {
+              "amount": "0.5216639",
+              "dateTime": "05/20",
+              "fullTime": "2026-05-20 00:00:00",
+              "overCount": 5,
+              "profitRate": "0.32"
+            },
+            {
+              "amount": "0.6061814",
+              "dateTime": "05/21",
+              "fullTime": "2026-05-21 00:00:00",
+              "overCount": 5,
+              "profitRate": "0.37"
+            },
+            {
+              "amount": "0.5420104",
+              "dateTime": "05/22",
+              "fullTime": "2026-05-22 00:00:00",
+              "overCount": 5,
+              "profitRate": "0.33"
+            },
+            {
+              "amount": "1.032117",
+              "dateTime": "05/23",
+              "fullTime": "2026-05-23 00:00:00",
+              "overCount": 7,
+              "profitRate": "0.64"
+            },
+            {
+              "amount": "1.0837338",
+              "dateTime": "05/24",
+              "fullTime": "2026-05-24 00:00:00",
+              "overCount": 7,
+              "profitRate": "0.67"
+            },
+            {
+              "amount": "1.0750506",
+              "dateTime": "05/25",
+              "fullTime": "2026-05-25 00:00:00",
+              "overCount": 7,
+              "profitRate": "0.66"
+            },
+            {
+              "amount": "1.1827178",
+              "dateTime": "05/26",
+              "fullTime": "2026-05-26 00:00:00",
+              "overCount": 8,
+              "profitRate": "0.73"
+            },
+            {
+              "amount": "1.128897",
+              "dateTime": "05/27",
+              "fullTime": "2026-05-27 00:00:00",
+              "overCount": 8,
+              "profitRate": "0.7"
+            },
+            {
+              "amount": "0.7061545",
+              "dateTime": "05/28",
+              "fullTime": "2026-05-28 00:00:00",
+              "overCount": 8,
+              "profitRate": "0.43"
+            },
+            {
+              "amount": "1.40858109",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 9,
+              "profitRate": "0.87"
+            },
+            {
+              "amount": "1.42184209",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 9,
+              "profitRate": "0.88"
+            },
+            {
+              "amount": "1.42830869",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 9,
+              "profitRate": "0.88"
+            },
+            {
+              "amount": "1.49403029",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 10,
+              "profitRate": "0.92"
+            },
+            {
+              "amount": "1.49718893",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 10,
+              "profitRate": "0.92"
+            },
+            {
+              "amount": "1.54649475",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 11,
+              "profitRate": "0.96"
+            },
+            {
+              "amount": "1.91051416",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 13,
+              "profitRate": "1.18"
+            },
+            {
+              "amount": "1.99849141",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 15,
+              "profitRate": "1.24"
+            },
+            {
+              "amount": "2.08310527",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 17,
+              "profitRate": "1.29"
+            },
+            {
+              "amount": "2.16288499",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 19,
+              "profitRate": "1.34"
+            },
+            {
+              "amount": "2.29019294",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 21,
+              "profitRate": "1.42"
+            },
+            {
+              "amount": "2.13202759",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 22,
+              "profitRate": "1.32"
+            },
+            {
+              "amount": "2.64481814",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 23,
+              "profitRate": "1.64"
+            },
+            {
+              "amount": "2.74849311",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 24,
+              "profitRate": "1.7"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1587,
+            "baseTokenId": "HYPE",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "HYPE/USDT",
+            "symbolId": "HYPEUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "HYPEUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "0.34",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 2,
+        "userDisplayName": "woowoo",
+        "userName": "woowoo"
+      },
+      {
+        "accountUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [-0.05, 0.88, 0.5, 1.87, 2.01, 0.74, 0.15, 0.8, 1.22],
+        "createTime": "1780476934328",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "162.12",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1445990555910713345",
+        "profitAmount": "3.81",
+        "profitChartDto": null,
+        "profitRate": "1.22",
+        "profitSharingRate": 0,
+        "runTime": "685999750",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bcb4467f8eb63850a397",
+        "strategyId": "1445990555476078592",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "-0.04074512",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 0,
+              "profitRate": "-0.05"
+            },
+            {
+              "amount": "0.77054685",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 2,
+              "profitRate": "0.88"
+            },
+            {
+              "amount": "0.43763117",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 3,
+              "profitRate": "0.5"
+            },
+            {
+              "amount": "1.63939134",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 5,
+              "profitRate": "1.87"
+            },
+            {
+              "amount": "1.75961301",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 8,
+              "profitRate": "2.01"
+            },
+            {
+              "amount": "2.30123601",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 13,
+              "profitRate": "0.74"
+            },
+            {
+              "amount": "0.46893721",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 13,
+              "profitRate": "0.15"
+            },
+            {
+              "amount": "2.48542038",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 13,
+              "profitRate": "0.8"
+            },
+            {
+              "amount": "3.81652306",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 15,
+              "profitRate": "1.22"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1,
+            "baseTokenId": "BTC",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "BTC/USDT",
+            "symbolId": "BTCUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "BTCUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "1.82",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 2,
+        "userName": "BGUSER-ESQY1VM8"
+      },
+      {
+        "accountUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [0, -0.24, 0.93, 1.86, 2.31, 1.03, 2.19, 2.72],
+        "createTime": "1780622027567",
+        "direction": 1,
+        "followInvestCurrentAmount": "53.63",
+        "followerInvestmentAmount": "53.63",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1446599120930471937",
+        "profitAmount": "8.20",
+        "profitChartDto": null,
+        "profitRate": "2.72",
+        "profitSharingRate": 10,
+        "runTime": "522755625",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "b1bd49758bb53150ac90",
+        "strategyId": "1446599120676540416",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "profitRate": "0"
+            },
+            {
+              "amount": "-0.69487192",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 1,
+              "profitRate": "-0.24"
+            },
+            {
+              "amount": "2.82773546",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 2,
+              "profitRate": "0.93"
+            },
+            {
+              "amount": "5.62927564",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 3,
+              "profitRate": "1.86"
+            },
+            {
+              "amount": "6.97342771",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 5,
+              "profitRate": "2.31"
+            },
+            {
+              "amount": "3.11126115",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 5,
+              "profitRate": "1.03"
+            },
+            {
+              "amount": "6.61400022",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 5,
+              "profitRate": "2.19"
+            },
+            {
+              "amount": "8.20793798",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 6,
+              "profitRate": "2.72"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1,
+            "baseTokenId": "BTC",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "BTC/USDT",
+            "symbolId": "BTCUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "BTCUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "1.25",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 1,
+        "userName": "BGUSER-L5PZFG8M"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20250930/1759189555129.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          0, 0.06, -0.07, 0.23, 0.3, 0.32, 0.34, 0.39, 0.37, 0.5, 0.53, 0.53, 0.59, 0.58, 0.57, 0.6,
+          0.61, 0.62, 0.7, 0.7, 0.7, 1.07, 1.09, 1.16, 1.16, 1.25, 1.23, 1.22, 1.22
+        ],
+        "createTime": "1778786262433",
+        "direction": 1,
+        "followInvestCurrentAmount": "145.26",
+        "followerInvestmentAmount": "145.26",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1438899363851055104",
+        "profitAmount": "1.96",
+        "profitChartDto": null,
+        "profitRate": "1.22",
+        "profitSharingRate": 10,
+        "runTime": "2313233489",
+        "secondStrategyType": 5,
+        "status": 1,
+        "strAccountId": "bcbd4a7188b33f50a294",
+        "strategyId": "1438899363661303808",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0",
+              "dateTime": "05/14",
+              "fullTime": "2026-05-14 00:00:00",
+              "profitRate": "0"
+            },
+            {
+              "amount": "0.1047497",
+              "dateTime": "05/15",
+              "fullTime": "2026-05-15 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.06"
+            },
+            {
+              "amount": "-0.1108972",
+              "dateTime": "05/16",
+              "fullTime": "2026-05-16 00:00:00",
+              "overCount": 1,
+              "profitRate": "-0.07"
+            },
+            {
+              "amount": "0.3713129",
+              "dateTime": "05/17",
+              "fullTime": "2026-05-17 00:00:00",
+              "overCount": 2,
+              "profitRate": "0.23"
+            },
+            {
+              "amount": "0.4917052",
+              "dateTime": "05/18",
+              "fullTime": "2026-05-18 00:00:00",
+              "overCount": 3,
+              "profitRate": "0.3"
+            },
+            {
+              "amount": "0.5180126",
+              "dateTime": "05/19",
+              "fullTime": "2026-05-19 00:00:00",
+              "overCount": 3,
+              "profitRate": "0.32"
+            },
+            {
+              "amount": "0.5498262",
+              "dateTime": "05/20",
+              "fullTime": "2026-05-20 00:00:00",
+              "overCount": 3,
+              "profitRate": "0.34"
+            },
+            {
+              "amount": "0.6332932",
+              "dateTime": "05/21",
+              "fullTime": "2026-05-21 00:00:00",
+              "overCount": 3,
+              "profitRate": "0.39"
+            },
+            {
+              "amount": "0.6068984",
+              "dateTime": "05/22",
+              "fullTime": "2026-05-22 00:00:00",
+              "overCount": 3,
+              "profitRate": "0.37"
+            },
+            {
+              "amount": "0.8104698",
+              "dateTime": "05/23",
+              "fullTime": "2026-05-23 00:00:00",
+              "overCount": 5,
+              "profitRate": "0.5"
+            },
+            {
+              "amount": "0.8639484",
+              "dateTime": "05/24",
+              "fullTime": "2026-05-24 00:00:00",
+              "overCount": 5,
+              "profitRate": "0.53"
+            },
+            {
+              "amount": "0.854952",
+              "dateTime": "05/25",
+              "fullTime": "2026-05-25 00:00:00",
+              "overCount": 5,
+              "profitRate": "0.53"
+            },
+            {
+              "amount": "0.9597415",
+              "dateTime": "05/26",
+              "fullTime": "2026-05-26 00:00:00",
+              "overCount": 6,
+              "profitRate": "0.59"
+            },
+            {
+              "amount": "0.9404497",
+              "dateTime": "05/27",
+              "fullTime": "2026-05-27 00:00:00",
+              "overCount": 6,
+              "profitRate": "0.58"
+            },
+            {
+              "amount": "0.9180647",
+              "dateTime": "05/28",
+              "fullTime": "2026-05-28 00:00:00",
+              "overCount": 6,
+              "profitRate": "0.57"
+            },
+            {
+              "amount": "0.9822079",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 6,
+              "profitRate": "0.6"
+            },
+            {
+              "amount": "0.9966971",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 6,
+              "profitRate": "0.61"
+            },
+            {
+              "amount": "1.00376262",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 6,
+              "profitRate": "0.62"
+            },
+            {
+              "amount": "1.12929481",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 7,
+              "profitRate": "0.7"
+            },
+            {
+              "amount": "1.13271025",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 7,
+              "profitRate": "0.7"
+            },
+            {
+              "amount": "1.13875111",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 7,
+              "profitRate": "0.7"
+            },
+            {
+              "amount": "1.7263697",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 9,
+              "profitRate": "1.07"
+            },
+            {
+              "amount": "1.76893537",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 10,
+              "profitRate": "1.09"
+            },
+            {
+              "amount": "1.87408401",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 11,
+              "profitRate": "1.16"
+            },
+            {
+              "amount": "1.87204041",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 11,
+              "profitRate": "1.16"
+            },
+            {
+              "amount": "2.02360904",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 12,
+              "profitRate": "1.25"
+            },
+            {
+              "amount": "1.98509988",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 12,
+              "profitRate": "1.23"
+            },
+            {
+              "amount": "1.97366886",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 12,
+              "profitRate": "1.22"
+            },
+            {
+              "amount": "1.96542052",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 12,
+              "profitRate": "1.22"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1587,
+            "baseTokenId": "HYPE",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "HYPE/USDT",
+            "symbolId": "HYPEUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "HYPEUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "0.12",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 1,
+        "userDisplayName": "woowoo",
+        "userName": "woowoo"
+      },
+      {
+        "accountUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [0, 0.12, -0.19, -0.06, 0.24, 0.67, 0.06, 0.3, 0.39],
+        "createTime": "1780537474140",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "59.20",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1446244478430216193",
+        "profitAmount": "20.08",
+        "profitChartDto": null,
+        "profitRate": "0.39",
+        "profitSharingRate": 0,
+        "runTime": "625454234",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "beb147778cb23e56ac90",
+        "strategyId": "1446244477879570432",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "profitRate": "0"
+            },
+            {
+              "amount": "6.38666018",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 0,
+              "profitRate": "0.12"
+            },
+            {
+              "amount": "-9.43453032",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 0,
+              "profitRate": "-0.19"
+            },
+            {
+              "amount": "-2.84557909",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 0,
+              "profitRate": "-0.06"
+            },
+            {
+              "amount": "12.2367536",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 0,
+              "profitRate": "0.24"
+            },
+            {
+              "amount": "33.78370632",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 0,
+              "profitRate": "0.67"
+            },
+            {
+              "amount": "3.07026576",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 0,
+              "profitRate": "0.06"
+            },
+            {
+              "amount": "15.16590175",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 0,
+              "profitRate": "0.3"
+            },
+            {
+              "amount": "20.08533117",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 0,
+              "profitRate": "0.39"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1,
+            "baseTokenId": "BTC",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "BTC/USDT",
+            "symbolId": "BTCUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "BTCUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "0.60",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 1,
+        "userDisplayName": "Fiona888",
+        "userName": "BGUSER-ZJ393GFF"
+      },
+      {
+        "accountUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          22.22, 16.48, 23.76, 24.57, 24.13, 24.93, 25.51, 25.15, 25.84, 26.44, 26.6, 27.16, 27.66,
+          28.28, 28.98, 29.21, 29.72, 28.89, 30.51, 29.57, 31.3, 30.96, 32.23, 32.91, 32.55, 32.09,
+          33.68, 33.73, 34.98, 35.31
+        ],
+        "createTime": "1780988773619",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1448137365619212289",
+        "profitAmount": "19.94",
+        "profitChartDto": null,
+        "profitRate": "35.31",
+        "profitSharingRate": 30,
+        "runTime": "173631856",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "beb24a7588ba315fa096",
+        "strategyId": "1448137365135675392",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "12.54804363",
+              "dateTime": "06/10 10",
+              "fullTime": "2026-06-10 10:00:00",
+              "overCount": 81,
+              "profitRate": "22.22"
+            },
+            {
+              "amount": "9.30653409",
+              "dateTime": "06/10 11",
+              "fullTime": "2026-06-10 11:00:00",
+              "overCount": 81,
+              "profitRate": "16.48"
+            },
+            {
+              "amount": "13.41672005",
+              "dateTime": "06/10 12",
+              "fullTime": "2026-06-10 12:00:00",
+              "overCount": 83,
+              "profitRate": "23.76"
+            },
+            {
+              "amount": "13.87579903",
+              "dateTime": "06/10 13",
+              "fullTime": "2026-06-10 13:00:00",
+              "overCount": 89,
+              "profitRate": "24.57"
+            },
+            {
+              "amount": "13.6252179",
+              "dateTime": "06/10 14",
+              "fullTime": "2026-06-10 14:00:00",
+              "overCount": 92,
+              "profitRate": "24.13"
+            },
+            {
+              "amount": "14.08011803",
+              "dateTime": "06/10 15",
+              "fullTime": "2026-06-10 15:00:00",
+              "overCount": 93,
+              "profitRate": "24.93"
+            },
+            {
+              "amount": "14.40789342",
+              "dateTime": "06/10 16",
+              "fullTime": "2026-06-10 16:00:00",
+              "overCount": 96,
+              "profitRate": "25.51"
+            },
+            {
+              "amount": "14.20638664",
+              "dateTime": "06/10 17",
+              "fullTime": "2026-06-10 17:00:00",
+              "overCount": 96,
+              "profitRate": "25.15"
+            },
+            {
+              "amount": "14.5959974",
+              "dateTime": "06/10 18",
+              "fullTime": "2026-06-10 18:00:00",
+              "overCount": 97,
+              "profitRate": "25.84"
+            },
+            {
+              "amount": "14.93177381",
+              "dateTime": "06/10 19",
+              "fullTime": "2026-06-10 19:00:00",
+              "overCount": 102,
+              "profitRate": "26.44"
+            },
+            {
+              "amount": "15.02384734",
+              "dateTime": "06/10 20",
+              "fullTime": "2026-06-10 20:00:00",
+              "overCount": 105,
+              "profitRate": "26.6"
+            },
+            {
+              "amount": "15.33748003",
+              "dateTime": "06/10 21",
+              "fullTime": "2026-06-10 21:00:00",
+              "overCount": 107,
+              "profitRate": "27.16"
+            },
+            {
+              "amount": "15.61839856",
+              "dateTime": "06/10 22",
+              "fullTime": "2026-06-10 22:00:00",
+              "overCount": 111,
+              "profitRate": "27.66"
+            },
+            {
+              "amount": "15.97265456",
+              "dateTime": "06/10 23",
+              "fullTime": "2026-06-10 23:00:00",
+              "overCount": 117,
+              "profitRate": "28.28"
+            },
+            {
+              "amount": "16.36645529",
+              "dateTime": "06/11 00",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 123,
+              "profitRate": "28.98"
+            },
+            {
+              "amount": "16.49620308",
+              "dateTime": "06/11 01",
+              "fullTime": "2026-06-11 01:00:00",
+              "overCount": 129,
+              "profitRate": "29.21"
+            },
+            {
+              "amount": "16.78558004",
+              "dateTime": "06/11 02",
+              "fullTime": "2026-06-11 02:00:00",
+              "overCount": 130,
+              "profitRate": "29.72"
+            },
+            {
+              "amount": "16.31678705",
+              "dateTime": "06/11 03",
+              "fullTime": "2026-06-11 03:00:00",
+              "overCount": 131,
+              "profitRate": "28.89"
+            },
+            {
+              "amount": "17.23185721",
+              "dateTime": "06/11 04",
+              "fullTime": "2026-06-11 04:00:00",
+              "overCount": 132,
+              "profitRate": "30.51"
+            },
+            {
+              "amount": "16.70090876",
+              "dateTime": "06/11 05",
+              "fullTime": "2026-06-11 05:00:00",
+              "overCount": 135,
+              "profitRate": "29.57"
+            },
+            {
+              "amount": "17.67846645",
+              "dateTime": "06/11 06",
+              "fullTime": "2026-06-11 06:00:00",
+              "overCount": 138,
+              "profitRate": "31.3"
+            },
+            {
+              "amount": "17.48582699",
+              "dateTime": "06/11 07",
+              "fullTime": "2026-06-11 07:00:00",
+              "overCount": 140,
+              "profitRate": "30.96"
+            },
+            {
+              "amount": "18.20275688",
+              "dateTime": "06/11 08",
+              "fullTime": "2026-06-11 08:00:00",
+              "overCount": 145,
+              "profitRate": "32.23"
+            },
+            {
+              "amount": "18.58823919",
+              "dateTime": "06/11 09",
+              "fullTime": "2026-06-11 09:00:00",
+              "overCount": 150,
+              "profitRate": "32.91"
+            },
+            {
+              "amount": "18.3824666",
+              "dateTime": "06/11 10",
+              "fullTime": "2026-06-11 10:00:00",
+              "overCount": 151,
+              "profitRate": "32.55"
+            },
+            {
+              "amount": "18.12525688",
+              "dateTime": "06/11 11",
+              "fullTime": "2026-06-11 11:00:00",
+              "overCount": 151,
+              "profitRate": "32.09"
+            },
+            {
+              "amount": "19.01887957",
+              "dateTime": "06/11 12",
+              "fullTime": "2026-06-11 12:00:00",
+              "overCount": 154,
+              "profitRate": "33.68"
+            },
+            {
+              "amount": "19.05104246",
+              "dateTime": "06/11 13",
+              "fullTime": "2026-06-11 13:00:00",
+              "overCount": 160,
+              "profitRate": "33.73"
+            },
+            {
+              "amount": "19.7537128",
+              "dateTime": "06/11 14",
+              "fullTime": "2026-06-11 14:00:00",
+              "overCount": 164,
+              "profitRate": "34.98"
+            },
+            {
+              "amount": "19.94131258",
+              "dateTime": "06/11 15",
+              "fullTime": "2026-06-11 15:00:00",
+              "overCount": 167,
+              "profitRate": "35.31"
+            }
+          ],
+          "timeType": 1
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1810,
+            "baseTokenId": "H",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "H/USDT",
+            "symbolId": "HUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "HUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "4.69",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "Smart_Martingale_Pro",
+        "userName": "BGUSER-3D86DYY5"
+      },
+      {
+        "accountUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          3.55, -2.93, 3.89, 6.06, 5.18, 6.19, 7.27, 7.25, 7.92, 8.99, 9.04, 9.75, 10.1, 10.76,
+          11.7, 12.11, 11.57, 9.11, 10.1, 11.63, 14.05, 14.99, 16.07, 16.58, 16.08, 15.42, 15.34,
+          18.16, 18.82, 19
+        ],
+        "createTime": "1781045245467",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1448374225603919873",
+        "profitAmount": "9.75",
+        "profitChartDto": null,
+        "profitRate": "19.00",
+        "profitSharingRate": 30,
+        "runTime": "117589927",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "beb24a7588ba315fa096",
+        "strategyId": "1448374225229434880",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "1.82659212",
+              "dateTime": "06/10 10",
+              "fullTime": "2026-06-10 10:00:00",
+              "overCount": 15,
+              "profitRate": "3.55"
+            },
+            {
+              "amount": "-1.50199763",
+              "dateTime": "06/10 11",
+              "fullTime": "2026-06-10 11:00:00",
+              "overCount": 15,
+              "profitRate": "-2.93"
+            },
+            {
+              "amount": "1.9980085",
+              "dateTime": "06/10 12",
+              "fullTime": "2026-06-10 12:00:00",
+              "overCount": 16,
+              "profitRate": "3.89"
+            },
+            {
+              "amount": "3.11352486",
+              "dateTime": "06/10 13",
+              "fullTime": "2026-06-10 13:00:00",
+              "overCount": 22,
+              "profitRate": "6.06"
+            },
+            {
+              "amount": "2.66343365",
+              "dateTime": "06/10 14",
+              "fullTime": "2026-06-10 14:00:00",
+              "overCount": 23,
+              "profitRate": "5.18"
+            },
+            {
+              "amount": "3.17915582",
+              "dateTime": "06/10 15",
+              "fullTime": "2026-06-10 15:00:00",
+              "overCount": 24,
+              "profitRate": "6.19"
+            },
+            {
+              "amount": "3.73147885",
+              "dateTime": "06/10 16",
+              "fullTime": "2026-06-10 16:00:00",
+              "overCount": 27,
+              "profitRate": "7.27"
+            },
+            {
+              "amount": "3.72224094",
+              "dateTime": "06/10 17",
+              "fullTime": "2026-06-10 17:00:00",
+              "overCount": 28,
+              "profitRate": "7.25"
+            },
+            {
+              "amount": "4.06888065",
+              "dateTime": "06/10 18",
+              "fullTime": "2026-06-10 18:00:00",
+              "overCount": 29,
+              "profitRate": "7.92"
+            },
+            {
+              "amount": "4.61719729",
+              "dateTime": "06/10 19",
+              "fullTime": "2026-06-10 19:00:00",
+              "overCount": 35,
+              "profitRate": "8.99"
+            },
+            {
+              "amount": "4.64408446",
+              "dateTime": "06/10 20",
+              "fullTime": "2026-06-10 20:00:00",
+              "overCount": 37,
+              "profitRate": "9.04"
+            },
+            {
+              "amount": "5.00716942",
+              "dateTime": "06/10 21",
+              "fullTime": "2026-06-10 21:00:00",
+              "overCount": 38,
+              "profitRate": "9.75"
+            },
+            {
+              "amount": "5.18808801",
+              "dateTime": "06/10 22",
+              "fullTime": "2026-06-10 22:00:00",
+              "overCount": 40,
+              "profitRate": "10.1"
+            },
+            {
+              "amount": "5.52356364",
+              "dateTime": "06/10 23",
+              "fullTime": "2026-06-10 23:00:00",
+              "overCount": 43,
+              "profitRate": "10.76"
+            },
+            {
+              "amount": "6.00524585",
+              "dateTime": "06/11 00",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 48,
+              "profitRate": "11.7"
+            },
+            {
+              "amount": "6.21733878",
+              "dateTime": "06/11 01",
+              "fullTime": "2026-06-11 01:00:00",
+              "overCount": 54,
+              "profitRate": "12.11"
+            },
+            {
+              "amount": "5.93984393",
+              "dateTime": "06/11 02",
+              "fullTime": "2026-06-11 02:00:00",
+              "overCount": 54,
+              "profitRate": "11.57"
+            },
+            {
+              "amount": "4.68030399",
+              "dateTime": "06/11 03",
+              "fullTime": "2026-06-11 03:00:00",
+              "overCount": 54,
+              "profitRate": "9.11"
+            },
+            {
+              "amount": "5.18411908",
+              "dateTime": "06/11 04",
+              "fullTime": "2026-06-11 04:00:00",
+              "overCount": 54,
+              "profitRate": "10.1"
+            },
+            {
+              "amount": "5.97105127",
+              "dateTime": "06/11 05",
+              "fullTime": "2026-06-11 05:00:00",
+              "overCount": 56,
+              "profitRate": "11.63"
+            },
+            {
+              "amount": "7.21395065",
+              "dateTime": "06/11 06",
+              "fullTime": "2026-06-11 06:00:00",
+              "overCount": 58,
+              "profitRate": "14.05"
+            },
+            {
+              "amount": "7.69586618",
+              "dateTime": "06/11 07",
+              "fullTime": "2026-06-11 07:00:00",
+              "overCount": 62,
+              "profitRate": "14.99"
+            },
+            {
+              "amount": "8.25159845",
+              "dateTime": "06/11 08",
+              "fullTime": "2026-06-11 08:00:00",
+              "overCount": 68,
+              "profitRate": "16.07"
+            },
+            {
+              "amount": "8.51216272",
+              "dateTime": "06/11 09",
+              "fullTime": "2026-06-11 09:00:00",
+              "overCount": 70,
+              "profitRate": "16.58"
+            },
+            {
+              "amount": "8.25718859",
+              "dateTime": "06/11 10",
+              "fullTime": "2026-06-11 10:00:00",
+              "overCount": 71,
+              "profitRate": "16.08"
+            },
+            {
+              "amount": "7.9184015",
+              "dateTime": "06/11 11",
+              "fullTime": "2026-06-11 11:00:00",
+              "overCount": 71,
+              "profitRate": "15.42"
+            },
+            {
+              "amount": "7.87360441",
+              "dateTime": "06/11 12",
+              "fullTime": "2026-06-11 12:00:00",
+              "overCount": 71,
+              "profitRate": "15.34"
+            },
+            {
+              "amount": "9.32277623",
+              "dateTime": "06/11 13",
+              "fullTime": "2026-06-11 13:00:00",
+              "overCount": 75,
+              "profitRate": "18.16"
+            },
+            {
+              "amount": "9.66014369",
+              "dateTime": "06/11 14",
+              "fullTime": "2026-06-11 14:00:00",
+              "overCount": 78,
+              "profitRate": "18.82"
+            },
+            {
+              "amount": "9.75254809",
+              "dateTime": "06/11 15",
+              "fullTime": "2026-06-11 15:00:00",
+              "overCount": 79,
+              "profitRate": "19"
+            }
+          ],
+          "timeType": 1
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1810,
+            "baseTokenId": "H",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "H/USDT",
+            "symbolId": "HUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "HUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "6.25",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "Smart_Martingale_Pro",
+        "userName": "BGUSER-3D86DYY5"
+      },
+      {
+        "accountUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          1.1, 1.37, 2.89, -2.65, -1.76, 0.41, 0.22, 2.88, 3.33, 4.85, 4.75, 6.19, 6.26, 8.43, 5.6,
+          8.72, 9.13, 12.36, 12.56, 12.49, 11.88, 12.95, 13.17, 13.4, 13.03, 12.94, 13.48, 13.82,
+          13.62, 13.53
+        ],
+        "createTime": "1780834534709",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1447490440515551233",
+        "profitAmount": "9.14",
+        "profitChartDto": null,
+        "profitRate": "13.53",
+        "profitSharingRate": 30,
+        "runTime": "328192725",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "beb24a7588ba315fa096",
+        "strategyId": "1447490440252370945",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0.5536489",
+              "dateTime": "06/10 10",
+              "fullTime": "2026-06-10 10:00:00",
+              "overCount": 99,
+              "profitRate": "1.1"
+            },
+            {
+              "amount": "0.68612457",
+              "dateTime": "06/10 11",
+              "fullTime": "2026-06-10 11:00:00",
+              "overCount": 99,
+              "profitRate": "1.37"
+            },
+            {
+              "amount": "1.44934257",
+              "dateTime": "06/10 12",
+              "fullTime": "2026-06-10 12:00:00",
+              "overCount": 99,
+              "profitRate": "2.89"
+            },
+            {
+              "amount": "-1.32473735",
+              "dateTime": "06/10 13",
+              "fullTime": "2026-06-10 13:00:00",
+              "overCount": 99,
+              "profitRate": "-2.65"
+            },
+            {
+              "amount": "-0.87985639",
+              "dateTime": "06/10 14",
+              "fullTime": "2026-06-10 14:00:00",
+              "overCount": 99,
+              "profitRate": "-1.76"
+            },
+            {
+              "amount": "0.20763038",
+              "dateTime": "06/10 15",
+              "fullTime": "2026-06-10 15:00:00",
+              "overCount": 99,
+              "profitRate": "0.41"
+            },
+            {
+              "amount": "0.11272244",
+              "dateTime": "06/10 16",
+              "fullTime": "2026-06-10 16:00:00",
+              "overCount": 99,
+              "profitRate": "0.22"
+            },
+            {
+              "amount": "1.44538807",
+              "dateTime": "06/10 17",
+              "fullTime": "2026-06-10 17:00:00",
+              "overCount": 99,
+              "profitRate": "2.88"
+            },
+            {
+              "amount": "1.67079442",
+              "dateTime": "06/10 18",
+              "fullTime": "2026-06-10 18:00:00",
+              "overCount": 99,
+              "profitRate": "3.33"
+            },
+            {
+              "amount": "2.43203517",
+              "dateTime": "06/10 19",
+              "fullTime": "2026-06-10 19:00:00",
+              "overCount": 99,
+              "profitRate": "4.85"
+            },
+            {
+              "amount": "2.37864945",
+              "dateTime": "06/10 20",
+              "fullTime": "2026-06-10 20:00:00",
+              "overCount": 99,
+              "profitRate": "4.75"
+            },
+            {
+              "amount": "4.18853136",
+              "dateTime": "06/10 21",
+              "fullTime": "2026-06-10 21:00:00",
+              "overCount": 99,
+              "profitRate": "6.19"
+            },
+            {
+              "amount": "4.23047223",
+              "dateTime": "06/10 22",
+              "fullTime": "2026-06-10 22:00:00",
+              "overCount": 99,
+              "profitRate": "6.26"
+            },
+            {
+              "amount": "5.70102377",
+              "dateTime": "06/10 23",
+              "fullTime": "2026-06-10 23:00:00",
+              "overCount": 99,
+              "profitRate": "8.43"
+            },
+            {
+              "amount": "3.79009315",
+              "dateTime": "06/11 00",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 99,
+              "profitRate": "5.6"
+            },
+            {
+              "amount": "5.89762157",
+              "dateTime": "06/11 01",
+              "fullTime": "2026-06-11 01:00:00",
+              "overCount": 99,
+              "profitRate": "8.72"
+            },
+            {
+              "amount": "6.17285849",
+              "dateTime": "06/11 02",
+              "fullTime": "2026-06-11 02:00:00",
+              "overCount": 99,
+              "profitRate": "9.13"
+            },
+            {
+              "amount": "8.35445276",
+              "dateTime": "06/11 03",
+              "fullTime": "2026-06-11 03:00:00",
+              "overCount": 100,
+              "profitRate": "12.36"
+            },
+            {
+              "amount": "8.49051255",
+              "dateTime": "06/11 04",
+              "fullTime": "2026-06-11 04:00:00",
+              "overCount": 102,
+              "profitRate": "12.56"
+            },
+            {
+              "amount": "8.4440805",
+              "dateTime": "06/11 05",
+              "fullTime": "2026-06-11 05:00:00",
+              "overCount": 102,
+              "profitRate": "12.49"
+            },
+            {
+              "amount": "8.02982961",
+              "dateTime": "06/11 06",
+              "fullTime": "2026-06-11 06:00:00",
+              "overCount": 102,
+              "profitRate": "11.88"
+            },
+            {
+              "amount": "8.75550198",
+              "dateTime": "06/11 07",
+              "fullTime": "2026-06-11 07:00:00",
+              "overCount": 103,
+              "profitRate": "12.95"
+            },
+            {
+              "amount": "8.90242008",
+              "dateTime": "06/11 08",
+              "fullTime": "2026-06-11 08:00:00",
+              "overCount": 105,
+              "profitRate": "13.17"
+            },
+            {
+              "amount": "9.06008003",
+              "dateTime": "06/11 09",
+              "fullTime": "2026-06-11 09:00:00",
+              "overCount": 108,
+              "profitRate": "13.4"
+            },
+            {
+              "amount": "8.81003208",
+              "dateTime": "06/11 10",
+              "fullTime": "2026-06-11 10:00:00",
+              "overCount": 109,
+              "profitRate": "13.03"
+            },
+            {
+              "amount": "8.74994535",
+              "dateTime": "06/11 11",
+              "fullTime": "2026-06-11 11:00:00",
+              "overCount": 109,
+              "profitRate": "12.94"
+            },
+            {
+              "amount": "9.11479195",
+              "dateTime": "06/11 12",
+              "fullTime": "2026-06-11 12:00:00",
+              "overCount": 109,
+              "profitRate": "13.48"
+            },
+            {
+              "amount": "9.3416667",
+              "dateTime": "06/11 13",
+              "fullTime": "2026-06-11 13:00:00",
+              "overCount": 110,
+              "profitRate": "13.82"
+            },
+            {
+              "amount": "9.20951763",
+              "dateTime": "06/11 14",
+              "fullTime": "2026-06-11 14:00:00",
+              "overCount": 110,
+              "profitRate": "13.62"
+            },
+            {
+              "amount": "9.14725204",
+              "dateTime": "06/11 15",
+              "fullTime": "2026-06-11 15:00:00",
+              "overCount": 110,
+              "profitRate": "13.53"
+            }
+          ],
+          "timeType": 1
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 2096,
+            "baseTokenId": "BSB",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "BSB/USDT",
+            "symbolId": "BSBUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "BSBUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "5.38",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "Smart_Martingale_Pro",
+        "userName": "BGUSER-3D86DYY5"
+      },
+      {
+        "accountUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          2.58, -1.55, 3.31, 4.39, 4.04, 4.66, 5.18, 4.86, 5.45, 5.97, 6.1, 6.59, 6.95, 7.51, 7.69,
+          8.26, 8.63, 8, 8.69, 8.42, 9.82, 9.55, 10.64, 11.1, 10.82, 10.47, 11.48, 11.62, 12.71,
+          12.84
+        ],
+        "createTime": "1781044764987",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1448372210303762433",
+        "profitAmount": "6.43",
+        "profitChartDto": null,
+        "profitRate": "12.84",
+        "profitSharingRate": 30,
+        "runTime": "118010950",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "beb24a7588ba315fa096",
+        "strategyId": "1448372209954443264",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "1.29270374",
+              "dateTime": "06/10 10",
+              "fullTime": "2026-06-10 10:00:00",
+              "overCount": 18,
+              "profitRate": "2.58"
+            },
+            {
+              "amount": "-0.77151075",
+              "dateTime": "06/10 11",
+              "fullTime": "2026-06-10 11:00:00",
+              "overCount": 18,
+              "profitRate": "-1.55"
+            },
+            {
+              "amount": "1.66164342",
+              "dateTime": "06/10 12",
+              "fullTime": "2026-06-10 12:00:00",
+              "overCount": 19,
+              "profitRate": "3.31"
+            },
+            {
+              "amount": "2.20182141",
+              "dateTime": "06/10 13",
+              "fullTime": "2026-06-10 13:00:00",
+              "overCount": 25,
+              "profitRate": "4.39"
+            },
+            {
+              "amount": "2.0241892",
+              "dateTime": "06/10 14",
+              "fullTime": "2026-06-10 14:00:00",
+              "overCount": 28,
+              "profitRate": "4.04"
+            },
+            {
+              "amount": "2.33703999",
+              "dateTime": "06/10 15",
+              "fullTime": "2026-06-10 15:00:00",
+              "overCount": 29,
+              "profitRate": "4.66"
+            },
+            {
+              "amount": "2.59593692",
+              "dateTime": "06/10 16",
+              "fullTime": "2026-06-10 16:00:00",
+              "overCount": 32,
+              "profitRate": "5.18"
+            },
+            {
+              "amount": "2.43855249",
+              "dateTime": "06/10 17",
+              "fullTime": "2026-06-10 17:00:00",
+              "overCount": 32,
+              "profitRate": "4.86"
+            },
+            {
+              "amount": "2.73281277",
+              "dateTime": "06/10 18",
+              "fullTime": "2026-06-10 18:00:00",
+              "overCount": 33,
+              "profitRate": "5.45"
+            },
+            {
+              "amount": "2.99396567",
+              "dateTime": "06/10 19",
+              "fullTime": "2026-06-10 19:00:00",
+              "overCount": 38,
+              "profitRate": "5.97"
+            },
+            {
+              "amount": "3.05608577",
+              "dateTime": "06/10 20",
+              "fullTime": "2026-06-10 20:00:00",
+              "overCount": 41,
+              "profitRate": "6.1"
+            },
+            {
+              "amount": "3.30496025",
+              "dateTime": "06/10 21",
+              "fullTime": "2026-06-10 21:00:00",
+              "overCount": 43,
+              "profitRate": "6.59"
+            },
+            {
+              "amount": "3.48337648",
+              "dateTime": "06/10 22",
+              "fullTime": "2026-06-10 22:00:00",
+              "overCount": 46,
+              "profitRate": "6.95"
+            },
+            {
+              "amount": "3.76389919",
+              "dateTime": "06/10 23",
+              "fullTime": "2026-06-10 23:00:00",
+              "overCount": 52,
+              "profitRate": "7.51"
+            },
+            {
+              "amount": "3.85636477",
+              "dateTime": "06/11 00",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 57,
+              "profitRate": "7.69"
+            },
+            {
+              "amount": "4.13958353",
+              "dateTime": "06/11 01",
+              "fullTime": "2026-06-11 01:00:00",
+              "overCount": 63,
+              "profitRate": "8.26"
+            },
+            {
+              "amount": "4.32663625",
+              "dateTime": "06/11 02",
+              "fullTime": "2026-06-11 02:00:00",
+              "overCount": 64,
+              "profitRate": "8.63"
+            },
+            {
+              "amount": "4.01195331",
+              "dateTime": "06/11 03",
+              "fullTime": "2026-06-11 03:00:00",
+              "overCount": 65,
+              "profitRate": "8"
+            },
+            {
+              "amount": "4.35669999",
+              "dateTime": "06/11 04",
+              "fullTime": "2026-06-11 04:00:00",
+              "overCount": 65,
+              "profitRate": "8.69"
+            },
+            {
+              "amount": "4.22009899",
+              "dateTime": "06/11 05",
+              "fullTime": "2026-06-11 05:00:00",
+              "overCount": 68,
+              "profitRate": "8.42"
+            },
+            {
+              "amount": "4.9222208",
+              "dateTime": "06/11 06",
+              "fullTime": "2026-06-11 06:00:00",
+              "overCount": 71,
+              "profitRate": "9.82"
+            },
+            {
+              "amount": "4.78528537",
+              "dateTime": "06/11 07",
+              "fullTime": "2026-06-11 07:00:00",
+              "overCount": 73,
+              "profitRate": "9.55"
+            },
+            {
+              "amount": "5.33450104",
+              "dateTime": "06/11 08",
+              "fullTime": "2026-06-11 08:00:00",
+              "overCount": 78,
+              "profitRate": "10.64"
+            },
+            {
+              "amount": "5.56321897",
+              "dateTime": "06/11 09",
+              "fullTime": "2026-06-11 09:00:00",
+              "overCount": 82,
+              "profitRate": "11.1"
+            },
+            {
+              "amount": "5.42333654",
+              "dateTime": "06/11 10",
+              "fullTime": "2026-06-11 10:00:00",
+              "overCount": 83,
+              "profitRate": "10.82"
+            },
+            {
+              "amount": "5.24609359",
+              "dateTime": "06/11 11",
+              "fullTime": "2026-06-11 11:00:00",
+              "overCount": 83,
+              "profitRate": "10.47"
+            },
+            {
+              "amount": "5.75353881",
+              "dateTime": "06/11 12",
+              "fullTime": "2026-06-11 12:00:00",
+              "overCount": 86,
+              "profitRate": "11.48"
+            },
+            {
+              "amount": "5.82495797",
+              "dateTime": "06/11 13",
+              "fullTime": "2026-06-11 13:00:00",
+              "overCount": 90,
+              "profitRate": "11.62"
+            },
+            {
+              "amount": "6.36760709",
+              "dateTime": "06/11 14",
+              "fullTime": "2026-06-11 14:00:00",
+              "overCount": 94,
+              "profitRate": "12.71"
+            },
+            {
+              "amount": "6.43296985",
+              "dateTime": "06/11 15",
+              "fullTime": "2026-06-11 15:00:00",
+              "overCount": 95,
+              "profitRate": "12.84"
+            }
+          ],
+          "timeType": 1
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1810,
+            "baseTokenId": "H",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "H/USDT",
+            "symbolId": "HUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "HUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "4.02",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "Smart_Martingale_Pro",
+        "userName": "BGUSER-3D86DYY5"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20250121/1737473632186.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [-0.09, -0.41, 1.18, 0.71, -1.04, -3.6, -4.47, 5.66, 8.71, 9.11, 10.5, 11.71],
+        "createTime": "1780221150302",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1444917719931813889",
+        "profitAmount": "9.61",
+        "profitChartDto": null,
+        "profitRate": "11.71",
+        "profitSharingRate": 30,
+        "runTime": "941783823",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bbb1497789b53f55ac92",
+        "strategyId": "1444917719580553216",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "-0.07224347",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 0,
+              "profitRate": "-0.09"
+            },
+            {
+              "amount": "-0.33010101",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 2,
+              "profitRate": "-0.41"
+            },
+            {
+              "amount": "0.97332159",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 4,
+              "profitRate": "1.18"
+            },
+            {
+              "amount": "0.5867715",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 4,
+              "profitRate": "0.71"
+            },
+            {
+              "amount": "-0.8484963",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 4,
+              "profitRate": "-1.04"
+            },
+            {
+              "amount": "-2.95090623",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 4,
+              "profitRate": "-3.6"
+            },
+            {
+              "amount": "-3.66437087",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 4,
+              "profitRate": "-4.47"
+            },
+            {
+              "amount": "4.6494646",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 13,
+              "profitRate": "5.66"
+            },
+            {
+              "amount": "7.15358995",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 19,
+              "profitRate": "8.71"
+            },
+            {
+              "amount": "7.47806842",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 21,
+              "profitRate": "9.11"
+            },
+            {
+              "amount": "8.62279819",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 22,
+              "profitRate": "10.5"
+            },
+            {
+              "amount": "9.61212832",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 24,
+              "profitRate": "11.71"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 2096,
+            "baseTokenId": "BSB",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "BSB/USDT",
+            "symbolId": "BSBUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "BSBUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "5.58",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "PrimeHorizon",
+        "userName": "zeeshanamjad147"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20251205/1764877042001.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          1.2, 2.44, 1.97, 3.3, 5.29, 5.93, 7.19, 8.13, 8.28, 8.71, 8.9, 9.05, 3.22, 3.02, 3.42,
+          3.15, 3, 3.22, 3.54, 4.72, 4.68, 5.29, 6.47, 6.85, 6.97, 7.1, 7.2, 7.31, 7.39, 7.44
+        ],
+        "createTime": "1777653160229",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1434146789047664641",
+        "profitAmount": "9.28",
+        "profitChartDto": null,
+        "profitRate": "7.44",
+        "profitSharingRate": 10,
+        "runTime": "3509773922",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "beb7487386b13a5ea494",
+        "strategyId": "1434146788554207232",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0.54133916",
+              "dateTime": "05/13",
+              "fullTime": "2026-05-13 00:00:00",
+              "overCount": 87,
+              "profitRate": "1.2"
+            },
+            {
+              "amount": "1.09369603",
+              "dateTime": "05/14",
+              "fullTime": "2026-05-14 00:00:00",
+              "overCount": 89,
+              "profitRate": "2.44"
+            },
+            {
+              "amount": "0.88211225",
+              "dateTime": "05/15",
+              "fullTime": "2026-05-15 00:00:00",
+              "overCount": 100,
+              "profitRate": "1.97"
+            },
+            {
+              "amount": "1.47796336",
+              "dateTime": "05/16",
+              "fullTime": "2026-05-16 00:00:00",
+              "overCount": 127,
+              "profitRate": "3.3"
+            },
+            {
+              "amount": "2.37180685",
+              "dateTime": "05/17",
+              "fullTime": "2026-05-17 00:00:00",
+              "overCount": 217,
+              "profitRate": "5.29"
+            },
+            {
+              "amount": "2.65822494",
+              "dateTime": "05/18",
+              "fullTime": "2026-05-18 00:00:00",
+              "overCount": 230,
+              "profitRate": "5.93"
+            },
+            {
+              "amount": "3.21988596",
+              "dateTime": "05/19",
+              "fullTime": "2026-05-19 00:00:00",
+              "overCount": 251,
+              "profitRate": "7.19"
+            },
+            {
+              "amount": "3.6407525",
+              "dateTime": "05/20",
+              "fullTime": "2026-05-20 00:00:00",
+              "overCount": 259,
+              "profitRate": "8.13"
+            },
+            {
+              "amount": "3.70983502",
+              "dateTime": "05/21",
+              "fullTime": "2026-05-21 00:00:00",
+              "overCount": 263,
+              "profitRate": "8.28"
+            },
+            {
+              "amount": "3.90184128",
+              "dateTime": "05/22",
+              "fullTime": "2026-05-22 00:00:00",
+              "overCount": 285,
+              "profitRate": "8.71"
+            },
+            {
+              "amount": "3.98509527",
+              "dateTime": "05/23",
+              "fullTime": "2026-05-23 00:00:00",
+              "overCount": 290,
+              "profitRate": "8.9"
+            },
+            {
+              "amount": "4.05357234",
+              "dateTime": "05/24",
+              "fullTime": "2026-05-24 00:00:00",
+              "overCount": 298,
+              "profitRate": "9.05"
+            },
+            {
+              "amount": "4.02409231",
+              "dateTime": "05/25",
+              "fullTime": "2026-05-25 00:00:00",
+              "overCount": 301,
+              "profitRate": "3.22"
+            },
+            {
+              "amount": "3.76846232",
+              "dateTime": "05/26",
+              "fullTime": "2026-05-26 00:00:00",
+              "overCount": 301,
+              "profitRate": "3.02"
+            },
+            {
+              "amount": "4.26812165",
+              "dateTime": "05/27",
+              "fullTime": "2026-05-27 00:00:00",
+              "overCount": 304,
+              "profitRate": "3.42"
+            },
+            {
+              "amount": "3.93208756",
+              "dateTime": "05/28",
+              "fullTime": "2026-05-28 00:00:00",
+              "overCount": 305,
+              "profitRate": "3.15"
+            },
+            {
+              "amount": "3.75017696",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 305,
+              "profitRate": "3"
+            },
+            {
+              "amount": "4.02931564",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 305,
+              "profitRate": "3.22"
+            },
+            {
+              "amount": "4.41806663",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 366,
+              "profitRate": "3.54"
+            },
+            {
+              "amount": "5.88986273",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 401,
+              "profitRate": "4.72"
+            },
+            {
+              "amount": "5.84630728",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 417,
+              "profitRate": "4.68"
+            },
+            {
+              "amount": "6.60820871",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 455,
+              "profitRate": "5.29"
+            },
+            {
+              "amount": "8.07953814",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 519,
+              "profitRate": "6.47"
+            },
+            {
+              "amount": "8.5571304",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 541,
+              "profitRate": "6.85"
+            },
+            {
+              "amount": "8.70470108",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 550,
+              "profitRate": "6.97"
+            },
+            {
+              "amount": "8.87138362",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 560,
+              "profitRate": "7.1"
+            },
+            {
+              "amount": "8.99643467",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 570,
+              "profitRate": "7.2"
+            },
+            {
+              "amount": "9.12221456",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 576,
+              "profitRate": "7.31"
+            },
+            {
+              "amount": "9.23050537",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 584,
+              "profitRate": "7.39"
+            },
+            {
+              "amount": "9.28375415",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 588,
+              "profitRate": "7.44"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1942,
+            "baseTokenId": "AIA",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "AIA/USDT",
+            "symbolId": "AIAUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "AIAUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "5.54",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "InsiderX",
+        "userName": "BGUSER-DXUE4ZUH"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20250912/1757612658079.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          0, -0.17, -1.58, 0.12, 0.54, 1.25, 1.6, 2.25, 2.05, 2.98, 3.55, 3.82, 4.04, 4.09, 3.51,
+          5.06, 5.28, 5.41, 5.92, 6.28, 6.66, 5.95, 0.87, 1.12, 0.98, 7.5, 6.19, 5.57, 5.07
+        ],
+        "createTime": "1778778726148",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1438867754686918657",
+        "profitAmount": "5.17",
+        "profitChartDto": null,
+        "profitRate": "5.07",
+        "profitSharingRate": 10,
+        "runTime": "2384207919",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bcb446708fb23c54a79c",
+        "strategyId": "1438867754118819840",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0",
+              "dateTime": "05/14",
+              "fullTime": "2026-05-14 00:00:00",
+              "profitRate": "0"
+            },
+            {
+              "amount": "-0.1712308",
+              "dateTime": "05/15",
+              "fullTime": "2026-05-15 00:00:00",
+              "overCount": 9,
+              "profitRate": "-0.17"
+            },
+            {
+              "amount": "-1.6124832",
+              "dateTime": "05/16",
+              "fullTime": "2026-05-16 00:00:00",
+              "overCount": 9,
+              "profitRate": "-1.58"
+            },
+            {
+              "amount": "0.1227888",
+              "dateTime": "05/17",
+              "fullTime": "2026-05-17 00:00:00",
+              "overCount": 9,
+              "profitRate": "0.12"
+            },
+            {
+              "amount": "0.5523367",
+              "dateTime": "05/18",
+              "fullTime": "2026-05-18 00:00:00",
+              "overCount": 18,
+              "profitRate": "0.54"
+            },
+            {
+              "amount": "1.2850548",
+              "dateTime": "05/19",
+              "fullTime": "2026-05-19 00:00:00",
+              "overCount": 28,
+              "profitRate": "1.25"
+            },
+            {
+              "amount": "1.6398948",
+              "dateTime": "05/20",
+              "fullTime": "2026-05-20 00:00:00",
+              "overCount": 37,
+              "profitRate": "1.6"
+            },
+            {
+              "amount": "2.2988249",
+              "dateTime": "05/21",
+              "fullTime": "2026-05-21 00:00:00",
+              "overCount": 61,
+              "profitRate": "2.25"
+            },
+            {
+              "amount": "2.0961868",
+              "dateTime": "05/22",
+              "fullTime": "2026-05-22 00:00:00",
+              "overCount": 65,
+              "profitRate": "2.05"
+            },
+            {
+              "amount": "3.0444305",
+              "dateTime": "05/23",
+              "fullTime": "2026-05-23 00:00:00",
+              "overCount": 67,
+              "profitRate": "2.98"
+            },
+            {
+              "amount": "3.630215",
+              "dateTime": "05/24",
+              "fullTime": "2026-05-24 00:00:00",
+              "overCount": 83,
+              "profitRate": "3.55"
+            },
+            {
+              "amount": "3.9024347",
+              "dateTime": "05/25",
+              "fullTime": "2026-05-25 00:00:00",
+              "overCount": 89,
+              "profitRate": "3.82"
+            },
+            {
+              "amount": "4.1287505",
+              "dateTime": "05/26",
+              "fullTime": "2026-05-26 00:00:00",
+              "overCount": 93,
+              "profitRate": "4.04"
+            },
+            {
+              "amount": "4.1746277",
+              "dateTime": "05/27",
+              "fullTime": "2026-05-27 00:00:00",
+              "overCount": 95,
+              "profitRate": "4.09"
+            },
+            {
+              "amount": "3.5833277",
+              "dateTime": "05/28",
+              "fullTime": "2026-05-28 00:00:00",
+              "overCount": 95,
+              "profitRate": "3.51"
+            },
+            {
+              "amount": "5.17000822",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 110,
+              "profitRate": "5.06"
+            },
+            {
+              "amount": "5.39439443",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 116,
+              "profitRate": "5.28"
+            },
+            {
+              "amount": "5.52495174",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 122,
+              "profitRate": "5.41"
+            },
+            {
+              "amount": "6.04604899",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 134,
+              "profitRate": "5.92"
+            },
+            {
+              "amount": "6.41664202",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 145,
+              "profitRate": "6.28"
+            },
+            {
+              "amount": "6.79977889",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 152,
+              "profitRate": "6.66"
+            },
+            {
+              "amount": "6.0735274",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 160,
+              "profitRate": "5.95"
+            },
+            {
+              "amount": "0.8929219",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 160,
+              "profitRate": "0.87"
+            },
+            {
+              "amount": "1.14872962",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 160,
+              "profitRate": "1.12"
+            },
+            {
+              "amount": "1.0042069",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 160,
+              "profitRate": "0.98"
+            },
+            {
+              "amount": "7.65635425",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 161,
+              "profitRate": "7.5"
+            },
+            {
+              "amount": "6.32035739",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 161,
+              "profitRate": "6.19"
+            },
+            {
+              "amount": "5.68773596",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 161,
+              "profitRate": "5.57"
+            },
+            {
+              "amount": "5.17717273",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 161,
+              "profitRate": "5.07"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1587,
+            "baseTokenId": "HYPE",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "HYPE/USDT",
+            "symbolId": "HYPEUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "HYPEUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "5.42",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "Töbs",
+        "userName": "Toebs"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20240308/1709863622407.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          -0.01, 0.12, 0.18, 0.12, 0.74, 1.03, 0.96, -28.51, -22.09, -7.41, -1.31, 3.04, 3.69, 3.66
+        ],
+        "createTime": "1780061920545",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1444249861667991553",
+        "profitAmount": "10.29",
+        "profitChartDto": null,
+        "profitRate": "3.66",
+        "profitSharingRate": 10,
+        "runTime": "1101013544",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bcb548708eba3954a39d",
+        "strategyId": "1444249861578903553",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "-0.00315472",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 0,
+              "profitRate": "-0.01"
+            },
+            {
+              "amount": "0.360236",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 2,
+              "profitRate": "0.12"
+            },
+            {
+              "amount": "0.50776757",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 5,
+              "profitRate": "0.18"
+            },
+            {
+              "amount": "0.35880602",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 10,
+              "profitRate": "0.12"
+            },
+            {
+              "amount": "2.08625597",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 16,
+              "profitRate": "0.74"
+            },
+            {
+              "amount": "2.91727202",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 25,
+              "profitRate": "1.03"
+            },
+            {
+              "amount": "2.71153186",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 28,
+              "profitRate": "0.96"
+            },
+            {
+              "amount": "-80.19093391",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 28,
+              "profitRate": "-28.51"
+            },
+            {
+              "amount": "-62.11971763",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 28,
+              "profitRate": "-22.09"
+            },
+            {
+              "amount": "-20.83927102",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 28,
+              "profitRate": "-7.41"
+            },
+            {
+              "amount": "-3.66188677",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 28,
+              "profitRate": "-1.31"
+            },
+            {
+              "amount": "8.55876799",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 32,
+              "profitRate": "3.04"
+            },
+            {
+              "amount": "10.39946406",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 35,
+              "profitRate": "3.69"
+            },
+            {
+              "amount": "10.2975638",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 35,
+              "profitRate": "3.66"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 105,
+            "baseTokenId": "ZEC",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "ZEC/USDT",
+            "symbolId": "ZECUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "ZECUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "29.23",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "",
+        "userName": "capayam1"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20240610/1717954666435.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [0, -2.44, -10.28, -4.75, -9.77, -0.69, 1.82, 6.14, 3.06],
+        "createTime": "1780513406346",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1446143530541035521",
+        "profitAmount": "67.00",
+        "profitChartDto": null,
+        "profitRate": "3.06",
+        "profitSharingRate": 30,
+        "runTime": "649527800",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "babc477189b73152a094",
+        "strategyId": "1446143530279981056",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "profitRate": "0"
+            },
+            {
+              "amount": "-53.07996528",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 1,
+              "profitRate": "-2.44"
+            },
+            {
+              "amount": "-224.25872993",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 1,
+              "profitRate": "-10.28"
+            },
+            {
+              "amount": "-103.57154334",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 1,
+              "profitRate": "-4.75"
+            },
+            {
+              "amount": "-213.1752128",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 1,
+              "profitRate": "-9.77"
+            },
+            {
+              "amount": "-14.90340625",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 1,
+              "profitRate": "-0.69"
+            },
+            {
+              "amount": "39.92196929",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 2,
+              "profitRate": "1.82"
+            },
+            {
+              "amount": "134.03470355",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 3,
+              "profitRate": "6.14"
+            },
+            {
+              "amount": "67.001943",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 3,
+              "profitRate": "3.06"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 2049,
+            "baseTokenId": "LIT",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "LIT/USDT",
+            "symbolId": "LITNEWUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "LITNEWUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "10.28",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "峰回路轉",
+        "userName": "BGUSER-76CB9KLE"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20240308/1709863622407.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          -0.04, -0.03, 0.18, 0.22, 0.29, 0.45, 0.51, 0.45, 0.4, 0.52, 0.54, 0.41, 0.31, 0.24, 0.24,
+          0.22, 0.27, 0.22, 0.31, 0.4, 0.23, -15.39, 2.34, 2.47, 2.53, 2.49, 2.49, 2.47
+        ],
+        "createTime": "1778842585649",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1439135600922898433",
+        "profitAmount": "2.16",
+        "profitChartDto": null,
+        "profitRate": "2.47",
+        "profitSharingRate": 10,
+        "runTime": "2320348468",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bcb548708eba3954a39d",
+        "strategyId": "1439135600343076864",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "-0.02732648",
+              "dateTime": "05/15",
+              "fullTime": "2026-05-15 00:00:00",
+              "overCount": 0,
+              "profitRate": "-0.04"
+            },
+            {
+              "amount": "-0.02430272",
+              "dateTime": "05/16",
+              "fullTime": "2026-05-16 00:00:00",
+              "overCount": 0,
+              "profitRate": "-0.03"
+            },
+            {
+              "amount": "0.16618372",
+              "dateTime": "05/17",
+              "fullTime": "2026-05-17 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.18"
+            },
+            {
+              "amount": "0.19904528",
+              "dateTime": "05/18",
+              "fullTime": "2026-05-18 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.22"
+            },
+            {
+              "amount": "0.26175576",
+              "dateTime": "05/19",
+              "fullTime": "2026-05-19 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.29"
+            },
+            {
+              "amount": "0.40158586",
+              "dateTime": "05/20",
+              "fullTime": "2026-05-20 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.45"
+            },
+            {
+              "amount": "0.44992684",
+              "dateTime": "05/21",
+              "fullTime": "2026-05-21 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.51"
+            },
+            {
+              "amount": "0.3973642",
+              "dateTime": "05/22",
+              "fullTime": "2026-05-22 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.45"
+            },
+            {
+              "amount": "0.35043044",
+              "dateTime": "05/23",
+              "fullTime": "2026-05-23 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.4"
+            },
+            {
+              "amount": "0.45882602",
+              "dateTime": "05/24",
+              "fullTime": "2026-05-24 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.52"
+            },
+            {
+              "amount": "0.4811037",
+              "dateTime": "05/25",
+              "fullTime": "2026-05-25 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.54"
+            },
+            {
+              "amount": "0.36024134",
+              "dateTime": "05/26",
+              "fullTime": "2026-05-26 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.41"
+            },
+            {
+              "amount": "0.27681896",
+              "dateTime": "05/27",
+              "fullTime": "2026-05-27 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.31"
+            },
+            {
+              "amount": "0.2107589",
+              "dateTime": "05/28",
+              "fullTime": "2026-05-28 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.24"
+            },
+            {
+              "amount": "0.21436614",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.24"
+            },
+            {
+              "amount": "0.20088854",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.22"
+            },
+            {
+              "amount": "0.24023124",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.27"
+            },
+            {
+              "amount": "0.19962006",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.22"
+            },
+            {
+              "amount": "0.2724982",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.31"
+            },
+            {
+              "amount": "0.35879448",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.4"
+            },
+            {
+              "amount": "0.20842014",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 1,
+              "profitRate": "0.23"
+            },
+            {
+              "amount": "-13.4612711",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 1,
+              "profitRate": "-15.39"
+            },
+            {
+              "amount": "2.05148488",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 7,
+              "profitRate": "2.34"
+            },
+            {
+              "amount": "2.16786764",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 7,
+              "profitRate": "2.47"
+            },
+            {
+              "amount": "2.21564278",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 7,
+              "profitRate": "2.53"
+            },
+            {
+              "amount": "2.18003694",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 7,
+              "profitRate": "2.49"
+            },
+            {
+              "amount": "2.1839175",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 7,
+              "profitRate": "2.49"
+            },
+            {
+              "amount": "2.16243826",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 7,
+              "profitRate": "2.47"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 105,
+            "baseTokenId": "ZEC",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "ZEC/USDT",
+            "symbolId": "ZECUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "ZECUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "15.84",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "",
+        "userName": "capayam1"
+      },
+      {
+        "accountUrl": "https://img.bgstatic.com/image/third/avatar-default-1747644203.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [
+          -1.49, -1.03, -1.94, -2.38, -2.46, -3.15, -2.86, -1.88, -2.01, 0.25, 0.01, 0.44, 0.53,
+          0.64, 0.74, -0.04, 0.43, 0.3, 0, -0.14, 0.68, 1.12, 1.39, 0.02, -0.12, 0.82, 1.56, 1.56,
+          1.68, 1.73
+        ],
+        "createTime": "1778223153451",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1436537513902866433",
+        "profitAmount": "6.18",
+        "profitChartDto": null,
+        "profitRate": "1.73",
+        "profitSharingRate": 0,
+        "runTime": "2939780621",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "bdb0467e86b43d50a39c",
+        "strategyId": "1436537513316724736",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "-5.2931993",
+              "dateTime": "05/13",
+              "fullTime": "2026-05-13 00:00:00",
+              "overCount": 11,
+              "profitRate": "-1.49"
+            },
+            {
+              "amount": "-3.65751445",
+              "dateTime": "05/14",
+              "fullTime": "2026-05-14 00:00:00",
+              "overCount": 11,
+              "profitRate": "-1.03"
+            },
+            {
+              "amount": "-6.91117418",
+              "dateTime": "05/15",
+              "fullTime": "2026-05-15 00:00:00",
+              "overCount": 11,
+              "profitRate": "-1.94"
+            },
+            {
+              "amount": "-8.48427915",
+              "dateTime": "05/16",
+              "fullTime": "2026-05-16 00:00:00",
+              "overCount": 11,
+              "profitRate": "-2.38"
+            },
+            {
+              "amount": "-8.75414757",
+              "dateTime": "05/17",
+              "fullTime": "2026-05-17 00:00:00",
+              "overCount": 11,
+              "profitRate": "-2.46"
+            },
+            {
+              "amount": "-11.21801151",
+              "dateTime": "05/18",
+              "fullTime": "2026-05-18 00:00:00",
+              "overCount": 11,
+              "profitRate": "-3.15"
+            },
+            {
+              "amount": "-10.17027816",
+              "dateTime": "05/19",
+              "fullTime": "2026-05-19 00:00:00",
+              "overCount": 11,
+              "profitRate": "-2.86"
+            },
+            {
+              "amount": "-6.69681433",
+              "dateTime": "05/20",
+              "fullTime": "2026-05-20 00:00:00",
+              "overCount": 11,
+              "profitRate": "-1.88"
+            },
+            {
+              "amount": "-7.14096216",
+              "dateTime": "05/21",
+              "fullTime": "2026-05-21 00:00:00",
+              "overCount": 11,
+              "profitRate": "-2.01"
+            },
+            {
+              "amount": "0.9084683",
+              "dateTime": "05/22",
+              "fullTime": "2026-05-22 00:00:00",
+              "overCount": 13,
+              "profitRate": "0.25"
+            },
+            {
+              "amount": "0.0374296",
+              "dateTime": "05/23",
+              "fullTime": "2026-05-23 00:00:00",
+              "overCount": 13,
+              "profitRate": "0.01"
+            },
+            {
+              "amount": "1.58755865",
+              "dateTime": "05/24",
+              "fullTime": "2026-05-24 00:00:00",
+              "overCount": 18,
+              "profitRate": "0.44"
+            },
+            {
+              "amount": "1.92647654",
+              "dateTime": "05/25",
+              "fullTime": "2026-05-25 00:00:00",
+              "overCount": 25,
+              "profitRate": "0.53"
+            },
+            {
+              "amount": "2.28576628",
+              "dateTime": "05/26",
+              "fullTime": "2026-05-26 00:00:00",
+              "overCount": 41,
+              "profitRate": "0.64"
+            },
+            {
+              "amount": "2.65592508",
+              "dateTime": "05/27",
+              "fullTime": "2026-05-27 00:00:00",
+              "overCount": 44,
+              "profitRate": "0.74"
+            },
+            {
+              "amount": "-0.12387493",
+              "dateTime": "05/28",
+              "fullTime": "2026-05-28 00:00:00",
+              "overCount": 44,
+              "profitRate": "-0.04"
+            },
+            {
+              "amount": "1.56181642",
+              "dateTime": "05/29",
+              "fullTime": "2026-05-29 00:00:00",
+              "overCount": 44,
+              "profitRate": "0.43"
+            },
+            {
+              "amount": "1.09942191",
+              "dateTime": "05/30",
+              "fullTime": "2026-05-30 00:00:00",
+              "overCount": 44,
+              "profitRate": "0.3"
+            },
+            {
+              "amount": "0.02830553",
+              "dateTime": "05/31",
+              "fullTime": "2026-05-31 00:00:00",
+              "overCount": 44,
+              "profitRate": "0"
+            },
+            {
+              "amount": "-0.49847301",
+              "dateTime": "06/01",
+              "fullTime": "2026-06-01 00:00:00",
+              "overCount": 44,
+              "profitRate": "-0.14"
+            },
+            {
+              "amount": "2.44085763",
+              "dateTime": "06/02",
+              "fullTime": "2026-06-02 00:00:00",
+              "overCount": 46,
+              "profitRate": "0.68"
+            },
+            {
+              "amount": "4.03101085",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "overCount": 60,
+              "profitRate": "1.12"
+            },
+            {
+              "amount": "4.96226189",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 68,
+              "profitRate": "1.39"
+            },
+            {
+              "amount": "0.1027569",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 68,
+              "profitRate": "0.02"
+            },
+            {
+              "amount": "-0.39543419",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 68,
+              "profitRate": "-0.12"
+            },
+            {
+              "amount": "2.93021915",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 68,
+              "profitRate": "0.82"
+            },
+            {
+              "amount": "5.59714201",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 69,
+              "profitRate": "1.56"
+            },
+            {
+              "amount": "5.59691721",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 71,
+              "profitRate": "1.56"
+            },
+            {
+              "amount": "6.00158789",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 74,
+              "profitRate": "1.68"
+            },
+            {
+              "amount": "6.18263046",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 76,
+              "profitRate": "1.73"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 1235,
+            "baseTokenId": "VIRTUAL",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "VIRTUAL/USDT",
+            "symbolId": "VIRTUALUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "VIRTUALUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "2.14",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "FlOw974",
+        "userName": "FlOw974"
+      },
+      {
+        "accountUrl": "https://qrc.bgstatic.com/otc/images/20260304/1772623274392.png",
+        "alreadyFollow": false,
+        "businessLine": 1,
+        "chartData": [0, 0.45, -0.61, -1.45, 0.17, 1.22, 1, 1.07, 1.55],
+        "createTime": "1780505987258",
+        "direction": 1,
+        "followInvestCurrentAmount": "0.00",
+        "followerInvestmentAmount": "0.00",
+        "isFully": false,
+        "isOwner": false,
+        "outOfGrid": false,
+        "productId": "1446112412592812033",
+        "profitAmount": "15.23",
+        "profitChartDto": null,
+        "profitRate": "1.55",
+        "profitSharingRate": 10,
+        "runTime": "656933648",
+        "secondStrategyType": 5,
+        "status": 2,
+        "strAccountId": "b0b04e738cb53952ad96",
+        "strategyId": "1446112412147208192",
+        "strategySelfProfitChartDto": {
+          "profitData": [
+            {
+              "amount": "0",
+              "dateTime": "06/03",
+              "fullTime": "2026-06-03 00:00:00",
+              "profitRate": "0"
+            },
+            {
+              "amount": "4.51128607",
+              "dateTime": "06/04",
+              "fullTime": "2026-06-04 00:00:00",
+              "overCount": 2,
+              "profitRate": "0.45"
+            },
+            {
+              "amount": "-5.92410259",
+              "dateTime": "06/05",
+              "fullTime": "2026-06-05 00:00:00",
+              "overCount": 2,
+              "profitRate": "-0.61"
+            },
+            {
+              "amount": "-14.16022219",
+              "dateTime": "06/06",
+              "fullTime": "2026-06-06 00:00:00",
+              "overCount": 2,
+              "profitRate": "-1.45"
+            },
+            {
+              "amount": "1.74295333",
+              "dateTime": "06/07",
+              "fullTime": "2026-06-07 00:00:00",
+              "overCount": 2,
+              "profitRate": "0.17"
+            },
+            {
+              "amount": "12.04980876",
+              "dateTime": "06/08",
+              "fullTime": "2026-06-08 00:00:00",
+              "overCount": 3,
+              "profitRate": "1.22"
+            },
+            {
+              "amount": "9.90508885",
+              "dateTime": "06/09",
+              "fullTime": "2026-06-09 00:00:00",
+              "overCount": 4,
+              "profitRate": "1"
+            },
+            {
+              "amount": "10.58696221",
+              "dateTime": "06/10",
+              "fullTime": "2026-06-10 00:00:00",
+              "overCount": 4,
+              "profitRate": "1.07"
+            },
+            {
+              "amount": "15.23295259",
+              "dateTime": "06/11",
+              "fullTime": "2026-06-11 00:00:00",
+              "overCount": 4,
+              "profitRate": "1.55"
+            }
+          ],
+          "timeType": 2
+        },
+        "strategyType": 3,
+        "symbolDtos": [
+          {
+            "baseCoinId": 122,
+            "baseTokenId": "SOL",
+            "businessLine": 1,
+            "quoteCoinId": 2,
+            "quoteTokenId": "USDT",
+            "symbolDisplayName": "SOL/USDT",
+            "symbolId": "SOLUSDT_SPBL"
+          }
+        ],
+        "symbolGold": false,
+        "symbolId": "SOLUSDT_SPBL",
+        "symbolRWA": false,
+        "symbolSuspend": false,
+        "thirtyMaxDrawdown": "1.89",
+        "tickers": [],
+        "tokenName": "USDT",
+        "traceTotalCount": 0,
+        "userDisplayName": "AuditClassXII",
+        "userName": "BGUSER-UN6HX0E5"
+      }
+    ],
+    "nextFlag": true,
+    "pageNo": 1,
+    "totalRecord": "46"
+  },
+  "params": []
+}
