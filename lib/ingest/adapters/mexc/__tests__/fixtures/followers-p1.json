@@ -1,0 +1,94 @@
+{
+  "success": true,
+  "code": 0,
+  "message": "",
+  "data": {
+    "total": 33,
+    "pageSize": 10,
+    "totalPage": 4,
+    "currentPage": 1,
+    "content": [
+      {
+        "followerUid": "85*****9",
+        "copyFunds": 30,
+        "copyProfit": 2.092837008,
+        "currency": "USDT",
+        "nickname": "bn****8@***.com",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "99*****7",
+        "copyFunds": 30,
+        "copyProfit": 2.0774623401,
+        "currency": "USDT",
+        "nickname": "ag****2@***.com",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "94*****6",
+        "copyFunds": 42.2819,
+        "copyProfit": 1.4525827836,
+        "currency": "USDT",
+        "nickname": "Di****a@***.com",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "92*****8",
+        "copyFunds": 70,
+        "copyProfit": 0.3499238707,
+        "currency": "USDT",
+        "nickname": "96****1",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "59*****9",
+        "copyFunds": 30,
+        "copyProfit": 0.2579202007,
+        "currency": "USDT",
+        "nickname": "uk****u@***.com",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "65*****7",
+        "copyFunds": 30,
+        "copyProfit": 0.0589207651,
+        "currency": "USDT",
+        "nickname": "in****n@***.com",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "57*****1",
+        "copyFunds": 30,
+        "copyProfit": 0,
+        "currency": "USDT",
+        "nickname": "ny****q@***.appleid.com",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "78*****9",
+        "copyFunds": 348.1555,
+        "copyProfit": 0,
+        "currency": "USDT",
+        "nickname": "al****1@***.ru",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "53*****6",
+        "copyFunds": 34.93,
+        "copyProfit": 0,
+        "currency": "USDT",
+        "nickname": "Me****e@***.com",
+        "reverseCopy": 0
+      },
+      {
+        "followerUid": "16*****7",
+        "copyFunds": 30,
+        "copyProfit": 0,
+        "currency": "USDT",
+        "nickname": "ra****n@***.com",
+        "reverseCopy": 0
+      }
+    ],
+    "offset": 0
+  }
+}

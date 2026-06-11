@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "code": 0,
+  "message": "",
+  "data": {
+    "digitalId": "02298603",
+    "intervalDays": 30,
+    "profitScore": 0.9781,
+    "winRateScore": 0.9472,
+    "winTimesScore": 0.728,
+    "singleMaxProfitScore": 0.8484,
+    "maxWinningTimesScore": 0.1679,
+    "rating": "A+"
+  }
+}

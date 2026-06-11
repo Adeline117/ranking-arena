@@ -1,0 +1,189 @@
+{
+  "success": true,
+  "code": 0,
+  "message": "",
+  "data": {
+    "uid": "02298603",
+    "avatar": "https://public.mocortech.com/banner/F20241129180903897wAEfT8y5WLfF2J.png",
+    "bio": "",
+    "nickname": "02*****3",
+    "recommenderFollowed": false,
+    "onlyFollowerSeePosition": false,
+    "settledDay": 913,
+    "tags": [
+      {
+        "code": "HIGH_PRESSURE",
+        "content": "High Stress Tolerance",
+        "desc": "This trader can withstand losses exceeding 40%, staying disciplined through volatile markets with strong drawdown management"
+      },
+      {
+        "code": "HIGH_LEVERAGE",
+        "content": "High-Risk High-Return",
+        "desc": "Bullish bias, mostly go long"
+      },
+      {
+        "code": "SHORT_TERM",
+        "content": "Short-Term Holding",
+        "desc": "Average holding period ranges from 1 to 7 days, aiming to capture short-term market trends"
+      },
+      {
+        "code": "DAY",
+        "content": "~24H entries",
+        "desc": "Low-frequency trading, opening new positions every 8–24 hours"
+      },
+      {
+        "code": "RANGE",
+        "content": "Neutral",
+        "desc": "Prioritize risk control with stable returns and minimal drawdowns"
+      },
+      {
+        "code": "SECONDARY_CRYPTO",
+        "content": "Mid-Cap Tokens",
+        "desc": "Trade only major altcoins such as SOL and XRP"
+      },
+      {
+        "code": "GOLD",
+        "content": "GOLD",
+        "desc": ""
+      },
+      {
+        "code": "SILVER",
+        "content": "SILVER",
+        "desc": ""
+      },
+      {
+        "code": "1011",
+        "content": "Cross Margin",
+        "desc": "Traders currently holding cross-margin orders"
+      },
+      {
+        "code": "1002",
+        "content": "Low Frequency",
+        "desc": "Traders who hold positions for an extended period and have fewer trades"
+      }
+    ],
+    "symbols": ["BTC_USDT", "ETH_USDT", "BCH_USDT"],
+    "autoCopyContract": false,
+    "roi": 0.5684,
+    "pnl": 2431.95904,
+    "winRate": 0.887,
+    "minCopyAmount": 0.01,
+    "followers": 33,
+    "followersLimit": 2000,
+    "nextFollowersLimit": -1,
+    "canApplyFollowerNum": 1800,
+    "maxFollower": 2,
+    "profitRatio": 0.1,
+    "equity": 12773.24633366,
+    "currency": "USDT",
+    "followable": true,
+    "openTimes": 62,
+    "winTimes": 55,
+    "lossTimes": 7,
+    "totalProfit": 27389.75915048476,
+    "totalLoss": -20363.852495486,
+    "profitAndLossRatio": "4.0:1",
+    "followProfit": -726.0971205872576,
+    "holdAvgTime": 0.5,
+    "tradeFrequency": 13,
+    "lastTradeTime": 1781181991273,
+    "allowCopy": true,
+    "topTrader": false,
+    "sevenDaysRoi": 4.313,
+    "sevenDaysPnl": 2586.8283,
+    "holdingOpenTimes": 1,
+    "avgOrderAmount": 13368.83,
+    "maxDrawdown": 0,
+    "totalFollowers": 157,
+    "interestedNum": 104,
+    "followCopyFunds": 2658.5861,
+    "thirtyDaysPnl": 2431.95904,
+    "totalPnl": 3077.5810009166853,
+    "totalRoi": 0.2732,
+    "totalWinRate": 0.8939,
+    "copyType": 0,
+    "traderType": "NORMAL",
+    "isReverse": false,
+    "isVvip": false,
+    "highlightStats": [
+      {
+        "param": {
+          "count": 18
+        },
+        "type": "FOLLOWER_GROWTH"
+      },
+      {
+        "param": {
+          "winRate": 71.42
+        },
+        "type": "WINRATE_INCREASE"
+      }
+    ],
+    "interested": false,
+    "showAsset": true,
+    "symbolDetails": [
+      {
+        "symbol": "BTC_USDT",
+        "maxLeverage": 200,
+        "minAmount": 5,
+        "baseCoinName": "BTC",
+        "quoteCoinName": "USDT"
+      },
+      {
+        "symbol": "ETH_USDT",
+        "maxLeverage": 200,
+        "minAmount": 5,
+        "baseCoinName": "ETH",
+        "quoteCoinName": "USDT"
+      },
+      {
+        "symbol": "BCH_USDT",
+        "maxLeverage": 100,
+        "minAmount": 5,
+        "baseCoinName": "BCH",
+        "quoteCoinName": "USDT"
+      }
+    ],
+    "wait": "CAN_FOLLOW",
+    "traderSelf": false,
+    "avatarIndex": "1",
+    "maxProfitRatio": 0.15,
+    "contractNames": [
+      "F20250215193518264H6zzNm9ofQqCcy",
+      "F202307012048575224RCK88v6rC5BjM",
+      "F20250409102238285di8KpfwK2u0ilr"
+    ],
+    "contractRateList": [
+      {
+        "contractId": 51,
+        "symbol": "SOLUSDT",
+        "rate": 0.39,
+        "icon": "F20250215193518264H6zzNm9ofQqCcy"
+      },
+      {
+        "contractId": 531,
+        "symbol": "TAOUSDT",
+        "rate": 0.21,
+        "icon": "F202307012048575224RCK88v6rC5BjM"
+      },
+      {
+        "contractId": -9999,
+        "symbol": "OTHER",
+        "rate": 0.18
+      },
+      {
+        "contractId": 11,
+        "symbol": "ETHUSDT",
+        "rate": 0.12,
+        "icon": "F20250918112639910U5wBZIUE1wlj5f"
+      },
+      {
+        "contractId": 1022,
+        "symbol": "XAUTUSDT",
+        "rate": 0.09,
+        "icon": ""
+      }
+    ],
+    "isFollowing": false
+  }
+}

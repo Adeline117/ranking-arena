@@ -1,0 +1,66 @@
+{
+  "success": true,
+  "code": 0,
+  "message": "",
+  "data": [
+    {
+      "digitalId": "02298603",
+      "contractId": 51,
+      "contractName": "SOL_USDT",
+      "tradeRatio": 0.3114,
+      "openTimes": 19,
+      "pnl": 431.546,
+      "baseCoin": "SOL",
+      "quoteCoin": "USDT",
+      "baseCoinName": "SOL",
+      "quoteCoinName": "USDT",
+      "icon": "F20250215193518264H6zzNm9ofQqCcy"
+    },
+    {
+      "digitalId": "02298603",
+      "contractId": 531,
+      "contractName": "TAO_USDT",
+      "tradeRatio": 0.2131,
+      "openTimes": 13,
+      "pnl": 1366.9501,
+      "baseCoin": "TAO",
+      "quoteCoin": "USDT",
+      "baseCoinName": "TAO",
+      "quoteCoinName": "USDT",
+      "icon": "F202307012048575224RCK88v6rC5BjM"
+    },
+    {
+      "digitalId": "02298603",
+      "contractId": 45,
+      "contractName": "BNB_USDT",
+      "tradeRatio": 0.1311,
+      "openTimes": 8,
+      "pnl": 882.638,
+      "baseCoin": "BNB",
+      "quoteCoin": "USDT",
+      "baseCoinName": "BNB",
+      "quoteCoinName": "USDT",
+      "icon": "F20250409102238285di8KpfwK2u0ilr"
+    },
+    {
+      "digitalId": "02298603",
+      "contractId": 11,
+      "contractName": "ETH_USDT",
+      "tradeRatio": 0.1147,
+      "openTimes": 7,
+      "pnl": 259.7556,
+      "baseCoin": "ETH",
+      "quoteCoin": "USDT",
+      "baseCoinName": "ETH",
+      "quoteCoinName": "USDT",
+      "icon": "F20250918112639910U5wBZIUE1wlj5f"
+    },
+    {
+      "digitalId": "02298603",
+      "contractName": "other",
+      "tradeRatio": 0.2295,
+      "openTimes": 14,
+      "pnl": 639.57674
+    }
+  ]
+}

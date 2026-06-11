@@ -1,0 +1,41 @@
+{
+  "success": true,
+  "code": 0,
+  "message": "",
+  "data": {
+    "avgHoldTime": 43828,
+    "maxHoldTime": 215932,
+    "holdDetailList": [
+      {
+        "holdTimeStart": 81,
+        "holdTimeEnd": 43251,
+        "holdCount": 45,
+        "profit": 3449.6111
+      },
+      {
+        "holdTimeStart": 43251,
+        "holdTimeEnd": 86421,
+        "holdCount": 3,
+        "profit": 234.6763
+      },
+      {
+        "holdTimeStart": 86421,
+        "holdTimeEnd": 129591,
+        "holdCount": 3,
+        "profit": 420.186
+      },
+      {
+        "holdTimeStart": 129591,
+        "holdTimeEnd": 172761,
+        "holdCount": 3,
+        "profit": 355.6412
+      },
+      {
+        "holdTimeStart": 172761,
+        "holdTimeEnd": 215932,
+        "holdCount": 7,
+        "profit": -879.64816
+      }
+    ]
+  }
+}
