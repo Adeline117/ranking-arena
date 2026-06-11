@@ -38,10 +38,21 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
     throw new Error(`[tier-c] surface ${surface} not implemented for ${sourceSlug}`)
   }
 
+  // UTA portfolio traders route profile calls by traders.meta (portfolio_id)
+  // — load it so long-tail UTA profiles fetch correctly instead of empty.
+  const { rows: metaRows } = await getIngestPool().query<{
+    meta: Record<string, unknown>
+  }>(
+    `SELECT t.meta FROM arena.traders t
+      WHERE t.source_id = $1 AND t.exchange_trader_id = $2`,
+    [src.id, exchangeTraderId]
+  )
+  const traderMeta = metaRows[0]?.meta ?? null
+
   const session = await openSession(src)
   try {
     const scrapedAt = new Date().toISOString()
-    const bundle = await adapter.getProfile(session, src, exchangeTraderId, timeframe)
+    const bundle = await adapter.getProfile(session, src, exchangeTraderId, timeframe, traderMeta)
 
     const ctx: ParseCtx = {
       sourceSlug: src.slug,

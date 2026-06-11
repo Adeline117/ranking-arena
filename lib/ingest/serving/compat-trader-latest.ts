@@ -102,7 +102,7 @@ export async function compatWriteTraderLatest(
        handle = COALESCE(EXCLUDED.handle, public.trader_sources.handle),
        avatar_url = COALESCE(EXCLUDED.avatar_url, public.trader_sources.avatar_url),
        is_active = true,
-       updated_at = now()`,
+       last_refreshed_at = now()`,
     [platform, src.id]
   )
 
