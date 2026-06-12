@@ -1,0 +1,177 @@
+/**
+ * Schema 契约 + 写路径金丝雀哨兵（每日跑，失败 Telegram 告警）
+ *
+ * 背景（2026-06 按钮审计）：~200 个迁移未应用生产导致发帖/点赞/订阅
+ * 长期静默 500 无人发现。此哨兵让该类问题的发现成本 = 0 人力 / 24h 内。
+ *
+ * 检查项:
+ *   1. schema 契约 — node scripts/qa/schema-contract-check.mjs
+ *      （代码 .rpc()/.from() 依赖 vs 生产实际清单，差集即漂移）
+ *   2. 写路径金丝雀 — QA 账号（qa.button.test@arenafi.org）完整做一轮
+ *      发帖 → 点赞 → 评论 → 删帖（全部清理，零数据残留）
+ *
+ * 用法（crontab，环境变量同 health-monitor）:
+ *   node scripts/openclaw/schema-canary-sentinel.mjs
+ *
+ * QA 账号密码: 每次运行用 service role 重置为随机值（不持久化）。
+ */
+import { execSync } from 'node:child_process'
+import fs from 'node:fs'
+import crypto from 'node:crypto'
+import path from 'node:path'
+
+const QA_EMAIL = 'qa.button.test@arenafi.org'
+const QA_USER_ID = '1c533890-01e8-4c34-a895-657f389ab4b2'
+const BASE = 'https://www.arenafi.org'
+
+function readEnv(name, { optional = false } = {}) {
+  if (process.env[name]) return process.env[name].replace(/^"|"$/g, '')
+  for (const file of ['.env.local', '.env']) {
+    try {
+      const m = fs
+        .readFileSync(path.join(process.cwd(), file), 'utf8')
+        .split('\n')
+        .find((l) => l.startsWith(`${name}=`))
+      if (m) return m.slice(name.length + 1).replace(/^"|"$/g, '')
+    } catch {
+      /* file missing */
+    }
+  }
+  if (optional) return null
+  throw new Error(`${name} not found`)
+}
+
+const TELEGRAM_BOT_TOKEN = readEnv('TELEGRAM_BOT_TOKEN', { optional: true })
+const TELEGRAM_CHAT_ID = readEnv('TELEGRAM_ALERT_CHAT_ID', { optional: true })
+
+async function sendTelegram(text) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.log('[telegram skipped]', text)
+    return
+  }
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text }),
+  }).catch((e) => console.error('telegram send failed:', e.message))
+}
+
+const failures = []
+
+// ---------- 1. Schema 契约 ----------
+try {
+  const out = execSync('node scripts/qa/schema-contract-check.mjs', {
+    encoding: 'utf8',
+    timeout: 120_000,
+  })
+  console.log(out.trim())
+} catch (e) {
+  failures.push(`Schema 契约失败:\n${(e.stdout || '') + (e.stderr || '')}`.slice(0, 800))
+}
+
+// ---------- 2. 写路径金丝雀 ----------
+async function writeCanary() {
+  const SUPA_URL = readEnv('NEXT_PUBLIC_SUPABASE_URL')
+  const SRK = readEnv('SUPABASE_SERVICE_ROLE_KEY')
+  const ANON = readEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+
+  // 重置 QA 账号密码（随机，不持久化）
+  const pw = crypto.randomBytes(18).toString('base64')
+  const resetRes = await fetch(`${SUPA_URL}/auth/v1/admin/users/${QA_USER_ID}`, {
+    method: 'PUT',
+    headers: { apikey: SRK, Authorization: `Bearer ${SRK}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: pw }),
+  })
+  if (!resetRes.ok) throw new Error(`QA 密码重置失败 ${resetRes.status}`)
+
+  // 登录
+  const loginRes = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+    method: 'POST',
+    headers: { apikey: ANON, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: QA_EMAIL, password: pw }),
+  })
+  const session = await loginRes.json()
+  if (!session.access_token)
+    throw new Error(`QA 登录失败: ${JSON.stringify(session).slice(0, 120)}`)
+
+  // CSRF（proxy.ts 格式：base36 时间戳.64hex）
+  const csrf = `${Date.now().toString(36)}.${crypto.randomBytes(32).toString('hex')}`
+  const H = {
+    'Content-Type': 'application/json',
+    Authorization: `Bearer ${session.access_token}`,
+    'x-csrf-token': csrf,
+    Cookie: `csrf-token=${csrf}`,
+    // WAF 会拦 Node 默认 UA（Forbidden）— 伪装浏览器 UA
+    'User-Agent':
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaSentinel',
+  }
+  const api = async (pathname, init = {}) => {
+    const res = await fetch(`${BASE}${pathname}`, { ...init, headers: { ...H, ...init.headers } })
+    let body = null
+    try {
+      body = await res.json()
+    } catch {
+      /* non-json */
+    }
+    return { status: res.status, body }
+  }
+
+  // 发帖
+  const create = await api('/api/posts', {
+    method: 'POST',
+    body: JSON.stringify({
+      title: 'canary — auto-deleted',
+      content: '[sentinel] daily write-path canary. Auto-cleaned.',
+    }),
+  })
+  const postId = create.body?.data?.post?.id || create.body?.data?.id
+  if (!postId)
+    throw new Error(`发帖失败 ${create.status}: ${JSON.stringify(create.body).slice(0, 150)}`)
+
+  try {
+    // 点赞 + 取消
+    const like = await api(`/api/posts/${postId}/like`, {
+      method: 'POST',
+      body: JSON.stringify({ reaction_type: 'up' }),
+    })
+    if (like.status >= 400) throw new Error(`点赞失败 ${like.status}`)
+    await api(`/api/posts/${postId}/like`, {
+      method: 'POST',
+      body: JSON.stringify({ reaction_type: 'up' }),
+    })
+
+    // 评论 + 删评论
+    const comment = await api(`/api/posts/${postId}/comments`, {
+      method: 'POST',
+      body: JSON.stringify({ content: '[sentinel] canary comment' }),
+    })
+    const commentId = comment.body?.data?.comment?.id || comment.body?.data?.id
+    if (!commentId) throw new Error(`评论失败 ${comment.status}`)
+    const delC = await api(`/api/posts/${postId}/comments`, {
+      method: 'DELETE',
+      body: JSON.stringify({ comment_id: commentId }),
+    })
+    if (delC.status >= 400) throw new Error(`删评论失败 ${delC.status}`)
+  } finally {
+    // 删帖（无论中途失败与否都清理）
+    const del = await api(`/api/posts/${postId}`, { method: 'DELETE' })
+    if (del.status >= 400) throw new Error(`删帖清理失败 ${del.status} (post ${postId} 可能残留!)`)
+  }
+  console.log('✅ 写路径金丝雀通过: 发帖→点赞→评论→删除 全 2xx，零残留')
+}
+
+try {
+  await writeCanary()
+} catch (e) {
+  failures.push(`写路径金丝雀失败: ${e.message}`)
+}
+
+// ---------- 结果 ----------
+if (failures.length) {
+  const msg = `🚨 Arena 哨兵告警 (${new Date().toISOString().slice(0, 10)})\n\n${failures.join('\n\n')}`
+  console.error(msg)
+  await sendTelegram(msg)
+  process.exit(1)
+}
+console.log('✅ 哨兵全绿: schema 契约 + 写路径金丝雀')
+process.exit(0)
