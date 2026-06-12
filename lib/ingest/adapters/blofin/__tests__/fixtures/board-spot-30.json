@@ -1,0 +1,131 @@
+{
+  "code": 200,
+  "msg": "succeed",
+  "data": {
+    "trader_info": [
+      {
+        "uid": 13255445137,
+        "nick_name": "Blofin_OKFh07aogW",
+        "verified": false,
+        "follow_state": 0,
+        "profile": "https://s2.blofin.com/static/user/img/default3.png",
+        "range_time": 2,
+        "roi": "-0.00052510297730353",
+        "pnl": "-0.014619294005855",
+        "mdd": "0.0714258651",
+        "aum": "19",
+        "sharpe_ratio": "0",
+        "followers": 0,
+        "followers_max": 200,
+        "chart_data": {
+          "roi": [
+            {
+              "time": 1779840000000,
+              "data": "0"
+            },
+            {
+              "time": 1779926400000,
+              "data": "0"
+            },
+            {
+              "time": 1780012800000,
+              "data": "0"
+            },
+            {
+              "time": 1780099200000,
+              "data": "0"
+            },
+            {
+              "time": 1780185600000,
+              "data": "0"
+            }
+          ]
+        }
+      },
+      {
+        "uid": 4187422152,
+        "nick_name": "Cryptoracle",
+        "verified": false,
+        "follow_state": 0,
+        "profile": "https://s2.blofin.com/static/user/img/profile/1ae76d1660dd4a2293f30755a7749582.",
+        "range_time": 2,
+        "roi": "-0.008981174832821466",
+        "pnl": "-1.568601190679982998",
+        "mdd": "0.02054630140298924",
+        "aum": "170",
+        "sharpe_ratio": "0",
+        "followers": 0,
+        "followers_max": 200,
+        "chart_data": {
+          "roi": [
+            {
+              "time": 1778716800000,
+              "data": "0"
+            },
+            {
+              "time": 1778803200000,
+              "data": "0"
+            },
+            {
+              "time": 1778889600000,
+              "data": "0"
+            },
+            {
+              "time": 1778976000000,
+              "data": "0"
+            },
+            {
+              "time": 1779062400000,
+              "data": "0"
+            }
+          ]
+        }
+      },
+      {
+        "uid": 26814103080,
+        "nick_name": "SwingBTC JZ",
+        "verified": false,
+        "follow_state": 0,
+        "profile": "https://s2.blofin.com/static/user/img/default3.png",
+        "range_time": 2,
+        "roi": "-0.010483148849388197",
+        "pnl": "-10.564004505203796",
+        "mdd": "0.012674971557979475",
+        "aum": "58249",
+        "sharpe_ratio": "4.0685",
+        "followers": 2,
+        "followers_max": 200,
+        "chart_data": {
+          "roi": [
+            {
+              "time": 1778716800000,
+              "data": "0"
+            },
+            {
+              "time": 1778803200000,
+              "data": "0"
+            },
+            {
+              "time": 1778889600000,
+              "data": "0"
+            },
+            {
+              "time": 1778976000000,
+              "data": "0"
+            },
+            {
+              "time": 1779062400000,
+              "data": "0"
+            }
+          ]
+        }
+      }
+    ],
+    "page_num": 1,
+    "page_size": 5,
+    "page_total": 81,
+    "pages": 17,
+    "range_time": 2
+  },
+  "alert": null
+}
