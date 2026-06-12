@@ -55,6 +55,22 @@ export async function reconcileSchedulers(): Promise<void> {
       { name: INGEST_JOB.TIER_D, data }
     )
 
+    // Series backfill (spec §13.1): slow sweep of ranked traders beyond
+    // deep_profile_topn — only for sources that opt in via
+    // meta.series_backfill_topn. Default 30-min cadence drips a bounded batch
+    // so long-tail chart coverage grows over days within the rate budget.
+    const backfillTopN = Number(src.meta?.series_backfill_topn ?? 0)
+    if (backfillTopN > src.deep_profile_topn) {
+      const cadenceSec = Number(src.meta?.series_backfill_cadence_seconds ?? 1800)
+      const seriesBackfill = `tierbs:${src.slug}`
+      wanted.add(seriesBackfill)
+      await queue.upsertJobScheduler(
+        seriesBackfill,
+        { every: Math.max(60, cadenceSec) * 1000 },
+        { name: INGEST_JOB.TIER_B_SERIES, data }
+      )
+    }
+
     // Derived boards (MEXC/BTCC): synthesize after each Tier-A cadence.
     if (src.timeframes_derived.length > 0) {
       const derive = `derive:${src.slug}`
