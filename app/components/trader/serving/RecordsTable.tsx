@@ -35,7 +35,7 @@ export interface RecordsTableProps {
   emptyKey?: string
 }
 
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC'])
+const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
 
 function formatCell(
   value: unknown,

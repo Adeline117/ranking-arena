@@ -9,7 +9,7 @@
 
 export type ServingTimeframe = 7 | 30 | 90 | 'inception'
 export type TfAvailability = 'native' | 'derived' | 'absent'
-export type ServingCurrency = 'USDT' | 'USDx' | 'USDC'
+export type ServingCurrency = 'USDT' | 'USDx' | 'USDC' | 'USD'
 
 export interface Provenance {
   /** Exchange/source slug, e.g. 'bitget_futures'. */

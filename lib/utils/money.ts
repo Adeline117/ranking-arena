@@ -1,6 +1,7 @@
 /**
- * Currency-safe money rendering (spec §5.8): three quote units exist in
- * the wild (USDT, USDx on Bybit MT5/Gate CFD, USDC on gTrade/OKX web3).
+ * Currency-safe money rendering (spec §5.8): four quote units exist in
+ * the wild (USDT, USDx on Bybit MT5/Gate CFD, USDC on gTrade/OKX web3,
+ * literal USD on Bitfinex rankings).
  * Never sum or rank across mismatched units; always label the unit.
  * (Precision arithmetic helpers live in lib/utils/currency.ts.)
  */

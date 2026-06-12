@@ -147,7 +147,7 @@ const STAT_KEY_MAP: Record<string, string> = {
   holdingDurationAvgHours: 'holding_duration_avg',
 }
 
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC'])
+const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
 
 /** Map a Tier-C profile result into TraderCoreModules (cold-fetched). */
 export function coreModulesFromTierC(

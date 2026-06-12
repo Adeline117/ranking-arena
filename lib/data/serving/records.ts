@@ -11,7 +11,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { money } from '@/lib/utils/money'
 import type { CopierAggregate, RecordKind, RecordsPage, ServingCurrency } from './types'
 
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC'])
+const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
 
 function asCurrency(v: unknown): ServingCurrency {
   return typeof v === 'string' && CURRENCIES.has(v) ? (v as ServingCurrency) : 'USDT'
