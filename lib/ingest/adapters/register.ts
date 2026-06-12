@@ -33,5 +33,6 @@ import './btcc'
 
 // Phase 2 — wave 2 on-chain (pure HTTP / JSON APIs)
 import './gmx'
+import './gtrade'
 
 export {}
