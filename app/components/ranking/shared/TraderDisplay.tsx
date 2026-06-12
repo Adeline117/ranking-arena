@@ -156,6 +156,10 @@ export function TraderAvatar({
         height: size,
         minWidth: size,
         minHeight: size,
+        // Belt-and-braces: even if a parent flexbox squeezes the wrapper,
+        // the avatar keeps its square footprint and never reflows neighbors.
+        aspectRatio: '1',
+        contain: 'layout',
         borderRadius: '50%',
         background: getAvatarGradient(traderId),
         border: '2px solid var(--color-border-primary)',
