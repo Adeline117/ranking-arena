@@ -1,0 +1,158 @@
+{
+  "returnCode": 0,
+  "msgInfo": "success",
+  "error": null,
+  "result": {
+    "hasPrev": false,
+    "hasNext": true,
+    "items": [
+      {
+        "accountId": 8305081452527,
+        "nickName": "阿阳",
+        "days": 30,
+        "income": "175.40481862",
+        "incomeRate": "11.2471",
+        "followerProfit": "-45.00817",
+        "totalFollowerProfit": "-45.00817",
+        "followerTrade": null,
+        "totalFollowerTrade": null,
+        "followerMargin": "780",
+        "totalFollowerMargin": "780",
+        "winRate": "0.6461",
+        "followerCount": "0",
+        "maxFollowerSize": 100,
+        "level": 1,
+        "levelName": "Lvl 1",
+        "label": ["Short term", "conservative"],
+        "avatar": "https://a.static-global.com/1/user/common/3f9fc83c-643b-4082-8ef7-5f7e3191419a-1761119853423.png",
+        "followNumber": 9,
+        "newFollowNumber": 9,
+        "maxRetraction": 1.4925,
+        "chart": [
+          {
+            "amount": "0",
+            "time": 0
+          },
+          {
+            "amount": "0",
+            "time": 1778716800000
+          },
+          {
+            "amount": "0",
+            "time": 1778803200000
+          },
+          {
+            "amount": "0",
+            "time": 1778889600000
+          },
+          {
+            "amount": "0",
+            "time": 1778976000000
+          },
+          {
+            "amount": "0",
+            "time": 1779062400000
+          }
+        ]
+      },
+      {
+        "accountId": 9523865650557,
+        "nickName": "XAI INVESTMENT",
+        "days": 30,
+        "income": "262.94879519",
+        "incomeRate": "6.8014",
+        "followerProfit": "-624.1565",
+        "totalFollowerProfit": "-624.1565",
+        "followerTrade": null,
+        "totalFollowerTrade": null,
+        "followerMargin": "4677.6289",
+        "totalFollowerMargin": "4697.2778",
+        "winRate": "0.9859",
+        "followerCount": "10",
+        "maxFollowerSize": 100,
+        "level": 1,
+        "levelName": "Lvl 1",
+        "label": [],
+        "avatar": "https://a.static-global.com/1/user/common/7c773c65-a6c2-4f52-96ee-eab81b828bd3-1780133710954.png",
+        "followNumber": 64,
+        "newFollowNumber": 64,
+        "maxRetraction": 0.0701,
+        "chart": [
+          {
+            "amount": "0",
+            "time": 0
+          },
+          {
+            "amount": "0",
+            "time": 1778716800000
+          },
+          {
+            "amount": "0",
+            "time": 1778803200000
+          },
+          {
+            "amount": "0",
+            "time": 1778889600000
+          },
+          {
+            "amount": "0",
+            "time": 1778976000000
+          },
+          {
+            "amount": "0",
+            "time": 1779062400000
+          }
+        ]
+      },
+      {
+        "accountId": 8680638710947,
+        "nickName": "财哥论币",
+        "days": 30,
+        "income": "4751.12600478",
+        "incomeRate": "3.0889",
+        "followerProfit": "-104.61172",
+        "totalFollowerProfit": "-139.16861",
+        "followerTrade": null,
+        "totalFollowerTrade": null,
+        "followerMargin": "876.39",
+        "totalFollowerMargin": "2356.96991711",
+        "winRate": "0.3148",
+        "followerCount": "2",
+        "maxFollowerSize": 300,
+        "level": 2,
+        "levelName": "Lvl 2",
+        "label": ["High frequency", "Short term"],
+        "avatar": "https://a.static-global.com/1/user/common/5a7c2436-c629-486a-ab57-7d62cde92acd-1779440611423.png",
+        "followNumber": 15,
+        "newFollowNumber": 15,
+        "maxRetraction": 6.9585,
+        "chart": [
+          {
+            "amount": "0",
+            "time": 0
+          },
+          {
+            "amount": "0",
+            "time": 1778716800000
+          },
+          {
+            "amount": "0",
+            "time": 1778803200000
+          },
+          {
+            "amount": "0",
+            "time": 1778889600000
+          },
+          {
+            "amount": "0",
+            "time": 1778976000000
+          },
+          {
+            "amount": "0",
+            "time": 1779062400000
+          }
+        ]
+      }
+    ]
+  }
+}

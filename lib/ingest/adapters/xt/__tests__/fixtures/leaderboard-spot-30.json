@@ -1,0 +1,182 @@
+{
+  "rc": 0,
+  "mc": "SUCCESS",
+  "ma": [],
+  "result": {
+    "hasPrev": false,
+    "hasNext": true,
+    "items": [
+      {
+        "accountId": "4612466590349457382",
+        "aid": 6800954951615,
+        "nickName": "naifoscrypt",
+        "avatar": "https://a.static-global.com/1/user/common/6208b5f2-7e70-4915-bd3e-7117ae36dbb9-1735845736632.png",
+        "level": 1,
+        "levelName": "Lvl 1",
+        "days": 30,
+        "income": "-48.81888",
+        "winRate": "0",
+        "followerProfit": "0",
+        "followerMargin": "0",
+        "incomeRate": "-0.5242",
+        "followerCount": 8,
+        "maxFollowerSize": 500,
+        "recentlyFollowNumber": 3,
+        "maxRetraction": 1.0832,
+        "equity": null,
+        "recommend": false,
+        "recommendWeight": null,
+        "firstTradeTime": 1775690570504,
+        "lastTradeTime": 1775690570504,
+        "displayEquity": false,
+        "tradeDays": 65,
+        "chart": [
+          {
+            "id": null,
+            "amount": "0.1097",
+            "time": 1778716800000
+          },
+          {
+            "id": null,
+            "amount": "-0.0474",
+            "time": 1778803200000
+          },
+          {
+            "id": null,
+            "amount": "-0.058",
+            "time": 1778889600000
+          },
+          {
+            "id": null,
+            "amount": "0.015",
+            "time": 1778976000000
+          },
+          {
+            "id": null,
+            "amount": "0.0982",
+            "time": 1779062400000
+          },
+          {
+            "id": null,
+            "amount": "0.1366",
+            "time": 1779148800000
+          }
+        ]
+      },
+      {
+        "accountId": "4612473507301998726",
+        "aid": 7016572847620,
+        "nickName": "ali raeisi :(",
+        "avatar": "https://a.static-global.com/1/user/common/bf5f42f8-e815-4817-9c13-2b14b4af24e0-1709539990384.png",
+        "level": 1,
+        "levelName": "Lvl 1",
+        "days": 30,
+        "income": "-158.1950696",
+        "winRate": "0",
+        "followerProfit": "0",
+        "followerMargin": "0",
+        "incomeRate": "-0.3019",
+        "followerCount": 0,
+        "maxFollowerSize": 500,
+        "recentlyFollowNumber": 0,
+        "maxRetraction": 0.3125,
+        "equity": null,
+        "recommend": false,
+        "recommendWeight": null,
+        "firstTradeTime": 1769665342291,
+        "lastTradeTime": 1780674279205,
+        "displayEquity": false,
+        "tradeDays": 134,
+        "chart": [
+          {
+            "id": null,
+            "amount": "0.0106",
+            "time": 1778716800000
+          },
+          {
+            "id": null,
+            "amount": "-0.0183",
+            "time": 1778803200000
+          },
+          {
+            "id": null,
+            "amount": "-0.0384",
+            "time": 1778889600000
+          },
+          {
+            "id": null,
+            "amount": "-0.048",
+            "time": 1778976000000
+          },
+          {
+            "id": null,
+            "amount": "-0.0492",
+            "time": 1779062400000
+          },
+          {
+            "id": null,
+            "amount": "-0.06",
+            "time": 1779148800000
+          }
+        ]
+      },
+      {
+        "accountId": "4612404344642502630",
+        "aid": 4855776609279,
+        "nickName": "Le Bitcoineur",
+        "avatar": "https://a.static-global.com/1/user/common/b08bf62e-f714-4cd3-8fc6-eaf355333ee0-1766589374056.jpg",
+        "level": 1,
+        "levelName": "Lvl 1",
+        "days": 30,
+        "income": "-131.40802386",
+        "winRate": "0",
+        "followerProfit": "0",
+        "followerMargin": "0",
+        "incomeRate": "-0.2624",
+        "followerCount": 0,
+        "maxFollowerSize": 500,
+        "recentlyFollowNumber": 0,
+        "maxRetraction": 0.2624,
+        "equity": null,
+        "recommend": false,
+        "recommendWeight": null,
+        "firstTradeTime": 1766704392039,
+        "lastTradeTime": 1780875897651,
+        "displayEquity": false,
+        "tradeDays": 169,
+        "chart": [
+          {
+            "id": null,
+            "amount": "0",
+            "time": 1778716800000
+          },
+          {
+            "id": null,
+            "amount": "0",
+            "time": 1778803200000
+          },
+          {
+            "id": null,
+            "amount": "0",
+            "time": 1778889600000
+          },
+          {
+            "id": null,
+            "amount": "0",
+            "time": 1778976000000
+          },
+          {
+            "id": null,
+            "amount": "0",
+            "time": 1779062400000
+          },
+          {
+            "id": null,
+            "amount": "0",
+            "time": 1779148800000
+          }
+        ]
+      }
+    ]
+  }
+}

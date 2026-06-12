@@ -1,0 +1,109 @@
+{
+  "returnCode": 0,
+  "msgInfo": "success",
+  "error": null,
+  "result": {
+    "hasPrev": false,
+    "hasNext": true,
+    "items": [
+      {
+        "accountId": 7691490034030,
+        "nickName": "鲁智深交易",
+        "days": 7,
+        "income": "310.33875502",
+        "incomeRate": "2.9284",
+        "followerProfit": "11.8621",
+        "totalFollowerProfit": "-220.17764",
+        "followerTrade": null,
+        "totalFollowerTrade": null,
+        "followerMargin": "0",
+        "totalFollowerMargin": "2276.73974851",
+        "winRate": "0.4",
+        "followerCount": "4",
+        "maxFollowerSize": 100,
+        "level": 1,
+        "levelName": "Lvl 1",
+        "label": [],
+        "avatar": "https://a.static-global.com/1/user/common/6683ba8a-f4fc-40c0-92f4-a7f5eb8c786e-1776517294778.png",
+        "followNumber": 17,
+        "newFollowNumber": 10,
+        "maxRetraction": 0.5063,
+        "chart": [
+          {
+            "amount": "0",
+            "time": 0
+          },
+          {
+            "amount": "0.0082",
+            "time": 1780704000000
+          },
+          {
+            "amount": "1.1814",
+            "time": 1780790400000
+          },
+          {
+            "amount": "1.1604",
+            "time": 1780876800000
+          },
+          {
+            "amount": "0.6751",
+            "time": 1780963200000
+          },
+          {
+            "amount": "2.9284",
+            "time": 1781049600000
+          }
+        ]
+      },
+      {
+        "accountId": 7973754373300,
+        "nickName": "狗庄",
+        "days": 7,
+        "income": "216.74787181",
+        "incomeRate": "1.2814",
+        "followerProfit": "0",
+        "totalFollowerProfit": "-495.71818",
+        "followerTrade": null,
+        "totalFollowerTrade": null,
+        "followerMargin": "0",
+        "totalFollowerMargin": "4098.91508819",
+        "winRate": "0.4741",
+        "followerCount": "0",
+        "maxFollowerSize": 100,
+        "level": 1,
+        "levelName": "Lvl 1",
+        "label": [],
+        "avatar": "https://a.static-global.com/1/user/common/bf5f42f8-e815-4817-9c13-2b14b4af24e0-1709539990384.png",
+        "followNumber": 0,
+        "newFollowNumber": 0,
+        "maxRetraction": 0.0679,
+        "chart": [
+          {
+            "amount": "0",
+            "time": 0
+          },
+          {
+            "amount": "0.2159",
+            "time": 1780704000000
+          },
+          {
+            "amount": "0.7069",
+            "time": 1780790400000
+          },
+          {
+            "amount": "0.8679",
+            "time": 1780876800000
+          },
+          {
+            "amount": "0.8726",
+            "time": 1780963200000
+          },
+          {
+            "amount": "1.3481",
+            "time": 1781049600000
+          }
+        ]
+      }
+    ]
+  }
+}
