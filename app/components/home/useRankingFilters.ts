@@ -762,12 +762,10 @@ export function useRankingFilters({
     // paywall_blocked: a free user just hit a Pro-gated affordance.
     // Pairs with view_pricing → click_upgrade_cta → start_checkout → pro_subscribe
     // for a complete funnel from "blocked" to "paid".
+    // UI moved to ProUpsellModal in RankingSection (a toast was a dead end —
+    // no CTA, no funnel continuation); this handler only tracks.
     trackEvent('paywall_blocked', { source: 'home_ranking_filters' })
-    showToast(
-      t('proFilterTooltip') || 'Upgrade to Pro to filter by Futures, Spot, and On-chain categories',
-      'info'
-    )
-  }, [showToast, t])
+  }, [])
 
   const handleCopyLink = useCallback(() => {
     const url = window.location.href

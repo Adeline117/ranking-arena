@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { apiFetch } from '@/lib/utils/api-fetch'
@@ -20,6 +20,10 @@ import CategoryRankingTabs from '../ranking/CategoryRankingTabs'
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
 const ProGate = dynamic(() => import('../ui/ProGate'), { ssr: false })
+const ProUpsellModal = dynamic(
+  () => import('../ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
+  { ssr: false }
+)
 const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
 const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), {
   ssr: false,
@@ -99,6 +103,14 @@ export default function RankingSection({
     handleFilterToggle,
     formatLastUpdated,
   } = useRankingFilters({ traders, activeTimeRange, totalCount, categoryCounts, fetchPage })
+
+  // Unified paywall: callback-style gates (locked tabs, export) open the
+  // shared upsell modal instead of a dead-end toast.
+  const [proUpsellOpen, setProUpsellOpen] = useState(false)
+  const onProRequired = useCallback(() => {
+    handleProRequired() // tracking only
+    setProUpsellOpen(true)
+  }, [handleProRequired])
 
   // Leaderboard movers
   const [movers, setMovers] = useState<{
@@ -188,7 +200,7 @@ export default function RankingSection({
           currentCategory={category}
           onCategoryChange={setCategory}
           isPro={isPro}
-          onProRequired={handleProRequired}
+          onProRequired={onProRequired}
           categoryCounts={categoryCounts}
         />
       </div>
@@ -311,7 +323,7 @@ export default function RankingSection({
         isPro={isPro}
         category={category}
         onCategoryChange={setCategory}
-        onProRequired={handleProRequired}
+        onProRequired={onProRequired}
         onFilterToggle={handleFilterToggle}
         hasActiveFilters={hasActiveFilters}
         error={error}
@@ -352,6 +364,12 @@ export default function RankingSection({
           />
         )}
       </div>
+
+      <ProUpsellModal
+        open={proUpsellOpen}
+        onClose={() => setProUpsellOpen(false)}
+        featureKey="proFilterTooltip"
+      />
 
       <RankingFooter
         loading={loading}
