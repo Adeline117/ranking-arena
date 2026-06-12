@@ -13,7 +13,7 @@ import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/i
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
-import { validateStats } from '@/lib/ingest/staging/validate'
+import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
 import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
 
@@ -21,6 +21,8 @@ interface TopTrader {
   id: number
   exchange_trader_id: string
   meta: Record<string, unknown> | null
+  /** timeframe → board headline ROI (for the spec §5.3 cross-check). */
+  headline_rois: Record<string, number | null> | null
 }
 
 /**
@@ -38,11 +40,13 @@ async function getTopTraders(sourceId: number, topN: number): Promise<TopTrader[
         WHERE source_id = $1 AND count_check_passed
         ORDER BY timeframe, scraped_at DESC
      )
-     SELECT DISTINCT t.id, t.exchange_trader_id, t.meta
+     SELECT t.id, t.exchange_trader_id, t.meta,
+            jsonb_object_agg(e.timeframe::text, e.headline_roi) AS headline_rois
        FROM latest l
        JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
        JOIN arena.traders t ON t.id = e.trader_id
-      WHERE e.rank <= $2`,
+      WHERE e.rank <= $2
+      GROUP BY t.id, t.exchange_trader_id, t.meta`,
     [sourceId, topN]
   )
   return rows
@@ -193,6 +197,21 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
             >
             const { valid, rejects } = validateStats(profile.stats, requiredFields)
             result.rejects += rejects.length
+
+            // Cross-check (spec §5.3): board headline ROI must match the
+            // profile ROI for the same TF within tolerance — catches stale
+            // caches / wrong-timeframe clicks. Log-and-count, never block:
+            // the board value stays authoritative for ranking either way.
+            const headline = trader.headline_rois?.[String(timeframe)] ?? null
+            const profileRoi = valid.find((b) => b.timeframe === timeframe)?.roi ?? null
+            if (roiCrossCheckOk(headline, profileRoi) === false) {
+              result.crossCheckFails += 1
+              console.warn(
+                `[tier-b] ${src.slug} ${trader.exchange_trader_id} ${timeframe}d ` +
+                  `ROI cross-check FAIL: board=${headline} profile=${profileRoi}`
+              )
+            }
+
             await publishProfile(
               src,
               trader.id,
