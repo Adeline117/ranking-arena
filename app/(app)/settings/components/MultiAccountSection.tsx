@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import ProGate from '@/app/components/ui/ProGate'
 
 export function MultiAccountSection() {
   const { accounts, isPro, removeAccount, switchAccount } = useMultiAccount()
@@ -98,44 +99,42 @@ export function MultiAccountSection() {
           )}
         </Box>
       ))}
-      <Box
-        onClick={() => {
-          if (!isPro && accounts.length >= 1) {
-            router.push('/settings?section=subscription')
-          } else {
-            router.push('/login?addAccount=true')
-          }
-        }}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: tokens.spacing[2],
-          padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-          borderRadius: tokens.radius.md,
-          border: `1px dashed ${tokens.colors.border.secondary}`,
-          cursor: 'pointer',
-          transition: `all ${tokens.transition.base}`,
-        }}
-      >
-        <Text size="xs" color="tertiary">
-          + {t('addAccount')}
-        </Text>
-        {!isPro && (
-          <Box
-            style={{
-              marginLeft: 'auto',
-              padding: `1px ${tokens.spacing[1]}`,
-              borderRadius: tokens.radius.sm,
-              background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-accent))`,
-              color: tokens.colors.white,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: 700,
-            }}
-          >
-            Pro
-          </Box>
-        )}
-      </Box>
+      {/* ProGate handles the free-user upsell (modal → /pricing); Pro users
+          click straight through to the add-account flow. */}
+      <ProGate variant="modal" featureKey="linkedAccountsDesc">
+        <Box
+          onClick={() => router.push('/login?addAccount=true')}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            borderRadius: tokens.radius.md,
+            border: `1px dashed ${tokens.colors.border.secondary}`,
+            cursor: 'pointer',
+            transition: `all ${tokens.transition.base}`,
+          }}
+        >
+          <Text size="xs" color="tertiary">
+            + {t('addAccount')}
+          </Text>
+          {!isPro && (
+            <Box
+              style={{
+                marginLeft: 'auto',
+                padding: `1px ${tokens.spacing[1]}`,
+                borderRadius: tokens.radius.sm,
+                background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-accent))`,
+                color: tokens.colors.white,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: 700,
+              }}
+            >
+              Pro
+            </Box>
+          )}
+        </Box>
+      </ProGate>
     </Box>
   )
 }
