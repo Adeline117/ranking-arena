@@ -1,5 +1,10 @@
+'use client'
+
+import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
+import { formatTimeAgo, type Locale } from '@/lib/utils/date'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface RankingFooterProps {
   loading: boolean
@@ -29,6 +34,16 @@ export default function RankingFooter({
   lastRefreshFailed,
 }: RankingFooterProps) {
   const stale = isStale(lastUpdated)
+  const { language } = useLanguage()
+
+  // Live relative timestamp: re-render every 10s so "12s ago" keeps ticking.
+  // The absolute time stays available as the title attribute.
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    if (!lastUpdated) return
+    const id = setInterval(() => setTick((n) => n + 1), 10_000)
+    return () => clearInterval(id)
+  }, [lastUpdated])
 
   return (
     <>
@@ -76,7 +91,9 @@ export default function RankingFooter({
             <circle cx="12" cy="12" r="10" />
             <path d="M12 6v6l4 2" />
           </svg>
-          <span suppressHydrationWarning>{formatLastUpdated(lastUpdated)}</span>
+          <span suppressHydrationWarning title={formatLastUpdated(lastUpdated) ?? undefined}>
+            {formatTimeAgo(lastUpdated, language as Locale)}
+          </span>
           {lastRefreshFailed && (
             <span
               title={t('refreshFailed') || 'Auto-refresh failed'}
