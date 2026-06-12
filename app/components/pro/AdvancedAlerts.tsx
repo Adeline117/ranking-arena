@@ -4,37 +4,73 @@ import React, { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
-import PremiumGate, { ProLabel } from '../premium/PremiumGate'
+import { ProLabel } from '../premium/PremiumGate'
+import ProGate from '../ui/ProGate'
 
 // Icons
 const BellIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
   </svg>
 )
 
 const BellOffIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M13.73 21a2 2 0 01-3.46 0M18.63 13A17.89 17.89 0 0118 8M6.26 6.26A5.86 5.86 0 006 8c0 7-3 9-3 9h14M18 8a6 6 0 00-9.33-5M1 1l22 22" />
   </svg>
 )
 
 const TrendUpIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M23 6l-9.5 9.5-5-5L1 18" />
     <path d="M17 6h6v6" />
   </svg>
 )
 
 const TrendDownIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M23 18l-9.5-9.5-5 5L1 6" />
     <path d="M17 18h6v-6" />
   </svg>
 )
 
 const HashIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <line x1="4" y1="9" x2="20" y2="9" />
     <line x1="4" y1="15" x2="20" y2="15" />
     <line x1="10" y1="3" x2="8" y2="21" />
@@ -43,28 +79,56 @@ const HashIcon = ({ size = 16 }: { size?: number }) => (
 )
 
 const MailIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
     <polyline points="22,6 12,13 2,6" />
   </svg>
 )
 
 const SmartphoneIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <rect x="5" y="2" width="14" height="20" rx="2" ry="2" />
     <line x1="12" y1="18" x2="12.01" y2="18" />
   </svg>
 )
 
 const PlusIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <line x1="12" y1="5" x2="12" y2="19" />
     <line x1="5" y1="12" x2="19" y2="12" />
   </svg>
 )
 
 const TrashIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <polyline points="3,6 5,6 21,6" />
     <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
   </svg>
@@ -145,7 +209,12 @@ export default function AdvancedAlerts({
     isActive: true,
   })
 
-  const alertTypes: { type: AlertType; label: string; icon: React.ReactNode; description: string }[] = [
+  const alertTypes: {
+    type: AlertType
+    label: string
+    icon: React.ReactNode
+    description: string
+  }[] = [
     {
       type: 'roi_change',
       label: t('alertRoiChangeLabel'),
@@ -175,9 +244,7 @@ export default function AdvancedAlerts({
   ]
 
   const handleToggleCondition = (id: string) => {
-    const updated = conditions.map((c) =>
-      c.id === id ? { ...c, isActive: !c.isActive } : c
-    )
+    const updated = conditions.map((c) => (c.id === id ? { ...c, isActive: !c.isActive } : c))
     setConditions(updated)
     onConditionsChange?.(updated)
   }
@@ -194,10 +261,10 @@ export default function AdvancedAlerts({
     const condition: AlertCondition = {
       id: Date.now().toString(),
       type: newCondition.type as AlertType,
-      operator: newCondition.operator as Operator || 'change_by',
+      operator: (newCondition.operator as Operator) || 'change_by',
       threshold: newCondition.threshold,
       isPercent: newCondition.isPercent ?? true,
-      channels: newCondition.channels as AlertChannel[] || ['push'],
+      channels: (newCondition.channels as AlertChannel[]) || ['push'],
       isActive: true,
     }
 
@@ -243,7 +310,14 @@ export default function AdvancedAlerts({
       </Box>
 
       {/* Existing Conditions */}
-      <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
+      <Box
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: tokens.spacing[3],
+          marginBottom: tokens.spacing[4],
+        }}
+      >
         {conditions.map((condition) => {
           const typeInfo = alertTypes.find((t) => t.type === condition.type)
 
@@ -255,7 +329,9 @@ export default function AdvancedAlerts({
                 borderRadius: tokens.radius.lg,
                 background: condition.isActive ? tokens.glass.bg.light : tokens.colors.bg.tertiary,
                 border: `1px solid ${
-                  condition.isActive ? tokens.colors.accent.primary + '30' : tokens.colors.border.primary
+                  condition.isActive
+                    ? tokens.colors.accent.primary + '30'
+                    : tokens.colors.border.primary
                 }`,
                 opacity: condition.isActive ? 1 : 0.6,
               }}
@@ -482,7 +558,9 @@ export default function AdvancedAlerts({
               <select
                 value={newCondition.operator}
                 aria-label={t('alertThresholdLabel')}
-                onChange={(e) => setNewCondition({ ...newCondition, operator: e.target.value as Operator })}
+                onChange={(e) =>
+                  setNewCondition({ ...newCondition, operator: e.target.value as Operator })
+                }
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                   borderRadius: tokens.radius.md,
@@ -551,7 +629,9 @@ export default function AdvancedAlerts({
                         isSelected ? tokens.colors.accent.primary : tokens.colors.border.primary
                       }`,
                       background: isSelected ? `${tokens.colors.accent.primary}20` : 'transparent',
-                      color: isSelected ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+                      color: isSelected
+                        ? tokens.colors.accent.primary
+                        : tokens.colors.text.secondary,
                       cursor: 'pointer',
                       fontSize: tokens.typography.fontSize.sm,
                     }}
@@ -637,15 +717,20 @@ export default function AdvancedAlerts({
     </Box>
   )
 
+  if (isPro) return content
+
   return (
-    <PremiumGate
-      isPro={isPro}
-      isLoggedIn={isLoggedIn}
-      featureKey="advancedAlerts"
-      blurAmount={10}
-      minHeight={300}
+    <ProGate
+      variant="blur"
+      description={t('gateAdvancedAlertsTitle')}
+      benefits={[
+        t('gateBenefitAlertsRealtime'),
+        t('gateBenefitAlertsConditions'),
+        t('gateBenefitAlertsHistory'),
+      ]}
+      fallbackHeight={300}
     >
       {content}
-    </PremiumGate>
+    </ProGate>
   )
 }
