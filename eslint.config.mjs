@@ -131,6 +131,27 @@ const eslintConfig = defineConfig([
     },
   },
   // ============================================
+  // RATCHET: files cleaned of design-token violations lock at error level.
+  // Add every newly-cleaned file here — it must never regress.
+  // End state: whole app/ tree in this list, warn block above deleted.
+  // See docs/LINTING_GUIDE.md "The ratchet".
+  // ============================================
+  {
+    files: [
+      'app/error.tsx',
+      'app/global-error.tsx',
+      'app/components/ui/ProBadge.tsx',
+      'app/components/ui/DataStateWrapper.tsx',
+      'app/components/ui/ReportModal.tsx',
+      'app/components/settings/WalletSection.tsx',
+      'app/components/sidebar/TrendingHashtags.tsx',
+      'app/components/sidebar/RecommendedGroups.tsx',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...appRestrictedSyntax],
+    },
+  },
+  // ============================================
   // System State Management enforcement
   // See docs/system-principles.md for rationale
   // ============================================
