@@ -141,21 +141,47 @@ async function syncHistoryToServer(userId: string, history: string[]): Promise<v
 }
 
 /**
+ * Read the caller's own search_history.
+ *
+ * RPC-first: after the user_profiles column-level SELECT REVOKE
+ * (20260612135859_restrict_user_profiles_pii_v2), `search_history` is only
+ * readable via the SECURITY DEFINER RPC `get_own_profile_sensitive()`.
+ * The RPC lands in the SAME migration as the revoke, so until it applies the
+ * function does not exist (PGRST202) — in that window we fall back to the
+ * legacy direct select, which still works pre-revoke.
+ *
+ * TODO(post-revoke): once the migration is live in prod, delete the PGRST202
+ * fallback branch below.
+ */
+async function fetchOwnSearchHistory(userId: string): Promise<SearchHistoryItem[]> {
+  // maybeSingle: auth users without a user_profiles row yet (profile created
+  // elsewhere) are a legitimate state — .single() would 406 on 0 rows.
+  const { data, error } = await supabase.rpc('get_own_profile_sensitive').maybeSingle()
+
+  if (!error) {
+    const row = data as { search_history?: SearchHistoryItem[] | null } | null
+    return row?.search_history || []
+  }
+
+  // PGRST202 = function not found in schema cache (migration not applied yet)
+  if (error.code !== 'PGRST202') throw error
+
+  const { data: legacyRow, error: legacyError } = await supabase
+    .from('user_profiles')
+    .select('search_history')
+    .eq('id', userId)
+    .maybeSingle()
+
+  if (legacyError) throw legacyError
+  return (legacyRow?.search_history as SearchHistoryItem[] | null) || []
+}
+
+/**
  * Load search history from server and merge with local
  */
 export async function loadAndMergeHistory(userId: string): Promise<string[]> {
   try {
-    // maybeSingle: auth users without a user_profiles row yet (profile created
-    // elsewhere) are a legitimate state — .single() would 406 on 0 rows.
-    const { data, error } = await supabase
-      .from('user_profiles')
-      .select('search_history')
-      .eq('id', userId)
-      .maybeSingle()
-
-    if (error) throw error
-
-    const serverHistory = (data?.search_history as SearchHistoryItem[] | null) || []
+    const serverHistory = await fetchOwnSearchHistory(userId)
     const localHistory = getLocalHistory()
 
     // Merge histories, preferring more recent items

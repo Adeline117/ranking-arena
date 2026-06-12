@@ -1,5 +1,8 @@
 -- Migration: 20260602223029_restrict_user_profiles_pii_columns.sql
 -- Created: 2026-06-03T05:30:29Z
+-- ⚠️ NEVER APPLIED TO PRODUCTION — superseded by 20260612135859_restrict_user_profiles_pii_v2.sql
+--    (this version's GRANT list references columns that don't exist in prod:
+--    display_name/exp/level/badge — applying it would fail. Kept for history only.)
 -- Description: Restrict authenticated role from reading PII columns on user_profiles
 --
 -- CRITICAL SECURITY FIX: Any authenticated user could read email, wallet_address,
