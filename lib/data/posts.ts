@@ -101,6 +101,8 @@ export interface PostListOptions {
   author_handle?: string
   /** Filter posts by specific author IDs (for following feed) */
   author_ids?: string[]
+  /** Filter to specific post IDs (for personalized feed — posts.author_id has no FK, so PostgREST embeds are unsupported; this reuses the two-step author merge) */
+  post_ids?: string[]
   sort_by?: 'created_at' | 'hot_score' | 'like_count'
   sort_order?: 'asc' | 'desc'
   viewer_id?: string
@@ -254,6 +256,7 @@ export async function getPosts(
     group_ids,
     author_handle,
     author_ids,
+    post_ids,
     sort_by = 'created_at',
     sort_order = 'desc',
     viewer_id,
@@ -275,6 +278,11 @@ export async function getPosts(
   // Following feed: filter to specific author IDs
   if (author_ids && author_ids.length > 0) {
     query = query.in('author_id', author_ids)
+  }
+
+  // Personalized feed: filter to specific post IDs
+  if (post_ids && post_ids.length > 0) {
+    query = query.in('id', post_ids)
   }
 
   // Visibility filtering: unauthenticated users only see public posts

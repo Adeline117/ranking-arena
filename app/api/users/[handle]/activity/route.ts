@@ -13,10 +13,7 @@ export type ActivityItem = {
  * GET /api/users/[handle]/activity
  * Aggregated recent activity feed for a user profile
  */
-export async function GET(
-  req: NextRequest,
-  { params }: { params: Promise<{ handle: string }> }
-) {
+export async function GET(req: NextRequest, { params }: { params: Promise<{ handle: string }> }) {
   try {
     const { handle } = await params
     const supabase = getSupabaseAdmin() as SupabaseClient
@@ -55,7 +52,9 @@ export async function GET(
       // Recent trader follows
       supabase
         .from('trader_follows')
-        .select('id, created_at, trader_id, traders(handle, display_name)')
+        // The legacy `traders` table was dropped (use trader_sources) — the
+        // traders(...) embed fails with PGRST200 and silently killed this branch.
+        .select('id, created_at, trader_id')
         .eq('user_id', profile.id)
         .order('created_at', { ascending: false })
         .limit(limit),
@@ -102,7 +101,7 @@ export async function GET(
         id: `follow-${f.id}`,
         type: 'follow_trader',
         timestamp: f.created_at,
-        data: { traderId: f.trader_id, trader: (f as Record<string, unknown>).traders },
+        data: { traderId: f.trader_id, trader: null },
       })
     }
 

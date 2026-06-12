@@ -17,7 +17,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = new Map()
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -29,14 +31,21 @@ jest.mock('next/server', () => {
     headers: Map<string, string>
     method: string
     _body: unknown
-    constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
+    constructor(
+      url: string,
+      opts?: { headers?: Record<string, string>; method?: string; body?: unknown }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...opts?.headers }))
+      this.headers = new Map(
+        Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...opts?.headers })
+      )
       this.method = opts?.method || 'POST'
       this._body = opts?.body
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
@@ -51,9 +60,15 @@ jest.mock('@/lib/utils/rate-limit', () => ({
 
 const mockGetAuthUser = jest.fn()
 
-// Supabase mock: supports chained .from().select().eq().single() and .from().upsert()
-const mockProfileResult = { data: { totp_enabled: false }, error: null }
-const mockUpsertResult = { error: null }
+// Supabase mock: supports chained .from().select().eq().maybeSingle() and .from().upsert()
+const mockProfileResult: {
+  data: { totp_enabled: boolean } | null
+  error: { message: string; code: string } | null
+} = {
+  data: { totp_enabled: false },
+  error: null,
+}
+const mockUpsertResult: { error: { message: string; code: string } | null } = { error: null }
 
 const mockSupabase = {
   from: jest.fn((table: string) => {
@@ -61,7 +76,7 @@ const mockSupabase = {
       return {
         select: jest.fn().mockReturnValue({
           eq: jest.fn().mockReturnValue({
-            single: jest.fn().mockResolvedValue(mockProfileResult),
+            maybeSingle: jest.fn().mockResolvedValue(mockProfileResult),
           }),
         }),
       }
@@ -74,6 +89,7 @@ const mockSupabase = {
     return {
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: null, error: null }),
       single: jest.fn().mockResolvedValue({ data: null, error: null }),
       upsert: jest.fn().mockResolvedValue({ error: null }),
     }
@@ -108,7 +124,12 @@ jest.mock('qrcode', () => ({
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
-  createLogger: jest.fn(() => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() })),
+  createLogger: jest.fn(() => ({
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+  })),
   fireAndForget: jest.fn(),
 }))
 
@@ -193,9 +214,7 @@ describe('POST /api/settings/2fa/setup', () => {
     expect(body.uri).toContain('otpauth://totp/')
     expect(body.qrCode).toContain('data:image/png')
     expect(mockGenerateTotpSecret).toHaveBeenCalledWith('test@test.com')
-    expect(mockToDataURL).toHaveBeenCalledWith(
-      expect.stringContaining('otpauth://totp/')
-    )
+    expect(mockToDataURL).toHaveBeenCalledWith(expect.stringContaining('otpauth://totp/'))
   })
 
   it('uses user.id as label when email is not available', async () => {
@@ -217,6 +236,21 @@ describe('POST /api/settings/2fa/setup', () => {
 
     expect(res.status).toBe(200)
     expect(mockSupabase.from).toHaveBeenCalledWith('user_2fa_secrets')
+  })
+
+  it('proceeds with setup when no profile row exists (new auth user)', async () => {
+    // maybeSingle returns data: null, error: null for 0 rows — must not 500
+    mockProfileResult.data = null
+    mockProfileResult.error = null
+
+    const req = new NextRequest('http://localhost/api/settings/2fa/setup', {
+      method: 'POST',
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.secret).toBe('JBSWY3DPEHPK3PXP')
   })
 
   // --- Error Handling ---

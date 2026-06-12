@@ -32,7 +32,10 @@ export function getLocalHistory(): string[] {
     if (!stored) return []
     return JSON.parse(stored)
   } catch (err) {
-    logger.debug('[search-history] failed to parse local history:', err instanceof Error ? err.message : String(err))
+    logger.debug(
+      '[search-history] failed to parse local history:',
+      err instanceof Error ? err.message : String(err)
+    )
     return []
   }
 }
@@ -46,7 +49,10 @@ export function saveLocalHistory(history: string[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(history.slice(0, MAX_HISTORY_ITEMS)))
   } catch (err) {
-    logger.debug('[search-history] localStorage write failed:', err instanceof Error ? err.message : String(err))
+    logger.debug(
+      '[search-history] localStorage write failed:',
+      err instanceof Error ? err.message : String(err)
+    )
   }
 }
 
@@ -59,10 +65,10 @@ export async function addToHistory(query: string, userId?: string): Promise<stri
 
   // Update local history first (for immediate UI feedback)
   const currentHistory = getLocalHistory()
-  const newHistory = [
-    trimmed,
-    ...currentHistory.filter(item => item !== trimmed)
-  ].slice(0, MAX_HISTORY_ITEMS)
+  const newHistory = [trimmed, ...currentHistory.filter((item) => item !== trimmed)].slice(
+    0,
+    MAX_HISTORY_ITEMS
+  )
 
   saveLocalHistory(newHistory)
 
@@ -83,7 +89,7 @@ export async function addToHistory(query: string, userId?: string): Promise<stri
  */
 export async function removeFromHistory(query: string, userId?: string): Promise<string[]> {
   const currentHistory = getLocalHistory()
-  const newHistory = currentHistory.filter(item => item !== query)
+  const newHistory = currentHistory.filter((item) => item !== query)
 
   saveLocalHistory(newHistory)
 
@@ -121,7 +127,7 @@ export async function clearHistory(userId?: string): Promise<void> {
 async function syncHistoryToServer(userId: string, history: string[]): Promise<void> {
   const historyItems: SearchHistoryItem[] = history.map((query, index) => ({
     query,
-    timestamp: Date.now() - index * 1000 // Preserve order
+    timestamp: Date.now() - index * 1000, // Preserve order
   }))
 
   const { error } = await supabase
@@ -139,11 +145,13 @@ async function syncHistoryToServer(userId: string, history: string[]): Promise<v
  */
 export async function loadAndMergeHistory(userId: string): Promise<string[]> {
   try {
+    // maybeSingle: auth users without a user_profiles row yet (profile created
+    // elsewhere) are a legitimate state — .single() would 406 on 0 rows.
     const { data, error } = await supabase
       .from('user_profiles')
       .select('search_history')
       .eq('id', userId)
-      .single()
+      .maybeSingle()
 
     if (error) throw error
 
@@ -153,7 +161,7 @@ export async function loadAndMergeHistory(userId: string): Promise<string[]> {
     // Merge histories, preferring more recent items
     const mergedMap = new Map<string, number>()
 
-    serverHistory.forEach(item => {
+    serverHistory.forEach((item) => {
       mergedMap.set(item.query, item.timestamp)
     })
 
@@ -176,13 +184,10 @@ export async function loadAndMergeHistory(userId: string): Promise<string[]> {
     // Update server with merged history
     const historyItems: SearchHistoryItem[] = merged.map((query, index) => ({
       query,
-      timestamp: Date.now() - index * 1000
+      timestamp: Date.now() - index * 1000,
     }))
 
-    await supabase
-      .from('user_profiles')
-      .update({ search_history: historyItems })
-      .eq('id', userId)
+    await supabase.from('user_profiles').update({ search_history: historyItems }).eq('id', userId)
 
     return merged
   } catch (error) {

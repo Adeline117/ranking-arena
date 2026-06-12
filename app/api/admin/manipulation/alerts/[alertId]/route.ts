@@ -26,12 +26,13 @@ interface AlertUpdateRequest {
 // GET - Get Alert Details
 // ============================================
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: { alertId: string } }
-) {
+export async function GET(request: NextRequest, { params }: { params: { alertId: string } }) {
   // Admin operation — failClose rate limiting
-  const rateLimitResponse = await checkRateLimit(request, { ...RateLimitPresets.sensitive, prefix: 'admin-alert-detail', failClose: true })
+  const rateLimitResponse = await checkRateLimit(request, {
+    ...RateLimitPresets.sensitive,
+    prefix: 'admin-alert-detail',
+    failClose: true,
+  })
   if (rateLimitResponse) return rateLimitResponse
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -41,9 +42,10 @@ export async function GET(
   if (!authHeader) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
-  const { data: { user: getUser }, error: getAuthError } = await supabase.auth.getUser(
-    authHeader.replace('Bearer ', '')
-  )
+  const {
+    data: { user: getUser },
+    error: getAuthError,
+  } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
   if (getAuthError || !getUser) {
     return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
   }
@@ -51,7 +53,7 @@ export async function GET(
     .from('user_profiles')
     .select('role')
     .eq('id', getUser.id)
-    .single()
+    .maybeSingle()
   if (getProfile?.role !== 'admin') {
     return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
   }
@@ -62,10 +64,12 @@ export async function GET(
     // Fetch alert with related data
     const { data: alert, error } = await supabase
       .from('manipulation_alerts')
-      .select(`
+      .select(
+        `
         *,
         trader_flags:trader_flags(*)
-      `)
+      `
+      )
       .eq('id', alertId)
       .single()
 
@@ -105,12 +109,13 @@ export async function GET(
 // PATCH - Update Alert
 // ============================================
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: { alertId: string } }
-) {
+export async function PATCH(request: NextRequest, { params }: { params: { alertId: string } }) {
   // Admin sensitive write — failClose rate limiting
-  const rateLimitResp = await checkRateLimit(request, { ...RateLimitPresets.sensitive, prefix: 'admin-alert-update', failClose: true })
+  const rateLimitResp = await checkRateLimit(request, {
+    ...RateLimitPresets.sensitive,
+    prefix: 'admin-alert-update',
+    failClose: true,
+  })
   if (rateLimitResp) return rateLimitResp
 
   const supabase = getSupabaseAdmin() as SupabaseClient
@@ -125,9 +130,10 @@ export async function PATCH(
 
   try {
     // Verify admin role
-    const { data: { user }, error: authError } = await supabase.auth.getUser(
-      authHeader.replace('Bearer ', '')
-    )
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
 
     if (authError || !user) {
       return NextResponse.json({ error: 'Invalid token' }, { status: 401 })
@@ -138,7 +144,7 @@ export async function PATCH(
       .from('user_profiles')
       .select('role')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
     if (patchProfile?.role !== 'admin') {
       return NextResponse.json({ error: 'Admin access required' }, { status: 403 })
     }
@@ -146,7 +152,9 @@ export async function PATCH(
     // Get current alert
     const { data: currentAlert, error: fetchError } = await supabase
       .from('manipulation_alerts')
-      .select('id, status, platform, market_type, trader_key, alert_type, severity, details, created_at, resolved_at, resolved_by, resolution_notes')
+      .select(
+        'id, status, platform, market_type, trader_key, alert_type, severity, details, created_at, resolved_at, resolved_by, resolution_notes'
+      )
       .eq('id', alertId)
       .single()
 
@@ -163,10 +171,7 @@ export async function PATCH(
     }
 
     if (!update.status && !update.resolution_notes) {
-      return NextResponse.json(
-        { error: 'No update fields provided' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'No update fields provided' }, { status: 400 })
     }
 
     // Build update object

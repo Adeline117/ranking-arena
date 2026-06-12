@@ -454,7 +454,6 @@ export const GET = withPublic(
     interface UserRow {
       id: string
       handle: string | null
-      display_name: string | null
       avatar_url: string | null
       bio: string | null
     }
@@ -538,8 +537,9 @@ export const GET = withPublic(
         ? safeQuery(
             supabase
               .from('user_profiles')
-              .select('id, handle, display_name, avatar_url, bio')
-              .or(`handle.ilike.%${sanitizedQuery}%,display_name.ilike.%${sanitizedQuery}%`)
+              // user_profiles has no display_name column — selecting/filtering on it 400s with 42703
+              .select('id, handle, avatar_url, bio')
+              .ilike('handle', `%${sanitizedQuery}%`)
               .limit(limitPerCategory)
           )
         : Promise.resolve([]),
@@ -659,7 +659,7 @@ export const GET = withPublic(
     const users: UnifiedSearchResult[] = (usersData as UserRow[]).map((u) => ({
       id: u.id,
       type: 'user' as const,
-      title: u.display_name || `@${u.handle}`,
+      title: `@${u.handle}`,
       subtitle: u.handle ? `@${u.handle}` : undefined,
       href: `/u/${encodeURIComponent(u.handle || u.id)}`,
       avatar: u.avatar_url,

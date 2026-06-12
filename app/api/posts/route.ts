@@ -150,14 +150,18 @@ export const GET = withPublic(
 
         if (feedData && Array.isArray(feedData) && feedData.length > 0) {
           const postIds = feedData.map((r: { post_id: string }) => r.post_id)
-          const { data: fullPosts } = await supabase
-            .from('posts')
-            .select(
-              '*, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)'
-            )
-            .in('id', postIds)
+          // posts.author_id has no FK in prod, so the users!posts_author_id_fkey
+          // embed fails with PGRST200 (and users has no display_name column).
+          // getPosts does the canonical two-step author merge via user_profiles.
+          const fullPosts = await getPosts(supabase, {
+            post_ids: postIds,
+            limit: postIds.length,
+            viewer_id: user.id,
+            language: langFilter,
+          })
 
-          const postMap = new Map((fullPosts || []).map((p: { id: string }) => [p.id, p]))
+          const postMap = new Map(fullPosts.map((p) => [p.id, p]))
+          // Preserve RPC ranking order
           posts = postIds.map((id: string) => postMap.get(id)).filter(Boolean) as Awaited<
             ReturnType<typeof getPosts>
           >

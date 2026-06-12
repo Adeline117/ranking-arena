@@ -31,7 +31,15 @@ interface FlashNews {
   content?: string
   source: string
   source_url?: string
-  category?: 'crypto' | 'macro' | 'defi' | 'regulation' | 'market' | 'btc_eth' | 'altcoin' | 'exchange'
+  category?:
+    | 'crypto'
+    | 'macro'
+    | 'defi'
+    | 'regulation'
+    | 'market'
+    | 'btc_eth'
+    | 'altcoin'
+    | 'exchange'
   importance?: 'breaking' | 'important' | 'normal'
   tags?: string[]
   published_at?: string
@@ -68,17 +76,19 @@ export async function GET(request: NextRequest) {
       // (indexed published_at DESC).
       let query = supabase
         .from('flash_news')
-        .select('id, title, title_zh, title_en, source, category, importance, published_at, tags', { count: 'exact' })
+        .select('id, title, title_zh, title_en, source, category, importance, published_at, tags', {
+          count: 'exact',
+        })
         .order('published_at', { ascending: false })
         .range(offset, offset + limit - 1)
 
       // 添加筛选条件 — support new broad categories + legacy DB values
       const CATEGORY_MAP: Record<string, string[]> = {
-        btc_eth: ['crypto', 'btc_eth'],          // BTC/ETH: legacy 'crypto' + new 'btc_eth'
-        altcoin: ['market', 'altcoin'],           // 山寨币: legacy 'market' + new 'altcoin'
+        btc_eth: ['crypto', 'btc_eth'], // BTC/ETH: legacy 'crypto' + new 'btc_eth'
+        altcoin: ['market', 'altcoin'], // 山寨币: legacy 'market' + new 'altcoin'
         defi: ['defi'],
-        macro: ['macro', 'regulation'],           // 宏观/监管 combines both
-        exchange: ['exchange'],                   // 交易所
+        macro: ['macro', 'regulation'], // 宏观/监管 combines both
+        exchange: ['exchange'], // 交易所
       }
       if (category) {
         const mapped = CATEGORY_MAP[category]
@@ -109,9 +119,9 @@ export async function GET(request: NextRequest) {
           limit,
           total: count || 0,
           totalPages: Math.ceil((count || 0) / limit),
-          hasNext: count ? (page * limit) < count : false,
+          hasNext: count ? page * limit < count : false,
           hasPrev: page > 1,
-        }
+        },
       }
     }
 
@@ -126,7 +136,9 @@ export async function GET(request: NextRequest) {
       result = await fetchFromDb()
     }
 
-    return success(result, 200, { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120' })
+    return success(result, 200, {
+      'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=120',
+    })
   } catch (err: unknown) {
     return handleError(err)
   }
@@ -149,8 +161,10 @@ export async function POST(request: NextRequest) {
     const { data: userProfile } = await supabase
       .from('user_profiles')
       .select('role')
-      .eq('user_id', user.id)
-      .single()
+      // user_profiles keys on `id` (no user_id column — filtering on it 400s with 42703,
+      // which made this admin check reject everyone); maybeSingle tolerates missing profiles
+      .eq('id', user.id)
+      .maybeSingle()
 
     if (!userProfile || userProfile.role !== 'admin') {
       return error('Insufficient permissions', 403)
@@ -177,7 +191,16 @@ export async function POST(request: NextRequest) {
     }
 
     // 验证分类 — support both legacy and new category values
-    const validCategories = ['crypto', 'macro', 'defi', 'regulation', 'market', 'btc_eth', 'altcoin', 'exchange']
+    const validCategories = [
+      'crypto',
+      'macro',
+      'defi',
+      'regulation',
+      'market',
+      'btc_eth',
+      'altcoin',
+      'exchange',
+    ]
     if (newsItem.category && !validCategories.includes(newsItem.category)) {
       return error('Invalid category', 400)
     }
@@ -235,8 +258,10 @@ export async function PUT(request: NextRequest) {
     const { data: userProfile } = await supabase
       .from('user_profiles')
       .select('role')
-      .eq('user_id', user.id)
-      .single()
+      // user_profiles keys on `id` (no user_id column — filtering on it 400s with 42703,
+      // which made this admin check reject everyone); maybeSingle tolerates missing profiles
+      .eq('id', user.id)
+      .maybeSingle()
 
     if (!userProfile || userProfile.role !== 'admin') {
       return error('Insufficient permissions', 403)
@@ -275,7 +300,16 @@ export async function PUT(request: NextRequest) {
     if (newsItem.tags) updateData.tags = newsItem.tags
 
     if (newsItem.category) {
-      const validCategories = ['crypto', 'macro', 'defi', 'regulation', 'market', 'btc_eth', 'altcoin', 'exchange']
+      const validCategories = [
+        'crypto',
+        'macro',
+        'defi',
+        'regulation',
+        'market',
+        'btc_eth',
+        'altcoin',
+        'exchange',
+      ]
       if (!validCategories.includes(newsItem.category)) {
         return error('Invalid category', 400)
       }
@@ -321,8 +355,10 @@ export async function DELETE(request: NextRequest) {
     const { data: userProfile } = await supabase
       .from('user_profiles')
       .select('role')
-      .eq('user_id', user.id)
-      .single()
+      // user_profiles keys on `id` (no user_id column — filtering on it 400s with 42703,
+      // which made this admin check reject everyone); maybeSingle tolerates missing profiles
+      .eq('id', user.id)
+      .maybeSingle()
 
     if (!userProfile || userProfile.role !== 'admin') {
       return error('Insufficient permissions', 403)
@@ -335,10 +371,7 @@ export async function DELETE(request: NextRequest) {
       return error('Missing flash news ID', 400)
     }
 
-    const { error: deleteError } = await supabase
-      .from('flash_news')
-      .delete()
-      .eq('id', newsId)
+    const { error: deleteError } = await supabase.from('flash_news').delete().eq('id', newsId)
 
     if (deleteError) {
       logger.error('[flash-news] 删除Failed:', deleteError)

@@ -16,23 +16,22 @@ export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
   async ({ user, supabase }) => {
-    // Check that 2FA is enabled
+    // Check that 2FA is enabled.
+    // maybeSingle: auth users without a user_profiles row yet are a legitimate
+    // state — no profile row means 2FA was never enabled.
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('totp_enabled')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (profileError || !profile) {
+    if (profileError) {
       logger.error('[2FA Backup Codes] Profile fetch error:', profileError)
       return serverError('Failed to fetch user profile')
     }
 
-    if (!profile.totp_enabled) {
-      return NextResponse.json(
-        { error: '2FA is not enabled. Enable 2FA first.' },
-        { status: 400 }
-      )
+    if (!profile?.totp_enabled) {
+      return NextResponse.json({ error: '2FA is not enabled. Enable 2FA first.' }, { status: 400 })
     }
 
     // Generate new backup codes
@@ -55,9 +54,7 @@ export const POST = withAuth(
     }
 
     // Insert new hashed codes
-    const { error: insertError } = await supabase
-      .from('backup_codes')
-      .insert(hashedCodes)
+    const { error: insertError } = await supabase.from('backup_codes').insert(hashedCodes)
 
     if (insertError) {
       logger.error('[2FA Backup Codes] Insert error:', insertError)

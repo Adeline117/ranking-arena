@@ -48,7 +48,10 @@ export const POST = withAuth(
     }
 
     if (description && description.length > 500) {
-      return NextResponse.json({ error: 'Group description cannot exceed 500 characters' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Group description cannot exceed 500 characters' },
+        { status: 400 }
+      )
     }
 
     // 如果要创建 Pro 专属小组，需要验证用户是 Pro 会员
@@ -57,12 +60,15 @@ export const POST = withAuth(
         .from('user_profiles')
         .select('subscription_tier')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
       const isPro = (profile as { subscription_tier?: string } | null)?.subscription_tier === 'pro'
 
       if (!isPro) {
-        return NextResponse.json({ error: 'Only Pro members can create exclusive groups' }, { status: 403 })
+        return NextResponse.json(
+          { error: 'Only Pro members can create exclusive groups' },
+          { status: 403 }
+        )
       }
     }
 
@@ -74,15 +80,14 @@ export const POST = withAuth(
         .eq('applicant_id', user.id)
         .eq('status', 'pending')
         .maybeSingle(),
-      supabase
-        .from('groups')
-        .select('id')
-        .eq('name', name.trim())
-        .maybeSingle(),
+      supabase.from('groups').select('id').eq('name', name.trim()).maybeSingle(),
     ])
 
     if (existingApplication) {
-      return NextResponse.json({ error: 'You already have a pending group application' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'You already have a pending group application' },
+        { status: 400 }
+      )
     }
 
     if (existingGroup) {
@@ -96,10 +101,12 @@ export const POST = withAuth(
     }
 
     // 合并用户提供的角色名称
-    const finalRoleNames = role_names ? {
-      admin: { ...defaultRoleNames.admin, ...role_names.admin },
-      member: { ...defaultRoleNames.member, ...role_names.member },
-    } : defaultRoleNames
+    const finalRoleNames = role_names
+      ? {
+          admin: { ...defaultRoleNames.admin, ...role_names.admin },
+          member: { ...defaultRoleNames.member, ...role_names.member },
+        }
+      : defaultRoleNames
 
     // 创建申请 (auto-approved)
     const { data: application, error: insertError } = await supabase
@@ -126,7 +133,12 @@ export const POST = withAuth(
     }
 
     // Auto-create the group immediately
-    const slug = name.trim().toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-').replace(/^-|-$/g, '') || `group-${Date.now()}`
+    const slug =
+      name
+        .trim()
+        .toLowerCase()
+        .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
+        .replace(/^-|-$/g, '') || `group-${Date.now()}`
     const { data: newGroup, error: groupError } = await supabase
       .from('groups')
       .insert({
@@ -183,7 +195,9 @@ export const GET = withAuth(
     // 获取用户的所有申请
     const { data: applications, error } = await supabase
       .from('group_applications')
-      .select('id, applicant_id, name, name_en, description, description_en, avatar_url, role_names, rules_json, rules, is_premium_only, status, reject_reason, reviewed_at, reviewed_by, created_at')
+      .select(
+        'id, applicant_id, name, name_en, description, description_en, avatar_url, role_names, rules_json, rules, is_premium_only, status, reject_reason, reviewed_at, reviewed_by, created_at'
+      )
       .eq('applicant_id', user.id)
       .order('created_at', { ascending: false })
 
