@@ -42,10 +42,13 @@ export type TraderSource =
   | 'lbank'
   | 'blofin'
   | 'bitmart'
+  | 'bitmart_futures'
+  | 'bitget_cfd'
   // CEX spot
   | 'binance_spot'
   | 'bitget_spot'
   | 'bybit_spot'
+  | 'htx_spot'
   | 'okx_spot'
   | 'bingx_spot'
   // CEX web3 / wallets
@@ -107,6 +110,7 @@ export const ALL_SOURCES: TraderSource[] = [
   'bingx',
   'gateio',
   'xt',
+  'lbank',
   'blofin',
   // CEX spot
   'binance_spot',
@@ -155,8 +159,8 @@ export const DEAD_BLOCKED_PLATFORMS: TraderSource[] = [
   'vertex' as TraderSource, // No public leaderboard API — competition backend DNS dead, SDK has 0 leaderboard endpoints (2026-04-01)
   'apex_pro' as TraderSource, // No public leaderboard API — tested 8+ endpoint patterns all 404, docs have 0 leaderboard endpoints (2026-04-01)
   'rabbitx' as TraderSource, // ALL domains DNS dead — rabbitx.io, api.rabbitx.com, api.prod.rabbitx.io all NXDOMAIN (2026-04-01)
-  'lbank', // Copy-trading API 404 since 2026-04 — endpoint removed
-  'bitget_spot' as TraderSource, // No leaderboard API — permanently disabled
+  // 'lbank' — REVIVED 2026-06-12: arena ingest pipeline (lbank_futures adapter) writes compat rows
+  // 'bitget_spot' — REVIVED 2026-06-12: arena ingest pipeline (Phase 0) writes compat rows
   'web3_bot', // Not in leaderboard_ranks (compute-leaderboard doesn't process it)
   'drift', // API returns empty leaderboard since $270M exploit (2026-04-01), 0 rows in leaderboard_ranks — confirmed 2026-05-18
   // 'bybit' — RECOVERED 2026-04-08: DB seed fallback keeps existing traders fresh via leader-details API (which is NOT WAF-blocked, only dynamic-leader-list is)
@@ -219,6 +223,7 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   'bingx',
   'gateio',
   'xt',
+  'lbank',
   'blofin',
   'btcc',
   'bitfinex',
@@ -256,6 +261,8 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'binance_futures',
   'bybit',
   'bitget_futures',
+  'bitget_cfd',
+  'bitmart_futures',
   'okx_futures',
   'mexc',
   'htx_futures',
@@ -263,6 +270,7 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'bingx',
   'gateio',
   'xt',
+  'lbank',
   'blofin',
   'btcc',
   'bitfinex',
@@ -275,6 +283,8 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'etoro',
   // CEX spot
   'binance_spot',
+  'bitget_spot',
+  'htx_spot',
   'bybit_spot',
   'okx_spot',
   // Web3 / DEX
@@ -427,6 +437,22 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
     trustWeight: 0.65,
     roiType: 'mixed',
   },
+  // ENDGAME (ARENA_DATA_SPEC v1.2): compat platforms written by the arena
+  // ingest pipeline that had no legacy counterpart.
+  bitmart_futures: {
+    name: 'BitMart',
+    sourceType: 'futures',
+    reliability: 65,
+    trustWeight: 0.65,
+    roiType: 'mixed',
+  },
+  bitget_cfd: {
+    name: 'Bitget CFD',
+    sourceType: 'futures',
+    reliability: 68,
+    trustWeight: 0.85,
+    roiType: 'mixed',
+  },
   // CEX spot
   binance_spot: {
     name: 'Binance Spot',
@@ -440,6 +466,13 @@ export const EXCHANGE_CONFIG: Record<TraderSource, ExchangeConfig> = {
     sourceType: 'spot',
     reliability: 65,
     trustWeight: 0.8,
+    roiType: 'mixed',
+  },
+  htx_spot: {
+    name: 'HTX Spot',
+    sourceType: 'spot',
+    reliability: 90,
+    trustWeight: 0.9,
     roiType: 'mixed',
   },
   bybit_spot: {
