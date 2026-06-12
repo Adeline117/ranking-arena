@@ -6,6 +6,7 @@ import { Box, Text } from '@/app/components/base'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { CommentIcon, ThumbsUpIcon } from '@/app/components/ui/icons'
 import { renderContentWithLinks } from '@/lib/utils/content'
+import type { Language } from '@/lib/i18n'
 import type { Post } from '../types'
 
 const ARENA_PURPLE = tokens.colors.accent.brand
@@ -21,6 +22,7 @@ interface PostCardProps {
   onOpenPost: (post: Post) => void
   localizedName: (zh: string, en?: string | null) => string
   t: (key: string) => string
+  language: Language
 }
 
 export function PostCard({
@@ -34,6 +36,7 @@ export function PostCard({
   onOpenPost,
   localizedName,
   t,
+  language,
 }: PostCardProps) {
   const displayBody = translatedBody || p.body
   const displayTitle =
@@ -281,9 +284,7 @@ export function PostCard({
           )}
         </span>
         <Text size="xs" color="tertiary">
-          {p.created_at
-            ? formatTimeAgo(p.created_at, (t('locale') || 'en') as 'en' | 'zh' | 'ja' | 'ko')
-            : p.time}
+          {p.created_at ? formatTimeAgo(p.created_at, language) : p.time}
         </Text>
         <span
           style={{
