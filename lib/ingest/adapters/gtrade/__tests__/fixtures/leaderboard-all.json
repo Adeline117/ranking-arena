@@ -1,0 +1,170 @@
+{
+  "1": [
+    {
+      "address": "0x95465e180697879cdD127b210C4830a16E3f96e4",
+      "count": 1,
+      "count_win": "1",
+      "count_loss": "0",
+      "avg_win": 12849.975631,
+      "avg_loss": 0,
+      "total_pnl": 12849.975631,
+      "total_pnl_usd": 12846.594802411484
+    },
+    {
+      "address": "0xc16B8dDcEF47A74C9b76cd28E6834270090D72dD",
+      "count": 6,
+      "count_win": "6",
+      "count_loss": "0",
+      "avg_win": 1673.8634731666668,
+      "avg_loss": 0,
+      "total_pnl": 10043.180839,
+      "total_pnl_usd": 10040.296519385372
+    },
+    {
+      "address": "0xd8356f27e9922b0152360e1aFF45f9cC003ED1be",
+      "count": 45,
+      "count_win": "42",
+      "count_loss": "3",
+      "avg_win": 156.56557476190477,
+      "avg_loss": -103.187364,
+      "total_pnl": 6266.192048,
+      "total_pnl_usd": 6264.620266393792
+    },
+    {
+      "address": "0xba19ab7248D194cdfc53C9cE57F3741B4518EED6",
+      "count": 2,
+      "count_win": "2",
+      "count_loss": "0",
+      "avg_win": 2786.261874,
+      "avg_loss": 0,
+      "total_pnl": 5572.523748,
+      "total_pnl_usd": 5571.37408062555
+    }
+  ],
+  "7": [
+    {
+      "address": "0x3da3B64E63b57Ed4926D4D9836cd08e0FFc830a0",
+      "count": 42,
+      "count_win": "35",
+      "count_loss": "7",
+      "avg_win": 7047.503856828571,
+      "avg_loss": -4619.2901627142855,
+      "total_pnl": 214327.60385,
+      "total_pnl_usd": 214258.18605346416
+    },
+    {
+      "address": "0x95465e180697879cdD127b210C4830a16E3f96e4",
+      "count": 8,
+      "count_win": "6",
+      "count_loss": "2",
+      "avg_win": 18098.32329483333,
+      "avg_loss": -621.989924,
+      "total_pnl": 107345.959921,
+      "total_pnl_usd": 107316.53759316428
+    },
+    {
+      "address": "0xc16B8dDcEF47A74C9b76cd28E6834270090D72dD",
+      "count": 15,
+      "count_win": "15",
+      "count_loss": "0",
+      "avg_win": 4140.703191999999,
+      "avg_loss": 0,
+      "total_pnl": 62110.54787999999,
+      "total_pnl_usd": 62092.13551502446
+    },
+    {
+      "address": "0x0D78fF46a85a9354924d99Af3db4Fa403cbB9900",
+      "count": 85,
+      "count_win": "41",
+      "count_loss": "44",
+      "avg_win": 2419.245291463414,
+      "avg_loss": -943.6234955909092,
+      "total_pnl": 57669.623144,
+      "total_pnl_usd": 57650.98732004864
+    }
+  ],
+  "30": [
+    {
+      "address": "0x3da3B64E63b57Ed4926D4D9836cd08e0FFc830a0",
+      "count": 46,
+      "count_win": "37",
+      "count_loss": "9",
+      "avg_win": 6750.932912,
+      "avg_loss": -4805.315797666666,
+      "total_pnl": 206536.675565,
+      "total_pnl_usd": 206469.53525983784
+    },
+    {
+      "address": "0x95465e180697879cdD127b210C4830a16E3f96e4",
+      "count": 44,
+      "count_win": "22",
+      "count_loss": "22",
+      "avg_win": 6100.541945409091,
+      "avg_loss": -1115.137939681818,
+      "total_pnl": 109678.888126,
+      "total_pnl_usd": 109648.940198999
+    },
+    {
+      "address": "0x0D78fF46a85a9354924d99Af3db4Fa403cbB9900",
+      "count": 212,
+      "count_win": "130",
+      "count_loss": "82",
+      "avg_win": 1215.383917207693,
+      "avg_loss": -673.9815482804877,
+      "total_pnl": 102733.422278,
+      "total_pnl_usd": 102698.3302771992
+    },
+    {
+      "address": "0xc16B8dDcEF47A74C9b76cd28E6834270090D72dD",
+      "count": 26,
+      "count_win": "25",
+      "count_loss": "1",
+      "avg_win": 2540.01859356,
+      "avg_loss": -14.830848,
+      "total_pnl": 63485.633991,
+      "total_pnl_usd": 63466.78255869608
+    }
+  ],
+  "90": [
+    {
+      "address": "0x3da3B64E63b57Ed4926D4D9836cd08e0FFc830a0",
+      "count": 137,
+      "count_win": "77",
+      "count_loss": "60",
+      "avg_win": 4480.603451155844,
+      "avg_loss": -2015.8507965,
+      "total_pnl": 224055.417949,
+      "total_pnl_usd": 223985.394774692
+    },
+    {
+      "address": "0x95465e180697879cdD127b210C4830a16E3f96e4",
+      "count": 162,
+      "count_win": "86",
+      "count_loss": "76",
+      "avg_win": 4000.364434581397,
+      "avg_loss": -2110.2489549210527,
+      "total_pnl": 183652.42080000008,
+      "total_pnl_usd": 183622.53270627972
+    },
+    {
+      "address": "0x0D78fF46a85a9354924d99Af3db4Fa403cbB9900",
+      "count": 703,
+      "count_win": "437",
+      "count_loss": "266",
+      "avg_win": 737.2606343066359,
+      "avg_loss": -532.5893711090224,
+      "total_pnl": 180514.12447699995,
+      "total_pnl_usd": 180465.70991878695
+    },
+    {
+      "address": "0x0Bd27FAc898a59680b9dc92bB7378Df610825E8D",
+      "count": 189,
+      "count_win": "139",
+      "count_loss": "50",
+      "avg_win": 1341.3679647122306,
+      "avg_loss": -1905.95486486,
+      "total_pnl": 91152.40385200002,
+      "total_pnl_usd": 91135.7958042913
+    }
+  ]
+}
