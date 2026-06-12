@@ -2,6 +2,19 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## UX/UI 根源优化三轮（2026-06-12，44 commits 全上线）
+
+计划: `~/.claude/plans/rippling-exploring-bumblebee.md`。3 探索 + 1 设计 + 5 实施 agent 协作。
+
+- **感知性能**：周期切换零骨架闪屏（loading/isRefreshing 拆分 + silent 轮询）、16 个 useQuery placeholderData、REFETCH\_\* 五档、排行 CLS 根除、页脚活时间戳
+- **护栏**：ESLint hex/中文死 fallback 选择器 + **ratchet 25 文件 error 级锁定**；.hover-bg/.tap-target 共享类；LINTING_GUIDE.md 落地；27 处 t()||'中文' 死代码清零
+- **付费墙 18/18 统一**：ProGate（blur/inline/modal + benefits）+ ProUpsellModal；死胡同 toast/硬跳全改漏斗闭环；PremiumGate @deprecated、PaywallOverlay/ProUpgradeCTA 删除。**CLAUDE.md 已加 MANDATORY PATTERN**
+- **SSR**：9 页转 server shell（search/login/notifications/following/favorites/inbox/compare/flash-news/competitions/help/legal×3）；整页客户端 50→35（剩余为 admin/auth 低价值流）
+- **SSR↔水合色移根除**：SSRRankingTable 评分阈值/PnL 绿/类型标签三处真实分叉统一到 getScoreColorInfo + 语义变量；品牌渐变 + 奖牌渐变双主题化
+- **遗留（深水区）**：trader 详情 SSR 超时降级路径（需 resolve 层架构改造）；~34 低流量页按需转换
+
+---
+
 ## Retro 2026-06-02
 
 159 commits / 6 days. Backend overhaul (BullMQ worker, hot/cold split, 32 platforms), 4 parallel audits (56 issues → all resolved), 11 migrations, 66 i18n keys added. See `docs/retros/retro-2026-06-02.md`.
