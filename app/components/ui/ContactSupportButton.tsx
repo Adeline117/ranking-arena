@@ -10,8 +10,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 
-const SUPPORT_HANDLE = 'adeline'
-const SUPPORT_EMAIL = 'adelinewen1107@outlook.com'
+const SUPPORT_HANDLE = 'Adeline'
 
 type ContactSupportButtonProps = {
   size?: 'sm' | 'md' | 'lg'
@@ -33,8 +32,8 @@ export default function ContactSupportButton({
   const { t } = useLanguage()
   const [loading, setLoading] = useState(false)
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [supportUserId, setSupportUserId] = useState<string | null>(null)
   const pendingRef = useRef(false)
+  const supportUserIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     const init = async () => {
@@ -42,30 +41,25 @@ export default function ContactSupportButton({
         data: { user },
       } = await supabase.auth.getUser()
       setCurrentUserId(user?.id || null)
-
-      const { data: supportUser } = await supabase
-        .from('user_profiles')
-        .select('id')
-        .eq('handle', SUPPORT_HANDLE)
-        .maybeSingle()
-
-      if (supportUser) {
-        setSupportUserId(supportUser.id)
-      } else {
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('email', SUPPORT_EMAIL)
-          .maybeSingle()
-
-        if (profile) {
-          setSupportUserId(profile.id)
-        }
-      }
     }
 
     init()
   }, [])
+
+  // Resolved lazily on click (and cached) so anonymous visitors never
+  // trigger a user_profiles query. ilike = case-insensitive handle match.
+  const resolveSupportUserId = async (): Promise<string | null> => {
+    if (supportUserIdRef.current) return supportUserIdRef.current
+
+    const { data: supportUser } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .ilike('handle', SUPPORT_HANDLE)
+      .maybeSingle()
+
+    supportUserIdRef.current = supportUser?.id || null
+    return supportUserIdRef.current
+  }
 
   const handleClick = async () => {
     // Check pending state FIRST to prevent race conditions
@@ -78,6 +72,8 @@ export default function ContactSupportButton({
       pendingRef.current = false
       return
     }
+
+    const supportUserId = await resolveSupportUserId()
 
     if (!supportUserId) {
       showToast(t('supportUnavailable'), 'error')
