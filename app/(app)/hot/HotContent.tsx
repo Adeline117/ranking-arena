@@ -246,6 +246,7 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                               onOpenPost={handleOpenPost}
                               localizedName={localizedName}
                               t={t}
+                              language={_language}
                             />
                           )
                         })}
