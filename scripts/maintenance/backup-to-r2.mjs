@@ -12,8 +12,18 @@
 
 import { execSync } from 'child_process'
 import { createReadStream, statSync, unlinkSync } from 'fs'
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import {
+  S3Client,
+  PutObjectCommand,
+  ListObjectsV2Command,
+  DeleteObjectsCommand,
+} from '@aws-sdk/client-s3'
 import 'dotenv/config'
+
+// Retention: daily (trader-tables) backups kept this many days; full backups
+// keep the N newest regardless of age (they are the only complete restore points)
+const DAILY_RETENTION_DAYS = 14
+const FULL_BACKUPS_TO_KEEP = 3
 
 const TRADER_TABLES = [
   // Core trader data
@@ -135,12 +145,68 @@ async function run() {
 
     // Cleanup local file
     unlinkSync(localPath)
+
+    await pruneOldBackups()
   } catch (err) {
     console.error(`[backup] ✗ Failed:`, err.message)
     try {
       unlinkSync(localPath)
     } catch {}
     process.exit(1)
+  }
+}
+
+// Prune objects outside retention. Failures here must never fail the backup
+// run itself — the upload already succeeded.
+async function pruneOldBackups() {
+  try {
+    let token
+    const all = []
+    do {
+      const r = await s3.send(
+        new ListObjectsV2Command({
+          Bucket: R2_BUCKET,
+          Prefix: 'db-backups/',
+          ContinuationToken: token,
+        })
+      )
+      all.push(...(r.Contents || []))
+      token = r.NextContinuationToken
+    } while (token)
+
+    const dateOf = (k) => (k.match(/arena-backup-(\d{8})/) || [])[1] || ''
+    const isFull = (k) => k.includes('-full')
+    const cutoffDate = new Date(Date.now() - DAILY_RETENTION_DAYS * 86_400_000)
+    const cutoff = cutoffDate.toISOString().slice(0, 10).replace(/-/g, '')
+    const keepFulls = new Set(
+      all
+        .filter((o) => isFull(o.Key))
+        .sort((a, b) => dateOf(b.Key).localeCompare(dateOf(a.Key)))
+        .slice(0, FULL_BACKUPS_TO_KEEP)
+        .map((o) => o.Key)
+    )
+    const toDelete = all.filter((o) =>
+      isFull(o.Key) ? !keepFulls.has(o.Key) : dateOf(o.Key) !== '' && dateOf(o.Key) < cutoff
+    )
+    if (toDelete.length === 0) {
+      console.log('[backup] Retention: nothing to prune')
+      return
+    }
+    const freedMB = (toDelete.reduce((s, o) => s + o.Size, 0) / 1048576).toFixed(0)
+    // DeleteObjects caps at 1000 keys per call; retention never approaches that
+    const r = await s3.send(
+      new DeleteObjectsCommand({
+        Bucket: R2_BUCKET,
+        Delete: { Objects: toDelete.map((o) => ({ Key: o.Key })) },
+      })
+    )
+    const errs = r.Errors || []
+    console.log(
+      `[backup] Retention: pruned ${(r.Deleted || []).length} objects (${freedMB} MB)` +
+        (errs.length ? `, ${errs.length} errors: ${errs.map((e) => e.Key).join(', ')}` : '')
+    )
+  } catch (err) {
+    console.error('[backup] Retention prune failed (backup itself succeeded):', err.message)
   }
 }
 
