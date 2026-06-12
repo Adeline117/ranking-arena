@@ -55,12 +55,15 @@ export const TraderInfoCell = memo(function TraderInfoCell({
 }: TraderInfoCellProps) {
   return (
     <Box style={TRADER_INFO_STYLE}>
+      {/* Fixed size for ALL ranks: realtime reorders across the rank-3 boundary must
+          not resize the avatar/name (42↔36 + font swap shifted the whole row — CLS).
+          Top-3 distinction stays on the medal glow, which doesn't affect layout. */}
       <TraderAvatar
         traderId={trader.id}
         displayName={displayName}
         avatarUrl={trader.avatar_url}
         rank={rank}
-        size={rank <= 3 ? 42 : 36}
+        size={36}
       />
       <Box style={NAME_COLUMN_STYLE}>
         <Box style={NAME_ROW_STYLE}>
@@ -72,8 +75,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              fontSize: rank <= 3 ? tokens.typography.fontSize.base : tokens.typography.fontSize.sm,
-              letterSpacing: rank <= 3 ? '-0.01em' : undefined,
+              fontSize: tokens.typography.fontSize.sm,
             }}
           >
             <HighlightedName text={displayName} query={searchQuery} />
