@@ -1,9 +1,10 @@
 'use client'
 import PasswordInput from '@/app/components/ui/PasswordInput'
 
-import React, { useEffect, useRef } from 'react'
+import React from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export function DeleteAccountModal({
@@ -28,96 +29,57 @@ export function DeleteAccountModal({
   onDelete: () => void
 }): React.ReactElement | null {
   const { t } = useLanguage()
-  const modalRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
-
-  useEffect(() => {
-    if (!isOpen) return
-    previousFocusRef.current = document.activeElement as HTMLElement
-    const timer = setTimeout(() => {
-      if (modalRef.current) {
-        const firstInput = modalRef.current.querySelector<HTMLElement>('input, button')
-        firstInput?.focus()
-      }
-    }, 50)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return }
-      if (e.key === 'Tab' && modalRef.current) {
-        const focusable = modalRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey) {
-          if (document.activeElement === first) { e.preventDefault(); last.focus() }
-        } else {
-          if (document.activeElement === last) { e.preventDefault(); first.focus() }
-        }
-      }
-    }
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('keydown', handleKeyDown)
-      previousFocusRef.current?.focus()
-    }
-  }, [isOpen, onClose])
-
-  if (!isOpen) return null
 
   return (
-    <Box
-      style={{
-        position: 'fixed',
-        top: 0, left: 0, right: 0, bottom: 0,
-        background: 'var(--color-backdrop)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        zIndex: tokens.zIndex.max,
-        padding: tokens.spacing[4],
-      }}
-      onClick={onClose}
+    <ModalOverlay
+      open={isOpen}
+      onClose={onClose}
+      label={t('deleteAccountTitle')}
+      zIndex={tokens.zIndex.max}
+      raw
     >
       <Box
-        ref={modalRef}
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="delete-account-modal-title"
-        onClick={(e) => e.stopPropagation()}
         style={{
           background: tokens.colors.bg.primary,
           borderRadius: tokens.radius.xl,
           padding: tokens.spacing[6],
-          maxWidth: 420,
-          width: '100%',
+          width: 'min(420px, calc(100vw - 32px))',
           border: `1px solid ${tokens.colors.accent.error}40`,
         }}
       >
-        <Text id="delete-account-modal-title" size="lg" weight="bold" style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}>
+        <Text
+          size="lg"
+          weight="bold"
+          style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}
+        >
           {t('deleteAccountTitle')}
         </Text>
         <Box style={{ marginBottom: tokens.spacing[4] }}>
           <Text size="sm" color="secondary" style={{ lineHeight: 1.6 }}>
             {t('deleteAccountDesc')}
           </Text>
-          <Box style={{
-            marginTop: tokens.spacing[3],
-            padding: tokens.spacing[3],
-            borderRadius: tokens.radius.md,
-            background: `${tokens.colors.accent.warning}10`,
-            border: `1px solid ${tokens.colors.accent.warning}30`,
-          }}>
+          <Box
+            style={{
+              marginTop: tokens.spacing[3],
+              padding: tokens.spacing[3],
+              borderRadius: tokens.radius.md,
+              background: `${tokens.colors.accent.warning}10`,
+              border: `1px solid ${tokens.colors.accent.warning}30`,
+            }}
+          >
             <Text size="xs" style={{ color: tokens.colors.accent.warning, lineHeight: 1.6 }}>
               {t('deleteAccountWarning')}
             </Text>
           </Box>
-          <Box style={{
-            marginTop: tokens.spacing[2],
-            padding: tokens.spacing[3],
-            borderRadius: tokens.radius.md,
-            background: `${tokens.colors.accent.primary}08`,
-            border: `1px solid ${tokens.colors.accent.primary}20`,
-          }}>
+          <Box
+            style={{
+              marginTop: tokens.spacing[2],
+              padding: tokens.spacing[3],
+              borderRadius: tokens.radius.md,
+              background: `${tokens.colors.accent.primary}08`,
+              border: `1px solid ${tokens.colors.accent.primary}20`,
+            }}
+          >
             <Text size="xs" style={{ color: tokens.colors.accent.primary, lineHeight: 1.6 }}>
               {t('deleteAccountRecoveryNote')}
             </Text>
@@ -125,7 +87,9 @@ export function DeleteAccountModal({
         </Box>
         <Box style={{ marginBottom: tokens.spacing[3] }}>
           <label htmlFor="delete-account-password">
-            <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('enterPasswordToConfirm')}</Text>
+            <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
+              {t('enterPasswordToConfirm')}
+            </Text>
           </label>
           <PasswordInput
             id="delete-account-password"
@@ -146,7 +110,9 @@ export function DeleteAccountModal({
         </Box>
         <Box style={{ marginBottom: tokens.spacing[4] }}>
           <label htmlFor="delete-account-reason">
-            <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>{t('deleteReasonOptional')}</Text>
+            <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
+              {t('deleteReasonOptional')}
+            </Text>
           </label>
           <input
             id="delete-account-reason"
@@ -166,11 +132,28 @@ export function DeleteAccountModal({
           />
         </Box>
         {error && (
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              marginBottom: tokens.spacing[3],
+            }}
+          >
             <Text size="xs" style={{ color: tokens.colors.accent.error, flex: 1 }}>
               {error}
             </Text>
-            <Button variant="ghost" size="sm" onClick={onDelete} disabled={deleting} style={{ color: tokens.colors.accent.error, fontSize: tokens.typography.fontSize.xs, padding: `${tokens.spacing[1]} ${tokens.spacing[2]}` }}>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onDelete}
+              disabled={deleting}
+              style={{
+                color: tokens.colors.accent.error,
+                fontSize: tokens.typography.fontSize.xs,
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+              }}
+            >
               {t('retry')}
             </Button>
           </Box>
@@ -193,6 +176,6 @@ export function DeleteAccountModal({
           </Button>
         </Box>
       </Box>
-    </Box>
+    </ModalOverlay>
   )
 }
