@@ -19,6 +19,8 @@ const customJestConfig = {
     '<rootDir>/.next/',
     '<rootDir>/e2e/',
     '<rootDir>/.claude/worktrees/',
+    // Real-DB integration tests run via `npm run test:ingest-integration` only.
+    '\\.integration\\.test\\.',
   ],
   collectCoverageFrom: [
     'lib/**/*.{ts,tsx}',
