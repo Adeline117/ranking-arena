@@ -5778,6 +5778,24 @@ const zh = {
   signalRiskRating: '风险',
   signalLastLiquidation: '最近强平',
   signalLabelsFromExchange: '标签来自交易所',
+  rankingsSubNavWeekly: '周赛',
+  weeklyArenaTitle: '跨交易所周收益竞技场',
+  weeklyArenaSubtitle: '本周 7 日收益率最强交易员，横跨 Arena 收录的所有交易所统一排名',
+  weeklyArenaEmpty: '本周暂无数据，下次快照后再来看看。',
+  weeklyArenaColRank: '排名',
+  weeklyArenaColTrader: '交易员',
+  weeklyArenaColExchange: '交易所',
+  weeklyArenaColRoi: '7日收益率',
+  weeklyArenaColPnl: '7日盈亏',
+  weeklyArenaColWinRate: '胜率',
+  weeklyArenaColAsOf: '更新于',
+  weeklyArenaNote:
+    '汇总自各交易所最新通过校验的 7 日榜单。收益率以交易所公布为准；盈亏按结算币种分列，绝不跨交易所相加。',
+  weeklyArenaBitmartTitle: 'BitMart 官方周赛',
+  weeklyArenaBitmartNote: 'BitMart 官方发布的周收益竞技场结果，仅供参考。',
+  weeklyArenaCategoryOpen: '公开组',
+  weeklyArenaCategoryLowLev: '低杠杆组',
+  weeklyArenaCategoryProtected: '保护组',
 } as const
 
 export default zh

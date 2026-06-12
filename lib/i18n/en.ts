@@ -5911,6 +5911,26 @@ const en = {
   signalRiskRating: 'Risk',
   signalLastLiquidation: 'Last liquidation',
   signalLabelsFromExchange: 'Labels by the exchange',
+  rankingsSubNavWeekly: 'Weekly Arena',
+  weeklyArenaTitle: 'Weekly Cross-Exchange ROI Arena',
+  weeklyArenaSubtitle:
+    'This week’s top 7-day ROI traders, ranked across every exchange Arena tracks',
+  weeklyArenaEmpty: 'No weekly data yet — check back after the next snapshot.',
+  weeklyArenaColRank: 'Rank',
+  weeklyArenaColTrader: 'Trader',
+  weeklyArenaColExchange: 'Exchange',
+  weeklyArenaColRoi: '7D ROI',
+  weeklyArenaColPnl: '7D PnL',
+  weeklyArenaColWinRate: 'Win Rate',
+  weeklyArenaColAsOf: 'Updated',
+  weeklyArenaNote:
+    'Pooled from each exchange’s latest verified 7-day leaderboard. ROI is as published by the exchange; PnL is per settlement currency and never summed across exchanges.',
+  weeklyArenaBitmartTitle: 'BitMart Official Weekly Arena',
+  weeklyArenaBitmartNote:
+    'Official weekly ROI arena results published by BitMart — shown for reference.',
+  weeklyArenaCategoryOpen: 'Open league',
+  weeklyArenaCategoryLowLev: 'Low-leverage league',
+  weeklyArenaCategoryProtected: 'Protected league',
 } as const
 
 export default en
