@@ -1,0 +1,338 @@
+{
+  "board": {
+    "code": "000000",
+    "message": null,
+    "messageDetail": null,
+    "data": {
+      "data": [
+        {
+          "address": "0xffae19561c038747c5c9f79f7777c29f28c4b4ad",
+          "addressLogo": null,
+          "addressLabel": null,
+          "addressTwitterUrl": null,
+          "balance": "0.011937466524736082",
+          "tags": null,
+          "realizedPnl": "59312.259256895664527249",
+          "realizedPnlPercent": "0.5179739614962856",
+          "dailyPNL": [
+            {
+              "realizedPnl": "2134.074704988429070155",
+              "dt": "2026-06-06"
+            },
+            {
+              "realizedPnl": "26708.936042672792797265",
+              "dt": "2026-06-07"
+            },
+            {
+              "realizedPnl": "3340.830217273785480611",
+              "dt": "2026-06-08"
+            },
+            {
+              "realizedPnl": "5559.699507386728720742",
+              "dt": "2026-06-09"
+            },
+            {
+              "realizedPnl": "0",
+              "dt": "2026-06-10"
+            },
+            {
+              "realizedPnl": "21567.237208428274991157",
+              "dt": "2026-06-11"
+            },
+            {
+              "realizedPnl": "1.481576145653467319",
+              "dt": "2026-06-12"
+            }
+          ],
+          "winRate": "0.4737",
+          "totalVolume": "315586.404968481508452139",
+          "buyVolume": "132669.841692374083158197",
+          "sellVolume": "182916.563276107425293942",
+          "avgBuyVolume": "462.264256767853948286",
+          "totalTxCnt": 650,
+          "buyTxCnt": 287,
+          "sellTxCnt": 363,
+          "totalTradedTokens": 27,
+          "tokenDistribution": {
+            "gt500Cnt": 0,
+            "between0And500Cnt": 9,
+            "between0AndNegative50Cnt": 10,
+            "ltNegative50Cnt": 0
+          },
+          "lastActivity": 1781232416000,
+          "genericAddressTagList": [],
+          "topEarningTokens": [
+            {
+              "tokenAddress": "0xcf3232b85b43bca90e51d38cc06cc8bb8c8a3e36",
+              "tokenSymbol": "BEAT",
+              "tokenUrl": "/images/web3-data/public/token/logos/64a43d89a1aa41a983e12f16e482f5f0.png",
+              "realizedPnl": "22219.107670337413164504",
+              "profitRate": "28.823921113568690138"
+            },
+            {
+              "tokenAddress": "0x44f161ae29361e332dea039dfa2f404e0bc5b5cc",
+              "tokenSymbol": "H",
+              "tokenUrl": "/images/web3-data/public/token/logos/80bb8c5bf81441edb3a642124ae442c3.png",
+              "realizedPnl": "12993.634075397562284104",
+              "profitRate": null
+            },
+            {
+              "tokenAddress": "0xf39e4b21c84e737df08e2c3b32541d856f508e48",
+              "tokenSymbol": "ESPORTS",
+              "tokenUrl": "/images/web3-data/public/token/logos/3261fe7717574f9ab853ed77da1e7023.png",
+              "realizedPnl": "11749.821621860654147328",
+              "profitRate": "3.338534931748236409"
+            }
+          ]
+        },
+        {
+          "address": "0x2b98a23bd28e0ea02f4402b4e553c63403d43115",
+          "addressLogo": null,
+          "addressLabel": null,
+          "addressTwitterUrl": null,
+          "balance": "0.8756659895051132",
+          "tags": null,
+          "realizedPnl": "48237.565622275054123406",
+          "realizedPnlPercent": "0.29218746614300811",
+          "dailyPNL": [
+            {
+              "realizedPnl": "2488.584781535393960574",
+              "dt": "2026-06-06"
+            },
+            {
+              "realizedPnl": "-1015.07398711105238861",
+              "dt": "2026-06-07"
+            },
+            {
+              "realizedPnl": "10684.103414165289620154",
+              "dt": "2026-06-08"
+            },
+            {
+              "realizedPnl": "2566.123642611357652404",
+              "dt": "2026-06-09"
+            },
+            {
+              "realizedPnl": "17067.914656119855270189",
+              "dt": "2026-06-10"
+            },
+            {
+              "realizedPnl": "15822.114250525669211225",
+              "dt": "2026-06-11"
+            },
+            {
+              "realizedPnl": "623.79886442854079747",
+              "dt": "2026-06-12"
+            }
+          ],
+          "winRate": "0.386",
+          "totalVolume": "440118.30763060536086618",
+          "buyVolume": "206933.804758238078766514",
+          "sellVolume": "233184.502872367282099666",
+          "avgBuyVolume": "407.350009366610391273",
+          "totalTxCnt": 1403,
+          "buyTxCnt": 508,
+          "sellTxCnt": 895,
+          "totalTradedTokens": 57,
+          "tokenDistribution": {
+            "gt500Cnt": 0,
+            "between0And500Cnt": 22,
+            "between0AndNegative50Cnt": 35,
+            "ltNegative50Cnt": 0
+          },
+          "lastActivity": 1781232423000,
+          "genericAddressTagList": [],
+          "topEarningTokens": [
+            {
+              "tokenAddress": "0xcf3232b85b43bca90e51d38cc06cc8bb8c8a3e36",
+              "tokenSymbol": "BEAT",
+              "tokenUrl": "/images/web3-data/public/token/logos/64a43d89a1aa41a983e12f16e482f5f0.png",
+              "realizedPnl": "27517.534532681182805719",
+              "profitRate": "5.406763037208523312"
+            },
+            {
+              "tokenAddress": "0x8b194370825e37b33373e74a41009161808c1488",
+              "tokenSymbol": "VELVET",
+              "tokenUrl": "/images/web3-data/public/token/logos/f76fb21bb88949968d5f5a3f503f9c4f.png",
+              "realizedPnl": "19545.552302584955846283",
+              "profitRate": null
+            },
+            {
+              "tokenAddress": "0x44f161ae29361e332dea039dfa2f404e0bc5b5cc",
+              "tokenSymbol": "H",
+              "tokenUrl": "/images/web3-data/public/token/logos/80bb8c5bf81441edb3a642124ae442c3.png",
+              "realizedPnl": "9605.111439161348776526",
+              "profitRate": "0.57527422537492321"
+            }
+          ]
+        },
+        {
+          "address": "0x561a3a8f7c97b66248c8a343a2649301740ce7c5",
+          "addressLogo": null,
+          "addressLabel": null,
+          "addressTwitterUrl": null,
+          "balance": "2.573538890725192",
+          "tags": null,
+          "realizedPnl": "44124.054490952490272503",
+          "realizedPnlPercent": "0.179424594109453083",
+          "dailyPNL": [
+            {
+              "realizedPnl": "13685.238766665418820805",
+              "dt": "2026-06-06"
+            },
+            {
+              "realizedPnl": "8712.819941722585966006",
+              "dt": "2026-06-07"
+            },
+            {
+              "realizedPnl": "5148.843529612675679637",
+              "dt": "2026-06-08"
+            },
+            {
+              "realizedPnl": "421.463345908139575179",
+              "dt": "2026-06-09"
+            },
+            {
+              "realizedPnl": "15288.700664607520536",
+              "dt": "2026-06-10"
+            },
+            {
+              "realizedPnl": "866.988242436149694877",
+              "dt": "2026-06-11"
+            }
+          ],
+          "winRate": "0.75",
+          "totalVolume": "529493.496988375428217092",
+          "buyVolume": "239449.441336601443828781",
+          "sellVolume": "290044.055651773984388311",
+          "avgBuyVolume": "877.104180720151808897",
+          "totalTxCnt": 767,
+          "buyTxCnt": 273,
+          "sellTxCnt": 494,
+          "totalTradedTokens": 20,
+          "tokenDistribution": {
+            "gt500Cnt": 0,
+            "between0And500Cnt": 15,
+            "between0AndNegative50Cnt": 5,
+            "ltNegative50Cnt": 0
+          },
+          "lastActivity": 1781220494000,
+          "genericAddressTagList": [],
+          "topEarningTokens": [
+            {
+              "tokenAddress": "0xcf3232b85b43bca90e51d38cc06cc8bb8c8a3e36",
+              "tokenSymbol": "BEAT",
+              "tokenUrl": "/images/web3-data/public/token/logos/64a43d89a1aa41a983e12f16e482f5f0.png",
+              "realizedPnl": "12467.721017358051097325",
+              "profitRate": "1.785166512202487496"
+            },
+            {
+              "tokenAddress": "0x7ec43cf65f1663f820427c62a5780b8f2e25593a",
+              "tokenSymbol": "LAB",
+              "tokenUrl": "/images/web3-data/public/token/logos/274fa6f2ac6340088ba9045bbeeeb37c.png",
+              "realizedPnl": "9874.699492667582740306",
+              "profitRate": "1.239972425247754409"
+            },
+            {
+              "tokenAddress": "0x44f161ae29361e332dea039dfa2f404e0bc5b5cc",
+              "tokenSymbol": "H",
+              "tokenUrl": "/images/web3-data/public/token/logos/80bb8c5bf81441edb3a642124ae442c3.png",
+              "realizedPnl": "8513.659314920105909513",
+              "profitRate": "1.787339482190610916"
+            }
+          ]
+        },
+        {
+          "address": "0x62c35c53be4d13b9cc564a819079e4f63a3f83cd",
+          "addressLogo": null,
+          "addressLabel": null,
+          "addressTwitterUrl": null,
+          "balance": "0.844015701569455",
+          "tags": null,
+          "realizedPnl": "41933.550615488381122119",
+          "realizedPnlPercent": "0.210433082057406206",
+          "dailyPNL": [
+            {
+              "realizedPnl": "-176.741083271743381191",
+              "dt": "2026-06-06"
+            },
+            {
+              "realizedPnl": "5311.315923771899477771",
+              "dt": "2026-06-07"
+            },
+            {
+              "realizedPnl": "12225.895005733383014619",
+              "dt": "2026-06-08"
+            },
+            {
+              "realizedPnl": "1112.979836392530090389",
+              "dt": "2026-06-09"
+            },
+            {
+              "realizedPnl": "11339.834556192754454074",
+              "dt": "2026-06-10"
+            },
+            {
+              "realizedPnl": "11862.207316818895467925",
+              "dt": "2026-06-11"
+            },
+            {
+              "realizedPnl": "258.059059850661998531",
+              "dt": "2026-06-12"
+            }
+          ],
+          "winRate": "0.3774",
+          "totalVolume": "477573.63466665516996532",
+          "buyVolume": "232943.333409435418269494",
+          "sellVolume": "244630.301257219751695826",
+          "avgBuyVolume": "424.304796738498029635",
+          "totalTxCnt": 1433,
+          "buyTxCnt": 549,
+          "sellTxCnt": 884,
+          "totalTradedTokens": 53,
+          "tokenDistribution": {
+            "gt500Cnt": 0,
+            "between0And500Cnt": 20,
+            "between0AndNegative50Cnt": 33,
+            "ltNegative50Cnt": 0
+          },
+          "lastActivity": 1781230109000,
+          "genericAddressTagList": [],
+          "topEarningTokens": [
+            {
+              "tokenAddress": "0x8b194370825e37b33373e74a41009161808c1488",
+              "tokenSymbol": "VELVET",
+              "tokenUrl": "/images/web3-data/public/token/logos/f76fb21bb88949968d5f5a3f503f9c4f.png",
+              "realizedPnl": "19592.767330509464821604",
+              "profitRate": null
+            },
+            {
+              "tokenAddress": "0xcf3232b85b43bca90e51d38cc06cc8bb8c8a3e36",
+              "tokenSymbol": "BEAT",
+              "tokenUrl": "/images/web3-data/public/token/logos/64a43d89a1aa41a983e12f16e482f5f0.png",
+              "realizedPnl": "15307.938593507134976272",
+              "profitRate": "6.071965222466704811"
+            },
+            {
+              "tokenAddress": "0x44f161ae29361e332dea039dfa2f404e0bc5b5cc",
+              "tokenSymbol": "H",
+              "tokenUrl": "/images/web3-data/public/token/logos/80bb8c5bf81441edb3a642124ae442c3.png",
+              "realizedPnl": "10203.475249189929838652",
+              "profitRate": "0.698676469240732594"
+            }
+          ]
+        }
+      ],
+      "current": 1,
+      "size": 25,
+      "pages": 9
+    },
+    "success": true
+  },
+  "kolAddresses": [
+    "0xbf004bff64725914ee36d03b87d6965b0ced4903",
+    "0xa83b73f5644cde337b61da79589f10ea15548811",
+    "0x2ce9d43d1cba6ae31d7f07bfe0098dfa2d833373",
+    "0x2b98a23bd28e0ea02f4402b4e553c63403d43115"
+  ],
+  "timeframe": 7
+}
