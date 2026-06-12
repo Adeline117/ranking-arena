@@ -9,7 +9,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { RecordKind, ServingCurrency, SourceCapability, TfAvailability } from './types'
 
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC'])
+const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
 const DEPTHS: ReadonlySet<string> = new Set(['full', 'top10', 'top3_preview', 'none'])
 const KINDS: readonly RecordKind[] = [
   'positions',

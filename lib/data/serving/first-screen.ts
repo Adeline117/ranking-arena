@@ -11,7 +11,7 @@ import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import { projectBoardExtras } from './board-extras'
 import type { ServingCurrency, TraderFirstScreen } from './types'
 
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC'])
+const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
 
 function asCurrency(v: unknown, fallback: ServingCurrency = 'USDT'): ServingCurrency {
   return typeof v === 'string' && CURRENCIES.has(v) ? (v as ServingCurrency) : fallback

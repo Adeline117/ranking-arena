@@ -8,7 +8,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { ServingCurrency, ServingTimeframe, TraderCoreModules } from './types'
 
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC'])
+const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
 
 export function tfToInt(tf: ServingTimeframe): 0 | 7 | 30 | 90 {
   return tf === 'inception' ? 0 : tf

@@ -35,7 +35,7 @@ export interface ExchangeRankings {
 }
 
 const PRODUCT_TYPES: ReadonlySet<string> = new Set(['spot', 'futures', 'cfd', 'onchain'])
-const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC'])
+const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
 
 function numOrNull(v: unknown): number | null {
   if (v === null || v === undefined) return null
