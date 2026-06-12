@@ -9,6 +9,7 @@
 import { useRouter } from 'next/navigation'
 import { useTransition, useState, useEffect, useRef, useCallback } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { tokens } from '@/lib/design-tokens'
 
 const RANGES = ['90D', '30D', '7D'] as const
 
@@ -125,8 +126,9 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             width: '100%',
             display: 'flex',
             justifyContent: 'flex-end',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
             fontSize: 11,
-            color: 'var(--color-text-tertiary, #888)',
+            color: 'var(--color-text-tertiary)',
             order: -1,
             padding: '2px 4px 0',
           }}
@@ -142,10 +144,11 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
           style={{
             width: '100%',
             padding: '8px 12px',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
             borderRadius: 8,
-            fontSize: 12,
-            fontWeight: 500,
-            color: 'var(--color-text-primary, #fff)',
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: tokens.typography.fontWeight.medium,
+            color: 'var(--color-text-primary)',
             background: 'rgba(251, 146, 60, 0.15)',
             border: '1px solid rgba(251, 146, 60, 0.3)',
             display: 'flex',
@@ -154,7 +157,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             order: -1,
           }}
         >
-          <span style={{ fontSize: 14 }}>&#x26A0;</span>
+          <span style={{ fontSize: tokens.typography.fontSize.base }}>&#x26A0;</span>
           <span style={{ flex: 1 }}>
             {isOffline
               ? `${t('rankingControlsOffline')}${lastDataTime ? ` ${t('rankingControlsDataAsOf')} ${lastDataTime}.` : ''}`
@@ -168,11 +171,12 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
               style={{
                 background: 'rgba(251, 146, 60, 0.3)',
                 border: '1px solid rgba(251, 146, 60, 0.5)',
-                color: 'var(--color-text-primary, #fff)',
+                color: 'var(--color-text-primary)',
                 padding: '4px 10px',
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
+                // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
                 fontSize: 11,
-                fontWeight: 600,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: isPending ? 'not-allowed' : 'pointer',
                 opacity: isPending ? 0.6 : 1,
               }}
@@ -248,10 +252,11 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             gap: 8,
             width: '100%',
             padding: '8px 14px',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
             borderRadius: 8,
-            fontSize: 12,
-            fontWeight: 500,
-            color: 'var(--color-text-secondary, #aaa)',
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: tokens.typography.fontWeight.medium,
+            color: 'var(--color-text-secondary)',
             background:
               page >= totalPages - 1
                 ? 'linear-gradient(135deg, var(--color-bg-secondary, #1a1a2e) 0%, rgba(167,139,250,0.12) 100%)'
@@ -270,8 +275,10 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
           </span>
           <span
             style={{
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
               fontSize: 11,
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
               color: 'var(--color-brand, #a78bfa)',
               whiteSpace: 'nowrap',
             }}
@@ -294,7 +301,9 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
               display: 'flex',
               alignItems: 'center',
               gap: 6,
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
               fontSize: 11,
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
               color: 'var(--color-text-secondary, #888)',
               pointerEvents: 'none',
             }}

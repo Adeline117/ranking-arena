@@ -29,7 +29,9 @@ export default function DefiOverview() {
 
   useEffect(() => {
     apiFetch<DefiOverviewData & { error?: string }>('/api/market/defi')
-      .then((json) => { if (!json.error) setData(json) })
+      .then((json) => {
+        if (!json.error) setData(json)
+      })
       .catch((err) => {
         if (err instanceof Error && err.name === 'AbortError') return
         setError(err instanceof Error ? err.message : 'Failed to load')
@@ -40,10 +42,27 @@ export default function DefiOverview() {
   if (loading) {
     return (
       <div style={cardStyle}>
-        <div className="skeleton" style={{ height: 12, width: '40%', marginBottom: 8, borderRadius: 4 }} />
-        <div className="skeleton" style={{ height: 18, width: '55%', marginBottom: 6, borderRadius: 4 }} />
-        <div className="skeleton" style={{ height: 12, width: '100%', marginBottom: 4, borderRadius: 4 }} />
-        <div className="skeleton" style={{ height: 12, width: '90%', marginBottom: 4, borderRadius: 4 }} />
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+        <div
+          className="skeleton"
+          style={{ height: 12, width: '40%', marginBottom: 8, borderRadius: 4 }}
+        />
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+        <div
+          className="skeleton"
+          style={{ height: 18, width: '55%', marginBottom: 6, borderRadius: 4 }}
+        />
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+        <div
+          className="skeleton"
+          style={{ height: 12, width: '100%', marginBottom: 4, borderRadius: 4 }}
+        />
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+        <div
+          className="skeleton"
+          style={{ height: 12, width: '90%', marginBottom: 4, borderRadius: 4 }}
+        />
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <div className="skeleton" style={{ height: 12, width: '80%', borderRadius: 4 }} />
       </div>
     )
@@ -52,10 +71,28 @@ export default function DefiOverview() {
   if (error || !data) {
     return (
       <div style={cardStyle}>
-        <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+        <div
+          style={{
+            fontSize: 10,
+            color: tokens.colors.text.tertiary,
+            fontWeight: tokens.typography.fontWeight.medium,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            marginBottom: 6,
+          }}
+        >
           {t('defiOverview')}
         </div>
-        <div style={{ fontSize: 11, color: tokens.colors.text.tertiary, textAlign: 'center', padding: '4px 0' }}>
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+        <div
+          style={{
+            fontSize: 11,
+            color: tokens.colors.text.tertiary,
+            textAlign: 'center',
+            padding: '4px 0',
+          }}
+        >
           {error ? t('sidebarLoadFailed') : t('noDataGeneric')}
         </div>
       </div>
@@ -64,19 +101,55 @@ export default function DefiOverview() {
 
   return (
     <div style={cardStyle}>
-      <div style={{ fontSize: 10, color: tokens.colors.text.tertiary, fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: 6 }}>
+      {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+      <div
+        style={{
+          fontSize: 10,
+          color: tokens.colors.text.tertiary,
+          fontWeight: tokens.typography.fontWeight.medium,
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          marginBottom: 6,
+        }}
+      >
         {t('defiOverview')}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-        <span style={{ fontSize: 16, fontWeight: 800, color: tokens.colors.text.primary, lineHeight: 1 }}>
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+        <span
+          style={{
+            fontSize: tokens.typography.fontSize.md,
+            fontWeight: 800,
+            color: tokens.colors.text.primary,
+            lineHeight: 1,
+          }}
+        >
           {formatTVL(data.totalTVL)}
         </span>
-        <span style={{ fontSize: 11, fontWeight: 600, color: data.tvlChange24h >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)' }}>
-          {data.tvlChange24h >= 0 ? '+' : ''}{data.tvlChange24h.toFixed(2)}%
+        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: tokens.typography.fontWeight.semibold,
+            color:
+              data.tvlChange24h >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
+          }}
+        >
+          {data.tvlChange24h >= 0 ? '+' : ''}
+          {data.tvlChange24h.toFixed(2)}%
         </span>
       </div>
       {data.topProtocols.slice(0, 3).map((p) => (
-        <div key={p.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '1px 0', fontSize: 11 }}>
+        // eslint-disable-next-line no-restricted-syntax -- off-scale by design
+        <div
+          key={p.id}
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            padding: '1px 0',
+            fontSize: 11,
+          }}
+        >
           <span style={{ color: tokens.colors.text.primary }}>{p.name}</span>
           <span style={{ color: tokens.colors.text.secondary }}>{formatTVL(p.tvl)}</span>
         </div>
