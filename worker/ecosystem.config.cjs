@@ -48,8 +48,13 @@ module.exports = {
       error_file: 'worker/logs/ingest-error.log',
       out_file: 'worker/logs/ingest-out.log',
       merge_logs: true,
-      // Playwright sessions are memory-heavy; higher ceiling than arena-worker
-      max_memory_restart: '1024M',
+      // 1024M was killing the process mid-crawl every ~32 min (28 restarts
+      // in 15h), so 25-90min Tier-A crawls NEVER finished a full cycle —
+      // the root cause of the STALE-source backlog. 3 concurrent Playwright
+      // sessions + remote connect comfortably exceed 1GB. 16GB host → 3GB
+      // ceiling gives every crawl room to complete; Node heap raised to match.
+      max_memory_restart: '3072M',
+      node_args: '--max-old-space-size=2560',
       kill_timeout: 30000,
       listen_timeout: 10000,
     },
