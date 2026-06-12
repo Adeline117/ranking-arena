@@ -130,13 +130,13 @@ export async function POST(request: NextRequest) {
       supabase
         .from('tips')
         .select('*')
-        .eq('sender_id', user.id)
+        .eq('from_user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(EXPORT_ROW_LIMIT),
       supabase
         .from('tips')
         .select('*')
-        .eq('receiver_id', user.id)
+        .eq('to_user_id', user.id)
         .order('created_at', { ascending: false })
         .limit(EXPORT_ROW_LIMIT),
     ])
