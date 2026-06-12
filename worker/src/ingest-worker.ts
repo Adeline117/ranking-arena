@@ -19,7 +19,7 @@ config({ path: resolve(__dirname, '..', '.env') })
 
 import { Worker, type Job } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
-import { INGEST_QUEUE_NAME, INGEST_JOB, ingestConnection } from './ingest/queues'
+import { INGEST_QUEUE_NAME, TIERC_QUEUE_NAME, INGEST_JOB, ingestConnection } from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
 
 // Playwright sessions are heavy on a Mac Mini; per-source serialization
@@ -87,6 +87,20 @@ async function main(): Promise<void> {
     console.error(`[ingest-worker] ✗ ${job?.name} (${job?.id}):`, err.message)
   })
 
+  // Dedicated Tier-C worker: user-facing on-demand fetches get their own
+  // slots so they never queue behind hours-long Tier-A/B bulk crawls
+  // (the API route's polling window is 8s).
+  const tiercWorker = new Worker(TIERC_QUEUE_NAME, route, {
+    connection: ingestConnection(),
+    concurrency: 2,
+  })
+  tiercWorker.on('completed', (job) => {
+    console.log(`[ingest-worker] ✓ tierc ${job.id}`)
+  })
+  tiercWorker.on('failed', (job, err) => {
+    console.error(`[ingest-worker] ✗ tierc ${job?.id}:`, err.message)
+  })
+
   await reconcileSchedulers()
   // Re-reconcile hourly: sources rows are the live config (spec §2.1).
   const reconcileTimer = setInterval(() => {
@@ -99,6 +113,7 @@ async function main(): Promise<void> {
     console.log(`[ingest-worker] ${signal} — shutting down…`)
     clearInterval(reconcileTimer)
     await worker.close()
+    await tiercWorker.close()
     const { closeIngestPool } = await import('@/lib/ingest/db')
     await closeIngestPool()
     await closeConnection()

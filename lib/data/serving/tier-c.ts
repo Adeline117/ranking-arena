@@ -47,7 +47,7 @@ export function tierCResultKey(d: TierCRequest): string {
 }
 
 const TIER_C_JOB_NAME = 'tierc:profile' // INGEST_JOB.TIER_C
-const QUEUE_NAME = 'arena-ingest' // INGEST_QUEUE_NAME
+const QUEUE_NAME = 'arena-ingest-tierc' // TIERC_QUEUE_NAME — dedicated user-facing queue
 
 let bridge: { queue: Queue; redis: Redis } | null = null
 

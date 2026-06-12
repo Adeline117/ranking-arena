@@ -15,6 +15,29 @@ export function ingestConnection(): ConnectionOptions {
 
 export const INGEST_QUEUE_NAME = 'arena-ingest'
 
+/**
+ * Tier-C runs on its OWN queue + worker slots: bulk Tier-A/B crawls hold
+ * the main queue's 3 slots for up to ~hours, and a user-facing on-demand
+ * fetch must never wait behind them (the route's polling window is 8s).
+ */
+export const TIERC_QUEUE_NAME = 'arena-ingest-tierc'
+
+let tiercQueue: Queue | null = null
+
+export function getTierCQueue(): Queue {
+  if (tiercQueue) return tiercQueue
+  tiercQueue = new Queue(TIERC_QUEUE_NAME, {
+    connection: ingestConnection(),
+    defaultJobOptions: {
+      attempts: 2,
+      backoff: { type: 'exponential', delay: 5_000 },
+      removeOnComplete: { age: 3600, count: 200 },
+      removeOnFail: { age: 24 * 3600, count: 500 },
+    },
+  })
+  return tiercQueue
+}
+
 let queue: Queue | null = null
 
 export function getIngestQueue(): Queue {
