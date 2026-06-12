@@ -4,30 +4,36 @@ import { createClient } from '@supabase/supabase-js'
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ''
 
-const publicSupabase = supabaseUrl && supabaseKey
-  ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
-  : null
+const publicSupabase =
+  supabaseUrl && supabaseKey
+    ? createClient(supabaseUrl, supabaseKey, { auth: { persistSession: false } })
+    : null
 
 import { BASE_URL } from '@/lib/constants/urls'
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
   const { id } = await params
 
   try {
     if (publicSupabase) {
-      const { data: bot } = await publicSupabase
-        .from('bot_rankings')
-        .select('name, category, description, roi_7d, aum')
-        .eq('id', id)
-        .maybeSingle()
+      // bot_sources is the live bots table (the legacy bot_rankings table was
+      // dropped). Mirror /api/bots/[id]: match by UUID or slug.
+      let botQuery = publicSupabase.from('bot_sources').select('name, strategy_type, description')
+      const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
+      botQuery = isUuid ? botQuery.eq('id', id) : botQuery.eq('slug', id)
+      const { data: bot } = await botQuery.maybeSingle()
 
       if (bot) {
         const title = bot.name
         const description = bot.description
           ? bot.description.substring(0, 160)
-          : `${bot.name} — ${bot.category || 'Trading Bot'} on Arena`
+          : `${bot.name} — ${bot.strategy_type || 'Trading Bot'} on Arena`
 
-        const ogImage = `${BASE_URL}/api/og?title=${encodeURIComponent(bot.name)}&subtitle=${encodeURIComponent(bot.category || 'Trading Bot')}`
+        const ogImage = `${BASE_URL}/api/og?title=${encodeURIComponent(bot.name)}&subtitle=${encodeURIComponent(bot.strategy_type || 'Trading Bot')}`
 
         return {
           title,

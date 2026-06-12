@@ -175,44 +175,29 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
         // Phase 1: Get latest snapshot + history in parallel
         // Latest from trader_latest (1 row per window, no ORDER/LIMIT needed)
         // History from trader_snapshots_v2 (archive, multiple rows over time)
-        const [latestSnapshotResult, historySnapshotsResult, monthlyResult, yearlyResult] =
-          await Promise.all([
-            supabase
-              .from('trader_latest')
-              .select('roi_pct, updated_at, pnl_usd, win_rate, max_drawdown, trades_count')
-              .eq('platform', source.source)
-              .eq('trader_key', source.source_trader_id)
-              .eq('window', '90D')
-              .maybeSingle(),
-            supabase
-              .from('trader_snapshots_v2')
-              .select('roi_pct, created_at')
-              .eq('platform', source.source)
-              .eq('trader_key', source.source_trader_id)
-              .eq('window', '90D')
-              .order('created_at', { ascending: false })
-              .limit(200),
-            supabase
-              .from('trader_monthly_performance')
-              .select('year, month, roi')
-              .eq('source', source.source)
-              .eq('source_trader_id', source.source_trader_id)
-              .order('year', { ascending: false })
-              .order('month', { ascending: false })
-              .limit(12),
-            supabase
-              .from('trader_yearly_performance')
-              .select('year, roi')
-              .eq('source', source.source)
-              .eq('source_trader_id', source.source_trader_id)
-              .order('year', { ascending: false })
-              .limit(5),
-          ])
+        // (trader_monthly_performance / trader_yearly_performance queries were
+        // removed: both tables were dropped from prod, so the monthly/yearly
+        // sections were always empty.)
+        const [latestSnapshotResult, historySnapshotsResult] = await Promise.all([
+          supabase
+            .from('trader_latest')
+            .select('roi_pct, updated_at, pnl_usd, win_rate, max_drawdown, trades_count')
+            .eq('platform', source.source)
+            .eq('trader_key', source.source_trader_id)
+            .eq('window', '90D')
+            .maybeSingle(),
+          supabase
+            .from('trader_snapshots_v2')
+            .select('roi_pct, created_at')
+            .eq('platform', source.source)
+            .eq('trader_key', source.source_trader_id)
+            .eq('window', '90D')
+            .order('created_at', { ascending: false })
+            .limit(200),
+        ])
 
         const latestSnapshot = latestSnapshotResult.data
         const snapshots = historySnapshotsResult.data || []
-        const monthlyData = monthlyResult.data || []
-        const yearlyData = yearlyResult.data || []
 
         if (snapshots.length === 0) {
           return success({ additionalStats: {} })
@@ -258,18 +243,6 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           profitablePct: item.profitable_pct ?? 0,
         }))
 
-        const monthlyPerformance = monthlyData.map(
-          (item: { year: number; month: number; roi: number | null }) => ({
-            month: `${item.year}-${String(item.month).padStart(2, '0')}`,
-            value: item.roi ?? 0,
-          })
-        )
-
-        const yearlyPerformance = yearlyData.map((item: { year: number; roi: number | null }) => ({
-          year: item.year,
-          value: item.roi ?? 0,
-        }))
-
         return success({
           expectedDividends: undefined,
           trading: latestSnapshot
@@ -293,8 +266,10 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
             maxDrawdown: latestSnapshot?.max_drawdown ?? undefined,
             sharpeRatio: undefined,
           },
-          monthlyPerformance: monthlyPerformance.length > 0 ? monthlyPerformance : undefined,
-          yearlyPerformance: yearlyPerformance.length > 0 ? yearlyPerformance : undefined,
+          // Source tables (trader_monthly/yearly_performance) were dropped —
+          // these stay undefined and the UI hides the sections.
+          monthlyPerformance: undefined,
+          yearlyPerformance: undefined,
         })
       } catch (error) {
         const logger = createLogger('trader-data')
@@ -375,76 +350,9 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<
   }
 }
 
-/**
- * 获取交易员月度表现
- */
-export async function getTraderMonthlyPerformance(
-  handle: string
-): Promise<DataResult<Array<{ month: string; value: number }>>> {
-  try {
-    const source = await findTraderAcrossSources(handle)
-    if (!source) return success([])
-
-    const { data } = await supabase
-      .from('trader_monthly_performance')
-      .select('year, month, roi')
-      .eq('source', source.source)
-      .eq('source_trader_id', source.source_trader_id)
-      .order('year', { ascending: false })
-      .order('month', { ascending: false })
-      .limit(12)
-
-    if (!data) return success([])
-
-    return success(
-      data.map((item: { year: number; month: number; roi: number | null }) => ({
-        month: `${item.year}-${String(item.month).padStart(2, '0')}`,
-        value: item.roi ?? 0,
-      }))
-    )
-  } catch (error) {
-    const logger = createLogger('trader-data')
-    logger.error('Error in getTraderMonthlyPerformance', { error, handle })
-    return failure(
-      error instanceof Error ? error.message : 'Unknown error in getTraderMonthlyPerformance'
-    )
-  }
-}
-
-/**
- * 获取交易员年度表现
- */
-export async function getTraderYearlyPerformance(
-  handle: string
-): Promise<DataResult<Array<{ year: number; value: number }>>> {
-  try {
-    const source = await findTraderAcrossSources(handle)
-    if (!source) return success([])
-
-    const { data } = await supabase
-      .from('trader_yearly_performance')
-      .select('year, roi')
-      .eq('source', source.source)
-      .eq('source_trader_id', source.source_trader_id)
-      .order('year', { ascending: false })
-      .limit(5)
-
-    if (!data) return success([])
-
-    return success(
-      data.map((item: { year: number; roi: number | null }) => ({
-        year: item.year,
-        value: item.roi ?? 0,
-      }))
-    )
-  } catch (error) {
-    const logger = createLogger('trader-data')
-    logger.error('Error in getTraderYearlyPerformance', { error, handle })
-    return failure(
-      error instanceof Error ? error.message : 'Unknown error in getTraderYearlyPerformance'
-    )
-  }
-}
+// getTraderMonthlyPerformance / getTraderYearlyPerformance were removed:
+// their source tables (trader_monthly_performance, trader_yearly_performance)
+// were dropped from prod and the functions had no callers (re-export only).
 
 /**
  * 获取交易员投资组合

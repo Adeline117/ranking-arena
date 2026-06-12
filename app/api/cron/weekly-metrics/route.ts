@@ -9,7 +9,7 @@
  *
  *   1. Total paying subscribers (active|trialing × pro|lifetime)
  *   2. New paying signups this week (7d window)
- *   3. WAU (distinct user_activity user_ids, 7d)
+ *   3. WAU — reported as n/a since the user_activity table was dropped
  *   4. Top-10 trust ratio (confidence=full / 10 in 90D leaderboard)
  *
  * Scheduled at Friday 09:00 UTC in vercel.json.
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
       // All reads in parallel — independent.
-      const [totalPayingRes, newPayingRes, activityRes, trustRes] = await Promise.allSettled([
+      const [totalPayingRes, newPayingRes, trustRes] = await Promise.allSettled([
         supabase
           .from('subscriptions')
           .select('id', { count: 'estimated', head: true })
@@ -57,11 +57,6 @@ export async function GET(request: NextRequest) {
           .in('status', ['active', 'trialing'])
           .in('tier', ['pro', 'lifetime'])
           .gte('created_at', weekAgo),
-        supabase
-          .from('user_activity')
-          .select('user_id')
-          .gte('created_at', weekAgo)
-          .limit(50_000),
         // Trust ratio — uses the dedicated RPC added in
         // 20260409173653_get_top_trust_ratio_rpc.sql. Replaces the previous
         // N+1 REST loop that timed out at the 30s Supabase limit.
@@ -69,22 +64,19 @@ export async function GET(request: NextRequest) {
       ])
 
       const totalPaying =
-        totalPayingRes.status === 'fulfilled' ? totalPayingRes.value.count ?? 0 : null
-      const newPaying =
-        newPayingRes.status === 'fulfilled' ? newPayingRes.value.count ?? 0 : null
-      let wau: number | null = null
-      if (activityRes.status === 'fulfilled' && activityRes.value.data) {
-        const unique = new Set(
-          (activityRes.value.data as Array<{ user_id: string }>).map((r) => r.user_id),
-        )
-        wau = unique.size
-      }
+        totalPayingRes.status === 'fulfilled' ? (totalPayingRes.value.count ?? 0) : null
+      const newPaying = newPayingRes.status === 'fulfilled' ? (newPayingRes.value.count ?? 0) : null
+      // WAU is no longer computable: user_activity was intentionally dropped
+      // (phase1_drop_dead_tables) and nothing records activity events.
+      const wau: number | null = null
 
       let trustFull: number | null = null
       let trustTotal: number | null = null
       let trustRatio: number | null = null
       if (trustRes.status === 'fulfilled' && trustRes.value.data) {
-        const row = Array.isArray(trustRes.value.data) ? trustRes.value.data[0] : trustRes.value.data
+        const row = Array.isArray(trustRes.value.data)
+          ? trustRes.value.data[0]
+          : trustRes.value.data
         if (row) {
           trustFull = Number(row.full_count) || 0
           trustTotal = Number(row.total_count) || 0
@@ -93,15 +85,15 @@ export async function GET(request: NextRequest) {
       }
 
       // Log any failed sub-queries (non-fatal — Telegram still gets partial data)
-      if (totalPayingRes.status === 'rejected') logger.warn('totalPaying failed', totalPayingRes.reason)
+      if (totalPayingRes.status === 'rejected')
+        logger.warn('totalPaying failed', totalPayingRes.reason)
       if (newPayingRes.status === 'rejected') logger.warn('newPaying failed', newPayingRes.reason)
-      if (activityRes.status === 'rejected') logger.warn('activity failed', activityRes.reason)
       if (trustRes.status === 'rejected') logger.warn('trustRatio failed', trustRes.reason)
 
       const lines = [
         '<b>📊 Arena Weekly Metrics</b>',
         '',
-        `<b>WAU (7d):</b> ${wau ?? '<i>failed</i>'}`,
+        `<b>WAU (7d):</b> ${wau ?? '<i>n/a</i>'}`,
         `<b>Total paying:</b> ${totalPaying ?? '<i>failed</i>'}`,
         `<b>New paying this week:</b> ${newPaying ?? '<i>failed</i>'}`,
         trustRatio != null && trustTotal
@@ -131,6 +123,6 @@ export async function GET(request: NextRequest) {
           trustRatio,
         },
       }
-    },
+    }
   )
 }

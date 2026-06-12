@@ -187,31 +187,11 @@ describe('Helper Functions', () => {
     }
   })
 
-  it.skipIf(shouldSkipServiceTests)('is_site_admin should exist or be optional', async () => {
-    const { data, error } = await serviceClient.rpc('is_site_admin')
-
-    if (error?.code === 'PGRST202') {
-      expect(true).toBe(true)
-    } else if (error?.message?.includes('Legacy API keys are disabled')) {
-      expect(true).toBe(true)
-    } else {
-      expect(error).toBeNull()
-      expect(typeof data).toBe('boolean')
-    }
-  })
-
-  it.skipIf(shouldSkipServiceTests)('is_premium_user should exist or be optional', async () => {
-    const { data, error } = await serviceClient.rpc('is_premium_user')
-
-    if (error?.code === 'PGRST202') {
-      expect(true).toBe(true)
-    } else if (error?.message?.includes('Legacy API keys are disabled')) {
-      expect(true).toBe(true)
-    } else {
-      expect(error).toBeNull()
-      expect(typeof data).toBe('boolean')
-    }
-  })
+  // The former is_site_admin / is_premium_user probes were removed: those
+  // RPCs never existed in prod (no repo migration defines them) and no auth
+  // path calls them — admin auth uses the ADMIN_EMAILS allowlist in
+  // lib/admin/auth.ts (fails closed), premium gating reads subscriptions.tier.
+  // The probes were tautological (they passed on PGRST202 "missing function").
 })
 
 describe('RLS Policy Existence', () => {

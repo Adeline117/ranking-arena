@@ -38,8 +38,6 @@ export {
   getTraderPerformance,
   getTraderStats,
   getTraderFrequentlyTraded,
-  getTraderMonthlyPerformance,
-  getTraderYearlyPerformance,
   getTraderPortfolio,
   getTraderPositionHistory,
   getTraderFeed,

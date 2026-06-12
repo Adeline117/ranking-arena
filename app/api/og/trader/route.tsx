@@ -37,31 +37,69 @@ const C = {
 }
 
 const PLATFORM_COLORS: Record<string, string> = {
-  binance_futures: '#F0B90B', binance_spot: '#F0B90B', binance_web3: '#F0B90B',
-  bybit: '#F7A600', bybit_spot: '#F7A600',
-  okx: '#FFFFFF', okx_futures: '#FFFFFF', okx_spot: '#FFFFFF', okx_web3: '#FFFFFF',
-  bitget_futures: '#00D4AA', bitget_spot: '#00D4AA',
-  hyperliquid: '#50E3C2', gmx: '#4B8FEE', dydx: '#6966FF',
-  mexc: '#00B897', kucoin: '#24AE8F', gateio: '#2354E6',
-  htx_futures: '#2E7CF6', coinex: '#3FB68B', drift: '#E040FB',
-  bitunix: '#3B82F6', btcc: '#FF6B35', bitfinex: '#A7E92F',
-  etoro: '#69C53E', blofin: '#00D4FF', phemex: '#D4FF00',
-  jupiter_perps: '#C7F284', aevo: '#FF7A45',
+  binance_futures: '#F0B90B',
+  binance_spot: '#F0B90B',
+  binance_web3: '#F0B90B',
+  bybit: '#F7A600',
+  bybit_spot: '#F7A600',
+  okx: '#FFFFFF',
+  okx_futures: '#FFFFFF',
+  okx_spot: '#FFFFFF',
+  okx_web3: '#FFFFFF',
+  bitget_futures: '#00D4AA',
+  bitget_spot: '#00D4AA',
+  hyperliquid: '#50E3C2',
+  gmx: '#4B8FEE',
+  dydx: '#6966FF',
+  mexc: '#00B897',
+  kucoin: '#24AE8F',
+  gateio: '#2354E6',
+  htx_futures: '#2E7CF6',
+  coinex: '#3FB68B',
+  drift: '#E040FB',
+  bitunix: '#3B82F6',
+  btcc: '#FF6B35',
+  bitfinex: '#A7E92F',
+  etoro: '#69C53E',
+  blofin: '#00D4FF',
+  phemex: '#D4FF00',
+  jupiter_perps: '#C7F284',
+  aevo: '#FF7A45',
 }
 
 const PLATFORM_NAMES: Record<string, string> = {
-  binance_futures: 'Binance', binance_spot: 'Binance Spot', binance_web3: 'Binance Web3',
-  bybit: 'Bybit', bybit_spot: 'Bybit Spot',
-  bitget_futures: 'Bitget', bitget_spot: 'Bitget Spot',
-  okx_futures: 'OKX', okx_spot: 'OKX Spot', okx_web3: 'OKX Web3',
-  hyperliquid: 'Hyperliquid', gmx: 'GMX', dydx: 'dYdX',
-  mexc: 'MEXC', kucoin: 'KuCoin', gateio: 'Gate.io',
-  htx_futures: 'HTX', coinex: 'CoinEx', drift: 'Drift',
-  bitunix: 'Bitunix', btcc: 'BTCC', bitfinex: 'Bitfinex',
-  etoro: 'eToro', blofin: 'BloFin', phemex: 'Phemex',
-  weex: 'WEEX', bingx: 'BingX', xt: 'XT.COM',
-  jupiter_perps: 'Jupiter Perps', aevo: 'Aevo',
-  web3_bot: 'Web3 Bot', kwenta: 'Kwenta',
+  binance_futures: 'Binance',
+  binance_spot: 'Binance Spot',
+  binance_web3: 'Binance Web3',
+  bybit: 'Bybit',
+  bybit_spot: 'Bybit Spot',
+  bitget_futures: 'Bitget',
+  bitget_spot: 'Bitget Spot',
+  okx_futures: 'OKX',
+  okx_spot: 'OKX Spot',
+  okx_web3: 'OKX Web3',
+  hyperliquid: 'Hyperliquid',
+  gmx: 'GMX',
+  dydx: 'dYdX',
+  mexc: 'MEXC',
+  kucoin: 'KuCoin',
+  gateio: 'Gate.io',
+  htx_futures: 'HTX',
+  coinex: 'CoinEx',
+  drift: 'Drift',
+  bitunix: 'Bitunix',
+  btcc: 'BTCC',
+  bitfinex: 'Bitfinex',
+  etoro: 'eToro',
+  blofin: 'BloFin',
+  phemex: 'Phemex',
+  weex: 'WEEX',
+  bingx: 'BingX',
+  xt: 'XT.COM',
+  jupiter_perps: 'Jupiter Perps',
+  aevo: 'Aevo',
+  web3_bot: 'Web3 Bot',
+  kwenta: 'Kwenta',
 }
 
 function formatRoi(roi: number): string {
@@ -75,7 +113,13 @@ function formatRoi(roi: number): string {
 async function fetchTrader(handle: string) {
   const supabase = getSupabaseAdmin()
 
-  let source: { handle: string | null; display_name?: string | null; avatar_url: string | null; source: string; source_trader_id: string } | null = null
+  let source: {
+    handle: string | null
+    display_name?: string | null
+    avatar_url: string | null
+    source: string
+    source_trader_id: string
+  } | null = null
 
   const { data: byHandle } = await supabase
     .from('trader_sources')
@@ -114,7 +158,15 @@ async function fetchTrader(handle: string) {
   if (!source) return null
 
   // Cascade through season_ids: 90D → 30D → 7D
-  let rankData: { roi: number | null; pnl: number | null; win_rate: number | null; max_drawdown: number | null; arena_score: number | null; rank: number | null; season_id?: string } | null = null
+  let rankData: {
+    roi: number | null
+    pnl: number | null
+    win_rate: number | null
+    max_drawdown: number | null
+    arena_score: number | null
+    rank: number | null
+    season_id?: string
+  } | null = null
   let usedSeason = '90D'
 
   for (const season of ['90D', '30D', '7D'] as const) {
@@ -133,22 +185,9 @@ async function fetchTrader(handle: string) {
     }
   }
 
-  // Final fallback: try trader_snapshots for latest data
-  if (!rankData) {
-    const { data: snapshot } = await supabase
-      .from('trader_snapshots')
-      .select('roi, pnl, win_rate, max_drawdown, arena_score')
-      .eq('source', source.source)
-      .eq('source_trader_id', source.source_trader_id)
-      .order('snapshot_date', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    if (snapshot) {
-      rankData = { ...snapshot, rank: null }
-      usedSeason = 'latest'
-    }
-  }
+  // Note: the legacy trader_snapshots fallback was removed — that table was
+  // dropped from prod (phase1_drop_dead_tables). leaderboard_ranks cascade
+  // above is the only data source; missing traders render the no-stats card.
 
   return { ...source, platform: source.source, season: usedSeason, ...(rankData || {}) }
 }
@@ -225,236 +264,396 @@ export async function GET(request: NextRequest) {
     }
 
     return new ImageResponse(
-      (
+      <div
+        style={{
+          width: 1200,
+          height: 630,
+          display: 'flex',
+          flexDirection: 'column',
+          background: `linear-gradient(135deg, ${C.bgTop} 0%, ${C.bgMid} 50%, ${C.bgTop} 100%)`,
+          fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Background gradient blobs */}
         <div
           style={{
-            width: 1200,
-            height: 630,
-            display: 'flex',
-            flexDirection: 'column',
-            background: `linear-gradient(135deg, ${C.bgTop} 0%, ${C.bgMid} 50%, ${C.bgTop} 100%)`,
-            fontFamily: 'Inter, -apple-system, BlinkMacSystemFont, system-ui, sans-serif',
-            position: 'relative',
-            overflow: 'hidden',
-          }}
-        >
-          {/* Background gradient blobs */}
-          <div style={{
-            position: 'absolute', top: -120, left: -80, width: 500, height: 500,
+            position: 'absolute',
+            top: -120,
+            left: -80,
+            width: 500,
+            height: 500,
             background: 'radial-gradient(circle, rgba(139,92,246,0.15) 0%, transparent 70%)',
             display: 'flex',
-          }} />
-          <div style={{
-            position: 'absolute', bottom: -100, right: -60, width: 420, height: 420,
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            bottom: -100,
+            right: -60,
+            width: 420,
+            height: 420,
             background: 'radial-gradient(circle, rgba(212,175,55,0.10) 0%, transparent 70%)',
             display: 'flex',
-          }} />
+          }}
+        />
 
-          {/* Top accent bar */}
-          <div style={{
-            position: 'absolute', top: 0, left: 0, right: 0, height: 4,
+        {/* Top accent bar */}
+        <div
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 4,
             background: 'linear-gradient(90deg, #8B5CF6 0%, #D4AF37 50%, #8B5CF6 100%)',
             display: 'flex',
-          }} />
+          }}
+        />
 
-          {/* Main content */}
-          <div style={{
-            position: 'relative', display: 'flex', flexDirection: 'column',
-            height: '100%', padding: '44px 60px 36px', zIndex: 1,
-          }}>
-            {/* Top row: Arena branding */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 36 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 8, height: 8, borderRadius: 999, background: C.gold, display: 'flex',
-                }} />
-                <span style={{ fontSize: 16, fontWeight: 800, color: C.gold, letterSpacing: '1.5px' }}>
-                  ARENA
-                </span>
-                <span style={{ fontSize: 13, color: C.dimmer, marginLeft: 4 }}>
-                  arenafi.org
-                </span>
-              </div>
-              <div style={{
-                display: 'flex', padding: '6px 16px', borderRadius: 8,
-                background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)',
-              }}>
-                <span style={{ fontSize: 14, fontWeight: 700, color: C.dim, letterSpacing: '1px' }}>
-                  {seasonLabel}
-                </span>
-              </div>
+        {/* Main content */}
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            flexDirection: 'column',
+            height: '100%',
+            padding: '44px 60px 36px',
+            zIndex: 1,
+          }}
+        >
+          {/* Top row: Arena branding */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: 36,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                style={{
+                  width: 8,
+                  height: 8,
+                  borderRadius: 999,
+                  background: C.gold,
+                  display: 'flex',
+                }}
+              />
+              <span
+                style={{ fontSize: 16, fontWeight: 800, color: C.gold, letterSpacing: '1.5px' }}
+              >
+                ARENA
+              </span>
+              <span style={{ fontSize: 13, color: C.dimmer, marginLeft: 4 }}>arenafi.org</span>
             </div>
+            <div
+              style={{
+                display: 'flex',
+                padding: '6px 16px',
+                borderRadius: 8,
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.12)',
+              }}
+            >
+              <span style={{ fontSize: 14, fontWeight: 700, color: C.dim, letterSpacing: '1px' }}>
+                {seasonLabel}
+              </span>
+            </div>
+          </div>
 
-            {/* Trader identity row: Avatar + Name + Exchange */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 32 }}>
-              {/* Avatar */}
-              {avatarSrc ? (
-                <img
-                  src={avatarSrc}
-                  alt=""
-                  width={88}
-                  height={88}
-                  style={{
-                    borderRadius: '50%',
-                    border: `3px solid ${platformColor}40`,
-                    objectFit: 'cover',
-                  }}
-                />
-              ) : (
-                <div
-                  style={{
-                    width: 88,
-                    height: 88,
-                    borderRadius: '50%',
-                    background: `linear-gradient(135deg, ${C.purple}, #6366f1)`,
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: 36,
-                    fontWeight: 800,
-                    color: '#fff',
-                  }}
-                >
-                  {displayName.charAt(0).toUpperCase()}
-                </div>
-              )}
+          {/* Trader identity row: Avatar + Name + Exchange */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 24, marginBottom: 32 }}>
+            {/* Avatar */}
+            {avatarSrc ? (
+              <img
+                src={avatarSrc}
+                alt=""
+                width={88}
+                height={88}
+                style={{
+                  borderRadius: '50%',
+                  border: `3px solid ${platformColor}40`,
+                  objectFit: 'cover',
+                }}
+              />
+            ) : (
+              <div
+                style={{
+                  width: 88,
+                  height: 88,
+                  borderRadius: '50%',
+                  background: `linear-gradient(135deg, ${C.purple}, #6366f1)`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 36,
+                  fontWeight: 800,
+                  color: '#fff',
+                }}
+              >
+                {displayName.charAt(0).toUpperCase()}
+              </div>
+            )}
 
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <span style={{
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span
+                style={{
                   fontSize: displayName.length > 18 ? 32 : 40,
                   fontWeight: 900,
                   color: C.white,
                   letterSpacing: '-0.5px',
-                }}>
-                  {displayName.length > 24 ? displayName.slice(0, 24) + '...' : displayName}
-                </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  {/* Exchange badge */}
-                  {platformLabel && (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 6,
-                      padding: '4px 12px', borderRadius: 6,
+                }}
+              >
+                {displayName.length > 24 ? displayName.slice(0, 24) + '...' : displayName}
+              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                {/* Exchange badge */}
+                {platformLabel && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: '4px 12px',
+                      borderRadius: 6,
                       background: platformColor + '18',
                       border: '1px solid ' + platformColor + '35',
-                    }}>
-                      <div style={{ width: 6, height: 6, borderRadius: 999, background: platformColor, display: 'flex' }} />
-                      <span style={{ fontSize: 13, fontWeight: 700, color: platformColor, letterSpacing: '0.5px' }}>
-                        {platformLabel}
-                      </span>
-                    </div>
-                  )}
-                  {/* Rank badge */}
-                  {rank != null && (
-                    <div style={{
-                      display: 'flex', alignItems: 'center', gap: 4,
-                      padding: '4px 12px', borderRadius: 6,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 999,
+                        background: platformColor,
+                        display: 'flex',
+                      }}
+                    />
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: platformColor,
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      {platformLabel}
+                    </span>
+                  </div>
+                )}
+                {/* Rank badge */}
+                {rank != null && (
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      padding: '4px 12px',
+                      borderRadius: 6,
                       background: 'rgba(255,255,255,0.06)',
                       border: '1px solid rgba(255,255,255,0.12)',
-                    }}>
-                      <span style={{ fontSize: 12, fontWeight: 700, color: C.dim, letterSpacing: '0.5px' }}>
-                        #{rank}
-                      </span>
-                    </div>
-                  )}
-                </div>
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontSize: 12,
+                        fontWeight: 700,
+                        color: C.dim,
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      #{rank}
+                    </span>
+                  </div>
+                )}
               </div>
-            </div>
-
-            {/* Stats cards row — only show cards with real data */}
-            <div style={{ display: 'flex', gap: 16, flex: 1, alignItems: 'stretch' }}>
-              {/* Arena Score — always shown */}
-              <div style={{
-                display: 'flex', flexDirection: 'column', flex: optionalCardCount === 0 ? 1.2 : 1,
-                padding: '20px 24px', borderRadius: 16,
-                background: C.goldDim, border: '1px solid ' + C.borderGold, gap: 8,
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: C.goldLight, letterSpacing: '2px', display: 'flex' }}>
-                  ARENA SCORE
-                </span>
-                <span style={{
-                  fontSize: 52, fontWeight: 900, color: C.goldLight,
-                  letterSpacing: '-2px', lineHeight: 1, display: 'flex',
-                }}>
-                  {score != null ? Math.round(score).toString() : '--'}
-                </span>
-              </div>
-
-              {/* ROI — always shown */}
-              <div style={{
-                display: 'flex', flexDirection: 'column', flex: optionalCardCount === 0 ? 1.2 : 1,
-                padding: '20px 24px', borderRadius: 16,
-                background: roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
-                border: roiValid && roi >= 0 ? '1px solid rgba(47,229,125,0.25)' : '1px solid rgba(255,85,85,0.25)',
-                gap: 8,
-              }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
-                  ROI ({seasonLabel})
-                </span>
-                <span style={{
-                  fontSize: 48, fontWeight: 900, color: roiColor,
-                  letterSpacing: '-2px', lineHeight: 1, display: 'flex',
-                }}>
-                  {roiStr}
-                </span>
-              </div>
-
-              {/* Win Rate — only when data exists */}
-              {showWinRate && (
-                <div style={{
-                  display: 'flex', flexDirection: 'column', flex: 0.8,
-                  padding: '20px 24px', borderRadius: 16,
-                  background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.08)',
-                  gap: 8,
-                }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
-                    WIN RATE
-                  </span>
-                  <span style={{
-                    fontSize: 40, fontWeight: 900, color: C.offWhite,
-                    letterSpacing: '-1px', lineHeight: 1, display: 'flex',
-                  }}>
-                    {winRate.toFixed(0) + '%'}
-                  </span>
-                </div>
-              )}
-
-              {/* Max Drawdown — only when data exists */}
-              {showMdd && (
-                <div style={{
-                  display: 'flex', flexDirection: 'column', flex: 0.8,
-                  padding: '20px 24px', borderRadius: 16,
-                  background: 'rgba(255,85,85,0.05)', border: '1px solid rgba(255,85,85,0.15)',
-                  gap: 8,
-                }}>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', display: 'flex' }}>
-                    MAX DD
-                  </span>
-                  <span style={{
-                    fontSize: 40, fontWeight: 900, color: C.error,
-                    letterSpacing: '-1px', lineHeight: 1, display: 'flex',
-                  }}>
-                    {`-${Math.abs(mdd).toFixed(0)}%`}
-                  </span>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div style={{
-              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-              marginTop: 20, paddingTop: 16,
-              borderTop: '1px solid rgba(255,255,255,0.06)',
-            }}>
-              <span style={{ fontSize: 14, color: C.dim }}>
-                Crypto Trader Rankings
-              </span>
-              <span style={{ fontSize: 14, fontWeight: 600, color: C.dim }}>
-                View full profile at arenafi.org
-              </span>
             </div>
           </div>
+
+          {/* Stats cards row — only show cards with real data */}
+          <div style={{ display: 'flex', gap: 16, flex: 1, alignItems: 'stretch' }}>
+            {/* Arena Score — always shown */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: optionalCardCount === 0 ? 1.2 : 1,
+                padding: '20px 24px',
+                borderRadius: 16,
+                background: C.goldDim,
+                border: '1px solid ' + C.borderGold,
+                gap: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: C.goldLight,
+                  letterSpacing: '2px',
+                  display: 'flex',
+                }}
+              >
+                ARENA SCORE
+              </span>
+              <span
+                style={{
+                  fontSize: 52,
+                  fontWeight: 900,
+                  color: C.goldLight,
+                  letterSpacing: '-2px',
+                  lineHeight: 1,
+                  display: 'flex',
+                }}
+              >
+                {score != null ? Math.round(score).toString() : '--'}
+              </span>
+            </div>
+
+            {/* ROI — always shown */}
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                flex: optionalCardCount === 0 ? 1.2 : 1,
+                padding: '20px 24px',
+                borderRadius: 16,
+                background: roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
+                border:
+                  roiValid && roi >= 0
+                    ? '1px solid rgba(47,229,125,0.25)'
+                    : '1px solid rgba(255,85,85,0.25)',
+                gap: 8,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: C.dimmer,
+                  letterSpacing: '2px',
+                  display: 'flex',
+                }}
+              >
+                ROI ({seasonLabel})
+              </span>
+              <span
+                style={{
+                  fontSize: 48,
+                  fontWeight: 900,
+                  color: roiColor,
+                  letterSpacing: '-2px',
+                  lineHeight: 1,
+                  display: 'flex',
+                }}
+              >
+                {roiStr}
+              </span>
+            </div>
+
+            {/* Win Rate — only when data exists */}
+            {showWinRate && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flex: 0.8,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  gap: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.dimmer,
+                    letterSpacing: '2px',
+                    display: 'flex',
+                  }}
+                >
+                  WIN RATE
+                </span>
+                <span
+                  style={{
+                    fontSize: 40,
+                    fontWeight: 900,
+                    color: C.offWhite,
+                    letterSpacing: '-1px',
+                    lineHeight: 1,
+                    display: 'flex',
+                  }}
+                >
+                  {winRate.toFixed(0) + '%'}
+                </span>
+              </div>
+            )}
+
+            {/* Max Drawdown — only when data exists */}
+            {showMdd && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  flex: 0.8,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background: 'rgba(255,85,85,0.05)',
+                  border: '1px solid rgba(255,85,85,0.15)',
+                  gap: 8,
+                }}
+              >
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.dimmer,
+                    letterSpacing: '2px',
+                    display: 'flex',
+                  }}
+                >
+                  MAX DD
+                </span>
+                <span
+                  style={{
+                    fontSize: 40,
+                    fontWeight: 900,
+                    color: C.error,
+                    letterSpacing: '-1px',
+                    lineHeight: 1,
+                    display: 'flex',
+                  }}
+                >
+                  {`-${Math.abs(mdd).toFixed(0)}%`}
+                </span>
+              </div>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginTop: 20,
+              paddingTop: 16,
+              borderTop: '1px solid rgba(255,255,255,0.06)',
+            }}
+          >
+            <span style={{ fontSize: 14, color: C.dim }}>Crypto Trader Rankings</span>
+            <span style={{ fontSize: 14, fontWeight: 600, color: C.dim }}>
+              View full profile at arenafi.org
+            </span>
+          </div>
         </div>
-      ),
+      </div>,
       {
         width: 1200,
         height: 630,
@@ -467,37 +666,54 @@ export async function GET(request: NextRequest) {
     logger.error('[OG Trader] Error:', e)
     // Return a minimal fallback OG image instead of a 500 error.
     // A broken OG image means no social preview on Twitter/Discord — unacceptable.
-    const fallbackHandle = (new URL(request.url).searchParams.get('handle') || 'Trader').slice(0, 200)
+    const fallbackHandle = (new URL(request.url).searchParams.get('handle') || 'Trader').slice(
+      0,
+      200
+    )
     try {
       return new ImageResponse(
-        (
-          <div style={{
-            width: 1200, height: 630, display: 'flex', flexDirection: 'column',
-            alignItems: 'center', justifyContent: 'center',
+        <div
+          style={{
+            width: 1200,
+            height: 630,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
             background: 'linear-gradient(135deg, #0A0A0F 0%, #1a1525 50%, #0A0A0F 100%)',
             fontFamily: 'Inter, system-ui, sans-serif',
-          }}>
-            <div style={{
-              width: 88, height: 88, borderRadius: '50%',
+          }}
+        >
+          <div
+            style={{
+              width: 88,
+              height: 88,
+              borderRadius: '50%',
               background: 'linear-gradient(135deg, #8B5CF6, #6366f1)',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontSize: 36, fontWeight: 800, color: '#fff', marginBottom: 24,
-            }}>
-              {fallbackHandle.charAt(0).toUpperCase()}
-            </div>
-            <span style={{ fontSize: 36, fontWeight: 900, color: '#fff', marginBottom: 12 }}>
-              {fallbackHandle.length > 24 ? fallbackHandle.slice(0, 24) + '...' : fallbackHandle}
-            </span>
-            <span style={{ fontSize: 18, color: '#D4AF37', fontWeight: 700, letterSpacing: '1.5px' }}>
-              ARENA — Crypto Trader Rankings
-            </span>
-            <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>
-              arenafi.org
-            </span>
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 36,
+              fontWeight: 800,
+              color: '#fff',
+              marginBottom: 24,
+            }}
+          >
+            {fallbackHandle.charAt(0).toUpperCase()}
           </div>
-        ),
+          <span style={{ fontSize: 36, fontWeight: 900, color: '#fff', marginBottom: 12 }}>
+            {fallbackHandle.length > 24 ? fallbackHandle.slice(0, 24) + '...' : fallbackHandle}
+          </span>
+          <span style={{ fontSize: 18, color: '#D4AF37', fontWeight: 700, letterSpacing: '1.5px' }}>
+            ARENA — Crypto Trader Rankings
+          </span>
+          <span style={{ fontSize: 14, color: 'rgba(255,255,255,0.5)', marginTop: 8 }}>
+            arenafi.org
+          </span>
+        </div>,
         {
-          width: 1200, height: 630,
+          width: 1200,
+          height: 630,
           headers: { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' },
         }
       )

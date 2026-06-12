@@ -606,16 +606,10 @@ export async function deletePost(
   await invalidatePostListCache()
 }
 
-/**
- * 增加浏览次数
- */
-export async function incrementViewCount(supabase: SupabaseClient, postId: string): Promise<void> {
-  const { error } = await supabase.rpc('increment_post_view', { post_id: postId })
-  if (error) {
-    // RPC 不存在时的降级处理（view_count 在数据库层自增更安全）
-    logger.warn('increment_post_view RPC not available:', error.message)
-  }
-}
+// incrementViewCount was removed: it had no production callers and the
+// increment_post_view RPC it depended on never existed in prod (no repo
+// migration defines it). If post-view counting is reintroduced, add an
+// atomic RPC migration first (see CLAUDE.md counter rules).
 
 /**
  * 获取用户对帖子的点赞状态
