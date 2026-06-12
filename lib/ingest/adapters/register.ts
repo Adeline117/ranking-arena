@@ -28,4 +28,7 @@ import './xt'
 import './blofin'
 import './bingx'
 
+// Phase 2 — long-tail batch 3 (wave 2)
+import './btcc'
+
 export {}

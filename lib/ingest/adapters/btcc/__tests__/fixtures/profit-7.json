@@ -1,0 +1,78 @@
+{
+  "code": 200,
+  "msg": "请求成功",
+  "data": [
+    {
+      "traderId": null,
+      "settleDateList": null,
+      "dayProfitList": null,
+      "totalCostAmount": null,
+      "settleDate": "2026-06-05",
+      "dayTotalProfit": 7296.1,
+      "dayTotalCostAmount": 11625.87,
+      "dayTotalProfitRate": 62.76
+    },
+    {
+      "traderId": null,
+      "settleDateList": null,
+      "dayProfitList": null,
+      "totalCostAmount": null,
+      "settleDate": "2026-06-06",
+      "dayTotalProfit": 15559.91,
+      "dayTotalCostAmount": 11625.87,
+      "dayTotalProfitRate": 133.84
+    },
+    {
+      "traderId": null,
+      "settleDateList": null,
+      "dayProfitList": null,
+      "totalCostAmount": null,
+      "settleDate": "2026-06-07",
+      "dayTotalProfit": 25611.58,
+      "dayTotalCostAmount": 11625.87,
+      "dayTotalProfitRate": 220.3
+    },
+    {
+      "traderId": null,
+      "settleDateList": null,
+      "dayProfitList": null,
+      "totalCostAmount": null,
+      "settleDate": "2026-06-08",
+      "dayTotalProfit": 26323.06,
+      "dayTotalCostAmount": 11625.87,
+      "dayTotalProfitRate": 226.42
+    },
+    {
+      "traderId": null,
+      "settleDateList": null,
+      "dayProfitList": null,
+      "totalCostAmount": null,
+      "settleDate": "2026-06-09",
+      "dayTotalProfit": 26983.11,
+      "dayTotalCostAmount": 11625.87,
+      "dayTotalProfitRate": 232.1
+    },
+    {
+      "traderId": null,
+      "settleDateList": null,
+      "dayProfitList": null,
+      "totalCostAmount": null,
+      "settleDate": "2026-06-10",
+      "dayTotalProfit": 27186.29,
+      "dayTotalCostAmount": 11625.87,
+      "dayTotalProfitRate": 233.85
+    },
+    {
+      "traderId": null,
+      "settleDateList": null,
+      "dayProfitList": null,
+      "totalCostAmount": null,
+      "settleDate": "2026-06-11",
+      "dayTotalProfit": 27321.05,
+      "dayTotalCostAmount": 11625.87,
+      "dayTotalProfitRate": 235.01
+    }
+  ],
+  "errorDetails": null,
+  "ok": true
+}

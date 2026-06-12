@@ -1,0 +1,14 @@
+{
+  "code": 200,
+  "msg": "请求成功",
+  "data": {
+    "traderId": 1941565,
+    "winRate": 93.8,
+    "totalProfitRate": 304.43,
+    "totalNetProfit": 35392.5,
+    "nickName": "Black Rock",
+    "avatarPic": "https://img2.btuserlog.com/btcc/mis/20250223/297e243a-b30e-437b-a301-c9cc0a101ad0.jpeg"
+  },
+  "errorDetails": null,
+  "ok": true
+}

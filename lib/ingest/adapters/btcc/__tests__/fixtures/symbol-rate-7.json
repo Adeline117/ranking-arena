@@ -1,0 +1,9 @@
+{
+  "code": 200,
+  "msg": "请求成功",
+  "data": [
+    { "symbol": "ETH", "tradeNum": 48, "openMargin": "3507.036050000001", "tradeTotalNum": 48 }
+  ],
+  "errorDetails": null,
+  "ok": true
+}

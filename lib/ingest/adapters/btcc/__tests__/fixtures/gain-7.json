@@ -1,0 +1,19 @@
+{
+  "code": 200,
+  "msg": "请求成功",
+  "data": {
+    "traderId": 1941565,
+    "avgPostionTimes": 16300,
+    "traderAtom": 124771.15,
+    "totalTradeNum": 48,
+    "totalWinTradeNum": 47,
+    "totalNetProfit": 27321.05,
+    "totalWinAmount": 27349.16,
+    "totalProfitRateList": "132.19,203.27,289.73,295.85,301.53,303.27,304.43",
+    "maxBackRate": 0,
+    "profitAndCossRate": 972.93,
+    "cumulativeNetProfit": -1393862.31
+  },
+  "errorDetails": null,
+  "ok": true
+}
