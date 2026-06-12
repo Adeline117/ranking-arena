@@ -1,0 +1,92 @@
+{
+  "response": {
+    "code": 0,
+    "data": {
+      "avgCostBuy": "166.1529577516",
+      "datePnlList": [
+        {
+          "profit": "0",
+          "timestamp": 1780704000000
+        },
+        {
+          "profit": "2785.088657915245126054551486",
+          "timestamp": 1780790400000
+        },
+        {
+          "profit": "4995.360616509613054699124965",
+          "timestamp": 1780876800000
+        },
+        {
+          "profit": "-2667.989312267514127860002432",
+          "timestamp": 1780963200000
+        },
+        {
+          "profit": "36264.090280503076994496940858",
+          "timestamp": 1781049600000
+        },
+        {
+          "profit": "23314.502612037124913376543526",
+          "timestamp": 1781136000000
+        },
+        {
+          "profit": "0",
+          "timestamp": 1781222400000
+        }
+      ],
+      "favoriteMcapType": "2",
+      "mcapTxsBuyList": [128, 144, 0, 0, 0],
+      "nativeTokenBalanceAmount": "9.749411528",
+      "nativeTokenBalanceUsd": "653.04031683997916824712593788057925950525808",
+      "newWinRateDistribution": [1, 8, 20, 4],
+      "topTokens": [
+        {
+          "innerGotoUrl": "/token/solana/Tqj8yFmagrg7oorpQkVGYR52r96RFTamvWfth9bpump",
+          "pnl": "59873.8803353657",
+          "roi": "723.6041026908748",
+          "tokenAddress": "Tqj8yFmagrg7oorpQkVGYR52r96RFTamvWfth9bpump",
+          "tokenLogo": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-Tqj8yFmagrg7oorpQkVGYR52r96RFTamvWfth9bpump-109/type=default_90_0?v=1779472621760",
+          "tokenName": "Kintara",
+          "tokenSymbol": "KINS"
+        },
+        {
+          "innerGotoUrl": "/token/solana/9UuLsJ3jf8ViBNeRcwXD53re5G3ypgfKK3s2EiMMpump",
+          "pnl": "4302.591121316569",
+          "roi": "106.4493960148256",
+          "tokenAddress": "9UuLsJ3jf8ViBNeRcwXD53re5G3ypgfKK3s2EiMMpump",
+          "tokenLogo": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-9UuLsJ3jf8ViBNeRcwXD53re5G3ypgfKK3s2EiMMpump-109/type=default_90_0?v=1780371544831",
+          "tokenName": "Permission-less Lending",
+          "tokenSymbol": "Magpie"
+        },
+        {
+          "innerGotoUrl": "/token/solana/87UGfmKKFjvWRCpFRgpKtRdrj1gVwkqebdxLnAAPpump",
+          "pnl": "1748.1386545766775",
+          "roi": "171.97769651677194",
+          "tokenAddress": "87UGfmKKFjvWRCpFRgpKtRdrj1gVwkqebdxLnAAPpump",
+          "tokenLogo": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-87UGfmKKFjvWRCpFRgpKtRdrj1gVwkqebdxLnAAPpump-109/type=default_90_0?v=1780897072182",
+          "tokenName": "Lil Finder Guy",
+          "tokenSymbol": "FIN"
+        }
+      ],
+      "topTokensTotalPnl": "65924.6101112589465",
+      "topTokensTotalRoi": "494.45",
+      "totalPnl": "64544.012921031914",
+      "totalPnlRoi": "213.70",
+      "totalProfitPnl": "121476.09483690979",
+      "totalProfitPnlRoi": "3.38",
+      "totalTxsBuy": 272,
+      "totalTxsSell": 90,
+      "totalVolumeBuy": "45193.604508441626",
+      "totalVolumeSell": "94747.0259503692",
+      "totalWinRate": "22.50",
+      "unrealizedPnl": "32820.13227375993",
+      "unrealizedPnlRoi": "151.63499206299505",
+      "winRateList": ["2.50", "2.50", "12.50", "5.00", "50.00", "10.00"]
+    },
+    "detailMsg": "",
+    "error_code": "0",
+    "error_message": "",
+    "msg": ""
+  },
+  "address": "3CkgBB2ryzxQuSmzPSQ53jtVffPf1Wb1t1HBVs8GmGfw",
+  "timeframe": 7
+}
