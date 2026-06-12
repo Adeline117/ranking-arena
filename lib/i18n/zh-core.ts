@@ -155,6 +155,7 @@ const zhCore = {
   loadFailed: '加载失败，点击重试',
   loadMore: '加载更多',
   loading: '加载中...',
+  refreshing: '刷新中...',
   loadingMore: '加载更多...',
   loadingShort: '加载中',
   loadingSkeleton: '正在加载内容...',

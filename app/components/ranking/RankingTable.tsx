@@ -84,6 +84,8 @@ function CardLoadMoreSentinel({ onVisible }: { onVisible: () => void }) {
 function RankingTableInner(props: {
   traders: Trader[]
   loading: boolean
+  /** Background refresh (period switch / poll) with rows still on screen — dims the table instead of replacing it. */
+  isRefreshing?: boolean
   loggedIn: boolean
   source?: string
   timeRange?: '7D' | '30D' | '90D' | 'COMPOSITE'
@@ -113,6 +115,7 @@ function RankingTableInner(props: {
   const {
     traders: tradersRaw,
     loading,
+    isRefreshing = false,
     source,
     timeRange = '90D',
     isPro = false,
@@ -925,38 +928,18 @@ function RankingTableInner(props: {
           onClose={() => setShowScoreRulesModal(false)}
         />
 
-        <Box style={{ minHeight: 400, contain: 'layout style', position: 'relative' }}>
-          {/* Loading overlay — shown when refreshing with existing data (e.g. period switch) */}
-          {loading && sortedTraders.length > 0 && (
-            <div
-              style={{
-                position: 'absolute',
-                inset: 0,
-                zIndex: 5,
-                display: 'flex',
-                alignItems: 'flex-start',
-                justifyContent: 'center',
-                paddingTop: 80,
-                background: 'var(--color-bg-primary-80, rgba(0,0,0,0.4))',
-                backdropFilter: 'blur(1px)',
-                borderRadius: tokens.radius.lg,
-                pointerEvents: 'none',
-              }}
-            >
-              <svg
-                width="24"
-                height="24"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--color-accent-primary)"
-                strokeWidth="2.5"
-                style={{ animation: 'spin 1s linear infinite' }}
-              >
-                <circle cx="12" cy="12" r="10" opacity={0.25} />
-                <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
-              </svg>
-            </div>
-          )}
+        <Box
+          style={{
+            minHeight: 400,
+            contain: 'layout style',
+            position: 'relative',
+            // Background refresh: keep rows visible, dim instead of overlay/skeleton.
+            // Rows stay readable but non-interactive until fresh data lands.
+            opacity: isRefreshing ? 0.55 : 1,
+            transition: 'opacity 150ms ease',
+            pointerEvents: isRefreshing ? 'none' : undefined,
+          }}
+        >
           {loading && sortedTraders.length === 0 ? (
             <Box style={{ animation: 'fadeIn 0.2s ease-in' }}>
               <RankingSkeleton />
