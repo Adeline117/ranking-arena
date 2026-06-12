@@ -14,6 +14,9 @@ export type SortBy = 'arena_score' | 'roi' | 'win_rate' | 'max_drawdown'
 export type SortOrder = 'asc' | 'desc'
 
 const TIME_RANGE_STORAGE_KEY = 'ranking_time_range'
+// Debounce for rapid tab-flicking. Kept short: with the dim-not-overlay refresh UI
+// the old rows stay visible, so a long debounce only delays the fetch start.
+export const TIME_RANGE_DEBOUNCE_MS = 150
 const AUTO_REFRESH_MS = 60_000 // 60s — rankings update frequently with event-driven pipeline
 const STALE_THRESHOLD_MS = AUTO_REFRESH_MS
 const PAGE_SIZE = 50
@@ -478,7 +481,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     timeRangeDebounceTimer = setTimeout(() => {
       timeRangeDebounceTimer = null
       dispatch({ type: 'SET_TIME_RANGE', timeRange: range })
-    }, 300)
+    }, TIME_RANGE_DEBOUNCE_MS)
   }, [])
 
   const refresh = useCallback(() => {
