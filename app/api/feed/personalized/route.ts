@@ -1,6 +1,6 @@
 /**
  * GET /api/feed/personalized
- * 
+ *
  * Personalized feed using get_personalized_feed RPC.
  * Falls back to hot_score for unauthenticated users.
  */
@@ -42,16 +42,19 @@ export async function GET(request: NextRequest) {
 
         if (user) {
           // Call personalized feed RPC
-          const { data: feedData, error: rpcError } = await supabase.rpc(
-            'get_personalized_feed',
-            { p_user_id: user.id, p_limit: limit, p_offset: offset }
-          )
+          const { data: feedData, error: rpcError } = await supabase.rpc('get_personalized_feed', {
+            p_user_id: user.id,
+            p_limit: limit,
+            p_offset: offset,
+          })
 
           if (rpcError) {
             // Fallback to hot_score on RPC error
             const { data: fallbackData } = await supabase
               .from('posts')
-              .select('id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
+              .select(
+                'id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)'
+              )
               .order('hot_score', { ascending: false })
               .range(offset, offset + limit - 1)
 
@@ -62,25 +65,55 @@ export async function GET(request: NextRequest) {
               const postIds = feedData.map((r: Record<string, unknown>) => r.post_id as string)
               const { data: fullPosts } = await supabase
                 .from('posts')
-                .select('id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
+                .select(
+                  'id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)'
+                )
                 .in('id', postIds)
 
               // Preserve RPC ordering
-              const postMap = new Map((fullPosts || []).map((p: Record<string, unknown>) => [p.id, p]))
-              fetchedPosts = postIds
-                .map((id: string) => postMap.get(id))
-                .filter(Boolean) as Record<string, unknown>[]
+              const postMap = new Map(
+                (fullPosts || []).map((p: Record<string, unknown>) => [p.id, p])
+              )
+              fetchedPosts = postIds.map((id: string) => postMap.get(id)).filter(Boolean) as Record<
+                string,
+                unknown
+              >[]
             }
           }
         } else {
           // Unauthenticated: fallback to hot_score
           const { data: fallbackData } = await supabase
             .from('posts')
-            .select('id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url), group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)')
+            .select(
+              'id, title, created_at, updated_at, author_id, author_handle, group_id, images, like_count, comment_count, repost_count, view_count, bookmark_count, is_pinned, hot_score, poll_enabled, poll_bull, poll_bear, poll_wait, visibility, language, mentions, hashtags, group:groups!posts_group_id_fkey(id, name, name_en, avatar_url)'
+            )
             .order('hot_score', { ascending: false })
             .range(offset, offset + limit - 1)
 
           fetchedPosts = (fallbackData as Record<string, unknown>[]) || []
+        }
+
+        // Merge author profiles. posts.author_id has no FK in prod, so the
+        // users!posts_author_id_fkey embed fails with PGRST200 (and the users
+        // table has no handle/display_name/avatar_url columns anyway) —
+        // two-step lookup via user_profiles instead.
+        if (fetchedPosts.length > 0) {
+          const authorIds = [
+            ...new Set(fetchedPosts.map((p) => p.author_id as string).filter(Boolean)),
+          ]
+          const { data: authorProfiles } = authorIds.length
+            ? await supabase
+                .from('user_profiles')
+                .select('id, handle, avatar_url')
+                .in('id', authorIds)
+            : { data: null }
+          const profileById = new Map(
+            (authorProfiles || []).map((p: Record<string, unknown>) => [p.id as string, p])
+          )
+          fetchedPosts = fetchedPosts.map((post) => ({
+            ...post,
+            author: profileById.get(post.author_id as string) ?? null,
+          }))
         }
 
         // Attach user reactions/votes
@@ -88,7 +121,7 @@ export async function GET(request: NextRequest) {
         let userVotes: Map<string, 'bull' | 'bear' | 'wait'> = new Map()
 
         if (user && fetchedPosts.length > 0) {
-          const postIds = fetchedPosts.map(p => p.id as string)
+          const postIds = fetchedPosts.map((p) => p.id as string)
           const [reactions, votes] = await Promise.all([
             getUserPostReactions(supabase, postIds, user.id),
             getUserPostVotes(supabase, postIds, user.id),
@@ -97,7 +130,7 @@ export async function GET(request: NextRequest) {
           userVotes = votes
         }
 
-        const postsWithState = fetchedPosts.map(post => ({
+        const postsWithState = fetchedPosts.map((post) => ({
           ...post,
           user_reaction: userReactions.get(post.id as string) || null,
           user_vote: userVotes.get(post.id as string) || null,
@@ -108,10 +141,7 @@ export async function GET(request: NextRequest) {
       { ttl: 60 }
     )
 
-    return successWithPagination(
-      { posts },
-      { limit, offset, has_more: hasMore }
-    )
+    return successWithPagination({ posts }, { limit, offset, has_more: hasMore })
   } catch (error: unknown) {
     return handleError(error, 'personalized feed GET')
   }

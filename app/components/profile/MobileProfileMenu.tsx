@@ -15,7 +15,6 @@ interface UserInfo {
   handle: string | null
   email: string | null
   avatarUrl: string | null
-  displayName: string | null
 }
 
 const ALL_MENU_ITEMS = [
@@ -87,7 +86,8 @@ export default function MobileProfileMenu() {
       const u = data.session.user
       supabase
         .from('user_profiles')
-        .select('handle, display_name, avatar_url')
+        // user_profiles has no display_name column (selecting it 400s with 42703) — handle is the display name
+        .select('handle, avatar_url')
         .eq('id', u.id)
         .maybeSingle()
         .then(({ data: profile }) => {
@@ -95,7 +95,6 @@ export default function MobileProfileMenu() {
             handle: profile?.handle || null,
             email: u.email || null,
             avatarUrl: profile?.avatar_url || null,
-            displayName: profile?.display_name || null,
           })
           setLoading(false)
         })
@@ -161,8 +160,14 @@ export default function MobileProfileMenu() {
                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               />
             ) : (
-              <span style={{ color: tokens.colors.white, fontSize: 20, fontWeight: 700 }}>
-                {(user?.displayName || user?.handle || user?.email || '?').charAt(0).toUpperCase()}
+              <span
+                style={{
+                  color: tokens.colors.white,
+                  fontSize: tokens.typography.fontSize.xl,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                }}
+              >
+                {(user?.handle || user?.email || '?').charAt(0).toUpperCase()}
               </span>
             )}
           </div>
@@ -171,14 +176,14 @@ export default function MobileProfileMenu() {
             <div
               style={{
                 fontSize: tokens.typography.fontSize.md,
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
                 color: 'var(--color-text-primary)',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
               }}
             >
-              {user ? user.displayName || user.handle || user.email : t('loginOrSignUp')}
+              {user ? user.handle || user.email : t('loginOrSignUp')}
             </div>
             {user?.handle && (
               <div

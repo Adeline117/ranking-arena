@@ -148,7 +148,7 @@ export async function getPostsByHashtag(
     .from('hashtags')
     .select('id')
     .eq('tag', tag.toLowerCase())
-    .single()
+    .maybeSingle()
 
   if (!hashtag) return { posts: [], total: 0 }
 
@@ -164,10 +164,13 @@ export async function getPostsByHashtag(
 
   const postIds = joinRows.map((r: { post_id: string }) => r.post_id)
 
-  // Fetch posts
+  // Fetch posts. posts.author_id has no FK in prod, so the
+  // users!posts_author_id_fkey embed fails with PGRST200 (and the users table
+  // has no handle/display_name/avatar_url columns anyway) — two-step lookup
+  // via user_profiles instead, keeping the `author` response key shape.
   const query = supabase
     .from('posts')
-    .select('*, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url)')
+    .select('*')
     .in('id', postIds)
     .order(sort_by, { ascending: false })
     .range(offset, offset + limit - 1)
@@ -179,5 +182,18 @@ export async function getPostsByHashtag(
     return { posts: [], total: 0 }
   }
 
-  return { posts: posts || [], total: count || 0 }
+  const rows = (posts || []) as Record<string, unknown>[]
+  const authorIds = [...new Set(rows.map((p) => p.author_id as string).filter(Boolean))]
+  const { data: profiles } = authorIds.length
+    ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
+    : { data: null }
+  const profileById = new Map(
+    (profiles || []).map((p: Record<string, unknown>) => [p.id as string, p])
+  )
+  const withAuthors = rows.map((p) => ({
+    ...p,
+    author: profileById.get(p.author_id as string) ?? null,
+  }))
+
+  return { posts: withAuthors, total: count || 0 }
 }

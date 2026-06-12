@@ -20,10 +20,13 @@ export const POST = withAuth(
 
     // Validate required fields
     if (!title || !messageBody) {
-      return NextResponse.json({
-        success: false,
-        error: 'Missing required fields: title, body',
-      }, { status: 400 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Missing required fields: title, body',
+        },
+        { status: 400 }
+      )
     }
 
     // Check if user is admin (for sending to others)
@@ -36,13 +39,16 @@ export const POST = withAuth(
         .from('user_profiles')
         .select('role')
         .eq('id', user.id)
-        .single()
+        .maybeSingle()
 
       if (profile?.role !== 'admin') {
-        return NextResponse.json({
-          success: false,
-          error: 'Admin role required to send to other users',
-        }, { status: 403 })
+        return NextResponse.json(
+          {
+            success: false,
+            error: 'Admin role required to send to other users',
+          },
+          { status: 403 }
+        )
       }
     }
 
@@ -64,10 +70,13 @@ export const POST = withAuth(
       })
     } catch (error: unknown) {
       logger.error('[push/send] Failed to send notification:', error)
-      return NextResponse.json({
-        success: false,
-        error: 'Failed to send notification',
-      }, { status: 500 })
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Failed to send notification',
+        },
+        { status: 500 }
+      )
     }
   },
   { name: 'push-send', rateLimit: 'write' }

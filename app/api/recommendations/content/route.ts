@@ -19,6 +19,27 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 
+/**
+ * Merge author profiles into post rows. posts.author_id has no FK in prod, so
+ * the users!posts_author_id_fkey embed fails with PGRST200 (and the users table
+ * has no handle/display_name/avatar_url columns anyway) — two-step lookup via
+ * user_profiles instead, keeping the `author` response key shape.
+ */
+async function attachAuthors(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  posts: Record<string, unknown>[]
+): Promise<Record<string, unknown>[]> {
+  if (posts.length === 0) return posts
+  const authorIds = [...new Set(posts.map((p) => p.author_id as string).filter(Boolean))]
+  const { data: profiles } = authorIds.length
+    ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
+    : { data: null }
+  const profileById = new Map(
+    (profiles || []).map((p: Record<string, unknown>) => [p.id as string, p])
+  )
+  return posts.map((p) => ({ ...p, author: profileById.get(p.author_id as string) ?? null }))
+}
+
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
@@ -27,10 +48,8 @@ export async function GET(request: NextRequest) {
     const supabase = getSupabaseAdmin()
     const { searchParams } = new URL(request.url)
 
-    const contentType = validateEnum(
-      searchParams.get('type'),
-      ['post', 'group', 'trader'] as const
-    ) ?? 'post'
+    const contentType =
+      validateEnum(searchParams.get('type'), ['post', 'group', 'trader'] as const) ?? 'post'
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 50 }) ?? 20
 
     const user = await getAuthUser(request)
@@ -39,12 +58,15 @@ export async function GET(request: NextRequest) {
       // Unauthenticated: return hot posts as fallback
       const { data: fallbackData } = await supabase
         .from('posts')
-        .select('id, title, content, created_at, hot_score, like_count, comment_count, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url)')
+        .select('id, title, content, created_at, hot_score, like_count, comment_count, author_id')
         .order('hot_score', { ascending: false })
         .limit(limit)
 
       return success({
-        recommendations: (fallbackData || []),
+        recommendations: await attachAuthors(
+          supabase,
+          (fallbackData as Record<string, unknown>[]) || []
+        ),
         type: contentType,
         personalized: false,
       })
@@ -59,12 +81,15 @@ export async function GET(request: NextRequest) {
       // Fallback
       const { data: fallbackData } = await supabase
         .from('posts')
-        .select('id, title, content, created_at, hot_score, like_count, comment_count, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url)')
+        .select('id, title, content, created_at, hot_score, like_count, comment_count, author_id')
         .order('hot_score', { ascending: false })
         .limit(limit)
 
       return success({
-        recommendations: (fallbackData || []),
+        recommendations: await attachAuthors(
+          supabase,
+          (fallbackData as Record<string, unknown>[]) || []
+        ),
         type: contentType,
         personalized: false,
       })
@@ -76,14 +101,14 @@ export async function GET(request: NextRequest) {
     if (contentType === 'post') {
       const { data: posts } = await supabase
         .from('posts')
-        .select('id, title, content, created_at, hot_score, like_count, comment_count, author:users!posts_author_id_fkey(id, handle, display_name, avatar_url)')
+        .select('id, title, content, created_at, hot_score, like_count, comment_count, author_id')
         .in('id', itemIds)
 
       const postMap = new Map((posts || []).map((p: Record<string, unknown>) => [p.id, p]))
       const ordered = itemIds.map((id: string) => postMap.get(id)).filter(Boolean)
 
       return success({
-        recommendations: ordered,
+        recommendations: await attachAuthors(supabase, ordered as Record<string, unknown>[]),
         type: contentType,
         personalized: true,
       })

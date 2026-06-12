@@ -49,19 +49,21 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Invalid password' }, { status: 403 })
     }
 
-    // Check that 2FA is currently enabled
+    // Check that 2FA is currently enabled.
+    // maybeSingle: auth users without a user_profiles row yet are a legitimate
+    // state — no profile row means 2FA was never enabled.
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('totp_enabled')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
-    if (profileError || !profile) {
+    if (profileError) {
       logger.error('[2FA Disable] Profile fetch error:', profileError)
       return serverError('Failed to fetch user profile')
     }
 
-    if (!profile.totp_enabled) {
+    if (!profile?.totp_enabled) {
       return badRequest('2FA is not enabled')
     }
 

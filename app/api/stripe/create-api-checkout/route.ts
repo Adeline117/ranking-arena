@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     const { data: profile } = (await (supabaseAdmin.from('user_profiles') as any)
       .select('api_tier, api_stripe_subscription_id')
       .eq('id', user.id)
-      .single()) as {
+      .maybeSingle()) as {
       data: { api_tier?: string; api_stripe_subscription_id?: string } | null
       error: unknown
     }

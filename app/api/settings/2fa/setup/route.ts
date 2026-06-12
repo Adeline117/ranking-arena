@@ -16,12 +16,14 @@ export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
   async ({ user, supabase }) => {
-    // Check if 2FA is already enabled
+    // Check if 2FA is already enabled.
+    // maybeSingle: auth users without a user_profiles row yet are a legitimate
+    // state — .single() errors (PGRST116) on 0 rows and turned this into a 500.
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
       .select('totp_enabled')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (profileError) {
       logger.error('[2FA Setup] Profile fetch error:', profileError)

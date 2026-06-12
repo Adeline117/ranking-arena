@@ -14,7 +14,11 @@ const logger = createLogger('2fa-verify')
 
 // Zod schema for POST /api/settings/2fa/verify
 const Verify2FASchema = z.object({
-  code: z.string().min(1, 'Verification code is required').max(10, 'Code too long').regex(/^\d+$/, 'Code must be numeric'),
+  code: z
+    .string()
+    .min(1, 'Verification code is required')
+    .max(10, 'Code too long')
+    .regex(/^\d+$/, 'Code must be numeric'),
 })
 
 export const dynamic = 'force-dynamic'
@@ -37,12 +41,12 @@ export const POST = withAuth(
     }
     const { code } = parsed.data
 
-    // Check if already enabled
+    // Check if already enabled (maybeSingle: profile row may not exist yet)
     const { data: profile } = await supabase
       .from('user_profiles')
       .select('totp_enabled')
       .eq('id', user.id)
-      .single()
+      .maybeSingle()
 
     if (profile?.totp_enabled) {
       return badRequest('2FA is already enabled')
@@ -65,15 +69,23 @@ export const POST = withAuth(
       return badRequest('Invalid verification code')
     }
 
-    // Enable 2FA
-    const { error: updateError } = await supabase
+    // Enable 2FA. select('id') so a missing profile row (0 rows updated) is
+    // detected instead of silently reporting success without enabling 2FA.
+    const { data: updatedRows, error: updateError } = await supabase
       .from('user_profiles')
       .update({ totp_enabled: true })
       .eq('id', user.id)
+      .select('id')
 
     if (updateError) {
       logger.error('[2FA Verify] Enable error:', updateError)
       return NextResponse.json({ error: 'Failed to enable 2FA' }, { status: 500 })
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      // Auth user without a user_profiles row — there is nowhere to persist the
+      // 2FA flag yet. Fail explicitly rather than pretending 2FA is on.
+      return badRequest('User profile not found. Complete your profile before enabling 2FA.')
     }
 
     // Generate backup codes
@@ -85,15 +97,10 @@ export const POST = withAuth(
     }))
 
     // Delete any existing backup codes for this user
-    await supabase
-      .from('backup_codes')
-      .delete()
-      .eq('user_id', user.id)
+    await supabase.from('backup_codes').delete().eq('user_id', user.id)
 
     // Store hashed backup codes
-    const { error: insertError } = await supabase
-      .from('backup_codes')
-      .insert(hashedCodes)
+    const { error: insertError } = await supabase.from('backup_codes').insert(hashedCodes)
 
     if (insertError) {
       logger.error('[2FA Verify] Backup codes insert error:', insertError)

@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       .from('user_profiles')
       .select('stripe_customer_id')
       .eq('id', session.user.id)
-      .single()
+      .maybeSingle()
 
     if (!profile?.stripe_customer_id) {
       // Fallback: redirect to pricing page when no customer exists
