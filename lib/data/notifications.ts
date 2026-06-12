@@ -48,6 +48,8 @@ export type NotificationType =
   | 'subscription_expiring'
   | 'subscription_expired'
   | 'nft_expired'
+  | 'nft_pending'
+  | 'nft_minted'
 
 export interface NotificationListOptions {
   limit?: number
