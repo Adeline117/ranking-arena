@@ -19,4 +19,7 @@ import './hyperliquid'
 import './coinex'
 import './htx'
 
+// Phase 2 — long-tail batch 2 (paired futures/spot CEX family)
+import './gate'
+
 export {}
