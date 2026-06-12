@@ -1,0 +1,19 @@
+{
+  "code": 200,
+  "data": {
+    "userSign": "NTMwMzM0NzU",
+    "nickName": "拾光筑梦点滴成川",
+    "imgUrl": "https://d1x7dwosqaosdj.cloudfront.net/images/2026-03-02/7812f829-0b2c-43c1-9bb7-b04dfc627321.png",
+    "profile": "1、目前仅做 BTC、ETH主流币种\n2、不会开无用单、希望大伙，马年发财，拾光筑梦，点滴成川",
+    "tagMappings": "Short-term,Momentum,Prudent",
+    "fullUserNum": 1000,
+    "copyUserNum": 50,
+    "totalCopyUserNum": 420,
+    "takeRate": "0.2500",
+    "totalProfitRate": "1.8578",
+    "copyProfit": "80649.062115",
+    "lossNum": 15,
+    "winNum": 124
+  },
+  "success": true
+}
