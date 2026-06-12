@@ -68,7 +68,7 @@
 1. **迁移 `20260602223029_restrict_user_profiles_pii_columns.sql` 未应用到生产** — `get_own_profile_sensitive` RPC 404，设置页通知偏好/2FA 状态以默认值显示（客户端已优雅降级）。需人工确认后应用。
 2. **Stripe checkout URL 是 `cs_test_`（测试模式）** — 生产订阅按钮跳的是 Stripe 测试环境，真实用户无法付费。若 beta 期有意为之可忽略，否则需换 live keys。
 3. **admin data-health 页**调用仅接受 `ADMIN_SECRET` 的路由，浏览器无法提供 — 路由需支持 admin 用户 Bearer。
-4. `/api/follow` `/api/watchlist` `/api/referral` schema 漂移修复进行中（最后一个 agent）；trader_watchlist 表已不存在，watchlist 功能需产品决策（恢复表 or 下线入口）。
+4. ~~`/api/follow` `/api/watchlist` `/api/referral` schema 漂移~~ — **已全部根治**（`9d2047a7e`）：follow 触发器查已删 traders 表（DB 函数已修+生产验证）；trader_watchlist 迁移补应用生产（功能恢复+增删查验证）；referral 以 handle 为 code 优雅降级。`referral_code`/`referred_by` 列是否补迁移待产品决策。
 5. React #418 hydration 告警：localStorage 有语言偏好但 cookie 缺失时首屏 SSR/CSR 语言不一致（边缘场景，sweep 注入伪影为主）。
 6. `docs/QA_TEST_CASES.md` 的 `test.*@example.com` 账号生产不存在 — 真实 QA 账号是 `qa.button.test@arenafi.org`（密码用 service role 重置即可复用，详见 memory/qa-test-accounts.md）。
 7. post-deploy-check.sh 用的 `/trader/soul` 已是死数据（weex 下架），建议改为动态取排行第一名。
