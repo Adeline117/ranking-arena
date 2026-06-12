@@ -107,6 +107,37 @@ function UpsellCard({
   )
 }
 
+/**
+ * Controlled upsell modal for callback-style gate sites (onProRequired
+ * handlers) where ProGate can't wrap a trigger element. Same card, same
+ * funnel — open it from the callback instead of showing a toast.
+ */
+export function ProUpsellModal({
+  open,
+  onClose,
+  featureKey = 'proFeatureBlurred',
+  description,
+}: {
+  open: boolean
+  onClose: () => void
+  featureKey?: string
+  description?: string
+}) {
+  const { t } = useLanguage()
+  const router = useRouter()
+  return (
+    <ModalOverlay open={open} onClose={onClose} label={t('proFeature')} maxWidth={380}>
+      <div style={{ padding: tokens.spacing[6] }}>
+        <UpsellCard
+          description={description ?? t(featureKey)}
+          onUpgrade={() => router.push('/pricing')}
+          t={t}
+        />
+      </div>
+    </ModalOverlay>
+  )
+}
+
 export default function ProGate({
   children,
   variant = 'inline',
