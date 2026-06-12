@@ -52,31 +52,38 @@ export default memo(function TrendingHashtags() {
               textDecoration: 'none',
               color: tokens.colors.text.primary,
               fontSize: tokens.typography.fontSize.sm,
-              transition: `background ${tokens.transition.base}`,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+            className="hover-bg"
           >
             <span style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <span style={{
-                color: tokens.colors.text.tertiary,
-                fontSize: 11,
-                fontWeight: 600,
-                minWidth: 16,
-              }}>
+              <span
+                style={{
+                  color: tokens.colors.text.tertiary,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  minWidth: 16,
+                }}
+              >
                 {i + 1}
               </span>
-              <span style={{ color: 'var(--color-brand)', fontWeight: 600 }}>
+              <span
+                style={{
+                  color: 'var(--color-brand)',
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                }}
+              >
                 #{h.tag}
               </span>
             </span>
-            <span style={{
-              fontSize: 11,
-              color: tokens.colors.text.tertiary,
-              background: tokens.colors.bg.tertiary,
-              padding: `1px ${tokens.spacing[1.5]}`,
-              borderRadius: tokens.radius.full,
-            }}>
+            <span
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: tokens.colors.text.tertiary,
+                background: tokens.colors.bg.tertiary,
+                padding: `1px ${tokens.spacing[1.5]}`,
+                borderRadius: tokens.radius.full,
+              }}
+            >
               {h.post_count}
             </span>
           </Link>
