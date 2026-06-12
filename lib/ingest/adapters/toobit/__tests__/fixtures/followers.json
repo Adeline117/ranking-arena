@@ -1,0 +1,59 @@
+{
+  "code": 200,
+  "data": [
+    {
+      "followerAccountId": "0",
+      "followerNickname": "Amir Locifer",
+      "followerUserId": "0",
+      "followerAvatar": "",
+      "totalFollowAmount": "13.4781",
+      "totalFollowProfit": "-6.9218",
+      "followRunningMills": "28284751559"
+    },
+    {
+      "followerAccountId": "0",
+      "followerNickname": "TBUSER_UY7l1e",
+      "followerUserId": "0",
+      "followerAvatar": "",
+      "totalFollowAmount": "132.053",
+      "totalFollowProfit": "-9.8766",
+      "followRunningMills": "29049661150"
+    },
+    {
+      "followerAccountId": "0",
+      "followerNickname": "TBUSER_7ZsQHD",
+      "followerUserId": "0",
+      "followerAvatar": "",
+      "totalFollowAmount": "12.9766",
+      "totalFollowProfit": "-12.4967",
+      "followRunningMills": "21375406048"
+    },
+    {
+      "followerAccountId": "0",
+      "followerNickname": "Roza",
+      "followerUserId": "0",
+      "followerAvatar": "https://s3.ap-northeast-1.amazonaws.com/s3.toobit.com/plain/9001/797613274/WaLa5jflbpLw8xNOHditn_Cv0N-zaL54tVy-8fJmaq4.png",
+      "totalFollowAmount": "19.7993",
+      "totalFollowProfit": "-17.4951",
+      "followRunningMills": "32728906843"
+    },
+    {
+      "followerAccountId": "0",
+      "followerNickname": "TBUSER_wFkz6r",
+      "followerUserId": "0",
+      "followerAvatar": "",
+      "totalFollowAmount": "9.8999",
+      "totalFollowProfit": "-21.4641",
+      "followRunningMills": "29007497929"
+    },
+    {
+      "followerAccountId": "0",
+      "followerNickname": "TBUSER_CXFIQh",
+      "followerUserId": "0",
+      "followerAvatar": "",
+      "totalFollowAmount": "27.283",
+      "totalFollowProfit": "-73.4193",
+      "followRunningMills": "763593660"
+    }
+  ]
+}
