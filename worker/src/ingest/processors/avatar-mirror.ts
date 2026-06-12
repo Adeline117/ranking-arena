@@ -12,7 +12,7 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getIngestPool } from '@/lib/ingest/db'
 
 const BUCKET = 'trader-avatars'
-const BATCH = 300
+const BATCH = 500
 const REFRESH_DAYS = 7
 const MAX_BYTES = 2 * 1024 * 1024
 
