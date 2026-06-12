@@ -2,13 +2,19 @@
  * XT pure parsers (spec §11.13) — work on stored RAW payloads only
  * (re-parse guarantee, spec §5.5).
  *
- * One adapter serves xt_futures + xt_spot via src.meta.boardKey. The two
- * boards use the SAME endpoint name (`leader-list-v2`) under different API
- * bases and response envelopes:
- *   futures: /fapi/user/v1/public/copy-trade/* — envelope {returnCode, result}
- *   spot:    /sapi/v4/account/public/copy-trade/* — envelope {rc, mc, ma, result}
- * Both return result.{items, hasNext, hasPrev} with NO total (pagination is
- * hasNext + short-page; the spot degenerate-page rule handles §5.6).
+ * One adapter serves xt_futures + xt_spot via src.meta.boardKey. The full
+ * "All Traders" board (spec §11.13 "View All Traders") uses DIFFERENT
+ * endpoints per board — the curated leader-list-v2 only ever returns the
+ * featured top-10:
+ *   futures: /fapi/user/v1/public/copy-trade/leader-list-v3
+ *            ?page&ps&sortType=INCOME&days&sortDirection=DESC — result.{total,
+ *            items}, real page+ps pagination (ps up to 100, total exposed).
+ *   spot:    /sapi/v4/account/public/copy-trade/leader-list-v2
+ *            ?sortType=INCOME_RATE&days&sortDirection=DESC&limit — `limit`
+ *            returns the top-N (page/offset ignored) with all-zero placeholder
+ *            rows padding the tail once real traders run out (spec §5.6); the
+ *            adapter fetches a large limit once and the parser drops the
+ *            placeholders.
  *
  * The board row is PER-TF (days=7|30|90) and rich: income (P&L), incomeRate
  * (ROI, decimal), winRate (decimal), maxRetraction (MDD, already percent),
@@ -60,25 +66,40 @@ function labelTags(v: unknown): string[] | null {
   return tags.length > 0 ? tags : null
 }
 
+/** All-zero placeholder row (XT spot tail padding, spec §5.6). */
+function isPlaceholderRow(item: Dict): boolean {
+  return (
+    (num(item.income) ?? 0) === 0 &&
+    (num(item.incomeRate) ?? 0) === 0 &&
+    (num(item.winRate) ?? 0) === 0
+  )
+}
+
 /**
- * leader-list-v2 page → per-TF rows. maxRetraction is ALREADY a percent
+ * leader-list page → per-TF rows. maxRetraction is ALREADY a percent
  * (1.4925 = 1.49%) unlike the decimal income/win rates. The cumulative
  * `chart` series and the full row are preserved in raw (spec §3).
+ * v3 (futures) exposes result.total; v2 (spot) does not. Spot all-zero
+ * placeholder rows are dropped so they never reach serving.
  */
-export function parseXtLeaderboardPage(payload: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
+export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedLeaderboardPage {
   const rows: ParsedLeaderboardRow[] = []
   const list = items(payload)
+  const dropPlaceholders = ctx.meta?.boardKey === 'spot'
+  let rank = 0
   for (let i = 0; i < list.length; i++) {
     const item = list[i]
+    if (dropPlaceholders && isPlaceholderRow(item)) continue
     // futures: accountId numeric; spot: accountId string + numeric aid.
     const id = item.accountId
     if (id === null || id === undefined) continue
+    rank += 1
     const traderMeta: Record<string, unknown> = {}
     if (item.level !== undefined) traderMeta.xt_level = int(item.level)
     if (typeof item.levelName === 'string') traderMeta.xt_level_name = item.levelName
     rows.push({
       exchangeTraderId: String(id),
-      rank: i + 1, // sorted list; re-anchored across pages by the caller
+      rank, // sorted list; re-anchored across pages by the caller
       nickname: typeof item.nickName === 'string' ? item.nickName : null,
       avatarUrlOrigin: typeof item.avatar === 'string' ? item.avatar : null,
       walletAddress: null,
@@ -91,9 +112,9 @@ export function parseXtLeaderboardPage(payload: unknown, _ctx: ParseCtx): Parsed
       raw: item,
     })
   }
-  // No source-reported total — pagination is hasNext/short-page (+ degenerate
-  // rule for spot). reportedTotal stays null.
-  return { rows, reportedTotal: null }
+  // v3 (futures) reports result.total; v2 (spot) does not (→ null).
+  const total = int(((payload as Dict)?.result as Dict | undefined)?.total)
+  return { rows, reportedTotal: total }
 }
 
 /** All-zero degenerate row (XT spot failure mode, spec §5.6): income,

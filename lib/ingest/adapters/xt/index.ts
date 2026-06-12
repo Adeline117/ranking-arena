@@ -3,17 +3,20 @@
  * src.meta.boardKey. Public unsigned JSON API (no signing, unlike BingX).
  *
  * Endpoints (verified by live capture 2026-06-11):
- *   futures board:  GET /fapi/user/v1/public/copy-trade/leader-list-v2
- *                     ?page&size&days={7|30|90}&sotType=INCOME_RATE
- *   spot board:     GET /sapi/v4/account/public/copy-trade/leader-list-v2 (same params)
+ *   futures board:  GET /fapi/user/v1/public/copy-trade/leader-list-v3
+ *                     ?page&ps&days={7|30|90}&sortType=INCOME&sortDirection=DESC
+ *                     — result.{total, items}; real page+ps pagination (ps≤100).
+ *   spot board:     GET /sapi/v4/account/public/copy-trade/leader-list-v2
+ *                     ?sortType=INCOME_RATE&days&sortDirection=DESC&limit
+ *                     — `limit` returns the top-N (page/offset ignored); fetched
+ *                     in ONE big-limit request, placeholders dropped by the parser.
  *   profile (both): GET .../leader-detail-v2?accountId — identity + overview
  *
- * The "View All Traders" link (spec §11.13) is just the SPA route to this
- * paginated leader-list-v2 endpoint — we hit it directly, so the truncation
- * footgun never applies. Page size is server-capped at 10 regardless of the
- * requested size; pagination is hasNext + short-page. XT spot returns
- * all-zero placeholder pages after the real traders run out (~3 pages, spec
- * §5.6) → the degenerate-page stop rule (meta.degenerate_page_stop) handles it.
+ * The "View All Traders" link (spec §11.13) is the SPA route to these full
+ * boards — leader-list-v2's bare form only returns the featured top-10, so we
+ * hit the v3 (futures) / limit-form v2 (spot) endpoints directly. XT spot pads
+ * its tail with all-zero placeholder rows once real traders run out (spec
+ * §5.6) — parseXtLeaderboardPage drops them for the spot board.
  *
  * GAP (documented): the per-trader profile page (Copy Trading Overview per-TF
  * charts, Current Orders / History / Follower tabs) lives behind a
@@ -39,7 +42,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged } from '../../fetch/capture'
-import { isXtDegeneratePage, parseXtLeaderboardPage, parseXtProfile } from './parsers'
+import { parseXtLeaderboardPage, parseXtProfile } from './parsers'
 
 const ORIGIN = 'https://www.xt.com'
 const BASES: Record<string, string> = {
@@ -76,35 +79,49 @@ const xtAdapter: SourceAdapter = {
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
     const fetcher = apiFetcher(await session.api())
-    const pageSize = src.page_size ?? 10
-    const listUrl = `${base(src)}/leader-list-v2`
+    const ctx = () => ({
+      sourceSlug: src.slug,
+      currency: src.currency,
+      tfLabelMap: src.tf_label_map,
+      scrapedAt: new Date().toISOString(),
+      meta: src.meta,
+    })
+
+    // Spot: a single big-limit fetch covers the small board; the API ignores
+    // page/offset and pads the tail with all-zero placeholders (dropped by
+    // the parser). No real pagination, so no replayPaged.
+    if (boardKey(src) === 'spot') {
+      const limit = Number(src.meta.spot_limit) || 200
+      const url =
+        `${base(src)}/leader-list-v2?sortType=INCOME_RATE&days=${timeframe}` +
+        `&sortDirection=DESC&limit=${limit}&canFollow=false&nickName=&elite=false`
+      const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
+      yield { pageIndex: 1, payload, url, fetchedAt: new Date().toISOString() }
+      return
+    }
+
+    // Futures: real page+ps pagination with result.total for the completeness
+    // assertion. ps up to 100 keeps the crawl to ~19 pages for ~1,873 traders.
+    const ps = src.page_size ?? 100
+    const listUrl = `${base(src)}/leader-list-v3`
     const maxPages = Number(src.meta.max_pages) || null
-    // Spec §5.6: the spot board emits all-zero placeholder pages once real
-    // traders run out — stop after N consecutive degenerate pages.
-    const degenerateStopAfter = Number(src.meta.degenerate_page_stop) || 1
 
     let pagesYielded = 0
     for await (const page of replayPaged({
       session,
       fetcher,
       buildRequest: (pageIndex) => ({
-        url: `${listUrl}?page=${pageIndex}&size=${pageSize}&days=${timeframe}&sotType=INCOME_RATE`,
+        url:
+          `${listUrl}?page=${pageIndex}&ps=${ps}&sortType=INCOME&days=${timeframe}` +
+          `&sortDirection=DESC&canFollow=false&nickName=&elite=false`,
         method: 'GET',
         headers: HEADERS,
       }),
       extractMeta: (payload) => {
-        const parsed = parseXtLeaderboardPage(payload, {
-          sourceSlug: src.slug,
-          currency: src.currency,
-          tfLabelMap: src.tf_label_map,
-          scrapedAt: new Date().toISOString(),
-          meta: src.meta,
-        })
+        const parsed = parseXtLeaderboardPage(payload, ctx())
         return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
       },
-      pageSize,
-      isDegenerate: boardKey(src) === 'spot' ? isXtDegeneratePage : undefined,
-      degenerateStopAfter,
+      pageSize: ps,
     })) {
       yield page
       pagesYielded += 1
