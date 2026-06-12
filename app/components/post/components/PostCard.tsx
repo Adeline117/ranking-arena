@@ -12,12 +12,16 @@ import { SensitiveContentWrapper } from './SensitiveContentWrapper'
 import LevelBadge from '@/app/components/user/LevelBadge'
 import { memo, useRef, useEffect } from 'react'
 import { useLanguage } from '../../Providers/LanguageProvider'
+import { hasLocalSession } from '@/lib/tracking'
 
 // Visibility icon paths
 const VISIBILITY_ICONS: Record<string, string> = {
-  public: 'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
-  followers: 'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
-  group: 'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z',
+  public:
+    'M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z',
+  followers:
+    'M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z',
+  group:
+    'M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z',
 }
 
 // Module-level Set to prevent duplicate impression reports
@@ -68,10 +72,17 @@ export const PostCard = memo(function PostCard({
       ([entry]) => {
         if (entry.isIntersecting && !reportedImpressions.has(post.id)) {
           reportedImpressions.add(post.id)
-          navigator.sendBeacon('/api/track', JSON.stringify({
-            type: 'impression',
-            post_id: post.id,
-          }))
+          // /api/track only records for logged-in users (204 otherwise) — skip
+          // the beacon entirely for anonymous visitors to avoid console 403s.
+          if (hasLocalSession()) {
+            navigator.sendBeacon(
+              '/api/track',
+              JSON.stringify({
+                type: 'impression',
+                post_id: post.id,
+              })
+            )
+          }
           observer.disconnect()
         }
       },
@@ -89,11 +100,13 @@ export const PostCard = memo(function PostCard({
   const isTranslated = !!(translatedTitle || translatedContent)
 
   // 计算投票结果
-  const pollWinner = post.poll_enabled ? getPollWinner({
-    bull: post.poll_bull || 0,
-    bear: post.poll_bear || 0,
-    wait: post.poll_wait || 0,
-  }) : null
+  const pollWinner = post.poll_enabled
+    ? getPollWinner({
+        bull: post.poll_bull || 0,
+        bear: post.poll_bear || 0,
+        wait: post.poll_wait || 0,
+      })
+    : null
 
   // 紧凑模式
   if (isCompact) {
@@ -128,50 +141,75 @@ export const PostCard = memo(function PostCard({
         }}
       >
         {/* 标题 */}
-        <div style={{
-          fontWeight: tokens.typography.fontWeight.bold,
-          fontSize: tokens.typography.fontSize.sm,
-          color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
-          lineHeight: 1.4,
-          display: '-webkit-box',
-          WebkitLineClamp: 2,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}>
+        <div
+          style={{
+            fontWeight: tokens.typography.fontWeight.bold,
+            fontSize: tokens.typography.fontSize.sm,
+            color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
+            lineHeight: 1.4,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
           {displayTitle}
-          {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', padding: '0 4px', borderRadius: tokens.radius.full, marginLeft: 4 }}>译</span>}
+          {isTranslated && (
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 600,
+                color: 'var(--color-translated)',
+                background: 'var(--color-translated-08)',
+                padding: '0 4px',
+                borderRadius: tokens.radius.full,
+                marginLeft: 4,
+              }}
+            >
+              译
+            </span>
+          )}
         </div>
-        
+
         {/* 底部信息 */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          fontSize: tokens.typography.fontSize.xs,
-          color: tokens.colors.text.tertiary,
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: tokens.typography.fontSize.xs,
+            color: tokens.colors.text.tertiary,
+          }}
+        >
           <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-            <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
+            <AvatarLink
+              handle={post.author_handle}
+              avatarUrl={post.author_avatar_url}
+              isPro={post.author_is_pro}
+              showProBadge={post.author_show_pro_badge}
+            />
             <LevelBadge exp={post.author_exp || 0} size="sm" />
           </span>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
             {/* 投票结果指示器 */}
             {pollWinner && (
-              <span style={{
-                color: pollColor(pollWinner),
-                fontWeight: 700,
-                fontSize: 12,
-              }}>
+              <span
+                style={{
+                  color: pollColor(pollWinner),
+                  fontWeight: 700,
+                  fontSize: 12,
+                }}
+              >
                 {pollLabel(pollWinner, t)}
               </span>
             )}
-            
+
             <span style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
               <CommentIcon size={12} />
               {post.comment_count || 0}
             </span>
-            
+
             <span>{formatTimeAgo(post.created_at, language)}</span>
           </div>
         </div>
@@ -216,10 +254,15 @@ export const PostCard = memo(function PostCard({
       {/* 头部 */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-          <AvatarLink handle={post.author_handle} avatarUrl={post.author_avatar_url} isPro={post.author_is_pro} showProBadge={post.author_show_pro_badge} />
+          <AvatarLink
+            handle={post.author_handle}
+            avatarUrl={post.author_avatar_url}
+            isPro={post.author_is_pro}
+            showProBadge={post.author_show_pro_badge}
+          />
           <LevelBadge exp={post.author_exp || 0} size="sm" />
         </span>
-        
+
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {post.group_name && post.group_id && (
             <Link
@@ -239,13 +282,18 @@ export const PostCard = memo(function PostCard({
           )}
           {/* Visibility indicator */}
           {post.visibility && post.visibility !== 'public' && (
-            <span title={t(post.visibility === 'followers' ? 'visibilityFollowers' : 'visibilityGroup')} style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <span
+              title={t(post.visibility === 'followers' ? 'visibilityFollowers' : 'visibilityGroup')}
+              style={{ display: 'inline-flex', alignItems: 'center' }}
+            >
               <svg width="12" height="12" viewBox="0 0 24 24" fill={tokens.colors.text.tertiary}>
                 <path d={VISIBILITY_ICONS[post.visibility] || VISIBILITY_ICONS.public} />
               </svg>
             </span>
           )}
-          <span style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+          <span
+            style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}
+          >
             {formatTimeAgo(post.created_at, language)}
           </span>
         </div>
@@ -255,28 +303,48 @@ export const PostCard = memo(function PostCard({
       {post.is_sensitive || post.content_warning ? (
         <SensitiveContentWrapper contentWarning={post.content_warning}>
           {/* 标题 */}
-          <div style={{
-            fontWeight: tokens.typography.fontWeight.bold,
-            fontSize: tokens.typography.fontSize.base,
-            color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
-            lineHeight: 1.4,
-          }}>
+          <div
+            style={{
+              fontWeight: tokens.typography.fontWeight.bold,
+              fontSize: tokens.typography.fontSize.base,
+              color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
+              lineHeight: 1.4,
+            }}
+          >
             {displayTitle}
-            {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', border: '1px solid var(--color-translated-20)', padding: '1px 5px', borderRadius: tokens.radius.full, marginLeft: 6, verticalAlign: 'middle' }}>译</span>}
+            {isTranslated && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: 'var(--color-translated)',
+                  background: 'var(--color-translated-08)',
+                  border: '1px solid var(--color-translated-20)',
+                  padding: '1px 5px',
+                  borderRadius: tokens.radius.full,
+                  marginLeft: 6,
+                  verticalAlign: 'middle',
+                }}
+              >
+                译
+              </span>
+            )}
           </div>
 
           {/* 内容预览 */}
           {displayContent && (
-            <div style={{
-              fontSize: tokens.typography.fontSize.sm,
-              color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.secondary,
-              opacity: isTranslated ? 0.8 : 1,
-              lineHeight: 1.6,
-              display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            }}>
+            <div
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.secondary,
+                opacity: isTranslated ? 0.8 : 1,
+                lineHeight: 1.6,
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
+            >
               {renderContentWithLinks(truncateText(displayContent, 200))}
             </div>
           )}
@@ -284,49 +352,76 @@ export const PostCard = memo(function PostCard({
       ) : (
         <>
           {/* 标题 */}
-          <div style={{
-            fontWeight: tokens.typography.fontWeight.bold,
-            fontSize: tokens.typography.fontSize.base,
-            color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
-            lineHeight: 1.4,
-          }}>
+          <div
+            style={{
+              fontWeight: tokens.typography.fontWeight.bold,
+              fontSize: tokens.typography.fontSize.base,
+              color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.primary,
+              lineHeight: 1.4,
+            }}
+          >
             {displayTitle}
-            {isTranslated && <span style={{ fontSize: 10, fontWeight: 600, color: 'var(--color-translated)', background: 'var(--color-translated-08)', border: '1px solid var(--color-translated-20)', padding: '1px 5px', borderRadius: tokens.radius.full, marginLeft: 6, verticalAlign: 'middle' }}>译</span>}
+            {isTranslated && (
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 600,
+                  color: 'var(--color-translated)',
+                  background: 'var(--color-translated-08)',
+                  border: '1px solid var(--color-translated-20)',
+                  padding: '1px 5px',
+                  borderRadius: tokens.radius.full,
+                  marginLeft: 6,
+                  verticalAlign: 'middle',
+                }}
+              >
+                译
+              </span>
+            )}
           </div>
 
           {/* 内容预览 */}
           {displayContent && (
-            <div style={{
-              fontSize: tokens.typography.fontSize.sm,
-              color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.secondary,
-              opacity: isTranslated ? 0.8 : 1,
-              lineHeight: 1.6,
-              display: '-webkit-box',
-              WebkitLineClamp: 3,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-            }}>
+            <div
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: isTranslated ? 'var(--color-translated)' : tokens.colors.text.secondary,
+                opacity: isTranslated ? 0.8 : 1,
+                lineHeight: 1.6,
+                display: '-webkit-box',
+                WebkitLineClamp: 3,
+                WebkitBoxOrient: 'vertical',
+                overflow: 'hidden',
+              }}
+            >
               {renderContentWithLinks(truncateText(displayContent, 200))}
             </div>
           )}
         </>
       )}
-      
+
       {/* 投票显示 */}
       {post.poll_enabled && (
-        <div style={{
-          display: 'flex',
-          gap: tokens.spacing[2],
-          padding: tokens.spacing[2],
-          background: tokens.colors.bg.tertiary,
-          borderRadius: tokens.radius.md,
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: tokens.spacing[2],
+            padding: tokens.spacing[2],
+            background: tokens.colors.bg.tertiary,
+            borderRadius: tokens.radius.md,
+          }}
+        >
           {(['bull', 'bear', 'wait'] as PollChoice[]).map((choice) => {
-            const count = choice === 'bull' ? post.poll_bull : choice === 'bear' ? post.poll_bear : post.poll_wait
+            const count =
+              choice === 'bull'
+                ? post.poll_bull
+                : choice === 'bear'
+                  ? post.poll_bear
+                  : post.poll_wait
             const total = (post.poll_bull || 0) + (post.poll_bear || 0) + (post.poll_wait || 0)
-            const percent = total > 0 ? Math.round((count || 0) / total * 100) : 0
+            const percent = total > 0 ? Math.round(((count || 0) / total) * 100) : 0
             const isSelected = post.user_vote === choice
-            
+
             return (
               <button
                 key={choice}
@@ -353,16 +448,18 @@ export const PostCard = memo(function PostCard({
           })}
         </div>
       )}
-      
+
       {/* 底部操作 */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: tokens.spacing[2],
-        paddingTop: tokens.spacing[2],
-        marginTop: tokens.spacing[1],
-        borderTop: `1px solid ${tokens.colors.border.primary}`,
-      }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          paddingTop: tokens.spacing[2],
+          marginTop: tokens.spacing[1],
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
+        }}
+      >
         <ReactButton
           onClick={(e) => {
             e.stopPropagation()
@@ -372,7 +469,7 @@ export const PostCard = memo(function PostCard({
           icon={<ThumbsUpIcon size={16} />}
           count={post.like_count || 0}
         />
-        
+
         <ReactButton
           onClick={(e) => {
             e.stopPropagation()
@@ -382,14 +479,16 @@ export const PostCard = memo(function PostCard({
           icon={<ThumbsDownIcon size={16} />}
           count={post.dislike_count || 0}
         />
-        
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          color: tokens.colors.text.tertiary,
-          fontSize: tokens.typography.fontSize.sm,
-        }}>
+
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            color: tokens.colors.text.tertiary,
+            fontSize: tokens.typography.fontSize.sm,
+          }}
+        >
           <CommentIcon size={16} />
           {post.comment_count || 0}
         </div>
@@ -399,4 +498,3 @@ export const PostCard = memo(function PostCard({
 })
 
 export default PostCard
-
