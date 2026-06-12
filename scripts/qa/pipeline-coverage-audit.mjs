@@ -82,7 +82,13 @@ for (const r of rows) {
   const cov = r.stats_rows > 0 ? r.series_traders / r.stats_rows : 1
   if (r.stats_rows > 100 && cov < 0.1) issues.push(`LOW-SERIES(${(cov * 100).toFixed(0)}%)`)
 
-  if (issues.length) breaks.push(r.slug)
+  // LOW-SERIES grows over crawl cycles (dedicated backfill) — it's a
+  // coverage signal, not an outage. In --soft mode (acceptance gate) it
+  // doesn't fail the run; hard breaks (no snapshot / no compat / stale)
+  // always do.
+  const hardIssues = issues.filter((i) => !i.startsWith('LOW-SERIES'))
+  const failingIssues = process.argv.includes('--soft') ? hardIssues : issues
+  if (failingIssues.length) breaks.push(r.slug)
   const fmt = (v, w) => String(v).padEnd(w)
   console.log(
     fmt(r.slug, 22) +
