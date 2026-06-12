@@ -23,7 +23,16 @@ Spec: `~/Desktop/ARENA_DATA_SPEC.md`；计划: `~/.claude/plans/snug-squishing-h
 
 **Phase 1 完成（2026-06-11/12）**：六大源 adapter 全部上线 —— Bybit MT5（USDx/browser_channel 反 TLS）、MEXC（真实 URL 修正 + 衍生板 derive-boards 通用机制闭环 + AI bot 标记）、Bybit classic（beehive 端点族/bot scope series/8781 行 0.2% 偏差）、Hyperliquid（纯 HTTP/BUILD 判定/board_depth 10k 体量控制/90d 衍生）、Binance×2（SG VPS 远程浏览器经 SSH 隧道零公网暴露/Sharpe 映射/双排序去重）。**管道：11 活跃源 / 39 调度自治运行**。legacy 调度已摘除 4 个被接管源。
 
-**后续**：Phase 2 长尾 ~20 源批量复制（每源 1 adapter + 1 seed 行，零 UI 代码）→ Phase 3（OKX CEX/Toobit 待 VPS 验证、Bitfinex API）→ 终局删除清单（36 connector + 36 enrichment + batch crons + compat writer）
+**终局完成（2026-06-12）**：legacy 数据管道全量退役 ——
+
+- **写路径切断**：worker FETCH_SCHEDULES（16 平台）+ ENRICH 调度删除；Redis 中 39 个遗留 fetch/enrich BullMQ scheduler 清空（含"已退役"但从未从 Redis 移除的 mexc/btcc/gateio 等——正是 legacy 持续覆写 compat 行的根因，mexc roi fraction 覆盖 percent）；vercel.json 再摘 6 条 legacy cron（fetch-details×2/fetch-traders/backfill-data/snapshot-positions/smoke-test-enrichment）。`trader_latest` 自此唯一写入方 = arena_ingest_v2 compat
+- **全队 shadow-diff PASS**：写路径切断 + compat 全队重写后，22 shadow 源 0 mismatch（此前 mexc/binance/gateio/coinex/kucoin/htx/binance_web3 全 FAIL，根因即 legacy 覆写）
+- **读路径全量切换**：15 个 shadow 源批量翻 serving（现 23 serving / 7 shadow 等首个过门快照：bitunix/blofin×2/btcc/xt×2/bingx_spot）；`arena_resolve_trader` RPC 新增 legacy_platform 别名匹配（mexc/bybit/gateio… slug≠旧名的源此前进不了 serving 路径）；Redis `serving_sources` 扩到 32 项（slug+别名）。生产 curl 验证 8 平台 dataMode="serving"，post-deploy 5/5
+- **代码删除 ~45k LOC**：lib/connectors（71 文件）+ lib/cron/fetchers（45 文件）+ enrichment-runner + connector-db-adapter + lib/jobs + /api/v2/trader + 12 个 legacy-only API 路由 + admin/pipeline 页 + 4 个废弃脚本。每组 commit tsc+测试+build 全绿
+- **保留（有意）**：compat writer（rankings/leaderboard_ranks 仍读 trader_latest，直到 compute-leaderboard 重指 arena.score_inputs）；SSH 隧道（tier-c 远程区域驻地）；pipeline-health-check.mjs（独立 .mjs 诊断）
+- **已知 follow-up**：非 USDT 源（hyperliquid/gmx/gtrade/bybit_mt5/gate_cfd）无 compat 写入 → leaderboard_ranks 冻结在 06-08，rankings 列表需 compute-leaderboard 增读 arena.score_inputs（或非 USDT compat 变体）才恢复；VPS arena-scraper:3457 待手动停（已无调用方）
+
+**后续**：Phase 3（OKX CEX/Toobit adapter 已落，待 VPS 解封验证、Bitfinex API）→ compute-leaderboard 重指 arena.score_inputs → 删 compat writer
 
 ---
 
