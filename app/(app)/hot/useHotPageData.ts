@@ -471,6 +471,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Translate post content (with cache)
   const translateContent = useCallback(
     async (postId: string, content: string, targetLang: 'zh' | 'en') => {
+      // /api/translate requires auth — skip silently for anonymous visitors
+      if (!email) return
       const cacheKey = `${postId}-content-${targetLang}`
 
       if (translationCache[cacheKey]) {
@@ -511,7 +513,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [translationCache, showToast]
+    [translationCache, showToast, email]
   )
 
   // Track whether this modal was opened via navigation
