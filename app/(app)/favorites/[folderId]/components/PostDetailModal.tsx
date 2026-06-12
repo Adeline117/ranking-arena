@@ -1,10 +1,8 @@
 'use client'
 
-import { useRef } from 'react'
-import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { useModalA11y } from '@/lib/hooks/useModalA11y'
+import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { Box, Text } from '@/app/components/base'
 import { formatTimeAgo } from '@/lib/utils/date'
 
@@ -34,42 +32,11 @@ export default function PostDetailModal({
   t,
   onClose,
 }: PostDetailModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null)
-
-  useModalA11y({ open: !!post, onClose })
-
   if (!post) return null
 
-  const modalContent = (
-    <div
-      ref={dialogRef}
-      tabIndex={-1}
-      onClick={onClose}
-      role="dialog"
-      aria-modal="true"
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'var(--color-backdrop-medium)',
-        display: 'grid',
-        placeItems: 'center',
-        padding: 16,
-        zIndex: tokens.zIndex.modal,
-        overflowY: 'auto',
-      }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{
-          width: 'min(760px, 100%)',
-          maxHeight: '90vh',
-          overflowY: 'auto',
-          border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.xl,
-          background: tokens.colors.bg.secondary,
-          padding: 24,
-        }}
-      >
+  return (
+    <ModalOverlay open onClose={onClose} label={post.title} maxWidth={760} portal>
+      <div style={{ padding: 24 }}>
         <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
           <button
             onClick={onClose}
@@ -160,8 +127,6 @@ export default function PostDetailModal({
           </Link>
         </Box>
       </div>
-    </div>
+    </ModalOverlay>
   )
-
-  return createPortal(modalContent, document.body)
 }

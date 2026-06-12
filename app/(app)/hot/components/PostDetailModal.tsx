@@ -1,8 +1,10 @@
 'use client'
 
+import { useRef } from 'react'
 import { createPortal } from 'react-dom'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/ui/icons'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -33,12 +35,33 @@ interface PostDetailModalProps {
 }
 
 export function PostDetailModal({
-  post, comments, loadingComments, hasMoreComments, loadingMoreComments,
-  newComment, setNewComment, submittingComment,
-  translatedContent, showingOriginal, translating,
-  accessToken, onClose, onSubmitComment, onToggleReaction,
-  onToggleOriginal, onLoadMoreComments, localizedName, t,
+  post,
+  comments,
+  loadingComments,
+  hasMoreComments,
+  loadingMoreComments,
+  newComment,
+  setNewComment,
+  submittingComment,
+  translatedContent,
+  showingOriginal,
+  translating,
+  accessToken,
+  onClose,
+  onSubmitComment,
+  onToggleReaction,
+  onToggleOriginal,
+  onLoadMoreComments,
+  localizedName,
+  t,
 }: PostDetailModalProps) {
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  // Shared modal a11y: scroll lock, Escape, focus trap, auto-focus, focus restore.
+  // Layout stays custom (mobile bottom-sheet via .post-modal-* CSS), so we use
+  // useModalA11y directly instead of ModalOverlay.
+  useModalA11y({ open: true, onClose, modalRef: panelRef })
+
   return createPortal(
     <div
       onClick={onClose}
@@ -58,6 +81,7 @@ export function PostDetailModal({
       }}
     >
       <div
+        ref={panelRef}
         onClick={(e) => e.stopPropagation()}
         className="post-modal-content"
         style={{
@@ -122,7 +146,16 @@ export function PostDetailModal({
         </div>
 
         {/* Author */}
-        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--color-text-tertiary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <div
+          style={{
+            marginTop: 8,
+            fontSize: 12,
+            color: 'var(--color-text-tertiary)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+        >
           {post.author_handle ? (
             <Link
               href={`/u/${encodeURIComponent(post.author_handle)}`}
@@ -145,11 +178,19 @@ export function PostDetailModal({
         </div>
 
         {/* Body */}
-        <div translate="no" style={{ marginTop: 12, fontSize: 14, color: 'var(--color-text-primary)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+        <div
+          translate="no"
+          style={{
+            marginTop: 12,
+            fontSize: 14,
+            color: 'var(--color-text-primary)',
+            lineHeight: 1.7,
+            whiteSpace: 'pre-wrap',
+          }}
+        >
           {showingOriginal
             ? renderContentWithLinks(post.body || '')
-            : renderContentWithLinks(translatedContent || post.body || '')
-          }
+            : renderContentWithLinks(translatedContent || post.body || '')}
         </div>
 
         {/* Translation toggle */}
@@ -189,7 +230,16 @@ export function PostDetailModal({
         )}
 
         {/* Reaction buttons */}
-        <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid var(--color-border-secondary)`, display: 'flex', gap: 14, flexWrap: 'wrap' }}>
+        <div
+          style={{
+            marginTop: 14,
+            paddingTop: 12,
+            borderTop: `1px solid var(--color-border-secondary)`,
+            display: 'flex',
+            gap: 14,
+            flexWrap: 'wrap',
+          }}
+        >
           <button
             onClick={() => onToggleReaction(post.id, 'up')}
             aria-label={`Like (${post.likes})`}
@@ -200,8 +250,14 @@ export function PostDetailModal({
               padding: '6px 12px',
               border: 'none',
               borderRadius: tokens.radius.md,
-              background: post.user_reaction === 'up' ? `var(--color-accent-success-20)` : 'var(--color-bg-tertiary)',
-              color: post.user_reaction === 'up' ? 'var(--color-accent-success)' : 'var(--color-text-secondary)',
+              background:
+                post.user_reaction === 'up'
+                  ? `var(--color-accent-success-20)`
+                  : 'var(--color-bg-tertiary)',
+              color:
+                post.user_reaction === 'up'
+                  ? 'var(--color-accent-success)'
+                  : 'var(--color-text-secondary)',
               cursor: 'pointer',
               fontSize: 13,
               fontWeight: 600,
@@ -219,8 +275,14 @@ export function PostDetailModal({
               padding: '6px 12px',
               border: 'none',
               borderRadius: tokens.radius.md,
-              background: post.user_reaction === 'down' ? `var(--color-accent-error-20)` : 'var(--color-bg-tertiary)',
-              color: post.user_reaction === 'down' ? 'var(--color-accent-error)' : 'var(--color-text-secondary)',
+              background:
+                post.user_reaction === 'down'
+                  ? `var(--color-accent-error-20)`
+                  : 'var(--color-bg-tertiary)',
+              color:
+                post.user_reaction === 'down'
+                  ? 'var(--color-accent-error)'
+                  : 'var(--color-text-secondary)',
               cursor: 'pointer',
               fontSize: 13,
               fontWeight: 600,
@@ -231,7 +293,13 @@ export function PostDetailModal({
         </div>
 
         {/* Comments section */}
-        <div style={{ marginTop: 16, borderTop: `1px solid var(--color-border-secondary)`, paddingTop: 16 }}>
+        <div
+          style={{
+            marginTop: 16,
+            borderTop: `1px solid var(--color-border-secondary)`,
+            paddingTop: 16,
+          }}
+        >
           <div style={{ fontWeight: 900, marginBottom: 12 }}>
             {t('comments')} ({post.comments})
           </div>
@@ -243,7 +311,12 @@ export function PostDetailModal({
               onChange={(e) => setNewComment(e.target.value)}
               onKeyDown={(e) => {
                 // Cmd+Enter or Ctrl+Enter to submit
-                if ((e.metaKey || e.ctrlKey) && e.key === 'Enter' && newComment.trim() && !submittingComment) {
+                if (
+                  (e.metaKey || e.ctrlKey) &&
+                  e.key === 'Enter' &&
+                  newComment.trim() &&
+                  !submittingComment
+                ) {
                   e.preventDefault()
                   onSubmitComment(post.id)
                 }
@@ -270,7 +343,10 @@ export function PostDetailModal({
                 style={{
                   marginTop: 8,
                   padding: '8px 16px',
-                  background: newComment.trim() && !submittingComment ? ARENA_PURPLE : 'var(--color-accent-primary-30)',
+                  background:
+                    newComment.trim() && !submittingComment
+                      ? ARENA_PURPLE
+                      : 'var(--color-accent-primary-30)',
                   color: tokens.colors.white,
                   border: 'none',
                   borderRadius: tokens.radius.md,
@@ -286,9 +362,13 @@ export function PostDetailModal({
 
           {/* Comments list */}
           {loadingComments ? (
-            <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>{t('loadingComments')}</div>
+            <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>
+              {t('loadingComments')}
+            </div>
           ) : comments.length === 0 ? (
-            <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>{t('noCommentsYet')}</div>
+            <div style={{ color: 'var(--color-text-tertiary)', fontSize: 13 }}>
+              {t('noCommentsYet')}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {comments.filter(Boolean).map((comment) => (
@@ -315,7 +395,13 @@ export function PostDetailModal({
                         @{comment.author_handle}
                       </Link>
                     ) : (
-                      <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--color-text-secondary)' }}>
+                      <span
+                        style={{
+                          fontSize: 12,
+                          fontWeight: 700,
+                          color: 'var(--color-text-secondary)',
+                        }}
+                      >
                         {'user'}
                       </span>
                     )}
@@ -323,7 +409,10 @@ export function PostDetailModal({
                       {formatTimeAgo(comment.created_at)}
                     </span>
                   </div>
-                  <div translate="no" style={{ fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.6 }}>
+                  <div
+                    translate="no"
+                    style={{ fontSize: 13, color: 'var(--color-text-primary)', lineHeight: 1.6 }}
+                  >
                     {renderContentWithLinks(comment.content || '')}
                   </div>
                 </div>
