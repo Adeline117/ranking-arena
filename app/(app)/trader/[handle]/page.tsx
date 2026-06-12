@@ -453,15 +453,38 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   ])
 
   // ── ARENA_DATA_SPEC v1.2 serving branch (spec §2.4-1) ──
-  // If the resolved platform is cut over (or legacy resolution failed but the
-  // arena resolver knows this handle), serve the first screen from ONE RPC.
+  // ROOT-CAUSE FIX (2026-06-12): ALWAYS consult the arena (serving) resolver and
+  // let a serving-mode match WIN over the legacy resolver.
+  //
+  // Why: the legacy `trader_sources` table still holds stale rows keyed by the
+  // same exchange_trader_id/handle as a live serving trader (e.g. id "3355"
+  // exists for legacy `xt`/`lbank`/`gateio` AND serving `gate_futures`; the
+  // bybit copytrade id exists for both legacy `bybit_spot` and serving
+  // `bybit_copytrade`). The old code consulted the serving resolver ONLY when
+  // the legacy resolver returned null or already pointed at a serving source —
+  // so a stale legacy match to a NON-serving source (xt/bybit_spot) shadowed the
+  // correct serving trader, the page rendered in legacy mode, and the client
+  // fetched /api/traders/{wrongHandle}?source={staleSource} → 404 → full-page
+  // "Trader Not Found" over an HTTP-200 page.
+  //
+  // The arena resolver (arena_resolve_trader) is authoritative for serving
+  // sources, so if it returns a serving-mode trader for this handle we use it
+  // unconditionally. This guarantees NO stale legacy row can ever shadow a live
+  // serving trader, for any source, present or future.
   let servingResolved: Awaited<ReturnType<typeof cachedServingResolve>> = null
-  if (resolved && resolved !== RESOLVE_UNAVAILABLE) {
-    if ((await getDataMode(resolved.platform)) === 'serving') {
-      servingResolved = await cachedServingResolve(decodedHandle, resolved.platform)
-    }
-  } else {
-    const sr = await cachedServingResolve(decodedHandle)
+  {
+    // Only pass the legacy platform as a source hint when it is ITSELF a serving
+    // source. arena_resolve_trader(handle, hint) returns NOTHING when the hint is
+    // a stale non-serving source (e.g. "xt"/"bybit_spot") even though the handle
+    // resolves cleanly with no hint — so a stale legacy hint would defeat the
+    // whole fix. Resolving by handle alone lets the RPC pick the serving trader.
+    const legacyPlatform =
+      resolved && resolved !== RESOLVE_UNAVAILABLE ? resolved.platform : undefined
+    const hint =
+      legacyPlatform && (await getDataMode(legacyPlatform)) === 'serving'
+        ? legacyPlatform
+        : undefined
+    const sr = await cachedServingResolve(decodedHandle, hint)
     if (sr && (await getDataMode(sr.source)) === 'serving') servingResolved = sr
   }
 
