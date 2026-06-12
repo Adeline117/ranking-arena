@@ -4175,6 +4175,7 @@ const zh = {
   // Data freshness
   lastUpdated: '已更新',
   dataStaleWarning: '数据可能有延迟',
+  staleDataRecovering: '⚠ 数据可能有延迟，正在恢复中...',
 
   // Trader rank context
   traderRankOf: '在 {platform} 排名第 {rank} / 共 {total} 人',

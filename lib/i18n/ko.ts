@@ -4137,6 +4137,7 @@ const ko = {
   // Data freshness
   lastUpdated: '업데이트',
   dataStaleWarning: '데이터가 지연될 수 있습니다',
+  staleDataRecovering: '⚠ 데이터가 지연될 수 있습니다. 복구 중...',
 
   // Trader rank context
   traderRankOf: '{platform}에서 {total}명 중 #{rank}위',

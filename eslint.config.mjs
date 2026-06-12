@@ -62,6 +62,29 @@ const appRestrictedSyntax = [
   },
 ]
 
+// Warn-everywhere additions NOT yet in the ratchet (legacy volume too high to
+// lock): raw rgb()/rgba() literals bypass the hex selectors, and
+// `language === 'zh' ?` ternaries bypass the isZh rule. Guard new code now;
+// burn down the backlog before promoting these into the ratchet arrays.
+const appWarnOnlySyntax = [
+  {
+    selector: "Property[value.type='Literal'][value.value=/rgba?\\(\\s*[0-9]/]",
+    message:
+      'Raw rgb()/rgba() color. Use a --color-* CSS variable or color-mix(in srgb, var(--x) n%, transparent). See DESIGN.md.',
+  },
+  {
+    selector: 'TemplateElement[value.raw=/rgba?\\(\\s*[0-9]/]',
+    message:
+      'Raw rgb()/rgba() in template string. Use var(--color-*) or color-mix(). See DESIGN.md.',
+  },
+  {
+    selector:
+      "ConditionalExpression > BinaryExpression[operator='==='][left.name='language'][right.value='zh']",
+    message:
+      "Do not branch copy on language === 'zh' — ja/ko users get the English fallback. Use t('key') with keys in all 4 locales.",
+  },
+]
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -127,7 +150,12 @@ const eslintConfig = defineConfig([
   {
     files: ['app/**/*.tsx', 'app/**/*.ts'],
     rules: {
-      'no-restricted-syntax': ['warn', ...baseRestrictedSyntax, ...appRestrictedSyntax],
+      'no-restricted-syntax': [
+        'warn',
+        ...baseRestrictedSyntax,
+        ...appRestrictedSyntax,
+        ...appWarnOnlySyntax,
+      ],
     },
   },
   // ============================================

@@ -40,9 +40,16 @@ const CHIP_BASE: React.CSSProperties = {
 }
 
 function riskBandColor(rating: number): { fg: string; bg: string } {
-  if (rating <= 3) return { fg: 'var(--color-success, #22c55e)', bg: 'rgba(34,197,94,0.12)' }
+  if (rating <= 3)
+    return {
+      fg: 'var(--color-accent-success)',
+      bg: 'color-mix(in srgb, var(--color-accent-success) 12%, transparent)',
+    }
   if (rating <= 6) return { fg: 'var(--color-warning, #f59e0b)', bg: 'rgba(245,158,11,0.12)' }
-  return { fg: 'var(--color-danger, #ef4444)', bg: 'rgba(239,68,68,0.12)' }
+  return {
+    fg: 'var(--color-accent-error)',
+    bg: 'color-mix(in srgb, var(--color-accent-error) 12%, transparent)',
+  }
 }
 
 export default function SignalChips({ source, extras }: SignalChipsProps) {
@@ -85,7 +92,7 @@ export default function SignalChips({ source, extras }: SignalChipsProps) {
           role="listitem"
           style={{
             ...CHIP_BASE,
-            color: 'var(--color-danger, #ef4444)',
+            color: 'var(--color-accent-error)',
             background: 'rgba(239,68,68,0.10)',
             borderColor: 'transparent',
             fontWeight: 600,
