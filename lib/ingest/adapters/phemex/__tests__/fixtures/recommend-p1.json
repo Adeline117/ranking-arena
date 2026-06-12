@@ -1,0 +1,714 @@
+{
+  "code": 0,
+  "msg": "OK",
+  "data": {
+    "total": 229,
+    "rows": [
+      {
+        "userId": 2874961,
+        "nickName": "PhemexTraderrr",
+        "avatar": "8f1f469f5814b19a.png",
+        "showPosition": false,
+        "showBalance": false,
+        "copierRestriction": false,
+        "syncMaster": false,
+        "status": null,
+        "starTrader": false,
+        "tags": [],
+        "totalBalance": "0",
+        "totalPnl": "379607.9035",
+        "totalPnlRate": "5.6921",
+        "pnl30d": "50182.4014",
+        "pnlRate30d": "0.4303",
+        "tradeWinRate30d": "0.7813",
+        "pnl90d": "78846.795",
+        "pnlRate90d": "0.7476",
+        "pnl180d": "93477.3982",
+        "pnlRate180d": "0.931",
+        "tradeWinRate90d": "0.64705882",
+        "tradeWinRate180d": "0.5704057279236276",
+        "mdd30d": "0.08",
+        "mdd90d": "0.189",
+        "mdd180d": "0.2438",
+        "aum": "209.825497",
+        "followerCount": 751,
+        "displayWeight": 40,
+        "followStatus": "Unfollowed",
+        "copyTradeData": {
+          "copyStatus": "Uncopied",
+          "copyStatusV2": "Copy",
+          "profitShareRateRr": "0.1",
+          "minCopyAmount": {
+            "currency": "USD",
+            "amount": "10"
+          },
+          "minCopyInvestments": [
+            {
+              "currency": "USDT",
+              "amount": "100"
+            }
+          ],
+          "copierCount": 6,
+          "maxCopierCount": 100,
+          "totalProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "last4CycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "lastCycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "currentCycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "copyingSymbols": [],
+          "copierRealizedPnl30d": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "copierTotalRealizedPnl": {
+            "currency": "USD",
+            "amount": "-738.438222719107"
+          },
+          "copierRealizedPnl90d": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "copierRealizedPnl180d": {
+            "currency": "USD",
+            "amount": "-202.437938"
+          }
+        },
+        "createdTime": 1668725439000,
+        "updatedTime": 1781225103000,
+        "pnlRate30ds": [
+          {
+            "time": 1778716800000,
+            "value": "0.017",
+            "pt": "2026-05-14"
+          },
+          {
+            "time": 1778803200000,
+            "value": "0.0487",
+            "pt": "2026-05-15"
+          },
+          {
+            "time": 1778889600000,
+            "value": "0.0562",
+            "pt": "2026-05-16"
+          },
+          {
+            "time": 1778976000000,
+            "value": "0.0905",
+            "pt": "2026-05-17"
+          },
+          {
+            "time": 1779062400000,
+            "value": "0.0733",
+            "pt": "2026-05-18"
+          },
+          {
+            "time": 1779148800000,
+            "value": "0.0794",
+            "pt": "2026-05-19"
+          },
+          {
+            "time": 1779235200000,
+            "value": "0.0456",
+            "pt": "2026-05-20"
+          },
+          {
+            "time": 1779321600000,
+            "value": "0.0337",
+            "pt": "2026-05-21"
+          },
+          {
+            "time": 1779408000000,
+            "value": "0.0719",
+            "pt": "2026-05-22"
+          },
+          {
+            "time": 1779494400000,
+            "value": "0.0496",
+            "pt": "2026-05-23"
+          },
+          {
+            "time": 1779580800000,
+            "value": "0.0758",
+            "pt": "2026-05-24"
+          },
+          {
+            "time": 1779667200000,
+            "value": "0.067",
+            "pt": "2026-05-25"
+          },
+          {
+            "time": 1779753600000,
+            "value": "0.1058",
+            "pt": "2026-05-26"
+          },
+          {
+            "time": 1779840000000,
+            "value": "0.1142",
+            "pt": "2026-05-27"
+          },
+          {
+            "time": 1779926400000,
+            "value": "0.1408",
+            "pt": "2026-05-28"
+          },
+          {
+            "time": 1780012800000,
+            "value": "0.1302",
+            "pt": "2026-05-29"
+          },
+          {
+            "time": 1780099200000,
+            "value": "0.1707",
+            "pt": "2026-05-30"
+          },
+          {
+            "time": 1780185600000,
+            "value": "0.1645",
+            "pt": "2026-05-31"
+          },
+          {
+            "time": 1780272000000,
+            "value": "0.1399",
+            "pt": "2026-06-01"
+          },
+          {
+            "time": 1780358400000,
+            "value": "0.1751",
+            "pt": "2026-06-02"
+          },
+          {
+            "time": 1780444800000,
+            "value": "0.1343",
+            "pt": "2026-06-03"
+          },
+          {
+            "time": 1780531200000,
+            "value": "0.2224",
+            "pt": "2026-06-04"
+          },
+          {
+            "time": 1780617600000,
+            "value": "0.3121",
+            "pt": "2026-06-05"
+          },
+          {
+            "time": 1780704000000,
+            "value": "0.3076",
+            "pt": "2026-06-06"
+          },
+          {
+            "time": 1780790400000,
+            "value": "0.3416",
+            "pt": "2026-06-07"
+          },
+          {
+            "time": 1780876800000,
+            "value": "0.3984",
+            "pt": "2026-06-08"
+          },
+          {
+            "time": 1780963200000,
+            "value": "0.3184",
+            "pt": "2026-06-09"
+          },
+          {
+            "time": 1781049600000,
+            "value": "0.3454",
+            "pt": "2026-06-10"
+          },
+          {
+            "time": 1781136000000,
+            "value": "0.3627",
+            "pt": "2026-06-11"
+          },
+          {
+            "time": 1781222400000,
+            "value": "0.4303",
+            "pt": "2026-06-12"
+          }
+        ]
+      },
+      {
+        "userId": 4651301,
+        "nickName": "Wundertrading",
+        "avatar": "4061f87b42d00495b13a1174f0afc1bcd3fce9546d01910e4e143279cd36e0dd.png",
+        "showPosition": false,
+        "showBalance": false,
+        "copierRestriction": false,
+        "syncMaster": false,
+        "status": null,
+        "starTrader": false,
+        "tags": [],
+        "totalBalance": "0",
+        "totalPnl": "2550.4822",
+        "totalPnlRate": "0.9291",
+        "pnl30d": "40328.1048",
+        "pnlRate30d": "1.8158",
+        "tradeWinRate30d": "0.4468",
+        "pnl90d": "2858.4653",
+        "pnlRate90d": "0.5632",
+        "pnl180d": "810.6225",
+        "pnlRate180d": "0.5173",
+        "tradeWinRate90d": "0.54482759",
+        "tradeWinRate180d": "0.5657894736842105",
+        "mdd30d": "0.1461",
+        "mdd90d": "0.9633",
+        "mdd180d": "0.9633",
+        "aum": "199.826666",
+        "followerCount": 632,
+        "displayWeight": 37,
+        "followStatus": "Unfollowed",
+        "copyTradeData": {
+          "copyStatus": "Uncopied",
+          "copyStatusV2": "Copy",
+          "profitShareRateRr": "0.12",
+          "minCopyAmount": {
+            "currency": "USD",
+            "amount": "10"
+          },
+          "minCopyInvestments": [
+            {
+              "currency": "USDT",
+              "amount": "0"
+            }
+          ],
+          "copierCount": 2,
+          "maxCopierCount": 100,
+          "totalProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "last4CycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "lastCycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "currentCycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "copyingSymbols": [],
+          "copierRealizedPnl30d": {
+            "currency": "USD",
+            "amount": "2.958291393475"
+          },
+          "copierTotalRealizedPnl": {
+            "currency": "USD",
+            "amount": "-6.452447859295"
+          },
+          "copierRealizedPnl90d": {
+            "currency": "USD",
+            "amount": "3.034658"
+          },
+          "copierRealizedPnl180d": {
+            "currency": "USD",
+            "amount": "3.034658"
+          }
+        },
+        "createdTime": 1672531444000,
+        "updatedTime": 1781225103000,
+        "pnlRate30ds": [
+          {
+            "time": 1778716800000,
+            "value": "-0.3848",
+            "pt": "2026-05-14"
+          },
+          {
+            "time": 1778803200000,
+            "value": "0.3615",
+            "pt": "2026-05-15"
+          },
+          {
+            "time": 1778889600000,
+            "value": "0.5939",
+            "pt": "2026-05-16"
+          },
+          {
+            "time": 1778976000000,
+            "value": "0.7928",
+            "pt": "2026-05-17"
+          },
+          {
+            "time": 1779062400000,
+            "value": "0.8151",
+            "pt": "2026-05-18"
+          },
+          {
+            "time": 1779148800000,
+            "value": "0.8781",
+            "pt": "2026-05-19"
+          },
+          {
+            "time": 1779235200000,
+            "value": "0.7548",
+            "pt": "2026-05-20"
+          },
+          {
+            "time": 1779321600000,
+            "value": "0.7282",
+            "pt": "2026-05-21"
+          },
+          {
+            "time": 1779408000000,
+            "value": "1.0869",
+            "pt": "2026-05-22"
+          },
+          {
+            "time": 1779494400000,
+            "value": "1.0202",
+            "pt": "2026-05-23"
+          },
+          {
+            "time": 1779580800000,
+            "value": "1.0047",
+            "pt": "2026-05-24"
+          },
+          {
+            "time": 1779667200000,
+            "value": "0.9836",
+            "pt": "2026-05-25"
+          },
+          {
+            "time": 1779753600000,
+            "value": "1.1122",
+            "pt": "2026-05-26"
+          },
+          {
+            "time": 1779840000000,
+            "value": "1.1477",
+            "pt": "2026-05-27"
+          },
+          {
+            "time": 1779926400000,
+            "value": "1.1657",
+            "pt": "2026-05-28"
+          },
+          {
+            "time": 1780012800000,
+            "value": "1.1823",
+            "pt": "2026-05-29"
+          },
+          {
+            "time": 1780099200000,
+            "value": "1.1363",
+            "pt": "2026-05-30"
+          },
+          {
+            "time": 1780185600000,
+            "value": "1.1656",
+            "pt": "2026-05-31"
+          },
+          {
+            "time": 1780272000000,
+            "value": "1.3134",
+            "pt": "2026-06-01"
+          },
+          {
+            "time": 1780358400000,
+            "value": "1.6243",
+            "pt": "2026-06-02"
+          },
+          {
+            "time": 1780444800000,
+            "value": "1.7431",
+            "pt": "2026-06-03"
+          },
+          {
+            "time": 1780531200000,
+            "value": "1.7745",
+            "pt": "2026-06-04"
+          },
+          {
+            "time": 1780617600000,
+            "value": "1.7785",
+            "pt": "2026-06-05"
+          },
+          {
+            "time": 1780704000000,
+            "value": "1.7872",
+            "pt": "2026-06-06"
+          },
+          {
+            "time": 1780790400000,
+            "value": "1.786",
+            "pt": "2026-06-07"
+          },
+          {
+            "time": 1780876800000,
+            "value": "1.786",
+            "pt": "2026-06-08"
+          },
+          {
+            "time": 1780963200000,
+            "value": "1.786",
+            "pt": "2026-06-09"
+          },
+          {
+            "time": 1781049600000,
+            "value": "1.786",
+            "pt": "2026-06-10"
+          },
+          {
+            "time": 1781136000000,
+            "value": "1.8145",
+            "pt": "2026-06-11"
+          },
+          {
+            "time": 1781222400000,
+            "value": "1.8158",
+            "pt": "2026-06-12"
+          }
+        ]
+      },
+      {
+        "userId": 758999,
+        "nickName": "HOepkIeo",
+        "avatar": "05bc2b6dc61e054863ca0bd542e670d375f144db26ec6f19e44987a8975aebbc.png",
+        "showPosition": false,
+        "showBalance": true,
+        "copierRestriction": false,
+        "syncMaster": false,
+        "status": null,
+        "starTrader": false,
+        "tags": [],
+        "totalBalance": "39973.36514981216",
+        "totalPnl": "-11617.8023",
+        "totalPnlRate": "0.1683",
+        "pnl30d": "20187.876",
+        "pnlRate30d": "0.6755",
+        "tradeWinRate30d": "0.5",
+        "pnl90d": "10806.6999",
+        "pnlRate90d": "0.2784",
+        "pnl180d": "9419.3262",
+        "pnlRate180d": "0.3262",
+        "tradeWinRate90d": "0.5",
+        "tradeWinRate180d": "0.5",
+        "mdd30d": "0.0802",
+        "mdd90d": "0.7732",
+        "mdd180d": "0.9483",
+        "aum": "36.95518344",
+        "followerCount": 28,
+        "displayWeight": 20,
+        "followStatus": "Unfollowed",
+        "copyTradeData": {
+          "copyStatus": "Uncopied",
+          "copyStatusV2": "Copy",
+          "profitShareRateRr": "0.12",
+          "minCopyAmount": {
+            "currency": "USD",
+            "amount": "10"
+          },
+          "minCopyInvestments": [
+            {
+              "currency": "USDT",
+              "amount": "0"
+            }
+          ],
+          "copierCount": 1,
+          "maxCopierCount": 100,
+          "totalProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "last4CycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "lastCycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "currentCycleProfitShare": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "copyingSymbols": [],
+          "copierRealizedPnl30d": {
+            "currency": "USD",
+            "amount": "0"
+          },
+          "copierTotalRealizedPnl": {
+            "currency": "USD",
+            "amount": "-39.970932212936"
+          },
+          "copierRealizedPnl90d": {
+            "currency": "USD",
+            "amount": "1.132936"
+          },
+          "copierRealizedPnl180d": {
+            "currency": "USD",
+            "amount": "1.132936"
+          }
+        },
+        "createdTime": 1741657800000,
+        "updatedTime": 1781225108000,
+        "pnlRate30ds": [
+          {
+            "time": 1778716800000,
+            "value": "-0.0275",
+            "pt": "2026-05-14"
+          },
+          {
+            "time": 1778803200000,
+            "value": "0.0599",
+            "pt": "2026-05-15"
+          },
+          {
+            "time": 1778889600000,
+            "value": "0.1242",
+            "pt": "2026-05-16"
+          },
+          {
+            "time": 1778976000000,
+            "value": "0.1763",
+            "pt": "2026-05-17"
+          },
+          {
+            "time": 1779062400000,
+            "value": "0.1702",
+            "pt": "2026-05-18"
+          },
+          {
+            "time": 1779148800000,
+            "value": "0.1967",
+            "pt": "2026-05-19"
+          },
+          {
+            "time": 1779235200000,
+            "value": "0.1493",
+            "pt": "2026-05-20"
+          },
+          {
+            "time": 1779321600000,
+            "value": "0.1238",
+            "pt": "2026-05-21"
+          },
+          {
+            "time": 1779408000000,
+            "value": "0.2352",
+            "pt": "2026-05-22"
+          },
+          {
+            "time": 1779494400000,
+            "value": "0.1718",
+            "pt": "2026-05-23"
+          },
+          {
+            "time": 1779580800000,
+            "value": "0.1946",
+            "pt": "2026-05-24"
+          },
+          {
+            "time": 1779667200000,
+            "value": "0.1905",
+            "pt": "2026-05-25"
+          },
+          {
+            "time": 1779753600000,
+            "value": "0.2421",
+            "pt": "2026-05-26"
+          },
+          {
+            "time": 1779840000000,
+            "value": "0.2982",
+            "pt": "2026-05-27"
+          },
+          {
+            "time": 1779926400000,
+            "value": "0.3209",
+            "pt": "2026-05-28"
+          },
+          {
+            "time": 1780012800000,
+            "value": "0.3122",
+            "pt": "2026-05-29"
+          },
+          {
+            "time": 1780099200000,
+            "value": "0.2942",
+            "pt": "2026-05-30"
+          },
+          {
+            "time": 1780185600000,
+            "value": "0.3122",
+            "pt": "2026-05-31"
+          },
+          {
+            "time": 1780272000000,
+            "value": "0.3253",
+            "pt": "2026-06-01"
+          },
+          {
+            "time": 1780358400000,
+            "value": "0.5792",
+            "pt": "2026-06-02"
+          },
+          {
+            "time": 1780444800000,
+            "value": "0.6393",
+            "pt": "2026-06-03"
+          },
+          {
+            "time": 1780531200000,
+            "value": "0.7225",
+            "pt": "2026-06-04"
+          },
+          {
+            "time": 1780617600000,
+            "value": "0.7376",
+            "pt": "2026-06-05"
+          },
+          {
+            "time": 1780704000000,
+            "value": "0.7564",
+            "pt": "2026-06-06"
+          },
+          {
+            "time": 1780790400000,
+            "value": "0.7",
+            "pt": "2026-06-07"
+          },
+          {
+            "time": 1780876800000,
+            "value": "0.689",
+            "pt": "2026-06-08"
+          },
+          {
+            "time": 1780963200000,
+            "value": "0.7051",
+            "pt": "2026-06-09"
+          },
+          {
+            "time": 1781049600000,
+            "value": "0.6862",
+            "pt": "2026-06-10"
+          },
+          {
+            "time": 1781136000000,
+            "value": "0.6756",
+            "pt": "2026-06-11"
+          },
+          {
+            "time": 1781222400000,
+            "value": "0.6755",
+            "pt": "2026-06-12"
+          }
+        ]
+      }
+    ]
+  }
+}

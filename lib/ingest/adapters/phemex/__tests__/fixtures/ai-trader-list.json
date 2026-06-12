@@ -1,0 +1,176 @@
+{
+  "code": 0,
+  "msg": "OK",
+  "data": [
+    {
+      "userId": 9175175,
+      "nickName": "Stoic Triad",
+      "avatar": "prod/avatar/u-9175175/1ebd366c-4fbc-4af6-9f3a-e034d55674a6.png",
+      "showPosition": true,
+      "showBalance": true,
+      "copierRestriction": false,
+      "syncMaster": true,
+      "status": null,
+      "starTrader": false,
+      "tags": ["AI_TRADER"],
+      "totalBalance": "5087.6556604",
+      "totalPnl": "2587.656",
+      "totalPnlRate": "0.8603",
+      "pnl30d": "2587.656",
+      "pnlRate30d": "0.8603",
+      "tradeWinRate30d": "0.7692",
+      "pnl90d": "2587.656",
+      "pnlRate90d": "0.8603",
+      "pnl180d": "2587.656",
+      "pnlRate180d": "0.8603",
+      "tradeWinRate90d": "0.76923077",
+      "tradeWinRate180d": "0.7692307692307693",
+      "mdd30d": "0.1796",
+      "mdd90d": "0.1796",
+      "mdd180d": "0.1796",
+      "aum": "1089.65557236",
+      "followerCount": 17,
+      "displayWeight": 26,
+      "followStatus": "Unfollowed",
+      "copyTradeData": {
+        "copyStatus": "Uncopied",
+        "copyStatusV2": "Copy",
+        "profitShareRateRr": "0",
+        "minCopyAmount": {
+          "currency": "USD",
+          "amount": "10"
+        },
+        "minCopyInvestments": [
+          {
+            "currency": "USDT",
+            "amount": "50"
+          }
+        ],
+        "copierCount": 8,
+        "maxCopierCount": 1000,
+        "totalProfitShare": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "last4CycleProfitShare": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "lastCycleProfitShare": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "currentCycleProfitShare": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "copyingSymbols": [],
+        "copierRealizedPnl30d": {
+          "currency": "USD",
+          "amount": "12.980421691093"
+        },
+        "copierTotalRealizedPnl": {
+          "currency": "USD",
+          "amount": "12.980421702663"
+        },
+        "copierRealizedPnl90d": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "copierRealizedPnl180d": {
+          "currency": "USD",
+          "amount": "0"
+        }
+      },
+      "createdTime": 1779357556000,
+      "updatedTime": 1781225112000,
+      "aiDescription": "Best for copiers who value discipline over thrills and steady risk-controlled exposure. Trades only BTC, ETH, and SOL with modest leverage, fading overextended rallies and holding through noise. Patient, unemotional, and built to avoid the chase — never overleverages, never overtrades.",
+      "pnlRate30ds": []
+    },
+    {
+      "userId": 9175174,
+      "nickName": "Apex Fader",
+      "avatar": "prod/avatar/u-9175174/b5679582-4739-4fbe-9a55-29caeda5be6a.png",
+      "showPosition": true,
+      "showBalance": true,
+      "copierRestriction": false,
+      "syncMaster": true,
+      "status": null,
+      "starTrader": false,
+      "tags": ["AI_TRADER"],
+      "totalBalance": "2540.2031581992",
+      "totalPnl": "40.202",
+      "totalPnlRate": "0.0415",
+      "pnl30d": "40.202",
+      "pnlRate30d": "0.0415",
+      "tradeWinRate30d": "0.3846",
+      "pnl90d": "40.202",
+      "pnlRate90d": "0.0415",
+      "pnl180d": "40.202",
+      "pnlRate180d": "0.0415",
+      "tradeWinRate90d": "0.47619048",
+      "tradeWinRate180d": "0.4761904761904762",
+      "mdd30d": "0.1041",
+      "mdd90d": "0.1041",
+      "mdd180d": "0.1041",
+      "aum": "99.83179661",
+      "followerCount": 6,
+      "displayWeight": 2,
+      "followStatus": "Unfollowed",
+      "copyTradeData": {
+        "copyStatus": "Uncopied",
+        "copyStatusV2": "Copy",
+        "profitShareRateRr": "0",
+        "minCopyAmount": {
+          "currency": "USD",
+          "amount": "10"
+        },
+        "minCopyInvestments": [
+          {
+            "currency": "USDT",
+            "amount": "50"
+          }
+        ],
+        "copierCount": 1,
+        "maxCopierCount": 1000,
+        "totalProfitShare": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "last4CycleProfitShare": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "lastCycleProfitShare": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "currentCycleProfitShare": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "copyingSymbols": [],
+        "copierRealizedPnl30d": {
+          "currency": "USD",
+          "amount": "-3.031337178248"
+        },
+        "copierTotalRealizedPnl": {
+          "currency": "USD",
+          "amount": "-3.031337175384"
+        },
+        "copierRealizedPnl90d": {
+          "currency": "USD",
+          "amount": "0"
+        },
+        "copierRealizedPnl180d": {
+          "currency": "USD",
+          "amount": "0"
+        }
+      },
+      "createdTime": 1779357545000,
+      "updatedTime": 1781225112000,
+      "aiDescription": "Best for high-volatility, range-bound markets and copiers comfortable with counter-trend timing. APex Fader fades overextended price spikes at local apex points, capturing the mean-reversion as price snaps back from overbought/oversold extremes.",
+      "pnlRate30ds": []
+    }
+  ]
+}
