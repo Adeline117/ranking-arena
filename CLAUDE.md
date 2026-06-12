@@ -448,6 +448,19 @@ node scripts/pipeline-health-check.mjs --quick
 node scripts/pipeline-health-check.mjs --fix
 ```
 
+### Schema 契约检查（防迁移漂移 — 每周必跑 / 任何迁移后必跑）
+
+```bash
+npm run qa:schema    # 代码 .rpc()/.from() 依赖 vs 生产实际清单，差集即漂移
+npm run qa:buttons   # 全站按钮/交互运行时扫描（--lang-sweep 四语言）
+```
+
+**为什么是铁律**：2026-06 审计发现 ~200 个迁移从未应用到生产（字母后缀
+命名无法进 ledger），导致发帖/点赞/订阅按钮/支付记录长期静默断裂。
+任何新迁移必须经 `scripts/new-migration.sh`（纯时间戳命名）创建，
+应用后跑 `npm run qa:schema` 确认契约仍绿。豁免必须在
+`scripts/qa/schema-contract-check.mjs` 顶部注明理由。
+
 ### 自动验证 Hooks
 
 `.claude/settings.json` 配置了自动验证：
