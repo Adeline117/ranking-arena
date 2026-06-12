@@ -162,11 +162,49 @@ async function queueSuspiciousEvictions(): Promise<void> {
   }
 }
 
+/**
+ * Orphan-partition watchdog (root-cause guard, 2026-06-12): twice during the
+ * rebuild an old monthly partition was DETACHed from its parent to stop the
+ * legacy pipeline / swap in a renamed partitioned table, but never DROPped —
+ * leaving standalone orphan tables that no live query can reach (the parent
+ * only sees attached partitions) yet still cost storage. trader_snapshots_v2
+ * Apr+May alone were ~15GB of invisible dead weight. There is no automated
+ * DETACH process, so this is leftover-detection, not a recurring-job alarm:
+ * flag any partition-shaped table (name ends _YYYY_MM / _pYYYY_MM) that is
+ * attached to NO parent and exceeds 100MB, so the next orphan gets reviewed
+ * for DROP instead of silently rotting.
+ */
+async function queueOrphanPartitions(): Promise<void> {
+  const redis = getConnection()
+  const { rows } = await getIngestPool().query<{ orphan: string; size: string; bytes: number }>(
+    `SELECT n.nspname || '.' || c.relname AS orphan,
+            pg_size_pretty(pg_total_relation_size(c.oid)) AS size,
+            pg_total_relation_size(c.oid) AS bytes
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE c.relkind = 'r'
+        AND n.nspname IN ('public','arena')
+        AND c.relname ~ '_p?[0-9]{4}_[0-9]{2}$'
+        AND NOT EXISTS (SELECT 1 FROM pg_inherits i WHERE i.inhrelid = c.oid)
+        AND pg_total_relation_size(c.oid) > 100 * 1024 * 1024
+      ORDER BY pg_total_relation_size(c.oid) DESC`
+  )
+  for (const r of rows) {
+    await alert(redis, {
+      sourceSlug: r.orphan,
+      phase: 0,
+      tier: 'maint', // cost hygiene, not an outage
+      message: `detached orphan partition ${r.orphan} (${r.size}) — no parent, no live reads; review for DROP`,
+    })
+  }
+}
+
 export async function processDailyDigest(_job: Job): Promise<{ flushed: number }> {
   await queueRejectSummary()
   await queueCoverageAudit()
   await queueWorkerHealth()
   await queueSuspiciousEvictions()
+  await queueOrphanPartitions()
   const flushed = await flushDigest(getConnection())
   console.log(`[daily-digest] flushed ${flushed} events`)
   return { flushed }
