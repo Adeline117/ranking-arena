@@ -175,6 +175,38 @@ useModalA11y({ open, onClose, modalRef }) // + focus trap + auto-focus
 - Hand-write escape key listeners for modals
 - Hand-write focus trap logic
 
+### Pro Paywall Gates — MANDATORY PATTERN
+
+All Pro feature gates MUST use `ProGate` / `ProUpsellModal` from
+`app/components/ui/ProGate.tsx`. NEVER hand-write `isPro ? ... : ...` upsell
+UI, dead-end toasts, or hard `router.push('/pricing')` on gated controls.
+
+```typescript
+import ProGate, { ProUpsellModal } from '@/app/components/ui/ProGate'
+
+<ProGate variant="blur" featureKey="upgradeProStatsDesc">{content}</ProGate>   // feature preview
+<ProGate variant="inline" description={parametrizedCopy} />                     // replaced section
+<ProGate variant="modal">{lockedTrigger}</ProGate>                              // click → upsell dialog
+// callback-style sites (onProRequired handlers):
+<ProUpsellModal open={open} onClose={...} featureKey="proFilterTooltip" />
+// rich gates: benefits={[t('gateBenefit1'), ...]} renders a ✓ bullet list
+```
+
+- isPro comes from `useSubscription()` internally (beta unlock respected);
+  loading window renders ungated (no paywall flash for paying users)
+- CTA always routes to `/pricing` — track `paywall_blocked` at the call site
+- `PremiumGate` is @deprecated; `PaywallOverlay`/`ProUpgradeCTA` were deleted
+
+### Design Tokens — ESLint Ratchet
+
+`eslint.config.mjs` warns on raw hex colors / fontSize / fontWeight /
+borderRadius numerics under `app/` and on dead `t('key') || '中文'` fallbacks.
+Files cleaned to zero get LOCKED at error level in the ratchet block — add
+every newly-cleaned file there. Off-scale values (9/10/11px micro labels) get
+a property-level `// eslint-disable-next-line no-restricted-syntax -- off-scale by design`
+(property-level, NOT JSX-line-level — prettier reflow displaces those).
+See docs/LINTING_GUIDE.md.
+
 ### API Routes
 
 - Cron routes require `Authorization: Bearer CRON_SECRET` header
