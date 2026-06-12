@@ -27,10 +27,14 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { useSubscription } from '../home/hooks/useSubscription'
 
 export interface ProGateProps {
-  children: ReactNode
+  /** Optional for variant="inline", which renders only the upsell card. */
+  children?: ReactNode
   variant?: 'blur' | 'inline' | 'modal'
   /** i18n key for the upsell description (defaults to generic Pro copy). */
   featureKey?: string
+  /** Pre-translated description override — for parametrized copy like
+      t('showingTopFreeLimit').replace('{limit}', …). Wins over featureKey. */
+  description?: string
   /** Reserve height for the inline/blur card to avoid CLS. */
   fallbackHeight?: number
 }
@@ -50,12 +54,12 @@ function StarIcon({ size = 28 }: { size?: number }) {
 }
 
 function UpsellCard({
-  featureKey,
+  description,
   minHeight,
   onUpgrade,
   t,
 }: {
-  featureKey: string
+  description: string
   minHeight?: number
   onUpgrade: () => void
   t: (key: string) => string
@@ -81,7 +85,7 @@ function UpsellCard({
         {t('proFeature')}
       </Text>
       <Text size="sm" style={{ color: tokens.colors.text.tertiary, lineHeight: 1.5 }}>
-        {t(featureKey)}
+        {description}
       </Text>
       <button
         onClick={onUpgrade}
@@ -107,12 +111,14 @@ export default function ProGate({
   children,
   variant = 'inline',
   featureKey = 'proFeatureBlurred',
+  description,
   fallbackHeight,
 }: ProGateProps) {
   const { t } = useLanguage()
   const router = useRouter()
   const { isPro, isLoading } = useSubscription()
   const [modalOpen, setModalOpen] = useState(false)
+  const upsellText = description ?? t(featureKey)
 
   // Pro users and the loading window render ungated — a transient paywall
   // flash for paying users is worse than a delayed gate for free users.
@@ -136,7 +142,7 @@ export default function ProGate({
             zIndex: 2,
           }}
         >
-          <UpsellCard featureKey={featureKey} onUpgrade={goUpgrade} t={t} />
+          <UpsellCard description={upsellText} onUpgrade={goUpgrade} t={t} />
         </div>
       </div>
     )
@@ -171,7 +177,7 @@ export default function ProGate({
           maxWidth={380}
         >
           <div style={{ padding: tokens.spacing[6] }}>
-            <UpsellCard featureKey={featureKey} onUpgrade={goUpgrade} t={t} />
+            <UpsellCard description={upsellText} onUpgrade={goUpgrade} t={t} />
           </div>
         </ModalOverlay>
       </>
@@ -180,6 +186,6 @@ export default function ProGate({
 
   // inline
   return (
-    <UpsellCard featureKey={featureKey} minHeight={fallbackHeight} onUpgrade={goUpgrade} t={t} />
+    <UpsellCard description={upsellText} minHeight={fallbackHeight} onUpgrade={goUpgrade} t={t} />
   )
 }
