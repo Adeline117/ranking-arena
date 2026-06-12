@@ -27,6 +27,7 @@ import {
   regionQueueName,
 } from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
+import { startHeartbeat } from './ingest/heartbeat'
 
 // Playwright sessions are heavy on a Mac Mini; per-source serialization
 // happens inside processors (one session per source at a time).
@@ -133,6 +134,11 @@ async function main(): Promise<void> {
     reconcileSchedulers().catch((err) => console.error('[ingest-worker] reconcile failed:', err))
   }, 60 * 60_000)
 
+  // Liveness heartbeat → shared cloud Redis, read by the worker-heartbeat-check
+  // Vercel cron (de-single-point: detect this node dying within ~15min,
+  // independent of crawl cadence and of this node being alive).
+  const heartbeatTimer = startHeartbeat(getConnection(), regions)
+
   console.log(
     `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY})`
   )
@@ -145,6 +151,7 @@ async function main(): Promise<void> {
     shuttingDown = true
     console.log(`[ingest-worker] ${signal} — shutting down…`)
     clearInterval(reconcileTimer)
+    clearInterval(heartbeatTimer)
     await Promise.all(workers.map((w) => w.close()))
     await tiercWorker?.close()
     const { closeIngestPool } = await import('@/lib/ingest/db')
