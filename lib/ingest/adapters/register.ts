@@ -15,4 +15,7 @@ import './bybit-copytrade'
 import './mexc'
 import './hyperliquid'
 
+// Phase 2 — long-tail batch 1 (simple CEX futures family)
+import './coinex'
+
 export {}

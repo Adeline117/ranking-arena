@@ -1,0 +1,63 @@
+{
+  "code": 0,
+  "data": {
+    "has_next": true,
+    "curr_page": 1,
+    "count": 10,
+    "data": [
+      {
+        "follower_name": "User_QLZ4569",
+        "fund_amount": "500",
+        "total_copy_earn_amount": "17.06470696"
+      },
+      {
+        "follower_name": "kudryavec1982",
+        "fund_amount": "500",
+        "total_copy_earn_amount": "16.84453268"
+      },
+      {
+        "follower_name": "gan******d60@***.com",
+        "fund_amount": "250",
+        "total_copy_earn_amount": "13.86971287"
+      },
+      {
+        "follower_name": "cher*****ivan@***.com",
+        "fund_amount": "238.51",
+        "total_copy_earn_amount": "13.14180865"
+      },
+      {
+        "follower_name": "PraveenUmesh",
+        "fund_amount": "190",
+        "total_copy_earn_amount": "11.99592415"
+      },
+      {
+        "follower_name": "hame******d017@***.com",
+        "fund_amount": "73.83260859",
+        "total_copy_earn_amount": "11.61434642"
+      },
+      {
+        "follower_name": "behzadsaedi25",
+        "fund_amount": "280",
+        "total_copy_earn_amount": "9.79342573"
+      },
+      {
+        "follower_name": "tagi******kbar@***.com",
+        "fund_amount": "200",
+        "total_copy_earn_amount": "8.04731685"
+      },
+      {
+        "follower_name": "mahmo******i1368@***.com",
+        "fund_amount": "100",
+        "total_copy_earn_amount": "6.0617831"
+      },
+      {
+        "follower_name": "mila********ni_f@***.com",
+        "fund_amount": "104.44",
+        "total_copy_earn_amount": "3.53972878"
+      }
+    ],
+    "total": 43,
+    "total_page": 5
+  },
+  "message": "Success"
+}

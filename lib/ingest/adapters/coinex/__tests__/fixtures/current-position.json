@@ -1,0 +1,34 @@
+{
+  "code": 0,
+  "data": [
+    {
+      "position_id": 394832906,
+      "create_time": 1781209609,
+      "market": "ETHUSDT",
+      "type": 2,
+      "leverage": "10",
+      "side": 2,
+      "amount": "0.059",
+      "open_price": "1676.00000000000000000000",
+      "liq_price": "1012.03722628513001078142",
+      "profit_unreal": "-0.22833000",
+      "profit_real": "-0.02966520000000000000",
+      "margin_amount": "9.88840000000000000000"
+    },
+    {
+      "position_id": 394782251,
+      "create_time": 1781094621,
+      "market": "BTCUSDT",
+      "type": 2,
+      "leverage": "10",
+      "side": 1,
+      "amount": "0.0079",
+      "open_price": "62350.17824147785469303544",
+      "liq_price": "71970.14970078392845849323",
+      "profit_unreal": "-9.92889190",
+      "profit_real": "-2.58660685767505207500",
+      "margin_amount": "49.25664081076750520751"
+    }
+  ],
+  "message": "Success"
+}

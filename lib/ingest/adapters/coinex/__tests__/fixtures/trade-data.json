@@ -1,0 +1,24 @@
+{
+  "code": 0,
+  "data": {
+    "last_trade_at": 1781209609,
+    "trade_days": 28,
+    "trade_count": 10,
+    "margin_amount": "66.0567786",
+    "equity": "89.32734744",
+    "profit_amount": "23.27056883",
+    "profit_rate": "0.35228131",
+    "winning_rate": "1",
+    "follower_profit_amount": "-128.54097387",
+    "total_profit_amount": "-105.27040504",
+    "profit_share_amount": "2.66043638",
+    "mdd": "0.05939723",
+    "profit_count": 10,
+    "loss_count": 0,
+    "total_follower_count": 74,
+    "favorite_count": 90,
+    "max_follower_num": 100,
+    "cur_follower_num": 43
+  },
+  "message": "Success"
+}

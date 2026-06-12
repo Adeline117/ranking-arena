@@ -1,0 +1,16 @@
+{
+  "code": 0,
+  "data": [
+    {
+      "market": "BTCUSDT",
+      "trade_count": "7",
+      "profit_amount": "30.36012863"
+    },
+    {
+      "market": "ETHUSDT",
+      "trade_count": "2",
+      "profit_amount": "1.72062285"
+    }
+  ],
+  "message": "Success"
+}
