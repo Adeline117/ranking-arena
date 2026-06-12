@@ -72,7 +72,10 @@ export default function AdvancedMetricsCard({
     return `${(hours / 168).toFixed(1)}w`
   }
 
-  const getRatioColor = (value: number | null, thresholds: { good: number; excellent: number }): string => {
+  const getRatioColor = (
+    value: number | null,
+    thresholds: { good: number; excellent: number }
+  ): string => {
     if (value === null) return tokens.colors.text.tertiary
     if (value >= thresholds.excellent) return tokens.colors.accent.success
     if (value >= thresholds.good) return tokens.colors.accent.warning
@@ -134,8 +137,22 @@ export default function AdvancedMetricsCard({
       }}
     >
       {/* Header */}
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          marginBottom: tokens.spacing[4],
+        }}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={tokens.colors.accent.primary}
+          strokeWidth="2"
+        >
           <path d="M3 3v18h18" />
           <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
         </svg>
@@ -159,9 +176,19 @@ export default function AdvancedMetricsCard({
           label={t('sortinoRatio') || 'Sortino'}
           value={formatRatio(metrics.sortino_ratio)}
           color={getRatioColor(metrics.sortino_ratio, { good: 1, excellent: 2 })}
-          tooltip={t('sortinoTooltip') || 'Risk-adjusted return using only downside volatility. Higher is better.'}
+          tooltip={
+            t('sortinoTooltip') ||
+            'Risk-adjusted return using only downside volatility. Higher is better.'
+          }
           icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M22 12h-4l-3 9L9 3l-3 9H2" />
             </svg>
           }
@@ -172,9 +199,18 @@ export default function AdvancedMetricsCard({
           label={t('calmarRatio') || 'Calmar'}
           value={formatRatio(metrics.calmar_ratio)}
           color={getRatioColor(metrics.calmar_ratio, { good: 1, excellent: 3 })}
-          tooltip={t('calmarTooltip') || 'Annualized return divided by max drawdown. Higher is better.'}
+          tooltip={
+            t('calmarTooltip') || 'Annualized return divided by max drawdown. Higher is better.'
+          }
           icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
               <polyline points="17 6 23 6 23 12" />
             </svg>
@@ -186,9 +222,19 @@ export default function AdvancedMetricsCard({
           label={t('profitFactor') || 'Profit Factor'}
           value={formatRatio(metrics.profit_factor)}
           color={getRatioColor(metrics.profit_factor, { good: 1.5, excellent: 2 })}
-          tooltip={t('profitFactorTooltip') || 'Gross profit / gross loss. Above 1.5 is good, above 2 is excellent.'}
+          tooltip={
+            t('profitFactorTooltip') ||
+            'Gross profit / gross loss. Above 1.5 is good, above 2 is excellent.'
+          }
           icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <line x1="12" y1="1" x2="12" y2="23" />
               <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
             </svg>
@@ -200,9 +246,19 @@ export default function AdvancedMetricsCard({
           label={t('recoveryFactor') || 'Recovery'}
           value={formatRatio(metrics.recovery_factor)}
           color={getRatioColor(metrics.recovery_factor, { good: 1, excellent: 2 })}
-          tooltip={t('recoveryFactorTooltip') || 'Net profit / max drawdown. Shows ability to recover from losses.'}
+          tooltip={
+            t('recoveryFactorTooltip') ||
+            'Net profit / max drawdown. Shows ability to recover from losses.'
+          }
           icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <polyline points="1 4 1 10 7 10" />
               <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10" />
             </svg>
@@ -221,9 +277,18 @@ export default function AdvancedMetricsCard({
                   ? tokens.colors.accent.warning
                   : tokens.colors.accent.error
             }
-            tooltip={t('riskRewardTooltip') || 'Average win / average loss ratio. Above 1.5 is good.'}
+            tooltip={
+              t('riskRewardTooltip') || 'Average win / average loss ratio. Above 1.5 is good.'
+            }
             icon={
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <path d="M12 2L2 7l10 5 10-5-10-5z" />
                 <path d="M2 17l10 5 10-5" />
                 <path d="M2 12l10 5 10-5" />
@@ -235,9 +300,18 @@ export default function AdvancedMetricsCard({
 
       {/* Insufficient data note */}
       {!hasAnyData && (
-        <Box style={{ marginBottom: tokens.spacing[3], padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`, background: `${tokens.colors.bg.tertiary}80`, borderRadius: tokens.radius.md, border: `1px solid ${tokens.colors.border.primary}40` }}>
+        <Box
+          style={{
+            marginBottom: tokens.spacing[3],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            background: `${tokens.colors.bg.tertiary}80`,
+            borderRadius: tokens.radius.md,
+            border: `1px solid ${tokens.colors.border.primary}40`,
+          }}
+        >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, lineHeight: 1.5 }}>
-            {t('metricsInsufficientData') || 'Insufficient trading history to compute these metrics. They will populate as more data becomes available.'}
+            {t('metricsInsufficientData') ||
+              'Insufficient trading history to compute these metrics. They will populate as more data becomes available.'}
           </Text>
         </Box>
       )}
@@ -257,7 +331,18 @@ export default function AdvancedMetricsCard({
         <SecondaryBadge
           label={t('maxConsecWins') || 'Max Wins'}
           value={metrics.max_consecutive_wins?.toString() ?? '—'}
-          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>}
+          icon={
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+            </svg>
+          }
           highlight={metrics.max_consecutive_wins !== null && metrics.max_consecutive_wins >= 5}
         />
 
@@ -265,7 +350,19 @@ export default function AdvancedMetricsCard({
         <SecondaryBadge
           label={t('maxConsecLosses') || 'Max Losses'}
           value={metrics.max_consecutive_losses?.toString() ?? '—'}
-          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>}
+          icon={
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+              <polyline points="17 18 23 18 23 12" />
+            </svg>
+          }
           negative={metrics.max_consecutive_losses !== null && metrics.max_consecutive_losses >= 5}
         />
 
@@ -273,23 +370,65 @@ export default function AdvancedMetricsCard({
         <SecondaryBadge
           label={t('avgHolding') || 'Avg Hold'}
           value={formatHours(metrics.avg_holding_hours)}
-          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>}
+          icon={
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="12" cy="12" r="10" />
+              <polyline points="12 6 12 12 16 14" />
+            </svg>
+          }
         />
 
         {/* Volatility */}
         <SecondaryBadge
           label={t('volatility') || 'Volatility'}
           value={metrics.volatility_pct !== null ? `${metrics.volatility_pct.toFixed(1)}%` : '—'}
-          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 3v18h18"/><path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3"/></svg>}
+          icon={
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M3 3v18h18" />
+              <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
+            </svg>
+          }
           negative={metrics.volatility_pct !== null && metrics.volatility_pct > 50}
         />
 
         {/* Downside Volatility */}
         <SecondaryBadge
           label={t('downsideVol') || 'Downside Vol'}
-          value={metrics.downside_volatility_pct !== null ? `${metrics.downside_volatility_pct.toFixed(1)}%` : '—'}
-          icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="19 12 12 19 5 12"/></svg>}
-          negative={metrics.downside_volatility_pct !== null && metrics.downside_volatility_pct > 30}
+          value={
+            metrics.downside_volatility_pct !== null
+              ? `${metrics.downside_volatility_pct.toFixed(1)}%`
+              : '—'
+          }
+          icon={
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <polyline points="19 12 12 19 5 12" />
+            </svg>
+          }
+          negative={
+            metrics.downside_volatility_pct !== null && metrics.downside_volatility_pct > 30
+          }
         />
       </Box>
 
@@ -319,8 +458,9 @@ export default function AdvancedMetricsCard({
                   color: tokens.colors.text.tertiary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
+                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
                   fontSize: 10,
-                  fontWeight: 500,
+                  fontWeight: tokens.typography.fontWeight.medium,
                   marginBottom: 4,
                 }}
               >
@@ -328,13 +468,16 @@ export default function AdvancedMetricsCard({
               </Text>
               <Text
                 style={{
-                  fontSize: 18,
-                  fontWeight: 700,
+                  fontSize: tokens.typography.fontSize.lg,
+                  fontWeight: tokens.typography.fontWeight.bold,
                   color: tokens.colors.accent.success,
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                 }}
               >
-                +${largestWin.toLocaleString('en-US', { maximumFractionDigits: largestWin < 1000 ? 2 : 0 })}
+                +$
+                {largestWin.toLocaleString('en-US', {
+                  maximumFractionDigits: largestWin < 1000 ? 2 : 0,
+                })}
               </Text>
             </Box>
           )}
@@ -353,8 +496,9 @@ export default function AdvancedMetricsCard({
                   color: tokens.colors.text.tertiary,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
+                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
                   fontSize: 10,
-                  fontWeight: 500,
+                  fontWeight: tokens.typography.fontWeight.medium,
                   marginBottom: 4,
                 }}
               >
@@ -362,13 +506,16 @@ export default function AdvancedMetricsCard({
               </Text>
               <Text
                 style={{
-                  fontSize: 18,
-                  fontWeight: 700,
+                  fontSize: tokens.typography.fontSize.lg,
+                  fontWeight: tokens.typography.fontWeight.bold,
                   color: tokens.colors.accent.error,
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                 }}
               >
-                -${Math.abs(largestLoss).toLocaleString('en-US', { maximumFractionDigits: Math.abs(largestLoss) < 1000 ? 2 : 0 })}
+                -$
+                {Math.abs(largestLoss).toLocaleString('en-US', {
+                  maximumFractionDigits: Math.abs(largestLoss) < 1000 ? 2 : 0,
+                })}
               </Text>
             </Box>
           )}
@@ -415,8 +562,9 @@ function MetricCard({
             color: tokens.colors.text.tertiary,
             textTransform: 'uppercase',
             letterSpacing: '0.5px',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
             fontSize: 10,
-            fontWeight: 500,
+            fontWeight: tokens.typography.fontWeight.medium,
           }}
         >
           {label}
@@ -424,8 +572,9 @@ function MetricCard({
       </Box>
       <Text
         style={{
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
           fontSize: 22,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
           color: isNA ? tokens.colors.text.tertiary : color,
           fontFamily: tokens.typography.fontFamily.mono.join(', '),
           letterSpacing: '-0.02em',
@@ -474,15 +623,26 @@ function SecondaryBadge({
         border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : negative ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
       }}
     >
-      {icon && <span style={{ display: 'flex', alignItems: 'center', color: tokens.colors.text.tertiary }}>{icon}</span>}
-      <Text style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 500 }}>
+      {icon && (
+        <span style={{ display: 'flex', alignItems: 'center', color: tokens.colors.text.tertiary }}>
+          {icon}
+        </span>
+      )}
+      {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
+      <Text
+        style={{
+          fontSize: 11,
+          color: tokens.colors.text.tertiary,
+          fontWeight: tokens.typography.fontWeight.medium,
+        }}
+      >
         {label}
       </Text>
       <Text
         style={{
-          fontSize: 12,
+          fontSize: tokens.typography.fontSize.xs,
           color,
-          fontWeight: 600,
+          fontWeight: tokens.typography.fontWeight.semibold,
           fontFamily: tokens.typography.fontFamily.mono.join(', '),
         }}
       >

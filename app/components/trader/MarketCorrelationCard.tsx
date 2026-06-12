@@ -62,11 +62,19 @@ export default function MarketCorrelationCard({
 
   const getBetaInterpretation = (beta: number | null): { text: string; color: string } => {
     if (beta === null) return { text: '', color: tokens.colors.text.tertiary }
-    if (beta > 1.5) return { text: t('betaHighVolatile') || 'High volatility', color: tokens.colors.accent.warning }
-    if (beta > 1) return { text: t('betaAboveMarket') || 'Above market', color: tokens.colors.accent.primary }
-    if (beta > 0.5) return { text: t('betaModerate') || 'Moderate', color: tokens.colors.text.secondary }
-    if (beta > 0) return { text: t('betaDefensive') || 'Defensive', color: tokens.colors.accent.success }
-    if (beta < 0) return { text: t('betaInverse') || 'Inverse correlation', color: tokens.colors.accent.error }
+    if (beta > 1.5)
+      return {
+        text: t('betaHighVolatile') || 'High volatility',
+        color: tokens.colors.accent.warning,
+      }
+    if (beta > 1)
+      return { text: t('betaAboveMarket') || 'Above market', color: tokens.colors.accent.primary }
+    if (beta > 0.5)
+      return { text: t('betaModerate') || 'Moderate', color: tokens.colors.text.secondary }
+    if (beta > 0)
+      return { text: t('betaDefensive') || 'Defensive', color: tokens.colors.accent.success }
+    if (beta < 0)
+      return { text: t('betaInverse') || 'Inverse correlation', color: tokens.colors.accent.error }
     return { text: t('betaNeutral') || 'Market neutral', color: tokens.colors.text.tertiary }
   }
 
@@ -85,34 +93,47 @@ export default function MarketCorrelationCard({
   }
 
   const getConditionIcon = (condition: MarketCondition): React.ReactNode => {
-    const iconProps = { width: 14, height: 14, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2 }
+    const iconProps = {
+      width: 14,
+      height: 14,
+      viewBox: '0 0 24 24',
+      fill: 'none',
+      stroke: 'currentColor',
+      strokeWidth: 2,
+    }
     switch (condition) {
-      case 'bull': return (
-        <svg {...iconProps} style={{ color: tokens.colors.accent.success }}>
-          <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
-          <polyline points="17 6 23 6 23 12" />
-        </svg>
-      )
-      case 'bear': return (
-        <svg {...iconProps} style={{ color: tokens.colors.accent.error }}>
-          <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
-          <polyline points="17 18 23 18 23 12" />
-        </svg>
-      )
-      case 'sideways': return (
-        <svg {...iconProps} style={{ color: tokens.colors.text.tertiary }}>
-          <line x1="5" y1="12" x2="19" y2="12" />
-          <polyline points="12 5 19 12 12 19" />
-        </svg>
-      )
+      case 'bull':
+        return (
+          <svg {...iconProps} style={{ color: tokens.colors.accent.success }}>
+            <polyline points="23 6 13.5 15.5 8.5 10.5 1 18" />
+            <polyline points="17 6 23 6 23 12" />
+          </svg>
+        )
+      case 'bear':
+        return (
+          <svg {...iconProps} style={{ color: tokens.colors.accent.error }}>
+            <polyline points="23 18 13.5 8.5 8.5 13.5 1 6" />
+            <polyline points="17 18 23 18 23 12" />
+          </svg>
+        )
+      case 'sideways':
+        return (
+          <svg {...iconProps} style={{ color: tokens.colors.text.tertiary }}>
+            <line x1="5" y1="12" x2="19" y2="12" />
+            <polyline points="12 5 19 12 12 19" />
+          </svg>
+        )
     }
   }
 
   const getConditionLabel = (condition: MarketCondition): string => {
     switch (condition) {
-      case 'bull': return t('bullMarket') || 'Bull Market'
-      case 'bear': return t('bearMarket') || 'Bear Market'
-      case 'sideways': return t('sidewaysMarket') || 'Sideways'
+      case 'bull':
+        return t('bullMarket') || 'Bull Market'
+      case 'bear':
+        return t('bearMarket') || 'Bear Market'
+      case 'sideways':
+        return t('sidewaysMarket') || 'Sideways'
     }
   }
 
@@ -162,8 +183,22 @@ export default function MarketCorrelationCard({
       }}
     >
       {/* Header */}
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2">
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          marginBottom: tokens.spacing[4],
+        }}
+      >
+        <svg
+          width="18"
+          height="18"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={tokens.colors.accent.primary}
+          strokeWidth="2"
+        >
           <circle cx="12" cy="12" r="10" />
           <path d="M2 12h20" />
           <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
@@ -192,17 +227,32 @@ export default function MarketCorrelationCard({
             textAlign: 'center',
           }}
         >
-          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
-            <span style={{ fontSize: 16 }}>₿</span>
-            <Text size="xs" color="tertiary" style={{ fontWeight: 500 }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              marginBottom: 4,
+            }}
+          >
+            <span style={{ fontSize: tokens.typography.fontSize.md }}>₿</span>
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ fontWeight: tokens.typography.fontWeight.medium }}
+            >
               Beta (BTC)
             </Text>
           </Box>
           <Text
             style={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: correlation.beta_btc !== null ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+              fontSize: tokens.typography.fontSize['2xl'],
+              fontWeight: tokens.typography.fontWeight.bold,
+              color:
+                correlation.beta_btc !== null
+                  ? tokens.colors.text.primary
+                  : tokens.colors.text.tertiary,
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
             }}
           >
@@ -225,17 +275,32 @@ export default function MarketCorrelationCard({
             textAlign: 'center',
           }}
         >
-          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
-            <span style={{ fontSize: 16 }}>Ξ</span>
-            <Text size="xs" color="tertiary" style={{ fontWeight: 500 }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              marginBottom: 4,
+            }}
+          >
+            <span style={{ fontSize: tokens.typography.fontSize.md }}>Ξ</span>
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ fontWeight: tokens.typography.fontWeight.medium }}
+            >
               Beta (ETH)
             </Text>
           </Box>
           <Text
             style={{
-              fontSize: 24,
-              fontWeight: 700,
-              color: correlation.beta_eth !== null ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+              fontSize: tokens.typography.fontSize['2xl'],
+              fontWeight: tokens.typography.fontWeight.bold,
+              color:
+                correlation.beta_eth !== null
+                  ? tokens.colors.text.primary
+                  : tokens.colors.text.tertiary,
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
             }}
           >
@@ -252,24 +317,37 @@ export default function MarketCorrelationCard({
         <Box
           style={{
             padding: tokens.spacing[3],
-            background: correlation.alpha !== null && correlation.alpha > 0
-              ? `${tokens.colors.accent.success}10`
-              : tokens.colors.bg.tertiary + '60',
+            background:
+              correlation.alpha !== null && correlation.alpha > 0
+                ? `${tokens.colors.accent.success}10`
+                : tokens.colors.bg.tertiary + '60',
             borderRadius: tokens.radius.lg,
             border: `1px solid ${correlation.alpha !== null && correlation.alpha > 0 ? tokens.colors.accent.success + '30' : tokens.colors.border.primary}`,
             textAlign: 'center',
           }}
         >
-          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, marginBottom: 4 }}>
-            <span style={{ fontSize: 14 }}>α</span>
-            <Text size="xs" color="tertiary" style={{ fontWeight: 500 }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 4,
+              marginBottom: 4,
+            }}
+          >
+            <span style={{ fontSize: tokens.typography.fontSize.base }}>α</span>
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ fontWeight: tokens.typography.fontWeight.medium }}
+            >
               Alpha
             </Text>
           </Box>
           <Text
             style={{
-              fontSize: 24,
-              fontWeight: 700,
+              fontSize: tokens.typography.fontSize['2xl'],
+              fontWeight: tokens.typography.fontWeight.bold,
               color: getAlphaColor(correlation.alpha),
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
             }}
@@ -278,7 +356,9 @@ export default function MarketCorrelationCard({
           </Text>
           {correlation.alpha !== null && (
             <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
-              {correlation.alpha > 0 ? (t('excessReturns') || 'Excess returns') : (t('underperforming') || 'Below benchmark')}
+              {correlation.alpha > 0
+                ? t('excessReturns') || 'Excess returns'
+                : t('underperforming') || 'Below benchmark'}
             </Text>
           )}
         </Box>
@@ -292,7 +372,16 @@ export default function MarketCorrelationCard({
             borderTop: `1px solid ${tokens.colors.border.primary}40`,
           }}
         >
-          <Text size="xs" color="tertiary" weight="bold" style={{ marginBottom: tokens.spacing[3], textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+          <Text
+            size="xs"
+            color="tertiary"
+            weight="bold"
+            style={{
+              marginBottom: tokens.spacing[3],
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+            }}
+          >
             {t('performanceByCondition') || 'Performance by Market Condition'}
           </Text>
           <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
@@ -312,15 +401,18 @@ export default function MarketCorrelationCard({
                     gap: 8,
                   }}
                 >
-                  <span style={{ display: 'flex', alignItems: 'center' }}>{getConditionIcon(condition)}</span>
+                  <span style={{ display: 'flex', alignItems: 'center' }}>
+                    {getConditionIcon(condition)}
+                  </span>
                   <Box>
+                    {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
                     <Text size="xs" color="tertiary" style={{ fontSize: 10 }}>
                       {getConditionLabel(condition)}
                     </Text>
                     <Text
                       style={{
-                        fontSize: 14,
-                        fontWeight: 600,
+                        fontSize: tokens.typography.fontSize.base,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                         color: getConditionColor(perf),
                         fontFamily: tokens.typography.fontFamily.mono.join(', '),
                       }}
