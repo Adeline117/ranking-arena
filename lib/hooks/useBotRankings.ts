@@ -1,6 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
+import { REFETCH_SLOW } from './cache-presets'
 
 export interface BotMetrics {
   total_volume: number | null
@@ -78,7 +79,7 @@ export function useBotRankings(opts: UseBotRankingsOptions = {}) {
     queryFn: () => fetcher(url),
     refetchOnWindowFocus: false,
     placeholderData: (prev) => prev,
-    refetchInterval: 15 * 60 * 1000,
+    refetchInterval: REFETCH_SLOW,
     initialData: fallbackData,
   })
 
