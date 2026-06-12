@@ -1,0 +1,24 @@
+{
+  "code": 200,
+  "msg": "请求成功",
+  "data": {
+    "traderId": 1941565,
+    "registerDays": 556,
+    "shareProfitRate": 12,
+    "supportSyms": "BTCUSDT#ETHUSDT#XRPUSDT",
+    "nickName": "Black Rock",
+    "avatarPic": "https://img2.btuserlog.com/btcc/mis/20250223/297e243a-b30e-437b-a301-c9cc0a101ad0.jpeg",
+    "totalFollowNum": 7193,
+    "selfInfo": "i am a professional trader, i have been doing trading since last 3 years.\r\ni only take the trades when i am soo sure to win that, use a stop loss strategy.",
+    "followNum": 2861,
+    "limitFollow": 3000,
+    "isFollow": 0,
+    "traderLevel": 2,
+    "daysTraderAtom": 124771.15,
+    "traderAtom": 124771.15,
+    "rateProfit": 353.67,
+    "autoUpdate": 0
+  },
+  "errorDetails": null,
+  "ok": true
+}

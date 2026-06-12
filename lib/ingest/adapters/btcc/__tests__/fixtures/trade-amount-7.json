@@ -1,0 +1,15 @@
+{
+  "code": 200,
+  "msg": "请求成功",
+  "data": [
+    { "settleDate": "2026-06-05", "dayTradeAmount": 520762.76 },
+    { "settleDate": "2026-06-06", "dayTradeAmount": 191266.34 },
+    { "settleDate": "2026-06-07", "dayTradeAmount": 258779.61 },
+    { "settleDate": "2026-06-08", "dayTradeAmount": 50251.4 },
+    { "settleDate": "2026-06-09", "dayTradeAmount": 66305.25 },
+    { "settleDate": "2026-06-10", "dayTradeAmount": 32414.8 },
+    { "settleDate": "2026-06-11", "dayTradeAmount": 16104.05 }
+  ],
+  "errorDetails": null,
+  "ok": true
+}

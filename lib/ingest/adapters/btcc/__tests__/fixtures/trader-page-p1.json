@@ -1,0 +1,61 @@
+{
+  "total": 1820,
+  "rows": [
+    {
+      "traderId": 2812898,
+      "nickName": ";)",
+      "avatarPic": "https://img2.btuserlog.com/btcc/documentary/20250930/5d42246c-5f49-45db-9a97-01bdad1a5782.jpg",
+      "followNum": 0,
+      "limitFollow": 500,
+      "supportSyms": "BTCUSDT#ETHUSDT#XRPUSDT",
+      "totalNetProfit": 68053.93,
+      "rateProfit": 57.35,
+      "netProfitList": "0.00,0.00,0.00,0.00,0.00,0.00,0.00,0.00",
+      "totalTraderAtom": 155.28,
+      "winRate": 48.28,
+      "maxBackRate": 0,
+      "hasFollow": 0,
+      "advertTag": "",
+      "marketingTag": ""
+    },
+    {
+      "traderId": 1941565,
+      "nickName": "Black Rock",
+      "avatarPic": "https://img2.btuserlog.com/btcc/mis/20250223/297e243a-b30e-437b-a301-c9cc0a101ad0.jpeg",
+      "followNum": 2861,
+      "limitFollow": 3000,
+      "supportSyms": "BTCUSDT#ETHUSDT#XRPUSDT",
+      "totalNetProfit": 41117.02,
+      "rateProfit": 353.67,
+      "netProfitList": "0.00,0.00,77.09,77.09,160.54,283.89,283.89,292.42",
+      "totalTraderAtom": 120612.12,
+      "winRate": 93.8,
+      "maxBackRate": 5676.0,
+      "hasFollow": 0,
+      "advertTag": null,
+      "marketingTag": null
+    },
+    {
+      "traderId": 1565564,
+      "nickName": "SabioInversor",
+      "avatarPic": "https://img2.btuserlog.com/btcc/documentary_company/97564722.jpg",
+      "followNum": 32,
+      "limitFollow": 500,
+      "supportSyms": "BTCUSDT#ETHUSDT#XRPUSDT",
+      "totalNetProfit": 19210.96,
+      "rateProfit": 20.71,
+      "netProfitList": "-282.75,-640.68,812.67,3378.73,3421.61,10133.41,10534.80,10784.84",
+      "totalTraderAtom": 658.81,
+      "winRate": 46.21,
+      "maxBackRate": 5166.0,
+      "hasFollow": 0,
+      "advertTag": null,
+      "marketingTag": null
+    }
+  ],
+  "code": 200,
+  "msg": "请求成功",
+  "pageNum": 1,
+  "pageSize": 3,
+  "extended": null
+}

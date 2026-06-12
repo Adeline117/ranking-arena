@@ -1,0 +1,31 @@
+{
+  "total": 2861,
+  "rows": [
+    {
+      "userId": 2485350,
+      "followTime": 1773717578000,
+      "avatarPic": "",
+      "nickName": "klem****@gmail.com",
+      "cumulativeNetProfit": 32212.96
+    },
+    {
+      "userId": 3197619,
+      "followTime": 1765066697000,
+      "avatarPic": "",
+      "nickName": "larr****@emecinc.com",
+      "cumulativeNetProfit": 18691.04
+    },
+    {
+      "userId": 3240281,
+      "followTime": 1766180739000,
+      "avatarPic": "",
+      "nickName": "jrjb****@yahoo.com",
+      "cumulativeNetProfit": 13469.75
+    }
+  ],
+  "code": 200,
+  "msg": "请求成功",
+  "pageNum": 1,
+  "pageSize": 3,
+  "extended": null
+}
