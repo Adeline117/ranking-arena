@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import ProGate from '../ui/ProGate'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { PortfolioItem, PositionHistoryItem } from '@/lib/data/trader'
 import type { ExtendedPositionHistoryItem } from './portfolio-table-utils'
@@ -27,7 +28,12 @@ type ViewMode = 'current' | 'history'
  * Portfolio页面 - 显示当前持仓和历史仓位
  * 现代化设计，流畅动画
  */
-export default function PortfolioTable({ items, history = [], isPro = true, onUnlock: _onUnlock }: PortfolioTableProps) {
+export default function PortfolioTable({
+  items,
+  history = [],
+  isPro = true,
+  onUnlock: _onUnlock,
+}: PortfolioTableProps) {
   const { t } = useLanguage()
   const [viewMode, setViewMode] = useState<ViewMode>('current')
   const [selectedMarket, setSelectedMarket] = useState<string | null>(null)
@@ -63,8 +69,8 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
   })
 
   // 检查是否有扩展字段
-  const hasExtendedFields = history.some(item =>
-    'positionType' in item || 'maxPositionSize' in item || 'pnlUsd' in item
+  const hasExtendedFields = history.some(
+    (item) => 'positionType' in item || 'maxPositionSize' in item || 'pnlUsd' in item
   )
 
   // Empty state when no current positions and no history
@@ -84,16 +90,55 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
           gap: tokens.spacing[3],
         }}
       >
-        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.3, color: tokens.colors.text.tertiary }}>
+        <svg
+          width="40"
+          height="40"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="1.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          style={{ opacity: 0.3, color: tokens.colors.text.tertiary }}
+        >
           <path d="M21 12V7H5a2 2 0 0 1 0-4h14v4" />
           <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
           <path d="M18 12a2 2 0 0 0 0 4h4v-4Z" />
         </svg>
-        <Text size="sm" weight="bold" color="secondary">{t('noOpenPositions')}</Text>
-        <Text size="xs" color="tertiary">{t('noPositionHistoryDesc')}</Text>
+        <Text size="sm" weight="bold" color="secondary">
+          {t('noOpenPositions')}
+        </Text>
+        <Text size="xs" color="tertiary">
+          {t('noPositionHistoryDesc')}
+        </Text>
       </Box>
     )
   }
+
+  const portfolioContent =
+    viewMode === 'current' ? (
+      <PortfolioCurrentView
+        items={items}
+        hoveredRow={hoveredRow}
+        selectedMarket={selectedMarket}
+        onHoverRow={setHoveredRow}
+        onSelectMarket={setSelectedMarket}
+      />
+    ) : (
+      <PositionHistoryView
+        sortedHistory={sortedHistory}
+        hasExtendedFields={hasExtendedFields}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        historyExpanded={historyExpanded}
+        hoveredRow={hoveredRow}
+        collapsedCount={COLLAPSED_COUNT}
+        onSortByChange={setSortBy}
+        onSortOrderToggle={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+        onHistoryExpandedToggle={() => setHistoryExpanded(!historyExpanded)}
+        onHoverRow={setHoveredRow}
+      />
+    )
 
   return (
     <>
@@ -111,36 +156,12 @@ export default function PortfolioTable({ items, history = [], isPro = true, onUn
           position: 'relative',
         }}
       >
-        {/* Pro Lock Overlay — PortfolioProLock removed in cleanup */}
-
         {/* Header */}
         <PortfolioTableHeader viewMode={viewMode} onViewModeChange={setViewMode} />
 
-        {/* Content */}
-        <Box style={{ padding: tokens.spacing[5], filter: isPro ? 'none' : 'blur(3px)', pointerEvents: isPro ? 'auto' : 'none' }}>
-          {viewMode === 'current' ? (
-            <PortfolioCurrentView
-              items={items}
-              hoveredRow={hoveredRow}
-              selectedMarket={selectedMarket}
-              onHoverRow={setHoveredRow}
-              onSelectMarket={setSelectedMarket}
-            />
-          ) : (
-            <PositionHistoryView
-              sortedHistory={sortedHistory}
-              hasExtendedFields={hasExtendedFields}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              historyExpanded={historyExpanded}
-              hoveredRow={hoveredRow}
-              collapsedCount={COLLAPSED_COUNT}
-              onSortByChange={setSortBy}
-              onSortOrderToggle={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
-              onHistoryExpandedToggle={() => setHistoryExpanded(!historyExpanded)}
-              onHoverRow={setHoveredRow}
-            />
-          )}
+        {/* Content — Pro-gated behind unified ProGate (blurred preview + upsell card) */}
+        <Box style={{ padding: tokens.spacing[5] }}>
+          {isPro ? portfolioContent : <ProGate variant="blur">{portfolioContent}</ProGate>}
         </Box>
       </Box>
 
