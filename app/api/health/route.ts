@@ -152,21 +152,38 @@ export async function GET() {
       ),
     ])
     const latency = Date.now() - t1
-    if (result.error) {
-      freshness = { status: 'fail', message: result.error.message, latency }
-    } else if (!result.data?.updated_at) {
-      freshness = { status: 'fail', message: 'No trader_latest data found', latency }
+    // Dual signal (2026-06-12): the unified ingest pipeline writes
+    // arena.leaderboard_snapshots; serving-only sources (USDx/USDC) never
+    // touch trader_latest, so OR the two — data is flowing if EITHER is
+    // fresh. RPC is service_role-only.
+    let newestMs: number | null = null
+    if (!result.error && result.data?.updated_at) {
+      newestMs = new Date(result.data.updated_at).getTime()
+    }
+    try {
+      const { data: arenaAt } = await getSupabaseAdmin().rpc('arena_latest_snapshot_at' as never)
+      if (arenaAt) {
+        const arenaMs = new Date(arenaAt as string).getTime()
+        newestMs = newestMs === null ? arenaMs : Math.max(newestMs, arenaMs)
+      }
+    } catch {
+      // arena signal unavailable — fall back to trader_latest alone
+    }
+    if (newestMs === null) {
+      freshness = {
+        status: 'fail',
+        message: result.error?.message ?? 'No pipeline data found (trader_latest + arena)',
+        latency,
+      }
     } else {
-      const ageMs = Date.now() - new Date(result.data.updated_at).getTime()
-      const ageHours = ageMs / (1000 * 60 * 60)
-      // 4h threshold: BullMQ worker fetches every 2-8h per platform.
-      // 4h = at least 1 platform should have updated within this window.
+      const ageHours = (Date.now() - newestMs) / (1000 * 60 * 60)
+      // 4h threshold: worker tiers run every 2-8h per source.
       freshness =
         ageHours <= 4
           ? {
               status: 'pass',
               latency,
-              message: `${ageHours.toFixed(1)}h old (trader_latest)`,
+              message: `${ageHours.toFixed(1)}h old (pipeline)`,
             }
           : {
               status: 'fail',
