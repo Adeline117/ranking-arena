@@ -1,0 +1,41 @@
+{
+  "code": 200,
+  "label": "",
+  "message": "",
+  "data": [
+    {
+      "market": "BEAT_USDT",
+      "average_price": "9.453",
+      "last_price": "8.6735",
+      "trading_volumn": "20",
+      "create_time": 1781197480,
+      "side": "buy",
+      "leverage": 0,
+      "settle": "USDT"
+    },
+    {
+      "market": "BEAT_USDT",
+      "average_price": "9.453",
+      "last_price": "8.6735",
+      "trading_volumn": "20",
+      "create_time": 1781197480,
+      "side": "buy",
+      "leverage": 0,
+      "settle": "USDT"
+    },
+    {
+      "market": "BEAT_USDT",
+      "average_price": "9.453",
+      "last_price": "8.6735",
+      "trading_volumn": "10",
+      "create_time": 1781197480,
+      "side": "buy",
+      "leverage": 0,
+      "settle": "USDT"
+    }
+  ],
+  "page": 1,
+  "pagesize": 10,
+  "pagecount": 161,
+  "totalcount": 1601
+}

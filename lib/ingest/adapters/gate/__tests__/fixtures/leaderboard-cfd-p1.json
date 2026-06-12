@@ -1,0 +1,109 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "page": 1,
+    "pagesize": 12,
+    "pagecount": 228,
+    "totalcount": 2725,
+    "lists": [
+      {
+        "leader_id": 144647,
+        "follow_id": 0,
+        "curr_follow_num": 1,
+        "max_follow_num": 300,
+        "is_full": 0,
+        "is_follow": 0,
+        "is_self": 0,
+        "is_excessive": 0,
+        "max_excessive": 5,
+        "user_info": {
+          "nickname": "1000X带单",
+          "nick": "1000X带单",
+          "nick_en": "1000X Leverage Trading",
+          "tier": 7,
+          "avatar": "https://gavatar.staticimgs.com/groupchat/avatar-16ece3e0bb-b3b4028bff-c92a10-751d31",
+          "anonymous": "Octavia-Arran-Lacie"
+        },
+        "profit": "28390.96",
+        "profit_rate": "0.38647258",
+        "win_rate": "0.7333",
+        "max_drawdown": "0",
+        "sharp_ratio": "0",
+        "aum": "2226.28",
+        "follow_profit": "78602.58",
+        "create_time": 1779781052,
+        "live": {
+          "live_id": "",
+          "live_title": "",
+          "watching_num": ""
+        }
+      },
+      {
+        "leader_id": 1776572690346882,
+        "follow_id": 0,
+        "curr_follow_num": 29,
+        "max_follow_num": 300,
+        "is_full": 0,
+        "is_follow": 0,
+        "is_self": 0,
+        "is_excessive": 0,
+        "max_excessive": 5,
+        "user_info": {
+          "nickname": "东东k2k",
+          "nick": "东东k2k",
+          "nick_en": "Dongdong K2K",
+          "tier": 8,
+          "avatar": "https://gavatar.staticimgs.com/groupchat/avatar-34a6a87409-bc63ad6931-c92a10-7d0665.jpg",
+          "anonymous": "Ayaan-Fallon-Bailey"
+        },
+        "profit": "-132.41",
+        "profit_rate": "-0.27805544",
+        "win_rate": "0.5949",
+        "max_drawdown": "0",
+        "sharp_ratio": "0",
+        "aum": "29750.78",
+        "follow_profit": "38097.63",
+        "create_time": 1776572690,
+        "live": {
+          "live_id": "",
+          "live_title": "",
+          "watching_num": ""
+        }
+      },
+      {
+        "leader_id": 139422,
+        "follow_id": 0,
+        "curr_follow_num": 75,
+        "max_follow_num": 300,
+        "is_full": 0,
+        "is_follow": 0,
+        "is_self": 0,
+        "is_excessive": 0,
+        "max_excessive": 5,
+        "user_info": {
+          "nickname": "阿林发发发",
+          "nick": "阿林发发发",
+          "nick_en": "Arlin Fafa Fafa",
+          "tier": 10,
+          "avatar": "https://gavatar.staticimgs.com/groupchat/avatar-bfcfaa2c93-31b8b68858-c92a10-751d31",
+          "anonymous": "Stephen-Quinn-Aldo"
+        },
+        "profit": "1746.97",
+        "profit_rate": "0.47806396",
+        "win_rate": "0.7885",
+        "max_drawdown": "0",
+        "sharp_ratio": "0",
+        "aum": "61365.34",
+        "follow_profit": "31381.21",
+        "create_time": 1779296093,
+        "live": {
+          "live_id": "",
+          "live_title": "",
+          "watching_num": ""
+        }
+      }
+    ]
+  },
+  "timestamp": 1781223545625
+}

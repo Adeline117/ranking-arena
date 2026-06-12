@@ -1,0 +1,37 @@
+{
+  "code": 200,
+  "label": "",
+  "message": "",
+  "data": [
+    {
+      "market": "GUA_USDT",
+      "percent": 0.1914,
+      "count": 297,
+      "pnl_sum": "-3543.94"
+    },
+    {
+      "market": "BEAT_USDT",
+      "percent": 0.1721,
+      "count": 267,
+      "pnl_sum": "17153.38"
+    },
+    {
+      "market": "BSB_USDT",
+      "percent": 0.136,
+      "count": 211,
+      "pnl_sum": "7680.7"
+    },
+    {
+      "market": "LAB_USDT",
+      "percent": 0.1315,
+      "count": 204,
+      "pnl_sum": "5312.63"
+    },
+    {
+      "market": "others",
+      "percent": 0.3687,
+      "count": 572,
+      "pnl_sum": "-2281.25"
+    }
+  ]
+}

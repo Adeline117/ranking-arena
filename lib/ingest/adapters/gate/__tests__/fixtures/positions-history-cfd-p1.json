@@ -1,0 +1,82 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "page": 1,
+    "pagesize": 10,
+    "pagecount": 2,
+    "totalcount": 15,
+    "list": [
+      {
+        "position_id": 1334181,
+        "symbol": "XAUUSD",
+        "base_symbol": "XAUUSD",
+        "symbol_desc": "",
+        "leverage": "500",
+        "realized_pnl": "3056",
+        "realized_pnl_rate": "0.3391952548182153",
+        "size": "10",
+        "size_close": "10",
+        "entry_price": "4507.89",
+        "close_price": "4504.78",
+        "position_dir": "Short",
+        "entry_time": 1780579267,
+        "close_time": 1780579462,
+        "position_status": "1",
+        "close_detail": {
+          "margin_level": "",
+          "margin": "",
+          "equity": "",
+          "stop_out_level": ""
+        }
+      },
+      {
+        "position_id": 1331602,
+        "symbol": "XAUUSD",
+        "base_symbol": "XAUUSD",
+        "symbol_desc": "",
+        "leverage": "500",
+        "realized_pnl": "7636",
+        "realized_pnl_rate": "0.8478396521592375",
+        "size": "10",
+        "size_close": "10",
+        "entry_price": "4510.9",
+        "close_price": "4503.21",
+        "position_dir": "Short",
+        "entry_time": 1780577530,
+        "close_time": 1780577600,
+        "position_status": "1",
+        "close_detail": {
+          "margin_level": "",
+          "margin": "",
+          "equity": "",
+          "stop_out_level": ""
+        }
+      },
+      {
+        "position_id": 1331509,
+        "symbol": "XAUUSD",
+        "base_symbol": "XAUUSD",
+        "symbol_desc": "",
+        "leverage": "500",
+        "realized_pnl": "6606",
+        "realized_pnl_rate": "0.7334588703445458",
+        "size": "10",
+        "size_close": "10",
+        "entry_price": "4509.98",
+        "close_price": "4503.32",
+        "position_dir": "Short",
+        "entry_time": 1780577519,
+        "close_time": 1780577600,
+        "position_status": "1",
+        "close_detail": {
+          "margin_level": "",
+          "margin": "",
+          "equity": "",
+          "stop_out_level": ""
+        }
+      }
+    ]
+  },
+  "timestamp": 1781223557495
+}

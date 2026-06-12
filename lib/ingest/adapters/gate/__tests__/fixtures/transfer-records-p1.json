@@ -1,0 +1,36 @@
+{
+  "code": 200,
+  "label": "",
+  "message": "",
+  "data": [
+    {
+      "time": 1781181244,
+      "amount": "-500",
+      "side": 2
+    },
+    {
+      "time": 1781160450,
+      "amount": "18058.45219",
+      "side": 1
+    },
+    {
+      "time": 1781160430,
+      "amount": "5000.22262017",
+      "side": 1
+    },
+    {
+      "time": 1781157942,
+      "amount": "400",
+      "side": 1
+    },
+    {
+      "time": 1781157841,
+      "amount": "-5400",
+      "side": 2
+    }
+  ],
+  "page": 1,
+  "pagesize": 10,
+  "pagecount": 13,
+  "totalcount": 121
+}

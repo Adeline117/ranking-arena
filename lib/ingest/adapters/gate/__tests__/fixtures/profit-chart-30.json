@@ -1,0 +1,386 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "list": [
+      {
+        "profit": "-495.2",
+        "profit_rate": "-0.1046",
+        "current_profit": "173.52",
+        "total_invest": "1328.69",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1778716800
+      },
+      {
+        "profit": "-697.89",
+        "profit_rate": "-0.1474",
+        "current_profit": "-202.68",
+        "total_invest": "1327.76",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1778803200
+      },
+      {
+        "profit": "-487.45",
+        "profit_rate": "-0.0501",
+        "current_profit": "210.43",
+        "total_invest": "6569.14",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1778889600
+      },
+      {
+        "profit": "-679.57",
+        "profit_rate": "-0.0459",
+        "current_profit": "-192.11",
+        "total_invest": "11517.45",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1778976000
+      },
+      {
+        "profit": "-437.04",
+        "profit_rate": "-0.0296",
+        "current_profit": "242.53",
+        "total_invest": "11525.84",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779062400
+      },
+      {
+        "profit": "-1935.55",
+        "profit_rate": "-0.1309",
+        "current_profit": "-1498.51",
+        "total_invest": "10524.46",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779148800
+      },
+      {
+        "profit": "3097.94",
+        "profit_rate": "0.2095",
+        "current_profit": "5033.5",
+        "total_invest": "15481.75",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779235200
+      },
+      {
+        "profit": "2636.61",
+        "profit_rate": "0.1783",
+        "current_profit": "-461.33",
+        "total_invest": "15020.42",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779321600
+      },
+      {
+        "profit": "2571.13",
+        "profit_rate": "0.1738",
+        "current_profit": "-65.47",
+        "total_invest": "4755.11",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779408000
+      },
+      {
+        "profit": "1922.81",
+        "profit_rate": "0.1278",
+        "current_profit": "-648.32",
+        "total_invest": "4624.68",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779494400
+      },
+      {
+        "profit": "1922",
+        "profit_rate": "0.1278",
+        "current_profit": "-0.8",
+        "total_invest": "4321.15",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779580800
+      },
+      {
+        "profit": "625.45",
+        "profit_rate": "0.0416",
+        "current_profit": "-1296.55",
+        "total_invest": "3229.49",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779667200
+      },
+      {
+        "profit": "1832.43",
+        "profit_rate": "0.1218",
+        "current_profit": "1206.98",
+        "total_invest": "3243.33",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779753600
+      },
+      {
+        "profit": "1619.43",
+        "profit_rate": "0.1077",
+        "current_profit": "-212.99",
+        "total_invest": "3900.84",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779840000
+      },
+      {
+        "profit": "2212",
+        "profit_rate": "0.1471",
+        "current_profit": "592.56",
+        "total_invest": "5098.11",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1779926400
+      },
+      {
+        "profit": "2124.79",
+        "profit_rate": "0.0586",
+        "current_profit": "-87.21",
+        "total_invest": "11837.46",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780012800
+      },
+      {
+        "profit": "2156.76",
+        "profit_rate": "0.0523",
+        "current_profit": "31.97",
+        "total_invest": "9674.42",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780099200
+      },
+      {
+        "profit": "3094.23",
+        "profit_rate": "0.0669",
+        "current_profit": "937.47",
+        "total_invest": "13773.18",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780185600
+      },
+      {
+        "profit": "7471.99",
+        "profit_rate": "0.1616",
+        "current_profit": "4377.75",
+        "total_invest": "9774.39",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780272000
+      },
+      {
+        "profit": "8578.09",
+        "profit_rate": "0.1855",
+        "current_profit": "1106.09",
+        "total_invest": "11493.69",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780358400
+      },
+      {
+        "profit": "8614.9",
+        "profit_rate": "0.1863",
+        "current_profit": "36.81",
+        "total_invest": "10755.15",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780444800
+      },
+      {
+        "profit": "7156.66",
+        "profit_rate": "0.1547",
+        "current_profit": "-1458.24",
+        "total_invest": "7296.91",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780531200
+      },
+      {
+        "profit": "6451.92",
+        "profit_rate": "0.1395",
+        "current_profit": "-704.74",
+        "total_invest": "6723.25",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780617600
+      },
+      {
+        "profit": "8094.86",
+        "profit_rate": "0.175",
+        "current_profit": "1642.94",
+        "total_invest": "7055.72",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780704000
+      },
+      {
+        "profit": "9568.9",
+        "profit_rate": "0.2069",
+        "current_profit": "1474.04",
+        "total_invest": "6946.31",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780790400
+      },
+      {
+        "profit": "12539.33",
+        "profit_rate": "0.2711",
+        "current_profit": "2970.42",
+        "total_invest": "12679.58",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780876800
+      },
+      {
+        "profit": "14437.02",
+        "profit_rate": "0.3122",
+        "current_profit": "1897.68",
+        "total_invest": "12651.56",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1780963200
+      },
+      {
+        "profit": "22316.2",
+        "profit_rate": "0.4825",
+        "current_profit": "7879.18",
+        "total_invest": "5193.28",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1781049600
+      },
+      {
+        "profit": "24120.01",
+        "profit_rate": "0.346",
+        "current_profit": "1803.8",
+        "total_invest": "0",
+        "liq": {
+          "tag": false
+        },
+        "reset": {
+          "tag": false
+        },
+        "create_time": 1781222400
+      }
+    ]
+  },
+  "timestamp": 1781223533444
+}

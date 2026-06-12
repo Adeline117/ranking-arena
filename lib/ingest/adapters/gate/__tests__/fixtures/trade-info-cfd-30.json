@@ -1,0 +1,20 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "win_rate": "0.7333",
+    "trade_count": 15,
+    "win_count": 11,
+    "loss_count": 4,
+    "net_asset_value": "0.00",
+    "max_draw_down": "0",
+    "sharp_rate": "0",
+    "daily_trade_freq": "0.8824",
+    "profit_loss_ratio": "1.4956",
+    "follow_profit": "78602.58",
+    "profit": "28390.96",
+    "profit_rate": "0.38647258",
+    "latest_trade_at": 1780579462
+  },
+  "timestamp": 1781223551338
+}
