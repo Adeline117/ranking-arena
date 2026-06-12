@@ -39,4 +39,7 @@ import './gtrade'
 import './binance-web3'
 import './okx-web3'
 
+// Phase 3 — API-first / VPS-unblocked sources
+import './bitfinex'
+
 export {}

@@ -1,0 +1,121 @@
+{
+  "timeframe": 7,
+  "boardKey": "plu_diff",
+  "snapshotTs": 1780876800000,
+  "boards": {
+    "plu_diff": {
+      "ts": 1780876800000,
+      "rows": [
+        [1780876800000, null, "ubris", 1, null, null, 2915845.7, null, 0, null, null, null, null],
+        [1780876800000, null, "Heika", 2, null, null, 213888.18, null, 2, null, null, null, null],
+        [
+          1780876800000,
+          null,
+          "sipweeeh",
+          3,
+          null,
+          null,
+          123910.92,
+          null,
+          2,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          1780876800000,
+          null,
+          "gazouuu",
+          4,
+          null,
+          null,
+          88495.09,
+          null,
+          2,
+          null,
+          null,
+          null,
+          1589432734177
+        ]
+      ]
+    },
+    "plu": {
+      "ts": 1780876800000,
+      "rows": [
+        [
+          1780876800000,
+          null,
+          "Heika",
+          204,
+          null,
+          null,
+          -465227.77,
+          null,
+          2,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          1780876800000,
+          null,
+          "gazouuu",
+          208,
+          null,
+          null,
+          -3130936.44,
+          null,
+          2,
+          null,
+          null,
+          null,
+          1589432734177
+        ],
+        [
+          1780876800000,
+          null,
+          "sipweeeh",
+          210,
+          null,
+          null,
+          -10091288.24,
+          null,
+          2,
+          null,
+          null,
+          null,
+          null
+        ],
+        [
+          1780876800000,
+          null,
+          "ubris",
+          212,
+          null,
+          null,
+          -144636104.57,
+          null,
+          0,
+          null,
+          null,
+          null,
+          null
+        ]
+      ]
+    },
+    "plr": {
+      "ts": 1780876800000,
+      "rows": [
+        [1780876800000, null, "Heika", 70, null, null, -124139.27, null, 2, null, null, null, null]
+      ]
+    },
+    "vol": {
+      "ts": 1780876800000,
+      "rows": [
+        [1780876800000, null, "Heika", 8, null, null, 27003442.59, null, 2, null, null, null, null]
+      ]
+    }
+  }
+}
