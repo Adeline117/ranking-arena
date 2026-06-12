@@ -149,6 +149,10 @@ interface PremiumGateProps {
   minHeight?: number | string
 }
 
+/**
+ * @deprecated Migrate to app/components/ui/ProGate (variant="blur" + benefits prop).
+ * Last consumer (AdvancedAlerts) migrated 2026-06-12; only ProLabel remains in use.
+ */
 export default function PremiumGate({
   children,
   isPro,

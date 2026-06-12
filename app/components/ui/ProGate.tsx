@@ -35,6 +35,8 @@ export interface ProGateProps {
   /** Pre-translated description override — for parametrized copy like
       t('showingTopFreeLimit').replace('{limit}', …). Wins over featureKey. */
   description?: string
+  /** Pre-translated benefit bullets (rich gates migrating from PremiumGate). */
+  benefits?: string[]
   /** Reserve height for the inline/blur card to avoid CLS. */
   fallbackHeight?: number
 }
@@ -55,11 +57,13 @@ function StarIcon({ size = 28 }: { size?: number }) {
 
 function UpsellCard({
   description,
+  benefits,
   minHeight,
   onUpgrade,
   t,
 }: {
   description: string
+  benefits?: string[]
   minHeight?: number
   onUpgrade: () => void
   t: (key: string) => string
@@ -87,6 +91,37 @@ function UpsellCard({
       <Text size="sm" style={{ color: tokens.colors.text.tertiary, lineHeight: 1.5 }}>
         {description}
       </Text>
+      {benefits && benefits.length > 0 && (
+        <ul
+          style={{
+            listStyle: 'none',
+            margin: 0,
+            padding: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: tokens.spacing[1.5],
+            textAlign: 'left',
+          }}
+        >
+          {benefits.map((b) => (
+            <li
+              key={b}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: tokens.spacing[2],
+                color: tokens.colors.text.secondary,
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
+              <span aria-hidden style={{ color: 'var(--color-accent-success)' }}>
+                ✓
+              </span>
+              {b}
+            </li>
+          ))}
+        </ul>
+      )}
       <button
         onClick={onUpgrade}
         className="tap-target"
@@ -143,6 +178,7 @@ export default function ProGate({
   variant = 'inline',
   featureKey = 'proFeatureBlurred',
   description,
+  benefits,
   fallbackHeight,
 }: ProGateProps) {
   const { t } = useLanguage()
@@ -173,7 +209,7 @@ export default function ProGate({
             zIndex: 2,
           }}
         >
-          <UpsellCard description={upsellText} onUpgrade={goUpgrade} t={t} />
+          <UpsellCard description={upsellText} benefits={benefits} onUpgrade={goUpgrade} t={t} />
         </div>
       </div>
     )
@@ -208,7 +244,7 @@ export default function ProGate({
           maxWidth={380}
         >
           <div style={{ padding: tokens.spacing[6] }}>
-            <UpsellCard description={upsellText} onUpgrade={goUpgrade} t={t} />
+            <UpsellCard description={upsellText} benefits={benefits} onUpgrade={goUpgrade} t={t} />
           </div>
         </ModalOverlay>
       </>
@@ -217,6 +253,12 @@ export default function ProGate({
 
   // inline
   return (
-    <UpsellCard description={upsellText} minHeight={fallbackHeight} onUpgrade={goUpgrade} t={t} />
+    <UpsellCard
+      description={upsellText}
+      benefits={benefits}
+      minHeight={fallbackHeight}
+      onUpgrade={goUpgrade}
+      t={t}
+    />
   )
 }
