@@ -1,0 +1,51 @@
+{
+  "code": 0,
+  "msg": "result.success",
+  "data": {
+    "records": [
+      {
+        "uid": 822771161,
+        "nickname": "az****@gmail.com",
+        "header": "https://img.bitunix.com/config/kv/loginDefault.png",
+        "followAmount": "10",
+        "status": 1,
+        "day": 1,
+        "followDate": "2026-06-12T01:57:21Z",
+        "endFollowDate": null,
+        "roi": "0",
+        "pl": "0",
+        "puid": 365533121
+      },
+      {
+        "uid": 819615117,
+        "nickname": "ho****@gmail.com",
+        "header": "https://img.bitunix.com/config/kv/loginDefault.png",
+        "followAmount": "30.1877",
+        "status": 1,
+        "day": 1,
+        "followDate": "2026-06-11T23:54:45Z",
+        "endFollowDate": null,
+        "roi": "0",
+        "pl": "0",
+        "puid": 229361124
+      },
+      {
+        "uid": 899514117,
+        "nickname": "Pusimist",
+        "header": "https://img.bitunix.com/config/kv/loginDefault.png",
+        "followAmount": "11.76",
+        "status": 1,
+        "day": 1,
+        "followDate": "2026-06-11T19:37:08Z",
+        "endFollowDate": null,
+        "roi": "0",
+        "pl": "0",
+        "puid": 287937141
+      }
+    ],
+    "total": 5,
+    "totalPage": 2,
+    "page": 1
+  },
+  "success": true
+}

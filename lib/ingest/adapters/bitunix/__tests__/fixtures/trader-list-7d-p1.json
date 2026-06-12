@@ -1,0 +1,99 @@
+{
+  "code": 0,
+  "msg": "result.success",
+  "data": {
+    "records": [
+      {
+        "header": "https://img.bitunix.com/user/avatar/01.png",
+        "nickname": "255555",
+        "maxFollow": 500,
+        "currentFollow": 0,
+        "roi": "0.501569",
+        "pl": "254882.119810",
+        "mdd": "0.0430",
+        "aum": "795450.0740464023203241",
+        "full": false,
+        "myself": false,
+        "uid": 388987117,
+        "winRate": "1.0000",
+        "dailyWinRate": [
+          { "date": 20260606, "amount": "-0.154543" },
+          { "date": 20260607, "amount": "0.372080" },
+          { "date": 20260608, "amount": "0.488287" },
+          { "date": 20260609, "amount": "0.033837" },
+          { "date": 20260610, "amount": "-0.184935" },
+          { "date": 20260611, "amount": "0.569117" },
+          { "date": 20260612, "amount": "0.501569" }
+        ],
+        "followed": false,
+        "followerUid": null,
+        "winCount": 1,
+        "symbolList": ["ETH", "SOL", "BTC"],
+        "privateMode": false,
+        "clcLimit": null
+      },
+      {
+        "header": "https://img.bitunix.com/user/avatar/avatar_9.png",
+        "nickname": "Ai Agent",
+        "maxFollow": 500,
+        "currentFollow": 0,
+        "roi": "0.147159",
+        "pl": "201106.552888",
+        "mdd": "0.0390",
+        "aum": "1508710.9272354092581585",
+        "full": false,
+        "myself": false,
+        "uid": 465938111,
+        "winRate": "0.8421",
+        "dailyWinRate": [
+          { "date": 20260606, "amount": "-0.019948" },
+          { "date": 20260607, "amount": "0.156594" },
+          { "date": 20260608, "amount": "0.167909" },
+          { "date": 20260609, "amount": "0.182686" },
+          { "date": 20260610, "amount": "0.193766" },
+          { "date": 20260611, "amount": "0.141851" },
+          { "date": 20260612, "amount": "0.147159" }
+        ],
+        "followed": false,
+        "followerUid": null,
+        "winCount": 32,
+        "symbolList": ["BTC", "ETH"],
+        "privateMode": true,
+        "clcLimit": null
+      },
+      {
+        "header": "https://img.bitunix.com/user/avatar/avatar_6.png",
+        "nickname": "Fghjjj",
+        "maxFollow": 500,
+        "currentFollow": 1,
+        "roi": "0.258629",
+        "pl": "74731.893707",
+        "mdd": "0.0071",
+        "aum": "374686.20841129449494170000",
+        "full": false,
+        "myself": false,
+        "uid": 348686117,
+        "winRate": "1.0000",
+        "dailyWinRate": [
+          { "date": 20260606, "amount": "-0.059197" },
+          { "date": 20260607, "amount": "0.128301" },
+          { "date": 20260608, "amount": "0.146166" },
+          { "date": 20260609, "amount": "0.071811" },
+          { "date": 20260610, "amount": "-0.064211" },
+          { "date": 20260611, "amount": "0.267749" },
+          { "date": 20260612, "amount": "0.258629" }
+        ],
+        "followed": false,
+        "followerUid": null,
+        "winCount": 1,
+        "symbolList": ["ETH", "SOL"],
+        "privateMode": false,
+        "clcLimit": null
+      }
+    ],
+    "total": 4025,
+    "totalPage": 1342,
+    "page": 1
+  },
+  "success": true
+}

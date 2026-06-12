@@ -1,0 +1,46 @@
+{
+  "code": 0,
+  "msg": "result.success",
+  "data": {
+    "roi": "0.874816",
+    "pl": "27178.416518",
+    "mdd": "0.4351",
+    "winRate": "0.5945",
+    "followerPnl": "-3.30770377428",
+    "winCount": 22,
+    "lossCount": 15,
+    "dailyWinRate": [
+      { "date": 20260604, "amount": "-0.215887" },
+      { "date": 20260605, "amount": "2.319341" },
+      { "date": 20260606, "amount": "1.626159" },
+      { "date": 20260607, "amount": "0.451908" },
+      { "date": 20260608, "amount": "0.468603" },
+      { "date": 20260609, "amount": "0.426898" },
+      { "date": 20260610, "amount": "0.685164" },
+      { "date": 20260611, "amount": "0.946886" },
+      { "date": 20260612, "amount": "0.874816" }
+    ],
+    "dailyPl": [
+      { "date": 20260604, "amount": "-6707.077060" },
+      { "date": 20260605, "amount": "72056.324088" },
+      { "date": 20260606, "amount": "50520.835800" },
+      { "date": 20260607, "amount": "14039.676219" },
+      { "date": 20260608, "amount": "14558.362083" },
+      { "date": 20260609, "amount": "13262.677291" },
+      { "date": 20260610, "amount": "21286.376968" },
+      { "date": 20260611, "amount": "29417.464853" },
+      { "date": 20260612, "amount": "27178.416518" }
+    ],
+    "symbolList": [
+      { "symbol": "BTC", "proportion": "0.6556" },
+      { "symbol": "SOL", "proportion": "0.1313" },
+      { "symbol": "HYPE", "proportion": "0.0985" },
+      { "symbol": "ETH", "proportion": "0.0714" },
+      { "symbol": "TRX", "proportion": "0.0253" },
+      { "symbol": "NEAR", "proportion": "0.0128" },
+      { "symbol": "ADA", "proportion": "0.0028" },
+      { "symbol": "PEPE", "proportion": "0.0023" }
+    ]
+  },
+  "success": true
+}
