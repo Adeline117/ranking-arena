@@ -51,7 +51,9 @@ const translations: Record<
 }
 
 export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'): string {
-  const effectiveLocale = locale
+  // Callers pass user-controlled strings cast to Locale; an unknown value would
+  // make every lookup below undefined and crash the page
+  const effectiveLocale: Locale = locale in translations ? locale : 'en'
   // 处理无效输入
   if (!dateString) {
     return effectiveLocale === 'zh'
