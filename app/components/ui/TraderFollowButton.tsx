@@ -34,7 +34,12 @@ type _FollowResponse = {
  *
  * 区分于 UserFollowButton（用于关注平台用户）
  */
-export default function TraderFollowButton({ traderId, userId, initialFollowing = false, onFollowChange }: TraderFollowButtonProps) {
+export default function TraderFollowButton({
+  traderId,
+  userId,
+  initialFollowing = false,
+  onFollowChange,
+}: TraderFollowButtonProps) {
   const _router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
@@ -106,98 +111,112 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
   }, [userId, traderId, getAuthHeadersAsync, onFollowChange])
 
   // 执行关注/取消关注操作
-  const executeFollow = useCallback(async (action: 'follow' | 'unfollow') => {
-    setIsLoading(true)
-    try {
-      const authHeaders = await getAuthHeadersAsync()
-      const csrfHeaders = getCsrfHeaders()
-      const response = await fetch('/api/follow', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders,
-          ...csrfHeaders,
-        },
-        body: JSON.stringify({ traderId, action }),
-      })
-
-      const result = await response.json()
-      const data = result.data || result // Handle wrapped or unwrapped response
-
-      // 清除超时保护
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-      pendingRef.current = false
-      expectedStateRef.current = null
-
-      if (data.tableNotFound) {
-        setFeatureDisabled(true)
-        showToast(t('followFeatureComingSoon'), 'info')
-        return
-      }
-
-      if (!response.ok) {
-        throw new Error(data.error || t('operationFailed'))
-      }
-
-      setFollowing(data.following)
-      onFollowChange?.(data.following)
-      retryCountRef.current = 0
-
-      // Trigger pulse animation
-      setShowPulse(true)
-      setTimeout(() => setShowPulse(false), 600)
-
-      // Analytics tracking
-      if (data.following) {
-        trackEvent('follow_trader', { trader_id: traderId })
-      }
-
-      // Haptic feedback + success toast
-      haptic('success')
-      showToast(data.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
-
-      // 广播状态变化到其他窗口
-      if (userId) {
-        broadcast('FOLLOW_CHANGED', {
-          traderId,
-          following: data.following,
-          userId,
+  const executeFollow = useCallback(
+    async (action: 'follow' | 'unfollow') => {
+      setIsLoading(true)
+      try {
+        const authHeaders = await getAuthHeadersAsync()
+        const csrfHeaders = getCsrfHeaders()
+        const response = await fetch('/api/follow', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+            ...csrfHeaders,
+          },
+          body: JSON.stringify({ traderId, action }),
         })
-      }
-    } catch (error: unknown) {
-      // 清除超时保护
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-      pendingRef.current = false
-      const failedAction = action
-      // 回滚乐观更新
-      if (expectedStateRef.current !== null) {
-        setFollowing(!expectedStateRef.current)
-        expectedStateRef.current = null
-      }
-      const errorMsg = error instanceof Error ? error.message : t('operationFailed')
-      if (errorMsg.includes('table') || errorMsg.includes('503')) {
-        setFeatureDisabled(true)
-        showToast(t('followFeatureComingSoon'), 'info')
-      } else {
-        // #22: Show retry hint on network error (max 2 auto-retries)
-        const isNetworkError = error instanceof TypeError && error.message.includes('fetch')
-        showToast(isNetworkError ? `${errorMsg} — ${t('tapToRetry') || 'Tap to retry'}` : errorMsg, 'error')
-        if (isNetworkError && retryCountRef.current < 2) {
-          retryCountRef.current++
-          setTimeout(() => executeFollow(failedAction), 2000)
+
+        const result = await response.json()
+        const data = result.data || result // Handle wrapped or unwrapped response
+
+        // 清除超时保护
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
         }
+        pendingRef.current = false
+        // NOTE: do NOT clear expectedStateRef here — the catch block relies on
+        // it to roll back the optimistic flip when the server returns an error.
+        // (Previously it was nulled before the response.ok check, so a 500 left
+        // the button stuck in the optimistic "Following" state.)
+
+        if (data.tableNotFound) {
+          expectedStateRef.current = null
+          setFeatureDisabled(true)
+          showToast(t('followFeatureComingSoon'), 'info')
+          return
+        }
+
+        if (!response.ok) {
+          // API error payload may be a string or { code, message } object
+          const apiErr = data.error
+          const apiErrMsg = typeof apiErr === 'string' ? apiErr : apiErr?.message
+          throw new Error(apiErrMsg || t('operationFailed'))
+        }
+
+        expectedStateRef.current = null
+        setFollowing(data.following)
+        onFollowChange?.(data.following)
+        retryCountRef.current = 0
+
+        // Trigger pulse animation
+        setShowPulse(true)
+        setTimeout(() => setShowPulse(false), 600)
+
+        // Analytics tracking
+        if (data.following) {
+          trackEvent('follow_trader', { trader_id: traderId })
+        }
+
+        // Haptic feedback + success toast
+        haptic('success')
+        showToast(data.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
+
+        // 广播状态变化到其他窗口
+        if (userId) {
+          broadcast('FOLLOW_CHANGED', {
+            traderId,
+            following: data.following,
+            userId,
+          })
+        }
+      } catch (error: unknown) {
+        // 清除超时保护
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+        pendingRef.current = false
+        const failedAction = action
+        // 回滚乐观更新
+        if (expectedStateRef.current !== null) {
+          setFollowing(!expectedStateRef.current)
+          expectedStateRef.current = null
+        }
+        const errorMsg = error instanceof Error ? error.message : t('operationFailed')
+        if (errorMsg.includes('table') || errorMsg.includes('503')) {
+          setFeatureDisabled(true)
+          showToast(t('followFeatureComingSoon'), 'info')
+        } else {
+          // #22: Show retry hint on network error (max 2 auto-retries)
+          const isNetworkError = error instanceof TypeError && error.message.includes('fetch')
+          showToast(
+            isNetworkError ? `${errorMsg} — ${t('tapToRetry') || 'Tap to retry'}` : errorMsg,
+            'error'
+          )
+          if (isNetworkError && retryCountRef.current < 2) {
+            retryCountRef.current++
+            setTimeout(() => executeFollow(failedAction), 2000)
+          }
+        }
+      } finally {
+        setIsLoading(false)
       }
-    } finally {
-      setIsLoading(false)
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded to avoid re-creating callback on language change; translations are read at call time
-  }, [traderId, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded to avoid re-creating callback on language change; translations are read at call time
+    },
+    [traderId, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange]
+  )
 
   // UF8: Resume pending follow action after login
   useEffect(() => {
@@ -217,7 +236,9 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
           sessionStorage.removeItem('pendingFollow')
         }
       }
-    } catch { /* intentionally empty */ }
+    } catch {
+      /* intentionally empty */
+    }
   }, [userId, traderId]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when userId/traderId change; executeFollow and onFollowChange are stable refs
 
   useEffect(() => {
@@ -228,13 +249,10 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
     ;(async () => {
       try {
         const authHeaders = await getAuthHeadersAsync()
-        const response = await fetch(
-          `/api/follow?traderId=${traderId}`,
-          {
-            signal: abortController.signal,
-            headers: authHeaders,
-          }
-        )
+        const response = await fetch(`/api/follow?traderId=${traderId}`, {
+          signal: abortController.signal,
+          headers: authHeaders,
+        })
         if (response.ok) {
           const data = await response.json()
           // 只有在没有待处理操作时才更新状态
@@ -364,12 +382,21 @@ export default function TraderFollowButton({ traderId, userId, initialFollowing 
         justifyContent: 'center',
         gap: tokens.spacing[2],
       }}
-      onMouseEnter={(e) => { if (!isLoading) e.currentTarget.style.opacity = '0.85' }}
-      onMouseLeave={(e) => { if (!isLoading) e.currentTarget.style.opacity = '1' }}
+      onMouseEnter={(e) => {
+        if (!isLoading) e.currentTarget.style.opacity = '0.85'
+      }}
+      onMouseLeave={(e) => {
+        if (!isLoading) e.currentTarget.style.opacity = '1'
+      }}
     >
       {isLoading && <ButtonSpinner size="xs" />}
-      {isLoading ? (following ? t('unfollowingAction') : t('followingAction')) : following ? t('unfollow') : t('follow')}
+      {isLoading
+        ? following
+          ? t('unfollowingAction')
+          : t('followingAction')
+        : following
+          ? t('unfollow')
+          : t('follow')}
     </button>
   )
 }
-
