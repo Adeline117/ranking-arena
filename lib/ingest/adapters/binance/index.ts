@@ -110,6 +110,16 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
     // networkidle is best-effort — a busy page still yields valid cookies
   })
+  // Park on a near-empty same-origin document: the copy-trading SPA keeps
+  // websockets/charts/timers running, and holding it open for a multi-TF
+  // crawl crashed the remote SG chromium mid-session ("Browser closed",
+  // 2026-06-11). pageFetch only needs the binance.com origin + cookies —
+  // robots.txt provides both at ~zero render cost (query-list POST and
+  // performance GET both verified 000000 from this page).
+  await page.goto('https://www.binance.com/robots.txt', {
+    waitUntil: 'domcontentloaded',
+    timeout: 30_000,
+  })
   warmedSessions.add(session)
 }
 
