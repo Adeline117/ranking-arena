@@ -133,7 +133,12 @@ async function main(): Promise<void> {
     `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY})`
   )
 
+  let shuttingDown = false
   const shutdown = async (signal: string) => {
+    // SIGINT+SIGTERM can both fire (pm2 stop) — double closeIngestPool()
+    // throws "Called end on pool more than once" as an unhandled rejection.
+    if (shuttingDown) return
+    shuttingDown = true
     console.log(`[ingest-worker] ${signal} — shutting down…`)
     clearInterval(reconcileTimer)
     await Promise.all(workers.map((w) => w.close()))
