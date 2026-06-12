@@ -353,8 +353,8 @@ export default function PostDetailView({
                 ? t('viewTranslation')
                 : t('viewOriginal')}
           </button>
-          {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
           {!showingOriginal && (
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design
             <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
               {t('translatedByAI')}
             </span>

@@ -628,9 +628,9 @@ function SecondaryBadge({
           {icon}
         </span>
       )}
-      {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
       <Text
         style={{
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
           fontSize: 11,
           color: tokens.colors.text.tertiary,
           fontWeight: tokens.typography.fontWeight.medium,
