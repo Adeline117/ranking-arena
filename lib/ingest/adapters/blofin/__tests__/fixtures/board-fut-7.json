@@ -1,0 +1,88 @@
+{
+  "code": 200,
+  "msg": "succeed",
+  "data": {
+    "trader_info": [
+      {
+        "uid": 53257260235,
+        "nick_name": "TradingLite",
+        "follow_state": 0,
+        "profile": "https://s2.blofin.com/static/user/img/default3.png",
+        "range_time": 1,
+        "roi": "2.90645764665970331",
+        "pnl": "200.662707230254562453",
+        "mdd": "0.711518944045404967",
+        "aum": "615",
+        "sharpe_ratio": "0",
+        "followers": 3,
+        "followers_max": 200,
+        "chart_data": {
+          "roi": [
+            {
+              "time": 1780704000000,
+              "data": "0.291636767977075908"
+            },
+            {
+              "time": 1780790400000,
+              "data": "5.125238212205514654"
+            },
+            {
+              "time": 1780876800000,
+              "data": "4.927620075003932607"
+            },
+            {
+              "time": 1780963200000,
+              "data": "1.164999719915252748"
+            },
+            {
+              "time": 1781049600000,
+              "data": "0.719917988710460436"
+            }
+          ]
+        },
+        "verified": false
+      },
+      {
+        "uid": 54955072322,
+        "nick_name": "CryptoDynastyScalps",
+        "follow_state": 0,
+        "profile": "https://s2.blofin.com/static/user/img/profile/daf3b51817484481be4b9c195b37a7df.png",
+        "range_time": 1,
+        "roi": "2.551002823458193303",
+        "pnl": "25.510028234581933034",
+        "mdd": "0.110403556670286308",
+        "aum": "257",
+        "sharpe_ratio": "30.2993",
+        "followers": 1,
+        "followers_max": 200,
+        "chart_data": {
+          "roi": [
+            {
+              "time": 1780963200000,
+              "data": "0"
+            },
+            {
+              "time": 1781049600000,
+              "data": "1.522714363458193302"
+            },
+            {
+              "time": 1781136000000,
+              "data": "2.551002823458193303"
+            },
+            {
+              "time": 1781222400000,
+              "data": "2.551002823458193303"
+            }
+          ]
+        },
+        "verified": false
+      }
+    ],
+    "page_num": 1,
+    "page_size": 5,
+    "page_total": 1662,
+    "pages": 333,
+    "range_time": 1
+  },
+  "alert": null
+}

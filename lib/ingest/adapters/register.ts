@@ -25,5 +25,6 @@ import './lbank'
 // Phase 2 — long-tail batch 2 (paired futures/spot CEX family)
 import './gate'
 import './xt'
+import './blofin'
 
 export {}
