@@ -10,6 +10,7 @@ import { tokens, RANK_COLORS_ARRAY } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 type Trader = {
   source: string
@@ -46,11 +47,7 @@ function TraderAvatar({
   if (avatarUrl && !imgError) {
     return (
       <img
-        src={
-          avatarUrl.startsWith('data:')
-            ? avatarUrl
-            : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
-        }
+        src={avatarSrc(avatarUrl)}
         alt={name}
         width={size}
         height={size}
