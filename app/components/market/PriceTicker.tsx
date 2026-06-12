@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query'
 import { STALE_REALTIME } from '@/lib/hooks/cache-presets'
 // Use plain <img> for crypto icons (SVGs cause 400 on Vercel image optimizer)
 import { tokens } from '@/lib/design-tokens'
+import { hasLocalCryptoIcon, normalizeCoinSymbol } from '@/lib/utils/crypto-icons'
 
 interface TickerCoin {
   symbol: string
@@ -22,8 +23,10 @@ function formatPrice(n: number): string {
 const ICON_VERSION = 'v5'
 
 function getCryptoIcon(symbol: string, fallbackImage: string): string {
-  const localPath = `/icons/crypto/${symbol.toLowerCase()}.svg?${ICON_VERSION}`
-  return localPath || fallbackImage
+  // Only request the local SVG when it actually exists — a speculative
+  // <img> 404 always logs to the browser console (onError can't suppress it).
+  if (!hasLocalCryptoIcon(symbol)) return fallbackImage
+  return `/icons/crypto/${normalizeCoinSymbol(symbol)}.svg?${ICON_VERSION}`
 }
 
 const spotFetcher = async (url: string): Promise<TickerCoin[]> => {

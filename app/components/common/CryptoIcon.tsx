@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { normalizeCoinSymbol, getSymbolLabel } from '@/lib/utils/crypto-icons'
+import { normalizeCoinSymbol, getSymbolLabel, hasLocalCryptoIcon } from '@/lib/utils/crypto-icons'
 
 const ICON_BASE_PATH = '/icons/crypto'
 // Version suffix busts CDN-cached 404s that arose from files being added
@@ -29,7 +29,9 @@ interface CryptoIconProps {
  * These strip to their base symbol for icon lookups and text fallback.
  */
 export default function CryptoIcon({ symbol, size = 20, style, className }: CryptoIconProps) {
-  const [fallbackLevel, setFallbackLevel] = useState(0)
+  // Skip the local request entirely when the manifest says the file doesn't
+  // exist — a speculative <img> 404 always logs to the browser console.
+  const [fallbackLevel, setFallbackLevel] = useState(() => (hasLocalCryptoIcon(symbol) ? 0 : 1))
   const normalized = normalizeCoinSymbol(symbol)
   const label = getSymbolLabel(symbol)
 
@@ -63,9 +65,8 @@ export default function CryptoIcon({ symbol, size = 20, style, className }: Cryp
     )
   }
 
-  const src = fallbackLevel === 0
-    ? `${ICON_BASE_PATH}/${normalized}.svg?${ICON_VERSION}`
-    : getCdnUrl(symbol)
+  const src =
+    fallbackLevel === 0 ? `${ICON_BASE_PATH}/${normalized}.svg?${ICON_VERSION}` : getCdnUrl(symbol)
 
   return (
     <img
@@ -75,7 +76,7 @@ export default function CryptoIcon({ symbol, size = 20, style, className }: Cryp
       height={size}
       loading="lazy"
       className={className}
-      onError={() => setFallbackLevel(prev => prev + 1)}
+      onError={() => setFallbackLevel((prev) => prev + 1)}
       style={{
         borderRadius: '50%',
         flexShrink: 0,
