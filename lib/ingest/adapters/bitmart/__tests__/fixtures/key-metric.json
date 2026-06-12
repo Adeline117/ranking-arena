@@ -1,0 +1,20 @@
+{
+  "errno": "OK",
+  "message": "Success",
+  "data": {
+    "nav": "1.3732479301",
+    "run_time": 646869,
+    "trade_days": "11.625",
+    "win_rate": "0.4086021505",
+    "profit_loss_ratio": "1.502959",
+    "avg_holding_time": "11384.3076923077",
+    "last_traded_at": "2026-06-12T02:10:56Z",
+    "total_equity": "1876.43124033",
+    "un_pnl": "-1.42622834",
+    "top_volume_share": "1",
+    "realized_profit_sharing": "5.6808",
+    "last_updated_at": "2026-06-12T03:12:29Z",
+    "start_at": "2026-06-04T15:31:21Z"
+  },
+  "success": true
+}

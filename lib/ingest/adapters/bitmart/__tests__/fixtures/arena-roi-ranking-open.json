@@ -1,0 +1,80 @@
+{
+  "errno": "OK",
+  "message": "Success",
+  "data": {
+    "list": [
+      {
+        "master_name": "鹤衍H",
+        "roi": "0.77093",
+        "contract": "",
+        "order_way": 0,
+        "uuid": "UvNP-Ns4SE-wTpXeHzhlxA",
+        "avatar": "https://dm1mubcttd115.cloudfront.net/web-ai-hub/_next/static/media/30.7b36441f.jpg",
+        "leverage_limit": ""
+      },
+      {
+        "master_name": "银子的秘密",
+        "roi": "0.195527",
+        "contract": "",
+        "order_way": 0,
+        "uuid": "TPuilNIYR7-TUp8BzYo_Fg",
+        "avatar": "https://api-img.snidefender.com/static-file/photo/6ff9bacfd721040d7575907c0c851513/20260515075729626a7d84a4e52f5499d.jpg",
+        "leverage_limit": ""
+      },
+      {
+        "master_name": "今日上涨",
+        "roi": "0.183436",
+        "contract": "",
+        "order_way": 0,
+        "uuid": "8EvB2dBhQ_yMYV02DU8s4g",
+        "avatar": "https://www.bitmart.com/static-file/photo/6ff9bacfd721040d7575907c0c851513/2026051507572932140d4939d05364760.jpg",
+        "leverage_limit": ""
+      },
+      {
+        "master_name": "bitghost",
+        "roi": "0.114589",
+        "contract": "",
+        "order_way": 0,
+        "uuid": "BXIJ96o8TH6N8DmuvCFPsQ",
+        "avatar": "https://api-img.snidefender.com/static-file/photo/d9bee359f9fbf1ba785b137638c367e4/20260609161826671ab6c45f33309461c.jpg",
+        "leverage_limit": ""
+      },
+      {
+        "master_name": "15473250",
+        "roi": "0.113348",
+        "contract": "",
+        "order_way": 0,
+        "uuid": "2Wse-Pu-TaC1gcxrLqTz5Q",
+        "avatar": "https://api-img.snidefender.com/static-file/photo/6ff9bacfd721040d7575907c0c851513/20260515075722171621ecf81db7649dc.jpg",
+        "leverage_limit": ""
+      },
+      {
+        "master_name": "GridTactics-King-2.0X",
+        "roi": "0.082947",
+        "contract": "",
+        "order_way": 0,
+        "uuid": "Bmr-RVyTTOWpmEc3QboIdA",
+        "avatar": "https://api-app2.bitmart.com/static-file/photo/c627eaae2cc0f9991ffd7e8cdebd4ee5/20260525061616018b8e815ba1029428e.png",
+        "leverage_limit": ""
+      },
+      {
+        "master_name": "BTC多军头子",
+        "roi": "0.053114",
+        "contract": "",
+        "order_way": 0,
+        "uuid": "bH0vqdzORB-tEFn6duVIQw",
+        "avatar": "https://api-img.snidefender.com/static-file/photo/6ff9bacfd721040d7575907c0c851513/20260515075726665efa855e512bb452e.jpg",
+        "leverage_limit": "5"
+      }
+    ],
+    "last_update_time": "2026-06-12T03:08:23Z",
+    "week_info": {
+      "year": 2026,
+      "week": 24,
+      "start_date": "2026-06-08",
+      "end_date": "2026-06-14",
+      "is_current_week": true
+    }
+  },
+  "success": true
+}

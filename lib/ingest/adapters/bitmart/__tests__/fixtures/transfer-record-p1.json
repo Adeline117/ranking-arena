@@ -1,0 +1,30 @@
+{
+  "errno": "OK",
+  "message": "Success",
+  "data": {
+    "record": [
+      {
+        "transfer_time": "2026-06-04T15:48:19Z",
+        "coin": "USDT",
+        "amount": "1430.02",
+        "from": 2,
+        "to": 1,
+        "type": 1
+      }
+    ],
+    "total": 1,
+    "page": 1,
+    "size": 3,
+    "list": [
+      {
+        "transfer_time": "2026-06-04T15:48:19Z",
+        "coin": "USDT",
+        "amount": "1430.02",
+        "from": 2,
+        "to": 1,
+        "type": 1
+      }
+    ]
+  },
+  "success": true
+}
