@@ -50,7 +50,7 @@ export default function MessageButton({
           success: false,
           error: {
             code: 'UNAUTHORIZED',
-            message: t('loginExpiredPleaseRelogin') || '登录已过期，请重新登录',
+            message: t('loginExpiredPleaseRelogin'),
           },
         }
       }
@@ -75,7 +75,7 @@ export default function MessageButton({
       },
       onError: (error) => {
         if (error.code === 'UNAUTHORIZED') {
-          showToast(t('loginExpiredPleaseRelogin') || '登录已过期，请重新登录', 'error')
+          showToast(t('loginExpiredPleaseRelogin'), 'error')
           openLoginModal(t('pleaseLogin'))
         } else if (
           error.message?.includes('disabled direct messages') ||

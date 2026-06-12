@@ -600,7 +600,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const handleSubmitEdit = async () => {
     if (!accessToken || !isOwner) return
     if (!editName.trim() && !editNameEn.trim()) {
-      showToast(t('pleaseEnterGroupName') || '请至少填写一个小组名称', 'warning')
+      showToast(t('pleaseEnterGroupName'), 'warning')
       return
     }
     setSubmitting(true)
@@ -707,11 +707,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [dissolving, setDissolving] = useState(false)
   const handleDissolve = useCallback(async () => {
     if (!isOwner || dissolving) return
-    const confirmed = await showDangerConfirm(
-      t('dissolveGroup') || 'Dissolve Group',
-      t('dissolveGroupConfirm') ||
-        'This will permanently freeze this group. All members can still view history but cannot post or interact. This action cannot be undone.'
-    )
+    const confirmed = await showDangerConfirm(t('dissolveGroup'), t('dissolveGroupConfirm'))
     if (!confirmed) return
     setDissolving(true)
     try {
@@ -720,7 +716,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
       })
       if (res.ok) {
-        showToast(t('groupDissolved') || 'Group dissolved', 'success')
+        showToast(t('groupDissolved'), 'success')
         router.push('/groups')
       } else {
         const data = await res.json().catch(() => ({}))
@@ -1027,15 +1023,14 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
               weight="bold"
               style={{ color: 'var(--color-accent-error)', marginBottom: tokens.spacing[2] }}
             >
-              {t('dangerZone') || 'Danger Zone'}
+              {t('dangerZone')}
             </Text>
             <Text
               size="xs"
               color="tertiary"
               style={{ marginBottom: tokens.spacing[4], lineHeight: 1.5 }}
             >
-              {t('dissolveGroupDesc') ||
-                'Dissolving this group will freeze all activity. Members can still view historical posts but cannot create new content. This action cannot be undone.'}
+              {t('dissolveGroupDesc')}
             </Text>
             <button
               onClick={handleDissolve}
@@ -1060,7 +1055,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
                 e.currentTarget.style.color = 'var(--color-accent-error)'
               }}
             >
-              {dissolving ? '...' : t('dissolveGroupBtn') || 'Dissolve Group'}
+              {dissolving ? '...' : t('dissolveGroupBtn')}
             </button>
           </Box>
         )}

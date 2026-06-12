@@ -248,7 +248,7 @@ export default function LiveTradesFeed() {
               fontWeight: 700,
             }}
           >
-            {t('liveTradesFeed') || '实时交易流'}
+            {t('liveTradesFeed')}
           </span>
           {filteredTrades.length > 0 && (
             <span
@@ -363,9 +363,7 @@ export default function LiveTradesFeed() {
                 animation: 'spin 1s linear infinite',
               }}
             />
-            <p style={{ fontSize: tokens.typography.fontSize.sm }}>
-              {t('waitingForData') || '等待交易数据...'}
-            </p>
+            <p style={{ fontSize: tokens.typography.fontSize.sm }}>{t('waitingForData')}</p>
           </div>
         ) : filteredTrades.length === 0 ? (
           <div
@@ -376,7 +374,7 @@ export default function LiveTradesFeed() {
               fontSize: tokens.typography.fontSize.sm,
             }}
           >
-            {t('waitingForData') || '等待交易数据...'}
+            {t('waitingForData')}
           </div>
         ) : (
           filteredTrades.map((trade, i) => <TradeRow key={trade.id} trade={trade} index={i} />)
