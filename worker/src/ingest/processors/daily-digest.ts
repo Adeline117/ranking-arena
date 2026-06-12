@@ -40,8 +40,133 @@ async function queueRejectSummary(): Promise<void> {
   }
 }
 
+/**
+ * Coverage self-audit (root-of-root guard, 2026-06-12): the same checks as
+ * scripts/qa/pipeline-coverage-audit.mjs, run on a timer so silent breaks
+ * surface WITHOUT anyone remembering to run a script. Catches the class that
+ * hid for hours: STALE sources (Tier-A not producing — e.g. the worker was
+ * being OOM-restarted mid-crawl) and active sources with no passed snapshot.
+ * LOW-SERIES is intentionally excluded (grows over cycles, has its backfill).
+ */
+async function queueCoverageAudit(): Promise<void> {
+  const redis = getConnection()
+  const { rows } = await getIngestPool().query<{
+    slug: string
+    phase: number
+    serving_mode: string
+    passed_tfs: number
+    expected_tfs: number
+    age_hours: number | null
+  }>(
+    `SELECT s.slug, s.phase, s.serving_mode,
+       (SELECT count(DISTINCT ls.timeframe) FROM arena.leaderboard_snapshots ls
+          WHERE ls.source_id = s.id AND ls.count_check_passed)::int AS passed_tfs,
+       cardinality(ARRAY(
+         SELECT DISTINCT unnest(s.timeframes_native || s.timeframes_derived)
+         INTERSECT SELECT unnest(ARRAY[7,30,90]))) AS expected_tfs,
+       EXTRACT(EPOCH FROM (now() - (
+         SELECT max(ls.scraped_at) FROM arena.leaderboard_snapshots ls
+          WHERE ls.source_id = s.id AND ls.count_check_passed))) / 3600 AS age_hours
+     FROM arena.sources s
+     WHERE s.status = 'active'`
+  )
+  for (const r of rows) {
+    const issues: string[] = []
+    if (r.passed_tfs === 0) issues.push('NO-PASSED-SNAPSHOT')
+    else if (r.passed_tfs < Math.min(r.expected_tfs, 3))
+      issues.push(`PARTIAL-TF(${r.passed_tfs}/${r.expected_tfs})`)
+    // Stale = older than 3× the typical 5-6h Tier-A cadence.
+    if (r.age_hours !== null && r.age_hours > 18) issues.push(`STALE(${r.age_hours.toFixed(0)}h)`)
+    if (issues.length === 0) continue
+    await alert(redis, {
+      sourceSlug: r.slug,
+      phase: r.phase,
+      // serving sources serving stale/no data is more urgent than shadow.
+      tier:
+        r.serving_mode === 'serving' && issues.some((i) => i.startsWith('STALE')) ? 'A' : 'maint',
+      message: `coverage: ${issues.join(', ')}`,
+    })
+  }
+}
+
+/**
+ * Worker-health watchdog: a process being OOM/crash-restarted repeatedly is
+ * the single most damaging silent failure (it kills in-flight 25-90min
+ * crawls), and nothing surfaced it for 15h / 28 restarts. Read PM2's restart
+ * counter from its dump and flag abnormal churn.
+ */
+async function queueWorkerHealth(): Promise<void> {
+  const redis = getConnection()
+  try {
+    const { readFile } = await import('node:fs/promises')
+    const { homedir } = await import('node:os')
+    const dump = JSON.parse(await readFile(`${homedir()}/.pm2/dump.pm2`, 'utf8')) as Array<{
+      name: string
+      pm2_env?: { restart_time?: number; created_at?: number }
+    }>
+    for (const app of dump) {
+      if (!app.name?.startsWith('arena-ingest')) continue
+      const restarts = app.pm2_env?.restart_time ?? 0
+      const createdAt = app.pm2_env?.created_at
+      if (!createdAt) continue
+      const hours = (Date.now() - createdAt) / 3.6e6
+      // >1 restart/hour sustained = crash loop / OOM churn.
+      if (hours > 2 && restarts / hours > 1) {
+        await alert(redis, {
+          sourceSlug: app.name,
+          phase: 0,
+          tier: 'A', // worker churn pages — it silently kills crawls
+          message: `worker restart churn: ${restarts} restarts in ${hours.toFixed(0)}h (OOM?)`,
+        })
+      }
+    }
+  } catch (err) {
+    console.warn('[daily-digest] worker-health probe skipped:', err)
+  }
+}
+
+/**
+ * Suspicious-eviction detector: a snapshot whose count is WITHIN tolerance
+ * yet count_check_passed=false and NOT tagged meta.smoke was almost
+ * certainly hand-evicted by a bare `UPDATE ... SET count_check_passed=false`
+ * (the old smoke SOP that bypassed the --smoke flag's meta tag) — which
+ * buried real full-crawl snapshots (bitunix 4025/4005, blofin). Surface
+ * them so they can be restored instead of silently rotting.
+ */
+async function queueSuspiciousEvictions(): Promise<void> {
+  const redis = getConnection()
+  const { rows } = await getIngestPool().query<{ slug: string; phase: number; n: number }>(
+    `SELECT s.slug, s.phase, count(*)::int AS n
+       FROM arena.leaderboard_snapshots ls
+       JOIN arena.sources s ON s.id = ls.source_id
+      WHERE NOT ls.count_check_passed
+        AND (ls.meta->>'smoke') IS NULL
+        AND ls.baseline_used IS NOT NULL
+        AND abs(ls.actual_count - ls.baseline_used)::numeric
+              / NULLIF(ls.baseline_used, 0) <= 0.10
+        AND ls.scraped_at > now() - interval '7 days'
+        -- only flag if the source currently has NO passed snapshot for that TF
+        AND NOT EXISTS (
+          SELECT 1 FROM arena.leaderboard_snapshots p
+           WHERE p.source_id = ls.source_id AND p.timeframe = ls.timeframe
+             AND p.count_check_passed)
+      GROUP BY s.slug, s.phase`
+  )
+  for (const r of rows) {
+    await alert(redis, {
+      sourceSlug: r.slug,
+      phase: r.phase,
+      tier: 'maint',
+      message: `${r.n} in-tolerance snapshot(s) evicted without smoke tag — likely buried real data, review for restore`,
+    })
+  }
+}
+
 export async function processDailyDigest(_job: Job): Promise<{ flushed: number }> {
   await queueRejectSummary()
+  await queueCoverageAudit()
+  await queueWorkerHealth()
+  await queueSuspiciousEvictions()
   const flushed = await flushDigest(getConnection())
   console.log(`[daily-digest] flushed ${flushed} events`)
   return { flushed }
