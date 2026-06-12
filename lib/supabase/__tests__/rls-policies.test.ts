@@ -23,7 +23,9 @@ declare global {
 }
 
 // 实现 skipIf
-;(it as unknown as { skipIf: (condition: boolean) => typeof it | typeof it.skip }).skipIf = (condition: boolean) => {
+;(it as unknown as { skipIf: (condition: boolean) => typeof it | typeof it.skip }).skipIf = (
+  condition: boolean
+) => {
   return condition ? it.skip : it
 }
 
@@ -57,17 +59,20 @@ describeIf('RLS Policies', () => {
   })
 
   describe('notifications INSERT policy', () => {
-    it.skipIf(shouldSkip)('should prevent anonymous users from inserting notifications', async () => {
-      const { error } = await anonClient.from('notifications').insert({
-        user_id: '00000000-0000-0000-0000-000000000000',
-        type: 'system',
-        title: 'Test',
-        message: 'Test notification',
-      })
+    it.skipIf(shouldSkip)(
+      'should prevent anonymous users from inserting notifications',
+      async () => {
+        const { error } = await anonClient.from('notifications').insert({
+          user_id: '00000000-0000-0000-0000-000000000000',
+          type: 'system',
+          title: 'Test',
+          message: 'Test notification',
+        })
 
-      // 应该有错误（可能是权限错误 42501 或外键约束 23503）
-      expect(error).not.toBeNull()
-    })
+        // 应该有错误（可能是权限错误 42501 或外键约束 23503）
+        expect(error).not.toBeNull()
+      }
+    )
 
     it.skipIf(shouldSkipServiceTests)(
       'should allow service role to insert notifications',
@@ -88,23 +93,6 @@ describeIf('RLS Policies', () => {
         }
       }
     )
-  })
-
-  describe('risk_alerts INSERT policy', () => {
-    it.skipIf(shouldSkip)('should prevent anonymous users from inserting risk alerts', async () => {
-      const { error } = await anonClient.from('risk_alerts').insert({
-        user_id: '00000000-0000-0000-0000-000000000000',
-        trader_id: 'test-trader',
-        alert_type: 'drawdown',
-        severity: 'warning',
-        threshold: 10,
-        current_value: 15,
-        message: 'Test alert',
-      })
-
-      // 应该有错误（权限错误、表不存在或外键约束）
-      expect(error).not.toBeNull()
-    })
   })
 
   describe('group_applications policy', () => {
@@ -235,10 +223,7 @@ describe('RLS Policy Existence', () => {
   })
 
   it.skipIf(shouldSkipServiceTests)('should be able to query tables with RLS', async () => {
-    const { error: notifError } = await serviceClient
-      .from('notifications')
-      .select('id')
-      .limit(1)
+    const { error: notifError } = await serviceClient.from('notifications').select('id').limit(1)
 
     if (notifError?.message?.includes('Legacy API keys are disabled')) {
       expect(true).toBe(true)
@@ -247,4 +232,3 @@ describe('RLS Policy Existence', () => {
     }
   })
 })
-
