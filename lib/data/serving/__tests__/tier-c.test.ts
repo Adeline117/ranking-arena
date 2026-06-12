@@ -22,10 +22,11 @@ describe('tier-c key builders stay in sync with worker/src/ingest/queues', () =>
     surface: 'profile' as const,
   }
 
-  it('jobId template parity', () => {
-    expect(tierCJobId(req)).toBe('tierc:bitget_futures:beb24d718eb23b54ac91:30:profile')
+  it('jobId template parity (no ":" — BullMQ rejects colon custom ids)', () => {
+    expect(tierCJobId(req)).toBe('tierc--bitget_futures--beb24d718eb23b54ac91--30--profile')
+    expect(tierCJobId(req)).not.toContain(':')
     expect(workerSource).toContain(
-      '`tierc:${d.sourceSlug}:${d.exchangeTraderId}:${d.timeframe}:${d.surface}`'
+      "['tierc', d.sourceSlug, d.exchangeTraderId, d.timeframe, d.surface].join('--')"
     )
   })
 
