@@ -41,10 +41,14 @@ export async function compatWriteTraderLatest(
   timeframe: 7 | 30 | 90
 ): Promise<CompatWriteResult> {
   if (src.serving_mode === 'legacy') return { written: 0, skipped: 'legacy mode' }
-  if (src.currency !== 'USDT') {
-    // Never silently treat USDx/USDC as USDT (spec §5.8).
-    return { written: 0, skipped: `non-USDT currency ${src.currency}` }
-  }
+  // Ranking-layer currency semantics: trader_latest/leaderboard_ranks were
+  // ALWAYS implicitly dollar-denominated (legacy treated every source's pnl
+  // as $). USDT/USDC/USD/USDx are all dollar-pegged units, so writing them
+  // unconverted preserves exactly the legacy ranking behavior — without
+  // this, non-USDT sources' leaderboard_ranks froze at cutover (hyperliquid/
+  // gmx/gtrade/bybit_mt5/gate_cfd went stale 06-08). spec §5.8's no-coerce
+  // rule governs the UI/serving layer, which reads arena.* with honest
+  // per-row currency labels and is unaffected.
   const platform = Object.prototype.hasOwnProperty.call(src.meta, 'legacy_platform')
     ? (src.meta.legacy_platform as string | null)
     : src.slug
