@@ -31,14 +31,6 @@
       "schedule": "23 */6 * * *"
     },
     {
-      "path": "/api/cron/fetch-details?tier=hot&concurrency=20&limit=50",
-      "schedule": "7 */2 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-details?tier=normal&concurrency=10&limit=200",
-      "schedule": "33 */4 * * *"
-    },
-    {
       "path": "/api/cron/batch-5min",
       "schedule": "3,18,33,48 * * * *"
     },
@@ -131,14 +123,6 @@
       "schedule": "15 */6 * * *"
     },
     {
-      "path": "/api/cron/smoke-test-enrichment",
-      "schedule": "30 5 * * *"
-    },
-    {
-      "path": "/api/cron/backfill-data?type=snapshots&limit=50",
-      "schedule": "49 3 * * *"
-    },
-    {
       "path": "/api/cron/weekly-report",
       "schedule": "0 8 * * 1"
     },
@@ -157,14 +141,6 @@
     {
       "path": "/api/cron/detect-contracts?limit=500",
       "schedule": "10 */6 * * *"
-    },
-    {
-      "path": "/api/cron/snapshot-positions",
-      "schedule": "48 */4 * * *"
-    },
-    {
-      "path": "/api/cron/fetch-traders/blofin",
-      "schedule": "55 1,7,13,19 * * *"
     },
     {
       "path": "/api/cron/health-check-all",
