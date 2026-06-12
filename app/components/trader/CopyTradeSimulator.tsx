@@ -172,11 +172,11 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
               cursor: 'pointer',
             }}
           />
-          {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
           <div
             style={{
               display: 'flex',
               justifyContent: 'space-between',
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
               fontSize: 11,
               color: 'var(--color-text-tertiary)',
             }}
@@ -287,9 +287,9 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
       )}
 
       {/* Disclaimer */}
-      {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
       <div
         style={{
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
           fontSize: 11,
           color: 'var(--color-text-tertiary)',
           marginTop: tokens.spacing[2],
