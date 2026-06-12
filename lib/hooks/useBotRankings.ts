@@ -68,7 +68,12 @@ export function useBotRankings(opts: UseBotRankingsOptions = {}) {
 
   const url = `/api/bots?${params.toString()}`
 
-  const { data, error, isLoading, isFetching: isValidating } = useQuery<BotRankingsResponse>({
+  const {
+    data,
+    error,
+    isLoading,
+    isFetching: isValidating,
+  } = useQuery<BotRankingsResponse>({
     queryKey: ['bot-rankings', window, category, sortBy, sortDir],
     queryFn: () => fetcher(url),
     refetchOnWindowFocus: false,
@@ -83,6 +88,7 @@ export function useBotRankings(opts: UseBotRankingsOptions = {}) {
 export function useBotDetail(id: string | null) {
   const { data, error, isLoading } = useQuery({
     queryKey: ['bot-detail', id],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher(`/api/bots/${id}`),
     enabled: !!id,
     refetchOnWindowFocus: false,

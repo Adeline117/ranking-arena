@@ -71,6 +71,7 @@ export function useTraderDetailV2({
     isFetching: isValidating,
   } = useQuery<TraderDetailResponse>({
     queryKey,
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher(`/api/trader/${platform}/${traderKey}`),
     enabled: !!traderKey,
     refetchInterval: refreshInterval || false,

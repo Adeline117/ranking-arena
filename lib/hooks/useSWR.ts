@@ -54,6 +54,7 @@ export function useTraderList(options: UseTraderListOptions = {}) {
 
   return useQuery<TradersResponse>({
     queryKey: ['trader-list', timeRange, exchange, limit],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher(url),
     enabled,
     refetchOnWindowFocus: false,
@@ -89,6 +90,7 @@ export function useTraderDetail(handle: string | undefined) {
 
   return useQuery<TraderDetailResponse>({
     queryKey: ['trader-detail', handle],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher(url),
     enabled: !!handle,
     refetchOnWindowFocus: false,
@@ -110,6 +112,7 @@ export function useTraderEquity(handle: string | undefined) {
 
   return useQuery<EquityResponse>({
     queryKey: ['trader-equity', handle],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher(url),
     enabled: !!handle,
     refetchOnWindowFocus: false,
@@ -138,6 +141,7 @@ export function useTraderPositions(handle: string | undefined) {
 
   return useQuery<PositionsResponse>({
     queryKey: ['trader-positions', handle],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher(url),
     enabled: !!handle,
     refetchInterval: 5 * 60 * 1000,
@@ -191,6 +195,7 @@ export function usePosts(options: UsePostsOptions = {}) {
 
   return useQuery<PostsResponse>({
     queryKey: ['posts', groupId, sortBy, limit],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher(url),
     enabled,
     refetchOnWindowFocus: false,
@@ -251,6 +256,7 @@ export function usePostDetail(postId: string | undefined) {
 
   return useQuery<PostDetailResponse>({
     queryKey: ['post-detail', postId],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher(url),
     enabled: !!postId,
     refetchOnWindowFocus: false,
@@ -277,6 +283,7 @@ interface MarketData {
 export function useMarketData() {
   return useQuery<MarketData>({
     queryKey: ['market-data'],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher('/api/market'),
     refetchInterval: 30 * 1000,
     refetchOnWindowFocus: false,
@@ -304,6 +311,7 @@ export function useUserProfile(handle: string | undefined, token?: string) {
 
   return useQuery<UserProfile>({
     queryKey: ['user-profile', handle],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcherWithAuth(url, token),
     enabled: !!handle,
     refetchOnWindowFocus: false,
@@ -336,6 +344,7 @@ export function useNotifications(userId: string | undefined, token?: string) {
 
   return useQuery<NotificationsResponse>({
     queryKey: ['notifications', userId],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcherWithAuth(url, token),
     enabled: !!userId,
     refetchInterval: 2 * 60 * 1000,

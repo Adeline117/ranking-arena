@@ -17,6 +17,7 @@ import type { ApiSuccessResponse } from '@/lib/types/index'
 export function useSourceCapabilities(enabled = true) {
   const query = useQuery<Record<string, SourceCapability>>({
     queryKey: ['source-capabilities'],
+    placeholderData: (prev) => prev,
     queryFn: async () => {
       const res = await fetcher<ApiSuccessResponse<Record<string, SourceCapability>>>(
         '/api/sources/capabilities'
