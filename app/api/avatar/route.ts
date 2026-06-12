@@ -166,6 +166,7 @@ export async function GET(request: NextRequest) {
       // HTX uses specific CloudFront distributions — restrict to avoid open proxy
       'd2uuskl05wy6ml.cloudfront.net',
       'd1nhio0ox7pgb.cloudfront.net',
+      'd1x7dwosqaosdj.cloudfront.net',
       // BingX
       'bingx.com',
       // CoinEx
