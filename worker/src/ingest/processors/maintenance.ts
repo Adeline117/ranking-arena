@@ -15,6 +15,7 @@ import { getIngestPool } from '@/lib/ingest/db'
 import { cleanupRawObjects } from '@/lib/ingest/raw'
 import {
   downsampleOldSeries,
+  downsampleSnapshotEntries,
   ensurePartitions,
   pruneLongTailHistories,
 } from '@/lib/ingest/serving/series'
@@ -28,6 +29,7 @@ export async function processMaintenance(_job: Job): Promise<Record<string, unkn
     ['partitions', () => ensurePartitions()],
     ['raw_cleanup', () => cleanupRawObjects(30)],
     ['series_downsample', () => downsampleOldSeries(90)],
+    ['entries_downsample', () => downsampleSnapshotEntries(7)],
     ['history_retention', () => pruneLongTailHistories(180)],
     [
       'profile_cache_expiry',

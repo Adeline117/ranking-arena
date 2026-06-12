@@ -76,6 +76,30 @@ export async function ensurePartitions(): Promise<number> {
 }
 
 /**
+ * Snapshot-history downsampling: only the LATEST passed snapshot per
+ * (source, TF) serves reads; older entries exist for rank-trend/churn,
+ * which daily granularity fully covers. Keep all snapshots from the last
+ * `keepAllDays`; beyond that keep one snapshot's entries per day (the
+ * day's last passed crawl) and delete the rest — ~80% of entries volume
+ * at 4-5 crawls/day.
+ */
+export async function downsampleSnapshotEntries(keepAllDays = 7): Promise<number> {
+  const result = await getIngestPool().query(
+    `WITH keep AS (
+       SELECT DISTINCT ON (source_id, timeframe, scraped_at::date) id
+         FROM arena.leaderboard_snapshots
+        WHERE count_check_passed
+        ORDER BY source_id, timeframe, scraped_at::date, scraped_at DESC
+     )
+     DELETE FROM arena.leaderboard_entries e
+      WHERE e.scraped_at < now() - ($1 || ' days')::interval
+        AND e.snapshot_id NOT IN (SELECT id FROM keep)`,
+    [keepAllDays]
+  )
+  return result.rowCount ?? 0
+}
+
+/**
  * History retention by tier (spec §13.5): long-tail traders keep a bounded
  * window; topN/ranked traders keep full history. "Ranked" = appeared in a
  * passed snapshot within the last 30 days.

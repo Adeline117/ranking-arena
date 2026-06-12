@@ -8,7 +8,7 @@
  */
 
 import { getActiveSources } from '@/lib/ingest/sources'
-import { getIngestQueue, INGEST_JOB } from './queues'
+import { getIngestQueue, getRegionQueue, INGEST_JOB, INGEST_REGIONS } from './queues'
 
 /** Maintenance jobs are framework-level, not per-source. */
 const STATIC_SCHEDULERS = [
@@ -21,12 +21,15 @@ const STATIC_SCHEDULERS = [
 ] as const
 
 export async function reconcileSchedulers(): Promise<void> {
-  const queue = getIngestQueue()
   const sources = await getActiveSources()
+  // scheduler id → its region queue; stale cleanup walks every region.
   const wanted = new Set<string>()
 
   for (const src of sources) {
     const data = { sourceSlug: src.slug }
+    // Bulk tiers run on the source's fetch_region queue so a worker
+    // co-located with that region picks them up (remote-WS chain gone).
+    const queue = getRegionQueue(src.fetch_region)
 
     const tierA = `tiera:${src.slug}`
     wanted.add(tierA)
@@ -64,17 +67,23 @@ export async function reconcileSchedulers(): Promise<void> {
     }
   }
 
+  // Framework maintenance always runs on the primary (local) node.
+  const localQueue = getIngestQueue()
   for (const s of STATIC_SCHEDULERS) {
     wanted.add(s.id)
-    await queue.upsertJobScheduler(s.id, { every: s.everyMs }, { name: s.name, data: {} })
+    await localQueue.upsertJobScheduler(s.id, { every: s.everyMs }, { name: s.name, data: {} })
   }
 
-  // Remove schedulers for sources that were deactivated/dropped.
-  const existing = await queue.getJobSchedulers()
-  for (const scheduler of existing) {
-    if (scheduler.id && !wanted.has(scheduler.id)) {
-      await queue.removeJobScheduler(scheduler.id)
-      console.log(`[ingest-scheduler] removed stale scheduler ${scheduler.id}`)
+  // Remove stale schedulers across EVERY region queue (a source whose
+  // fetch_region changed leaves its old scheduler on the previous queue).
+  for (const region of INGEST_REGIONS) {
+    const q = getRegionQueue(region)
+    const existing = await q.getJobSchedulers()
+    for (const scheduler of existing) {
+      if (scheduler.id && !wanted.has(scheduler.id)) {
+        await q.removeJobScheduler(scheduler.id)
+        console.log(`[ingest-scheduler] removed stale scheduler ${scheduler.id} (${region})`)
+      }
     }
   }
 
