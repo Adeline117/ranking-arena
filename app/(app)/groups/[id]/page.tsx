@@ -377,9 +377,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             .eq('id', groupId)
             .maybeSingle(),
           // 2. Member avatar previews (5 most recent)
+          // NOTE: no FK from group_members.user_id → user_profiles (it references
+          // auth.users), so PostgREST embeds 400 with PGRST200. Two-step fetch below.
           supabase
             .from('group_members')
-            .select('user_profiles(handle, avatar_url)')
+            .select('user_id')
             .eq('group_id', groupId)
             .order('joined_at', { ascending: false })
             .limit(5),
@@ -417,15 +419,23 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
         setGroup(groupData ? ({ ...groupData, owner_handle: ownerHandle } as Group) : null)
 
-        // Process member previews
-        if (previewResult.data) {
+        // Process member previews (step 2: fetch profiles by id)
+        if (previewResult.data && previewResult.data.length > 0) {
+          const previewIds = previewResult.data.map((m) => m.user_id).filter(Boolean)
+          const { data: previewProfiles } = previewIds.length
+            ? await supabase
+                .from('user_profiles')
+                .select('id, handle, avatar_url')
+                .in('id', previewIds)
+            : { data: null }
+          const profileById = new Map((previewProfiles || []).map((p) => [p.id, p]))
           setMemberPreviews(
             previewResult.data
               .map((m) => {
-                const p = Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles
+                const p = profileById.get(m.user_id)
                 return {
-                  avatar_url: (p as { avatar_url?: string | null } | null)?.avatar_url,
-                  handle: (p as { handle?: string | null } | null)?.handle,
+                  avatar_url: p?.avatar_url,
+                  handle: p?.handle,
                 }
               })
               .filter((m) => m.avatar_url || m.handle)
@@ -580,24 +590,33 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     if (loadingMembers || !groupId) return
     setLoadingMembers(true)
     try {
-      // Single JOIN query: group_members + user_profiles
+      // Two-step query: group_members has no FK to user_profiles (user_id references
+      // auth.users), so a PostgREST embed 400s with PGRST200. Fetch members, then profiles.
       const { data: membersData } = await supabase
         .from('group_members')
-        .select('user_id, role, joined_at, user_profiles(handle, avatar_url)')
+        .select('user_id, role, joined_at')
         .eq('group_id', groupId)
         .order('role', { ascending: true })
         .order('joined_at', { ascending: true })
 
       if (membersData && membersData.length > 0) {
+        const memberIds = membersData.map((m) => m.user_id).filter(Boolean)
+        const { data: memberProfiles } = memberIds.length
+          ? await supabase
+              .from('user_profiles')
+              .select('id, handle, avatar_url')
+              .in('id', memberIds)
+          : { data: null }
+        const profileById = new Map((memberProfiles || []).map((p) => [p.id, p]))
         const sortedMembers = membersData
           .map((m) => {
-            const profile = Array.isArray(m.user_profiles) ? m.user_profiles[0] : m.user_profiles
+            const profile = profileById.get(m.user_id)
             return {
               user_id: m.user_id,
               role: m.role,
               joined_at: m.joined_at,
-              handle: (profile as { handle?: string | null } | null)?.handle,
-              avatar_url: (profile as { avatar_url?: string | null } | null)?.avatar_url,
+              handle: profile?.handle,
+              avatar_url: profile?.avatar_url,
             }
           })
           .sort((a, b) => {
