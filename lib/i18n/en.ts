@@ -5847,6 +5847,7 @@ const en = {
   tfNotProvided: 'Not provided by this exchange',
   tfInception: 'Inception',
   moduleDataPending: 'Detailed data is loading — refresh in a moment.',
+  traderDormantForPeriod: 'No trading activity from this trader in the selected period.',
   moduleRetry: 'Retry',
   dataDelayedNote: 'This exchange publishes this data with a delay.',
   metricRoi: 'ROI',

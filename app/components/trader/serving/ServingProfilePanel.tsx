@@ -191,6 +191,19 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
     return merged
   }, [core.modules])
 
+  // Dormant trader (e.g. Bitget "*不活跃"): every core metric is 0 and the
+  // series is flat. Show one honest line instead of a grid of 0.00% that
+  // reads like a render failure. We do NOT fabricate data.
+  const isDormant = useMemo(() => {
+    if (!core.modules) return false
+    const core_keys = ['roi', 'pnl', 'win_rate', 'total_positions', 'aum'] as const
+    const allZero = core_keys.every((k) => {
+      const v = gridStats[k]
+      return v === undefined || v === null || Number(v) === 0
+    })
+    return allZero && core_keys.some((k) => gridStats[k] !== undefined)
+  }, [core.modules, gridStats])
+
   // Record sub-tabs: capability-driven; only opened tabs ever fetch.
   const kinds: RecordKind[] = capability
     ? (Object.keys(KIND_TAB_I18N) as RecordKind[]).filter((k) => capability.surfaces[k])
@@ -234,6 +247,11 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             </Text>
           )}
           <SignalChips source={source} extras={core.modules.extras} />
+          {isDormant && (
+            <Text size="sm" color="tertiary">
+              {t('traderDormantForPeriod')}
+            </Text>
+          )}
           <MetricGrid
             stats={gridStats}
             capabilityMetrics={[
