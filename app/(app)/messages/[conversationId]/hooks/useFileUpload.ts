@@ -4,6 +4,7 @@ import { useState, useCallback } from 'react'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import type { MediaAttachment } from '../components/types'
 
 interface UseFileUploadOptions {
@@ -29,36 +30,58 @@ export function useFileUpload({ userId, conversationId }: UseFileUploadOptions) 
     }
   }, [])
 
-  const handleDrop = useCallback(async (e: React.DragEvent) => {
-    e.preventDefault()
-    setIsDragging(false)
-    const file = e.dataTransfer.files?.[0]
-    if (file && userId && conversationId) {
-      setUploading(true)
-      try {
-        const formData = new FormData()
-        formData.append('file', file)
-        formData.append('userId', userId)
-        formData.append('conversationId', conversationId)
-        const res = await globalThis.fetch('/api/chat/upload', { method: 'POST', headers: getCsrfHeaders(), body: formData })
-        const data = await res.json()
-        if (res.ok) {
-          setPendingAttachment({ url: data.url, type: data.category, fileName: data.fileName, originalName: data.originalName, fileSize: data.fileSize })
-        } else {
-          showToast(data.error || t('uploadFailed'), 'error')
+  const handleDrop = useCallback(
+    async (e: React.DragEvent) => {
+      e.preventDefault()
+      setIsDragging(false)
+      const file = e.dataTransfer.files?.[0]
+      if (file && userId && conversationId) {
+        setUploading(true)
+        try {
+          const formData = new FormData()
+          formData.append('file', file)
+          formData.append('userId', userId)
+          formData.append('conversationId', conversationId)
+          // /api/chat/upload is withAuth (Bearer header only) — 401'd without the token
+          const accessToken = await tokenRefreshCoordinator.getValidToken()
+          const res = await globalThis.fetch('/api/chat/upload', {
+            method: 'POST',
+            headers: {
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+              ...getCsrfHeaders(),
+            },
+            body: formData,
+          })
+          const data = await res.json()
+          if (res.ok) {
+            setPendingAttachment({
+              url: data.url,
+              type: data.category,
+              fileName: data.fileName,
+              originalName: data.originalName,
+              fileSize: data.fileSize,
+            })
+          } else {
+            showToast(data.error || t('uploadFailed'), 'error')
+          }
+        } catch {
+          showToast(t('uploadFailedRetry'), 'error')
+        } finally {
+          setUploading(false)
         }
-      } catch {
-        showToast(t('uploadFailedRetry'), 'error')
-      } finally {
-        setUploading(false)
       }
-    }
-  }, [userId, conversationId, showToast, t])
+    },
+    [userId, conversationId, showToast, t]
+  )
 
   return {
-    pendingAttachment, setPendingAttachment,
-    uploading, setUploading,
+    pendingAttachment,
+    setPendingAttachment,
+    uploading,
+    setUploading,
     isDragging,
-    handleDragOver, handleDragLeave, handleDrop,
+    handleDragOver,
+    handleDragLeave,
+    handleDrop,
   }
 }

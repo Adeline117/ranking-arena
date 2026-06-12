@@ -15,6 +15,7 @@
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCsrfHeaders } from '@/lib/api/csrf'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 type Plan = 'monthly' | 'yearly' | 'lifetime'
 
@@ -31,9 +32,22 @@ export function useDirectCheckout() {
       setAlreadySubscribed(false)
 
       try {
+        // Server auth reads the Authorization Bearer header (cookie fallback is
+        // unreliable — sessions live in localStorage, not cookies). Without this
+        // header, logged-in users got a 401 and the subscribe button did nothing.
+        const accessToken = await tokenRefreshCoordinator.getValidToken()
+        if (!accessToken) {
+          router.push(`/login?redirect=${encodeURIComponent('/pricing')}`)
+          return
+        }
+
         const res = await fetch('/api/stripe/create-checkout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
           body: JSON.stringify({
             plan,
             promotionCode: options?.promotionCode,

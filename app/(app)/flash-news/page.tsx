@@ -103,7 +103,7 @@ const CATEGORY_COLORS_MAPPED: Record<string, string> = {
 export default function FlashNewsPage() {
   const { language, t } = useLanguage()
   const { showToast } = useToast()
-  const { isLoggedIn } = useAuthSession()
+  const { isLoggedIn, accessToken } = useAuthSession()
 
   const [news, setNews] = useState<FlashNews[]>([])
   const [loading, setLoading] = useState(true)
@@ -233,8 +233,8 @@ export default function FlashNewsPage() {
   // Translate content for items that need it
   const translateNewsContent = useCallback(
     async (items: FlashNews[]) => {
-      // /api/translate requires auth — skip silently for anonymous visitors
-      if (!isLoggedIn) return
+      // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
+      if (!isLoggedIn || !accessToken) return
       const targetLang = language as 'zh' | 'en'
       const needsTranslation = items
         .filter((item) => {
@@ -264,7 +264,11 @@ export default function FlashNewsPage() {
 
         const response = await fetch('/api/translate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
           body: JSON.stringify({ items: batchItems, targetLang }),
         })
 
@@ -289,7 +293,7 @@ export default function FlashNewsPage() {
         })
       }
     },
-    [language, translatedContent, translatingIds, isLoggedIn]
+    [language, translatedContent, translatingIds, isLoggedIn, accessToken]
   )
 
   // Trigger translation when news or language changes

@@ -19,6 +19,7 @@ import { AvatarUploadSection } from './components/AvatarUploadSection'
 import { ProGroupOption } from './components/ProGroupOption'
 import { RoleNameSettings } from './components/RoleNameSettings'
 import type { RoleNames, Rule } from './types'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 export default function ApplyGroupPage() {
   if (!features.social) redirect('/')
@@ -156,8 +157,11 @@ export default function ApplyGroupPage() {
       formData.append('file', file)
       formData.append('userId', userId)
 
+      // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+      const uploadToken = await tokenRefreshCoordinator.getValidToken()
       const response = await fetch('/api/posts/upload-image', {
         method: 'POST',
+        headers: uploadToken ? { Authorization: `Bearer ${uploadToken}` } : undefined,
         body: formData,
       })
 

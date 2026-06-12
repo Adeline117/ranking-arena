@@ -15,6 +15,7 @@ import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 interface UploadedImage {
   url: string
@@ -379,9 +380,12 @@ export default function EditPostPage() {
         formData.append('file', file)
         formData.append('userId', userId)
 
+        // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+        const uploadToken = await tokenRefreshCoordinator.getValidToken()
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
           headers: {
+            ...(uploadToken ? { Authorization: `Bearer ${uploadToken}` } : {}),
             ...getCsrfHeaders(),
           },
           body: formData,

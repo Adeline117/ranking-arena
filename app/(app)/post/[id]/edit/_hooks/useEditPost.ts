@@ -9,6 +9,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 export interface UploadedImage {
   url: string
@@ -39,10 +40,15 @@ export function useEditPost() {
 
   // Fetch user info
   useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      setEmail(data.user?.email ?? null)
-      setUserId(data.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for edit page init */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setEmail(data.user?.email ?? null)
+        setUserId(data.user?.id ?? null)
+      })
+      .catch(() => {
+        /* Intentionally swallowed: auth check non-critical for edit page init */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   // Load post data
@@ -87,7 +93,7 @@ export function useEditPost() {
     }
 
     loadPost()
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; loadPost defined inside effect
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; loadPost defined inside effect
   }, [postId, userId, router, showToast])
 
   // Handle image upload
@@ -125,10 +131,13 @@ export function useEditPost() {
         formData.append('file', file)
         formData.append('userId', userId)
 
+        // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+        const uploadToken = await tokenRefreshCoordinator.getValidToken()
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
           headers: {
-            ...getCsrfHeaders()
+            ...(uploadToken ? { Authorization: `Bearer ${uploadToken}` } : {}),
+            ...getCsrfHeaders(),
           },
           body: formData,
         })
@@ -151,7 +160,7 @@ export function useEditPost() {
     }
 
     if (newImages.length > 0) {
-      setImages(prev => [...prev, ...newImages])
+      setImages((prev) => [...prev, ...newImages])
       showToast(t('uploadSuccess').replace('{count}', String(newImages.length)), 'success')
     }
 
@@ -163,7 +172,7 @@ export function useEditPost() {
 
   // Remove image from list
   const removeImage = (index: number) => {
-    setImages(prev => prev.filter((_, i) => i !== index))
+    setImages((prev) => prev.filter((_, i) => i !== index))
   }
 
   // Insert image markdown at cursor position
@@ -171,14 +180,14 @@ export function useEditPost() {
     const imageMarkdown = `\n![image](${url})\n`
 
     if (cursorPosition !== null) {
-      setContent(prev => {
+      setContent((prev) => {
         const before = prev.slice(0, cursorPosition)
         const after = prev.slice(cursorPosition)
         return before + imageMarkdown + after
       })
       setCursorPosition(cursorPosition + imageMarkdown.length)
     } else {
-      setContent(prev => prev + imageMarkdown)
+      setContent((prev) => prev + imageMarkdown)
     }
     showToast(t('imageInserted'), 'info')
   }
@@ -192,7 +201,7 @@ export function useEditPost() {
       matches.push({ match: m[0], start: m.index, end: m.index + m[0].length })
     }
 
-    const currentIndex = matches.findIndex(m => m.match.includes(url))
+    const currentIndex = matches.findIndex((m) => m.match.includes(url))
     if (currentIndex === -1) return
 
     const targetIndex = direction === 'up' ? currentIndex - 1 : currentIndex + 1
@@ -209,15 +218,21 @@ export function useEditPost() {
     const placeholder2 = `__PLACEHOLDER_2__`
 
     if (direction === 'up') {
-      newContent = newContent.slice(0, target.start) + placeholder1 +
-                   newContent.slice(target.end, current.start) + placeholder2 +
-                   newContent.slice(current.end)
+      newContent =
+        newContent.slice(0, target.start) +
+        placeholder1 +
+        newContent.slice(target.end, current.start) +
+        placeholder2 +
+        newContent.slice(current.end)
       newContent = newContent.replace(placeholder1, current.match)
       newContent = newContent.replace(placeholder2, target.match)
     } else {
-      newContent = newContent.slice(0, current.start) + placeholder1 +
-                   newContent.slice(current.end, target.start) + placeholder2 +
-                   newContent.slice(target.end)
+      newContent =
+        newContent.slice(0, current.start) +
+        placeholder1 +
+        newContent.slice(current.end, target.start) +
+        placeholder2 +
+        newContent.slice(target.end)
       newContent = newContent.replace(placeholder1, target.match)
       newContent = newContent.replace(placeholder2, current.match)
     }
@@ -228,8 +243,16 @@ export function useEditPost() {
 
   // Remove image from content
   const removeImageFromContent = (url: string) => {
-    const imagePattern = new RegExp(`\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`, 'g')
-    setContent(prev => prev.replace(imagePattern, '\n').replace(/\n{3,}/g, '\n\n').trim())
+    const imagePattern = new RegExp(
+      `\\n?!\\[image\\]\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\)\\n?`,
+      'g'
+    )
+    setContent((prev) =>
+      prev
+        .replace(imagePattern, '\n')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    )
     showToast(t('imageRemovedFromContent'), 'info')
   }
 
@@ -254,7 +277,7 @@ export function useEditPost() {
     e.preventDefault()
     if (draggedImageIndex === null || draggedImageIndex === index) return
 
-    setImages(prev => {
+    setImages((prev) => {
       const newImages = [...prev]
       const draggedImage = newImages[draggedImageIndex]
       newImages.splice(draggedImageIndex, 1)
@@ -292,9 +315,9 @@ export function useEditPost() {
       // Auto-append un-inserted images to the end of content
       let finalContent = content
       if (images.length > 0) {
-        const unincludedImages = images.filter(img => !content.includes(img.url))
+        const unincludedImages = images.filter((img) => !content.includes(img.url))
         if (unincludedImages.length > 0) {
-          finalContent += '\n\n' + unincludedImages.map(img => `![image](${img.url})`).join('\n')
+          finalContent += '\n\n' + unincludedImages.map((img) => `![image](${img.url})`).join('\n')
         }
       }
 
@@ -303,7 +326,7 @@ export function useEditPost() {
         .update({
           title,
           content: finalContent,
-          images: images.map(img => img.url),
+          images: images.map((img) => img.url),
           updated_at: new Date().toISOString(),
         })
         .eq('id', postId)

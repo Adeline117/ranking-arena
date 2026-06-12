@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 type RoleNames = {
   admin: { zh: string; en: string }
@@ -22,7 +23,13 @@ interface UseGroupApplyFormProps {
   t: (key: string, ...args: unknown[]) => string
 }
 
-export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: UseGroupApplyFormProps) {
+export function useGroupApplyForm({
+  accessToken,
+  userId,
+  isPro,
+  showToast,
+  t,
+}: UseGroupApplyFormProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,20 +58,22 @@ export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: 
   const [avatarUrl, setAvatarUrl] = useState('')
   const [roleNames, setRoleNames] = useState<RoleNames>({
     admin: { zh: '管理员', en: 'Admin' },
-    member: { zh: '成员', en: 'Member' }
+    member: { zh: '成员', en: 'Member' },
   })
 
   // Pro group option
   const [isPremiumOnly, setIsPremiumOnly] = useState(false)
 
   // Existing applications
-  const [existingApplications, setExistingApplications] = useState<{ id: string; name: string; status: string; created_at: string }[]>([])
+  const [existingApplications, setExistingApplications] = useState<
+    { id: string; name: string; status: string; created_at: string }[]
+  >([])
 
   useEffect(() => {
     if (accessToken) {
       fetchMyApplications(accessToken)
     }
-  }, [accessToken])  
+  }, [accessToken])
 
   const validateField = (fieldName: string, _value: string) => {
     const newErrors = { ...fieldErrors }
@@ -83,7 +92,7 @@ export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: 
   const fetchMyApplications = async (token: string) => {
     try {
       const res = await fetch('/api/groups/apply', {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       if (!res.ok) {
@@ -149,8 +158,11 @@ export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: 
       formData.append('file', file)
       formData.append('userId', userId)
 
+      // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+      const uploadToken = await tokenRefreshCoordinator.getValidToken()
       const response = await fetch('/api/posts/upload-image', {
         method: 'POST',
+        headers: uploadToken ? { Authorization: `Bearer ${uploadToken}` } : undefined,
         body: formData,
       })
 
@@ -210,7 +222,7 @@ export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: 
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({
           name: nameZh.trim() || nameEn.trim(),
@@ -220,9 +232,13 @@ export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: 
           avatar_url: avatarUrl.trim() || null,
           role_names: roleNames,
           rules_json: rules.length > 0 ? rules : null,
-          rules: rules.map(r => r.zh).filter(Boolean).join('\n') || null,
+          rules:
+            rules
+              .map((r) => r.zh)
+              .filter(Boolean)
+              .join('\n') || null,
           is_premium_only: isPro && isPremiumOnly,
-        })
+        }),
       })
 
       if (!res.ok) {
@@ -276,19 +292,44 @@ export function useGroupApplyForm({ accessToken, userId, isPro, showToast, t }: 
     fileInputRef,
 
     // State
-    loading, error, success, setSuccess, uploading, fieldErrors,
-    activeTab, setActiveTab, showMultiLang, setShowMultiLang,
-    nameZh, setNameZh, descriptionZh, setDescriptionZh,
-    nameEn, setNameEn, descriptionEn, setDescriptionEn,
-    rules, newRuleZh, setNewRuleZh, newRuleEn, setNewRuleEn,
-    avatarUrl, setAvatarUrl,
-    roleNames, setRoleNames,
-    isPremiumOnly, setIsPremiumOnly,
+    loading,
+    error,
+    success,
+    setSuccess,
+    uploading,
+    fieldErrors,
+    activeTab,
+    setActiveTab,
+    showMultiLang,
+    setShowMultiLang,
+    nameZh,
+    setNameZh,
+    descriptionZh,
+    setDescriptionZh,
+    nameEn,
+    setNameEn,
+    descriptionEn,
+    setDescriptionEn,
+    rules,
+    newRuleZh,
+    setNewRuleZh,
+    newRuleEn,
+    setNewRuleEn,
+    avatarUrl,
+    setAvatarUrl,
+    roleNames,
+    setRoleNames,
+    isPremiumOnly,
+    setIsPremiumOnly,
     existingApplications,
 
     // Handlers
-    validateField, addRule, removeRule, updateRule,
-    handleImageUpload, handleSubmit,
+    validateField,
+    addRule,
+    removeRule,
+    updateRule,
+    handleImageUpload,
+    handleSubmit,
   }
 }
 

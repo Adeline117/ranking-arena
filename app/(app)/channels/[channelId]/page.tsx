@@ -81,7 +81,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         .then((r) => setChannelId(r.channelId))
         .catch(() => {
           /* params resolution should not fail */
-        }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+        })
     }
   }, [params])
 
@@ -225,9 +225,13 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       formData.append('file', file)
       formData.append('userId', userId)
       formData.append('conversationId', channelId)
+      // /api/chat/upload is withAuth (Bearer header only) — 401'd without the token
       const res = await globalThis.fetch('/api/chat/upload', {
         method: 'POST',
-        headers: getCsrfHeaders(),
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...getCsrfHeaders(),
+        },
         body: formData,
       })
       const data = await res.json()

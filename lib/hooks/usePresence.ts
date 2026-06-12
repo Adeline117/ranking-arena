@@ -7,7 +7,7 @@ import type { RealtimeChannel } from '@supabase/supabase-js'
 function getPresenceShard(userId: string): string {
   let hash = 0
   for (let i = 0; i < userId.length; i++) {
-    hash = ((hash << 5) - hash) + userId.charCodeAt(i)
+    hash = (hash << 5) - hash + userId.charCodeAt(i)
     hash |= 0
   }
   return `presence:${Math.abs(hash) % 100}`
@@ -47,7 +47,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
       .on('presence', { event: 'sync' }, () => {
         const state = channel.presenceState()
         const newMap: Record<string, PresenceState> = {}
-        
+
         for (const [key, presences] of Object.entries(state)) {
           if (presences && presences.length > 0) {
             newMap[key] = {
@@ -57,8 +57,8 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
             }
           }
         }
-        
-        setPresenceMap(prev => {
+
+        setPresenceMap((prev) => {
           // Merge: keep offline users from previous state, update online ones
           const merged = { ...prev }
           // Mark all previously online as potentially offline
@@ -76,7 +76,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
       })
       .on('presence', { event: 'join' }, ({ key }) => {
         if (key) {
-          setPresenceMap(prev => ({
+          setPresenceMap((prev) => ({
             ...prev,
             [key]: { userId: key, isOnline: true, lastSeenAt: new Date().toISOString() },
           }))
@@ -84,9 +84,14 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
       })
       .on('presence', { event: 'leave' }, ({ key }) => {
         if (key) {
-          setPresenceMap(prev => ({
+          setPresenceMap((prev) => ({
             ...prev,
-            [key]: { ...prev[key], userId: key, isOnline: false, lastSeenAt: new Date().toISOString() },
+            [key]: {
+              ...prev[key],
+              userId: key,
+              isOnline: false,
+              lastSeenAt: new Date().toISOString(),
+            },
           }))
         }
       })
@@ -107,9 +112,18 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
     const dbHeartbeat = setInterval(async () => {
       if (abortController.signal.aborted) return
       try {
+        // /api/presence auth reads only the Authorization Bearer header —
+        // heartbeats 401'd without it
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (!session?.access_token || abortController.signal.aborted) return
         await fetch('/api/presence', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+          },
           body: JSON.stringify({ action: 'heartbeat' }),
           signal: abortController.signal,
         })
@@ -151,7 +165,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
         if (aborted) return
 
         if (data) {
-          setPresenceMap(prev => {
+          setPresenceMap((prev) => {
             const updated = { ...prev }
             for (const user of data) {
               if (!updated[user.id]?.isOnline) {
@@ -171,22 +185,30 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
     }
 
     fetchLastSeen()
-    return () => { aborted = true }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- join produces stable string key
+    return () => {
+      aborted = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- join produces stable string key
   }, [watchUserIds.join(',')])
 
-  const getUserPresence = useCallback((userId: string): PresenceState => {
-    return presenceMap[userId] || { userId, isOnline: false, lastSeenAt: null }
-  }, [presenceMap])
+  const getUserPresence = useCallback(
+    (userId: string): PresenceState => {
+      return presenceMap[userId] || { userId, isOnline: false, lastSeenAt: null }
+    },
+    [presenceMap]
+  )
 
-  const setTyping = useCallback((conversationId: string, isTyping: boolean) => {
-    if (!currentUserId || !channelRef.current) return
-    channelRef.current.track({
-      user_id: currentUserId,
-      online_at: new Date().toISOString(),
-      typing_in: isTyping ? conversationId : null,
-    })
-  }, [currentUserId])
+  const setTyping = useCallback(
+    (conversationId: string, isTyping: boolean) => {
+      if (!currentUserId || !channelRef.current) return
+      channelRef.current.track({
+        user_id: currentUserId,
+        online_at: new Date().toISOString(),
+        typing_in: isTyping ? conversationId : null,
+      })
+    },
+    [currentUserId]
+  )
 
   const isUserTyping = useCallback((userId: string, conversationId: string): boolean => {
     const channel = channelRef.current
@@ -205,7 +227,7 @@ export function usePresence(currentUserId: string | null, watchUserIds: string[]
  */
 export function formatLastSeen(lastSeenAt: string | null, t: (key: string) => string): string {
   if (!lastSeenAt) return t('offlineStatus')
-  
+
   const now = Date.now()
   const seen = new Date(lastSeenAt).getTime()
   const diffMs = now - seen

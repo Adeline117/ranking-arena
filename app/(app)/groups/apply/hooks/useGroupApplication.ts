@@ -8,6 +8,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
 import type { RoleNames, Rule } from '../types'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 export function useGroupApplication() {
   const { t } = useLanguage()
@@ -42,7 +43,7 @@ export function useGroupApplication() {
   const [avatarUrl, setAvatarUrl] = useState('')
   const [roleNames, setRoleNames] = useState<RoleNames>({
     admin: { zh: '管理员', en: 'Admin' },
-    member: { zh: '成员', en: 'Member' }
+    member: { zh: '成员', en: 'Member' },
   })
 
   // Pro exclusive group option
@@ -75,7 +76,7 @@ export function useGroupApplication() {
   const fetchMyApplications = async (token: string) => {
     try {
       const res = await fetch('/api/groups/apply', {
-        headers: { Authorization: `Bearer ${token}` }
+        headers: { Authorization: `Bearer ${token}` },
       })
 
       if (!res.ok) {
@@ -141,8 +142,11 @@ export function useGroupApplication() {
       formData.append('file', file)
       formData.append('userId', userId)
 
+      // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+      const uploadToken = await tokenRefreshCoordinator.getValidToken()
       const response = await fetch('/api/posts/upload-image', {
         method: 'POST',
+        headers: uploadToken ? { Authorization: `Bearer ${uploadToken}` } : undefined,
         body: formData,
       })
 
@@ -202,7 +206,7 @@ export function useGroupApplication() {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
+          ...getCsrfHeaders(),
         },
         body: JSON.stringify({
           name: nameZh.trim() || nameEn.trim(),
@@ -212,9 +216,13 @@ export function useGroupApplication() {
           avatar_url: avatarUrl.trim() || null,
           role_names: roleNames,
           rules_json: rules.length > 0 ? rules : null,
-          rules: rules.map(r => r.zh).filter(Boolean).join('\n') || null,
+          rules:
+            rules
+              .map((r) => r.zh)
+              .filter(Boolean)
+              .join('\n') || null,
           is_premium_only: isPro && isPremiumOnly,
-        })
+        }),
       })
 
       if (!res.ok) {
