@@ -42,7 +42,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged } from '../../fetch/capture'
-import { parseXtLeaderboardPage, parseXtProfile } from './parsers'
+import { parseXtLeaderboardPage, parseXtLeaderboardSeries, parseXtProfile } from './parsers'
 
 const ORIGIN = 'https://www.xt.com'
 const BASES: Record<string, string> = {
@@ -166,6 +166,7 @@ const xtAdapter: SourceAdapter = {
   },
 
   parseLeaderboard: parseXtLeaderboardPage,
+  parseLeaderboardSeries: parseXtLeaderboardSeries,
   parseProfile: parseXtProfile,
   parsePositions: (): ParsedPosition[] => [],
   parseHistory: (_raw: unknown, _kind: HistoryKind): ParsedHistoryRow[] => [],

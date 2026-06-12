@@ -14,6 +14,7 @@
 
 import { createHash } from 'crypto'
 import type {
+  BoardSeriesBlock,
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
@@ -22,6 +23,7 @@ import type {
   ParsedPosition,
   ParsedProfile,
   ParsedStats,
+  RankingTimeframe,
   Timeframe,
 } from '../../core/types'
 
@@ -94,6 +96,41 @@ export function parseOkxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
     })
   }
   return { rows, reportedTotal: null } // endpoint reports pages, not rows
+}
+
+/**
+ * Board-level free series (spec §13.1): each board row embeds `pnlRatios` =
+ * {beginTs(ms str), pnlRatio(decimal str)} — a cumulative ROI sparkline for
+ * the board's native window, so EVERY ranked trader gets a chart with no
+ * extra fetch (the richer full series still arrives later via the profile
+ * crawl's public-pnl endpoint and overwrites by ts on conflict). Values are
+ * decimal fractions (×100), matching the board headline ROI. Tier-A only
+ * crawls OKX's native TF (90), so `timeframe` is the correct window.
+ */
+export function parseOkxLeaderboardSeries(
+  raw: unknown,
+  _ctx: ParseCtx,
+  timeframe: RankingTimeframe
+): Map<string, BoardSeriesBlock[]> {
+  const out = new Map<string, BoardSeriesBlock[]>()
+  const payload = (raw ?? {}) as { board?: { ranks?: unknown } }
+  const ranks = Array.isArray(payload.board?.ranks)
+    ? (payload.board!.ranks as unknown[]).filter(
+        (r): r is Dict => typeof r === 'object' && r !== null && !Array.isArray(r)
+      )
+    : []
+  for (const item of ranks) {
+    const code = str(item.uniqueCode)
+    if (!code) continue
+    const ratios = Array.isArray(item.pnlRatios) ? (item.pnlRatios as Dict[]) : []
+    const points = ratios
+      .map((p) => ({ t: num(p.beginTs), value: pct(p.pnlRatio) }))
+      .filter((p): p is { t: number; value: number } => p.t !== null && p.t > 0 && p.value !== null)
+      .sort((a, b) => a.t - b.t)
+      .map((p) => ({ ts: new Date(p.t).toISOString(), value: p.value }))
+    if (points.length > 0) out.set(code, [{ timeframe, metric: 'roi', points }])
+  }
+  return out
 }
 
 // ── Profile (stats + cumulative pnl/roi series + coin preferences) ──

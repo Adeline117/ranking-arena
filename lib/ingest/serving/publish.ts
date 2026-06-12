@@ -12,6 +12,7 @@
 import type { PoolClient } from 'pg'
 import { getIngestPool } from '../db'
 import type {
+  BoardSeriesBlock,
   ParsedLeaderboardRow,
   ParsedPosition,
   ParsedProfile,
@@ -335,6 +336,71 @@ export async function publishProfile(
   } finally {
     client.release()
   }
+}
+
+/**
+ * Board-level "free series" publish (spec §13.1): the Tier-A leaderboard row
+ * already carries a per-trader cumulative sparkline for SOME sources (okx,
+ * toobit, xt, blofin, bitunix), so every ranked trader — not just the topN
+ * that Tier-B crawls — gets a chart at zero extra fetch cost. Idempotent
+ * upsert into the SAME arena.trader_series table the profile crawl writes,
+ * so the maintenance downsample/retention (90d native → weekly rollup) and
+ * all serving reads apply unchanged. A later Tier-B/C profile crawl with a
+ * richer/longer series simply overwrites by (trader,tf,metric,ts) on conflict.
+ *
+ * `seriesByTrader` keys are exchange_trader_ids; `traderIds` is the
+ * exchange_trader_id → arena.traders.id map from the snapshot publish.
+ * Returns the number of series points written.
+ */
+export async function publishBoardSeries(
+  src: SourceRow,
+  seriesByTrader: Map<string, BoardSeriesBlock[]>,
+  traderIds: Map<string, number>
+): Promise<{ traders: number; points: number }> {
+  // Flatten to one row-set: {trader_id, timeframe, metric, ts, value}.
+  type Flat = { trader_id: number; timeframe: number; metric: string; ts: string; value: number }
+  const flat: Flat[] = []
+  let tradersWithSeries = 0
+  for (const [exchangeTraderId, blocks] of seriesByTrader) {
+    const traderId = traderIds.get(exchangeTraderId)
+    if (traderId === undefined) continue // not in the passed snapshot
+    let any = false
+    for (const block of blocks) {
+      for (const p of block.points) {
+        flat.push({
+          trader_id: traderId,
+          timeframe: block.timeframe,
+          metric: block.metric,
+          ts: p.ts,
+          value: p.value,
+        })
+        any = true
+      }
+    }
+    if (any) tradersWithSeries += 1
+  }
+  if (flat.length === 0) return { traders: 0, points: 0 }
+
+  // Chunk the insert — boards reach thousands of traders × ~30-90 pts each.
+  const CHUNK = 5000
+  const client = await getIngestPool().connect()
+  try {
+    for (let i = 0; i < flat.length; i += CHUNK) {
+      const slice = flat.slice(i, i + CHUNK)
+      await client.query(
+        `INSERT INTO arena.trader_series (trader_id, timeframe, metric, ts, value, currency)
+         SELECT r.trader_id, r.timeframe, r.metric, r.ts::timestamptz, r.value, $2
+           FROM jsonb_to_recordset($1::jsonb) AS r(
+             trader_id bigint, timeframe int, metric text, ts text, value numeric)
+         ON CONFLICT (trader_id, timeframe, metric, ts)
+         DO UPDATE SET value = EXCLUDED.value`,
+        [JSON.stringify(slice), src.currency]
+      )
+    }
+  } finally {
+    client.release()
+  }
+  return { traders: tradersWithSeries, points: flat.length }
 }
 
 /** Tier-D: fully replace a trader's open-positions snapshot (spec §2.3). */
