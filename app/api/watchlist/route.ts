@@ -8,10 +8,39 @@
 
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import { badRequest, serverError } from '@/lib/api/response'
+import { badRequest, serverError, error as errorResponse } from '@/lib/api/response'
+import { ErrorCode } from '@/lib/api/errors'
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('api:watchlist')
+
+/**
+ * SCHEMA DRIFT GUARD: the `trader_watchlist` table does NOT exist in prod.
+ * The migration `supabase/migrations/20260310000000_add_trader_watchlist.sql`
+ * exists in the repo but was never applied to the production database
+ * (PostgREST returns PGRST205 "Could not find the table").
+ *
+ * Until that migration is applied, this route degrades gracefully instead of
+ * 500ing: GET returns an empty watchlist; POST/DELETE return 503.
+ * Restoration = apply the existing migration (table + RLS + indexes), no code
+ * changes needed — these guards become dead paths automatically.
+ */
+function isTableMissing(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false
+  return (
+    err.code === 'PGRST205' ||
+    err.code === '42P01' ||
+    !!err.message?.includes('Could not find the table')
+  )
+}
+
+function watchlistUnavailable() {
+  return errorResponse(
+    'Watchlist is temporarily unavailable (feature table missing)',
+    503,
+    ErrorCode.SERVICE_UNAVAILABLE
+  )
+}
 
 export const GET = withAuth(
   async ({ user, supabase }) => {
@@ -23,6 +52,11 @@ export const GET = withAuth(
       .limit(200)
 
     if (error) {
+      if (isTableMissing(error)) {
+        // Table missing in prod — return empty list instead of 500 (see header comment)
+        log.warn('trader_watchlist table missing — returning empty watchlist')
+        return NextResponse.json({ watchlist: [] })
+      }
       log.error('GET query failed', { error: error.message })
       return serverError('Internal server error')
     }
@@ -35,12 +69,26 @@ export const GET = withAuth(
         .from('leaderboard_ranks')
         .select('source, source_trader_id, roi, pnl, rank, arena_score, win_rate, avatar_url')
         .eq('season_id', '90D')
-        .in('source', [...new Set(watchlist.map(w => w.source))])
-        .in('source_trader_id', [...new Set(watchlist.map(w => w.source_trader_id))])
+        .in('source', [...new Set(watchlist.map((w) => w.source))])
+        .in('source_trader_id', [...new Set(watchlist.map((w) => w.source_trader_id))])
 
       if (ranks && ranks.length > 0) {
-        type RankRow = { source: string; source_trader_id: string; roi: unknown; pnl: unknown; rank: unknown; arena_score: unknown; win_rate: unknown; avatar_url: unknown }
-        const rankMap = new Map(ranks.map(r => [`${(r as RankRow).source}:${(r as RankRow).source_trader_id}`, r as RankRow]))
+        type RankRow = {
+          source: string
+          source_trader_id: string
+          roi: unknown
+          pnl: unknown
+          rank: unknown
+          arena_score: unknown
+          win_rate: unknown
+          avatar_url: unknown
+        }
+        const rankMap = new Map(
+          ranks.map((r) => [
+            `${(r as RankRow).source}:${(r as RankRow).source_trader_id}`,
+            r as RankRow,
+          ])
+        )
         for (const item of watchlist) {
           const key = `${item.source}:${item.source_trader_id}`
           const rank = rankMap.get(key)
@@ -73,9 +121,18 @@ export const POST = withAuth(
     } catch {
       return badRequest('Invalid JSON body')
     }
-    const { source, source_trader_id, handle } = body as { source?: string; source_trader_id?: string; handle?: string }
+    const { source, source_trader_id, handle } = body as {
+      source?: string
+      source_trader_id?: string
+      handle?: string
+    }
 
-    if (!source || !source_trader_id || typeof source !== 'string' || typeof source_trader_id !== 'string') {
+    if (
+      !source ||
+      !source_trader_id ||
+      typeof source !== 'string' ||
+      typeof source_trader_id !== 'string'
+    ) {
       return badRequest('source and source_trader_id required (strings)')
     }
     if (source.length > 50 || source_trader_id.length > 200) {
@@ -93,18 +150,23 @@ export const POST = withAuth(
       return badRequest('Watchlist full (max 200)')
     }
 
-    const { error } = await supabase
-      .from('trader_watchlist')
-      .upsert({
+    const { error } = await supabase.from('trader_watchlist').upsert(
+      {
         user_id: user.id,
         source,
         source_trader_id,
         handle: handle || null,
-      }, {
+      },
+      {
         onConflict: 'user_id,source,source_trader_id',
-      })
+      }
+    )
 
     if (error) {
+      if (isTableMissing(error)) {
+        log.warn('trader_watchlist table missing — watchlist writes disabled')
+        return watchlistUnavailable()
+      }
       log.error('POST upsert failed', { error: error.message })
       return serverError('Internal server error')
     }
@@ -144,6 +206,10 @@ export const DELETE = withAuth(
       .eq('source_trader_id', source_trader_id)
 
     if (error) {
+      if (isTableMissing(error)) {
+        log.warn('trader_watchlist table missing — watchlist writes disabled')
+        return watchlistUnavailable()
+      }
       log.error('DELETE failed', { error: error.message })
       return serverError('Internal server error')
     }
