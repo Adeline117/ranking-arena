@@ -1,18 +1,18 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from "react"
-import Link from "next/link"
+import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import { logger } from '@/lib/logger'
 
-const ARENA_PURPLE = 'var(--color-brand, #8b6fa8)'
+const ARENA_PURPLE = 'var(--color-brand)'
 
 // CSS styles
 const injectStyles = () => {
   if (typeof window === 'undefined') return
   if (document.getElementById('error-page-styles')) return
-  
+
   const style = document.createElement('style')
   style.id = 'error-page-styles'
   style.textContent = `
@@ -57,7 +57,7 @@ const injectStyles = () => {
     .error-page-bg {
       position: fixed;
       inset: 0;
-      background: var(--color-bg-primary, linear-gradient(135deg, #0a0a0f 0%, #140d14 50%, #0f0d14 100%));
+      background: var(--color-bg-primary);
       z-index: 0;
     }
     
@@ -160,12 +160,12 @@ const injectStyles = () => {
 }
 
 // Error page component
-export default function Error({ 
-  error, 
-  reset 
-}: { 
+export default function Error({
+  error,
+  reset,
+}: {
   error: Error & { digest?: string }
-  reset: () => void 
+  reset: () => void
 }) {
   const { t } = useLanguage()
   const [mounted, setMounted] = useState(false)
@@ -174,7 +174,7 @@ export default function Error({
   useEffect(() => {
     injectStyles()
     setMounted(true)
-    logger.error("[Error]", error)
+    logger.error('[Error]', error)
   }, [error])
 
   const handleRetry = async () => {
@@ -187,32 +187,36 @@ export default function Error({
 
   if (!mounted) {
     return (
-      <div style={{ 
-        minHeight: '100vh',
-        background: 'var(--color-bg-primary, #0a0a0f)',
-      }} />
+      <div
+        style={{
+          minHeight: '100vh',
+          background: 'var(--color-bg-primary)',
+        }}
+      />
     )
   }
 
   return (
-    <div style={{ 
-      minHeight: '100vh',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 24, 
-      color: 'var(--color-text-primary, #EDEDED)', 
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 24,
+        color: 'var(--color-text-primary)',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
       {/* Background */}
       <div className="error-page-bg" />
-      
+
       {/* Glow effect */}
       <div className="error-glow" />
-      
+
       {/* Floating particles */}
       {[...Array(5)].map((_, i) => (
         <div
@@ -221,9 +225,8 @@ export default function Error({
           style={{
             width: 6 + i * 2,
             height: 6 + i * 2,
-            background: i % 2 === 0 
-              ? 'var(--color-accent-error-20)' 
-              : 'var(--color-accent-primary-30)',
+            background:
+              i % 2 === 0 ? 'var(--color-accent-error-20)' : 'var(--color-accent-primary-30)',
             left: `${20 + i * 15}%`,
             top: `${25 + (i % 3) * 20}%`,
             animationDuration: `${4 + i * 0.8}s`,
@@ -233,20 +236,23 @@ export default function Error({
       ))}
 
       {/* Main content */}
-      <div style={{ 
-        position: 'relative', 
-        zIndex: 1,
-        textAlign: 'center',
-        maxWidth: 440,
-      }}>
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 1,
+          textAlign: 'center',
+          maxWidth: 440,
+        }}
+      >
         {/* Error icon */}
-        <div 
+        <div
           className="error-icon-container"
           style={{
             width: 90,
             height: 90,
             borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-04) 100%)',
+            background:
+              'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-04) 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -255,12 +261,12 @@ export default function Error({
           }}
         >
           <div className="error-icon-ring" />
-          <svg 
-            width="44" 
-            height="44" 
-            viewBox="0 0 24 24" 
-            fill="none" 
-            stroke="var(--color-accent-error, #ff7c7c)" 
+          <svg
+            width="44"
+            height="44"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="var(--color-accent-error)"
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -272,13 +278,13 @@ export default function Error({
         </div>
 
         {/* Title */}
-        <h1 
+        <h1
           className="content-section"
-          style={{ 
-            fontSize: tokens.typography.fontSize['2xl'], 
+          style={{
+            fontSize: tokens.typography.fontSize['2xl'],
             fontWeight: tokens.typography.fontWeight.bold,
             marginBottom: 12,
-            background: `linear-gradient(135deg, var(--color-text-primary, #EDEDED) 0%, ${ARENA_PURPLE} 100%)`,
+            background: `linear-gradient(135deg, var(--color-text-primary) 0%, ${ARENA_PURPLE} 100%)`,
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
             animationDelay: '0.1s',
@@ -286,14 +292,14 @@ export default function Error({
         >
           {t('errorTitle')}
         </h1>
-        
+
         {/* Description */}
-        <p 
+        <p
           className="content-section"
-          style={{ 
-            opacity: 0.7, 
+          style={{
+            opacity: 0.7,
             marginBottom: 10,
-            fontSize: 16,
+            fontSize: tokens.typography.fontSize.md,
             lineHeight: 1.6,
             animationDelay: '0.2s',
           }}
@@ -304,27 +310,27 @@ export default function Error({
           className="content-section"
           style={{
             opacity: 0.5,
-            fontSize: 14,
+            fontSize: tokens.typography.fontSize.base,
             marginBottom: 16,
             animationDelay: '0.25s',
           }}
         >
           {t('errorRefresh')}
         </p>
-        
+
         {/* Error digest */}
         {error.digest && (
-          <div 
+          <div
             className="content-section"
-            style={{ 
+            style={{
               marginBottom: 20,
               animationDelay: '0.3s',
             }}
           >
-            <span 
+            <span
               className="error-code"
               style={{
-                fontSize: 12,
+                fontSize: tokens.typography.fontSize.xs,
                 color: 'var(--color-accent-error)',
               }}
             >
@@ -334,38 +340,38 @@ export default function Error({
         )}
 
         {/* Decorative line */}
-        <div 
+        <div
           className="decorative-line"
-          style={{ 
-            maxWidth: 180, 
+          style={{
+            maxWidth: 180,
             margin: '20px auto',
           }}
         />
 
         {/* Action buttons */}
-        <div 
+        <div
           className="content-section"
-          style={{ 
-            display: 'flex', 
+          style={{
+            display: 'flex',
             gap: 14,
             justifyContent: 'center',
             marginBottom: 32,
             animationDelay: '0.4s',
           }}
         >
-          <button 
+          <button
             onClick={handleRetry}
             disabled={isRetrying}
             className="action-button primary"
-            style={{ 
-              padding: '14px 28px', 
+            style={{
+              padding: '14px 28px',
               background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, var(--color-brand-deep) 100%)`,
-              color: tokens.colors.white, 
+              color: tokens.colors.white,
               borderRadius: tokens.radius.lg,
               border: 'none',
               cursor: isRetrying ? 'wait' : 'pointer',
-              fontSize: 16,
-              fontWeight: 600,
+              fontSize: tokens.typography.fontSize.md,
+              fontWeight: tokens.typography.fontWeight.semibold,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
@@ -374,19 +380,30 @@ export default function Error({
           >
             {isRetrying ? (
               <>
-                <div style={{
-                  width: 16,
-                  height: 16,
-                  border: '2px solid var(--glass-border-heavy)',
-                  borderTopColor: 'var(--foreground)',
-                  borderRadius: '50%',
-                  animation: 'spin 1s linear infinite',
-                }} />
+                <div
+                  style={{
+                    width: 16,
+                    height: 16,
+                    border: '2px solid var(--glass-border-heavy)',
+                    borderTopColor: 'var(--foreground)',
+                    borderRadius: '50%',
+                    animation: 'spin 1s linear infinite',
+                  }}
+                />
                 {t('retry')}...
               </>
             ) : (
               <>
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <polyline points="23 4 23 10 17 10"></polyline>
                   <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                 </svg>
@@ -394,25 +411,34 @@ export default function Error({
               </>
             )}
           </button>
-          
-          <Link 
+
+          <Link
             href="/"
             className="action-button secondary"
-            style={{ 
-              padding: '14px 28px', 
+            style={{
+              padding: '14px 28px',
               background: 'transparent',
-              color: 'var(--color-text-primary, #EDEDED)', 
+              color: 'var(--color-text-primary)',
               borderRadius: tokens.radius.lg,
               border: '1px solid var(--color-border-primary, var(--glass-border-medium))',
               textDecoration: 'none',
-              fontSize: 16,
-              fontWeight: 500,
+              fontSize: tokens.typography.fontSize.md,
+              fontWeight: tokens.typography.fontWeight.medium,
               display: 'flex',
               alignItems: 'center',
               gap: 8,
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
               <polyline points="9 22 9 12 15 12 15 22"></polyline>
             </svg>
@@ -426,8 +452,8 @@ export default function Error({
             className="content-section"
             style={{
               animationDelay: '0.45s',
-              fontSize: 12,
-              color: 'var(--color-text-quaternary, #444)',
+              fontSize: tokens.typography.fontSize.xs,
+              color: 'var(--color-text-quaternary)',
               fontFamily: 'monospace',
               marginBottom: 8,
             }}
@@ -444,8 +470,8 @@ export default function Error({
             alignItems: 'center',
             justifyContent: 'center',
             gap: 16,
-            fontSize: 13,
-            color: 'var(--color-text-tertiary, #5a5a5a)',
+            fontSize: tokens.typography.fontSize.sm,
+            color: 'var(--color-text-tertiary)',
           }}
         >
           <span>{t('errorPersist')}</span>
@@ -456,20 +482,29 @@ export default function Error({
             style={{
               color: ARENA_PURPLE,
               textDecoration: 'none',
-              fontWeight: 500,
+              fontWeight: tokens.typography.fontWeight.medium,
               display: 'inline-flex',
               alignItems: 'center',
               gap: 4,
             }}
           >
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" />
             </svg>
             {t('reportIssue') || 'Report Issue'}
           </a>
         </div>
       </div>
-      
+
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )

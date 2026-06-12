@@ -1,5 +1,10 @@
 'use client'
 
+/* eslint-disable no-restricted-syntax --
+   global-error renders WITHOUT the root layout: globals.css never loads, so
+   CSS variables are unavailable and the hex fallbacks in var(--x, #hex) ARE
+   the actual render path. Do not strip them (docs/LINTING_GUIDE.md). */
+
 /**
  * 全局错误处理页面
  * 捕获整个应用的未处理错误并上报到 Sentry
@@ -22,16 +27,19 @@ export default function GlobalError({
 
   useEffect(() => {
     // 动态加载 Sentry 上报错误（避免静态 import 增加 bundle）
-    import('@sentry/nextjs').then(Sentry => {
-      Sentry.captureException(error, {
-        tags: {
-          errorType: 'global',
-          digest: error.digest,
-        },
+    import('@sentry/nextjs')
+      .then((Sentry) => {
+        Sentry.captureException(error, {
+          tags: {
+            errorType: 'global',
+            digest: error.digest,
+          },
+        })
       })
-    }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-      // Sentry 加载失败时静默处理
-    })
+      .catch(() => {
+        // file-level disable covers this intentional fire-and-forget
+        // Sentry 加载失败时静默处理
+      })
   }, [error])
 
   const handleRetry = () => {
@@ -156,10 +164,10 @@ export default function GlobalError({
         >
           {/* Background */}
           <div className="global-error-bg" />
-          
+
           {/* Glow effect */}
           <div className="error-glow" />
-          
+
           {/* Floating particles */}
           {[0, 1, 2, 3, 4].map((i) => (
             <div
@@ -168,9 +176,8 @@ export default function GlobalError({
               style={{
                 width: 6 + i * 2,
                 height: 6 + i * 2,
-                background: i % 2 === 0 
-                  ? 'var(--color-accent-error-20)' 
-                  : 'var(--color-accent-primary-30)',
+                background:
+                  i % 2 === 0 ? 'var(--color-accent-error-20)' : 'var(--color-accent-primary-30)',
                 left: `${20 + i * 15}%`,
                 top: `${25 + (i % 3) * 20}%`,
                 animationDuration: `${4 + i * 0.8}s`,
@@ -202,7 +209,8 @@ export default function GlobalError({
                 width: 80,
                 height: 80,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-04) 100%)',
+                background:
+                  'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-04) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -211,12 +219,12 @@ export default function GlobalError({
               }}
             >
               <div className="error-icon-ring" />
-              <svg 
-                width="40" 
-                height="40" 
-                viewBox="0 0 24 24" 
-                fill="none" 
-                stroke="var(--color-accent-error, #ff7c7c)" 
+              <svg
+                width="40"
+                height="40"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--color-accent-error, #ff7c7c)"
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -232,7 +240,7 @@ export default function GlobalError({
               className="content-section"
               style={{
                 fontSize: '1.75rem',
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
                 marginBottom: '0.75rem',
                 background: `linear-gradient(135deg, var(--color-accent-error, #ff7c7c) 0%, ${ARENA_PURPLE} 100%)`,
                 WebkitBackgroundClip: 'text',
@@ -242,7 +250,7 @@ export default function GlobalError({
             >
               {t('globalErrorTitle')}
             </h1>
-            
+
             {/* Description */}
             <p
               className="content-section"
@@ -267,7 +275,7 @@ export default function GlobalError({
             >
               {t('globalErrorReported')}
             </p>
-            
+
             {/* Error digest */}
             {error.digest && (
               <div
@@ -301,7 +309,7 @@ export default function GlobalError({
               style={{
                 padding: '14px 32px',
                 fontSize: '0.95rem',
-                fontWeight: 600,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 color: 'var(--color-text-primary, #EDEDED)',
                 background: `linear-gradient(135deg, ${ARENA_PURPLE} 0%, var(--color-brand-deep) 100%)`,
                 border: 'none',
@@ -315,19 +323,30 @@ export default function GlobalError({
             >
               {isRetrying ? (
                 <>
-                  <div style={{
-                    width: 16,
-                    height: 16,
-                    border: '2px solid var(--glass-border-heavy)',
-                    borderTopColor: 'var(--foreground)',
-                    borderRadius: '50%',
-                    animation: 'spin 1s linear infinite',
-                  }} />
+                  <div
+                    style={{
+                      width: 16,
+                      height: 16,
+                      border: '2px solid var(--glass-border-heavy)',
+                      borderTopColor: 'var(--foreground)',
+                      borderRadius: '50%',
+                      animation: 'spin 1s linear infinite',
+                    }}
+                  />
                   {t('globalErrorRetrying')}
                 </>
               ) : (
                 <>
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
                     <polyline points="23 4 23 10 17 10"></polyline>
                     <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                   </svg>
