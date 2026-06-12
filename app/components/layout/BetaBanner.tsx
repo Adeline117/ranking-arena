@@ -11,8 +11,9 @@
  */
 
 export default function BetaBanner() {
-  // Hidden unless explicitly enabled — production (env var unset) won't show the banner
-  if (process.env.NEXT_PUBLIC_SHOW_BETA_BANNER !== 'true') return null
+  // Shown by default on all pages (rendered in root layout); set
+  // NEXT_PUBLIC_HIDE_BETA_BANNER=true to turn it off without a code change
+  if (process.env.NEXT_PUBLIC_HIDE_BETA_BANNER === 'true') return null
 
   return (
     <>
@@ -26,7 +27,7 @@ export default function BetaBanner() {
           fontSize: '14px',
           fontWeight: 600,
           position: 'relative',
-          zIndex: 1, /* flows in document — no longer overlaps sticky header */
+          zIndex: 1 /* flows in document — no longer overlaps sticky header */,
         }}
       >
         Arena is in closed beta — data is being updated and some features are under development.
@@ -58,7 +59,11 @@ export default function BetaBanner() {
       </div>
       {/* Inline script: hide if dismissed <24h ago, attach click handler.
           Runs synchronously before paint to avoid flash. */}
-      <script dangerouslySetInnerHTML={{ __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6){b.style.display='none';return}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'}})()` }} />
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6){b.style.display='none';return}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'}})()`,
+        }}
+      />
     </>
   )
 }
