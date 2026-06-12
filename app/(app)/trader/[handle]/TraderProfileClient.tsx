@@ -5,6 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
+
+const ProUpsellModal = dynamic(
+  () => import('@/app/components/ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
+  { ssr: false }
+)
 import { useQuery } from '@tanstack/react-query'
 import { STALE_STANDARD, STALE_RELAXED } from '@/lib/hooks/cache-presets'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
@@ -150,6 +155,7 @@ export default function TraderProfileClient({
   }, [data.source, data.handle, data.source_trader_id])
 
   const [isVerifiedTrader, setIsVerifiedTrader] = useState(false)
+  const [proUpsellOpen, setProUpsellOpen] = useState(false)
   const [isOwner, setIsOwner] = useState(false)
 
   // Active account state machine extracted into hook (./hooks/useTraderActiveAccount).
@@ -626,44 +632,20 @@ export default function TraderProfileClient({
             onTabChange={handleTabChange}
             isPro={isPro}
             onProRequired={() => {
+              // Modal instead of hard navigation: keep the user on the trader
+              // page while presenting the upsell.
               trackEvent('paywall_blocked', { source: 'trader_detail_tab' })
-              router.push('/pricing')
+              setProUpsellOpen(true)
             }}
             extraTabs={claimedUser ? ['posts'] : undefined}
             hideTabs={undefined}
           />
         )}
-
-        {/* Pro upsell — compact banner for free users */}
-        {!isPro && (
-          <Link
-            href="/pricing"
-            onClick={() => trackEvent('click_go_pro_trader_detail')}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: tokens.spacing[2],
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              background:
-                'linear-gradient(135deg, var(--color-accent-primary-10), var(--color-accent-secondary-10, var(--color-accent-primary-10)))',
-              borderRadius: tokens.radius.md,
-              margin: `${tokens.spacing[2]} 0`,
-              textDecoration: 'none',
-              cursor: 'pointer',
-            }}
-          >
-            <Text
-              style={{
-                fontSize: tokens.typography.fontSize.sm,
-                color: 'var(--color-accent-primary)',
-                fontWeight: tokens.typography.fontWeight.bold,
-              }}
-            >
-              {t('upgradeProStatsDesc')}
-            </Text>
-          </Link>
-        )}
+        <ProUpsellModal
+          open={proUpsellOpen}
+          onClose={() => setProUpsellOpen(false)}
+          featureKey="upgradeProStatsDesc"
+        />
 
         {/* Tab Content — dims while loading account switch */}
         {!isServing && (

@@ -4,6 +4,11 @@ import { useState, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
+
+const ProUpsellModal = dynamic(
+  () => import('@/app/components/ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
+  { ssr: false }
+)
 import { tokens } from '@/lib/design-tokens'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
@@ -93,6 +98,7 @@ export default function TraderProfileView({
     traderProfile?.trader_key
   )
   const [activeAccount, setActiveAccount] = useState<string>('all')
+  const [proUpsellOpen, setProUpsellOpen] = useState(false)
 
   // Tabs — include 'posts' for own profile or claimed user
   type TraderTabKey = 'overview' | 'stats' | 'portfolio' | 'posts'
@@ -186,9 +192,14 @@ export default function TraderProfileView({
           isPro={isPro}
           onProRequired={() => {
             trackEvent('paywall_blocked', { source: 'claimed_profile_tab' })
-            router.push('/pricing')
+            setProUpsellOpen(true)
           }}
           extraTabs={showPosts ? ['posts'] : undefined}
+        />
+        <ProUpsellModal
+          open={proUpsellOpen}
+          onClose={() => setProUpsellOpen(false)}
+          featureKey="upgradeProStatsDesc"
         />
 
         {/* Tab Content — dims while loading account switch */}
