@@ -46,8 +46,14 @@ export default function CoreCharts({ series, timeframe }: CoreChartsProps) {
   const roiPoints = series.roi ?? series.roi_trading ?? []
   const pnlPoints = series.pnl ?? series.cumulative_pnl ?? series.pnl_trading ?? []
 
-  const hasRoi = roiPoints.length > 0
-  const hasPnl = pnlPoints.length > 0
+  // A flat all-zero (or single-value) series is not chartable — inactive
+  // traders return a full window of zeros, which would otherwise render a
+  // half-screen empty box with a line glued to the axis. Treat "no
+  // variation" the same as "no data".
+  const hasVariation = (pts: Array<{ value: number }>) =>
+    pts.length > 1 && new Set(pts.map((p) => p.value)).size > 1
+  const hasRoi = hasVariation(roiPoints)
+  const hasPnl = hasVariation(pnlPoints)
   const [chartKey, setChartKey] = useState<ChartKey>(hasRoi ? 'roi' : 'pnl')
 
   const data = useMemo(() => mergeSeries(roiPoints, pnlPoints), [roiPoints, pnlPoints])

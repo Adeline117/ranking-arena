@@ -5714,6 +5714,7 @@ const zh = {
   tfNotProvided: '该交易所不提供此时间段',
   tfInception: '创建以来',
   moduleDataPending: '详细数据加载中 — 请稍后刷新。',
+  traderDormantForPeriod: '该交易员在所选周期内无交易活动。',
   moduleRetry: '重试',
   dataDelayedNote: '该交易所发布此数据存在延迟。',
   metricRoi: '收益率',
