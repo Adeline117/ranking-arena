@@ -3920,6 +3920,7 @@ const ja = {
   // Data freshness
   lastUpdated: '更新',
   dataStaleWarning: 'データが遅延している可能性があります',
+  staleDataRecovering: '⚠ データが遅延している可能性があります。復旧中...',
 
   // Trader rank context
   traderRankOf: '{platform} で {total} 人中 #{rank} 位',

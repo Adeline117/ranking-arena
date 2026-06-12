@@ -83,9 +83,9 @@ export default function CopierAggregatePanel({
               style={{
                 color:
                   aggregate.totalCopierPnl.value > 0
-                    ? 'var(--color-success, #22c55e)'
+                    ? 'var(--color-accent-success)'
                     : aggregate.totalCopierPnl.value < 0
-                      ? 'var(--color-danger, #ef4444)'
+                      ? 'var(--color-accent-error)'
                       : tokens.colors.text.primary,
               }}
             >

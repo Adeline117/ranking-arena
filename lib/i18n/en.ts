@@ -4269,6 +4269,7 @@ const en = {
   // Data freshness
   lastUpdated: 'Updated',
   dataStaleWarning: 'Data may be delayed',
+  staleDataRecovering: '⚠ Data may be delayed. Recovering...',
 
   // Trader rank context
   traderRankOf: 'Ranked #{rank} of {total} on {platform}',

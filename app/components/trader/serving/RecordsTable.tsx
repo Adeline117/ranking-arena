@@ -68,8 +68,8 @@ function formatCell(
 
 function cellColor(value: unknown, format: RecordColumnFormat | undefined): string {
   if ((format === 'money' || format === 'pct') && typeof value === 'number') {
-    if (value > 0) return 'var(--color-success, #22c55e)'
-    if (value < 0) return 'var(--color-danger, #ef4444)'
+    if (value > 0) return 'var(--color-accent-success)'
+    if (value < 0) return 'var(--color-accent-error)'
   }
   return tokens.colors.text.primary
 }

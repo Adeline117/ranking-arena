@@ -18,13 +18,28 @@ interface RankSparklineProps {
 export function RankSparkline({ data, width = 60, height = 20 }: RankSparklineProps) {
   if (data.length < 2) {
     return (
-      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} role="img" aria-label="No rank history">
-        <line x1={0} y1={height / 2} x2={width} y2={height / 2} stroke="#9ca3af" strokeWidth={1} strokeDasharray="3,3" opacity={0.4} />
+      <svg
+        width={width}
+        height={height}
+        viewBox={`0 0 ${width} ${height}`}
+        role="img"
+        aria-label="No rank history"
+      >
+        <line
+          x1={0}
+          y1={height / 2}
+          x2={width}
+          y2={height / 2}
+          stroke="#9ca3af"
+          strokeWidth={1}
+          strokeDasharray="3,3"
+          opacity={0.4}
+        />
       </svg>
     )
   }
 
-  const ranks = data.map(d => d.rank)
+  const ranks = data.map((d) => d.rank)
   const min = Math.min(...ranks)
   const max = Math.max(...ranks)
   const range = max - min || 1
@@ -42,9 +57,9 @@ export function RankSparkline({ data, width = 60, height = 20 }: RankSparklinePr
   const lastRank = data[data.length - 1].rank
   const color =
     lastRank < firstRank
-      ? '#22c55e' // improved (lower rank = better)
+      ? 'var(--color-accent-success)' // improved (lower rank = better)
       : lastRank > firstRank
-        ? '#ef4444' // worsened
+        ? 'var(--color-accent-error)' // worsened
         : '#9ca3af' // unchanged
 
   return (

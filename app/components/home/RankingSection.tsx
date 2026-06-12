@@ -241,9 +241,7 @@ export default function RankingSection({
             lineHeight: 1.4,
           }}
         >
-          {language === 'zh'
-            ? '⚠ 数据可能有延迟，正在恢复中...'
-            : '⚠ Data may be delayed. Recovering...'}
+          {t('staleDataRecovering')}
         </div>
       )}
 
