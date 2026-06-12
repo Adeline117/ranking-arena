@@ -12,8 +12,7 @@
 
 import { NextRequest } from 'next/server'
 import { sendDailyDigest, type DailyDigestData } from '@/lib/notifications/telegram'
-import { DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
-import { getSupportedPlatforms } from '@/lib/cron/fetchers'
+import { DEAD_BLOCKED_PLATFORMS, SOURCES_WITH_DATA } from '@/lib/constants/exchanges'
 import { withCron } from '@/lib/api/with-cron'
 
 export const dynamic = 'force-dynamic'
@@ -21,7 +20,7 @@ export const maxDuration = 120
 
 export const GET = withCron('daily-digest', async (_request: NextRequest, { supabase }) => {
   const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-  const activePlatforms = getSupportedPlatforms().filter((p) => !deadSet.has(p))
+  const activePlatforms = (SOURCES_WITH_DATA as string[]).filter((p) => !deadSet.has(p))
 
   // Pipeline success rate (24h)
   const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()

@@ -8,7 +8,7 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfileClient'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
-import { isDead } from '@/lib/connectors/route-config'
+import { isDeadPlatform } from '@/lib/constants/exchanges'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getFirstScreen } from '@/lib/data/serving/first-screen'
@@ -581,7 +581,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   const serverTraderData = detailResult ? toTraderPageData(detailResult) : null
 
   // Build UnregisteredTraderData for initial render
-  const platformDead = isDead(resolved.platform)
+  const platformDead = isDeadPlatform(resolved.platform)
   const traderData: UnregisteredTraderData = {
     handle: resolved.handle || decodedHandle,
     avatar_url: resolved.avatarUrl,

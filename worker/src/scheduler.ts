@@ -23,9 +23,10 @@ export async function registerSchedules(): Promise<void> {
   // (upsertJobScheduler persists them; deleting code alone does not stop them).
   const existing = await queue.getJobSchedulers()
   for (const sched of existing) {
-    if (sched.id && (sched.id.startsWith('fetch:') || sched.id.startsWith('enrich:'))) {
-      await queue.removeJobScheduler(sched.id)
-      console.log(`[scheduler] removed retired legacy scheduler ${sched.id}`)
+    const key = sched.key ?? sched.id
+    if (key && (key.startsWith('fetch:') || key.startsWith('enrich:'))) {
+      await queue.removeJobScheduler(key)
+      console.log(`[scheduler] removed retired legacy scheduler ${key}`)
     }
   }
 
