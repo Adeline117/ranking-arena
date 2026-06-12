@@ -5907,6 +5907,10 @@ const en = {
   botStrategyGrid: 'Grid',
   botStrategyAi: 'AI',
   currencyMixedNote: 'Cannot aggregate across different settlement currencies.',
+  signalStyleLabels: 'Trading style signals',
+  signalRiskRating: 'Risk',
+  signalLastLiquidation: 'Last liquidation',
+  signalLabelsFromExchange: 'Labels by the exchange',
 } as const
 
 export default en

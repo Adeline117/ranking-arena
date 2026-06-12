@@ -5774,6 +5774,10 @@ const zh = {
   botStrategyGrid: '网格',
   botStrategyAi: 'AI',
   currencyMixedNote: '不同结算币种无法聚合。',
+  signalStyleLabels: '交易风格信号',
+  signalRiskRating: '风险',
+  signalLastLiquidation: '最近强平',
+  signalLabelsFromExchange: '标签来自交易所',
 } as const
 
 export default zh
