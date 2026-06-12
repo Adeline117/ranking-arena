@@ -42,28 +42,26 @@ export default function DefiOverview() {
   if (loading) {
     return (
       <div style={cardStyle}>
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <div
           className="skeleton"
-          style={{ height: 12, width: '40%', marginBottom: 8, borderRadius: 4 }}
+          style={{ height: 12, width: '40%', marginBottom: 8, borderRadius: tokens.radius.sm }}
         />
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <div
           className="skeleton"
-          style={{ height: 18, width: '55%', marginBottom: 6, borderRadius: 4 }}
+          style={{ height: 18, width: '55%', marginBottom: 6, borderRadius: tokens.radius.sm }}
         />
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <div
           className="skeleton"
-          style={{ height: 12, width: '100%', marginBottom: 4, borderRadius: 4 }}
+          style={{ height: 12, width: '100%', marginBottom: 4, borderRadius: tokens.radius.sm }}
         />
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <div
           className="skeleton"
-          style={{ height: 12, width: '90%', marginBottom: 4, borderRadius: 4 }}
+          style={{ height: 12, width: '90%', marginBottom: 4, borderRadius: tokens.radius.sm }}
         />
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
-        <div className="skeleton" style={{ height: 12, width: '80%', borderRadius: 4 }} />
+        <div
+          className="skeleton"
+          style={{ height: 12, width: '80%', borderRadius: tokens.radius.sm }}
+        />
       </div>
     )
   }
@@ -71,9 +69,9 @@ export default function DefiOverview() {
   if (error || !data) {
     return (
       <div style={cardStyle}>
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <div
           style={{
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
             fontSize: 10,
             color: tokens.colors.text.tertiary,
             fontWeight: tokens.typography.fontWeight.medium,
@@ -84,9 +82,9 @@ export default function DefiOverview() {
         >
           {t('defiOverview')}
         </div>
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <div
           style={{
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
             fontSize: 11,
             color: tokens.colors.text.tertiary,
             textAlign: 'center',
@@ -101,9 +99,9 @@ export default function DefiOverview() {
 
   return (
     <div style={cardStyle}>
-      {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
       <div
         style={{
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
           fontSize: 10,
           color: tokens.colors.text.tertiary,
           fontWeight: tokens.typography.fontWeight.medium,
@@ -115,10 +113,10 @@ export default function DefiOverview() {
         {t('defiOverview')}
       </div>
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginBottom: 4 }}>
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <span
           style={{
             fontSize: tokens.typography.fontSize.md,
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
             fontWeight: 800,
             color: tokens.colors.text.primary,
             lineHeight: 1,
@@ -126,9 +124,9 @@ export default function DefiOverview() {
         >
           {formatTVL(data.totalTVL)}
         </span>
-        {/* eslint-disable-next-line no-restricted-syntax -- off-scale by design */}
         <span
           style={{
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
             fontSize: 11,
             fontWeight: tokens.typography.fontWeight.semibold,
             color:
@@ -140,13 +138,13 @@ export default function DefiOverview() {
         </span>
       </div>
       {data.topProtocols.slice(0, 3).map((p) => (
-        // eslint-disable-next-line no-restricted-syntax -- off-scale by design
         <div
           key={p.id}
           style={{
             display: 'flex',
             justifyContent: 'space-between',
             padding: '1px 0',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
             fontSize: 11,
           }}
         >
