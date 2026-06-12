@@ -1,0 +1,3294 @@
+{
+  "timeframe": 7,
+  "detail": {
+    "code": 200,
+    "data": {
+      "avatar": "https://image.tbstatic.com/plain/9001/668939882/ELJi3k2tcyXdEf2YZ6eA8hW3Aj-LaeVtG5-Kn6jy5vU.png",
+      "currentFollowerCount": "6",
+      "isFollow": false,
+      "isFull": false,
+      "lastWeekWinRate": "1",
+      "leaderUserId": "668939882",
+      "maxLeadCount": "100",
+      "nickname": "Top trade(usdt)",
+      "profitSharingRate": "0.1",
+      "startLeadTime": "1746710277746",
+      "summary": "🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥The goal of trading is not to be wrong, the goal is to make money, and I think that's my number one rule: don't dwell on your current successes\n🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥🔥\n telegram//me",
+      "symbolConfigs": [
+        {
+          "leverage": "75",
+          "symbolId": "AVAX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ZEN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RONIN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "BILL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "G-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "AAVE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ACT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "NOT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "VELODROME-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "XAI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "1000CHEEMS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "MOODENG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "1000CAT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "USTC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "UAI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "YB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "GPS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "1000PEPE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "FARTCOIN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SUSHI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "CRO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SOMI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "POWER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RIF-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "T-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "OKB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "HYPE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "JOE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "LUMIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TRUST-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "40",
+          "symbolId": "JCT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "INIT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "HOLO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "WIF-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "MAGMA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "1MBABYDOGE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MYX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CVC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "MAV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "GMX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MANTA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "HAEDAL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ARB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "LA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "ENJ-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CTK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MITO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "1000SATS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "EVAA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "JELLYJELLY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "RAVE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "YFI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "FOLKS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "AERO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "WCT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "FOGO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "IMX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "XTI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "1000FLOKI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "INJ-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "GRIFFAIN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BLUAI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "DASH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PROVE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "POPCAT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "FLOW-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SOON-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "PENDLE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BABY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "OG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "C-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ACX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "XTZ-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "OGN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "VVV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "IN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CHZ-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "1000RATS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "EDU-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "XNY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "FLUX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "SHELL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SLP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ANIME-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ZAMA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AXL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AUCTION-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "UK100-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ZORA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "HUMA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "FET-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ICX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "IDOL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "ARK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PENGU-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BIRB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ZRO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "HBAR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ENSO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "GOOGL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "DYDX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "KAIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "10",
+          "symbolId": "ZEST-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "GMT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PARTI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MANA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "OPEN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "MASK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "DEEP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "CTR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "STG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ETHFI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "LINEA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MMT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MINA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PUNDIX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "JTO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SAND-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "DYM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "XPD-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "DRIFT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "CROSS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "AVAAI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SCR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "GIGGLE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "RLC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "STX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CVX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "BROCCOLI714-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CKB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "ROBO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BAT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "CARV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "ARKM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "AVA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "B2-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TAO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "HFT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "PROMPT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ATOM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SOPH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SAHARA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "MAGIC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "PORTAL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "DOLO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ZIL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ASTER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "STBL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "CYS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TAKE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "CRV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SPX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ASR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "C98-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "GTC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "MUBARAK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "GRT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "HOME-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "MEW-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "200",
+          "symbolId": "BTC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "HEI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "M-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ZETA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "XMR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "BR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "IOTA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "KOMA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "NVDA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "MAVIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": -1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "TON-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "LQTY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "WLFI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "STO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "JST-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ALICE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "BIO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "TREE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "XPIN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "40",
+          "symbolId": "PIEVERSE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "PI2-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "WLD-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "A-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MET-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "ROSE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "THETA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "PUMPBTC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TRADOOR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "FIL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "1INCH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "LIGHT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "40",
+          "symbolId": "US-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "SIREN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "ESP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "DODOX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "USELESS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BSV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ENA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "NIL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TAIKO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "NFP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "0G-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BLESS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "TRX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "COTI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TRB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RESOLV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "FF-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "SPACE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "CRCL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ZEC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "HANA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "MORPHO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "DOOD-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AKE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "ICP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "JASMY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "200",
+          "symbolId": "XAUT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ZK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SWARMS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "POLYX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "HEMI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ESPORTS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CGPT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "COAI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "PYTH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "SKL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "HMSTR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ALCH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "SPX500-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "FLOCK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "OPN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "IO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "CYBER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "DUSK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MANTRA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "1000BONK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "UMA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PIPPIN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "FIGHT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TRUTH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ORDI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "COW-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "VIC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "LISTA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "JUP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "KERNEL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "LDO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "2Z-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "FRAX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "PRL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TAG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "500",
+          "symbolId": "XAG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "CFG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "IP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "EUL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "EGLD-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "4-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ONT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "SOL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "IOST-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "APT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ZEREBRO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "500",
+          "symbolId": "PAXG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "CTSI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "RPL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SAFE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "THE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TRIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "NAORIS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "LSK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "NEO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "IOTX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "VANA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TURTLE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "TLM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "AIXBT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SONIC2-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "MEME-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "APR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "10",
+          "symbolId": "ACU-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "F-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "10",
+          "symbolId": "BTW-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "VELVET-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "POWR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "40",
+          "symbolId": "SENT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "GLM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "1000SHIB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "15",
+          "symbolId": "AERGO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "GENIUS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "APE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "NEIRO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "NEAR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "PLUME-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "SOLSTICE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "KSM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "W-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "COOKIE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "NAS100-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "PLAY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SYRUP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "TOSHI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "BLUR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ALLO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "MSTR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SNX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "ATH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "BANANAS31-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "METIS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "ACH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "BCH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "LAYER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ONG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "40",
+          "symbolId": "ZKP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "CHIP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RUNE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "VTHO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SUI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ZBT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "NEWT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "1000LUNC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ARPA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "RAY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "STABLE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "KAVA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "TUT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "200",
+          "symbolId": "ETH-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "MOCA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "CLO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "AIGENSYN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "HYPER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "INX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "XLM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ON-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "BAN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PNUT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BEAMX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ONE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BNT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "AKT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "XBR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "125",
+          "symbolId": "XRP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CHILLGUY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "LIT2-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "REZ-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "AR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BANK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "WAL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SKY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "RED-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AXS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "ID2-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AEVO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SOLV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "EIGEN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "XPT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CELO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "BB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "AWE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "TOWNS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "LYN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "YGG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TWT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "ANKR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "KMNO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "SSV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "MTL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "NIGHT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "WAXP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "OPG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SPELL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "FLUID-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "LPT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ILV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BREV-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "AIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ERA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "SPORTFUN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BANANA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "KITE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "STEEM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ARIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "DEXE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CETUS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SQD-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "500",
+          "symbolId": "XAU-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "POL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "H-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "S-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SKYAI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "B-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "WOO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "SFP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "1000000MOG-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "BERA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "DOGE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "USUAL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "GUN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "AAPL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "1000XEC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "KAITO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "NOM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "IRYS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "TSLA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "RSR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "BNB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BULLA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SPK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "GRASS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AIN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "CELR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PHA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SUN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "LINK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "NMR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ONDO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ETC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "FORM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "COLLECT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ORDER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "MON-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "BIGTIME-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "GOAT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RARE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "NXPC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "MELANIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MOVR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "VIRTUAL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "PTB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ETHW-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SXT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AIO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TAC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "BMT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "OP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "UB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "KAS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "GAS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AGT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "VET-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "TST-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "WET-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BAS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "LTC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "AZTEC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "PEOPLE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SEI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "MERL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "MIRA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PUMP2-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PROM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BOME-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "CAKE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BRETT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "XAN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "PHAROS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ORCA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SCRT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "COPPER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "TIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "CLANKER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "LAB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "QTUM-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "10",
+          "symbolId": "BSB-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SAGA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "ELSA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "CFX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "EDGEX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "40",
+          "symbolId": "BEAT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "SKR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ICNT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "EPIC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "BICO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "10",
+          "symbolId": "KAT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "MEGA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BAND-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SUPER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ALPINE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CATI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ADA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RVN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RENDER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "TURBO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AVNT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "VANRY-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ENS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "DIA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "FHE-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "Q-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SAPIEN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "TRUMP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "XPL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "KNC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "CHR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "BTR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "BASED-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ASTR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "PIXEL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "BARD-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "DOT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RIVER-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "LUNA2-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "AGLD-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "GALA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "RECALL-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ALGO-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "SYN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "FIDA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "100",
+          "symbolId": "INTC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "API3-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "XVS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "CC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "SIGN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "QNT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "DOGS-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "COMP-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "TNSR-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "STRK-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "20",
+          "symbolId": "GUA-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "GWEI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "21",
+          "symbolId": "STORJ-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "ZRX-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "25",
+          "symbolId": "HOT-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "UNI-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "200",
+          "symbolId": "EUR-SWAP-USDT",
+          "isLead": 1,
+          "visible": -1
+        },
+        {
+          "leverage": "50",
+          "symbolId": "KGEN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "ZKC-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        },
+        {
+          "leverage": "75",
+          "symbolId": "EDEN-SWAP-USDT",
+          "isLead": 1,
+          "visible": 1
+        }
+      ],
+      "totalFollowerCount": "6",
+      "totalLeadAmount": "190.83",
+      "totalLeadProfit": "184.8273",
+      "totalLeadProfitRate": "0.9685",
+      "tradeCount": "161",
+      "cardSize": 0,
+      "cardMaxDeduction": "0",
+      "isNeedInvite": 0,
+      "levelName": "Co-Pilot",
+      "levelIcon": "https://image.tbstatic.com/bhop/image/JvQ4NAanbUA7kJLjWMM6xbygs210vR2GcBRi0E9dRPo.png",
+      "levelId": "1",
+      "joinTime": "1746710277746",
+      "webBanner": "",
+      "webUrl": "",
+      "appBanner": "",
+      "appUrl": "",
+      "tradeProtect": 1,
+      "unLeadType": 0,
+      "unLeadStartTime": 0,
+      "unLeadEndTime": 0,
+      "leadPositionType": -1,
+      "shareHost": "https://www.toobit.com",
+      "translateButton": false,
+      "identityType": 1,
+      "recommendShare": 0,
+      "recommendShareRate": "0",
+      "inviteCode": "T7uEtn",
+      "leadDays": "399"
+    }
+  },
+  "radar": {
+    "code": 200,
+    "data": {
+      "leaderId": 668939882,
+      "type": 7,
+      "leaderProfitOrderRatio": "1",
+      "leaderProfitOrderRatioProportion": "1",
+      "leaderProfitRatio": "0.7729",
+      "leaderProfitRatioProportion": "1",
+      "leaderMaximumDrawdown": "0.4134",
+      "leaderMaximumDrawdownProportion": "0.5866",
+      "leaderJoinDuration": "34532908941",
+      "leaderJoinDurationProportion": "1",
+      "leaderProfitAndLossRatio": "--",
+      "leaderProfitAndLossRatioProportion": "1"
+    }
+  },
+  "accumulate": {
+    "code": 200,
+    "data": [
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20260606",
+        "symbolId": "all",
+        "value": "4.8"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20260607",
+        "symbolId": "all",
+        "value": "10.84"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20260608",
+        "symbolId": "all",
+        "value": "10.84"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20260609",
+        "symbolId": "all",
+        "value": "12.28"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20260610",
+        "symbolId": "all",
+        "value": "24.66"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20260611",
+        "symbolId": "all",
+        "value": "24.66"
+      },
+      {
+        "leaderId": 668939882,
+        "type": 7,
+        "date": "20260612",
+        "symbolId": "all",
+        "value": "29.82"
+      }
+    ]
+  }
+}
