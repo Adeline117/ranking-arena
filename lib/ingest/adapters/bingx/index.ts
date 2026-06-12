@@ -105,7 +105,6 @@ const bingxAdapter: SourceAdapter = {
     const fetcher = apiFetcher(await session.api())
     const pageSize = src.page_size ?? 12
     const maxPages = Number(src.meta.max_pages) || null
-    // The parser reads the requested TF off ctx.meta.timeframe.
     const ctx = () => ({
       sourceSlug: src.slug,
       currency: src.currency,
@@ -124,13 +123,17 @@ const bingxAdapter: SourceAdapter = {
         headers: template.headers, // signed headers verbatim (sign covers body)
         body: template.body,
       }),
+      // extractMeta sees the raw search payload (rankStat holds all TFs, so the
+      // count is TF-independent here).
       extractMeta: (payload) => {
         const parsed = parseBingxLeaderboardPage(payload, ctx())
         return { rowCount: parsed.rows.length, reportedTotal: parsed.reportedTotal }
       },
       pageSize,
     })) {
-      yield page
+      // Store the TF WITH the payload so the pure parser re-reads it from RAW
+      // (the rankStat carries every period; the TF can't be inferred otherwise).
+      yield { ...page, payload: { search: page.payload, timeframe } }
       pagesYielded += 1
       if (maxPages !== null && pagesYielded >= maxPages) return
     }
