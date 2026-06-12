@@ -1,0 +1,38 @@
+{
+  "success": true,
+  "code": "200",
+  "msg": "success",
+  "retry": false,
+  "data": {
+    "currentPage": 1,
+    "pageSize": 10,
+    "totalNum": 47,
+    "totalPage": 5,
+    "items": [
+      {
+        "uid": null,
+        "nickName": "jm4***@privaterelay.appleid.com",
+        "avatar": "https://assets.staticimg.com/kc-v2-config/avatar/6968931a6ffcd300015ad6db_aRZriu.png",
+        "copyDays": 90,
+        "copyPrincipal": "10.00000000000000000000",
+        "pnl": "32.59351779400000000000"
+      },
+      {
+        "uid": null,
+        "nickName": "mac***@gmail.com",
+        "avatar": "https://assets.staticimg.com/kc-v2-config/avatar/696891376ffcd300015ad6a0_mGwODBV.png",
+        "copyDays": 1,
+        "copyPrincipal": "225.00000000000000000000",
+        "pnl": "25.62921143000000000000"
+      },
+      {
+        "uid": null,
+        "nickName": "lui***@icloud.com",
+        "avatar": "https://assets.staticimg.com/kc-v2-config/avatar/6968924a6ffcd300015ad6bd_lUIcwBku.png",
+        "copyDays": 3,
+        "copyPrincipal": "100.00000000000000000000",
+        "pnl": "23.42086481800000000000"
+      }
+    ]
+  }
+}

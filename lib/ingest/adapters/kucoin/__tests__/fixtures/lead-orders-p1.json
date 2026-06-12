@@ -1,0 +1,47 @@
+{
+  "success": true,
+  "code": "200",
+  "msg": "success",
+  "retry": false,
+  "data": {
+    "currentPage": 1,
+    "pageSize": 10,
+    "totalNum": 2056,
+    "totalPage": 206,
+    "items": [
+      {
+        "symbolCode": "ETCUSDTM",
+        "tradeSide": "OPEN_SHORT",
+        "leverage": "20.00000000000000000000",
+        "marginType": null,
+        "dealPrice": "7.23700000000000000000",
+        "dealSize": "344.12000000000000000000",
+        "realizedPnl": "0",
+        "tradeTime": 1781222669000,
+        "orderId": "BN-29448333491"
+      },
+      {
+        "symbolCode": "NEARUSDTM",
+        "tradeSide": "OPEN_SHORT",
+        "leverage": "20.00000000000000000000",
+        "marginType": null,
+        "dealPrice": "2.04800000000000000000",
+        "dealSize": "1215.00000000000000000000",
+        "realizedPnl": "0",
+        "tradeTime": 1781219029000,
+        "orderId": "BN-33647765921"
+      },
+      {
+        "symbolCode": "BNBUSDTM",
+        "tradeSide": "OPEN_LONG",
+        "leverage": "20.00000000000000000000",
+        "marginType": null,
+        "dealPrice": "603.30102000000000000000",
+        "dealSize": "4.12000000000000000000",
+        "realizedPnl": "0",
+        "tradeTime": 1781199309000,
+        "orderId": "BN-91408961285"
+      }
+    ]
+  }
+}
