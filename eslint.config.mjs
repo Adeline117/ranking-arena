@@ -161,6 +161,7 @@ const eslintConfig = defineConfig([
       'app/components/onboarding/WelcomeModal.tsx',
       'app/components/market/DefiOverview.tsx',
       'app/components/utils/ErrorBoundary.tsx',
+      'app/components/home/SSRRankingTable.tsx',
     ],
     rules: {
       'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...appRestrictedSyntax],

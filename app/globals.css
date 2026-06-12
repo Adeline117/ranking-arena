@@ -342,7 +342,9 @@ html.theme-transition #main-content {
   --color-medal-gold: #ffd700;
   --color-medal-gold-end: #ffa500;
   --color-medal-silver: #c0c0c0;
+  --color-medal-silver-end: #a0a0a0;
   --color-medal-bronze: #cd7f32;
+  --color-medal-bronze-end: #a0522d;
 
   /* Active button text on accent bg */
   --color-on-accent: #ffffff;
@@ -575,7 +577,9 @@ html.theme-transition #main-content {
   --color-medal-gold: #b8860b;
   --color-medal-gold-end: #cd950c;
   --color-medal-silver: #808080;
+  --color-medal-silver-end: #6b6b6b;
   --color-medal-bronze: #8b5a2b;
+  --color-medal-bronze-end: #74471f;
 
   /* Active button text on accent bg */
   --color-on-accent: #ffffff;
