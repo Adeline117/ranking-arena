@@ -29,39 +29,18 @@ export function getQueue(): Queue {
 
 // ── Job names ──
 
+// ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch:platform / enrich:platform jobs
+// removed — leaderboard data is produced by the arena-ingest queue. This queue
+// only carries the downstream chain (Arena Score + Meilisearch sync).
 export const JOB = {
-  // Stage 1: Fetch leaderboard data from exchanges
-  FETCH_PLATFORM: 'fetch:platform',
-
-  // Stage 2: Enrich with advanced metrics
-  ENRICH_PLATFORM: 'enrich:platform',
-
-  // Stage 3: Compute Arena Score + rankings
+  // Compute Arena Score + rankings
   COMPUTE_LEADERBOARD: 'score:compute',
 
-  // Stage 4: Distribute (cache, search, revalidate)
-  SYNC_REDIS: 'distribute:redis',
+  // Distribute (search)
   SYNC_MEILISEARCH: 'distribute:meilisearch',
-  REVALIDATE_PAGES: 'distribute:revalidate',
-
-  // Scheduling
-  SCHEDULE_FETCH_ALL: 'schedule:fetch-all',
-  SCHEDULE_ENRICH_ALL: 'schedule:enrich-all',
-  SCHEDULE_SCORE_ALL: 'schedule:score-all',
 } as const
 
 // ── Job data types ──
-
-export interface FetchPlatformData {
-  platform: string
-  windows: string[]
-}
-
-export interface EnrichPlatformData {
-  platform: string
-  period: string
-  limit: number
-}
 
 export interface ComputeLeaderboardData {
   season: '7D' | '30D' | '90D'
