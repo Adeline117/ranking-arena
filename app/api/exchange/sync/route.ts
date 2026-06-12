@@ -17,21 +17,13 @@ import {
   getBinanceTrades,
   calculateTradingStats as calculateBinanceTradingStats,
 } from '@/lib/exchange/binance'
-import {
-  getBybitAccount,
-  getBybitTrades,
-  calculateBybitTradingStats,
-} from '@/lib/exchange/bybit'
+import { getBybitAccount, getBybitTrades, calculateBybitTradingStats } from '@/lib/exchange/bybit'
 import {
   getBitgetAccount,
   getBitgetTrades,
   calculateBitgetTradingStats,
 } from '@/lib/exchange/bitget'
-import {
-  getMexcAccount,
-  getMexcTrades,
-  calculateMexcTradingStats,
-} from '@/lib/exchange/mexc'
+import { getMexcAccount, getMexcTrades, calculateMexcTradingStats } from '@/lib/exchange/mexc'
 import {
   getCoinexAccount,
   getCoinexTrades,
@@ -149,30 +141,9 @@ export const POST = withAuth(
       throw err
     }
 
-    // 保存交易统计数据
-    if (stats && stats.totalTrades > 0) {
-      const periodStart = new Date()
-      periodStart.setDate(periodStart.getDate() - 90)
-      const periodEnd = new Date()
-
-      await supabase
-        .from('user_trading_data')
-        .upsert({
-          user_id: user.id,
-          exchange,
-          period_start: periodStart.toISOString().split('T')[0],
-          period_end: periodEnd.toISOString().split('T')[0],
-          total_trades: stats.totalTrades,
-          avg_profit: stats.avgProfit,
-          avg_loss: stats.avgLoss,
-          profitable_trades_pct: stats.profitableTradesPct,
-          trades_per_week: stats.tradesPerWeek,
-          active_since: stats.activeSince?.toISOString().split('T')[0],
-          updated_at: new Date().toISOString(),
-        }, {
-          onConflict: 'user_id,exchange,period_start,period_end',
-        })
-    }
+    // Note: stats persistence removed — the user_trading_data table was
+    // intentionally dropped from prod and nothing ever read it. Stats are
+    // still computed live and returned in the response below.
 
     // 更新连接状态为成功
     await supabase

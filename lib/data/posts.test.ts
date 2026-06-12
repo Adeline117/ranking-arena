@@ -16,7 +16,6 @@ import {
   createPost,
   updatePost,
   deletePost,
-  incrementViewCount,
   getUserPostReaction,
   togglePostReaction,
   getUserPostVote,
@@ -287,16 +286,6 @@ describe('deletePost', () => {
     await expect(
       deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
     ).rejects.toThrow()
-  })
-})
-
-describe('incrementViewCount', () => {
-  test('should call rpc to increment view count', async () => {
-    const mockSupabase = createMockSupabase()
-    mockSupabase.rpc.mockResolvedValueOnce({ error: null })
-
-    await incrementViewCount(mockSupabase as unknown as SupabaseClient, 'post1')
-    expect(mockSupabase.rpc).toHaveBeenCalledWith('increment_post_view', { post_id: 'post1' })
   })
 })
 

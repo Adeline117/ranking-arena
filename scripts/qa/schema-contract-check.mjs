@@ -28,9 +28,29 @@ const CRITICAL_COLUMNS = {
 }
 
 // 已知误报豁免：动态拼名 / 测试桩 / 非 public schema（说明原因再加）
-const RPC_IGNORE = new Set([])
+const RPC_IGNORE = new Set([
+  // pro-official-group 三件套：prod 从未创建这些 RPC（仓库也无 CREATE TABLE
+  // pro_official_groups 迁移），但 app/api/pro-official-group/route.ts 检测
+  // 42883/PGRST202 后走 TS fallback（joinProOfficialGroupFallback 等），
+  // 功能可用 — 保留调用，待产品决定 ship-or-kill 后再清理。
+  'get_user_pro_official_group',
+  'join_pro_official_group',
+  'leave_pro_official_group',
+])
 const TABLE_IGNORE = new Set([
-  // PostgREST 系统入口，不是表
+  // Storage bucket，不是表：app/api/chat/upload 用的是
+  // supabase.storage.from('chat')，grep 的 .from('...') 模式误命中。
+  'chat',
+  // 产品决策待定（功能 UI 在线但表被删，不能由清理脚本单方面删代码）：
+  // tips — 打赏入口在 groups PostFooterActions（/api/tip/checkout）+ Stripe
+  //   webhook handler + settings/export。表被删后 insert 失败 → 路由在创建
+  //   Stripe session 之前就 500（fail-closed，不会扣款）。要么恢复 tips 表，
+  //   要么下线打赏 UI。
+  'tips',
+  // saved_filters — Pro 高级筛选保存（首页 RankingSection →
+  //   useRankingFilters / useSavedFilters → /api/saved-filters）。表被删后
+  //   保存/列表对 Pro 用户报错。要么恢复表，要么改 localStorage / 下线入口。
+  'saved_filters',
 ])
 
 // ---------- env ----------

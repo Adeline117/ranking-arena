@@ -16,15 +16,13 @@ export async function mintNFTForUser(userId: string, plan: string) {
 
     if (!profile?.wallet_address) {
       logger.info('User has no wallet address, NFT minting skipped', { userId })
-      await getSupabase()
-        .from('notifications')
-        .insert({
-          user_id: userId,
-          type: 'nft_pending',
-          title: '链接钱包领取 NFT 会员证',
-          body: '您已成功订阅 Pro 会员！链接钱包后即可获得 NFT 会员证明。',
-          data: { plan },
-        })
+      await getSupabase().from('notifications').insert({
+        user_id: userId,
+        type: 'nft_pending',
+        title: '链接钱包领取 NFT 会员证',
+        body: '您已成功订阅 Pro 会员！链接钱包后即可获得 NFT 会员证明。',
+        data: { plan },
+      })
       return
     }
 
@@ -62,17 +60,9 @@ export async function mintNFTForUser(userId: string, plan: string) {
           },
         })
     } else {
+      // No retry queue: the nft_mint_queue table was dropped from prod and no
+      // worker ever consumed it. The error log is the durable record.
       logger.error('NFT minting failed', { userId, error: result.error })
-      await getSupabase()
-        .from('nft_mint_queue')
-        .upsert({
-          user_id: userId,
-          wallet_address: profile.wallet_address,
-          plan: mintPlan,
-          status: 'pending',
-          error: result.error,
-          created_at: new Date().toISOString(),
-        }, { onConflict: 'user_id', ignoreDuplicates: true })
     }
   } catch (err) {
     logger.error('Error in mintNFTForUser', { userId, error: err })

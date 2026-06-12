@@ -47,9 +47,10 @@ export async function GET(request: NextRequest) {
     const days = Number(request.nextUrl.searchParams.get('days') || '7')
     const since = new Date(Date.now() - days * 86400000).toISOString()
 
-    // Pipeline success rate trend (from pipeline_job_logs)
+    // Pipeline success rate trend (from pipeline_logs — the live PipelineLogger
+    // table; the previously-referenced pipeline_job_logs never existed in prod)
     const pipelinePromise = supabase
-      .from('pipeline_job_logs')
+      .from('pipeline_logs')
       .select('status, started_at')
       .gte('started_at', since)
       .order('started_at', { ascending: true })
@@ -70,9 +71,9 @@ export async function GET(request: NextRequest) {
         }))
       })
 
-    // Error rate trend (from pipeline_job_logs)
+    // Error rate trend (from pipeline_logs)
     const errorRatePromise = supabase
-      .from('pipeline_job_logs')
+      .from('pipeline_logs')
       .select('status, started_at')
       .gte('started_at', since)
       .order('started_at', { ascending: true })
@@ -92,31 +93,22 @@ export async function GET(request: NextRequest) {
         }))
       })
 
-    // Active users trend (from user_profiles)
+    // New users by day (proxy for active users). The get_daily_active_users
+    // RPC never existed in prod and no migration defines it — this was the
+    // permanent fallback, so call it directly.
     const activeUsersPromise = supabase
-      .rpc('get_daily_active_users', { since_date: since })
-      .then(({ data, error }) => {
-        if (error || !data) {
-          // Fallback: count new users by day
-          return supabase
-            .from('user_profiles')
-            .select('created_at')
-            .gte('created_at', since)
-            .order('created_at', { ascending: true })
-            .then(({ data: users }) => {
-              if (!users) return [] as TrendPoint[]
-              const byDay = new Map<string, number>()
-              for (const u of users) {
-                const day = u.created_at?.slice(0, 10) || 'unknown'
-                byDay.set(day, (byDay.get(day) || 0) + 1)
-              }
-              return Array.from(byDay.entries()).map(([date, value]) => ({ date, value }))
-            })
+      .from('user_profiles')
+      .select('created_at')
+      .gte('created_at', since)
+      .order('created_at', { ascending: true })
+      .then(({ data: users }) => {
+        if (!users) return [] as TrendPoint[]
+        const byDay = new Map<string, number>()
+        for (const u of users) {
+          const day = u.created_at?.slice(0, 10) || 'unknown'
+          byDay.set(day, (byDay.get(day) || 0) + 1)
         }
-        return (data as Array<{ date: string; count: number }>).map(d => ({
-          date: d.date,
-          value: d.count,
-        }))
+        return Array.from(byDay.entries()).map(([date, value]) => ({ date, value }))
       })
 
     const [pipelineSuccessRate, errorRate, activeUsers] = await Promise.all([

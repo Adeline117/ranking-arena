@@ -68,16 +68,10 @@ export async function GET(_req: Request) {
     const reduction = ((currentCallsPerDay - expectedCallsPerDay) / currentCallsPerDay) * 100
     const costSavingsPerMonth = Math.round((reduction / 100) * 27690)
 
-    // 4. Query refresh queue from database views
-    const { data: queueData, error: queueError } = await supabase
-      .from('v_scheduler_refresh_queue')
-      .select(
-        'platform, market_type, trader_key, activity_tier, next_refresh_at, last_refreshed_at, priority_score'
-      )
-
-    if (queueError) {
-      logger.error('Failed to query refresh queue', { error: queueError })
-    }
+    // 4. Refresh queue view (v_scheduler_refresh_queue) does not exist in
+    // prod — 00026_smart_scheduler was never fully applied. Return an empty
+    // queue to keep the response shape for the monitoring dashboard.
+    const queueData: unknown[] = []
 
     // 5. Calculate data freshness by tier
     const { data: _freshnessData, error: freshnessError } = await supabase.rpc(

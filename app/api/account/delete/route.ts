@@ -105,19 +105,19 @@ export const POST = withAuth(
       // Remove user follows (both directions)
       supabase.from('user_follows').delete().eq('follower_id', user.id),
       supabase.from('user_follows').delete().eq('following_id', user.id),
-      // Remove bookmarks and bookmark folders
-      supabase.from('bookmarks').delete().eq('user_id', user.id),
+      // Remove bookmarks and bookmark folders (post_bookmarks is the live
+      // table; the legacy `bookmarks` table was dropped)
+      supabase.from('post_bookmarks').delete().eq('user_id', user.id),
       supabase.from('bookmark_folders').delete().eq('user_id', user.id),
       // Remove trader alerts
       supabase.from('trader_alerts').delete().eq('user_id', user.id),
       // Remove push subscriptions
       supabase.from('push_subscriptions').delete().eq('user_id', user.id),
-      // Remove saved searches
-      supabase.from('saved_searches').delete().eq('user_id', user.id),
       // Remove user preferences
       supabase.from('user_preferences').delete().eq('user_id', user.id),
-      // Anonymize messages (keep for recipient, but remove sender info)
-      supabase.from('messages').update({ sender_id: null }).eq('sender_id', user.id),
+      // Anonymize DMs (keep for recipient, but remove sender info).
+      // direct_messages is the live DM table; legacy `messages` was dropped.
+      supabase.from('direct_messages').update({ sender_id: null }).eq('sender_id', user.id),
     ]
 
     // Execute all cleanup in parallel, don't fail the deletion if some cleanup fails

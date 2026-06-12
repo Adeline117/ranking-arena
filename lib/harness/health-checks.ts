@@ -77,7 +77,13 @@ export async function checkFrontendHealth(baseUrl: string): Promise<HealthCheck[
           details = `Missing SSR content (expected "${page.expectSSR}")`
         }
 
-        return { name: `page:${page.name}`, category: 'frontend' as const, status, latency_ms: latency, details }
+        return {
+          name: `page:${page.name}`,
+          category: 'frontend' as const,
+          status,
+          latency_ms: latency,
+          details,
+        }
       } catch (err) {
         return {
           name: `page:${page.name}`,
@@ -92,7 +98,14 @@ export async function checkFrontendHealth(baseUrl: string): Promise<HealthCheck[
 
   for (const r of results) {
     if (r.status === 'fulfilled') checks.push(r.value)
-    else checks.push({ name: 'page:unknown', category: 'frontend', status: 'fail', latency_ms: 0, details: String(r.reason) })
+    else
+      checks.push({
+        name: 'page:unknown',
+        category: 'frontend',
+        status: 'fail',
+        latency_ms: 0,
+        details: String(r.reason),
+      })
   }
 
   return checks
@@ -142,7 +155,13 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
           details = `Missing key "${ep.expectKey}" in response`
         }
 
-        return { name: `api:${ep.name}`, category: 'api' as const, status, latency_ms: latency, details }
+        return {
+          name: `api:${ep.name}`,
+          category: 'api' as const,
+          status,
+          latency_ms: latency,
+          details,
+        }
       } catch (err) {
         return {
           name: `api:${ep.name}`,
@@ -157,7 +176,14 @@ export async function checkAPIHealth(baseUrl: string): Promise<HealthCheck[]> {
 
   for (const r of results) {
     if (r.status === 'fulfilled') checks.push(r.value)
-    else checks.push({ name: 'api:unknown', category: 'api', status: 'fail', latency_ms: 0, details: String(r.reason) })
+    else
+      checks.push({
+        name: 'api:unknown',
+        category: 'api',
+        status: 'fail',
+        latency_ms: 0,
+        details: String(r.reason),
+      })
   }
 
   return checks
@@ -195,91 +221,66 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       return {
         name: 'dq:ranking_order',
         category: 'data_quality' as const,
-        status: sorted ? 'pass' as const : 'fail' as const,
+        status: sorted ? ('pass' as const) : ('fail' as const),
         latency_ms: Date.now() - start,
-        details: sorted ? 'Top 10 rankings correctly ordered' : 'Ranking order inconsistency detected',
+        details: sorted
+          ? 'Top 10 rankings correctly ordered'
+          : 'Ranking order inconsistency detected',
       }
     })(),
 
-    // Check 2: No duplicate trader in same period
+    // Check 2: No duplicate trader in same period.
+    // Sample-based check — the check_leaderboard_duplicates RPC never existed
+    // in prod (no repo migration defines it), so the former "fallback" is the
+    // only implementation.
     (async () => {
       const start = Date.now()
-      let dupeCheck: number | null = null
-      try {
-        const { data } = await supabase.rpc('check_leaderboard_duplicates')
-        dupeCheck = data as number | null
-      } catch (_err) {
-        /* RPC not available */
-        dupeCheck = null
-      }
+      const { data: sample } = await supabase
+        .from('leaderboard_ranks')
+        .select('source, source_trader_id, season_id')
+        .eq('season_id', '90D')
+        .order('updated_at', { ascending: false })
+        .limit(500)
 
-      // Fallback: sample check
-      if (dupeCheck === null) {
-        const { data: sample } = await supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, season_id')
-          .eq('season_id', '90D')
-          .order('updated_at', { ascending: false })
-          .limit(500)
-
-        const seen = new Set<string>()
-        let dupes = 0
-        for (const r of sample || []) {
-          const key = `${r.source}:${r.source_trader_id}`
-          if (seen.has(key)) dupes++
-          seen.add(key)
-        }
-
-        return {
-          name: 'dq:no_duplicates',
-          category: 'data_quality' as const,
-          status: dupes === 0 ? 'pass' as const : 'fail' as const,
-          latency_ms: Date.now() - start,
-          details: dupes === 0 ? 'No duplicates in sample' : `${dupes} duplicates found in top 500`,
-        }
+      const seen = new Set<string>()
+      let dupes = 0
+      for (const r of sample || []) {
+        const key = `${r.source}:${r.source_trader_id}`
+        if (seen.has(key)) dupes++
+        seen.add(key)
       }
 
       return {
         name: 'dq:no_duplicates',
         category: 'data_quality' as const,
-        status: (dupeCheck as number) === 0 ? 'pass' as const : 'fail' as const,
+        status: dupes === 0 ? ('pass' as const) : ('fail' as const),
         latency_ms: Date.now() - start,
-        details: `${dupeCheck} duplicates`,
+        details: dupes === 0 ? 'No duplicates in sample' : `${dupes} duplicates found in top 500`,
       }
     })(),
 
-    // Check 3: Platform coverage — all active platforms have data
-    // Use the platform_stats materialized view / RPC if available instead of
-    // scanning 50K leaderboard_ranks rows (which repeatedly timed out at 30s
-    // under DB load and blew the 60s health-check-all budget). Falls back to
-    // a DISTINCT via sampling top 5K rows, which is enough for coverage.
+    // Check 3: Platform coverage — all active platforms have data.
+    // Sample top 5000 rows instead of a full 50K scan (which repeatedly timed
+    // out at 30s under DB load and blew the 60s health-check-all budget). Any
+    // active platform will be in the top few hundred rows by arena_score, so
+    // 5K is far more than enough. (The count_platforms_with_data RPC never
+    // existed in prod — no repo migration defines it.)
     (async () => {
       const start = Date.now()
-      // Try RPC first — ideally a cheap COUNT(DISTINCT source) query
-      let count = 0
-      try {
-        const { data: rpcData } = await supabase.rpc('count_platforms_with_data', { p_season_id: '90D' })
-        if (typeof rpcData === 'number' && rpcData > 0) count = rpcData
-      } catch { /* RPC not available, fall through */ }
-
-      if (count === 0) {
-        // Fallback: sample top 5000 rows instead of full 50K scan. Any active
-        // platform will be in the top few hundred rows by arena_score, so 5K
-        // is far more than enough to detect coverage gaps.
-        const { data: platforms } = await supabase
-          .from('leaderboard_ranks')
-          .select('source')
-          .eq('season_id', '90D')
-          .not('arena_score', 'is', null)
-          .order('arena_score', { ascending: false })
-          .limit(5000)
-        count = new Set((platforms || []).map(p => p.source)).size
-      }
+      const { data: platforms } = await supabase
+        .from('leaderboard_ranks')
+        .select('source')
+        .eq('season_id', '90D')
+        .not('arena_score', 'is', null)
+        .order('arena_score', { ascending: false })
+        .limit(5000)
+      const count = new Set((platforms || []).map((p) => p.source)).size
 
       return {
         name: 'dq:platform_coverage',
         category: 'data_quality' as const,
-        status: count >= 20 ? 'pass' as const : count >= 15 ? 'warn' as const : 'fail' as const,
+        status:
+          count >= 20 ? ('pass' as const) : count >= 15 ? ('warn' as const) : ('fail' as const),
         latency_ms: Date.now() - start,
         details: `${count} platforms with data in 90D leaderboard`,
       }
@@ -319,11 +320,17 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       return {
         name: 'dq:anomaly_check',
         category: 'data_quality' as const,
-        status: anomalies === 0 ? 'pass' as const : anomalies <= 3 ? 'warn' as const : 'fail' as const,
+        status:
+          anomalies === 0
+            ? ('pass' as const)
+            : anomalies <= 3
+              ? ('warn' as const)
+              : ('fail' as const),
         latency_ms: Date.now() - start,
-        details: anomalies === 0
-          ? 'No anomalies in top 100'
-          : `${anomalies} anomalies: ${issues.slice(0, 3).join(', ')}`,
+        details:
+          anomalies === 0
+            ? 'No anomalies in top 100'
+            : `${anomalies} anomalies: ${issues.slice(0, 3).join(', ')}`,
       }
     })(),
 
@@ -344,7 +351,8 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       return {
         name: 'dq:freshness',
         category: 'data_quality' as const,
-        status: ageHours < 2 ? 'pass' as const : ageHours < 6 ? 'warn' as const : 'fail' as const,
+        status:
+          ageHours < 2 ? ('pass' as const) : ageHours < 6 ? ('warn' as const) : ('fail' as const),
         latency_ms: Date.now() - start,
         details: `Leaderboard last updated ${ageHours.toFixed(1)}h ago`,
       }
@@ -359,14 +367,16 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       const start = Date.now()
       const counts: Record<string, number> = {}
 
-      const countResults = await Promise.all(['7D', '30D', '90D'].map(async (period) => {
-        const { count } = await supabase
-          .from('leaderboard_ranks')
-          .select('*', { count: 'estimated', head: true })
-          .eq('season_id', period)
-          .not('arena_score', 'is', null)
-        return [period, count ?? 0] as const
-      }))
+      const countResults = await Promise.all(
+        ['7D', '30D', '90D'].map(async (period) => {
+          const { count } = await supabase
+            .from('leaderboard_ranks')
+            .select('*', { count: 'estimated', head: true })
+            .eq('season_id', period)
+            .not('arena_score', 'is', null)
+          return [period, count ?? 0] as const
+        })
+      )
       for (const [period, c] of countResults) counts[period] = c
 
       // 7D should be at least 30% of 90D (some traders may not have 7D data)
@@ -376,7 +386,7 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       return {
         name: 'dq:period_consistency',
         category: 'data_quality' as const,
-        status: isConsistent ? 'pass' as const : 'warn' as const,
+        status: isConsistent ? ('pass' as const) : ('warn' as const),
         latency_ms: Date.now() - start,
         details: `7D: ${counts['7D']}, 30D: ${counts['30D']}, 90D: ${counts['90D']} (ratio 7D/90D: ${(ratio7d * 100).toFixed(0)}%)`,
       }
@@ -387,7 +397,13 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
     if (r.status === 'fulfilled') checks.push(r.value)
     else {
       logger.warn('[health-checks] Data quality check failed:', r.reason)
-      checks.push({ name: 'dq:error', category: 'data_quality', status: 'fail', latency_ms: 0, details: String(r.reason) })
+      checks.push({
+        name: 'dq:error',
+        category: 'data_quality',
+        status: 'fail',
+        latency_ms: 0,
+        details: String(r.reason),
+      })
     }
   }
 
@@ -401,14 +417,19 @@ export async function runFullHealthCheck(baseUrl: string): Promise<HealthReport>
 
   // Run all categories in parallel — surface crash as explicit FAIL check instead of silent []
   const categoryMap = { frontend: 'frontend', api: 'api', data: 'data_quality' } as const
-  const wrapCategory = (name: keyof typeof categoryMap, fn: Promise<HealthCheck[]>): Promise<HealthCheck[]> =>
-    fn.catch((err): HealthCheck[] => [{
-      name: `${name}_crash`,
-      category: categoryMap[name],
-      status: 'fail',
-      details: `Health check category crashed: ${err instanceof Error ? err.message : String(err)}`,
-      latency_ms: 0,
-    }])
+  const wrapCategory = (
+    name: keyof typeof categoryMap,
+    fn: Promise<HealthCheck[]>
+  ): Promise<HealthCheck[]> =>
+    fn.catch((err): HealthCheck[] => [
+      {
+        name: `${name}_crash`,
+        category: categoryMap[name],
+        status: 'fail',
+        details: `Health check category crashed: ${err instanceof Error ? err.message : String(err)}`,
+        latency_ms: 0,
+      },
+    ])
 
   const [frontendChecks, apiChecks, dataChecks] = await Promise.all([
     wrapCategory('frontend', checkFrontendHealth(baseUrl)),
@@ -419,11 +440,11 @@ export async function runFullHealthCheck(baseUrl: string): Promise<HealthReport>
   const allChecks = [...frontendChecks, ...apiChecks, ...dataChecks]
 
   // Calculate score
-  const passCount = allChecks.filter(c => c.status === 'pass').length
-  const warnCount = allChecks.filter(c => c.status === 'warn').length
-  const failCount = allChecks.filter(c => c.status === 'fail').length
+  const passCount = allChecks.filter((c) => c.status === 'pass').length
+  const warnCount = allChecks.filter((c) => c.status === 'warn').length
+  const failCount = allChecks.filter((c) => c.status === 'fail').length
   const total = allChecks.length || 1
-  const score = Math.round(((passCount * 100 + warnCount * 50) / total))
+  const score = Math.round((passCount * 100 + warnCount * 50) / total)
 
   let overall: 'healthy' | 'degraded' | 'critical' = 'healthy'
   if (failCount > 0 || score < 60) overall = 'critical'

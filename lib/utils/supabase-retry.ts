@@ -71,7 +71,7 @@ function isRetryableError(error: unknown): boolean {
  *
  * @example
  * const result = await retrySupabaseQuery(
- *   () => supabase.from('traders').upsert(data),
+ *   () => supabase.from('trader_sources').upsert(data),
  *   { maxAttempts: 3 }
  * )
  */
