@@ -200,10 +200,8 @@ export default function RecommendedGroups() {
                   padding: `${tokens.spacing[2]} ${tokens.spacing[1.5]}`,
                   textDecoration: 'none',
                   borderRadius: tokens.radius.md,
-                  transition: `background ${tokens.transition.fast}`,
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.background = tokens.colors.bg.tertiary)}
-                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
+                className="hover-bg"
               >
                 <GroupAvatar name={displayName} avatarUrl={g.avatar_url} size={36} />
                 <div style={{ flex: 1, minWidth: 0 }}>
