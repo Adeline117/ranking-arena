@@ -19,7 +19,13 @@ config({ path: resolve(__dirname, '..', '.env') })
 
 import { Worker, type Job } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
-import { INGEST_QUEUE_NAME, TIERC_QUEUE_NAME, INGEST_JOB, ingestConnection } from './ingest/queues'
+import {
+  TIERC_QUEUE_NAME,
+  INGEST_JOB,
+  ingestConnection,
+  consumedRegions,
+  regionQueueName,
+} from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
 
 // Playwright sessions are heavy on a Mac Mini; per-source serialization
@@ -75,22 +81,25 @@ async function main(): Promise<void> {
   // Register adapters (side-effect imports add them to the registry).
   await import('@/lib/ingest/adapters/register')
 
-  const worker = new Worker(INGEST_QUEUE_NAME, route, {
-    connection: ingestConnection(),
-    concurrency: INGEST_CONCURRENCY,
-    // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
-    // misfires across pm2 restarts ("job stalled more than allowable limit").
-    // Longer lock + renewal headroom; stalled jobs still recover via retry.
-    lockDuration: 180_000,
-    stalledInterval: 300_000,
-    maxStalledCount: 2,
-  })
-
-  worker.on('completed', (job) => {
-    console.log(`[ingest-worker] ✓ ${job.name} (${job.id})`)
-  })
-  worker.on('failed', (job, err) => {
-    console.error(`[ingest-worker] ✗ ${job?.name} (${job?.id}):`, err.message)
+  const regions = consumedRegions()
+  const workers = regions.map((region) => {
+    const w = new Worker(regionQueueName(region), route, {
+      connection: ingestConnection(),
+      concurrency: INGEST_CONCURRENCY,
+      // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
+      // misfires across pm2 restarts ("job stalled more than allowable limit").
+      // Longer lock + renewal headroom; stalled jobs still recover via retry.
+      lockDuration: 180_000,
+      stalledInterval: 300_000,
+      maxStalledCount: 2,
+    })
+    w.on('completed', (job) => {
+      console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}]`)
+    })
+    w.on('failed', (job, err) => {
+      console.error(`[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}]:`, err.message)
+    })
+    return w
   })
 
   // Dedicated Tier-C worker: user-facing on-demand fetches get their own
@@ -113,12 +122,14 @@ async function main(): Promise<void> {
     reconcileSchedulers().catch((err) => console.error('[ingest-worker] reconcile failed:', err))
   }, 60 * 60_000)
 
-  console.log(`[ingest-worker] ready (concurrency=${INGEST_CONCURRENCY})`)
+  console.log(
+    `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY})`
+  )
 
   const shutdown = async (signal: string) => {
     console.log(`[ingest-worker] ${signal} — shutting down…`)
     clearInterval(reconcileTimer)
-    await worker.close()
+    await Promise.all(workers.map((w) => w.close()))
     await tiercWorker.close()
     const { closeIngestPool } = await import('@/lib/ingest/db')
     await closeIngestPool()

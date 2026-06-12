@@ -16,6 +16,55 @@ export function ingestConnection(): ConnectionOptions {
 export const INGEST_QUEUE_NAME = 'arena-ingest'
 
 /**
+ * Region-affine queues (architecture: kill the remote-browser failure
+ * chain instead of self-healing it). Bulk tier jobs for a source are
+ * enqueued onto its fetch_region's queue:
+ *   local   → arena-ingest          (Mac Mini)
+ *   vps_sg  → arena-ingest-vps_sg   (consumed by Mac Mini via remote WS
+ *             today; by a worker ON the VPS — where the source becomes
+ *             effectively local — once deployed there)
+ * A worker consumes the queues listed in INGEST_REGIONS (default: all,
+ * preserving single-node behavior). Tier-C stays on its own queue
+ * regardless of region (user-facing latency path).
+ */
+export const INGEST_REGIONS = ['local', 'vps_sg', 'vps_jp'] as const
+export type IngestRegion = (typeof INGEST_REGIONS)[number]
+
+export function regionQueueName(region: string): string {
+  return region === 'local' ? INGEST_QUEUE_NAME : `${INGEST_QUEUE_NAME}-${region}`
+}
+
+const regionQueues = new Map<string, Queue>()
+
+export function getRegionQueue(region: string): Queue {
+  const name = regionQueueName(region)
+  let q = regionQueues.get(name)
+  if (!q) {
+    q = new Queue(name, {
+      connection: ingestConnection(),
+      defaultJobOptions: {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
+        removeOnComplete: { age: 24 * 3600, count: 500 },
+        removeOnFail: { age: 7 * 24 * 3600, count: 2000 },
+      },
+    })
+    regionQueues.set(name, q)
+  }
+  return q
+}
+
+/** Regions THIS worker process consumes (env INGEST_REGIONS=vps_sg on a VPS node). */
+export function consumedRegions(): IngestRegion[] {
+  const raw = process.env.INGEST_REGIONS
+  if (!raw) return [...INGEST_REGIONS]
+  return raw
+    .split(',')
+    .map((r) => r.trim())
+    .filter((r): r is IngestRegion => (INGEST_REGIONS as readonly string[]).includes(r))
+}
+
+/**
  * Tier-C runs on its OWN queue + worker slots: bulk Tier-A/B crawls hold
  * the main queue's 3 slots for up to ~hours, and a user-facing on-demand
  * fetch must never wait behind them (the route's polling window is 8s).
