@@ -153,6 +153,10 @@ const eslintConfig = defineConfig([
       'app/components/post/PostDetailModal.tsx',
       'app/components/profile/MobileProfileMenu.tsx',
       'app/components/ranking/RankingFilters.tsx',
+      'app/components/post/components/PostDetailView.tsx',
+      'app/components/trader/AdvancedMetricsCard.tsx',
+      'app/components/trader/MarketCorrelationCard.tsx',
+      'app/components/trader/CopyTradeSimulator.tsx',
     ],
     rules: {
       'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...appRestrictedSyntax],
