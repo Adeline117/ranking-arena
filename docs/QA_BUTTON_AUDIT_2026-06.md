@@ -65,10 +65,10 @@
 
 ## ⚠️ 遗留事项（需要决策/后续）
 
-1. **迁移 `20260602223029_restrict_user_profiles_pii_columns.sql` 未应用到生产** — `get_own_profile_sensitive` RPC 404，设置页通知偏好/2FA 状态以默认值显示（客户端已优雅降级）。需人工确认后应用。
-2. **Stripe checkout URL 是 `cs_test_`（测试模式）** — 生产订阅按钮跳的是 Stripe 测试环境，真实用户无法付费。若 beta 期有意为之可忽略，否则需换 live keys。
+1. ~~迁移 `20260602223029` 未应用~~ — **已根治**（`5190ad318`）：原版 GRANT 引用不存在的列必失败，按实测 schema 重写为 v2 并应用生产；客户端 94 处读取清查后 search-history 迁 RPC-first、privy 邮箱枚举探测删除；referral_code/referred_by/last_export_at 三列补齐（`d81da6a68`）。QA 验证：他人 email 42501 / handle 200 / RPC 200。
+2. **Stripe 保持测试模式**（用户确认 beta 期有意为之，2026-06-12）。
 3. **admin data-health 页**调用仅接受 `ADMIN_SECRET` 的路由，浏览器无法提供 — 路由需支持 admin 用户 Bearer。
-4. ~~`/api/follow` `/api/watchlist` `/api/referral` schema 漂移~~ — **已全部根治**（`9d2047a7e`）：follow 触发器查已删 traders 表（DB 函数已修+生产验证）；trader_watchlist 迁移补应用生产（功能恢复+增删查验证）；referral 以 handle 为 code 优雅降级。`referral_code`/`referred_by` 列是否补迁移待产品决策。
+4. ~~`/api/follow` `/api/watchlist` `/api/referral` schema 漂移~~ — **已全部根治**（`9d2047a7e` + `d81da6a68`）：follow 触发器查已删 traders 表（DB 函数已修+生产验证）；trader_watchlist 迁移补应用生产（功能恢复+增删查验证）；referral_code/referred_by/last_export_at 列已补齐应用，推荐码与导出冷却功能完整恢复。
 5. React #418 hydration 告警：localStorage 有语言偏好但 cookie 缺失时首屏 SSR/CSR 语言不一致（边缘场景，sweep 注入伪影为主）。
 6. `docs/QA_TEST_CASES.md` 的 `test.*@example.com` 账号生产不存在 — 真实 QA 账号是 `qa.button.test@arenafi.org`（密码用 service role 重置即可复用，详见 memory/qa-test-accounts.md）。
 7. post-deploy-check.sh 用的 `/trader/soul` 已是死数据（weex 下架），建议改为动态取排行第一名。
