@@ -2,7 +2,8 @@
 
 import { useState, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
-import { Box, Text, Button } from '../base'
+import { Box, Text } from '../base'
+import ProGate from '../ui/ProGate'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { SOURCES_WITH_DATA, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 
@@ -52,7 +53,7 @@ interface AdvancedFilterProps {
 
 const EXCHANGES: { value: string; label: string }[] = (() => {
   const unique = [...new Set(SOURCES_WITH_DATA)]
-  return unique.map(src => ({
+  return unique.map((src) => ({
     value: src,
     label: EXCHANGE_CONFIG[src]?.name || src,
   }))
@@ -77,23 +78,29 @@ export default function AdvancedFilter({
   const { t } = useLanguage()
   const [isExpanded, setIsExpanded] = useState(true)
 
-  const updateFilter = useCallback((key: keyof FilterConfig, value: unknown) => {
-    onFilterChange({ ...currentFilter, [key]: value })
-  }, [currentFilter, onFilterChange])
+  const updateFilter = useCallback(
+    (key: keyof FilterConfig, value: unknown) => {
+      onFilterChange({ ...currentFilter, [key]: value })
+    },
+    [currentFilter, onFilterChange]
+  )
 
-  const toggleArrayItem = useCallback((key: 'category' | 'exchange', value: string) => {
-    const current = currentFilter[key] || []
-    const newValue = current.includes(value)
-      ? current.filter(v => v !== value)
-      : [...current, value]
-    onFilterChange({ ...currentFilter, [key]: newValue.length > 0 ? newValue : undefined })
-  }, [currentFilter, onFilterChange])
+  const toggleArrayItem = useCallback(
+    (key: 'category' | 'exchange', value: string) => {
+      const current = currentFilter[key] || []
+      const newValue = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value]
+      onFilterChange({ ...currentFilter, [key]: newValue.length > 0 ? newValue : undefined })
+    },
+    [currentFilter, onFilterChange]
+  )
 
   const resetFilter = useCallback(() => {
     onFilterChange({})
   }, [onFilterChange])
 
-  const hasActiveFilters = Object.keys(currentFilter).some(key => {
+  const hasActiveFilters = Object.keys(currentFilter).some((key) => {
     const value = currentFilter[key as keyof FilterConfig]
     if (Array.isArray(value)) return value.length > 0
     return value != null
@@ -116,24 +123,7 @@ export default function AdvancedFilter({
             selectedGrade={currentFilter.grade}
             onSelectGrade={(g) => onFilterChange({ ...currentFilter, grade: g })}
           />
-          <Box
-            style={{
-              padding: tokens.spacing[3],
-              background: `linear-gradient(135deg, ${tokens.colors.accent.primary}10 0%, ${tokens.colors.accent.brand}08 100%)`,
-              borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.accent.primary}20`,
-            }}
-          >
-            <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <Box>
-                <Text size="sm" weight="bold">{t('advancedFilterLocked')}</Text>
-                <Text size="xs" color="tertiary">{t('unlockAdvancedFilter')}</Text>
-              </Box>
-              <Button variant="secondary" size="sm" onClick={() => window.location.href = '/settings'}>
-                {t('upgrade')}
-              </Button>
-            </Box>
-          </Box>
+          <ProGate variant="inline" featureKey="unlockAdvancedFilter" />
         </Box>
       </Box>
     )
@@ -162,7 +152,9 @@ export default function AdvancedFilter({
         }}
       >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="sm" weight="bold">{t('advancedFilter')}</Text>
+          <Text size="sm" weight="bold">
+            {t('advancedFilter')}
+          </Text>
           {hasActiveFilters && (
             <Box
               style={{
@@ -178,12 +170,19 @@ export default function AdvancedFilter({
             </Box>
           )}
         </Box>
-        <Text size="sm" color="tertiary">{isExpanded ? '\u25B2' : '\u25BC'}</Text>
+        <Text size="sm" color="tertiary">
+          {isExpanded ? '\u25B2' : '\u25BC'}
+        </Text>
       </Box>
 
       {/* Expanded content */}
       {isExpanded && (
-        <Box style={{ padding: tokens.spacing[4], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+        <Box
+          style={{
+            padding: tokens.spacing[4],
+            borderTop: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
           {/* Saved filters */}
           <SavedFiltersList
             label={t('savedFilters')}
@@ -202,7 +201,7 @@ export default function AdvancedFilter({
           {/* Category */}
           <FilterChipGroup
             label={t('categoryType')}
-            items={CATEGORY_KEYS.map(cat => ({ value: cat.value, label: t(cat.labelKey) }))}
+            items={CATEGORY_KEYS.map((cat) => ({ value: cat.value, label: t(cat.labelKey) }))}
             selected={currentFilter.category}
             onToggle={(v) => toggleArrayItem('category', v)}
           />
@@ -243,7 +242,14 @@ export default function AdvancedFilter({
           />
 
           {/* Other thresholds */}
-          <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
+          <Box
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(3, 1fr)',
+              gap: tokens.spacing[3],
+              marginBottom: tokens.spacing[4],
+            }}
+          >
             <FilterNumberInput
               label={t('minPnl')}
               placeholder={`${t('egExample')} 1000`}

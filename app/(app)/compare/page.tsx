@@ -8,7 +8,7 @@ import nextDynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
-import { Box, Text, Button } from '@/app/components/base'
+import { Box, Text } from '@/app/components/base'
 
 // Lazy load: TraderComparison includes charts (RadarChart, EquityCurveOverlay) — heavy below-the-fold content
 const TraderComparison = nextDynamic(() => import('@/app/components/premium/TraderComparison'), {
@@ -19,6 +19,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useAchievements } from '@/lib/hooks/useAchievements'
 import ExportButton from '@/app/components/common/ExportButton'
+import ProGate from '@/app/components/ui/ProGate'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
@@ -294,58 +295,8 @@ function CompareContent() {
 
         {/* Pro gate */}
         {!isPro && (
-          <Box
-            style={{
-              padding: tokens.spacing[6],
-              background: 'var(--color-pro-glow)',
-              borderRadius: tokens.radius.xl,
-              border: '1px solid var(--color-pro-gradient-start)',
-              marginBottom: tokens.spacing[6],
-              textAlign: 'center',
-            }}
-          >
-            <Box
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: tokens.radius.lg,
-                background: 'var(--color-blur-overlay)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                margin: '0 auto',
-                marginBottom: tokens.spacing[3],
-              }}
-            >
-              <svg
-                width={24}
-                height={24}
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="var(--color-pro-gradient-start)"
-                strokeWidth="2"
-              >
-                <path d="M19 11H5C3.9 11 3 11.9 3 13V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V13C21 11.9 20.1 11 19 11Z" />
-                <path d="M7 11V7C7 4.2 9.2 2 12 2C14.8 2 17 4.2 17 7V11" strokeLinecap="round" />
-              </svg>
-            </Box>
-            <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-              {t('proRequired')}
-            </Text>
-            <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-              {t('featureTraderCompareDesc')}
-            </Text>
-            <Button
-              variant="primary"
-              onClick={() => router.push('/pricing')}
-              style={{
-                background: 'var(--color-pro-badge-bg)',
-                border: 'none',
-                boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
-              }}
-            >
-              {t('upgradeToPro')}
-            </Button>
+          <Box style={{ marginBottom: tokens.spacing[6] }}>
+            <ProGate variant="inline" featureKey="featureTraderCompareDesc" />
           </Box>
         )}
 
