@@ -16,15 +16,6 @@ jest.mock('@/lib/alerts/send-alert', () => ({
   sendRateLimitedAlert: jest.fn().mockResolvedValue(undefined),
 }))
 
-jest.mock('@/lib/connectors/route-config', () => ({
-  getRouteConfig: jest.fn((platform: string) => {
-    if (platform === 'binance_futures') {
-      return { routes: ['direct', 'vps_sg', 'scraper_sg'] }
-    }
-    return { routes: ['direct'] }
-  }),
-}))
-
 jest.mock('@/lib/constants/exchanges', () => ({
   EXCHANGE_CONFIG: {
     binance_futures: { name: 'Binance Futures' },
@@ -36,10 +27,6 @@ import {
   recordPlatformFetchResult,
   getConsecutiveFailures,
   evaluateAndAlert,
-  recordRouteResult,
-  getPreferredRoute,
-  getRouteFailureCounts,
-  resetPreferredRoute,
 } from '../pipeline-self-heal'
 import { sendAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 
@@ -58,11 +45,7 @@ describe('Pipeline Self-Heal', () => {
 
       await recordPlatformFetchResult('binance_futures', 0)
 
-      expect(cache.set).toHaveBeenCalledWith(
-        'pipeline:failures:binance_futures',
-        3,
-        { ttl: 86400 }
-      )
+      expect(cache.set).toHaveBeenCalledWith('pipeline:failures:binance_futures', 3, { ttl: 86400 })
     })
 
     it('should start from 0 when no prior failures exist', async () => {
@@ -70,11 +53,7 @@ describe('Pipeline Self-Heal', () => {
 
       await recordPlatformFetchResult('binance_futures', 0)
 
-      expect(cache.set).toHaveBeenCalledWith(
-        'pipeline:failures:binance_futures',
-        1,
-        { ttl: 86400 }
-      )
+      expect(cache.set).toHaveBeenCalledWith('pipeline:failures:binance_futures', 1, { ttl: 86400 })
     })
 
     it('should reset failures on successful fetch', async () => {
@@ -83,11 +62,7 @@ describe('Pipeline Self-Heal', () => {
 
       await recordPlatformFetchResult('binance_futures', 50)
 
-      expect(cache.set).toHaveBeenCalledWith(
-        'pipeline:failures:binance_futures',
-        0,
-        { ttl: 86400 }
-      )
+      expect(cache.set).toHaveBeenCalledWith('pipeline:failures:binance_futures', 0, { ttl: 86400 })
     })
 
     it('should alert on data drop below 30% threshold', async () => {
@@ -151,9 +126,7 @@ describe('Pipeline Self-Heal', () => {
       // getConsecutiveFailures calls cache.get once per platform
       ;(cache.get as jest.Mock).mockResolvedValueOnce(0) // consecutive failures = 0 for bybit
 
-      const alerts = await evaluateAndAlert([
-        { platform: 'bybit', ageHours: 15, recordCount: 50 },
-      ])
+      const alerts = await evaluateAndAlert([{ platform: 'bybit', ageHours: 15, recordCount: 50 }])
 
       expect(alerts).toHaveLength(1)
       expect(alerts[0].alertType).toBe('stale')
@@ -162,8 +135,8 @@ describe('Pipeline Self-Heal', () => {
 
     it('should return empty array when everything is healthy', async () => {
       ;(cache.get as jest.Mock)
-        .mockResolvedValueOnce(0)  // binance_futures consecutive failures
-        .mockResolvedValueOnce(0)  // bybit consecutive failures
+        .mockResolvedValueOnce(0) // binance_futures consecutive failures
+        .mockResolvedValueOnce(0) // bybit consecutive failures
 
       const alerts = await evaluateAndAlert([
         { platform: 'binance_futures', ageHours: 1, recordCount: 100 },
@@ -178,81 +151,4 @@ describe('Pipeline Self-Heal', () => {
   // ============================================
   // Route Auto-Failover
   // ============================================
-
-  describe('recordRouteResult', () => {
-    it('should reset failure count on success', async () => {
-      await recordRouteResult('binance_futures', 'direct', true)
-
-      expect(cache.set).toHaveBeenCalledWith(
-        'route:failures:binance_futures:direct',
-        0,
-        { ttl: 86400 }
-      )
-    })
-
-    it('should increment failure count on failure', async () => {
-      ;(cache.get as jest.Mock).mockResolvedValueOnce(1)
-
-      await recordRouteResult('binance_futures', 'direct', false)
-
-      expect(cache.set).toHaveBeenCalledWith(
-        'route:failures:binance_futures:direct',
-        2,
-        { ttl: 86400 }
-      )
-    })
-
-    it('should switch to next route after 3 consecutive failures', async () => {
-      ;(cache.get as jest.Mock).mockResolvedValueOnce(2) // will become 3
-
-      await recordRouteResult('binance_futures', 'direct', false)
-
-      // Should set preferred route to 'vps_sg' (next after 'direct')
-      expect(cache.set).toHaveBeenCalledWith(
-        'route:preferred:binance_futures',
-        'vps_sg',
-        { ttl: 21600 } // 6h
-      )
-      expect(sendAlert).toHaveBeenCalledWith(
-        expect.objectContaining({
-          level: 'warning',
-        })
-      )
-    })
-  })
-
-  describe('getPreferredRoute', () => {
-    it('should return cached preferred route if set', async () => {
-      ;(cache.get as jest.Mock).mockResolvedValueOnce('vps_sg')
-      const route = await getPreferredRoute('binance_futures')
-      expect(route).toBe('vps_sg')
-    })
-
-    it('should return first configured route when no override', async () => {
-      ;(cache.get as jest.Mock).mockResolvedValueOnce(null)
-      const route = await getPreferredRoute('binance_futures')
-      expect(route).toBe('direct')
-    })
-  })
-
-  describe('getRouteFailureCounts', () => {
-    it('should return failure counts for all configured routes', async () => {
-      ;(cache.get as jest.Mock)
-        .mockResolvedValueOnce(1) // direct
-        .mockResolvedValueOnce(0) // vps_sg
-        .mockResolvedValueOnce(3) // scraper_sg
-
-      const counts = await getRouteFailureCounts('binance_futures')
-      expect(counts['direct']).toBe(1)
-      expect(counts['vps_sg']).toBe(0)
-      expect(counts['scraper_sg']).toBe(3)
-    })
-  })
-
-  describe('resetPreferredRoute', () => {
-    it('should delete the preferred route cache key', async () => {
-      await resetPreferredRoute('binance_futures')
-      expect(cache.del).toHaveBeenCalledWith('route:preferred:binance_futures')
-    })
-  })
 })

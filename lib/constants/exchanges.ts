@@ -709,6 +709,16 @@ for (let i = SOURCES_WITH_DATA.length - 1; i >= 0; i--) {
   if (_deadSet.has(SOURCES_WITH_DATA[i])) SOURCES_WITH_DATA.splice(i, 1)
 }
 
+/**
+ * Is this platform dead/blocked (no pipeline writes anymore)?
+ * Replaces lib/connectors/route-config isDead() after the legacy connector
+ * deletion (ARENA_DATA_SPEC v1.2 endgame) — the canonical dead list lives in
+ * DEAD_BLOCKED_PLATFORMS now.
+ */
+export function isDeadPlatform(platform: string): boolean {
+  return _deadSet.has(platform)
+}
+
 /** ROI type per source – derived from EXCHANGE_CONFIG */
 export const SOURCE_ROI_TYPE: Record<string, RoiType> = Object.fromEntries(
   Object.entries(EXCHANGE_CONFIG).map(([k, v]) => [k, v.roiType])

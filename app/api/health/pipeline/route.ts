@@ -10,13 +10,15 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
-import { getSupportedPlatforms } from '@/lib/cron/fetchers'
+import {
+  DEAD_BLOCKED_PLATFORMS,
+  EXCHANGE_CONFIG,
+  SOURCES_WITH_DATA,
+} from '@/lib/constants/exchanges'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { getFireAndForgetStats, logger } from '@/lib/utils/logger'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
-import { getCircuitStates } from '@/lib/connectors/circuit-registry'
 import { getRateLimitStats } from '@/lib/ratelimit/TokenBucket'
 
 export const dynamic = 'force-dynamic'
@@ -62,7 +64,7 @@ export interface PlatformHealth {
 async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   const supabase = getSupabaseAdmin()
   const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
-  const activePlatforms = getSupportedPlatforms().filter((p) => !deadSet.has(p))
+  const activePlatforms = (SOURCES_WITH_DATA as string[]).filter((p) => !deadSet.has(p))
   const now = Date.now()
   const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -316,15 +318,11 @@ export async function GET(req: NextRequest) {
         overallStatus = 'degraded'
       }
 
-      // Circuit breaker states — surface OPEN/HALF_OPEN circuits so OpenClaw
-      // can see when exchange connectors are tripping before cron failures
-      // cascade. Previously this was logged only and visible only via grep.
-      // See lib/connectors/circuit-registry.ts for the state source.
-      //
-      // Note: these live in serverless instance memory, so state will reset
-      // on cold start. An OPEN circuit here is a strong signal; its absence
-      // does NOT guarantee healthy (the instance may have just booted).
-      const rawCircuits = getCircuitStates()
+      // ENDGAME (ARENA_DATA_SPEC v1.2): legacy connector circuit breakers
+      // deleted with lib/connectors — the new ingest pipeline tracks failures
+      // in arena.leaderboard_snapshots / freshness-sentinel instead. Keep the
+      // response shape for OpenClaw consumers; always empty now.
+      const rawCircuits: Record<string, string> = {}
       const circuits = {
         states: rawCircuits,
         open: Object.entries(rawCircuits)
