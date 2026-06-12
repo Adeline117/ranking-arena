@@ -1,0 +1,39 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "list": [
+      {
+        "leader_id": 144647,
+        "leader_yield_curves": [
+          {
+            "profit": "0",
+            "profit_rate": "0",
+            "create_time": 1779667200
+          },
+          {
+            "profit": "-0.000000000000262144",
+            "profit_rate": "0",
+            "create_time": 1779753600
+          },
+          {
+            "profit": "-0.000000000000262144",
+            "profit_rate": "0",
+            "create_time": 1779840000
+          },
+          {
+            "profit": "-0.000000000000262144",
+            "profit_rate": "0",
+            "create_time": 1779926400
+          },
+          {
+            "profit": "-0.000000000000262144",
+            "profit_rate": "0",
+            "create_time": 1780012800
+          }
+        ]
+      }
+    ]
+  },
+  "timestamp": 1781223554798
+}

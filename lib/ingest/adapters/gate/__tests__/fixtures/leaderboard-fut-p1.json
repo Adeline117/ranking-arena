@@ -1,0 +1,243 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "list": [
+      {
+        "leader_id": 3355,
+        "level": 1,
+        "follow_id": 0,
+        "profit": "11189.89",
+        "profit_rate": "14.4897",
+        "win_rate": "0.5",
+        "max_drawdown": "0.297",
+        "follow_profit": "20.52",
+        "curr_follow_num": 1,
+        "max_follow_num": 50,
+        "total_follow_num": 0,
+        "aum": "10",
+        "sharp_ratio": "-1.31",
+        "is_follow": false,
+        "is_full": false,
+        "is_binance": false,
+        "create_time": 1695118411,
+        "is_curated": false,
+        "is_private_audit": false,
+        "coupon": {
+          "coupon_tags": null,
+          "coupon_bonus": null
+        },
+        "leading_days": 996,
+        "pl_ratio": "0",
+        "is_private_leader": false,
+        "private_info": {
+          "follower_black_status": false
+        },
+        "user_info": {
+          "nick": "南火逐风",
+          "nickname": "南火逐风",
+          "hide_name": "***",
+          "tier": 3,
+          "avatar": "https://gavatar.staticimgs.com/groupchat/avatar_default/2eb319002253696049291d83b503d559",
+          "anonymous": "Catherine-Deandra-Anabelle"
+        },
+        "label_info": {
+          "badge": [],
+          "text": [
+            {
+              "label_id": -6,
+              "label_name": "短线",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            },
+            {
+              "label_id": -8,
+              "label_name": "低频",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            },
+            {
+              "label_id": -10,
+              "label_name": "保守",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            },
+            {
+              "label_id": -2,
+              "label_name": "HighLeverageName",
+              "label_desc": "HighLeverageDesc",
+              "label_link": "",
+              "label_pic_url": ""
+            }
+          ]
+        },
+        "live": null,
+        "post": null,
+        "style_label": null,
+        "user_profile": null
+      },
+      {
+        "leader_id": 29810,
+        "level": 101,
+        "follow_id": 0,
+        "profit": "3520.24",
+        "profit_rate": "11.7342",
+        "win_rate": "0.8523",
+        "max_drawdown": "0.6209",
+        "follow_profit": "20652.35",
+        "curr_follow_num": 90,
+        "max_follow_num": 1000,
+        "total_follow_num": 0,
+        "aum": "88331.77",
+        "sharp_ratio": "0",
+        "is_follow": false,
+        "is_full": false,
+        "is_binance": false,
+        "create_time": 1780058985,
+        "is_curated": false,
+        "is_private_audit": false,
+        "coupon": {
+          "coupon_tags": null,
+          "coupon_bonus": null
+        },
+        "leading_days": 13,
+        "pl_ratio": "0.24",
+        "is_private_leader": true,
+        "private_info": {
+          "follower_black_status": false
+        },
+        "user_info": {
+          "nick": "一单定乾坤",
+          "nickname": "一单定乾坤",
+          "hide_name": "***",
+          "tier": 10,
+          "avatar": "https://gavatar.staticimgs.com/groupchat/avatar-c348e8c9ec-cac1fbb5c8-c92a10-faeac4.jpg",
+          "anonymous": "Esteban-Jerri-Luisa"
+        },
+        "label_info": {
+          "badge": [],
+          "text": [
+            {
+              "label_id": -5,
+              "label_name": "长线",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            },
+            {
+              "label_id": -7,
+              "label_name": "高频",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            },
+            {
+              "label_id": -9,
+              "label_name": "激进",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            }
+          ]
+        },
+        "live": {
+          "live_id": "81b364e9e33342fd9ddf51ec9504c26b",
+          "live_title": "外面的嘲讽声好大 差点盖过我的意志",
+          "watching_num": "59"
+        },
+        "post": null,
+        "style_label": [
+          {
+            "label_code": "heavy_hitter",
+            "label_title": "重仓博弈",
+            "label_desc": ""
+          }
+        ],
+        "user_profile": null
+      },
+      {
+        "leader_id": 29419,
+        "level": 1,
+        "follow_id": 0,
+        "profit": "1671.42",
+        "profit_rate": "5.4054",
+        "win_rate": "0.875",
+        "max_drawdown": "0.1638",
+        "follow_profit": "34.04",
+        "curr_follow_num": 49,
+        "max_follow_num": 50,
+        "total_follow_num": 0,
+        "aum": "1590",
+        "sharp_ratio": "5.51",
+        "is_follow": false,
+        "is_full": false,
+        "is_binance": false,
+        "create_time": 1779455250,
+        "is_curated": false,
+        "is_private_audit": false,
+        "coupon": {
+          "coupon_tags": null,
+          "coupon_bonus": null
+        },
+        "leading_days": 20,
+        "pl_ratio": "240.28",
+        "is_private_leader": false,
+        "private_info": {
+          "follower_black_status": false
+        },
+        "user_info": {
+          "nick": "Deepseek_R1",
+          "nickname": "Deepseek_R1",
+          "hide_name": "***",
+          "tier": 2,
+          "avatar": "https://gavatar.staticimgs.com/groupchat/avatar-0b1f214f51-c0dd044311-c92a10-faeac4.jpg",
+          "anonymous": "Roni-Elena-Rosemary"
+        },
+        "label_info": {
+          "badge": [],
+          "text": [
+            {
+              "label_id": -5,
+              "label_name": "长线",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            },
+            {
+              "label_id": -7,
+              "label_name": "高频",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            },
+            {
+              "label_id": -9,
+              "label_name": "激进",
+              "label_desc": "",
+              "label_link": "",
+              "label_pic_url": ""
+            }
+          ]
+        },
+        "live": null,
+        "post": null,
+        "style_label": [
+          {
+            "label_code": "rising_stars",
+            "label_title": "涨粉之星",
+            "label_desc": ""
+          }
+        ],
+        "user_profile": null
+      }
+    ],
+    "page": 1,
+    "pagesize": 12,
+    "pagecount": 62,
+    "totalcount": 734
+  },
+  "timestamp": 1781223526841
+}

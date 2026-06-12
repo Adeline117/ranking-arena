@@ -1,0 +1,37 @@
+{
+  "code": 0,
+  "message": "ok",
+  "data": {
+    "page": 1,
+    "pagesize": 10,
+    "pagecount": 3,
+    "totalcount": 23,
+    "list": [
+      {
+        "total_follow_amount": "33500",
+        "total_profit": "18070",
+        "total_follow_day": 4,
+        "nick_name": "景裕1",
+        "avatar": "https://gavatar.staticimgs.com/groupchat/avatar_default/64aa733205448a774cddf2fd0224d89f",
+        "tier": 6
+      },
+      {
+        "total_follow_amount": "10000",
+        "total_profit": "6084.6",
+        "total_follow_day": 3,
+        "nick_name": "5街",
+        "avatar": "https://gavatar.staticimgs.com/groupchat/avatar_default/f4710db79362e8a4b6919f9dcc55a8f1",
+        "tier": 5
+      },
+      {
+        "total_follow_amount": "10000",
+        "total_profit": "6056.23",
+        "total_follow_day": 4,
+        "nick_name": "兩位理事長",
+        "avatar": "https://gavatar.staticimgs.com/groupchat/avatar_default/f4710db79362e8a4b6919f9dcc55a8f1",
+        "tier": 5
+      }
+    ]
+  },
+  "timestamp": 1781223560765
+}
