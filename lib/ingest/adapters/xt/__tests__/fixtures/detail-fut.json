@@ -1,0 +1,25 @@
+{
+  "returnCode": 0,
+  "msgInfo": "success",
+  "error": null,
+  "result": {
+    "nickName": "阿阳",
+    "avatar": "https://a.static-global.com/1/user/common/3f9fc83c-643b-4082-8ef7-5f7e3191419a-1761119853423.png",
+    "intro": "伺机而动，想要马上暴富得不要来，安全得交易需要时间得沉淀，没开单证明没有好的位置，不要着急，相信自己小资金照样可以做大做强，胆小信心不坚定得不要来，不然只会赔不会赚，",
+    "leadDays": 234,
+    "levelId": 1,
+    "level": 1,
+    "levelName": "Lvl 1",
+    "label": ["Short term", "conservative"],
+    "followNumber": 9,
+    "currentFollowNumber": 0,
+    "maxFollowerSize": 100,
+    "profitRate": "0.12",
+    "platformProfitRate": "0",
+    "totalRights": "0",
+    "displayEquity": true,
+    "displayPosition": false,
+    "openPrivateDomain": false,
+    "openLeader": true
+  }
+}
