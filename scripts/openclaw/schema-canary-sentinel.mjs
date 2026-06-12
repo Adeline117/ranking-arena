@@ -24,6 +24,12 @@ const QA_EMAIL = 'qa.button.test@arenafi.org'
 const QA_USER_ID = '1c533890-01e8-4c34-a895-657f389ab4b2'
 const BASE = 'https://www.arenafi.org'
 
+// cron 场景铁律：任何网络请求必须有超时，否则挂起连接 = 僵尸 cron 堆积
+// （2026-06-12 实测：无超时版本在系统高负载时永久挂起）
+const FETCH_TIMEOUT_MS = 30_000
+const tfetch = (url, init = {}) =>
+  fetch(url, { ...init, signal: init.signal ?? AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+
 function readEnv(name, { optional = false } = {}) {
   if (process.env[name]) return process.env[name].replace(/^"|"$/g, '')
   for (const file of ['.env.local', '.env']) {
@@ -49,7 +55,7 @@ async function sendTelegram(text) {
     console.log('[telegram skipped]', text)
     return
   }
-  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+  await tfetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text }),
@@ -77,7 +83,7 @@ async function writeCanary() {
 
   // 重置 QA 账号密码（随机，不持久化）
   const pw = crypto.randomBytes(18).toString('base64')
-  const resetRes = await fetch(`${SUPA_URL}/auth/v1/admin/users/${QA_USER_ID}`, {
+  const resetRes = await tfetch(`${SUPA_URL}/auth/v1/admin/users/${QA_USER_ID}`, {
     method: 'PUT',
     headers: { apikey: SRK, Authorization: `Bearer ${SRK}`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ password: pw }),
@@ -85,7 +91,7 @@ async function writeCanary() {
   if (!resetRes.ok) throw new Error(`QA 密码重置失败 ${resetRes.status}`)
 
   // 登录
-  const loginRes = await fetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
+  const loginRes = await tfetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: { apikey: ANON, 'Content-Type': 'application/json' },
     body: JSON.stringify({ email: QA_EMAIL, password: pw }),
@@ -106,7 +112,7 @@ async function writeCanary() {
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaSentinel',
   }
   const api = async (pathname, init = {}) => {
-    const res = await fetch(`${BASE}${pathname}`, { ...init, headers: { ...H, ...init.headers } })
+    const res = await tfetch(`${BASE}${pathname}`, { ...init, headers: { ...H, ...init.headers } })
     let body = null
     try {
       body = await res.json()
