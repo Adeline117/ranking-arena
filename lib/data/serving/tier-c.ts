@@ -34,9 +34,11 @@ export interface TierCRequest {
   surface: TierCSurface
 }
 
-/** MUST match worker/src/ingest/queues.ts tierCJobId(). */
+/** MUST match worker/src/ingest/queues.ts tierCJobId().
+ *  BullMQ rejects custom ids containing ':' — '--' is the separator
+ *  (the original ':' format silently failed every enqueue). */
 export function tierCJobId(d: TierCRequest): string {
-  return `tierc:${d.sourceSlug}:${d.exchangeTraderId}:${d.timeframe}:${d.surface}`
+  return ['tierc', d.sourceSlug, d.exchangeTraderId, d.timeframe, d.surface].join('--')
 }
 
 /** MUST match worker/src/ingest/queues.ts tierCResultKey(). */
