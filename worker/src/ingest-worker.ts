@@ -42,6 +42,10 @@ async function route(job: Job): Promise<unknown> {
       const { processTierB } = await import('./ingest/processors/tier-b-profiles')
       return processTierB(job)
     }
+    case INGEST_JOB.TIER_B_SERIES: {
+      const { processTierBSeries } = await import('./ingest/processors/tier-b-series')
+      return processTierBSeries(job)
+    }
     case INGEST_JOB.TIER_C: {
       const { processTierC } = await import('./ingest/processors/tier-c-profile')
       return processTierC(job)

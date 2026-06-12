@@ -108,6 +108,8 @@ export const INGEST_JOB = {
   TIER_A: 'tiera:leaderboard',
   /** Tier B: deep-profile crawl of topN for one source. */
   TIER_B: 'tierb:profiles',
+  /** Tier B-S: slow series backfill for ranked traders beyond topN (spec §13.1). */
+  TIER_B_SERIES: 'tierb:series',
   /** Tier C: on-demand single profile surface (priority 1, from Vercel). */
   TIER_C: 'tierc:profile',
   /** Tier D: open positions for top-100 of one source. */
