@@ -9,7 +9,7 @@
  *
  *   1. Total paying subscribers (active|trialing × pro|lifetime)
  *   2. New paying signups this week (7d window)
- *   3. WAU — reported as n/a since the user_activity table was dropped
+ *   3. WAU — distinct user_id in user_interactions over the last 7 days
  *   4. Top-10 trust ratio (confidence=full / 10 in 90D leaderboard)
  *
  * Scheduled at Friday 09:00 UTC in vercel.json.
@@ -45,7 +45,7 @@ export async function GET(request: NextRequest) {
       const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
       // All reads in parallel — independent.
-      const [totalPayingRes, newPayingRes, trustRes] = await Promise.allSettled([
+      const [totalPayingRes, newPayingRes, trustRes, wauRes] = await Promise.allSettled([
         supabase
           .from('subscriptions')
           .select('id', { count: 'estimated', head: true })
@@ -61,14 +61,26 @@ export async function GET(request: NextRequest) {
         // 20260409173653_get_top_trust_ratio_rpc.sql. Replaces the previous
         // N+1 REST loop that timed out at the 30s Supabase limit.
         supabase.rpc('get_top_trust_ratio', { p_season_id: '90D', p_top_n: 10 }),
+        // WAU source rows — PostgREST has no DISTINCT, so fetch user_ids and
+        // dedupe here (bounded by limit; fine for current scale).
+        supabase
+          .from('user_interactions')
+          .select('user_id')
+          .gte('created_at', weekAgo)
+          .limit(50000),
       ])
 
       const totalPaying =
         totalPayingRes.status === 'fulfilled' ? (totalPayingRes.value.count ?? 0) : null
       const newPaying = newPayingRes.status === 'fulfilled' ? (newPayingRes.value.count ?? 0) : null
-      // WAU is no longer computable: user_activity was intentionally dropped
-      // (phase1_drop_dead_tables) and nothing records activity events.
-      const wau: number | null = null
+      // WAU = distinct user_id in user_interactions over the last 7 days.
+      // Rebuilt 2026-06-12 after the tracking pipeline repair (a11ff20e0) —
+      // user_interactions only accumulates data since that deploy, so WAU
+      // will read artificially low until a full 7-day window has elapsed.
+      const wau: number | null =
+        wauRes.status === 'fulfilled' && wauRes.value.data
+          ? new Set((wauRes.value.data as Array<{ user_id: string }>).map((r) => r.user_id)).size
+          : null
 
       let trustFull: number | null = null
       let trustTotal: number | null = null
@@ -89,6 +101,7 @@ export async function GET(request: NextRequest) {
         logger.warn('totalPaying failed', totalPayingRes.reason)
       if (newPayingRes.status === 'rejected') logger.warn('newPaying failed', newPayingRes.reason)
       if (trustRes.status === 'rejected') logger.warn('trustRatio failed', trustRes.reason)
+      if (wauRes.status === 'rejected') logger.warn('wau failed', wauRes.reason)
 
       const lines = [
         '<b>📊 Arena Weekly Metrics</b>',

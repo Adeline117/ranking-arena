@@ -3,7 +3,7 @@
  * Weekly Product Metrics → Telegram
  *
  * Tracks the three numbers that matter most post-paywall:
- *   1. WAU (Weekly Active Users) — distinct users in user_activity in last 7d
+ *   1. WAU (Weekly Active Users) — distinct users in user_interactions in last 7d
  *   2. Paying subscribers — subscriptions with status in (active, trialing) and tier != free
  *   3. Top-10 trust ratio — fraction of top-10 leaderboard_ranks where
  *      joined trader_sources.score_confidence = 'full'
@@ -12,9 +12,11 @@
  * decision is a guess. This script is designed to run weekly on Fridays
  * from the OpenClaw scheduler and post the result to Telegram.
  *
- * Known limitations (2026-04-09):
- *   - WAU relies on user_activity table being populated by client tracking,
- *     which may be sparse if analytics aren't firing on all pages.
+ * Known limitations:
+ *   - WAU relies on user_interactions being populated by client tracking
+ *     (/api/interactions + /api/track). The pipeline was repaired 2026-06-12
+ *     (commit a11ff20e0) — data only accumulates since that deploy, so WAU
+ *     reads artificially low until a full 7-day window has elapsed.
  *
  * Usage:
  *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... TELEGRAM_BOT_TOKEN=... \
@@ -79,13 +81,15 @@ function getCountHeader(res) {
 // Metric fetchers
 // ---------------------------------------------------------------------------
 
-/** WAU: distinct users with any activity in the last 7 days */
+/** WAU: distinct users with any interaction in the last 7 days */
 async function fetchWAU() {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
   // Supabase REST doesn't support DISTINCT directly, so we fetch user_ids and
   // dedupe client-side. For <10k active users this is <100kb of payload.
+  // NOTE: user_interactions only receives data since the 2026-06-12 tracking
+  // pipeline repair (a11ff20e0) — WAU reads low until a full 7d window exists.
   const { data } = await supabase(
-    `user_activity?select=user_id&created_at=gte.${encodeURIComponent(since)}&limit=50000`,
+    `user_interactions?select=user_id&created_at=gte.${encodeURIComponent(since)}&limit=50000`,
     { prefer: 'count=none' }
   )
   const unique = new Set((data || []).map((r) => r.user_id))
