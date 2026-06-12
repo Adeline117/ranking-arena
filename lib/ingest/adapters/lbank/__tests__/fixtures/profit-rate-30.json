@@ -1,0 +1,156 @@
+{
+  "code": 200,
+  "data": [
+    {
+      "dateTime": 1778630400000,
+      "profitRate": "0",
+      "profitRateSum": "-1.24"
+    },
+    {
+      "dateTime": 1778716800000,
+      "profitRate": "0",
+      "profitRateSum": "-0.03"
+    },
+    {
+      "dateTime": 1778803200000,
+      "profitRate": "0",
+      "profitRateSum": "-3.45"
+    },
+    {
+      "dateTime": 1778889600000,
+      "profitRate": "0",
+      "profitRateSum": "-5.82"
+    },
+    {
+      "dateTime": 1778976000000,
+      "profitRate": "0",
+      "profitRateSum": "-7.31"
+    },
+    {
+      "dateTime": 1779062400000,
+      "profitRate": "0",
+      "profitRateSum": "-7"
+    },
+    {
+      "dateTime": 1779148800000,
+      "profitRate": "0",
+      "profitRateSum": "-7.53"
+    },
+    {
+      "dateTime": 1779235200000,
+      "profitRate": "0",
+      "profitRateSum": "-7.31"
+    },
+    {
+      "dateTime": 1779321600000,
+      "profitRate": "0",
+      "profitRateSum": "-8.8"
+    },
+    {
+      "dateTime": 1779408000000,
+      "profitRate": "0",
+      "profitRateSum": "-6.57"
+    },
+    {
+      "dateTime": 1779494400000,
+      "profitRate": "0",
+      "profitRateSum": "-4.6"
+    },
+    {
+      "dateTime": 1779580800000,
+      "profitRate": "0",
+      "profitRateSum": "-4.27"
+    },
+    {
+      "dateTime": 1779667200000,
+      "profitRate": "0",
+      "profitRateSum": "-3.14"
+    },
+    {
+      "dateTime": 1779753600000,
+      "profitRate": "0",
+      "profitRateSum": "-3.24"
+    },
+    {
+      "dateTime": 1779840000000,
+      "profitRate": "0",
+      "profitRateSum": "-4.37"
+    },
+    {
+      "dateTime": 1779926400000,
+      "profitRate": "0",
+      "profitRateSum": "-5.52"
+    },
+    {
+      "dateTime": 1780012800000,
+      "profitRate": "0",
+      "profitRateSum": "-4.99"
+    },
+    {
+      "dateTime": 1780099200000,
+      "profitRate": "0",
+      "profitRateSum": "-3.21"
+    },
+    {
+      "dateTime": 1780185600000,
+      "profitRate": "0",
+      "profitRateSum": "-2.14"
+    },
+    {
+      "dateTime": 1780272000000,
+      "profitRate": "0",
+      "profitRateSum": "-2.06"
+    },
+    {
+      "dateTime": 1780358400000,
+      "profitRate": "0",
+      "profitRateSum": "-5.36"
+    },
+    {
+      "dateTime": 1780444800000,
+      "profitRate": "0",
+      "profitRateSum": "1.5"
+    },
+    {
+      "dateTime": 1780531200000,
+      "profitRate": "0",
+      "profitRateSum": "-0.53"
+    },
+    {
+      "dateTime": 1780617600000,
+      "profitRate": "0",
+      "profitRateSum": "-2.91"
+    },
+    {
+      "dateTime": 1780704000000,
+      "profitRate": "0",
+      "profitRateSum": "-1.6"
+    },
+    {
+      "dateTime": 1780790400000,
+      "profitRate": "0",
+      "profitRateSum": "3.1"
+    },
+    {
+      "dateTime": 1780876800000,
+      "profitRate": "0",
+      "profitRateSum": "1.77"
+    },
+    {
+      "dateTime": 1780963200000,
+      "profitRate": "0",
+      "profitRateSum": "1.53"
+    },
+    {
+      "dateTime": 1781049600000,
+      "profitRate": "0",
+      "profitRateSum": "0.81"
+    },
+    {
+      "dateTime": 1781136000000,
+      "profitRate": "0",
+      "profitRateSum": "5.71"
+    }
+  ],
+  "message": "成功!"
+}

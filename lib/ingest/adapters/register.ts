@@ -20,6 +20,7 @@ import './coinex'
 import './htx'
 import './kucoin'
 import './phemex'
+import './lbank'
 
 // Phase 2 — long-tail batch 2 (paired futures/spot CEX family)
 import './gate'

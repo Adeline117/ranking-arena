@@ -1,0 +1,37 @@
+{
+  "code": 200,
+  "data": {
+    "total": 46,
+    "current": 1,
+    "hitCount": false,
+    "pages": 3,
+    "size": 20,
+    "optimizeCountSql": true,
+    "records": [
+      {
+        "totalProfit": "2281.7355",
+        "transactionNum": 1169,
+        "name": "LBA****035",
+        "totalVol": "505734.5294",
+        "followDays": 130
+      },
+      {
+        "totalProfit": "1576.4836",
+        "transactionNum": 1015,
+        "name": "LBA****215",
+        "totalVol": "411159.7049",
+        "followDays": 118
+      },
+      {
+        "totalProfit": "776.0737",
+        "transactionNum": 841,
+        "name": "LBA****866",
+        "totalVol": "147917.7852",
+        "followDays": 131
+      }
+    ],
+    "searchCount": true,
+    "orders": []
+  },
+  "message": "成功!"
+}
