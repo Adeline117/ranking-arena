@@ -38,7 +38,7 @@ export * from './circuit-breaker'
 export * from './validation'
 export * from './content'
 export * from './server-cache'
-// sanitize: import directly from '@/lib/utils/sanitize' — isomorphic-dompurify is heavy (~40KB)
+// sanitize: import directly from '@/lib/utils/sanitize' — sanitize-html parser is heavy-ish; keep it out of the barrel
 // export * from './sanitize'
 export * from './csrf'
 // currency: import directly from '@/lib/utils/currency' — currency.js is server-only
@@ -63,7 +63,7 @@ export function safeJsonParse<T>(json: string, fallback: T): T {
  * 延迟函数
  */
 export function sleep(ms: number): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, ms))
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 /**
@@ -74,7 +74,7 @@ export function debounce<TArgs extends unknown[], TReturn>(
   delay: number
 ): (...args: TArgs) => void {
   let timeoutId: NodeJS.Timeout | null = null
-  
+
   return (...args: TArgs) => {
     if (timeoutId) clearTimeout(timeoutId)
     timeoutId = setTimeout(() => fn(...args), delay)
@@ -89,12 +89,14 @@ export function throttle<TArgs extends unknown[], TReturn>(
   limit: number
 ): (...args: TArgs) => void {
   let inThrottle = false
-  
+
   return (...args: TArgs) => {
     if (!inThrottle) {
       fn(...args)
       inThrottle = true
-      setTimeout(() => { inThrottle = false }, limit)
+      setTimeout(() => {
+        inThrottle = false
+      }, limit)
     }
   }
 }
@@ -187,4 +189,3 @@ export function getProperty<T>(
   if (validator) return validator(value) ? value : undefined
   return value as T | undefined
 }
-

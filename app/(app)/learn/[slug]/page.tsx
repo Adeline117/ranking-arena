@@ -146,9 +146,8 @@ export default async function LearnArticlePage({ params }: { params: Promise<{ s
     notFound()
   }
 
-  // Dynamic import: avoid top-level isomorphic-dompurify initialization that
-  // can crash the module in serverless environments (JSDOM side-effects),
-  // which would turn the notFound() above into a 500.
+  // Dynamic import: keeps the sanitize-html parser off this page's cold-start
+  // path so a sanitizer load failure can never turn the notFound() above into a 500.
   const { sanitizeHtml } = await import('@/lib/utils/sanitize')
 
   return (

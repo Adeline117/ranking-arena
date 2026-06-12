@@ -21,8 +21,8 @@ import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 import logger, { fireAndForget } from '@/lib/logger'
-// sanitizeText is dynamically imported inside POST/PUT only to avoid pulling
-// isomorphic-dompurify (~10MB) into the module graph at cold-start.
+// sanitizeText is dynamically imported inside POST/PUT only — keeps the
+// sanitize-html parser out of the GET handler's module graph at cold-start.
 
 // Zod schema for POST (create comment)
 const CreateCommentSchema = z.object({

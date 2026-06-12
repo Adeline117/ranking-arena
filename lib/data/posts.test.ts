@@ -1,4 +1,4 @@
-// Mock sanitize to avoid isomorphic-dompurify → jsdom → undici ESM issue
+// Mock sanitize — these tests cover data-layer logic; sanitize behavior is tested in lib/utils/__tests__/sanitize.test.ts
 jest.mock('@/lib/utils/sanitize', () => ({
   sanitizeText: jest.fn((text: string) => text),
   sanitizeHtml: jest.fn((html: string) => html),
@@ -279,11 +279,9 @@ describe('deletePost', () => {
 
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
-      eq: jest
-        .fn()
-        .mockReturnValue({
-          then: (resolve: MockResolve<unknown>) => resolve({ error: new Error('Delete failed') }),
-        }),
+      eq: jest.fn().mockReturnValue({
+        then: (resolve: MockResolve<unknown>) => resolve({ error: new Error('Delete failed') }),
+      }),
     })
 
     await expect(
