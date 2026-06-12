@@ -536,8 +536,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
   // Leave group (with confirmation)
   const handleLeave = useCallback(async () => {
     if (!userId) return
-    if (!window.confirm(t('leaveGroupConfirm') || 'Are you sure you want to leave this group?'))
-      return
+    if (!(await showDangerConfirm(t('leaveGroup'), t('leaveGroupConfirm')))) return
     setJoining(true)
     try {
       const res = await fetch(`/api/groups/${groupId}/membership`, {
@@ -568,7 +567,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setJoining(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; getCsrfHeaders is a pure utility
-  }, [userId, groupId, accessToken, showToast])
+  }, [userId, groupId, accessToken, showToast, showDangerConfirm])
 
   // Load members
   const loadMembers = async () => {
