@@ -87,6 +87,7 @@ const TradeRow = memo(function TradeRow({
         padding: `3px ${tokens.spacing[2]}`,
         background: isEven ? tokens.glass.bg.light : 'transparent',
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
+        // eslint-disable-next-line no-restricted-syntax -- off-scale by design (dense trade table, fixed grid columns)
         fontSize: 10,
         fontFamily: 'var(--font-mono, monospace)',
         minHeight: 26,
@@ -100,7 +101,8 @@ const TradeRow = memo(function TradeRow({
           borderRadius: tokens.radius.sm,
           background: exchBg,
           color: exchColor,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (dense trade table)
           fontSize: 10,
           textAlign: 'center',
           whiteSpace: 'nowrap',
@@ -112,7 +114,14 @@ const TradeRow = memo(function TradeRow({
       </span>
 
       {/* 交易对 */}
-      <span style={{ color: tokens.colors.text.primary, fontWeight: 600, fontSize: 10 }}>
+      <span
+        style={{
+          color: tokens.colors.text.primary,
+          fontWeight: tokens.typography.fontWeight.semibold,
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (dense trade table)
+          fontSize: 10,
+        }}
+      >
         {sym}
       </span>
 
@@ -120,7 +129,8 @@ const TradeRow = memo(function TradeRow({
       <span
         style={{
           color: sideColor,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (dense trade table)
           fontSize: 10,
         }}
       >
@@ -133,7 +143,7 @@ const TradeRow = memo(function TradeRow({
           {
             color: sideColor,
             textAlign: 'right',
-            fontWeight: 600,
+            fontWeight: tokens.typography.fontWeight.semibold,
             fontVariantNumeric: 'tabular-nums',
           } as React.CSSProperties
         }
@@ -142,17 +152,38 @@ const TradeRow = memo(function TradeRow({
       </span>
 
       {/* 数量 */}
-      <span style={{ color: tokens.colors.text.secondary, textAlign: 'right', fontSize: 9 }}>
+      <span
+        style={{
+          color: tokens.colors.text.secondary,
+          textAlign: 'right',
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (dense trade table)
+          fontSize: 9,
+        }}
+      >
         {formatAmount(trade.amount)}
       </span>
 
       {/* 价值 */}
-      <span style={{ color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 9 }}>
+      <span
+        style={{
+          color: tokens.colors.text.tertiary,
+          textAlign: 'right',
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (dense trade table)
+          fontSize: 9,
+        }}
+      >
         {formatValue(trade.notional)}
       </span>
 
       {/* 时间 */}
-      <span style={{ color: tokens.colors.text.tertiary, textAlign: 'right', fontSize: 9 }}>
+      <span
+        style={{
+          color: tokens.colors.text.tertiary,
+          textAlign: 'right',
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (dense trade table)
+          fontSize: 9,
+        }}
+      >
         {timeAgo(trade.timestamp, t as (key: string) => string)}
       </span>
     </div>
@@ -245,7 +276,7 @@ export default function LiveTradesFeed() {
             style={{
               color: tokens.colors.text.primary,
               fontSize: tokens.typography.fontSize.sm,
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
             }}
           >
             {t('liveTradesFeed')}
@@ -253,9 +284,10 @@ export default function LiveTradesFeed() {
           {filteredTrades.length > 0 && (
             <span
               style={{
+                // eslint-disable-next-line no-restricted-syntax -- off-scale by design (compact count badge)
                 fontSize: 10,
                 color: tokens.colors.text.tertiary,
-                fontWeight: 500,
+                fontWeight: tokens.typography.fontWeight.medium,
                 padding: `1px ${tokens.spacing[1]}`,
                 borderRadius: tokens.radius.sm,
                 background: tokens.colors.bg.tertiary,
@@ -277,8 +309,9 @@ export default function LiveTradesFeed() {
                 onClick={() => toggleExchange(ex)}
                 style={{
                   padding: `1px ${tokens.spacing[1]}`,
+                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (compact filter pill)
                   fontSize: 10,
-                  fontWeight: 600,
+                  fontWeight: tokens.typography.fontWeight.semibold,
                   borderRadius: tokens.radius.sm,
                   border: 'none',
                   cursor: 'pointer',
@@ -304,9 +337,10 @@ export default function LiveTradesFeed() {
           gap: 4,
           padding: `3px ${tokens.spacing[2]}`,
           borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          // eslint-disable-next-line no-restricted-syntax -- off-scale by design (dense trade table, fixed grid columns)
           fontSize: 10,
           color: tokens.colors.text.tertiary,
-          fontWeight: 600,
+          fontWeight: tokens.typography.fontWeight.semibold,
           letterSpacing: '0.3px',
         }}
       >
@@ -388,9 +422,10 @@ export default function LiveTradesFeed() {
             position: 'absolute',
             bottom: 8,
             right: 8,
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (compact pause indicator)
             fontSize: 10,
             color: tokens.colors.accent.warning,
-            fontWeight: 600,
+            fontWeight: tokens.typography.fontWeight.semibold,
             padding: `2px ${tokens.spacing[1]}`,
             borderRadius: tokens.radius.sm,
             background: 'var(--color-orange-subtle)',

@@ -213,7 +213,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               background: 'transparent',
               color: tokens.colors.text.secondary,
               cursor: 'pointer',
-              fontSize: 20,
+              fontSize: tokens.typography.fontSize.xl,
               width: 44,
               height: 44,
               display: 'flex',
@@ -231,16 +231,29 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           <Link
             href={`/groups/${post.group_id}`}
             onClick={(e) => e.stopPropagation()}
-            style={{ fontSize: 12, color: ARENA_PURPLE, textDecoration: 'none' }}
+            style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: ARENA_PURPLE,
+              textDecoration: 'none',
+            }}
           >
             {post.group_name || t('generalDiscussion')}
           </Link>
         ) : (
-          <div style={{ fontSize: 12, color: ARENA_PURPLE }}>{t('generalDiscussion')}</div>
+          <div style={{ fontSize: tokens.typography.fontSize.xs, color: ARENA_PURPLE }}>
+            {t('generalDiscussion')}
+          </div>
         )}
 
         {/* Title */}
-        <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25, marginTop: 8 }}>
+        <div
+          style={{
+            fontSize: tokens.typography.fontSize.xl,
+            fontWeight: tokens.typography.fontWeight.black,
+            lineHeight: 1.25,
+            marginTop: 8,
+          }}
+        >
           {post.title}
         </div>
 
@@ -248,7 +261,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
         <div
           style={{
             marginTop: 8,
-            fontSize: 12,
+            fontSize: tokens.typography.fontSize.xs,
             color: tokens.colors.text.tertiary,
             display: 'flex',
             alignItems: 'center',
@@ -258,7 +271,11 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           <Link
             href={`/u/${encodeURIComponent(post.author_handle)}`}
             onClick={(e) => e.stopPropagation()}
-            style={{ color: tokens.colors.text.secondary, textDecoration: 'none', fontWeight: 600 }}
+            style={{
+              color: tokens.colors.text.secondary,
+              textDecoration: 'none',
+              fontWeight: tokens.typography.fontWeight.semibold,
+            }}
           >
             {post.author_handle || 'user'}
           </Link>
@@ -273,7 +290,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           translate="no"
           style={{
             marginTop: 12,
-            fontSize: 14,
+            fontSize: tokens.typography.fontSize.base,
             color: tokens.colors.text.primary,
             lineHeight: 1.7,
             whiteSpace: 'pre-wrap',
@@ -312,8 +329,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   ? tokens.colors.accent.success
                   : tokens.colors.text.secondary,
               cursor: reacting ? 'not-allowed' : 'pointer',
-              fontSize: 13,
-              fontWeight: 600,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.semibold,
               opacity: reacting ? 0.6 : 1,
             }}
           >
@@ -338,8 +355,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   ? tokens.colors.accent.error
                   : tokens.colors.text.secondary,
               cursor: reacting ? 'not-allowed' : 'pointer',
-              fontSize: 13,
-              fontWeight: 600,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.semibold,
               opacity: reacting ? 0.6 : 1,
             }}
           >
@@ -355,7 +372,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
             paddingTop: 16,
           }}
         >
-          <div style={{ fontWeight: 900, marginBottom: 12 }}>
+          <div style={{ fontWeight: tokens.typography.fontWeight.black, marginBottom: 12 }}>
             {t('comments')} ({post.comment_count})
           </div>
 
@@ -375,7 +392,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                 border: `1px solid ${tokens.colors.border.primary}`,
                 background: tokens.colors.bg.primary,
                 color: tokens.colors.text.primary,
-                fontSize: 14,
+                fontSize: tokens.typography.fontSize.base,
                 resize: 'vertical',
                 outline: 'none',
               }}
@@ -394,8 +411,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                   color: tokens.colors.white,
                   border: 'none',
                   borderRadius: tokens.radius.md,
-                  fontSize: 13,
-                  fontWeight: 700,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.bold,
                   cursor: newComment.trim() && !submittingComment ? 'pointer' : 'not-allowed',
                 }}
               >
@@ -406,11 +423,21 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
 
           {/* Comment list */}
           {pagination?.loading ? (
-            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>
+            <div
+              style={{
+                color: tokens.colors.text.tertiary,
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
               {t('loadingComments')}
             </div>
           ) : comments.length === 0 ? (
-            <div style={{ color: tokens.colors.text.tertiary, fontSize: 13 }}>
+            <div
+              style={{
+                color: tokens.colors.text.tertiary,
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
               {t('noCommentsBeFirst')}
             </div>
           ) : (
@@ -431,8 +458,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                         href={`/u/${encodeURIComponent(comment.author_handle)}`}
                         onClick={(e) => e.stopPropagation()}
                         style={{
-                          fontSize: 12,
-                          fontWeight: 700,
+                          fontSize: tokens.typography.fontSize.xs,
+                          fontWeight: tokens.typography.fontWeight.bold,
                           color: tokens.colors.text.secondary,
                           textDecoration: 'none',
                         }}
@@ -442,21 +469,30 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                     ) : (
                       <span
                         style={{
-                          fontSize: 12,
-                          fontWeight: 700,
+                          fontSize: tokens.typography.fontSize.xs,
+                          fontWeight: tokens.typography.fontWeight.bold,
                           color: tokens.colors.text.tertiary,
                         }}
                       >
                         {'user'}
                       </span>
                     )}
-                    <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                    <span
+                      style={{
+                        fontSize: tokens.typography.fontSize.xs,
+                        color: tokens.colors.text.tertiary,
+                      }}
+                    >
                       {formatTimeAgo(comment.created_at, language)}
                     </span>
                   </div>
                   <div
                     translate="no"
-                    style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}
+                    style={{
+                      fontSize: tokens.typography.fontSize.sm,
+                      color: tokens.colors.text.primary,
+                      lineHeight: 1.6,
+                    }}
                   >
                     {renderContentWithLinks(comment.content || '')}
                   </div>
@@ -474,8 +510,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
                     border: `1px solid ${tokens.colors.border.primary}`,
                     borderRadius: tokens.radius.md,
                     color: tokens.colors.text.secondary,
-                    fontSize: 13,
-                    fontWeight: 600,
+                    fontSize: tokens.typography.fontSize.sm,
+                    fontWeight: tokens.typography.fontWeight.semibold,
                     cursor: pagination?.loadingMore ? 'not-allowed' : 'pointer',
                     opacity: pagination?.loadingMore ? 0.6 : 1,
                     width: '100%',
