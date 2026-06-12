@@ -21,6 +21,7 @@ const FETCH_SCHEDULES: PlatformSchedule[] = [
   // RETIRED → arena-ingest-worker (ARENA_DATA_SPEC rebuild): bybit (→
   // bybit_copytrade), bitget_futures, hyperliquid, mexc are fetched by the
   // new unified pipeline. Re-adding them here would double-fetch.
+  // Wave 2 retired: htx_futures, coinex, gateio, kucoin, bingx, xt.
   // Fast direct APIs — every 2h
   { platform: 'binance_futures', intervalMs: 2 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'binance_spot', intervalMs: 2 * 3600_000, windows: ['7d', '30d', '90d'] },
@@ -37,19 +38,13 @@ const FETCH_SCHEDULES: PlatformSchedule[] = [
   { platform: 'jupiter_perps', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
 
   // Medium CEX — every 4-6h
-  { platform: 'htx_futures', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'bitfinex', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'coinex', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'gateio', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'kucoin', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'bitunix', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
 
   // Slow / fragile — every 6-8h
-  { platform: 'bingx', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'weex', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'woox', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'etoro', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'xt', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'btcc', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'toobit', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'polymarket', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
