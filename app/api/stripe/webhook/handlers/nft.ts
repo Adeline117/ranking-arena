@@ -1,4 +1,5 @@
 import { mintMembershipNFT, isMintingConfigured } from '@/lib/web3/mint'
+import { sendNotification } from '@/lib/data/notifications'
 import { getSupabase, logger } from './shared'
 
 export async function mintNFTForUser(userId: string, plan: string) {
@@ -16,13 +17,17 @@ export async function mintNFTForUser(userId: string, plan: string) {
 
     if (!profile?.wallet_address) {
       logger.info('User has no wallet address, NFT minting skipped', { userId })
-      await getSupabase().from('notifications').insert({
-        user_id: userId,
-        type: 'nft_pending',
-        title: '链接钱包领取 NFT 会员证',
-        body: '您已成功订阅 Pro 会员！链接钱包后即可获得 NFT 会员证明。',
-        data: { plan },
-      })
+      sendNotification(
+        getSupabase(),
+        {
+          user_id: userId,
+          type: 'nft_pending',
+          title: '链接钱包领取 NFT 会员证',
+          message: '您已成功订阅 Pro 会员！链接钱包后即可获得 NFT 会员证明。',
+          link: '/settings/linked-accounts',
+        },
+        'NFT pending notification'
+      )
       return
     }
 
@@ -46,19 +51,17 @@ export async function mintNFTForUser(userId: string, plan: string) {
         })
         .eq('id', userId)
 
-      await getSupabase()
-        .from('notifications')
-        .insert({
+      sendNotification(
+        getSupabase(),
+        {
           user_id: userId,
           type: 'nft_minted',
           title: 'NFT 会员证已铸造',
-          body: `您的 Arena Pro NFT 会员证已成功铸造到钱包 ${profile.wallet_address.slice(0, 6)}...${profile.wallet_address.slice(-4)}`,
-          data: {
-            tokenId: result.tokenId?.toString(),
-            txHash: result.txHash,
-            plan,
-          },
-        })
+          message: `您的 Arena Pro NFT 会员证已成功铸造到钱包 ${profile.wallet_address.slice(0, 6)}...${profile.wallet_address.slice(-4)}（token #${result.tokenId?.toString() ?? '?'}）`,
+          reference_id: result.txHash,
+        },
+        'NFT minted notification'
+      )
     } else {
       // No retry queue: the nft_mint_queue table was dropped from prod and no
       // worker ever consumed it. The error log is the durable record.
