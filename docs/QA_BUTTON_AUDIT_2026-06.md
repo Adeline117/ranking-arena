@@ -73,6 +73,27 @@
 6. `docs/QA_TEST_CASES.md` 的 `test.*@example.com` 账号生产不存在 — 真实 QA 账号是 `qa.button.test@arenafi.org`（密码用 service role 重置即可复用，详见 memory/qa-test-accounts.md）。
 7. post-deploy-check.sh 用的 `/trader/soul` 已是死数据（weex 下架），建议改为动态取排行第一名。
 
+## 终章：根源的根源（2026-06-12 收口）
+
+迁移全量对账（333 个迁移文件 vs 生产实测）确认总根源：**~200 个迁移从未进
+ledger**（字母后缀命名无法被 CLI 追踪，靠 SQL editor 手工应用或彻底遗漏）。
+处置结果：
+
+- **13 个真断裂补应用**：notifications RLS 泄漏（安全）、payment_history
+  （4 月起支付记录静默丢失）、get_diverse_leaderboard（首页 400KB→10KB）、
+  hashtags、emoji reactions、user_strikes、trader_alert_logs、competitions、
+  hot_topics、avoid_votes、folder_subscriptions、pro_official_groups、
+  handle_new_user trigger + flash_news 列
+- **31 个陈旧引用全清理**：死路由×6 删除、错表名×4 修正（GDPR 删号一直在
+  删不存在的表）、死分支×8、RPC fallback 转正×3、安全确认（is_site_admin
+  无 fail-open）
+- **防复发**：`npm run qa:schema` 自维护契约检查（代码依赖 vs 生产清单差集）
+  → **exit 0**，迁移后必跑已写入 CLAUDE.md 铁律
+
+剩余 7 项全部是产品决策类（tips/saved_filters 恢复或下线、competitions cron
+排程、pro-official RPC ship-or-kill、WAU 统计重建、#418 观察、Stripe test
+mode 已确认保留）——无任何已知静默断裂。
+
 ## 可复用工具（已入库）
 
 - `scripts/qa/button-sweep.mjs` — 全站未登录态运行时扫描（`--lang-sweep` 四语言）
