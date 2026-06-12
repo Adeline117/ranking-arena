@@ -91,8 +91,8 @@ export default async function HomeHeroSSR({
           <h1
             style={{
               fontSize: 'clamp(20px, 2.8vw, 28px)',
-              fontWeight: 700,
-              color: 'var(--color-text-primary, #fff)',
+              fontWeight: tokens.typography.fontWeight.bold,
+              color: 'var(--color-text-primary)',
               marginBottom: tokens.spacing[2],
               lineHeight: 1.2,
               letterSpacing: '-0.02em',
@@ -126,8 +126,8 @@ export default async function HomeHeroSSR({
               <div
                 style={{
                   fontSize: '1.5rem',
-                  fontWeight: 700,
-                  color: 'var(--color-text-primary, #f0f0f0)',
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  color: 'var(--color-text-primary)',
                   fontVariantNumeric: 'tabular-nums',
                   lineHeight: 1.2,
                   minHeight: '1.2em',
@@ -139,10 +139,10 @@ export default async function HomeHeroSSR({
               <div
                 style={{
                   fontSize: '0.6875rem',
-                  color: 'var(--color-accent-secondary, #22d3ee)',
+                  color: 'var(--color-accent-secondary)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
-                  fontWeight: 500,
+                  fontWeight: tokens.typography.fontWeight.medium,
                   whiteSpace: 'nowrap',
                   opacity: 0.7,
                 }}
@@ -175,12 +175,12 @@ export default async function HomeHeroSSR({
             gap: 6,
             padding: '8px 20px',
             fontSize: '0.8125rem',
-            fontWeight: 600,
-            color: '#fff',
+            fontWeight: tokens.typography.fontWeight.semibold,
+            color: 'var(--color-on-accent)',
             background:
-              'linear-gradient(135deg, var(--color-brand-hover, #a68ec5) 0%, var(--color-brand, #9373b5) 100%)',
+              'linear-gradient(135deg, var(--color-brand-hover) 0%, var(--color-brand) 100%)',
             border: 'none',
-            borderRadius: 9999,
+            borderRadius: tokens.radius.full,
             textDecoration: 'none',
             minHeight: 44, // WCAG 2.5.5 minimum touch target
             boxShadow: '0 4px 14px var(--color-accent-primary-30, rgba(147,115,181,0.3))',
@@ -197,19 +197,19 @@ export default async function HomeHeroSSR({
             gap: 6,
             padding: '4px 12px',
             fontSize: '0.75rem',
-            color: 'var(--color-pro-gradient-start, #a78bfa)',
+            color: 'var(--color-pro-gradient-start)',
             background: 'var(--color-pro-glow, rgba(167,139,250,0.1))',
             border: '1px solid var(--color-pro-border, rgba(167,139,250,0.25))',
-            borderRadius: 9999,
+            borderRadius: tokens.radius.full,
             textDecoration: 'none',
-            fontWeight: 500,
+            fontWeight: tokens.typography.fontWeight.medium,
           }}
         >
           <svg
             width={12}
             height={12}
             viewBox="0 0 24 24"
-            fill="var(--color-pro-gradient-start, #a78bfa)"
+            fill="var(--color-pro-gradient-start)"
             style={{ flexShrink: 0 }}
           >
             <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
