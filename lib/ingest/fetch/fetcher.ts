@@ -17,6 +17,7 @@
  * (spec §5.9 hard rule).
  */
 
+import fs from 'node:fs'
 import path from 'node:path'
 import { chromium } from 'playwright'
 import type { APIRequestContext, BrowserContext, Page, Request } from 'playwright'
@@ -39,6 +40,38 @@ const CONTEXT_OPTIONS = {
     'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 ' +
     '(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
 } as const
+
+/**
+ * Remove stale Chromium singleton locks when no live process is using the
+ * profile dir. Chrome's lock is a symlink (SingletonLock → "host-pid");
+ * if that pid is dead, the lock is garbage from a killed run.
+ */
+function clearStaleSingletonLocks(userDataDir: string): void {
+  const lockPath = path.join(userDataDir, 'SingletonLock')
+  let target: string
+  try {
+    target = fs.readlinkSync(lockPath)
+  } catch {
+    return // no lock — nothing to do
+  }
+  const pid = Number(target.split('-').pop())
+  if (Number.isFinite(pid) && pid > 0) {
+    try {
+      process.kill(pid, 0) // probe only
+      return // pid alive — the profile is genuinely in use, do not touch
+    } catch {
+      // dead pid → stale lock
+    }
+  }
+  for (const name of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+    try {
+      fs.rmSync(path.join(userDataDir, name), { force: true })
+    } catch {
+      // best effort — launch will surface any real problem
+    }
+  }
+  console.warn(`[ingest] cleared stale Chromium singleton locks in ${userDataDir}`)
+}
 
 /** Circuits are per-source and shared across sessions/restarts of this process. */
 const circuits = new Map<string, Circuit>()
@@ -128,6 +161,11 @@ class PlaywrightFetchSession implements FetchSession {
         typeof this.src.meta.browser_channel === 'string'
           ? this.src.meta.browser_channel
           : undefined
+      // A killed Chromium (pm2 restart, timed-out shell) leaves
+      // SingletonLock behind → "Failed to create a ProcessSingleton" on the
+      // next launch. If no live process holds this profile, clear the
+      // stale locks instead of failing the job (recurred 3× in one day).
+      clearStaleSingletonLocks(userDataDir)
       this.context = await chromium.launchPersistentContext(userDataDir, {
         ...CONTEXT_OPTIONS,
         headless: true,

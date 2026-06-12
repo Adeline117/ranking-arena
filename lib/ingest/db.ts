@@ -11,7 +11,15 @@
  * the Supabase client; ESLint guard enforces the boundary).
  */
 
-import { Pool } from 'pg'
+import { Pool, types } from 'pg'
+
+// node-pg returns NUMERIC/BIGINT as strings by default — the source of a
+// whole class of `.toFixed is not a function` / string-math bugs (freshness
+// sentinel hit one). Parse them as JS numbers ONCE here: ingest values are
+// metrics/counts well within Number.MAX_SAFE_INTEGER precision, and every
+// money value is bounded by upstream validation.
+types.setTypeParser(types.builtins.NUMERIC, (v) => (v === null ? null : Number(v)))
+types.setTypeParser(types.builtins.INT8, (v) => (v === null ? null : Number(v)))
 
 let pool: Pool | null = null
 
