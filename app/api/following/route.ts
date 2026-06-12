@@ -69,19 +69,12 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
         .select('trader_id, source, created_at')
         .eq('user_id', userId)
         .limit(500),
+      // NOTE: user_follows.following_id references auth.users (not
+      // public.user_profiles), so a PostgREST embed fails with PGRST200.
+      // Two-step query: fetch follow rows here, then look up profiles below.
       supabase
         .from('user_follows')
-        .select(
-          `
-          created_at,
-          following:user_profiles!user_follows_following_id_fkey(
-            id,
-            handle,
-            bio,
-            avatar_url
-          )
-        `
-        )
+        .select('created_at, following_id')
         .eq('follower_id', userId)
         .limit(500),
     ]),
@@ -95,12 +88,30 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
 
   const items: FollowItem[] = []
 
-  // 处理关注的用户
-  for (const follow of userFollows) {
-    const following = follow.following
-    const user = Array.isArray(following) ? following[0] : following
-    if (user && typeof user === 'object' && 'id' in user) {
-      const userObj = user as { id: string; handle?: string; bio?: string; avatar_url?: string }
+  // 处理关注的用户（step 2: 按 id 批量取 user_profiles 再合并）
+  const followingIds = (userFollows as { following_id: string }[])
+    .map((f) => f.following_id)
+    .filter(Boolean)
+  const { data: followingProfiles } = followingIds.length
+    ? await supabase
+        .from('user_profiles')
+        .select('id, handle, bio, avatar_url')
+        .in('id', followingIds)
+    : { data: null }
+  const userProfileById = new Map(
+    (
+      (followingProfiles || []) as {
+        id: string
+        handle?: string
+        bio?: string
+        avatar_url?: string
+      }[]
+    ).map((p) => [p.id, p])
+  )
+
+  for (const follow of userFollows as { created_at?: string; following_id: string }[]) {
+    const userObj = userProfileById.get(follow.following_id)
+    if (userObj) {
       items.push({
         id: userObj.id,
         handle: userObj.handle || '未命名用户',

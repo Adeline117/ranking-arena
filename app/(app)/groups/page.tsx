@@ -38,14 +38,29 @@ const getRecommendedPosts = unstable_cache(
   async () => {
     try {
       const supabase = getSupabaseAdmin()
+      // NOTE: posts.author_id references auth.users (not public.user_profiles),
+      // so a PostgREST embed fails with PGRST200. Two-step query: fetch posts,
+      // then look up author profiles by id and merge as `user_profiles`.
       const { data } = await supabase
         .from('posts')
         .select(
-          'id, title, content, created_at, author_id, group_id, like_count, comment_count, hot_score, user_profiles:author_id(handle, avatar_url, display_name)'
+          'id, title, content, created_at, author_id, group_id, like_count, comment_count, hot_score'
         )
         .order('hot_score', { ascending: false })
         .limit(10)
-      return data || []
+      if (!data || data.length === 0) return []
+
+      const authorIds = [...new Set(data.map((p) => p.author_id).filter(Boolean))]
+      // (user_profiles has no display_name column — selecting it 400s with 42703)
+      const { data: authorProfiles } = authorIds.length
+        ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
+        : { data: null }
+      const profileById = new Map((authorProfiles || []).map((p) => [p.id, p]))
+
+      return data.map((post) => ({
+        ...post,
+        user_profiles: profileById.get(post.author_id) ?? null,
+      }))
     } catch {
       return []
     }

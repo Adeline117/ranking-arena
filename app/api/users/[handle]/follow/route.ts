@@ -20,14 +20,21 @@ const logger = createLogger('users-follow')
 
 export const dynamic = 'force-dynamic'
 
-type FollowerRow = {
-  follower?: { id?: string; handle?: string; bio?: string; avatar_url?: string }
-  created_at?: string
-}
+type ProfileRow = { id: string; handle?: string; bio?: string; avatar_url?: string }
 
-type FollowingRow = {
-  following?: { id?: string; handle?: string; bio?: string; avatar_url?: string }
-  created_at?: string
+// NOTE: user_follows.follower_id / following_id reference auth.users (not
+// public.user_profiles), so PostgREST embeds of user_profiles fail with
+// PGRST200. Two-step query: fetch follow rows, then look up profiles by id.
+async function fetchProfilesByIds(
+  supabase: SupabaseClient,
+  ids: string[]
+): Promise<Map<string, ProfileRow>> {
+  if (ids.length === 0) return new Map()
+  const { data } = await supabase
+    .from('user_profiles')
+    .select('id, handle, bio, avatar_url')
+    .in('id', ids)
+  return new Map(((data || []) as ProfileRow[]).map((p) => [p.id, p]))
 }
 
 async function fetchFollowStatus(
@@ -65,45 +72,41 @@ async function getFollowersList(
 
   const { data: followers, error: followersError } = await supabase
     .from('user_follows')
-    .select(`
-      id,
-      created_at,
-      follower:user_profiles!user_follows_follower_id_fkey(
-        id,
-        handle,
-        bio,
-        avatar_url
-      )
-    `)
+    .select('id, created_at, follower_id')
     .eq('following_id', targetUser.id)
     .order('created_at', { ascending: false })
     .limit(100)
 
   if (followersError) {
-    if (followersError.message?.includes('Could not find')) {
-      return NextResponse.json({ followers: [], count: 0 })
-    }
     logger.error('Fetch followers failed', { error: followersError, targetUserId: targetUser.id })
     return serverError('Failed to fetch followers')
   }
 
+  const followerRows = (followers || []) as {
+    id: string
+    created_at?: string
+    follower_id: string
+  }[]
+  const followerIds = followerRows.map((f) => f.follower_id).filter(Boolean)
+  const profileById = await fetchProfilesByIds(supabase, followerIds)
+
   let followStatus: Record<string, boolean> = {}
-  if (requesterId && followers && followers.length > 0) {
-    const followerIds = (followers as FollowerRow[])
-      .map((f) => f.follower?.id)
-      .filter(Boolean) as string[]
+  if (requesterId && followerIds.length > 0) {
     followStatus = await fetchFollowStatus(supabase, requesterId, followerIds)
   }
 
-  const formattedFollowers = ((followers || []) as FollowerRow[])
-    .map((f) => ({
-      id: f.follower?.id,
-      handle: f.follower?.handle,
-      bio: f.follower?.bio,
-      avatar_url: f.follower?.avatar_url,
-      followed_at: f.created_at,
-      is_following: followStatus[f.follower?.id || ''] || false,
-    }))
+  const formattedFollowers = followerRows
+    .map((f) => {
+      const profile = profileById.get(f.follower_id)
+      return {
+        id: profile?.id,
+        handle: profile?.handle,
+        bio: profile?.bio,
+        avatar_url: profile?.avatar_url,
+        followed_at: f.created_at,
+        is_following: followStatus[profile?.id || ''] || false,
+      }
+    })
     .filter((f) => f.id)
 
   return NextResponse.json({
@@ -127,45 +130,41 @@ async function getFollowingList(
 
   const { data: following, error: followingError } = await supabase
     .from('user_follows')
-    .select(`
-      id,
-      created_at,
-      following:user_profiles!user_follows_following_id_fkey(
-        id,
-        handle,
-        bio,
-        avatar_url
-      )
-    `)
+    .select('id, created_at, following_id')
     .eq('follower_id', targetUser.id)
     .order('created_at', { ascending: false })
     .limit(100)
 
   if (followingError) {
-    if (followingError.message?.includes('Could not find')) {
-      return NextResponse.json({ following: [], count: 0 })
-    }
     logger.error('Fetch following failed', { error: followingError, targetUserId: targetUser.id })
     return serverError('Failed to fetch following list')
   }
 
+  const followingRows = (following || []) as {
+    id: string
+    created_at?: string
+    following_id: string
+  }[]
+  const followingIds = followingRows.map((f) => f.following_id).filter(Boolean)
+  const profileById = await fetchProfilesByIds(supabase, followingIds)
+
   let followStatus: Record<string, boolean> = {}
-  if (requesterId && following && following.length > 0) {
-    const followingIds = (following as FollowingRow[])
-      .map((f) => f.following?.id)
-      .filter(Boolean) as string[]
+  if (requesterId && followingIds.length > 0) {
     followStatus = await fetchFollowStatus(supabase, requesterId, followingIds)
   }
 
-  const formattedFollowing = ((following || []) as FollowingRow[])
-    .map((f) => ({
-      id: f.following?.id,
-      handle: f.following?.handle,
-      bio: f.following?.bio,
-      avatar_url: f.following?.avatar_url,
-      followed_at: f.created_at,
-      is_following: followStatus[f.following?.id || ''] || false,
-    }))
+  const formattedFollowing = followingRows
+    .map((f) => {
+      const profile = profileById.get(f.following_id)
+      return {
+        id: profile?.id,
+        handle: profile?.handle,
+        bio: profile?.bio,
+        avatar_url: profile?.avatar_url,
+        followed_at: f.created_at,
+        is_following: followStatus[profile?.id || ''] || false,
+      }
+    })
     .filter((f) => f.id)
 
   return NextResponse.json({
@@ -189,37 +188,40 @@ export async function GET(
   }
 
   // Delegate to withPublic-wrapped handler with captured handle
-  const handler = withPublic(async ({ user, supabase: sb }) => {
-    const supabase = sb as SupabaseClient
-    const searchParams = request.nextUrl.searchParams
-    const list = searchParams.get('list') // 'followers' | 'following'
-    // Derive requesterId from auth token (middleware provides user if auth header present)
-    const requesterId = user?.id ?? null
+  const handler = withPublic(
+    async ({ user, supabase: sb }) => {
+      const supabase = sb as SupabaseClient
+      const searchParams = request.nextUrl.searchParams
+      const list = searchParams.get('list') // 'followers' | 'following'
+      // Derive requesterId from auth token (middleware provides user if auth header present)
+      const requesterId = user?.id ?? null
 
-    // Fetch cached follower/following counts directly from user_profiles.
-    const { data: targetUser, error: userError } = await supabase
-      .from('user_profiles')
-      .select('id, handle, show_followers, show_following, follower_count, following_count')
-      .eq('handle', handle)
-      .maybeSingle()
+      // Fetch cached follower/following counts directly from user_profiles.
+      const { data: targetUser, error: userError } = await supabase
+        .from('user_profiles')
+        .select('id, handle, show_followers, show_following, follower_count, following_count')
+        .eq('handle', handle)
+        .maybeSingle()
 
-    if (userError || !targetUser) {
-      return notFound('User not found')
-    }
+      if (userError || !targetUser) {
+        return notFound('User not found')
+      }
 
-    if (list === 'followers') {
-      return getFollowersList(supabase, targetUser, requesterId)
-    }
-    if (list === 'following') {
-      return getFollowingList(supabase, targetUser, requesterId)
-    }
+      if (list === 'followers') {
+        return getFollowersList(supabase, targetUser, requesterId)
+      }
+      if (list === 'following') {
+        return getFollowingList(supabase, targetUser, requesterId)
+      }
 
-    // Default: return both counts -- served from the cached columns
-    return NextResponse.json({
-      followers_count: targetUser.follower_count ?? 0,
-      following_count: targetUser.following_count ?? 0,
-    })
-  }, { name: 'users-follow', rateLimit: 'public', readsAuth: true })
+      // Default: return both counts -- served from the cached columns
+      return NextResponse.json({
+        followers_count: targetUser.follower_count ?? 0,
+        following_count: targetUser.following_count ?? 0,
+      })
+    },
+    { name: 'users-follow', rateLimit: 'public', readsAuth: true }
+  )
 
   return handler(request)
 }

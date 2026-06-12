@@ -25,12 +25,12 @@ export const GET = withAuth(
     const status = searchParams.get('status') || 'pending'
 
     // 获取申请列表
+    // NOTE: group_applications.applicant_id references auth.users (not
+    // public.user_profiles), so a PostgREST embed fails with PGRST200.
+    // Two-step query: fetch applications, then look up applicant profiles.
     let query = supabase
       .from('group_applications')
-      .select(`
-        *,
-        applicant:user_profiles!applicant_id(id, handle, avatar_url)
-      `)
+      .select('*')
       .order('created_at', { ascending: false })
 
     if (status !== 'all') {
@@ -44,7 +44,20 @@ export const GET = withAuth(
       return NextResponse.json({ error: 'Failed to fetch application list' }, { status: 500 })
     }
 
-    return NextResponse.json({ applications })
+    const applicantIds = [
+      ...new Set((applications || []).map((a) => a.applicant_id).filter(Boolean)),
+    ]
+    const { data: applicantProfiles } = applicantIds.length
+      ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', applicantIds)
+      : { data: null }
+    const profileById = new Map((applicantProfiles || []).map((p) => [p.id, p]))
+
+    const applicationsWithApplicant = (applications || []).map((a) => ({
+      ...a,
+      applicant: profileById.get(a.applicant_id) ?? null,
+    }))
+
+    return NextResponse.json({ applications: applicationsWithApplicant })
   },
   { name: 'groups-applications-get', rateLimit: 'read' }
 )

@@ -37,15 +37,17 @@ const getHotPosts = unstable_cache(
   async (): Promise<Post[]> => {
     try {
       const supabase = getSupabaseAdmin()
+      // NOTE: posts.author_id references auth.users (not public.user_profiles),
+      // so a PostgREST embed fails with PGRST200. Two-step query: fetch posts,
+      // then look up author profiles by id and merge.
       const { data } = await supabase
         .from('posts')
         .select(
           `
           id, title, content, created_at,
           like_count, comment_count, view_count, hot_score, dislike_count,
-          group_id,
-          groups:group_id(name, name_en),
-          user_profiles:author_id(handle, avatar_url, display_name)
+          group_id, author_id,
+          groups:group_id(name, name_en)
         `
         )
         .order('hot_score', { ascending: false })
@@ -53,9 +55,20 @@ const getHotPosts = unstable_cache(
 
       if (!data || data.length === 0) return []
 
+      const authorIds = [
+        ...new Set(data.map((p: Record<string, unknown>) => p.author_id as string).filter(Boolean)),
+      ]
+      // (user_profiles has no display_name column — selecting it 400s with 42703)
+      const { data: authorProfiles } = authorIds.length
+        ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
+        : { data: null }
+      const profileById = new Map(
+        (authorProfiles || []).map((p: Record<string, unknown>) => [p.id as string, p])
+      )
+
       return data.map((post: Record<string, unknown>) => {
         const groups = post.groups as Record<string, unknown> | null
-        const author = post.user_profiles as Record<string, unknown> | null
+        const author = profileById.get(post.author_id as string) ?? null
         const createdAt = post.created_at as string
         const hotScore = (post.hot_score as number) || 0
 
