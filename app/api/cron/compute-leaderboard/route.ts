@@ -31,7 +31,7 @@ import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
 import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
-import { fetchPhase1FromV2 } from './fetch-phase1'
+import { runPhase1 } from './phase1-select'
 import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank-cleanup'
 import { scoreTraders, type ScoredTrader } from './score-traders'
 import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
@@ -495,13 +495,13 @@ async function computeSeason(
   const traderMap = new Map<string, TraderRow>()
   const addToTraderMap = makeAddToTraderMap(traderMap)
 
-  // Phase 1: Fetch fresh trader rows from trader_snapshots_v2, one platform
-  // at a time. Sequential to avoid DB pool exhaustion under cron storms.
-  // Per-source 30s timeout, 30D fallback for sparse windows, JSONB fallback
-  // for platforms that write columns sparsely. Logic in fetch-phase1.ts.
-  // The returned per-source row counts aren't currently consumed downstream
-  // — kept for parity with the pre-refactor diagnostic surface.
-  await fetchPhase1FromV2(supabase, season, addToTraderMap)
+  // Phase 1: Fetch fresh trader rows into traderMap. The read source is
+  // chosen by COMPUTE_READ_SOURCE (trader_latest | arena | diff) — the ENDGAME
+  // cutover switch from the legacy trader_latest table to the arena pipeline's
+  // arena_score_inputs RPC. Default 'trader_latest' is the legacy per-platform
+  // reader; 'diff' publishes legacy while logging the arena delta (shadow
+  // phase); 'arena' reads purely from the new pipeline. See phase1-select.ts.
+  await runPhase1(supabase, season, traderMap, addToTraderMap)
 
   // V1 fetch removed — v2 backfill (migration 20260319b) ensures v2 has full coverage.
   // upsertTraders() writes to both v1 and v2 on every cron run, so v2 stays current.
