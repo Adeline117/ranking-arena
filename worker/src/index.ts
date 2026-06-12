@@ -30,14 +30,12 @@ import { Worker } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
 import { QUEUE_NAME, JOB, getQueue } from './queues'
 import { registerSchedules } from './scheduler'
-import { processFetch } from './processors/fetch'
 import { startDashboard } from './dashboard'
 
-const FETCH_CONCURRENCY = 5 // 5 platforms fetching in parallel
-
-// Track fetch completions to trigger leaderboard recompute
-let fetchCompletedSinceLastScore = 0
-const FETCH_BATCH_THRESHOLD = 5 // After N platforms fetch, trigger score recompute
+// ENDGAME (ARENA_DATA_SPEC v1.2): legacy fetch/enrich removed — leaderboard
+// data is produced by arena-ingest-worker. This worker only keeps the
+// downstream chain: Arena Score recompute + Meilisearch sync.
+const CONCURRENCY = 3
 
 async function main() {
   console.log('[worker] Arena Pipeline Worker starting...')
@@ -50,9 +48,6 @@ async function main() {
     QUEUE_NAME,
     async (job) => {
       switch (job.name) {
-        case JOB.FETCH_PLATFORM:
-          return processFetch(job)
-
         case JOB.COMPUTE_LEADERBOARD: {
           // Trigger Vercel's compute-leaderboard endpoint (still runs there)
           const { season } = job.data as { season: string }
@@ -73,27 +68,6 @@ async function main() {
           )
           if (!resp.ok) throw new Error(`compute-leaderboard ${season} returned ${resp.status}`)
           return { season, status: resp.status, ...body }
-        }
-
-        case JOB.ENRICH_PLATFORM: {
-          // Trigger Vercel's batch-enrich endpoint
-          const { period, tier } = job.data as { period: string; tier: string }
-          const enrichSecret = process.env.CRON_SECRET
-          if (!enrichSecret) return { skipped: true, reason: 'no CRON_SECRET' }
-          const enrichUrl = process.env.SITE_URL || 'https://www.arenafi.org'
-          job.log(`Triggering batch-enrich period=${period} tier=${tier}`)
-          const enrichResp = await fetch(
-            `${enrichUrl}/api/cron/batch-enrich?period=${period}&tier=${tier}`,
-            {
-              headers: { Authorization: `Bearer ${enrichSecret}` },
-              signal: AbortSignal.timeout(300_000),
-            }
-          )
-          const enrichBody = await enrichResp.json().catch(() => ({}))
-          job.log(`batch-enrich ${period}/${tier}: ${enrichResp.status}`)
-          if (!enrichResp.ok)
-            throw new Error(`batch-enrich ${period}/${tier} returned ${enrichResp.status}`)
-          return { period, tier, status: enrichResp.status, ...enrichBody }
         }
 
         case JOB.SYNC_MEILISEARCH: {
@@ -119,7 +93,7 @@ async function main() {
     },
     {
       connection: getConnection(),
-      concurrency: FETCH_CONCURRENCY,
+      concurrency: CONCURRENCY,
       removeOnComplete: { age: 24 * 3600, count: 1000 }, // Keep last 1000 completed jobs for 24h
       removeOnFail: { age: 7 * 24 * 3600, count: 5000 }, // Keep failed jobs for 7 days
     }
@@ -133,38 +107,6 @@ async function main() {
       console.log(`[worker] ✓ ${job.name} (${JSON.stringify(job.data)}) completed in ${duration}`)
 
       const q = getQueue()
-
-      // Event chain: fetch → score → enrich + meilisearch
-      if (job.name === JOB.FETCH_PLATFORM) {
-        fetchCompletedSinceLastScore++
-        if (fetchCompletedSinceLastScore >= FETCH_BATCH_THRESHOLD) {
-          fetchCompletedSinceLastScore = 0
-          console.log('[worker] Fetch batch threshold reached — triggering enrich + score')
-          for (const period of ['7D', '30D', '90D']) {
-            for (const tier of ['fast', 'slow']) {
-              await q.add(
-                JOB.ENRICH_PLATFORM,
-                { period, tier },
-                {
-                  jobId: `enrich-after-fetch_${period}_${tier}_${Date.now()}`,
-                  priority: 2,
-                }
-              )
-            }
-          }
-          for (const season of ['7D', '30D', '90D'] as const) {
-            await q.add(
-              JOB.COMPUTE_LEADERBOARD,
-              { season },
-              {
-                jobId: `score-after-fetch_${season}_${Date.now()}`,
-                priority: 1,
-                delay: 120_000,
-              }
-            )
-          }
-        }
-      }
 
       // After score compute → trigger meilisearch sync
       if (job.name === JOB.COMPUTE_LEADERBOARD) {
@@ -229,9 +171,7 @@ async function main() {
     console.error('[worker] UNHANDLED REJECTION:', reason)
   })
 
-  console.log(
-    `[worker] Ready — processing queue "${QUEUE_NAME}" with concurrency=${FETCH_CONCURRENCY}`
-  )
+  console.log(`[worker] Ready — processing queue "${QUEUE_NAME}" with concurrency=${CONCURRENCY}`)
   console.log('[worker] Press Ctrl+C to stop')
 
   // 5. Start Bull Board dashboard
