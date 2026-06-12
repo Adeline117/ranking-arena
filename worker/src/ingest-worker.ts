@@ -78,6 +78,12 @@ async function main(): Promise<void> {
   const worker = new Worker(INGEST_QUEUE_NAME, route, {
     connection: ingestConnection(),
     concurrency: INGEST_CONCURRENCY,
+    // Tier-A full crawls run 25-90 min; default 30s lock + stall detection
+    // misfires across pm2 restarts ("job stalled more than allowable limit").
+    // Longer lock + renewal headroom; stalled jobs still recover via retry.
+    lockDuration: 180_000,
+    stalledInterval: 300_000,
+    maxStalledCount: 2,
   })
 
   worker.on('completed', (job) => {
