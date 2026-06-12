@@ -33,6 +33,7 @@ export interface SpotCoin {
 export function useMarketSpotData() {
   return useQuery<SpotCoin[]>({
     queryKey: ['market-spot'],
+    placeholderData: (prev) => prev,
     queryFn: () => fetcher<SpotCoin[]>('/api/market/spot'),
     refetchInterval: 30_000,
     refetchOnWindowFocus: false,

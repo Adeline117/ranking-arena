@@ -82,6 +82,7 @@ export function useLinkedAccounts(
     isLoading,
   } = useQuery<LinkedAccountsResponse | null>({
     queryKey: ['linked-accounts', platform, traderKey],
+    placeholderData: (prev) => prev,
     queryFn: () => linkedAccountsFetcher(url),
     enabled: shouldFetch,
     refetchOnWindowFocus: false,

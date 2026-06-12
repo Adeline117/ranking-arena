@@ -36,6 +36,7 @@ export function useWatchlist() {
     isLoading: _queryLoading,
   } = useQuery<WatchlistItem[]>({
     queryKey: WATCHLIST_QUERY_KEY,
+    placeholderData: (prev) => prev,
     queryFn: fetchWatchlist,
     enabled: isLoggedIn,
     refetchOnWindowFocus: false,

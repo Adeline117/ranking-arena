@@ -90,6 +90,7 @@ export function useCopierAggregate(opts: {
   const { source, exchangeTraderId, enabled = false } = opts
   const query = useQuery<CopierAggregate | { cacheState: 'pending' }>({
     queryKey: ['trader-copiers', source, exchangeTraderId],
+    placeholderData: (prev) => prev,
     queryFn: async () => {
       const res = await fetcher<ApiSuccessResponse<CopierAggregate | { cacheState: 'pending' }>>(
         recordsUrl(exchangeTraderId, source, 'copiers', 90)
