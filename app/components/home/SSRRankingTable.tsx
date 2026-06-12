@@ -7,15 +7,15 @@
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { formatROI, formatPnL } from '@/lib/utils/format'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { getScoreColorInfo } from '@/lib/utils/score-colors'
+import { tokens } from '@/lib/design-tokens'
 
+/** Same tiers + CSS vars as the hydrated TraderCard (getScoreStyle in
+ *  TraderDisplay wraps the same util) — the SSR shell previously used stale
+ *  80/60/40 tiers with raw hexes, so chips visibly shifted on hydration. */
 function getScoreStyle(score: number) {
-  if (score >= 80)
-    return { bg: 'rgba(34,197,94,0.12)', border: 'rgba(34,197,94,0.3)', color: '#22c55e' }
-  if (score >= 60)
-    return { bg: 'rgba(167,139,250,0.12)', border: 'rgba(167,139,250,0.3)', color: '#a78bfa' }
-  if (score >= 40)
-    return { bg: 'rgba(148,163,184,0.12)', border: 'rgba(148,163,184,0.3)', color: '#94a3b8' }
-  return { bg: 'rgba(100,116,139,0.12)', border: 'rgba(100,116,139,0.3)', color: '#64748b' }
+  const info = getScoreColorInfo(score)
+  return { bg: info.bgGradient, border: info.borderColor, color: info.color }
 }
 
 function getInitial(name: string): string {
@@ -25,11 +25,9 @@ function getInitial(name: string): string {
   return clean.charAt(0).toUpperCase()
 }
 
-const SOURCE_TYPE_COLORS: Record<string, string> = {
-  futures: '#F59E0B',
-  spot: '#3B82F6',
-  web3: '#8B5CF6',
-}
+// Hydrated CSR (parseSourceInfo) renders all type tags in text-tertiary —
+// the SSR shell's per-type amber/blue/violet flashed away on hydration.
+const SOURCE_TYPE_COLOR = 'var(--color-text-tertiary)'
 
 interface Props {
   traders: InitialTrader[]
@@ -43,11 +41,15 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
         style={{
           padding: '48px 16px',
           textAlign: 'center',
-          color: 'var(--color-text-tertiary, #888)',
+          color: 'var(--color-text-tertiary)',
         }}
       >
-        <p style={{ fontSize: 16, marginBottom: 8 }}>Loading rankings... / 加载排名中...</p>
-        <p style={{ fontSize: 13 }}>Data refreshes every few minutes / 数据每几分钟刷新一次</p>
+        <p style={{ fontSize: tokens.typography.fontSize.md, marginBottom: 8 }}>
+          Loading rankings... / 加载排名中...
+        </p>
+        <p style={{ fontSize: tokens.typography.fontSize.sm }}>
+          Data refreshes every few minutes / 数据每几分钟刷新一次
+        </p>
       </div>
     )
   }
@@ -60,7 +62,7 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
         const roiPositive = roiVal >= 0
         const score = trader.arena_score != null ? Number(trader.arena_score).toFixed(0) : null
         const scoreStyle = trader.arena_score != null ? getScoreStyle(trader.arena_score) : null
-        const typeColor = SOURCE_TYPE_COLORS[trader.source_type] || '#94a3b8'
+        const typeColor = SOURCE_TYPE_COLOR
         const typeLabel =
           trader.source_type === 'web3'
             ? 'On-chain'
@@ -85,9 +87,10 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               flexDirection: 'column',
               gap: 8,
               padding: '12px 16px',
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
               borderRadius: 12,
-              background: 'var(--color-bg-secondary, #151320)',
-              border: '1px solid var(--color-border-primary, #2C293A)',
+              background: 'var(--color-bg-secondary)',
+              border: '1px solid var(--color-border-primary)',
               textDecoration: 'none',
               color: 'inherit',
             }}
@@ -105,22 +108,27 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                       display: 'inline-flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color: 'var(--color-bg-primary, #0B0A10)',
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      color: 'var(--color-bg-primary)',
                       background:
                         rank === 1
-                          ? 'linear-gradient(135deg, #FFD700, #FFA500)'
+                          ? 'linear-gradient(135deg, var(--color-medal-gold), var(--color-medal-gold-end))'
                           : rank === 2
-                            ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
-                            : 'linear-gradient(135deg, #CD7F32, #A0522D)',
+                            ? 'linear-gradient(135deg, var(--color-medal-silver), var(--color-medal-silver-end))'
+                            : 'linear-gradient(135deg, var(--color-medal-bronze), var(--color-medal-bronze-end))',
                     }}
                   >
                     {rank}
                   </span>
                 ) : (
                   <span
-                    style={{ fontSize: 13, fontWeight: 800, color: 'var(--color-text-tertiary)' }}
+                    style={{
+                      fontSize: tokens.typography.fontSize.sm,
+                      // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
+                      fontWeight: 800,
+                      color: 'var(--color-text-tertiary)',
+                    }}
                   >
                     {rank}
                   </span>
@@ -135,13 +143,13 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                   minWidth: 44,
                   borderRadius: '50%',
                   background:
-                    'linear-gradient(135deg, var(--color-accent-primary-30, rgba(139,111,168,0.3)), var(--color-pro-gold-border, #a78bfa))',
+                    'linear-gradient(135deg, var(--color-accent-primary-30, rgba(139,111,168,0.3)), var(--color-pro-gold-border))',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 16,
-                  fontWeight: 700,
-                  color: '#fff',
+                  fontSize: tokens.typography.fontSize.md,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  color: 'var(--color-on-accent)',
                   overflow: 'hidden',
                   position: 'relative',
                 }}
@@ -172,8 +180,8 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               >
                 <div
                   style={{
-                    fontSize: 14,
-                    fontWeight: 700,
+                    fontSize: tokens.typography.fontSize.base,
+                    fontWeight: tokens.typography.fontWeight.bold,
                     color: 'var(--color-text-primary)',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -186,13 +194,14 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                   <span
                     style={{
                       padding: '1px 6px',
-                      borderRadius: 6,
+                      borderRadius: tokens.radius.sm,
+                      // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
                       fontSize: 11,
-                      fontWeight: 700,
+                      fontWeight: tokens.typography.fontWeight.bold,
                       lineHeight: 1.4,
                       color: typeColor,
-                      background: `${typeColor}15`,
-                      border: `1px solid ${typeColor}30`,
+                      background: `color-mix(in srgb, ${typeColor} 8%, transparent)`,
+                      border: `1px solid color-mix(in srgb, ${typeColor} 19%, transparent)`,
                     }}
                   >
                     {typeLabel}
@@ -206,14 +215,15 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                   style={{
                     minWidth: 50,
                     height: 28,
+                    // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
                     borderRadius: 8,
                     background: scoreStyle.bg,
                     border: `1px solid ${scoreStyle.border}`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    fontSize: 14,
-                    fontWeight: 900,
+                    fontSize: tokens.typography.fontSize.base,
+                    fontWeight: tokens.typography.fontWeight.black,
                     color: scoreStyle.color,
                   }}
                 >
@@ -228,19 +238,20 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                 style={{
                   flex: 1,
                   height: 6,
+                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
                   borderRadius: 3,
                   background: roiPositive
-                    ? `linear-gradient(90deg, #22c55e ${Math.min(100, Math.abs(roiVal) / 20)}%, transparent)`
-                    : `linear-gradient(90deg, #ef4444 ${Math.min(100, Math.abs(roiVal) / 20)}%, transparent)`,
+                    ? `linear-gradient(90deg, var(--color-accent-success) ${Math.min(100, Math.abs(roiVal) / 20)}%, transparent)`
+                    : `linear-gradient(90deg, var(--color-accent-error) ${Math.min(100, Math.abs(roiVal) / 20)}%, transparent)`,
                   opacity: 0.7,
                 }}
               />
               <span
                 style={{
-                  fontSize: 20,
-                  fontWeight: 900,
+                  fontSize: tokens.typography.fontSize.xl,
+                  fontWeight: tokens.typography.fontWeight.black,
                   marginLeft: 'auto',
-                  color: roiPositive ? '#22c55e' : '#ef4444',
+                  color: roiPositive ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
                   letterSpacing: '-0.02em',
                 }}
               >
@@ -255,23 +266,32 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                 {
                   label: 'PnL',
                   value: formatPnL(trader.pnl),
-                  color: trader.pnl != null ? (trader.pnl >= 0 ? '#22c55e' : '#ef4444') : undefined,
+                  color:
+                    trader.pnl != null
+                      ? trader.pnl >= 0
+                        ? 'var(--color-accent-success)'
+                        : 'var(--color-accent-error)'
+                      : undefined,
                 },
                 {
                   label: 'Win%',
                   value: winRate,
-                  color: trader.win_rate != null && trader.win_rate > 50 ? '#22c55e' : undefined,
+                  color:
+                    trader.win_rate != null && trader.win_rate > 50
+                      ? 'var(--color-accent-success)'
+                      : undefined,
                 },
                 {
                   label: 'MDD',
                   value: mdd,
-                  color: trader.max_drawdown != null ? '#ef4444' : undefined,
+                  color: trader.max_drawdown != null ? 'var(--color-accent-error)' : undefined,
                 },
               ].map((stat) => (
                 <div
                   key={stat.label}
                   style={{
-                    background: 'var(--color-bg-tertiary, #1C1926)',
+                    background: 'var(--color-bg-tertiary)',
+                    // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
                     borderRadius: 8,
                     padding: '6px 8px',
                     display: 'flex',
@@ -282,10 +302,11 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                 >
                   <span
                     style={{
+                      // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
                       fontSize: 10,
                       color: 'var(--color-text-tertiary)',
                       textTransform: 'uppercase',
-                      fontWeight: 500,
+                      fontWeight: tokens.typography.fontWeight.medium,
                       letterSpacing: '0.04em',
                       opacity: 0.7,
                     }}
@@ -294,8 +315,8 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                   </span>
                   <span
                     style={{
-                      fontSize: 13,
-                      fontWeight: 500,
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.medium,
                       color: stat.color || 'var(--color-text-secondary)',
                       fontVariantNumeric: 'tabular-nums',
                     }}
