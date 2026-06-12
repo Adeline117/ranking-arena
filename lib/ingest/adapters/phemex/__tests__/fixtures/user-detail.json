@@ -1,0 +1,114 @@
+{
+  "code": 0,
+  "msg": "OK",
+  "data": {
+    "userId": 2874961,
+    "nickName": "PhemexTraderrr",
+    "avatar": "8f1f469f5814b19a.png",
+    "showPosition": false,
+    "showBalance": false,
+    "copierRestriction": false,
+    "syncMaster": false,
+    "status": "Listed",
+    "starTrader": false,
+    "tags": [],
+    "snsAccounts": [],
+    "followerCount": 751,
+    "followStatus": "Unfollowed",
+    "accountData": {
+      "totalBalance": "0",
+      "totalPnl": "379607.9035",
+      "totalPnlRate": "5.6921",
+      "pnl30d": "50182.4014",
+      "pnlRate30d": "0.4303",
+      "tradeCount30d": 31,
+      "pnl90d": "78846.795",
+      "pnlRate90d": "0.7476",
+      "pnl180d": "93477.3982",
+      "pnlRate180d": "0.931",
+      "aum": "209.825497"
+    },
+    "tradeData": {
+      "totalTradeCount": 1071,
+      "totalTradeWinCount": 644,
+      "totalTradeWinRate": "0.60130719",
+      "tradeCount90d": 119,
+      "realizedPnl90d": "56587.3811057",
+      "tradeWinCount90d": 77,
+      "tradeWinRate90d": "0.64705882",
+      "avgOpenPosSize90d": "0",
+      "totalTradeVolume": "26828009.60700924",
+      "avgPositionHoldTimeNs": 0,
+      "preferenceSymbols": ["SIRENUSDT", "ENJUSDT", "ARIAUSDT", "STOUSDT", "LABUSDT"],
+      "createdTime": 1781136308000,
+      "updatedTime": 1781222404000,
+      "tradeCount30d": 31,
+      "tradeWinCount30d": 25,
+      "tradeCount180d": 419,
+      "tradeWinCount180d": 239,
+      "tradeWinRate30d": "0.7813",
+      "tradeWinRate180d": "0.5704057279236276",
+      "cptTradeVolumeTotal": "16509897.196204",
+      "cptTradeVolume30d": "258262.133785",
+      "cptTradeVolume90d": "1290367.836704",
+      "cptTradeVolume180d": "5627532.492871",
+      "avgPositionHoldTimeNs30d": 2994139773479394,
+      "avgPositionHoldTimeNs90d": 1800946770515042,
+      "avgPositionHoldTimeNs180d": 1261783518149919,
+      "mdd30d": "0.08",
+      "mdd90d": "0.189",
+      "mdd180d": "0.2438"
+    },
+    "copyTradeData": {
+      "copyStatus": "Uncopied",
+      "copyStatusV2": "Copy",
+      "profitShareRateRr": "0.1",
+      "minCopyAmount": {
+        "currency": "USD",
+        "amount": "10"
+      },
+      "minCopyInvestments": [
+        {
+          "currency": "USDT",
+          "amount": "100"
+        }
+      ],
+      "copierCount": 6,
+      "maxCopierCount": 100,
+      "totalProfitShare": {
+        "currency": "USD",
+        "amount": "0"
+      },
+      "last4CycleProfitShare": {
+        "currency": "USD",
+        "amount": "0"
+      },
+      "lastCycleProfitShare": {
+        "currency": "USD",
+        "amount": "0"
+      },
+      "currentCycleProfitShare": {
+        "currency": "USD",
+        "amount": "0"
+      },
+      "copyingSymbols": ["BTCUSDT", "ETHUSDT", "XRPUSDT", "SOLUSDT", "BNBUSDT"],
+      "copierRealizedPnl30d": {
+        "currency": "USD",
+        "amount": "0"
+      },
+      "copierTotalRealizedPnl": {
+        "currency": "USD",
+        "amount": "-738.438222719107"
+      },
+      "copierRealizedPnl90d": {
+        "currency": "USD",
+        "amount": "0"
+      },
+      "copierRealizedPnl180d": {
+        "currency": "USD",
+        "amount": "-202.437938"
+      }
+    },
+    "aiDescription": null
+  }
+}

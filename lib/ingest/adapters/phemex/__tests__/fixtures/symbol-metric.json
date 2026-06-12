@@ -1,0 +1,84 @@
+{
+  "code": 0,
+  "msg": "OK",
+  "data": {
+    "30d": [
+      {
+        "symbol": "BABYUSDT",
+        "value": "0.175572519084"
+      },
+      {
+        "symbol": "STEEMUSDT",
+        "value": "0.080152671756"
+      },
+      {
+        "symbol": "FIDAUSDT",
+        "value": "0.076335877863"
+      },
+      {
+        "symbol": "LAYERUSDT",
+        "value": "0.068702290076"
+      },
+      {
+        "symbol": "HEIUSDT",
+        "value": "0.045801526718"
+      },
+      {
+        "symbol": "Others",
+        "value": "0.553435114503"
+      }
+    ],
+    "180d": [
+      {
+        "symbol": "ZILUSDT",
+        "value": "0.077523703291"
+      },
+      {
+        "symbol": "OMUSDT",
+        "value": "0.076036438"
+      },
+      {
+        "symbol": "LAUSDT",
+        "value": "0.037367540435"
+      },
+      {
+        "symbol": "SIRENUSDT",
+        "value": "0.036995724112"
+      },
+      {
+        "symbol": "ENJUSDT",
+        "value": "0.029187581335"
+      },
+      {
+        "symbol": "Others",
+        "value": "0.742889012827"
+      }
+    ],
+    "90d": [
+      {
+        "symbol": "SIRENUSDT",
+        "value": "0.139355742297"
+      },
+      {
+        "symbol": "ENJUSDT",
+        "value": "0.109943977591"
+      },
+      {
+        "symbol": "PIXELUSDT",
+        "value": "0.084033613445"
+      },
+      {
+        "symbol": "SAHARAUSDT",
+        "value": "0.080532212885"
+      },
+      {
+        "symbol": "TURBOUSDT",
+        "value": "0.050420168067"
+      },
+      {
+        "symbol": "Others",
+        "value": "0.535714285715"
+      }
+    ]
+  }
+}
