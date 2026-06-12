@@ -1,0 +1,92 @@
+{
+  "periodStats": [
+    {
+      "id": "0xf7CF8C69f370ce6E05bdF23C12C5b45d91F57B02",
+      "realizedPnl": "126472330604464017119005000000000",
+      "realizedFees": "1740532722716748268168350000000",
+      "realizedSwapFees": "0",
+      "realizedPriceImpact": "-542459608471499521243438665600",
+      "realizedSwapImpact": "0",
+      "startUnrealizedPnl": "0",
+      "startUnrealizedFees": "0",
+      "startUnrealizedPriceImpact": "0",
+      "netCapital": "375048914759855496022593438665600",
+      "maxCapital": "499845000000000000000000000000000",
+      "sumMaxSize": "2496794082921840486375000000000000",
+      "volume": "7990719807192869228100000000000000",
+      "cumsumSize": "5493925724271028741725000000000000",
+      "cumsumCollateral": "998622065707811363616521250000000",
+      "closedCount": 1,
+      "wins": 1,
+      "losses": 0
+    }
+  ],
+  "pnlHistory": [
+    {
+      "timestamp": 1780617600,
+      "pnl": "54918730037890440978291657367739",
+      "cumulativePnl": "54918730037890440978291657367739",
+      "realizedPnl": "0",
+      "cumulativeRealizedPnl": "0",
+      "unrealizedPnl": "57029486204288895329865000000000"
+    },
+    {
+      "timestamp": 1780704000,
+      "pnl": "-359807533109103010226600000000",
+      "cumulativePnl": "54558922504781337968065057367739",
+      "realizedPnl": "0",
+      "cumulativeRealizedPnl": "0",
+      "unrealizedPnl": "56669678720350164128885000000000"
+    },
+    {
+      "timestamp": 1780790400,
+      "pnl": "-5837624128355891452472250000000",
+      "cumulativePnl": "48721298376425446515592807367739",
+      "realizedPnl": "0",
+      "cumulativeRealizedPnl": "0",
+      "unrealizedPnl": "49833336525514271310265000000000"
+    },
+    {
+      "timestamp": 1780876800,
+      "pnl": "2129776375036656858336481070476",
+      "cumulativePnl": "50851074751462103373929288438215",
+      "realizedPnl": "0",
+      "cumulativeRealizedPnl": "0",
+      "unrealizedPnl": "51992181429146658516145000000000"
+    },
+    {
+      "timestamp": 1780963200,
+      "pnl": "73937689647322327339142672896185",
+      "cumulativePnl": "124788764398784430713071961334400",
+      "realizedPnl": "126472330604464017119005000000000",
+      "cumulativeRealizedPnl": "126472330604464017119005000000000",
+      "unrealizedPnl": "0"
+    },
+    {
+      "timestamp": 1781049600,
+      "pnl": "0",
+      "cumulativePnl": "124788764398784430713071961334400",
+      "realizedPnl": "0",
+      "cumulativeRealizedPnl": "126472330604464017119005000000000",
+      "unrealizedPnl": "0"
+    },
+    {
+      "timestamp": 1781136000,
+      "pnl": "110745045426385348575582645746000",
+      "cumulativePnl": "235533809825169779288654607080400",
+      "realizedPnl": "0",
+      "cumulativeRealizedPnl": "126472330604464017119005000000000",
+      "unrealizedPnl": "112264208694154880559870000000000"
+    },
+    {
+      "timestamp": 1781222400,
+      "pnl": "-7904854273097592439279177754821",
+      "cumulativePnl": "227628955552072186849375429325579",
+      "realizedPnl": "0",
+      "cumulativeRealizedPnl": "126472330604464017119005000000000",
+      "unrealizedPnl": "104426461064583492590790000000000"
+    }
+  ],
+  "timeframe": 7,
+  "from": 1780617600
+}
