@@ -140,15 +140,21 @@ describe('compatWriteTraderLatest — legacy dual-write semantics', () => {
     expect(await countRows('trader_sources')).toBe(0)
   })
 
-  test('non-USDT currency: never coerced into pnl_usd, skipped', async () => {
+  test('dollar-pegged non-USDT units (USDx/USDC/USD) DO compat-write — ranking layer is implicitly $', async () => {
+    // 2026-06-12 semantics change: the USDT-only skip froze non-USDT
+    // sources' leaderboard_ranks at cutover (hyperliquid/gmx/bybit_mt5…).
+    // trader_latest was always implicitly dollar-denominated; all four
+    // units are dollar-pegged, so the ranking layer writes them unconverted.
+    // spec §5.8 no-coerce stays enforced in the serving/UI layer (arena.*
+    // reads carry honest per-row currency labels).
     const src = makeSource({ expected_count: 5, serving_mode: 'shadow', currency: 'USDx' })
     await insertSourceRow(src)
     await publishPassed(src, 5)
 
     const result = await compatWriteTraderLatest(src, 7)
-    expect(result.written).toBe(0)
-    expect(result.skipped).toContain('non-USDT')
-    expect(await countRows('trader_latest')).toBe(0)
+    expect(result.skipped).toBeNull()
+    expect(result.written).toBe(5)
+    expect(await countRows('trader_latest')).toBe(5)
   })
 
   test('meta.legacy_platform: explicit null disables, string overrides the slug', async () => {
