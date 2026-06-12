@@ -13,7 +13,7 @@ import {
   getCommentCount,
 } from './comments'
 
-// Mock sanitize to avoid isomorphic-dompurify/jsdom/undici ReadableStream issue in test env
+// Mock sanitize — these tests cover data-layer logic; sanitize behavior is tested in lib/utils/__tests__/sanitize.test.ts
 jest.mock('@/lib/utils/sanitize', () => ({
   sanitizeText: jest.fn((text: string) => text),
   sanitizeHtml: jest.fn((html: string) => html),

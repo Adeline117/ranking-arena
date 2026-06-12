@@ -6,8 +6,8 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { delByPattern } from '@/lib/cache'
 import { CachePattern } from '@/lib/cache/keys'
-// Dynamic import: sanitize.ts pulls in isomorphic-dompurify + jsdom (~10MB)
-// which crashes Vercel serverless cold starts. Only needed for write operations.
+// Dynamic import: sanitize.ts pulls in the sanitize-html parser, only needed
+// for write operations — keep it out of read-path cold starts.
 const loadSanitize = () => import('@/lib/utils/sanitize').then((m) => m.sanitizeText)
 
 /** Best-effort invalidation of all post list caches */

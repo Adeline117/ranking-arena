@@ -11,7 +11,6 @@ const customJestConfig = {
   setupFilesAfterEnv: ['<rootDir>/jest.setup.js'],
   testEnvironment: 'jest-environment-jsdom',
   moduleNameMapper: {
-    '^isomorphic-dompurify$': '<rootDir>/lib/utils/__mocks__/isomorphic-dompurify.ts',
     '^@/(.*)$': '<rootDir>/$1',
   },
   testPathIgnorePatterns: [
