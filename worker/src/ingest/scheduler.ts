@@ -92,40 +92,46 @@ export async function reconcileSchedulers(): Promise<void> {
 
   // Remove stale schedulers + REVIVE stuck ones across every region queue.
   //
-  // Stuck-scheduler root fix (2026-06-12): BullMQ's upsertJobScheduler is
-  // idempotent when `every` is unchanged, so it does NOT advance a `next`
-  // fire-time that fell into the past — which happens when a worker was
-  // OOM-killed mid-crawl repeatedly: the job never completes, `next` never
-  // moves, and the source silently stops scheduling forever (xt/okx_web3
-  // sat at a 10h-old `next`). Detect any `next` older than ~2× its cadence
-  // and force-rebuild that scheduler so it fires again.
+  // Stuck-scheduler root fix, take 2 (2026-06-12): the first version of this
+  // block read `scheduler.id`, but getJobSchedulers() items carry the
+  // scheduler identifier in `key` — `id` is always undefined, so the guard
+  // `if (!scheduler.id) continue` skipped EVERY scheduler and both cleanup
+  // and revival were dead code (15 sources sat 20h+ stale while hourly
+  // reconciles logged success).
+  //
+  // Revival predicate is now exact instead of a loose 2×cadence window: a
+  // scheduler iteration job has the deterministic id `repeat:<key>:<next>`.
+  // If `next` is past grace AND that job is gone, the repeat chain is broken
+  // (a backlogged-but-queued iteration still has its job and is left alone).
+  const REVIVE_GRACE_MS = 5 * 60_000
   let revived = 0
   const now = Date.now()
   for (const region of INGEST_REGIONS) {
     const q = getRegionQueue(region)
     const existing = await q.getJobSchedulers()
     for (const scheduler of existing) {
-      if (!scheduler.id) continue
-      if (!wanted.has(scheduler.id)) {
-        await q.removeJobScheduler(scheduler.id)
-        console.log(`[ingest-scheduler] removed stale scheduler ${scheduler.id} (${region})`)
+      const key = scheduler.key
+      if (!key) continue
+      if (!wanted.has(key)) {
+        await q.removeJobScheduler(key)
+        console.log(`[ingest-scheduler] removed stale scheduler ${key} (${region})`)
         continue
       }
-      // Revive a scheduler whose next fire-time is badly overdue.
       const every = typeof scheduler.every === 'number' ? scheduler.every : Number(scheduler.every)
-      if (scheduler.next && every && scheduler.next < now - 2 * every) {
-        await q.removeJobScheduler(scheduler.id)
-        await q.upsertJobScheduler(
-          scheduler.id,
-          { every },
-          { name: scheduler.name, data: scheduler.template?.data ?? {} }
-        )
-        revived++
-        console.log(
-          `[ingest-scheduler] revived stuck scheduler ${scheduler.id} ` +
-            `(next was ${Math.round((now - scheduler.next) / 3.6e6)}h overdue)`
-        )
-      }
+      if (!scheduler.next || !every || scheduler.next >= now - REVIVE_GRACE_MS) continue
+      const iterationJob = await q.getJob(`repeat:${key}:${scheduler.next}`)
+      if (iterationJob) continue // queued behind a backlog — chain intact
+      await q.removeJobScheduler(key)
+      await q.upsertJobScheduler(
+        key,
+        { every },
+        { name: scheduler.name, data: scheduler.template?.data ?? {} }
+      )
+      revived++
+      console.log(
+        `[ingest-scheduler] revived stuck scheduler ${key} ` +
+          `(next was ${Math.round((now - scheduler.next) / 60_000)}min overdue, iteration job missing)`
+      )
     }
   }
 
