@@ -1,4 +1,5 @@
 # Ranking Arena - QA Test Cases
+
 # 质量保证测试用例
 
 > Professional test cases for all user operations in Ranking Arena.
@@ -9,28 +10,41 @@
 
 ## Document Info / 文档信息
 
-| Item | Value |
-|------|-------|
-| Version | 1.0.0 |
+| Item         | Value      |
+| ------------ | ---------- |
+| Version      | 1.0.0      |
 | Last Updated | 2026-01-28 |
-| Author | QA Team |
-| Status | Active |
+| Author       | QA Team    |
+| Status       | Active     |
 
 ## Test Environment / 测试环境
 
-| Environment | URL |
-|-------------|-----|
-| Production | https://www.arenafi.org |
-| Staging | https://staging.arenafi.org |
-| Local Dev | http://localhost:3000 |
+| Environment | URL                         |
+| ----------- | --------------------------- |
+| Production  | https://www.arenafi.org     |
+| Staging     | https://staging.arenafi.org |
+| Local Dev   | http://localhost:3000       |
 
 ## Test Accounts / 测试账号
 
-| Role | Email | Password | Notes |
-|------|-------|----------|-------|
-| Free User | test.free@example.com | Test123! | 无订阅 |
-| Pro User | test.pro@example.com | Test123! | Pro 订阅 |
-| Admin | test.admin@example.com | Test123! | 管理员权限 |
+> ⚠️ 2026-06-12 核实：下表的 `test.*@example.com` 账号在生产 Supabase **并不存在**
+> （登录返回 invalid_credentials），仅为历史占位。生产真实可用的 QA 账号：
+>
+> | Role             | Email                      | Password                                        | Notes                                                                                                               |
+> | ---------------- | -------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+> | Free User (真实) | qa.button.test@arenafi.org | 随机密码 — 用 service role admin API 重置后使用 | user id `1c533890-01e8-4c34-a895-657f389ab4b2`，user_metadata.purpose=automated-qa；profile handle `qa_button_test` |
+>
+> 登录方式：`POST {SUPABASE_URL}/auth/v1/token?grant_type=password`（header `apikey: <anon key>`）。
+> 浏览器会话注入：localStorage `arena-auth`（lib/supabase/client.ts storageKey）。
+> 写操作测试铁律：做完立即反向清理；Stripe 只测到 checkout 页（生产为 test mode）。
+
+历史占位（不存在，待补建或删除）：
+
+| Role        | Email                  | Password | Notes      |
+| ----------- | ---------------------- | -------- | ---------- |
+| Free User   | test.free@example.com  | Test123! | 无订阅     |
+| Pro User    | test.pro@example.com   | Test123! | Pro 订阅   |
+| Admin       | test.admin@example.com | Test123! | 管理员权限 |
 | Group Owner | test.owner@example.com | Test123! | 小组创建者 |
 
 ---
@@ -61,9 +75,10 @@
 ## TC-AUTH: Authentication Tests
 
 ### TC-AUTH-001: Email Registration
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value                                          |
+| ------------ | ---------------------------------------------- |
+| Priority     | P0 - Critical                                  |
 | Precondition | User not logged in, valid email not registered |
 
 **Test Steps:**
@@ -79,6 +94,7 @@
 | 8 | Click verification link | Account verified, redirected to app |
 
 **Edge Cases:**
+
 - [ ] Invalid email format → Error message displayed
 - [ ] Password too weak → Strength indicator shows weak
 - [ ] Email already registered → Error: "Email already in use"
@@ -87,9 +103,10 @@
 ---
 
 ### TC-AUTH-002: Email Login
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value                       |
+| ------------ | --------------------------- |
+| Priority     | P0 - Critical               |
 | Precondition | User has registered account |
 
 **Test Steps:**
@@ -103,6 +120,7 @@
 | 6 | Check navigation | User avatar/name shown in nav |
 
 **Edge Cases:**
+
 - [ ] Wrong password → Error: "Invalid credentials"
 - [ ] Non-existent email → Error: "Invalid credentials"
 - [ ] Empty fields → Validation error
@@ -111,9 +129,10 @@
 ---
 
 ### TC-AUTH-003: Logout
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P0 - Critical  |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -128,9 +147,10 @@
 ---
 
 ### TC-AUTH-004: Password Reset
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                       |
+| ------------ | --------------------------- |
+| Priority     | P1 - High                   |
 | Precondition | User has registered account |
 
 **Test Steps:**
@@ -150,9 +170,10 @@
 ---
 
 ### TC-AUTH-005: Account Deletion
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -173,9 +194,10 @@
 ## TC-PROFILE: User Profile Tests
 
 ### TC-PROFILE-001: View Own Profile
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P0 - Critical  |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -192,9 +214,10 @@
 ---
 
 ### TC-PROFILE-002: Edit Profile - Avatar Upload
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -210,6 +233,7 @@
 | 8 | Check profile | New avatar displayed |
 
 **Edge Cases:**
+
 - [ ] File too large (>5MB) → Error message
 - [ ] Invalid format (PDF, etc.) → Error message
 - [ ] Cancel during crop → No changes saved
@@ -217,9 +241,10 @@
 ---
 
 ### TC-PROFILE-003: Edit Profile - Bio Update
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -233,6 +258,7 @@
 | 6 | Navigate to profile | New bio displayed |
 
 **Edge Cases:**
+
 - [ ] Exceed 200 characters → Truncated or error
 - [ ] Empty bio → Saved as empty (valid)
 - [ ] Special characters/emoji → Properly saved and displayed
@@ -240,9 +266,10 @@
 ---
 
 ### TC-PROFILE-004: Edit Profile - Social Links
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P2 - Medium    |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -259,9 +286,10 @@
 ---
 
 ### TC-PROFILE-005: View Other User's Profile
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                              |
+| ------------ | ---------------------------------- |
+| Priority     | P1 - High                          |
 | Precondition | User logged in, target user exists |
 
 **Test Steps:**
@@ -279,9 +307,10 @@
 ## TC-TRADER: Trader Operations Tests
 
 ### TC-TRADER-001: View Leaderboard
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value                   |
+| ------------ | ----------------------- |
+| Priority     | P0 - Critical           |
 | Precondition | None (works for guests) |
 
 **Test Steps:**
@@ -299,9 +328,10 @@
 ---
 
 ### TC-TRADER-002: View Trader Detail Page
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value                     |
+| ------------ | ------------------------- |
+| Priority     | P0 - Critical             |
 | Precondition | Trader exists in database |
 
 **Test Steps:**
@@ -317,9 +347,10 @@
 ---
 
 ### TC-TRADER-003: Follow/Unfollow Trader
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -338,9 +369,10 @@
 ---
 
 ### TC-TRADER-004: Claim Trader Account
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                                                      |
+| ------------ | ---------------------------------------------------------- |
+| Priority     | P1 - High                                                  |
 | Precondition | User logged in, has exchange connected, trader not claimed |
 
 **Test Steps:**
@@ -355,6 +387,7 @@
 | 7 | Check trader page | Claimed badge visible |
 
 **Edge Cases:**
+
 - [ ] No exchange connected → Prompt to connect first
 - [ ] Verification fails → Error message with reason
 - [ ] Already claimed by another → Error: "Already claimed"
@@ -362,9 +395,10 @@
 ---
 
 ### TC-TRADER-005: Copy Trade Button (Pro Only)
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                 |
+| ------------ | --------------------- |
+| Priority     | P1 - High             |
 | Precondition | User logged in as Pro |
 
 **Test Steps:**
@@ -383,9 +417,10 @@
 ---
 
 ### TC-TRADER-006: Copy Trade Button (Free User)
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value                       |
+| ------------ | --------------------------- |
+| Priority     | P2 - Medium                 |
 | Precondition | User logged in as Free user |
 
 **Test Steps:**
@@ -401,9 +436,10 @@
 ## TC-POST: Post & Content Tests
 
 ### TC-POST-001: Create Text Post
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P0 - Critical  |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -418,6 +454,7 @@
 | 7 | Check post | Title, content, timestamp correct |
 
 **Edge Cases:**
+
 - [ ] Empty title → Error: "Title required"
 - [ ] Empty content → Error: "Content required"
 - [ ] Title > 200 chars → Truncated or error
@@ -426,9 +463,10 @@
 ---
 
 ### TC-POST-002: Create Post with Image
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -447,9 +485,10 @@
 ---
 
 ### TC-POST-003: Create Post with Poll
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P2 - Medium    |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -469,9 +508,10 @@
 ---
 
 ### TC-POST-004: Edit Post
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                         |
+| ------------ | ----------------------------- |
+| Priority     | P1 - High                     |
 | Precondition | User logged in, owns the post |
 
 **Test Steps:**
@@ -489,9 +529,10 @@
 ---
 
 ### TC-POST-005: Delete Post
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                         |
+| ------------ | ----------------------------- |
+| Priority     | P1 - High                     |
 | Precondition | User logged in, owns the post |
 
 **Test Steps:**
@@ -509,9 +550,10 @@
 ---
 
 ### TC-POST-006: Like/Dislike Post
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -527,9 +569,10 @@
 ---
 
 ### TC-POST-007: Bookmark Post
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -547,9 +590,10 @@
 ---
 
 ### TC-POST-008: Vote on Poll
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value                                |
+| ------------ | ------------------------------------ |
+| Priority     | P2 - Medium                          |
 | Precondition | User logged in, post has active poll |
 
 **Test Steps:**
@@ -567,9 +611,10 @@
 ## TC-COMMENT: Comment Tests
 
 ### TC-COMMENT-001: Add Comment
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P0 - Critical  |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -586,9 +631,10 @@
 ---
 
 ### TC-COMMENT-002: Reply to Comment
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                             |
+| ------------ | --------------------------------- |
+| Priority     | P1 - High                         |
 | Precondition | User logged in, post has comments |
 
 **Test Steps:**
@@ -604,9 +650,10 @@
 ---
 
 ### TC-COMMENT-003: Like Comment
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P2 - Medium    |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -620,9 +667,10 @@
 ---
 
 ### TC-COMMENT-004: Delete Own Comment
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                          |
+| ------------ | ------------------------------ |
+| Priority     | P1 - High                      |
 | Precondition | User logged in, owns a comment |
 
 **Test Steps:**
@@ -639,9 +687,10 @@
 ## TC-SOCIAL: Social Feature Tests
 
 ### TC-SOCIAL-001: Follow User
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -656,9 +705,10 @@
 ---
 
 ### TC-SOCIAL-002: Unfollow User
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                                  |
+| ------------ | -------------------------------------- |
+| Priority     | P1 - High                              |
 | Precondition | User logged in, following another user |
 
 **Test Steps:**
@@ -673,9 +723,10 @@
 ---
 
 ### TC-SOCIAL-003: View Followers List
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value                         |
+| ------------ | ----------------------------- |
+| Priority     | P2 - Medium                   |
 | Precondition | User logged in, has followers |
 
 **Test Steps:**
@@ -689,9 +740,10 @@
 ---
 
 ### TC-SOCIAL-004: Block User
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P2 - Medium    |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -710,9 +762,10 @@
 ## TC-MSG: Private Messaging Tests
 
 ### TC-MSG-001: Start New Conversation
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                                  |
+| ------------ | -------------------------------------- |
+| Priority     | P1 - High                              |
 | Precondition | User logged in, target allows messages |
 
 **Test Steps:**
@@ -728,9 +781,10 @@
 ---
 
 ### TC-MSG-002: Send Message in Existing Conversation
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                                     |
+| ------------ | ----------------------------------------- |
+| Priority     | P1 - High                                 |
 | Precondition | User logged in, has existing conversation |
 
 **Test Steps:**
@@ -745,9 +799,10 @@
 ---
 
 ### TC-MSG-003: Receive Message Notification
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                                      |
+| ------------ | ------------------------------------------ |
+| Priority     | P1 - High                                  |
 | Precondition | User logged in, another user sends message |
 
 **Test Steps:**
@@ -762,9 +817,10 @@
 ---
 
 ### TC-MSG-004: DM Privacy Settings
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P2 - Medium    |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -782,10 +838,11 @@
 ## TC-GROUP: Group Tests
 
 ### TC-GROUP-001: Browse Groups
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
-| Precondition | None |
+
+| Field        | Value     |
+| ------------ | --------- |
+| Priority     | P1 - High |
+| Precondition | None      |
 
 **Test Steps:**
 | Step | Action | Expected Result |
@@ -799,9 +856,10 @@
 ---
 
 ### TC-GROUP-002: Join Free Group
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P1 - High      |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -817,9 +875,10 @@
 ---
 
 ### TC-GROUP-003: Leave Group
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                |
+| ------------ | -------------------- |
+| Priority     | P1 - High            |
 | Precondition | User is group member |
 
 **Test Steps:**
@@ -834,9 +893,10 @@
 ---
 
 ### TC-GROUP-004: Apply to Create Group
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P2 - Medium    |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -853,9 +913,10 @@
 ---
 
 ### TC-GROUP-005: Group Admin - Ban Member
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value               |
+| ------------ | ------------------- |
+| Priority     | P2 - Medium         |
 | Precondition | User is group admin |
 
 **Test Steps:**
@@ -874,9 +935,10 @@
 ## TC-NOTIF: Notification Tests
 
 ### TC-NOTIF-001: View Notifications
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                             |
+| ------------ | --------------------------------- |
+| Priority     | P1 - High                         |
 | Precondition | User logged in, has notifications |
 
 **Test Steps:**
@@ -891,9 +953,10 @@
 ---
 
 ### TC-NOTIF-002: Mark All as Read
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value                         |
+| ------------ | ----------------------------- |
+| Priority     | P2 - Medium                   |
 | Precondition | User has unread notifications |
 
 **Test Steps:**
@@ -909,9 +972,10 @@
 ## TC-BOOKMARK: Bookmark Tests
 
 ### TC-BOOKMARK-001: Create Bookmark Folder
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P2 - Medium    |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -927,9 +991,10 @@
 ---
 
 ### TC-BOOKMARK-002: Move Bookmark to Folder
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value                          |
+| ------------ | ------------------------------ |
+| Priority     | P2 - Medium                    |
 | Precondition | User has bookmarks and folders |
 
 **Test Steps:**
@@ -947,10 +1012,11 @@
 ## TC-SEARCH: Search Tests
 
 ### TC-SEARCH-001: Search Traders
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
-| Precondition | None |
+
+| Field        | Value         |
+| ------------ | ------------- |
+| Priority     | P0 - Critical |
+| Precondition | None          |
 
 **Test Steps:**
 | Step | Action | Expected Result |
@@ -964,10 +1030,11 @@
 ---
 
 ### TC-SEARCH-002: Search with Filters
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
-| Precondition | None |
+
+| Field        | Value     |
+| ------------ | --------- |
+| Priority     | P1 - High |
+| Precondition | None      |
 
 **Test Steps:**
 | Step | Action | Expected Result |
@@ -982,9 +1049,10 @@
 ---
 
 ### TC-SEARCH-003: Search History
-| Field | Value |
-|-------|-------|
-| Priority | P3 - Low |
+
+| Field        | Value                    |
+| ------------ | ------------------------ |
+| Priority     | P3 - Low                 |
 | Precondition | User has searched before |
 
 **Test Steps:**
@@ -1000,9 +1068,10 @@
 ## TC-PAY: Subscription & Payment Tests
 
 ### TC-PAY-001: View Pricing Page
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                       |
+| ------------ | --------------------------- |
+| Priority     | P1 - High                   |
 | Precondition | User logged in as free user |
 
 **Test Steps:**
@@ -1017,9 +1086,10 @@
 ---
 
 ### TC-PAY-002: Subscribe to Pro (Monthly)
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value                                |
+| ------------ | ------------------------------------ |
+| Priority     | P0 - Critical                        |
 | Precondition | User logged in, valid payment method |
 
 **Test Steps:**
@@ -1034,6 +1104,7 @@
 | 7 | Access Pro features | Features unlocked |
 
 **Test Card Numbers:**
+
 - Success: 4242 4242 4242 4242
 - Decline: 4000 0000 0000 0002
 - Auth Required: 4000 0025 0000 3155
@@ -1041,9 +1112,10 @@
 ---
 
 ### TC-PAY-003: Cancel Subscription
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                            |
+| ------------ | -------------------------------- |
+| Priority     | P1 - High                        |
 | Precondition | User has active Pro subscription |
 
 **Test Steps:**
@@ -1062,9 +1134,10 @@
 ## TC-EXCHANGE: Exchange Connection Tests
 
 ### TC-EXCHANGE-001: Connect Exchange via API Key
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                                        |
+| ------------ | -------------------------------------------- |
+| Priority     | P1 - High                                    |
 | Precondition | User logged in, has exchange API credentials |
 
 **Test Steps:**
@@ -1083,9 +1156,10 @@
 ---
 
 ### TC-EXCHANGE-002: Disconnect Exchange
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                       |
+| ------------ | --------------------------- |
+| Priority     | P1 - High                   |
 | Precondition | User has connected exchange |
 
 **Test Steps:**
@@ -1100,9 +1174,10 @@
 ---
 
 ### TC-EXCHANGE-003: Sync Exchange Data
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value                       |
+| ------------ | --------------------------- |
+| Priority     | P2 - Medium                 |
 | Precondition | User has connected exchange |
 
 **Test Steps:**
@@ -1119,9 +1194,10 @@
 ## TC-SETTINGS: Settings Tests
 
 ### TC-SETTINGS-001: Change Language
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value            |
+| ------------ | ---------------- |
+| Priority     | P1 - High        |
 | Precondition | User on any page |
 
 **Test Steps:**
@@ -1137,9 +1213,10 @@
 ---
 
 ### TC-SETTINGS-002: Change Theme
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value            |
+| ------------ | ---------------- |
+| Priority     | P2 - Medium      |
 | Precondition | User on any page |
 
 **Test Steps:**
@@ -1155,9 +1232,10 @@
 ---
 
 ### TC-SETTINGS-003: Enable 2FA
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                           |
+| ------------ | ------------------------------- |
+| Priority     | P1 - High                       |
 | Precondition | User logged in, 2FA not enabled |
 
 **Test Steps:**
@@ -1178,10 +1256,11 @@
 ## TC-I18N: Internationalization Tests
 
 ### TC-I18N-001: All Pages Display Correctly in Both Languages
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
-| Precondition | None |
+
+| Field        | Value     |
+| ------------ | --------- |
+| Priority     | P1 - High |
+| Precondition | None      |
 
 **Test Steps:**
 | Step | Action | Expected Result |
@@ -1198,10 +1277,11 @@
 ---
 
 ### TC-I18N-002: Date/Time Formatting
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
-| Precondition | None |
+
+| Field        | Value       |
+| ------------ | ----------- |
+| Priority     | P2 - Medium |
+| Precondition | None        |
 
 **Test Steps:**
 | Step | Action | Expected Result |
@@ -1216,9 +1296,10 @@
 ## TC-MOBILE: Mobile Responsive Tests
 
 ### TC-MOBILE-001: Navigation on Mobile
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value                             |
+| ------------ | --------------------------------- |
+| Priority     | P0 - Critical                     |
 | Precondition | Mobile device or viewport < 768px |
 
 **Test Steps:**
@@ -1234,9 +1315,10 @@
 ---
 
 ### TC-MOBILE-002: Touch Interactions
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value         |
+| ------------ | ------------- |
+| Priority     | P1 - High     |
 | Precondition | Mobile device |
 
 **Test Steps:**
@@ -1251,9 +1333,10 @@
 ---
 
 ### TC-MOBILE-003: Forms on Mobile
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value         |
+| ------------ | ------------- |
+| Priority     | P1 - High     |
 | Precondition | Mobile device |
 
 **Test Steps:**
@@ -1270,9 +1353,10 @@
 ## TC-PERF: Performance Tests
 
 ### TC-PERF-001: Page Load Time
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field        | Value                  |
+| ------------ | ---------------------- |
+| Priority     | P1 - High              |
 | Precondition | Network: 4G or Fast 3G |
 
 **Test Steps:**
@@ -1289,9 +1373,10 @@
 ---
 
 ### TC-PERF-002: Infinite Scroll Performance
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field        | Value                     |
+| ------------ | ------------------------- |
+| Priority     | P2 - Medium               |
 | Precondition | Page with infinite scroll |
 
 **Test Steps:**
@@ -1308,9 +1393,10 @@
 ## TC-SEC: Security Tests
 
 ### TC-SEC-001: XSS Prevention
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value          |
+| ------------ | -------------- |
+| Priority     | P0 - Critical  |
 | Precondition | User logged in |
 
 **Test Steps:**
@@ -1325,9 +1411,10 @@
 ---
 
 ### TC-SEC-002: CSRF Protection
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value                      |
+| ------------ | -------------------------- |
+| Priority     | P0 - Critical              |
 | Precondition | Knowledge of API endpoints |
 
 **Test Steps:**
@@ -1341,9 +1428,10 @@
 ---
 
 ### TC-SEC-003: Authentication Required
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field        | Value           |
+| ------------ | --------------- |
+| Priority     | P0 - Critical   |
 | Precondition | User logged out |
 
 **Test Steps:**
@@ -1357,10 +1445,11 @@
 ---
 
 ### TC-SEC-004: Rate Limiting
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
-| Precondition | None |
+
+| Field        | Value     |
+| ------------ | --------- |
+| Priority     | P1 - High |
+| Precondition | None      |
 
 **Test Steps:**
 | Step | Action | Expected Result |
@@ -1381,9 +1470,10 @@
 ---
 
 ### TC-EDGE-001: Network Disconnection During Post Submit
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value          |
+| -------- | -------------- |
+| Priority | P1 - High      |
 | Category | Network / 网络 |
 
 **Scenario / 场景:**
@@ -1405,9 +1495,10 @@ User writes a long post, network disconnects right when clicking "Post".
 ---
 
 ### TC-EDGE-002: Rapid Double-Click on Follow Button
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value                     |
+| -------- | ------------------------- |
+| Priority | P1 - High                 |
 | Category | Race Condition / 竞态条件 |
 
 **Scenario / 场景:**
@@ -1426,9 +1517,10 @@ User rapidly clicks follow button multiple times.
 ---
 
 ### TC-EDGE-003: Same Account Login on Multiple Devices
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value          |
+| -------- | -------------- |
+| Priority | P1 - High      |
 | Category | Session / 会话 |
 
 **Scenario / 场景:**
@@ -1448,9 +1540,10 @@ User logs in on phone while already logged in on laptop.
 ---
 
 ### TC-EDGE-004: Browser Back Button After Form Submit
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value             |
+| -------- | ----------------- |
+| Priority | P2 - Medium       |
 | Category | Navigation / 导航 |
 
 **Scenario / 场景:**
@@ -1469,9 +1562,10 @@ User creates a post, then presses browser back button.
 ---
 
 ### TC-EDGE-005: Copy-Paste Formatted Text from Word/Notes
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value        |
+| -------- | ------------ |
+| Priority | P2 - Medium  |
 | Category | Input / 输入 |
 
 **Scenario / 场景:**
@@ -1491,15 +1585,17 @@ User copy-pastes formatted text with hidden characters from Microsoft Word.
 ---
 
 ### TC-EDGE-006: Emoji and Special Unicode Characters
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value              |
+| -------- | ------------------ |
+| Priority | P1 - High          |
 | Category | Unicode / 字符编码 |
 
 **Scenario / 场景:**
 User uses various emojis and special characters in content.
 
 **Test Data:**
+
 ```
 Standard emoji: 😀🎉🚀💰
 Skin tone: 👋🏻👋🏿
@@ -1526,15 +1622,17 @@ Zalgo: T̵̢̧̨͓̱̦̪͔͔̣̦̼̮͚̹̗̝̮̺͎͉͐̂́̏̋́̂͐̍̅̎̚͘͠
 ---
 
 ### TC-EDGE-007: Extremely Long Continuous Text (No Spaces)
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value         |
+| -------- | ------------- |
+| Priority | P2 - Medium   |
 | Category | Layout / 布局 |
 
 **Scenario / 场景:**
 User posts a very long string without any spaces or line breaks.
 
 **Test Data:**
+
 ```
 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ```
@@ -1551,9 +1649,10 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 ---
 
 ### TC-EDGE-008: Session Expires During Long Form Fill
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value          |
+| -------- | -------------- |
+| Priority | P1 - High      |
 | Category | Session / 会话 |
 
 **Scenario / 场景:**
@@ -1575,9 +1674,10 @@ User spends 2 hours writing a detailed post, session expires before submit.
 ---
 
 ### TC-EDGE-009: Upload Image with Wrong Extension
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value                  |
+| -------- | ---------------------- |
+| Priority | P2 - Medium            |
 | Category | File Upload / 文件上传 |
 
 **Scenario / 场景:**
@@ -1596,9 +1696,10 @@ User renames a .exe file to .jpg and tries to upload.
 ---
 
 ### TC-EDGE-010: Timezone Change During Session
-| Field | Value |
-|-------|-------|
-| Priority | P3 - Low |
+
+| Field    | Value       |
+| -------- | ----------- |
+| Priority | P3 - Low    |
 | Category | Time / 时间 |
 
 **Scenario / 场景:**
@@ -1618,9 +1719,10 @@ User travels from Beijing to New York while using the app.
 ---
 
 ### TC-EDGE-011: Rapid Tab Switching with Unsaved Changes
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value             |
+| -------- | ----------------- |
+| Priority | P2 - Medium       |
 | Category | Navigation / 导航 |
 
 **Scenario / 场景:**
@@ -1642,9 +1744,10 @@ User has unsaved post draft, rapidly switches between tabs.
 ---
 
 ### TC-EDGE-012: Payment Page Reload After Stripe Redirect
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field    | Value          |
+| -------- | -------------- |
+| Priority | P0 - Critical  |
 | Category | Payment / 支付 |
 
 **Scenario / 场景:**
@@ -1665,9 +1768,10 @@ User completes Stripe payment but closes browser before redirect completes.
 ---
 
 ### TC-EDGE-013: Simultaneous Edit Same Post (Two Tabs)
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value              |
+| -------- | ------------------ |
+| Priority | P2 - Medium        |
 | Category | Concurrency / 并发 |
 
 **Scenario / 场景:**
@@ -1688,9 +1792,10 @@ User opens same post for editing in two browser tabs.
 ---
 
 ### TC-EDGE-014: Follow User Who Blocks You Mid-Request
-| Field | Value |
-|-------|-------|
-| Priority | P3 - Low |
+
+| Field    | Value                     |
+| -------- | ------------------------- |
+| Priority | P3 - Low                  |
 | Category | Race Condition / 竞态条件 |
 
 **Scenario / 场景:**
@@ -1709,9 +1814,10 @@ User A clicks follow on User B. At the exact same moment, User B blocks User A.
 ---
 
 ### TC-EDGE-015: Upload During Low Storage on Mobile
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value           |
+| -------- | --------------- |
+| Priority | P2 - Medium     |
 | Category | Mobile / 移动端 |
 
 **Scenario / 场景:**
@@ -1730,15 +1836,17 @@ User tries to upload image when phone has <100MB storage left.
 ---
 
 ### TC-EDGE-016: API Key with Special Characters
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value             |
+| -------- | ----------------- |
+| Priority | P1 - High         |
 | Category | Exchange / 交易所 |
 
 **Scenario / 场景:**
 User's exchange API secret contains special characters like +, /, =.
 
 **Test Data:**
+
 ```
 API Key: abc123XYZ
 API Secret: aB+cD/eF==gH
@@ -1759,9 +1867,10 @@ Passphrase: p@ss+word/123=
 ---
 
 ### TC-EDGE-017: Language Switch Mid-Form
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value         |
+| -------- | ------------- |
+| Priority | P2 - Medium   |
 | Category | i18n / 国际化 |
 
 **Scenario / 场景:**
@@ -1781,9 +1890,10 @@ User starts filling a form in Chinese, switches to English mid-way.
 ---
 
 ### TC-EDGE-018: Delete Account Then Try to Login
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value          |
+| -------- | -------------- |
+| Priority | P1 - High      |
 | Category | Account / 账户 |
 
 **Scenario / 场景:**
@@ -1805,9 +1915,10 @@ User requests account deletion, then tries to login during 30-day grace period.
 ---
 
 ### TC-EDGE-019: Max Limit Testing
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value         |
+| -------- | ------------- |
+| Priority | P1 - High     |
 | Category | Limits / 限制 |
 
 **Scenario / 场景:**
@@ -1829,9 +1940,10 @@ Test behavior at maximum allowed limits.
 ---
 
 ### TC-EDGE-020: Extremely Slow Network (2G Simulation)
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value          |
+| -------- | -------------- |
+| Priority | P1 - High      |
 | Category | Network / 网络 |
 
 **Scenario / 场景:**
@@ -1852,9 +1964,10 @@ User on very slow network (2G speed).
 ---
 
 ### TC-EDGE-021: Password Manager Auto-fill Conflicts
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value            |
+| -------- | ---------------- |
+| Priority | P2 - Medium      |
 | Category | Browser / 浏览器 |
 
 **Scenario / 场景:**
@@ -1874,9 +1987,10 @@ Password manager tries to auto-fill wrong fields.
 ---
 
 ### TC-EDGE-022: Mobile Keyboard Covers Submit Button
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value           |
+| -------- | --------------- |
+| Priority | P1 - High       |
 | Category | Mobile / 移动端 |
 
 **Scenario / 场景:**
@@ -1897,12 +2011,14 @@ On mobile, the keyboard covers important buttons.
 ---
 
 ### TC-EDGE-023: External Link in Bio Causes XSS Attempt
-| Field | Value |
-|-------|-------|
-| Priority | P0 - Critical |
+
+| Field    | Value           |
+| -------- | --------------- |
+| Priority | P0 - Critical   |
 | Category | Security / 安全 |
 
 **Test Data:**
+
 ```
 javascript:alert('XSS')
 data:text/html,<script>alert('XSS')</script>
@@ -1923,9 +2039,10 @@ https://example.com?q=<script>alert('XSS')</script>
 ---
 
 ### TC-EDGE-024: Copy Trader with Deactivated Exchange Account
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value             |
+| -------- | ----------------- |
+| Priority | P2 - Medium       |
 | Category | Exchange / 交易所 |
 
 **Scenario / 场景:**
@@ -1944,9 +2061,10 @@ Trader's exchange account gets banned/deactivated.
 ---
 
 ### TC-EDGE-025: Group Owner Deletes Account
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value        |
+| -------- | ------------ |
+| Priority | P1 - High    |
 | Category | Group / 小组 |
 
 **Scenario / 场景:**
@@ -1966,9 +2084,10 @@ The owner of a group with 1000 members deletes their account.
 ---
 
 ### TC-EDGE-026: Bookmark Post Then Post Gets Deleted
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value                       |
+| -------- | --------------------------- |
+| Priority | P2 - Medium                 |
 | Category | Data Integrity / 数据完整性 |
 
 **Scenario / 场景:**
@@ -1988,9 +2107,10 @@ User bookmarks a post, then the post author deletes it.
 ---
 
 ### TC-EDGE-027: Browser Zoom 200% / 50%
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value                    |
+| -------- | ------------------------ |
+| Priority | P2 - Medium              |
 | Category | Accessibility / 可访问性 |
 
 **Scenario / 场景:**
@@ -2010,9 +2130,10 @@ User with vision issues uses browser zoom.
 ---
 
 ### TC-EDGE-028: Multiple File Upload - One Fails
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value         |
+| -------- | ------------- |
+| Priority | P2 - Medium   |
 | Category | Upload / 上传 |
 
 **Scenario / 场景:**
@@ -2033,9 +2154,10 @@ User uploads 5 images, the 3rd one fails.
 ---
 
 ### TC-EDGE-029: Login With Caps Lock On
-| Field | Value |
-|-------|-------|
-| Priority | P3 - Low |
+
+| Field    | Value         |
+| -------- | ------------- |
+| Priority | P3 - Low      |
 | Category | UX / 用户体验 |
 
 **Scenario / 场景:**
@@ -2055,9 +2177,10 @@ User accidentally has Caps Lock on while typing password.
 ---
 
 ### TC-EDGE-030: Deep Link When Not Logged In
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value             |
+| -------- | ----------------- |
+| Priority | P1 - High         |
 | Category | Navigation / 导航 |
 
 **Scenario / 场景:**
@@ -2077,9 +2200,10 @@ User clicks a shared link to protected content when not logged in.
 ---
 
 ### TC-EDGE-031: Stripe Webhook Delayed
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value          |
+| -------- | -------------- |
+| Priority | P1 - High      |
 | Category | Payment / 支付 |
 
 **Scenario / 场景:**
@@ -2100,9 +2224,10 @@ Stripe webhook is delayed by 5+ minutes after payment.
 ---
 
 ### TC-EDGE-032: Paste Image Directly into Text Field
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value        |
+| -------- | ------------ |
+| Priority | P2 - Medium  |
 | Category | Input / 输入 |
 
 **Scenario / 场景:**
@@ -2122,12 +2247,14 @@ User copies an image and pastes directly into post content.
 ---
 
 ### TC-EDGE-033: Right-to-Left (RTL) Language in Posts
-| Field | Value |
-|-------|-------|
-| Priority | P2 - Medium |
+
+| Field    | Value         |
+| -------- | ------------- |
+| Priority | P2 - Medium   |
 | Category | i18n / 国际化 |
 
 **Test Data:**
+
 ```
 Arabic: مرحبا بكم في أرينا
 Hebrew: שלום לכולם
@@ -2147,8 +2274,9 @@ Mixed: Hello مرحبا World عالم
 ---
 
 ### TC-EDGE-034: Trader Handle is Reserved Word
-| Field | Value |
-|-------|-------|
+
+| Field    | Value       |
+| -------- | ----------- |
 | Priority | P2 - Medium |
 | Category | Data / 数据 |
 
@@ -2156,6 +2284,7 @@ Mixed: Hello مرحبا World عالم
 Trader's handle matches a system reserved word or route.
 
 **Test Data:**
+
 - admin
 - settings
 - api
@@ -2177,9 +2306,10 @@ Trader's handle matches a system reserved word or route.
 ---
 
 ### TC-EDGE-035: WebSocket Disconnection During Chat
-| Field | Value |
-|-------|-------|
-| Priority | P1 - High |
+
+| Field    | Value            |
+| -------- | ---------------- |
+| Priority | P1 - High        |
 | Category | Real-time / 实时 |
 
 **Scenario / 场景:**
@@ -2204,35 +2334,43 @@ WebSocket connection drops during active chat.
 ## Bug ID: BUG-XXXX
 
 ### Summary / 摘要
+
 [One-line description]
 
 ### Environment / 环境
+
 - Browser:
 - OS:
 - Device:
 - User Type: Free/Pro/Admin
 
 ### Steps to Reproduce / 复现步骤
+
 1.
 2.
 3.
 
 ### Expected Result / 预期结果
+
 [What should happen]
 
 ### Actual Result / 实际结果
+
 [What actually happened]
 
 ### Screenshots / 截图
+
 [Attach if applicable]
 
 ### Severity / 严重程度
+
 - [ ] P0 - Critical (Blocks testing/production)
 - [ ] P1 - High (Major feature broken)
 - [ ] P2 - Medium (Feature works with workaround)
 - [ ] P3 - Low (Minor issue)
 
 ### Additional Notes / 备注
+
 [Any other information]
 ```
 
@@ -2254,12 +2392,12 @@ WebSocket connection drops during active chat.
 
 ### Sign-off / 签署
 
-| Role | Name | Date | Signature |
-|------|------|------|-----------|
-| QA Lead | | | |
-| Dev Lead | | | |
-| Product Owner | | | |
+| Role          | Name | Date | Signature |
+| ------------- | ---- | ---- | --------- |
+| QA Lead       |      |      |           |
+| Dev Lead      |      |      |           |
+| Product Owner |      |      |           |
 
 ---
 
-*Last updated: 2026-01-28*
+_Last updated: 2026-01-28_
