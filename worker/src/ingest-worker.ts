@@ -28,6 +28,7 @@ import {
 } from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
+import { startFailoverManager } from './ingest/failover'
 
 // Playwright sessions are heavy on a Mac Mini; per-source serialization
 // happens inside processors (one session per source at a time).
@@ -139,6 +140,16 @@ async function main(): Promise<void> {
   // independent of crawl cadence and of this node being alive).
   const heartbeatTimer = startHeartbeat(getConnection(), regions)
 
+  // Standby failover: when an operator sets arena:failover:regions in response
+  // to a heartbeat-down page, this worker temporarily consumes the downed
+  // node's queue (auto-stands-down when that node's heartbeat returns).
+  const failover = startFailoverManager(getConnection(), regions, route, {
+    concurrency: INGEST_CONCURRENCY,
+    lockDuration: 180_000,
+    stalledInterval: 300_000,
+    maxStalledCount: 2,
+  })
+
   console.log(
     `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY})`
   )
@@ -152,6 +163,7 @@ async function main(): Promise<void> {
     console.log(`[ingest-worker] ${signal} — shutting down…`)
     clearInterval(reconcileTimer)
     clearInterval(heartbeatTimer)
+    await failover.stop()
     await Promise.all(workers.map((w) => w.close()))
     await tiercWorker?.close()
     const { closeIngestPool } = await import('@/lib/ingest/db')
