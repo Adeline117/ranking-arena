@@ -12,7 +12,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { fetcher } from './fetchers'
-import { STALE_REALTIME } from './cache-presets'
+import { STALE_REALTIME, REFETCH_REALTIME } from './cache-presets'
 
 export interface SpotCoin {
   id: string
@@ -35,7 +35,7 @@ export function useMarketSpotData() {
     queryKey: ['market-spot'],
     placeholderData: (prev) => prev,
     queryFn: () => fetcher<SpotCoin[]>('/api/market/spot'),
-    refetchInterval: 30_000,
+    refetchInterval: REFETCH_REALTIME,
     refetchOnWindowFocus: false,
     staleTime: STALE_REALTIME,
   })

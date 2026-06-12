@@ -11,6 +11,12 @@
  */
 
 import { useQuery, useInfiniteQuery, type UseQueryResult } from '@tanstack/react-query'
+import {
+  REFETCH_REALTIME,
+  REFETCH_STANDARD,
+  REFETCH_RELAXED,
+  REFETCH_STATIC,
+} from './cache-presets'
 import { queryClient } from '@/app/components/Providers'
 
 // Re-export pure fetchers from the shared module
@@ -58,7 +64,7 @@ export function useTraderList(options: UseTraderListOptions = {}) {
     queryFn: () => fetcher(url),
     enabled,
     refetchOnWindowFocus: false,
-    refetchInterval: 30 * 60 * 1000,
+    refetchInterval: REFETCH_STATIC,
   })
 }
 
@@ -94,7 +100,7 @@ export function useTraderDetail(handle: string | undefined) {
     queryFn: () => fetcher(url),
     enabled: !!handle,
     refetchOnWindowFocus: false,
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: REFETCH_RELAXED,
   })
 }
 
@@ -116,7 +122,7 @@ export function useTraderEquity(handle: string | undefined) {
     queryFn: () => fetcher(url),
     enabled: !!handle,
     refetchOnWindowFocus: false,
-    refetchInterval: 60 * 60 * 1000,
+    refetchInterval: REFETCH_STATIC,
   })
 }
 
@@ -144,7 +150,7 @@ export function useTraderPositions(handle: string | undefined) {
     placeholderData: (prev) => prev,
     queryFn: () => fetcher(url),
     enabled: !!handle,
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: REFETCH_RELAXED,
   })
 }
 
@@ -199,7 +205,7 @@ export function usePosts(options: UsePostsOptions = {}) {
     queryFn: () => fetcher(url),
     enabled,
     refetchOnWindowFocus: false,
-    refetchInterval: 5 * 60 * 1000,
+    refetchInterval: REFETCH_RELAXED,
   })
 }
 
@@ -285,7 +291,7 @@ export function useMarketData() {
     queryKey: ['market-data'],
     placeholderData: (prev) => prev,
     queryFn: () => fetcher('/api/market'),
-    refetchInterval: 30 * 1000,
+    refetchInterval: REFETCH_REALTIME,
     refetchOnWindowFocus: false,
   })
 }
@@ -347,7 +353,7 @@ export function useNotifications(userId: string | undefined, token?: string) {
     placeholderData: (prev) => prev,
     queryFn: () => fetcherWithAuth(url, token),
     enabled: !!userId,
-    refetchInterval: 2 * 60 * 1000,
+    refetchInterval: REFETCH_STANDARD,
     refetchOnWindowFocus: false,
   })
 }
