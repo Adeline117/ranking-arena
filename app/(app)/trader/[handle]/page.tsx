@@ -250,17 +250,24 @@ const cachedFindUserHandleByTrader = unstable_cache(
 
       if (!sources?.length) return null
 
+      // NOTE: trader_authorizations.user_id references auth.users (not
+      // public.user_profiles), so a PostgREST embed fails with PGRST200.
+      // Two-step query: fetch user_id, then look up the profile handle.
       for (const src of sources) {
         const { data: auth } = await supabase
           .from('trader_authorizations')
-          .select('user_profiles:user_id(handle)')
+          .select('user_id')
           .eq('platform', src.source)
           .eq('trader_id', src.source_trader_id)
           .eq('status', 'active')
           .maybeSingle()
 
-        if (auth?.user_profiles) {
-          const profile = auth.user_profiles as unknown as { handle: string | null } | null
+        if (auth?.user_id) {
+          const { data: profile } = await supabase
+            .from('user_profiles')
+            .select('handle')
+            .eq('id', auth.user_id)
+            .maybeSingle()
           return profile?.handle || null
         }
       }
@@ -479,22 +486,21 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // already-resolved identity so the client stays in serving mode and lets
     // ServingProfilePanel fetch /core on its own (with its own skeletons + Tier-C
     // background fetch). entries=[] is a valid empty board, not a missing trader.
-    const firstScreen: TraderFirstScreen =
-      firstScreenRaw ?? {
-        source: servingResolved.source,
-        exchangeTraderId: servingResolved.exchangeTraderId,
-        nickname: servingResolved.nickname,
+    const firstScreen: TraderFirstScreen = firstScreenRaw ?? {
+      source: servingResolved.source,
+      exchangeTraderId: servingResolved.exchangeTraderId,
+      nickname: servingResolved.nickname,
+      avatarMirrorUrl: servingResolved.avatarMirrorUrl,
+      avatarOriginUrl: servingResolved.avatarOriginUrl,
+      avatarSrc: getTraderAvatarSrc({
         avatarMirrorUrl: servingResolved.avatarMirrorUrl,
         avatarOriginUrl: servingResolved.avatarOriginUrl,
-        avatarSrc: getTraderAvatarSrc({
-          avatarMirrorUrl: servingResolved.avatarMirrorUrl,
-          avatarOriginUrl: servingResolved.avatarOriginUrl,
-        }),
-        walletAddress: null,
-        traderKind: 'human',
-        botStrategy: null,
-        entries: [],
-      }
+      }),
+      walletAddress: null,
+      traderKind: 'human',
+      botStrategy: null,
+      entries: [],
+    }
 
     // Tier-A hero numbers: prefer the 90d board entry (matches rankings).
     const entries = firstScreen.entries ?? []
