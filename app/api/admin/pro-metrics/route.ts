@@ -28,53 +28,51 @@ export const GET = withAdminAuth(
     const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
 
     // All read-only queries in parallel — they don't depend on each other.
-    const [
-      totalPayingRes,
-      newPayingThisWeekRes,
-      activityRes,
-      recentSignupsRes,
-    ] = await Promise.allSettled([
-      // Total active paying subscribers
-      supabase
-        .from('subscriptions')
-        .select('id', { count: 'estimated', head: true })
-        .in('status', ['active', 'trialing'])
-        .in('tier', ['pro', 'lifetime']),
-      // Paying subscribers that signed up in the last 7 days
-      supabase
-        .from('subscriptions')
-        .select('id', { count: 'estimated', head: true })
-        .in('status', ['active', 'trialing'])
-        .in('tier', ['pro', 'lifetime'])
-        .gte('created_at', weekAgo.toISOString()),
-      // WAU: distinct user_ids in user_activity for the last 7d.
-      // Fetch user_ids and dedupe client-side (Supabase REST has no DISTINCT).
-      // Capped at 50k rows which is enough for current user base.
-      supabase
-        .from('user_activity')
-        .select('user_id')
-        .gte('created_at', weekAgo.toISOString())
-        .limit(50_000),
-      // Recent paying signups — last 10 across pro+lifetime
-      supabase
-        .from('subscriptions')
-        .select('id, user_id, tier, plan, status, created_at')
-        .in('status', ['active', 'trialing'])
-        .in('tier', ['pro', 'lifetime'])
-        .order('created_at', { ascending: false })
-        .limit(10),
-    ])
+    const [totalPayingRes, newPayingThisWeekRes, activityRes, recentSignupsRes] =
+      await Promise.allSettled([
+        // Total active paying subscribers
+        supabase
+          .from('subscriptions')
+          .select('id', { count: 'estimated', head: true })
+          .in('status', ['active', 'trialing'])
+          .in('tier', ['pro', 'lifetime']),
+        // Paying subscribers that signed up in the last 7 days
+        supabase
+          .from('subscriptions')
+          .select('id', { count: 'estimated', head: true })
+          .in('status', ['active', 'trialing'])
+          .in('tier', ['pro', 'lifetime'])
+          .gte('created_at', weekAgo.toISOString()),
+        // WAU: distinct user_ids in user_interactions for the last 7d.
+        // （user_activity 表已删；埋点管线 2026-06-12 修通后 user_interactions
+        //   开始落库 — 初期读数偏低。）
+        // Fetch user_ids and dedupe client-side (Supabase REST has no DISTINCT).
+        // Capped at 50k rows which is enough for current user base.
+        supabase
+          .from('user_interactions')
+          .select('user_id')
+          .gte('created_at', weekAgo.toISOString())
+          .limit(50_000),
+        // Recent paying signups — last 10 across pro+lifetime
+        supabase
+          .from('subscriptions')
+          .select('id, user_id, tier, plan, status, created_at')
+          .in('status', ['active', 'trialing'])
+          .in('tier', ['pro', 'lifetime'])
+          .order('created_at', { ascending: false })
+          .limit(10),
+      ])
 
     const totalPaying =
-      totalPayingRes.status === 'fulfilled' ? totalPayingRes.value.count ?? 0 : null
+      totalPayingRes.status === 'fulfilled' ? (totalPayingRes.value.count ?? 0) : null
     const newPayingThisWeek =
-      newPayingThisWeekRes.status === 'fulfilled'
-        ? newPayingThisWeekRes.value.count ?? 0
-        : null
+      newPayingThisWeekRes.status === 'fulfilled' ? (newPayingThisWeekRes.value.count ?? 0) : null
 
     let wau: number | null = null
     if (activityRes.status === 'fulfilled' && activityRes.value.data) {
-      const unique = new Set((activityRes.value.data as Array<{ user_id: string }>).map((r) => r.user_id))
+      const unique = new Set(
+        (activityRes.value.data as Array<{ user_id: string }>).map((r) => r.user_id)
+      )
       wau = unique.size
     }
 
@@ -91,10 +89,13 @@ export const GET = withAdminAuth(
         : []
 
     // Log any failed sub-queries (non-fatal — dashboard surfaces partial data)
-    if (totalPayingRes.status === 'rejected') logger.warn('totalPaying failed', totalPayingRes.reason)
-    if (newPayingThisWeekRes.status === 'rejected') logger.warn('newPaying failed', newPayingThisWeekRes.reason)
+    if (totalPayingRes.status === 'rejected')
+      logger.warn('totalPaying failed', totalPayingRes.reason)
+    if (newPayingThisWeekRes.status === 'rejected')
+      logger.warn('newPaying failed', newPayingThisWeekRes.reason)
     if (activityRes.status === 'rejected') logger.warn('activity failed', activityRes.reason)
-    if (recentSignupsRes.status === 'rejected') logger.warn('recentSignups failed', recentSignupsRes.reason)
+    if (recentSignupsRes.status === 'rejected')
+      logger.warn('recentSignups failed', recentSignupsRes.reason)
 
     return apiSuccess({
       totalPaying,
@@ -105,5 +106,5 @@ export const GET = withAdminAuth(
       timestamp: new Date().toISOString(),
     })
   },
-  { name: 'admin-pro-metrics' },
+  { name: 'admin-pro-metrics' }
 )
