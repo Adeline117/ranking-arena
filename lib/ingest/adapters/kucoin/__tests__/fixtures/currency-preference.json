@@ -1,0 +1,32 @@
+{
+  "success": true,
+  "code": "200",
+  "msg": "success",
+  "retry": false,
+  "data": [
+    {
+      "currency": "BTC",
+      "percent": "0.0767"
+    },
+    {
+      "currency": "APT",
+      "percent": "0.0710"
+    },
+    {
+      "currency": "UNI",
+      "percent": "0.0702"
+    },
+    {
+      "currency": "AAVE",
+      "percent": "0.0691"
+    },
+    {
+      "currency": "SUI",
+      "percent": "0.0666"
+    },
+    {
+      "currency": "Other",
+      "percent": "0.6464"
+    }
+  ]
+}

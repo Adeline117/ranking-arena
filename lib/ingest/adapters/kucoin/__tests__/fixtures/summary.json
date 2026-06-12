@@ -1,0 +1,28 @@
+{
+  "success": true,
+  "code": "200",
+  "msg": "success",
+  "retry": false,
+  "data": {
+    "leadConfigId": 1007359,
+    "uid": 253719106,
+    "nickName": "OldWolfofWallStreet_KC",
+    "avatar": "https://assets.staticimg.com/kc-v2-config/avatar/672a0c9a58fbd5000157bbe6_5.png",
+    "introduce": "AI-powered trading strategy by WolfBot.\nFollow my positions with disciplined position sizing. Every trade includes predefined stop-loss and take-profit to ensure risk control and capital protection.\n\nFocused on consistency, not gambling.\nLet's grow steadily and build wealth together.\n\nWeb wolfbot.io",
+    "twitterAccount": null,
+    "telegramAccount": null,
+    "followersSum": 285,
+    "followingSum": 1,
+    "alreadyCopyTraders": 47,
+    "allowCopyTraders": 1000,
+    "leadDays": 137,
+    "status": 1,
+    "followed": false,
+    "onLeaderboard": true,
+    "exchange": "BN",
+    "leadStatus": 1,
+    "positionVisibility": 1,
+    "copyTraderVisibility": 1,
+    "crossLeadOrderVisibility": 1
+  }
+}

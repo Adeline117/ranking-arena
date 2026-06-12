@@ -1,0 +1,15 @@
+{
+  "success": true,
+  "code": "200",
+  "msg": "success",
+  "retry": false,
+  "data": {
+    "leadConfigId": 1007359,
+    "totalReturnRate": "1.51101423097863849110",
+    "leadPrincipal": "4797.39877728000000000000",
+    "aum": "3004.07317996310000000000",
+    "copyTradingPnl": "192.93217996310000000000",
+    "profitSharingRatio": "0.10",
+    "tradingFrequency": 10
+  }
+}
