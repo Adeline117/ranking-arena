@@ -46,10 +46,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
   }
 
   const handleUnlinkWallet = async () => {
-    const confirmed = await onConfirm(
-      t('walletUnlinkTitle'),
-      t('walletUnlinkConfirm')
-    )
+    const confirmed = await onConfirm(t('walletUnlinkTitle'), t('walletUnlinkConfirm'))
     if (!confirmed) return
 
     setUnlinking(true)
@@ -66,7 +63,10 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
   if (walletLoading) {
     return (
       <Box style={{ padding: tokens.spacing[4] }}>
-        <div className="h-20 rounded-xl animate-pulse" style={{ background: 'var(--color-bg-tertiary)' }} />
+        <div
+          className="h-20 rounded-xl animate-pulse"
+          style={{ background: 'var(--color-bg-tertiary)' }}
+        />
       </Box>
     )
   }
@@ -117,7 +117,16 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                   justifyContent: 'center',
                 }}
               >
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.brand} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={tokens.colors.accent.brand}
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <rect x="2" y="6" width="20" height="12" rx="2" />
                   <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
                 </svg>
@@ -141,7 +150,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 background: 'transparent',
                 color: tokens.colors.accent.error,
                 fontSize: tokens.typography.fontSize.xs,
-                fontWeight: 600,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: unlinking ? 'not-allowed' : 'pointer',
                 opacity: unlinking ? 0.5 : 1,
               }}
@@ -166,7 +175,16 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
               }}
             >
               {t('walletViewOnBasescan')}
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="10"
+                height="10"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                 <polyline points="15 3 21 3 21 9" />
                 <line x1="10" y1="14" x2="21" y2="3" />
@@ -198,7 +216,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 border: 'none',
                 background: `linear-gradient(135deg, ${tokens.colors.accent.brand} 0%, ${tokens.colors.accent.brandHover} 100%)`,
                 color: tokens.colors.white,
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
                 fontSize: tokens.typography.fontSize.sm,
                 cursor: linkLoading ? 'not-allowed' : 'pointer',
                 opacity: linkLoading ? 0.6 : 1,
@@ -206,8 +224,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
             >
               {linkLoading
                 ? t('walletSigning')
-                : `${t('walletLinkButton')} (${shortenAddress(connectedAddress)})`
-              }
+                : `${t('walletLinkButton')} (${shortenAddress(connectedAddress)})`}
             </Button>
           ) : (
             <ConnectButton.Custom>
@@ -220,7 +237,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                     border: `1px solid var(--color-accent-primary-30)`,
                     background: 'var(--color-accent-primary-08)',
                     color: tokens.colors.accent.brandLight,
-                    fontWeight: 700,
+                    fontWeight: tokens.typography.fontWeight.bold,
                     fontSize: tokens.typography.fontSize.sm,
                     cursor: 'pointer',
                   }}
@@ -246,9 +263,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
           style={{
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.lg,
-            background: hasNFT
-              ? 'var(--color-accent-success-05)'
-              : tokens.colors.bg.tertiary,
+            background: hasNFT ? 'var(--color-accent-success-05)' : tokens.colors.bg.tertiary,
             border: `1px solid ${hasNFT ? 'var(--color-accent-success-20)' : tokens.colors.border.primary}`,
           }}
         >
@@ -264,20 +279,32 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 justifyContent: 'center',
               }}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={hasNFT ? tokens.colors.verified.onchain : tokens.colors.text.disabled} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={hasNFT ? tokens.colors.verified.onchain : tokens.colors.text.disabled}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 {hasNFT && <path d="M9 12l2 2 4-4" />}
               </svg>
             </Box>
             <Box>
-              <Text size="sm" weight="bold" style={{ color: hasNFT ? tokens.colors.verified.onchain : tokens.colors.text.secondary }}>
+              <Text
+                size="sm"
+                weight="bold"
+                style={{
+                  color: hasNFT ? tokens.colors.verified.onchain : tokens.colors.text.secondary,
+                }}
+              >
                 {hasNFT ? t('walletProNft') : t('walletNoNft')}
               </Text>
               <Text size="xs" color="tertiary">
-                {hasNFT
-                  ? t('walletProStatus').replace('{tier}', tier)
-                  : t('walletHoldNft')
-                }
+                {hasNFT ? t('walletProStatus').replace('{tier}', tier) : t('walletHoldNft')}
               </Text>
             </Box>
           </Box>

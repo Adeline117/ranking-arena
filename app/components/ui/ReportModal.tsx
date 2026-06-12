@@ -212,7 +212,12 @@ export default function ReportModal({
             >
               <Text size="sm" color="secondary">
                 {t('reportTarget')}
-                <span style={{ color: tokens.colors.text.primary, fontWeight: 600 }}>
+                <span
+                  style={{
+                    color: tokens.colors.text.primary,
+                    fontWeight: tokens.typography.fontWeight.semibold,
+                  }}
+                >
                   {targetName}
                 </span>
               </Text>
@@ -338,7 +343,7 @@ export default function ReportModal({
               {t('reportScreenshot')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
               <span
                 style={{
-                  fontWeight: 400,
+                  fontWeight: tokens.typography.fontWeight.normal,
                   color: tokens.colors.text.tertiary,
                   marginLeft: tokens.spacing[1],
                   fontSize: tokens.typography.fontSize.xs,
@@ -382,7 +387,7 @@ export default function ReportModal({
                       background: 'var(--color-backdrop-medium)',
                       border: 'none',
                       color: tokens.colors.white,
-                      fontSize: 12,
+                      fontSize: tokens.typography.fontSize.xs,
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
@@ -422,7 +427,12 @@ export default function ReportModal({
                     <circle cx="8.5" cy="8.5" r="1.5" />
                     <polyline points="21 15 16 10 5 21" />
                   </svg>
-                  <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
+                  <span
+                    style={{
+                      fontSize: tokens.typography.fontSize.xs,
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
                     {uploading ? '...' : t('upload')}
                   </span>
                   <input
@@ -502,7 +512,7 @@ export default function ReportModal({
                 borderRadius: tokens.radius.md,
                 color: tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.sm,
-                fontWeight: 600,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: 'pointer',
                 transition: 'all 0.2s',
               }}
@@ -531,7 +541,7 @@ export default function ReportModal({
                     ? 'var(--color-on-accent)'
                     : tokens.colors.text.tertiary,
                 fontSize: tokens.typography.fontSize.sm,
-                fontWeight: 600,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor:
                   submitting ||
                   !reason ||
