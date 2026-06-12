@@ -100,7 +100,7 @@ export default function RouteError({
           color: 'var(--color-text-primary)',
         }}
       >
-        {t('errorTitle') || '出了点问题'}
+        {t('errorTitle')}
       </h2>
 
       {/* 用户友好消息 */}
@@ -113,7 +113,7 @@ export default function RouteError({
           lineHeight: 1.6,
         }}
       >
-        {parsed.retryable ? t('errorRefresh') || '请刷新页面或稍后再试' : parsed.message}
+        {parsed.retryable ? t('errorRefresh') : parsed.message}
       </p>
 
       {/* 错误代码 */}
@@ -130,7 +130,7 @@ export default function RouteError({
             border: '1px solid var(--color-accent-error-12)',
           }}
         >
-          {t('errorCode') || '错误代码'}: {error.digest}
+          {t('errorCode')}: {error.digest}
         </p>
       )}
 
@@ -229,7 +229,7 @@ export default function RouteError({
             fontSize: 14,
           }}
         >
-          {t('backToHome') || '返回首页'}
+          {t('backToHome')}
         </Link>
         <a
           href={FEEDBACK_URL}

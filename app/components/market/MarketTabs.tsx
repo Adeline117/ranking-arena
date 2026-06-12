@@ -12,9 +12,7 @@ export default function MarketTabs({ children }: MarketTabsProps) {
   const { t } = useLanguage()
   const [active, setActive] = useState('spot')
 
-  const tabs = [
-    { key: 'spot', label: t('spot') || '现货' },
-  ]
+  const tabs = [{ key: 'spot', label: t('spot') }]
 
   return (
     <div>
@@ -34,9 +32,15 @@ export default function MarketTabs({ children }: MarketTabsProps) {
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
               background: 'none',
               border: 'none',
-              borderBottom: active === tab.key ? `2px solid ${tokens.colors.accent.primary}` : '2px solid transparent',
+              borderBottom:
+                active === tab.key
+                  ? `2px solid ${tokens.colors.accent.primary}`
+                  : '2px solid transparent',
               color: active === tab.key ? tokens.colors.text.primary : tokens.colors.text.secondary,
-              fontWeight: active === tab.key ? tokens.typography.fontWeight.semibold : tokens.typography.fontWeight.normal,
+              fontWeight:
+                active === tab.key
+                  ? tokens.typography.fontWeight.semibold
+                  : tokens.typography.fontWeight.normal,
               fontSize: tokens.typography.fontSize.base,
               cursor: 'pointer',
               transition: tokens.transition.fast,

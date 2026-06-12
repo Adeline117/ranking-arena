@@ -411,7 +411,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                 minHeight: 44,
               }}
             >
-              {t('back') || '返回'}
+              {t('back')}
             </button>
           )}
           <button
@@ -437,7 +437,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
             }}
           >
             {step === 'members' ? (
-              t('next') || '下一步'
+              t('next')
             ) : creating ? (
               <>
                 <ButtonSpinner size="xs" /> {t('loading')}

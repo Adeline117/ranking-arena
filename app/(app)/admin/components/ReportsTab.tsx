@@ -12,14 +12,8 @@ interface ReportsTabProps {
 }
 
 export default function ReportsTab({ accessToken }: ReportsTabProps) {
-  const {
-    reports,
-    pagination,
-    loading,
-    actionLoading,
-    loadReports,
-    resolveReport,
-  } = useReports(accessToken)
+  const { reports, pagination, loading, actionLoading, loadReports, resolveReport } =
+    useReports(accessToken)
   const { t } = useLanguage()
 
   const REASON_LABELS: Record<string, string> = {
@@ -39,7 +33,9 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
   }
 
   const [status, setStatus] = useState<'pending' | 'resolved' | 'dismissed' | 'all'>('pending')
-  const [contentType, setContentType] = useState<'post' | 'comment' | 'message' | 'user' | 'all'>('all')
+  const [contentType, setContentType] = useState<'post' | 'comment' | 'message' | 'user' | 'all'>(
+    'all'
+  )
 
   useEffect(() => {
     if (accessToken) {
@@ -54,9 +50,18 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
   return (
     <Card title={t('adminReportHandling')}>
       {/* Filters */}
-      <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
+      <Box
+        style={{
+          marginBottom: tokens.spacing[4],
+          display: 'flex',
+          gap: tokens.spacing[4],
+          flexWrap: 'wrap',
+        }}
+      >
         <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
-          <Text size="sm" color="secondary">{t('adminStatusFilter')}</Text>
+          <Text size="sm" color="secondary">
+            {t('adminStatusFilter')}
+          </Text>
           {(['pending', 'resolved', 'dismissed', 'all'] as const).map((s) => (
             <Button
               key={s}
@@ -64,13 +69,28 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
               size="sm"
               onClick={() => setStatus(s)}
             >
-              {s === 'pending' ? t('adminPending') : s === 'resolved' ? t('adminResolved') : s === 'dismissed' ? t('adminDismissed') : t('adminFilterAll')}
+              {s === 'pending'
+                ? t('adminPending')
+                : s === 'resolved'
+                  ? t('adminResolved')
+                  : s === 'dismissed'
+                    ? t('adminDismissed')
+                    : t('adminFilterAll')}
             </Button>
           ))}
         </Box>
 
-        <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center', flexWrap: 'wrap' }}>
-          <Text size="sm" color="secondary">{t('adminTypeFilter')}</Text>
+        <Box
+          style={{
+            display: 'flex',
+            gap: tokens.spacing[2],
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <Text size="sm" color="secondary">
+            {t('adminTypeFilter')}
+          </Text>
           {(['all', 'post', 'comment', 'message', 'user'] as const).map((ct) => (
             <Button
               key={ct}
@@ -107,19 +127,27 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                 }}
               >
                 {/* Header */}
-                <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[3] }}>
+                <Box
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: tokens.spacing[3],
+                  }}
+                >
                   <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
                     <Box
                       style={{
                         padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                         borderRadius: tokens.radius.sm,
-                        background: report.content_type === 'post'
-                          ? tokens.colors.accent.primary
-                          : report.content_type === 'message'
-                            ? 'var(--color-brand)'
-                            : report.content_type === 'user'
-                              ? 'var(--color-accent-error)'
-                              : tokens.colors.accent.warning,
+                        background:
+                          report.content_type === 'post'
+                            ? tokens.colors.accent.primary
+                            : report.content_type === 'message'
+                              ? 'var(--color-brand)'
+                              : report.content_type === 'user'
+                                ? 'var(--color-accent-error)'
+                                : tokens.colors.accent.warning,
                         color: tokens.colors.white,
                         fontSize: tokens.typography.fontSize.xs,
                       }}
@@ -145,7 +173,10 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                 {/* Reporter */}
                 <Box style={{ marginBottom: tokens.spacing[2] }}>
                   <Text size="sm" color="secondary">
-                    {t('adminReporter').replace('{handle}', report.reporter?.handle || t('unknown'))}
+                    {t('adminReporter').replace(
+                      '{handle}',
+                      report.reporter?.handle || t('unknown')
+                    )}
                   </Text>
                 </Box>
 
@@ -169,7 +200,10 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                     </Text>
                     {report.contentAuthor && (
                       <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
-                        {t('adminAuthor').replace('{handle}', report.contentAuthor.handle || t('unknown'))}
+                        {t('adminAuthor').replace(
+                          '{handle}',
+                          report.contentAuthor.handle || t('unknown')
+                        )}
                       </Text>
                     )}
                   </Box>
@@ -178,8 +212,12 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                 {/* Description */}
                 {report.description && (
                   <Box style={{ marginBottom: tokens.spacing[3] }}>
-                    <Text size="xs" color="tertiary">{t('adminReportDesc')}</Text>
-                    <Text size="sm" color="secondary">{report.description}</Text>
+                    <Text size="xs" color="tertiary">
+                      {t('adminReportDesc')}
+                    </Text>
+                    <Text size="sm" color="secondary">
+                      {report.description}
+                    </Text>
                   </Box>
                 )}
 
@@ -187,11 +225,17 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                 {report.images && report.images.length > 0 && (
                   <Box style={{ marginBottom: tokens.spacing[3] }}>
                     <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                      {t('adminReportEvidence') || '截图证据'} ({report.images.length})
+                      {t('adminReportEvidence')} ({report.images.length})
                     </Text>
                     <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
                       {report.images.map((img: string, i: number) => (
-                        <a key={i} href={img} target="_blank" rel="noopener noreferrer" style={{ display: 'block' }}>
+                        <a
+                          key={i}
+                          href={img}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{ display: 'block' }}
+                        >
                           <img
                             src={img}
                             alt={`Evidence ${i + 1}`}
@@ -199,12 +243,16 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                             height={90}
                             loading="lazy"
                             style={{
-                              width: 120, height: 90, objectFit: 'cover',
+                              width: 120,
+                              height: 90,
+                              objectFit: 'cover',
                               borderRadius: tokens.radius.md,
                               border: `1px solid ${tokens.colors.border.primary}`,
                               cursor: 'pointer',
                             }}
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+                            onError={(e) => {
+                              ;(e.target as HTMLImageElement).style.display = 'none'
+                            }}
                           />
                         </a>
                       ))}
@@ -240,12 +288,17 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                   <Box
                     style={{
                       padding: tokens.spacing[2],
-                      background: report.status === 'resolved' ? 'var(--color-accent-error-10)' : 'var(--color-overlay-subtle)',
+                      background:
+                        report.status === 'resolved'
+                          ? 'var(--color-accent-error-10)'
+                          : 'var(--color-overlay-subtle)',
                       borderRadius: tokens.radius.sm,
                     }}
                   >
                     <Text size="xs" color="tertiary">
-                      {report.status === 'resolved' ? t('adminResolvedDeleted') : t('adminDismissedStatus')}
+                      {report.status === 'resolved'
+                        ? t('adminResolvedDeleted')
+                        : t('adminDismissedStatus')}
                       {report.action_taken && ` - ${report.action_taken}`}
                     </Text>
                   </Box>
@@ -256,7 +309,14 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <Box style={{ marginTop: tokens.spacing[4], display: 'flex', justifyContent: 'center', gap: tokens.spacing[2] }}>
+            <Box
+              style={{
+                marginTop: tokens.spacing[4],
+                display: 'flex',
+                justifyContent: 'center',
+                gap: tokens.spacing[2],
+              }}
+            >
               <Button
                 variant="secondary"
                 size="sm"
