@@ -1,0 +1,334 @@
+{
+  "response": {
+    "code": 0,
+    "data": {
+      "rankEnd": 20,
+      "rankStart": 0,
+      "rankingFilter": {
+        "accountId": "",
+        "chainId": "501",
+        "desc": "true",
+        "label": "",
+        "periodType": "3",
+        "pnlMax": "",
+        "pnlMin": "-2147483648",
+        "rankBy": "1",
+        "roiMax": "",
+        "roiMin": "-2147483648",
+        "tradeVolumeMax": "",
+        "tradeVolumeMin": "-2147483648",
+        "txsMax": "9223372036854775807",
+        "txsMin": "0",
+        "winRateMax": "",
+        "winRateMin": "-2147483648"
+      },
+      "rankingInfos": [
+        {
+          "addressAlias": "",
+          "avgBuySize": "166.152957751623625000",
+          "chainBWLogoUrl": "https://static.coinall.ltd/cdn/assets/imgs/227/2C597ACB210BFE51.png",
+          "chainIconUrl": "https://static.coinall.ltd/cdn/wallet/logo/SOL-20220525.png",
+          "chainId": 501,
+          "favorite": false,
+          "labels": ["dev"],
+          "lastTime": 1781213582000,
+          "periodType": "3",
+          "pnl": "64544.012921031914000000",
+          "pnlHistory": [
+            {
+              "pnl": "4058",
+              "time": 1781121600000
+            },
+            {
+              "pnl": "31999",
+              "time": 1781125200000
+            },
+            {
+              "pnl": "41439",
+              "time": 1781128800000
+            },
+            {
+              "pnl": "41439",
+              "time": 1781132400000
+            },
+            {
+              "pnl": "41439",
+              "time": 1781136000000
+            }
+          ],
+          "roi": "213.700576357524468400",
+          "t": [
+            {
+              "e": {},
+              "k": "dev",
+              "m": 1
+            }
+          ],
+          "topTokens": [
+            {
+              "pnl": "59873.8803353657",
+              "roi": "723.6041026908748",
+              "tokenAddress": "Tqj8yFmagrg7oorpQkVGYR52r96RFTamvWfth9bpump",
+              "tokenSymbol": "KINS",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-Tqj8yFmagrg7oorpQkVGYR52r96RFTamvWfth9bpump-109/type=default_90_0?v=1779472621760"
+            },
+            {
+              "pnl": "4302.591121316569",
+              "roi": "106.4493960148256",
+              "tokenAddress": "9UuLsJ3jf8ViBNeRcwXD53re5G3ypgfKK3s2EiMMpump",
+              "tokenSymbol": "Magpie",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-9UuLsJ3jf8ViBNeRcwXD53re5G3ypgfKK3s2EiMMpump-109/type=default_90_0?v=1780371544831"
+            },
+            {
+              "pnl": "1748.1386545766775",
+              "roi": "171.97769651677194",
+              "tokenAddress": "87UGfmKKFjvWRCpFRgpKtRdrj1gVwkqebdxLnAAPpump",
+              "tokenSymbol": "FIN",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-87UGfmKKFjvWRCpFRgpKtRdrj1gVwkqebdxLnAAPpump-109/type=default_90_0?v=1780897072182"
+            }
+          ],
+          "tx": 362,
+          "volume": "139940.630458810826000000",
+          "walletAddress": "3CkgBB2ryzxQuSmzPSQ53jtVffPf1Wb1t1HBVs8GmGfw",
+          "walletIconUrl": "",
+          "walletName": "",
+          "winRate": "22.5"
+        },
+        {
+          "addressAlias": "",
+          "avgBuySize": "149.593215276125909962",
+          "chainBWLogoUrl": "https://static.coinall.ltd/cdn/assets/imgs/227/2C597ACB210BFE51.png",
+          "chainIconUrl": "https://static.coinall.ltd/cdn/wallet/logo/SOL-20220525.png",
+          "chainId": 501,
+          "favorite": false,
+          "labels": ["kol"],
+          "lastTime": 1781113983000,
+          "periodType": "3",
+          "pnl": "48589.715227177534000000",
+          "pnlHistory": [
+            {
+              "pnl": "58952",
+              "time": 1781121600000
+            },
+            {
+              "pnl": "58952",
+              "time": 1781125200000
+            },
+            {
+              "pnl": "58952",
+              "time": 1781128800000
+            },
+            {
+              "pnl": "58952",
+              "time": 1781132400000
+            },
+            {
+              "pnl": "58952",
+              "time": 1781136000000
+            }
+          ],
+          "roi": "15.626235404830522600",
+          "t": [
+            {
+              "e": {
+                "kolTwitterImage": "/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_2003035015440629815.jpg",
+                "kolTwitterLink": "https://x.com/domyxbt",
+                "kolTwitterImageFullPath": "https://static.coinall.ltd/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_2003035015440629815.jpg",
+                "name": "Domy"
+              },
+              "k": "kol",
+              "m": 1
+            }
+          ],
+          "topTokens": [
+            {
+              "pnl": "5998.942391263602",
+              "roi": "570.4794496522114",
+              "tokenAddress": "6hKCkzYNeiAaNBaCKx1mQvHpBpDy3TCS9BDexnoVpump",
+              "tokenSymbol": "Nietzschean ",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-6hKCkzYNeiAaNBaCKx1mQvHpBpDy3TCS9BDexnoVpump-107/type=default_90_0?v=1780923346175"
+            },
+            {
+              "pnl": "4580.319752350505",
+              "roi": "314.3025560553722",
+              "tokenAddress": "5CqzoJpLM3PqchnsKF23kremvSJ1vqBuY5YzBPDtpump",
+              "tokenSymbol": "drillpigius",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-5CqzoJpLM3PqchnsKF23kremvSJ1vqBuY5YzBPDtpump-107/type=default_90_0?v=1781007134969"
+            },
+            {
+              "pnl": "3727.7659895975307",
+              "roi": "323.8498648964709",
+              "tokenAddress": "22dJJzRF79AYhgddLD7iqqwg7ghNgbZqnx8jcbtMpump",
+              "tokenSymbol": "Tung",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-22dJJzRF79AYhgddLD7iqqwg7ghNgbZqnx8jcbtMpump-107/type=default_90_0?v=1781029146473"
+            }
+          ],
+          "tx": 2734,
+          "volume": "672041.599988275560000000",
+          "walletAddress": "3LUfv2u5yzsDtUzPdsSJ7ygPBuqwfycMkjpNreRR2Yww",
+          "walletIconUrl": "https://static.coinall.ltd/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_2003035015440629815.jpg",
+          "walletName": "Domy",
+          "winRate": "41.194"
+        },
+        {
+          "addressAlias": "",
+          "avgBuySize": "577.749199898849576923",
+          "chainBWLogoUrl": "https://static.coinall.ltd/cdn/assets/imgs/227/2C597ACB210BFE51.png",
+          "chainIconUrl": "https://static.coinall.ltd/cdn/wallet/logo/SOL-20220525.png",
+          "chainId": 501,
+          "favorite": false,
+          "labels": ["kol"],
+          "lastTime": 1781188871000,
+          "periodType": "3",
+          "pnl": "46489.177946406410000000",
+          "pnlHistory": [
+            {
+              "pnl": "47233",
+              "time": 1781121600000
+            },
+            {
+              "pnl": "47233",
+              "time": 1781125200000
+            },
+            {
+              "pnl": "47233",
+              "time": 1781128800000
+            },
+            {
+              "pnl": "47233",
+              "time": 1781132400000
+            },
+            {
+              "pnl": "47233",
+              "time": 1781136000000
+            }
+          ],
+          "roi": "557.696164401016945900",
+          "t": [
+            {
+              "e": {
+                "kolTwitterImage": "/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_1250812000000000105.jpg",
+                "kolTwitterLink": "https://x.com/retardily",
+                "kolTwitterImageFullPath": "https://static.coinall.ltd/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_1250812000000000105.jpg",
+                "name": "I̶l̷y̶"
+              },
+              "k": "kol",
+              "m": 1
+            }
+          ],
+          "topTokens": [
+            {
+              "pnl": "44608.96609142442",
+              "roi": "7571.764727746861",
+              "tokenAddress": "BcHEaaTCvycPwwsJ9yQTXdHP9X2gCLkznDbZ8VySpump",
+              "tokenSymbol": "Jotchua",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-BcHEaaTCvycPwwsJ9yQTXdHP9X2gCLkznDbZ8VySpump-109/type=default_90_0?v=1780808328515"
+            },
+            {
+              "pnl": "3065.6849380000012",
+              "roi": "345.8652426715713",
+              "tokenAddress": "8fiegpuKk3YqtSERRvrheDU5ryTZeZzGynkRfK5zpump",
+              "tokenSymbol": "ELON",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-8fiegpuKk3YqtSERRvrheDU5ryTZeZzGynkRfK5zpump-109/type=default_90_0?v=1781110753390"
+            },
+            {
+              "pnl": "488.98113399999767",
+              "roi": "100.49942041248158",
+              "tokenAddress": "DqUjBBbtnJutmLRNY2ZM8NzypJuMC3axeZQmxj3Mpump",
+              "tokenSymbol": "wCAT",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-DqUjBBbtnJutmLRNY2ZM8NzypJuMC3axeZQmxj3Mpump-109/type=default_90_0?v=1780766494071"
+            }
+          ],
+          "tx": 78,
+          "volume": "69846.590025139799000000",
+          "walletAddress": "AcoNeFQsTPYs7ZrH8RMWaxxGJTTQJJ4H5aTXmptaz5UK",
+          "walletIconUrl": "https://static.coinall.ltd/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_1250812000000000105.jpg",
+          "walletName": "I̶l̷y̶",
+          "winRate": "35.0"
+        },
+        {
+          "addressAlias": "",
+          "avgBuySize": "132.468518716022814159",
+          "chainBWLogoUrl": "https://static.coinall.ltd/cdn/assets/imgs/227/2C597ACB210BFE51.png",
+          "chainIconUrl": "https://static.coinall.ltd/cdn/wallet/logo/SOL-20220525.png",
+          "chainId": 501,
+          "favorite": false,
+          "labels": ["kol"],
+          "lastTime": 1781233359000,
+          "periodType": "3",
+          "pnl": "31391.203683834600000000",
+          "pnlHistory": [
+            {
+              "pnl": "36562",
+              "time": 1781121600000
+            },
+            {
+              "pnl": "36562",
+              "time": 1781125200000
+            },
+            {
+              "pnl": "35707",
+              "time": 1781128800000
+            },
+            {
+              "pnl": "36390",
+              "time": 1781132400000
+            },
+            {
+              "pnl": "35831",
+              "time": 1781136000000
+            }
+          ],
+          "roi": "52.399316197241302000",
+          "t": [
+            {
+              "e": {
+                "kolTwitterImage": "/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_2036353096531247125.jpg",
+                "kolTwitterLink": "https://x.com/Humanevolvd",
+                "kolTwitterImageFullPath": "https://static.coinall.ltd/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_2036353096531247125.jpg",
+                "name": "Doji"
+              },
+              "k": "kol",
+              "m": 1
+            }
+          ],
+          "topTokens": [
+            {
+              "pnl": "3064.7277286990397",
+              "roi": "429.8511525246215",
+              "tokenAddress": "2E4MBM3zQ3e7uRgrndYgJpjWqcJ8ReB4vuHURjwGpump",
+              "tokenSymbol": "GRIND",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-2E4MBM3zQ3e7uRgrndYgJpjWqcJ8ReB4vuHURjwGpump-109/type=default_90_0?v=1780877002089"
+            },
+            {
+              "pnl": "2740.8121460130956",
+              "roi": "452.03888694658826",
+              "tokenAddress": "9TJzt53bUa96wZQquMGAquSvAoJjFH5SUvcG2RYopump",
+              "tokenSymbol": "Mindanao",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-9TJzt53bUa96wZQquMGAquSvAoJjFH5SUvcG2RYopump-107/type=default_90_0?v=1781218316891"
+            },
+            {
+              "pnl": "2393.686538249344",
+              "roi": "136.15926136011205",
+              "tokenAddress": "Ft6MkibVEFQipCzNp7EoC8G8M8ai5YddFSLEFeSwpump",
+              "tokenSymbol": "Memetic",
+              "tokenUrl": "https://static.coinall.ltd/cdn/web3/currency/token/large/501-Ft6MkibVEFQipCzNp7EoC8G8M8ai5YddFSLEFeSwpump-109/type=default_90_0?v=1780952289631"
+            }
+          ],
+          "tx": 895,
+          "volume": "166315.703183010230000000",
+          "walletAddress": "5ZuV8eqkvzYFVEKbLvGBdexL2tFv7E5BCd2HZpjqbdg",
+          "walletIconUrl": "https://static.coinall.ltd/cdn/web3/onchaindata/dexTag/onchaindata_meme_radar_2036353096531247125.jpg",
+          "walletName": "Doji",
+          "winRate": "54.9451"
+        }
+      ],
+      "totalCount": 3814
+    },
+    "detailMsg": "",
+    "error_code": "0",
+    "error_message": "",
+    "msg": ""
+  },
+  "timeframe": 7
+}
