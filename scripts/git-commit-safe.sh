@@ -61,6 +61,18 @@ fi
 
 FILES=("$@")
 
+# Serialize the entire stage+commit against concurrent sessions.
+# Without this, another session's `git reset HEAD` (their step 1) can wipe
+# our just-staged files between our step 2 and step 4 — observed 2026-06-12:
+# a commit collected a different session's staged file under our message.
+# (flock on push already exists in pre-push; this guards the INDEX.)
+LOCK_FILE="/tmp/arena-git-index.lock"
+exec 9>"$LOCK_FILE"
+if ! flock -w 120 9; then
+  echo "❌ git-commit-safe: timed out waiting for index lock ($LOCK_FILE)" >&2
+  exit 1
+fi
+
 # Save any pre-existing staged state — restored after the commit
 PREEX_STAGED=$(git diff --cached --name-only)
 PREEX_STAGED_PATCH=""
