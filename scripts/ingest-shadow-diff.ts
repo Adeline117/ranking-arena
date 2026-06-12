@@ -110,8 +110,12 @@ async function diffOne(
            (f) => `
        count(*) FILTER (WHERE a_key IS NOT NULL AND a_${f} IS NULL)  AS ${f}_arena_nulls,
        count(*) FILTER (WHERE c_key IS NOT NULL AND c_${f} IS NULL)  AS ${f}_shadow_nulls,
+       -- compat-side NULL where arena has a value is WRITE LAG, not a
+       -- mismatch: tier-b enriches trader_stats between compat cycles and
+       -- the next tier-a compat write catches up. Real mismatches are
+       -- value disagreements (or compat inventing a value arena lacks).
        count(*) FILTER (WHERE a_key IS NOT NULL AND c_key IS NOT NULL AND (
-         (a_${f} IS NULL) <> (c_${f} IS NULL)
+         (a_${f} IS NULL AND c_${f} IS NOT NULL)
          OR abs(a_${f} - c_${f}) > ${TOLERANCE}))                    AS ${f}_mismatches,
        max(abs(a_${f} - c_${f})) FILTER (
          WHERE a_key IS NOT NULL AND c_key IS NOT NULL)              AS ${f}_max_delta`
