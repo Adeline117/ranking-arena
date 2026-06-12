@@ -143,7 +143,8 @@ export default function HomePageClient({
       <div style={{ position: 'relative', zIndex: 1 }}>
         <RankingSection
           traders={traders}
-          loading={loading || isChangingTimeRange}
+          loading={loading && traders.length === 0}
+          isRefreshing={(loading || isChangingTimeRange) && traders.length > 0}
           isLoggedIn={isLoggedIn}
           activeTimeRange={activeTimeRange}
           onTimeRangeChange={handleTimeRangeChange}

@@ -28,6 +28,8 @@ const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangel
 interface RankingSectionProps {
   traders: Trader[]
   loading: boolean
+  /** Background refresh (period switch / poll) with rows still visible — dims table, shows header spinner. */
+  isRefreshing?: boolean
   isLoggedIn: boolean
   activeTimeRange: TimeRange
   onTimeRangeChange: (range: TimeRange) => void
@@ -49,6 +51,7 @@ interface RankingSectionProps {
 export default function RankingSection({
   traders,
   loading,
+  isRefreshing = false,
   isLoggedIn,
   activeTimeRange,
   onTimeRangeChange,
@@ -158,6 +161,27 @@ export default function RankingSection({
         }}
       >
         <TimeRangeSelector activeRange={activeTimeRange} onChange={onTimeRangeChange} />
+        {isRefreshing && (
+          <span
+            role="status"
+            aria-live="polite"
+            style={{ display: 'inline-flex', alignItems: 'center', flexShrink: 0 }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-accent-primary)"
+              strokeWidth="2.5"
+              style={{ animation: 'spin 1s linear infinite' }}
+            >
+              <circle cx="12" cy="12" r="10" opacity={0.25} />
+              <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
+            </svg>
+            <span className="sr-only">{t('refreshing')}</span>
+          </span>
+        )}
         <div
           style={{ width: 1, height: 24, background: 'var(--color-border-primary)', flexShrink: 0 }}
         />
@@ -280,6 +304,7 @@ export default function RankingSection({
       <RankingTable
         traders={filteredTraders}
         loading={loading || premiumLoading}
+        isRefreshing={isRefreshing}
         loggedIn={isLoggedIn}
         source={source}
         timeRange={activeTimeRange}

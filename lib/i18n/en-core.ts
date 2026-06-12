@@ -30,6 +30,7 @@ const enCore = {
 
   // ── Common UI ───────────────────────────────────────────────────────
   loading: 'Loading...',
+  refreshing: 'Refreshing...',
   loadingShort: 'Loading',
   retry: 'Retry',
   cancel: 'Cancel',
