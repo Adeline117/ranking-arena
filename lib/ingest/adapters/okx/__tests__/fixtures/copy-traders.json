@@ -1,0 +1,74 @@
+{
+  "code": "0",
+  "data": [
+    {
+      "ccy": "USDT",
+      "copyTotalPnl": "4915.5927501606778108",
+      "copyTraderNumChg": "284",
+      "copyTraderNumChgRatio": "2.4912",
+      "copyTraders": [
+        {
+          "beginCopyTime": "1777093317000",
+          "nickName": "各个班级",
+          "pnl": "2267.2683337764752071",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/predefined/0040.png"
+        },
+        {
+          "beginCopyTime": "1778463667000",
+          "nickName": "现货王9888",
+          "pnl": "1043.3664695335603121",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/predefined/0026.png"
+        },
+        {
+          "beginCopyTime": "1777875279000",
+          "nickName": "学好交易",
+          "pnl": "694.7765774761768647",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/20260503/f7b378cc50594d199cd4922aa67e22c9"
+        },
+        {
+          "beginCopyTime": "1779465237000",
+          "nickName": "做个懒人",
+          "pnl": "185.3368608828855407",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/20260601/da11201a431c450193d26ec0db81a8c7"
+        },
+        {
+          "beginCopyTime": "1780518730000",
+          "nickName": "追风少年c",
+          "pnl": "138.6262009688911517",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/predefined/0037.png"
+        },
+        {
+          "beginCopyTime": "1777670059000",
+          "nickName": "余味y",
+          "pnl": "136.3105595889492715",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/20230922/b9825c2a3fa6439ea9c20d556e748bc7"
+        },
+        {
+          "beginCopyTime": "1777189953000",
+          "nickName": "不剪刘海的狗妹儿",
+          "pnl": "109.4373975832354592",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/predefined/0005.png"
+        },
+        {
+          "beginCopyTime": "1778282152000",
+          "nickName": "小满即安～",
+          "pnl": "108.8784475968945931",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/predefined/0002.png"
+        },
+        {
+          "beginCopyTime": "1778443712000",
+          "nickName": "风无向熬鹰",
+          "pnl": "79.993013748150508",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/predefined/0009.png"
+        },
+        {
+          "beginCopyTime": "1780208300000",
+          "nickName": "xsc",
+          "pnl": "71.9073685449453121",
+          "portLink": "https://static.okx.com/cdn/okex/users/headimages/20220509/3ac00a14f03843e9ad3ee843cdba546b"
+        }
+      ]
+    }
+  ],
+  "msg": ""
+}
