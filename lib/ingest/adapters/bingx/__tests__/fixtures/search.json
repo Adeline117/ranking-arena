@@ -1,0 +1,712 @@
+{
+  "code": 0,
+  "timestamp": 1781228586668,
+  "data": {
+    "result": [
+      {
+        "trader": {
+          "nickName": "Dr.Hash '' Wesley''",
+          "avatar": "https://static-app.bb-os.com/avatar/20260604/352fc120f017d548717d76fbdda9a3d6.jpg",
+          "uid": 1998800000134045,
+          "registerDate": "2026-03-10T12:23:10.000+08:00",
+          "shortUid": 36035564,
+          "nickNameNoMark": "Dr.Hash '' Wesley''",
+          "inviteUid": 0,
+          "accountName": "1548479910976987140-******o19",
+          "callingCode": "",
+          "subAccount": {
+            "mainUid": "1548479910976987140",
+            "status": 1,
+            "type": 0,
+            "remark": ""
+          },
+          "realNickName": "Dr.Hash '' Wesley''",
+          "teamId": 70,
+          "status": 0,
+          "vipLevel": 0,
+          "userLevel": 10,
+          "identityType": 3,
+          "createTime": 1773116590000,
+          "appId": 30004,
+          "mainAppId": 10009,
+          "mainUid": 1548479910976987100,
+          "googleAuthCode": true,
+          "appSiteId": "0",
+          "uidStr": "1998800000134045"
+        },
+        "rankStat": {
+          "apiIdentity": 1579905006518878200,
+          "disPlayName": "Perpetual Futures",
+          "icon": "https://static-app.bb-os.com/icon/bingbon.png",
+          "valid": 1,
+          "riskStatus": 0,
+          "isRelation": 0,
+          "copierStatus": 2,
+          "vstCopierStatus": 0,
+          "followerFull": false,
+          "beingInvite": false,
+          "strFollowerNum": "2",
+          "equity": "138.27",
+          "totalEarnings": "+108.33",
+          "followerEarning": "-22.88",
+          "maxDrawDown": "0.00%",
+          "strTotalEarningsRate": "+0.00%",
+          "strRecent30DaysRate": "+1,052.28%",
+          "strRecent7DaysRate": "+31.08%",
+          "strRecent90DaysRate": "+1,052.28%",
+          "strRecent180DaysRate": "+361.78%",
+          "exchangeVo": {
+            "exchangeId": 2,
+            "exchangeName": "BingX",
+            "icon": "https://static-app.bb-os.com/icon/bingbon.png",
+            "accountEnum": "BINGX_SWAP_FUTURES",
+            "desc": ""
+          },
+          "updateTime": "2026-06-12T09:35:12.000+08:00",
+          "riskLevel7Days": "5",
+          "riskLevel30Days": "7",
+          "riskLevel90Days": "7",
+          "riskLevel180Days": "8",
+          "strAccFollowerNum": "14",
+          "winRate": "100.00%",
+          "winRate7d": 1,
+          "winRate30d": 1,
+          "winRate90d": 1,
+          "winRate180d": 1,
+          "sharpe7d": "4.65",
+          "sharpe30d": "-0.94",
+          "sharpe90d": "-0.94",
+          "sharpe180d": "-0.94",
+          "followingAmount": "117.18",
+          "maxFollowerNum": 2000,
+          "totalTransactions": 8,
+          "profitCount": 7,
+          "avgProfitAmount": "22.13",
+          "avgProfitRate": "61.33%",
+          "lossCount": 1,
+          "avgLossAmount": "-17.61",
+          "avgLossRate": "-94.70%",
+          "pnlRate": "1.2:1",
+          "avgHoldTime": "32614",
+          "weeklyTradeFrequency": "0.6",
+          "tradeDays": "90",
+          "lastTradeTime": "2026-06-11T01:17:34.000+08:00",
+          "expand": 1,
+          "recent7DayFollowerNumChange": "0",
+          "recent30DayFollowerNumChange": "2",
+          "recent90DayFollowerNumChange": "2",
+          "recent180DayFollowerNumChange": "2",
+          "latest30DaysMedianMargin": "44.58",
+          "latest30DaysMedianLeverTimes": "10X",
+          "cumulativeProfitLoss7d": 32.78915069154627,
+          "cumulativeProfitLoss30d": 126.27411513326588,
+          "cumulativeProfitLoss90d": 126.27411513326588,
+          "cumulativeProfitLoss180d": 108.33092189839175,
+          "maximumDrawDown": 0,
+          "maxDrawDown7d": 0.5263957321602019,
+          "maxDrawDown30d": 0.5263957321602017,
+          "maxDrawDown90d": 0.5263957321602017,
+          "maxDrawDown180d": 0.5263957321602017,
+          "maxDrawDown7dV2": "52.63%",
+          "maxDrawDown30dV2": "52.63%",
+          "maxDrawDown90dV2": "52.63%",
+          "maxDrawDown180dV2": "52.63%",
+          "totalPositionCount": 4,
+          "profitablePositionCount": 4,
+          "lossPositionCount": 0,
+          "profitRealizedPnlU": 118.4425095574,
+          "lossRealizedPnlU": 0,
+          "pnlRateU": "+∞",
+          "avgProfit": 29.61062738935,
+          "avgLoss": 0,
+          "chart": [
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 2.899422638221996
+            },
+            {
+              "cumulativePnlRate": 3.777975216516231
+            },
+            {
+              "cumulativePnlRate": 12.706651259312258
+            },
+            {
+              "cumulativePnlRate": 7.790413700148913
+            },
+            {
+              "cumulativePnlRate": 6.947840622062162
+            },
+            {
+              "cumulativePnlRate": 9.254513182878078
+            },
+            {
+              "cumulativePnlRate": 11.330345967782337
+            },
+            {
+              "cumulativePnlRate": 9.526547947808929
+            },
+            {
+              "cumulativePnlRate": 10.499314526826778
+            },
+            {
+              "cumulativePnlRate": 9.65858945649357
+            },
+            {
+              "cumulativePnlRate": 10.522842923277262
+            }
+          ],
+          "isPro": 0,
+          "daysSinceBecameTrader": "9"
+        },
+        "traderPublicRecommendStatus": 0,
+        "hasNew": 0,
+        "labels": [],
+        "traderAccountGradeVO": {
+          "uid": 1998800000134045,
+          "apiIdentity": 1579905006518878200,
+          "traderGrade": 1,
+          "label": 8,
+          "uidAndApi": "1998800000134045_1579905006518878211"
+        },
+        "isSubscribed": 0
+      },
+      {
+        "trader": {
+          "nickName": "Wenzzzzz",
+          "avatar": "https://static-app.bb-os.com/avatar/20251209/BingX_iOS_28b8af1916c8466d79c2daa73e292876.jpg",
+          "uid": 1008592982928216000,
+          "registerDate": "2022-02-08T20:03:21.000+08:00",
+          "shortUid": 8079230,
+          "nickNameNoMark": "Wenzzzzz",
+          "inviteUid": 894533982330912800,
+          "callingCode": "+886",
+          "realNickName": "Wenzzzzz",
+          "teamId": 1,
+          "status": 0,
+          "vipLevel": 0,
+          "userLevel": 10,
+          "identityType": 1,
+          "createTime": 1644321800000,
+          "appId": 30004,
+          "mainAppId": 10009,
+          "mainUid": 0,
+          "googleAuthCode": true,
+          "appSiteId": "0",
+          "uidStr": "1008592982928216000"
+        },
+        "rankStat": {
+          "apiIdentity": 1515901125054083000,
+          "disPlayName": "Perpetual Futures",
+          "icon": "https://static-app.bb-os.com/icon/bingbon.png",
+          "valid": 1,
+          "riskStatus": 0,
+          "isRelation": 0,
+          "copierStatus": 2,
+          "vstCopierStatus": 0,
+          "followerFull": false,
+          "beingInvite": false,
+          "strFollowerNum": "0",
+          "equity": "2,312.12",
+          "totalEarnings": "-601.38",
+          "followerEarning": "-209.02",
+          "maxDrawDown": "0.00%",
+          "strTotalEarningsRate": "+0.00%",
+          "strRecent30DaysRate": "+941.10%",
+          "strRecent7DaysRate": "+1.43%",
+          "strRecent90DaysRate": "+12.43%",
+          "strRecent180DaysRate": "-28.68%",
+          "exchangeVo": {
+            "exchangeId": 2,
+            "exchangeName": "BingX",
+            "icon": "https://static-app.bb-os.com/icon/bingbon.png",
+            "accountEnum": "BINGX_SWAP_FUTURES",
+            "desc": ""
+          },
+          "updateTime": "2026-06-12T09:35:12.000+08:00",
+          "riskLevel7Days": "6",
+          "riskLevel30Days": "8",
+          "riskLevel90Days": "8",
+          "riskLevel180Days": "8",
+          "strAccFollowerNum": "5",
+          "winRate": "59.30%",
+          "winRate7d": 0.6551724137931034,
+          "winRate30d": 0.6036585365853658,
+          "winRate90d": 0.5851063829787234,
+          "winRate180d": 0.5877192982456141,
+          "sharpe7d": "3.90",
+          "sharpe30d": "12.42",
+          "sharpe90d": "7.80",
+          "sharpe180d": "9.36",
+          "followingAmount": "--",
+          "maxFollowerNum": 2000,
+          "totalTransactions": 994,
+          "profitCount": 702,
+          "avgProfitAmount": "24.60",
+          "avgProfitRate": "90.23%",
+          "lossCount": 292,
+          "avgLossAmount": "-61.99",
+          "avgLossRate": "-100.00%",
+          "pnlRate": "1:2.5",
+          "avgHoldTime": "40644",
+          "weeklyTradeFrequency": "22.5",
+          "tradeDays": "303",
+          "lastTradeTime": "2026-06-12T09:03:30.000+08:00",
+          "expand": 1,
+          "recent7DayFollowerNumChange": "0",
+          "recent30DayFollowerNumChange": "0",
+          "recent90DayFollowerNumChange": "0",
+          "recent180DayFollowerNumChange": "-1",
+          "latest30DaysMedianMargin": "13.76",
+          "latest30DaysMedianLeverTimes": "899X",
+          "cumulativeProfitLoss7d": 32.60128961668269,
+          "cumulativeProfitLoss30d": 2090.043376725648,
+          "cumulativeProfitLoss90d": 255.78285617634137,
+          "cumulativeProfitLoss180d": -930.0492942561814,
+          "maximumDrawDown": 0,
+          "maxDrawDown7d": 0.468595958737398,
+          "maxDrawDown30d": 1,
+          "maxDrawDown90d": 1,
+          "maxDrawDown180d": 1,
+          "maxDrawDown7dV2": "46.85%",
+          "maxDrawDown30dV2": "100.00%",
+          "maxDrawDown90dV2": "100.00%",
+          "maxDrawDown180dV2": "100.00%",
+          "totalPositionCount": 516,
+          "profitablePositionCount": 306,
+          "lossPositionCount": 210,
+          "profitRealizedPnlU": 14764.0285367652,
+          "lossRealizedPnlU": 16409.8667821162,
+          "pnlRateU": "0.899704350608",
+          "avgProfit": 48.248459270475,
+          "avgLoss": 78.142222771982,
+          "chart": [
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0.02047869873789835
+            },
+            {
+              "cumulativePnlRate": -0.653256886866418
+            },
+            {
+              "cumulativePnlRate": -0.31568409693357896
+            },
+            {
+              "cumulativePnlRate": -0.9998892504773237
+            },
+            {
+              "cumulativePnlRate": -0.9999993074176656
+            },
+            {
+              "cumulativePnlRate": -0.3258775144319416
+            },
+            {
+              "cumulativePnlRate": 0.06721284415183297
+            },
+            {
+              "cumulativePnlRate": 1.3345127620969877
+            },
+            {
+              "cumulativePnlRate": 1.7953825873815743
+            },
+            {
+              "cumulativePnlRate": 1.5916912786807325
+            },
+            {
+              "cumulativePnlRate": 1.44497905447932
+            },
+            {
+              "cumulativePnlRate": -0.3515501643528008
+            },
+            {
+              "cumulativePnlRate": -0.7968236899748465
+            },
+            {
+              "cumulativePnlRate": -0.553214390115915
+            },
+            {
+              "cumulativePnlRate": 0.055464622582564974
+            },
+            {
+              "cumulativePnlRate": -0.5789636387787586
+            },
+            {
+              "cumulativePnlRate": -0.2610137440741338
+            },
+            {
+              "cumulativePnlRate": 0.933793702170076
+            },
+            {
+              "cumulativePnlRate": 2.799576699981446
+            },
+            {
+              "cumulativePnlRate": 3.2746269645653734
+            },
+            {
+              "cumulativePnlRate": 5.358030998492846
+            },
+            {
+              "cumulativePnlRate": 9.264292001093924
+            },
+            {
+              "cumulativePnlRate": 9.81291341095428
+            },
+            {
+              "cumulativePnlRate": 7.795289052554566
+            },
+            {
+              "cumulativePnlRate": 6.076902909796467
+            },
+            {
+              "cumulativePnlRate": 10.626529676675418
+            },
+            {
+              "cumulativePnlRate": 9.332353598682499
+            },
+            {
+              "cumulativePnlRate": 11.627547353507385
+            },
+            {
+              "cumulativePnlRate": 9.411089749868266
+            }
+          ],
+          "isPro": 0,
+          "daysSinceBecameTrader": "185"
+        },
+        "traderPublicRecommendStatus": 0,
+        "hasNew": 0,
+        "labels": [],
+        "traderAccountGradeVO": {
+          "uid": 1008592982928216000,
+          "apiIdentity": 1515901125054083000,
+          "traderGrade": 1,
+          "label": 8,
+          "uidAndApi": "1008592982928216072_1515901125054083076"
+        },
+        "isSubscribed": 0
+      },
+      {
+        "trader": {
+          "nickName": "Thương nhân newbie 🌟🌟🌟",
+          "avatar": "https://static-app.bb-os.com/avatar/20240327/BingX_iOS_6f04904d87cc3c6bb38eb9801c73c2dd.jpg",
+          "uid": 1290153421976338400,
+          "registerDate": "2024-03-26T19:04:01.000+08:00",
+          "shortUid": 19471852,
+          "nickNameNoMark": "Thương nhân newbie 🌟🌟🌟",
+          "inviteUid": 1297481409051680800,
+          "callingCode": "+84",
+          "realNickName": "Thương nhân newbie 🌟🌟🌟",
+          "teamId": 70,
+          "status": 0,
+          "vipLevel": 0,
+          "userLevel": 10,
+          "identityType": 1,
+          "createTime": 1711451040000,
+          "appId": 30004,
+          "mainAppId": 10009,
+          "mainUid": 0,
+          "googleAuthCode": true,
+          "appSiteId": "0",
+          "uidStr": "1290153421976338400"
+        },
+        "rankStat": {
+          "apiIdentity": 1485661018400702500,
+          "disPlayName": "Perpetual Futures",
+          "icon": "https://static-app.bb-os.com/icon/bingbon.png",
+          "valid": 1,
+          "riskStatus": 0,
+          "isRelation": 0,
+          "copierStatus": 2,
+          "vstCopierStatus": 0,
+          "followerFull": false,
+          "beingInvite": false,
+          "strFollowerNum": "0",
+          "equity": "281.62",
+          "totalEarnings": "-1,443.07",
+          "followerEarning": "-42.13",
+          "maxDrawDown": "0.00%",
+          "strTotalEarningsRate": "+0.00%",
+          "strRecent30DaysRate": "+808.15%",
+          "strRecent7DaysRate": "-46.45%",
+          "strRecent90DaysRate": "+808.15%",
+          "strRecent180DaysRate": "+808.15%",
+          "exchangeVo": {
+            "exchangeId": 2,
+            "exchangeName": "BingX",
+            "icon": "https://static-app.bb-os.com/icon/bingbon.png",
+            "accountEnum": "BINGX_SWAP_FUTURES",
+            "desc": ""
+          },
+          "updateTime": "2026-06-12T09:35:12.000+08:00",
+          "riskLevel7Days": "7",
+          "riskLevel30Days": "7",
+          "riskLevel90Days": "7",
+          "riskLevel180Days": "7",
+          "strAccFollowerNum": "11",
+          "winRate": "40.47%",
+          "winRate7d": 0.25,
+          "winRate30d": 0.4722222222222222,
+          "winRate90d": 0.4722222222222222,
+          "winRate180d": 0.4722222222222222,
+          "sharpe7d": "-4.50",
+          "sharpe30d": "5.78",
+          "sharpe90d": "5.78",
+          "sharpe180d": "5.78",
+          "followingAmount": "--",
+          "maxFollowerNum": 2000,
+          "totalTransactions": 419,
+          "profitCount": 226,
+          "avgProfitAmount": "33.04",
+          "avgProfitRate": "129.88%",
+          "lossCount": 193,
+          "avgLossAmount": "-44.26",
+          "avgLossRate": "-100.00%",
+          "pnlRate": "1:1.3",
+          "avgHoldTime": "38613",
+          "weeklyTradeFrequency": "3.6",
+          "tradeDays": "807",
+          "lastTradeTime": "2026-06-12T03:00:09.000+08:00",
+          "expand": 1,
+          "recent7DayFollowerNumChange": "-4",
+          "recent30DayFollowerNumChange": "0",
+          "recent90DayFollowerNumChange": "0",
+          "recent180DayFollowerNumChange": "0",
+          "latest30DaysMedianMargin": "24.85",
+          "latest30DaysMedianLeverTimes": "100X",
+          "cumulativeProfitLoss7d": -694.764502109966,
+          "cumulativeProfitLoss30d": 942.8419825664084,
+          "cumulativeProfitLoss90d": 942.8419825664084,
+          "cumulativeProfitLoss180d": 942.8419825664084,
+          "maximumDrawDown": 0,
+          "maxDrawDown7d": 0.8532806691644097,
+          "maxDrawDown30d": 0.8532806691644095,
+          "maxDrawDown90d": 0.8532806691644095,
+          "maxDrawDown180d": 0.8532806691644095,
+          "maxDrawDown7dV2": "85.32%",
+          "maxDrawDown30dV2": "85.32%",
+          "maxDrawDown90dV2": "85.32%",
+          "maxDrawDown180dV2": "85.32%",
+          "totalPositionCount": 42,
+          "profitablePositionCount": 17,
+          "lossPositionCount": 25,
+          "profitRealizedPnlU": 1753.0454647176,
+          "lossRealizedPnlU": 897.525686672,
+          "pnlRateU": "1.953198098673",
+          "avgProfit": 103.120321453976,
+          "avgLoss": 35.90102746688,
+          "chart": [
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 0
+            },
+            {
+              "cumulativePnlRate": 3.083777636229403
+            },
+            {
+              "cumulativePnlRate": 7.924803032121869
+            },
+            {
+              "cumulativePnlRate": 8.028253680847715
+            },
+            {
+              "cumulativePnlRate": 14.03672690275547
+            },
+            {
+              "cumulativePnlRate": 8.951780248750119
+            },
+            {
+              "cumulativePnlRate": 9.19212058554117
+            },
+            {
+              "cumulativePnlRate": 9.596337661714012
+            },
+            {
+              "cumulativePnlRate": 8.90648331612293
+            },
+            {
+              "cumulativePnlRate": 9.853701424319532
+            },
+            {
+              "cumulativePnlRate": 7.538978339581247
+            },
+            {
+              "cumulativePnlRate": 8.081560219488633
+            }
+          ],
+          "isPro": 0,
+          "daysSinceBecameTrader": "269"
+        },
+        "traderPublicRecommendStatus": 0,
+        "hasNew": 0,
+        "labels": [],
+        "traderAccountGradeVO": {
+          "uid": 1290153421976338400,
+          "apiIdentity": 1485661018400702500,
+          "traderGrade": 1,
+          "label": 8,
+          "uidAndApi": "1290153421976338434_1485661018400702470"
+        },
+        "isSubscribed": 0
+      }
+    ],
+    "pageId": 2,
+    "total": 2008,
+    "rankDesc": "Only traders who meet the copying criteria are displayed in the All Traders list|1.Account Assets ≥ 50 USDT|2.30D ROI ≥ -30 %|3.Trade Days ≥ 7 D|4.Days since the last trade ≤ 30 D|5.Copier Profit ≥ -5000 USDT",
+    "rankShortDesc": "All Traders",
+    "rankType": "all",
+    "rankTitle": "All Traders",
+    "rankTags": "",
+    "rankStatisticDays": 30,
+    "searchResult": true,
+    "foldDisplay": [
+      {
+        "indicator": "totalEarnings",
+        "renderType": "pnl",
+        "desc": "Cumulative PnL",
+        "hasDateRender": 0
+      },
+      {
+        "indicator": "strFollowerNum",
+        "renderType": "string",
+        "desc": "Copiers",
+        "hasDateRender": 0
+      },
+      {
+        "indicator": "winRate",
+        "renderType": "string",
+        "desc": "Win Ratio",
+        "hasDateRender": 0
+      }
+    ],
+    "expandDisplay": [
+      {
+        "indicator": "maxDrawDown30dV2",
+        "renderType": "pnl_rate",
+        "desc": "30D Max. Drawdown",
+        "hasDateRender": 1
+      },
+      {
+        "indicator": "sharpe30d",
+        "renderType": "pnl_rate",
+        "desc": "30D Sharpe Ratio",
+        "hasDateRender": 1
+      },
+      {
+        "indicator": "followingAmount",
+        "renderType": "pnl_rate",
+        "desc": "AUM",
+        "hasDateRender": 0
+      }
+    ]
+  }
+}

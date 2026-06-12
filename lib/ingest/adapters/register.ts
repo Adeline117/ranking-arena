@@ -26,5 +26,6 @@ import './lbank'
 import './gate'
 import './xt'
 import './blofin'
+import './bingx'
 
 export {}
