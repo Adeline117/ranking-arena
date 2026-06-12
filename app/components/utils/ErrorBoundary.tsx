@@ -76,21 +76,24 @@ export class ErrorBoundary extends Component<Props, State> {
 
     // 将错误上报到 Sentry
     if (process.env.NODE_ENV === 'production') {
-      import('@sentry/nextjs').then((Sentry) => {
-        Sentry.captureException(error, {
-          contexts: {
-            react: { componentStack: errorInfo.componentStack || '' },
-          },
-          tags: { errorBoundary: true },
+      import('@sentry/nextjs')
+        .then((Sentry) => {
+          Sentry.captureException(error, {
+            contexts: {
+              react: { componentStack: errorInfo.componentStack || '' },
+            },
+            tags: { errorBoundary: true },
+          })
         })
-      }).catch(() => { // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-        // Sentry 加载失败时静默降级
-      })
+        // eslint-disable-next-line no-restricted-syntax -- intentional fire-and-forget
+        .catch(() => {
+          // Sentry 加载失败时静默降级
+        })
     }
   }
 
   handleReset = () => {
-    this.setState(prev => ({
+    this.setState((prev) => ({
       hasError: false,
       error: null,
       errorInfo: null,
@@ -100,7 +103,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   toggleStack = () => {
-    this.setState(prev => ({ showStack: !prev.showStack }))
+    this.setState((prev) => ({ showStack: !prev.showStack }))
   }
 
   render() {
@@ -119,17 +122,20 @@ export class ErrorBoundary extends Component<Props, State> {
           role="alert"
           aria-live="assertive"
           style={{
-            minHeight: this.props.level === 'page' ? '100vh' : this.props.level === 'section' ? '300px' : '100px',
+            minHeight:
+              this.props.level === 'page'
+                ? '100vh'
+                : this.props.level === 'section'
+                  ? '300px'
+                  : '100px',
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
             padding: 24,
-            color: 'var(--color-text-primary, #EDEDED)',
+            color: 'var(--color-text-primary)',
             fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-            background: this.props.level === 'page'
-              ? 'var(--color-bg-primary, #0a0a0f)'
-              : 'transparent',
+            background: this.props.level === 'page' ? 'var(--color-bg-primary)' : 'transparent',
           }}
         >
           <div style={{ textAlign: 'center', maxWidth: 500 }}>
@@ -138,7 +144,8 @@ export class ErrorBoundary extends Component<Props, State> {
                 width: this.props.level === 'component' ? 48 : 80,
                 height: this.props.level === 'component' ? 48 : 80,
                 borderRadius: '50%',
-                background: 'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-08) 100%)',
+                background:
+                  'linear-gradient(135deg, var(--color-accent-error-15) 0%, var(--color-accent-error-08) 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -165,9 +172,10 @@ export class ErrorBoundary extends Component<Props, State> {
             <h1
               style={{
                 fontSize: this.props.level === 'component' ? 18 : 28,
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
                 marginBottom: 12,
-                background: 'linear-gradient(135deg, var(--color-text-primary, #EDEDED) 0%, var(--color-brand) 100%)',
+                background:
+                  'linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-brand) 100%)',
                 WebkitBackgroundClip: 'text',
                 WebkitTextFillColor: 'transparent',
               }}
@@ -175,10 +183,19 @@ export class ErrorBoundary extends Component<Props, State> {
               {t('errorTitle')}
             </h1>
 
-            <p style={{ opacity: 0.7, marginBottom: 8, fontSize: 16, lineHeight: 1.6 }}>
+            <p
+              style={{
+                opacity: 0.7,
+                marginBottom: 8,
+                fontSize: tokens.typography.fontSize.md,
+                lineHeight: 1.6,
+              }}
+            >
               {t('errorMessage')}
             </p>
-            <p style={{ opacity: 0.5, fontSize: 14, marginBottom: 24 }}>
+            <p
+              style={{ opacity: 0.5, fontSize: tokens.typography.fontSize.base, marginBottom: 24 }}
+            >
               {t('errorRefresh')}
             </p>
 
@@ -192,12 +209,15 @@ export class ErrorBoundary extends Component<Props, State> {
                   borderRadius: tokens.radius.md,
                   border: '1px solid var(--color-accent-error-20)',
                   textAlign: 'left',
-                  fontSize: 12,
+                  fontSize: tokens.typography.fontSize.xs,
                   fontFamily: 'monospace',
                 }}
               >
                 <summary
-                  onClick={(e) => { e.preventDefault(); this.toggleStack(); }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    this.toggleStack()
+                  }}
                   style={{ cursor: 'pointer', marginBottom: 8, color: 'var(--color-accent-error)' }}
                 >
                   {t('errorDetails')} {this.state.showStack ? '▲' : '▼'}
@@ -225,20 +245,28 @@ export class ErrorBoundary extends Component<Props, State> {
                 aria-label={t('retryLoad')}
                 style={{
                   padding: '12px 24px',
-                  background: 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+                  background:
+                    'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                   color: tokens.colors.white,
                   borderRadius: tokens.radius.md,
                   border: 'none',
                   cursor: 'pointer',
-                  fontSize: 14,
-                  fontWeight: 600,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontWeight: tokens.typography.fontWeight.semibold,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
                 </svg>
                 {t('retryButton')}
               </button>
@@ -249,20 +277,27 @@ export class ErrorBoundary extends Component<Props, State> {
                 style={{
                   padding: '12px 24px',
                   background: 'transparent',
-                  color: 'var(--color-text-primary, #EDEDED)',
+                  color: 'var(--color-text-primary)',
                   borderRadius: tokens.radius.md,
                   border: '1px solid var(--glass-border-medium, var(--glass-border-medium))',
                   textDecoration: 'none',
-                  fontSize: 14,
-                  fontWeight: 500,
+                  fontSize: tokens.typography.fontSize.base,
+                  fontWeight: tokens.typography.fontWeight.medium,
                   display: 'flex',
                   alignItems: 'center',
                   gap: 8,
                 }}
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                  <polyline points="9 22 9 12 15 12 15 22"/>
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+                  <polyline points="9 22 9 12 15 12 15 22" />
                 </svg>
                 {t('backToHome')}
               </Link>
@@ -281,7 +316,7 @@ export class ErrorBoundary extends Component<Props, State> {
  */
 export function PageErrorBoundary({
   children,
-  onError
+  onError,
 }: {
   children: ReactNode
   onError?: (error: Error, errorInfo: React.ErrorInfo) => void
@@ -298,7 +333,7 @@ export function PageErrorBoundary({
  */
 export function SectionErrorBoundary({
   children,
-  fallbackMessage
+  fallbackMessage,
 }: {
   children: ReactNode
   fallbackMessage?: string
@@ -334,7 +369,14 @@ export function SectionErrorBoundary({
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <p style={{ color: 'var(--color-text-secondary)', fontSize: 14 }}>{fallbackMessage || t('sectionLoadFailed')}</p>
+          <p
+            style={{
+              color: 'var(--color-text-secondary)',
+              fontSize: tokens.typography.fontSize.base,
+            }}
+          >
+            {fallbackMessage || t('sectionLoadFailed')}
+          </p>
           <button
             onClick={() => window.location.reload()}
             style={{
@@ -345,7 +387,7 @@ export function SectionErrorBoundary({
               borderRadius: tokens.radius.sm,
               border: '1px solid var(--color-accent-primary-30)',
               cursor: 'pointer',
-              fontSize: 13,
+              fontSize: tokens.typography.fontSize.sm,
             }}
           >
             {t('refreshPage')}
@@ -364,7 +406,7 @@ export function SectionErrorBoundary({
 export function CompactErrorBoundary({
   children,
   message,
-  onRetry
+  onRetry,
 }: {
   children: ReactNode
   message?: string
@@ -398,7 +440,15 @@ export function CompactErrorBoundary({
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <span style={{ color: 'var(--color-text-secondary)', fontSize: 13, flex: 1 }}>{message || t('loadFailed')}</span>
+          <span
+            style={{
+              color: 'var(--color-text-secondary)',
+              fontSize: tokens.typography.fontSize.sm,
+              flex: 1,
+            }}
+          >
+            {message || t('loadFailed')}
+          </span>
           <button
             onClick={onRetry || (() => window.location.reload())}
             style={{
@@ -408,7 +458,7 @@ export function CompactErrorBoundary({
               borderRadius: tokens.radius.sm,
               border: '1px solid var(--color-accent-primary-30)',
               cursor: 'pointer',
-              fontSize: 12,
+              fontSize: tokens.typography.fontSize.xs,
             }}
           >
             {t('retryButton')}
@@ -434,11 +484,7 @@ export function withErrorBoundary<P extends object>(
 ) {
   return function WithErrorBoundaryComponent(props: P) {
     return (
-      <ErrorBoundary
-        fallback={options?.fallback}
-        level={options?.level}
-        onError={options?.onError}
-      >
+      <ErrorBoundary fallback={options?.fallback} level={options?.level} onError={options?.onError}>
         <Component {...props} />
       </ErrorBoundary>
     )

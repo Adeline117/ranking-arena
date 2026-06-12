@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
+import { tokens } from '@/lib/design-tokens'
 
 const STORAGE_KEY = 'onboarding_complete'
 
@@ -87,8 +88,8 @@ export default function WelcomeModal() {
             right: 8,
             background: 'none',
             border: 'none',
-            color: 'var(--color-text-tertiary, #888)',
-            fontSize: 20,
+            color: 'var(--color-text-tertiary)',
+            fontSize: tokens.typography.fontSize.xl,
             cursor: 'pointer',
             lineHeight: 1,
             width: 44,
@@ -105,9 +106,10 @@ export default function WelcomeModal() {
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <h2
             style={{
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
               fontSize: 22,
-              fontWeight: 700,
-              color: 'var(--color-text-primary, #fff)',
+              fontWeight: tokens.typography.fontWeight.bold,
+              color: 'var(--color-text-primary)',
               marginBottom: 10,
               marginTop: 0,
             }}
@@ -116,8 +118,9 @@ export default function WelcomeModal() {
           </h2>
           <p
             style={{
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label / skeleton)
               fontSize: 15,
-              color: 'var(--color-text-secondary, #aaa)',
+              color: 'var(--color-text-secondary)',
               lineHeight: 1.5,
               margin: 0,
             }}
@@ -133,12 +136,12 @@ export default function WelcomeModal() {
               onClick={handleBack}
               style={{
                 padding: '12px 20px',
-                borderRadius: 10,
+                borderRadius: tokens.radius.md,
                 border: '1px solid var(--color-border-primary, rgba(255,255,255,0.15))',
                 background: 'transparent',
-                color: 'var(--color-text-secondary, #aaa)',
-                fontSize: 14,
-                fontWeight: 600,
+                color: 'var(--color-text-secondary)',
+                fontSize: tokens.typography.fontSize.base,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 cursor: 'pointer',
                 minHeight: 44,
               }}
@@ -150,12 +153,12 @@ export default function WelcomeModal() {
             onClick={handleNext}
             style={{
               padding: '12px 24px',
-              borderRadius: 10,
+              borderRadius: tokens.radius.md,
               border: 'none',
-              background: 'var(--color-accent-primary, #8B6FA8)',
-              color: '#fff',
-              fontSize: 14,
-              fontWeight: 600,
+              background: 'var(--color-accent-primary)',
+              color: tokens.colors.white,
+              fontSize: tokens.typography.fontSize.base,
+              fontWeight: tokens.typography.fontWeight.semibold,
               cursor: 'pointer',
               flex: currentStep > 0 ? undefined : 1,
               maxWidth: 240,
@@ -184,7 +187,7 @@ export default function WelcomeModal() {
                 borderRadius: '50%',
                 background:
                   i === currentStep
-                    ? 'var(--color-accent-primary, #8B6FA8)'
+                    ? 'var(--color-accent-primary)'
                     : 'var(--color-border-primary, rgba(255,255,255,0.2))',
                 transition: 'background 0.2s ease',
               }}
