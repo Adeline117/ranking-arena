@@ -1,0 +1,29 @@
+{
+  "code": 200,
+  "data": {
+    "totalProfit": "18941.5524",
+    "copyTotalProfit": "80649.0621",
+    "totalProfitRate": "1.8578",
+    "winRate": "0.8921",
+    "mdd": "1.3338",
+    "aum": "49685.0002",
+    "copyUserNum": 50,
+    "totalCopyUserNum": 420,
+    "takeRate": "0.2500",
+    "symbolRates": [
+      "{\"r\":\"0.9716\",\"s\":\"ETH-USDT\"}",
+      "{\"r\":\"0.0284\",\"s\":\"BTC-USDT\"}"
+    ],
+    "lossNum": 15,
+    "winNum": 124,
+    "avgProfit": ["503.953600", "0.8921"],
+    "avgLost": ["2795.544500", "0.1079"],
+    "profitLost": ["0.1803", "1"],
+    "avgHoldTime": 33018351,
+    "weekTradeNum": "9.83",
+    "lastTrade": 1781219897554,
+    "firstSignUp": 1772675129067,
+    "ts": 1781223453373
+  },
+  "success": true
+}

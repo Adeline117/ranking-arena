@@ -1,0 +1,69 @@
+{
+  "code": 200,
+  "data": {
+    "isHide": 1,
+    "pageNo": 1,
+    "pageSize": 10,
+    "total": 109,
+    "positions": [
+      {
+        "bizType": "linear",
+        "symbol": "ETH",
+        "productId": "USDT",
+        "contractCode": "ETH-USDT",
+        "contractType": "swap",
+        "direction": "sell",
+        "marginMode": "cross",
+        "modeType": "cross",
+        "businessType": "swap",
+        "avgCost": "1680.54",
+        "totalProfit": "30.7228",
+        "maxHoldVolume": "356",
+        "avgOffset": "1671.91",
+        "offsetProfit": "1.0270",
+        "offsetVolume": "356",
+        "openTime": 1781216305538,
+        "offsetTime": 1781219897511
+      },
+      {
+        "bizType": "linear",
+        "symbol": "ETH",
+        "productId": "USDT",
+        "contractCode": "ETH-USDT",
+        "contractType": "swap",
+        "direction": "buy",
+        "marginMode": "cross",
+        "modeType": "cross",
+        "businessType": "swap",
+        "avgCost": "1645.63",
+        "totalProfit": "25.5552",
+        "maxHoldVolume": "242",
+        "avgOffset": "1656.19",
+        "offsetProfit": "1.2833",
+        "offsetVolume": "242",
+        "openTime": 1781181146398,
+        "offsetTime": 1781185925268
+      },
+      {
+        "bizType": "linear",
+        "symbol": "ETH",
+        "productId": "USDT",
+        "contractCode": "ETH-USDT",
+        "contractType": "swap",
+        "direction": "sell",
+        "marginMode": "cross",
+        "modeType": "cross",
+        "businessType": "swap",
+        "avgCost": "1653.77",
+        "totalProfit": "14.1581",
+        "maxHoldVolume": "361",
+        "avgOffset": "1649.85",
+        "offsetProfit": "0.4743",
+        "offsetVolume": "361",
+        "openTime": 1781143938136,
+        "offsetTime": 1781180637726
+      }
+    ]
+  },
+  "success": true
+}
