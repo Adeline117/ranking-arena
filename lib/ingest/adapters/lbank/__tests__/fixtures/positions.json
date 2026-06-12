@@ -1,0 +1,43 @@
+{
+  "code": 200,
+  "data": [
+    {
+      "leverage": "1",
+      "prePosition": "0",
+      "longFrozen": "0",
+      "totalPositionCost": "2763.422016",
+      "tradeFee": "0",
+      "highestPosition": "7685.96",
+      "openPrice": "0.3595",
+      "remark": "def",
+      "preLongFrozen": "0",
+      "longFrozenMargin": "0",
+      "closeProfit": "0",
+      "isCrossMargin": "0",
+      "closeOrderSysID": "",
+      "positionFee": "0",
+      "positionID": "1000779252279904",
+      "positionCost": "2763.422016",
+      "currency": "USDT",
+      "useMargin": "2759.52605861",
+      "frozenMargin": "0",
+      "instrumentID": "SPXUSDT",
+      "shortFrozenMargin": "0",
+      "costPrice": "0.359541555771823",
+      "posiDirection": "0",
+      "closePosition": "0",
+      "insertTime": "1779811036",
+      "copyMemberID": "d9f05ca3-83d4-4d12-9a05-9ed6a6f041b4",
+      "priceCurrency": "USDT",
+      "clearCurrency": "USDT",
+      "totalCloseProfit": "0",
+      "shortFrozen": "0",
+      "tradeUnitID": "2059302858289815552",
+      "position": "7685.96",
+      "memberID": "d9f05ca3-83d4-4d12-9a05-9ed6a6f041b4",
+      "preShortFrozen": "0",
+      "copyProfit": "0"
+    }
+  ],
+  "message": "成功!"
+}

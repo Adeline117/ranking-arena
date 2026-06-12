@@ -1,0 +1,20 @@
+{
+  "code": 200,
+  "data": [
+    {
+      "winCount": 97,
+      "amount": 290,
+      "rate": "94.77",
+      "instrumentId": "SPXUSDT",
+      "orderCount": 102,
+      "winRate": "95.1"
+    },
+    {
+      "amount": 16,
+      "rate": "5.23",
+      "instrumentId": "ETHUSDT",
+      "winRate": "85.71"
+    }
+  ],
+  "message": "成功!"
+}
