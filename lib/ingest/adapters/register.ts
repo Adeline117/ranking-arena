@@ -30,9 +30,11 @@ import './bingx'
 
 // Phase 2 — long-tail batch 3 (wave 2)
 import './btcc'
+import './bitunix'
 
 // Phase 2 — wave 2 on-chain (pure HTTP / JSON APIs)
 import './gmx'
 import './gtrade'
+import './binance-web3'
 
 export {}

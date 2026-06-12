@@ -1,0 +1,30 @@
+{
+  "code": 0,
+  "msg": "result.success",
+  "data": {
+    "tradeDays": 8,
+    "shareRatio": "0.1000",
+    "header": "https://img.bitunix.com/user/avatar/04.png",
+    "nickname": "Fic Mic",
+    "briefInfo": null,
+    "maxFollow": 500,
+    "currentFollow": 5,
+    "secAmount": "41764.7979224509799164",
+    "aum": "15599.02220038572000000000",
+    "followerPl": "-4.41170377428000000000",
+    "sharedAmount": null,
+    "totalFollow": 8,
+    "tradeAmount": "100.11140000000000000000",
+    "minInvest": "10",
+    "traderUid": 348686197,
+    "followed": false,
+    "followerUid": null,
+    "showPosition": true,
+    "privateMode": false,
+    "showSquare": true,
+    "inviteCode": null,
+    "myself": false,
+    "clcLimit": false
+  },
+  "success": true
+}

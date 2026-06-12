@@ -1,0 +1,38 @@
+{
+  "code": 0,
+  "msg": "Success",
+  "data": [
+    {
+      "positionId": "1089741775231446729",
+      "ctime": "2026-06-11T08:00:19Z",
+      "symbol": "ADAUSDT",
+      "base": "ADA",
+      "quote": "USDT",
+      "type": 2,
+      "side": 1,
+      "amount": "584503",
+      "openPrice": "0.1677870334283998",
+      "marginAmount": "4962.44443464",
+      "marginRate": "0.024",
+      "profitReal": "-22.7307573582360007",
+      "leverage": 20,
+      "openVal": "98072.0244",
+      "profitUnreal": "-1936.4389",
+      "unRoe": "-0.3949",
+      "positionMode": 2,
+      "lastPrice": "0.171",
+      "markPrice": "0.1711",
+      "fee": "0",
+      "funding": "-22.7307573582360007",
+      "closeProfit": "0",
+      "tpslCount": "6",
+      "trailingTpslCount": "0",
+      "settleCoin": "USDT",
+      "symbolType": "LINEAR",
+      "breakEvenPrice": "0.1676894530852757",
+      "source": "api",
+      "mergeMode": 1
+    }
+  ],
+  "success": true
+}
