@@ -101,11 +101,18 @@ function StatRow({ label, value }: { label: string; value: string }) {
         justifyContent: 'space-between',
         padding: '7px 0',
         borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        fontSize: 13,
+        fontSize: tokens.typography.fontSize.sm,
       }}
     >
       <span style={{ color: tokens.colors.text.tertiary }}>{label}</span>
-      <span style={{ color: tokens.colors.text.primary, fontWeight: 500 }}>{value}</span>
+      <span
+        style={{
+          color: tokens.colors.text.primary,
+          fontWeight: tokens.typography.fontWeight.medium,
+        }}
+      >
+        {value}
+      </span>
     </div>
   )
 }
@@ -114,7 +121,13 @@ function PriceChangeBar({ label, value }: { label: string; value: number | null 
   if (value == null)
     return (
       <div
-        style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          fontSize: tokens.typography.fontSize.xs,
+          padding: '4px 0',
+        }}
       >
         <span style={{ color: tokens.colors.text.tertiary, width: 32, flexShrink: 0 }}>
           {label}
@@ -126,7 +139,15 @@ function PriceChangeBar({ label, value }: { label: string; value: number | null 
   const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
   const barWidth = Math.min(Math.abs(value), 100)
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, padding: '4px 0' }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        fontSize: tokens.typography.fontSize.xs,
+        padding: '4px 0',
+      }}
+    >
       <span style={{ color: tokens.colors.text.tertiary, width: 32, flexShrink: 0 }}>{label}</span>
       <div
         style={{
@@ -150,7 +171,7 @@ function PriceChangeBar({ label, value }: { label: string; value: number | null 
       <span
         style={{
           color,
-          fontWeight: 500,
+          fontWeight: tokens.typography.fontWeight.medium,
           minWidth: 52,
           textAlign: 'right',
           fontFamily: 'var(--font-mono, monospace)',
@@ -305,8 +326,8 @@ export default function TokenSidePanel({
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontWeight: 700,
-                        fontSize: 14,
+                        fontWeight: tokens.typography.fontWeight.bold,
+                        fontSize: tokens.typography.fontSize.base,
                         color: tokens.colors.text.secondary,
                       }}
                     >
@@ -315,17 +336,26 @@ export default function TokenSidePanel({
                   )}
                   <div>
                     <div
-                      style={{ fontSize: 18, fontWeight: 700, color: tokens.colors.text.primary }}
+                      style={{
+                        fontSize: tokens.typography.fontSize.lg,
+                        fontWeight: tokens.typography.fontWeight.bold,
+                        color: tokens.colors.text.primary,
+                      }}
                     >
                       {token.symbol}
                     </div>
-                    <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
+                    <div
+                      style={{
+                        fontSize: tokens.typography.fontSize.xs,
+                        color: tokens.colors.text.tertiary,
+                      }}
+                    >
                       {token.name}
                     </div>
                   </div>
                   <span
                     style={{
-                      fontSize: 11,
+                      fontSize: tokens.typography.fontSize.xs,
                       color: tokens.colors.text.tertiary,
                       background: tokens.colors.bg.tertiary,
                       padding: '2px 8px',
@@ -370,8 +400,8 @@ export default function TokenSidePanel({
               <div style={{ marginBottom: 16 }}>
                 <div
                   style={{
-                    fontSize: 28,
-                    fontWeight: 700,
+                    fontSize: tokens.typography.fontSize.hero,
+                    fontWeight: tokens.typography.fontWeight.bold,
                     color: tokens.colors.text.primary,
                     fontFamily: 'var(--font-mono, monospace)',
                   }}
@@ -380,8 +410,8 @@ export default function TokenSidePanel({
                 </div>
                 <span
                   style={{
-                    fontSize: 14,
-                    fontWeight: 600,
+                    fontSize: tokens.typography.fontSize.base,
+                    fontWeight: tokens.typography.fontWeight.semibold,
                     color:
                       token.change24h >= 0
                         ? tokens.colors.accent.success
@@ -425,8 +455,8 @@ export default function TokenSidePanel({
                         border: 'none',
                         borderRadius: tokens.radius.sm,
                         padding: '4px 10px',
-                        fontSize: 12,
-                        fontWeight: 600,
+                        fontSize: tokens.typography.fontSize.xs,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                         cursor: 'pointer',
                         transition: tokens.transition.fast,
                       }}
@@ -446,7 +476,7 @@ export default function TokenSidePanel({
                         justifyContent: 'center',
                         zIndex: 2,
                         color: tokens.colors.text.tertiary,
-                        fontSize: 13,
+                        fontSize: tokens.typography.fontSize.sm,
                       }}
                     >
                       {t('loading')}
@@ -461,7 +491,7 @@ export default function TokenSidePanel({
                         alignItems: 'center',
                         justifyContent: 'center',
                         color: tokens.colors.text.tertiary,
-                        fontSize: 13,
+                        fontSize: tokens.typography.fontSize.sm,
                       }}
                     >
                       {t('chartUnavailable') || 'Chart data unavailable'}
@@ -484,8 +514,8 @@ export default function TokenSidePanel({
                 <div style={{ marginBottom: 20 }}>
                   <div
                     style={{
-                      fontSize: 14,
-                      fontWeight: 600,
+                      fontSize: tokens.typography.fontSize.base,
+                      fontWeight: tokens.typography.fontWeight.semibold,
                       color: tokens.colors.text.primary,
                       marginBottom: 8,
                     }}
@@ -506,8 +536,8 @@ export default function TokenSidePanel({
               <div style={{ marginBottom: 20 }}>
                 <div
                   style={{
-                    fontSize: 14,
-                    fontWeight: 600,
+                    fontSize: tokens.typography.fontSize.base,
+                    fontWeight: tokens.typography.fontWeight.semibold,
                     color: tokens.colors.text.primary,
                     marginBottom: 8,
                   }}
@@ -540,8 +570,8 @@ export default function TokenSidePanel({
                 <div style={{ marginBottom: 20 }}>
                   <div
                     style={{
-                      fontSize: 14,
-                      fontWeight: 600,
+                      fontSize: tokens.typography.fontSize.base,
+                      fontWeight: tokens.typography.fontWeight.semibold,
                       color: tokens.colors.text.primary,
                       marginBottom: 8,
                     }}
@@ -564,7 +594,7 @@ export default function TokenSidePanel({
                     >
                       <div
                         style={{
-                          fontSize: 11,
+                          fontSize: tokens.typography.fontSize.xs,
                           color: tokens.colors.text.tertiary,
                           marginBottom: 4,
                         }}
@@ -573,8 +603,8 @@ export default function TokenSidePanel({
                       </div>
                       <div
                         style={{
-                          fontSize: 16,
-                          fontWeight: 700,
+                          fontSize: tokens.typography.fontSize.md,
+                          fontWeight: tokens.typography.fontWeight.bold,
                           color: tokens.colors.accent.success,
                           fontFamily: 'var(--font-mono, monospace)',
                         }}
@@ -582,12 +612,20 @@ export default function TokenSidePanel({
                         {formatPrice(md.ath.usd)}
                       </div>
                       <div
-                        style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                          marginTop: 2,
+                        }}
                       >
                         {formatDate(md.ath_date.usd)}
                       </div>
                       <div
-                        style={{ fontSize: 11, color: tokens.colors.accent.error, marginTop: 2 }}
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.accent.error,
+                          marginTop: 2,
+                        }}
                       >
                         {(md.ath_change_percentage?.usd ?? 0).toFixed(1)}%
                       </div>
@@ -601,7 +639,7 @@ export default function TokenSidePanel({
                     >
                       <div
                         style={{
-                          fontSize: 11,
+                          fontSize: tokens.typography.fontSize.xs,
                           color: tokens.colors.text.tertiary,
                           marginBottom: 4,
                         }}
@@ -610,8 +648,8 @@ export default function TokenSidePanel({
                       </div>
                       <div
                         style={{
-                          fontSize: 16,
-                          fontWeight: 700,
+                          fontSize: tokens.typography.fontSize.md,
+                          fontWeight: tokens.typography.fontWeight.bold,
                           color: tokens.colors.accent.error,
                           fontFamily: 'var(--font-mono, monospace)',
                         }}
@@ -619,7 +657,11 @@ export default function TokenSidePanel({
                         {formatPrice(md.atl.usd)}
                       </div>
                       <div
-                        style={{ fontSize: 11, color: tokens.colors.text.tertiary, marginTop: 2 }}
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                          marginTop: 2,
+                        }}
                       >
                         {formatDate(md.atl_date.usd)}
                       </div>
@@ -649,7 +691,7 @@ export default function TokenSidePanel({
                             background: tokens.colors.bg.tertiary,
                             borderRadius: tokens.radius.md,
                             color: tokens.colors.accent.primary,
-                            fontSize: 12,
+                            fontSize: tokens.typography.fontSize.xs,
                             textDecoration: 'none',
                             border: `1px solid ${tokens.colors.border.primary}`,
                           }}
@@ -678,8 +720,8 @@ export default function TokenSidePanel({
               <div>
                 <div
                   style={{
-                    fontSize: 14,
-                    fontWeight: 600,
+                    fontSize: tokens.typography.fontSize.base,
+                    fontWeight: tokens.typography.fontWeight.semibold,
                     color: tokens.colors.text.primary,
                     marginBottom: 8,
                   }}
@@ -693,7 +735,7 @@ export default function TokenSidePanel({
                     borderRadius: tokens.radius.md,
                     textAlign: 'center',
                     color: tokens.colors.text.tertiary,
-                    fontSize: 13,
+                    fontSize: tokens.typography.fontSize.sm,
                   }}
                 >
                   {t('noDataComingSoon')}

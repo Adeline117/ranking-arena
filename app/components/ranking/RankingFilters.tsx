@@ -38,11 +38,11 @@ const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
 }
 
 const SCORE_TIERS = [
-  { value: 'S' as const, range: '90+', color: 'var(--color-score-legendary, #8b5cf6)' },
-  { value: 'A' as const, range: '70-89', color: 'var(--color-score-great, #10b981)' },
-  { value: 'B' as const, range: '50-69', color: 'var(--color-score-average, #eab308)' },
-  { value: 'C' as const, range: '30-49', color: 'var(--color-score-below, #f97316)' },
-  { value: 'D' as const, range: '<30', color: 'var(--color-score-low, #ef4444)' },
+  { value: 'S' as const, range: '90+', color: 'var(--color-score-legendary)' },
+  { value: 'A' as const, range: '70-89', color: 'var(--color-score-great)' },
+  { value: 'B' as const, range: '50-69', color: 'var(--color-score-average)' },
+  { value: 'C' as const, range: '30-49', color: 'var(--color-score-below)' },
+  { value: 'D' as const, range: '<30', color: 'var(--color-score-low)' },
 ]
 
 interface ExportRankingButtonProps {
@@ -109,24 +109,18 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
         aria-expanded={showMenu}
         aria-haspopup="true"
         aria-label={t('exportRanking')}
-        className="export-ranking-btn"
+        className="export-ranking-btn hover-bg-tertiary"
         style={{
           padding: '8px 12px',
           borderRadius: tokens.radius.sm,
           border: `1px solid ${tokens.colors.border.primary}`,
           background: tokens.colors.bg.secondary,
           color: tokens.colors.text.primary,
-          fontSize: 12,
-          fontWeight: 600,
+          fontSize: tokens.typography.fontSize.xs,
+          fontWeight: tokens.typography.fontWeight.semibold,
           cursor: 'pointer',
           minHeight: 44,
           transition: 'all 0.15s',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.background = tokens.colors.bg.tertiary
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.background = tokens.colors.bg.secondary
         }}
       >
         <svg
@@ -166,9 +160,9 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
           <div
             style={{
               padding: '6px 12px',
-              fontSize: 12,
+              fontSize: tokens.typography.fontSize.xs,
               color: tokens.colors.text.tertiary,
-              fontWeight: 600,
+              fontWeight: tokens.typography.fontWeight.semibold,
             }}
           >
             CSV
@@ -177,6 +171,7 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
             <button
               key={`csv-${n}`}
               onClick={() => doExport(n, 'csv')}
+              className="hover-bg-tertiary"
               style={{
                 display: 'block',
                 width: '100%',
@@ -184,15 +179,9 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
                 background: 'transparent',
                 border: 'none',
                 color: tokens.colors.text.primary,
-                fontSize: 13,
+                fontSize: tokens.typography.fontSize.sm,
                 cursor: 'pointer',
                 textAlign: 'left',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = tokens.colors.bg.tertiary
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
               }}
             >
               Top {n}
@@ -204,9 +193,9 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
           <div
             style={{
               padding: '6px 12px',
-              fontSize: 12,
+              fontSize: tokens.typography.fontSize.xs,
               color: tokens.colors.text.tertiary,
-              fontWeight: 600,
+              fontWeight: tokens.typography.fontWeight.semibold,
             }}
           >
             JSON
@@ -215,6 +204,7 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
             <button
               key={`json-${n}`}
               onClick={() => doExport(n, 'json')}
+              className="hover-bg-tertiary"
               style={{
                 display: 'block',
                 width: '100%',
@@ -222,15 +212,9 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
                 background: 'transparent',
                 border: 'none',
                 color: tokens.colors.text.primary,
-                fontSize: 13,
+                fontSize: tokens.typography.fontSize.sm,
                 cursor: 'pointer',
                 textAlign: 'left',
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.background = tokens.colors.bg.tertiary
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.background = 'transparent'
               }}
             >
               Top {n}
@@ -294,12 +278,12 @@ function FilterChip({
       onClick={onClick}
       style={{
         padding: '5px 12px',
-        borderRadius: 20,
+        borderRadius: tokens.radius.full,
         minHeight: 36,
         border: active ? `1px solid ${activeColor}` : `1px solid ${tokens.colors.border.primary}`,
         background: active ? `color-mix(in srgb, ${activeColor} 15%, transparent)` : 'transparent',
         color: active ? activeColor : tokens.colors.text.secondary,
-        fontSize: 12,
+        fontSize: tokens.typography.fontSize.xs,
         fontWeight: active ? 700 : 500,
         cursor: 'pointer',
         transition: 'all 0.15s ease, transform 0.1s ease',
@@ -388,7 +372,7 @@ export function RankingFilters({
           gap: tokens.spacing[2],
           borderBottom: '1px solid var(--glass-border-light)',
           background: tokens.glass.bg.light,
-          borderRadius: 0,
+          borderRadius: tokens.radius.none,
           flexWrap: 'wrap',
         }}
       >
@@ -419,7 +403,7 @@ export function RankingFilters({
                     traderTypeFilter === opt.value
                       ? tokens.colors.accent.primary
                       : tokens.colors.text.tertiary,
-                  fontSize: 12,
+                  fontSize: tokens.typography.fontSize.xs,
                   fontWeight: traderTypeFilter === opt.value ? 700 : 500,
                   cursor: 'pointer',
                   transition: `all ${tokens.transition.fast}`,
@@ -465,13 +449,14 @@ export function RankingFilters({
             {activeFilterCount > 0 && (
               <span
                 style={{
+                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (10px count badge)
                   fontSize: 10,
-                  fontWeight: 700,
+                  fontWeight: tokens.typography.fontWeight.bold,
                   lineHeight: 1,
                   padding: '1px 5px',
-                  borderRadius: 8,
+                  borderRadius: tokens.radius.full,
                   background: tokens.colors.accent.primary,
-                  color: '#fff',
+                  color: 'var(--color-on-accent)',
                   minWidth: 16,
                   textAlign: 'center',
                 }}
@@ -495,15 +480,17 @@ export function RankingFilters({
             {BETA_PRO_FEATURES_FREE && (
               <span
                 style={{
+                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (8px Pro micro-badge)
                   fontSize: 8,
-                  fontWeight: 700,
+                  fontWeight: tokens.typography.fontWeight.bold,
                   padding: '1px 4px',
+                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (4px radius on micro-badge; nearest token is 2px off)
                   borderRadius: 4,
                   background:
-                    'color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 20%, transparent)',
-                  color: 'var(--color-pro-gradient-start, #a78bfa)',
+                    'color-mix(in srgb, var(--color-pro-gradient-start) 20%, transparent)',
+                  color: 'var(--color-pro-gradient-start)',
                   border:
-                    '1px solid color-mix(in srgb, var(--color-pro-gradient-start, #a78bfa) 40%, transparent)',
+                    '1px solid color-mix(in srgb, var(--color-pro-gradient-start) 40%, transparent)',
                   whiteSpace: 'nowrap',
                   lineHeight: 1.4,
                 }}
@@ -616,8 +603,8 @@ export function RankingFilters({
                   border: '1px solid var(--color-border-primary)',
                   background: 'transparent',
                   color: 'var(--color-text-tertiary)',
-                  fontSize: 12,
-                  fontWeight: 500,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.medium,
                   cursor: 'pointer',
                   opacity: 0.7,
                 }}
@@ -639,7 +626,7 @@ export function RankingFilters({
           style={{
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
             borderBottom: '1px solid var(--glass-border-light)',
-            background: 'var(--color-bg-secondary, #14121C)',
+            background: 'var(--color-bg-secondary)',
             display: 'flex',
             flexDirection: 'column',
             gap: tokens.spacing[3],
@@ -712,8 +699,8 @@ export function RankingFilters({
               style={{
                 alignSelf: 'flex-start',
                 padding: '4px 12px',
-                fontSize: 12,
-                fontWeight: 600,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.semibold,
                 color: tokens.colors.accent.error,
                 background: 'transparent',
                 border: `1px solid ${tokens.colors.accent.error}40`,

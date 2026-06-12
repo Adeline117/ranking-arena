@@ -31,7 +31,13 @@ function TermsAgreement({ t }: { t: (key: string) => string }) {
     <div
       style={{ marginTop: 16, paddingTop: 12, borderTop: '1px solid var(--glass-border-light)' }}
     >
-      <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', lineHeight: 1.5 }}>
+      <div
+        style={{
+          fontSize: tokens.typography.fontSize.sm,
+          color: 'var(--color-text-tertiary)',
+          lineHeight: 1.5,
+        }}
+      >
         {t('loginTermsNote')}{' '}
         <a
           href="/terms"
@@ -221,8 +227,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
             <div style={{ textAlign: 'center', marginBottom: 24 }}>
               <div
                 style={{
-                  fontSize: 20,
-                  fontWeight: 800,
+                  fontSize: tokens.typography.fontSize.xl,
+                  fontWeight: tokens.typography.fontWeight.extrabold,
                   color: 'var(--color-text-primary)',
                   marginBottom: 6,
                 }}
@@ -230,7 +236,14 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 {t('authLoginTitle')}
               </div>
               {message && (
-                <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)' }}>{message}</div>
+                <div
+                  style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: 'var(--color-text-tertiary)',
+                  }}
+                >
+                  {message}
+                </div>
               )}
             </div>
 
@@ -245,8 +258,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 border: '1px solid var(--glass-border-medium)',
                 background: 'var(--glass-bg-light)',
                 color: 'var(--color-text-primary)',
-                fontWeight: 700,
-                fontSize: 14,
+                fontWeight: tokens.typography.fontWeight.bold,
+                fontSize: tokens.typography.fontSize.base,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -287,8 +300,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 border: '1px solid var(--glass-border-light)',
                 background: 'transparent',
                 color: 'var(--color-text-secondary)',
-                fontWeight: 600,
-                fontSize: 14,
+                fontWeight: tokens.typography.fontWeight.semibold,
+                fontSize: tokens.typography.fontSize.base,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -327,7 +340,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 style={{
                   marginTop: 12,
                   color: 'var(--color-accent-error)',
-                  fontSize: 13,
+                  fontSize: tokens.typography.fontSize.sm,
                   textAlign: 'center',
                 }}
               >
@@ -347,7 +360,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 border: 'none',
                 color: 'var(--color-text-tertiary)',
                 cursor: 'pointer',
-                fontSize: 13,
+                fontSize: tokens.typography.fontSize.sm,
                 padding: '0 0 16px',
                 display: 'flex',
                 alignItems: 'center',
@@ -370,8 +383,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
 
             <div
               style={{
-                fontSize: 16,
-                fontWeight: 700,
+                fontSize: tokens.typography.fontSize.md,
+                fontWeight: tokens.typography.fontWeight.bold,
                 color: 'var(--color-text-primary)',
                 marginBottom: 16,
               }}
@@ -395,7 +408,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 background: 'var(--glass-bg-light)',
                 border: '1px solid var(--glass-border-medium)',
                 color: 'var(--color-text-primary)',
-                fontSize: 16,
+                fontSize: tokens.typography.fontSize.md,
                 outline: 'none',
                 boxSizing: 'border-box',
                 marginBottom: 12,
@@ -411,9 +424,9 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
                 border: 'none',
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: 14,
+                color: 'var(--color-on-accent)',
+                fontWeight: tokens.typography.fontWeight.bold,
+                fontSize: tokens.typography.fontSize.base,
                 cursor: loading || !email.trim() ? 'not-allowed' : 'pointer',
                 opacity: loading || !email.trim() ? 0.6 : 1,
                 display: 'flex',
@@ -444,7 +457,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 style={{
                   marginTop: 12,
                   color: 'var(--color-accent-error)',
-                  fontSize: 13,
+                  fontSize: tokens.typography.fontSize.sm,
                   textAlign: 'center',
                 }}
               >
@@ -464,7 +477,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 border: 'none',
                 color: 'var(--color-text-tertiary)',
                 cursor: 'pointer',
-                fontSize: 13,
+                fontSize: tokens.typography.fontSize.sm,
                 padding: '0 0 16px',
                 display: 'flex',
                 alignItems: 'center',
@@ -487,15 +500,21 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
 
             <div
               style={{
-                fontSize: 16,
-                fontWeight: 700,
+                fontSize: tokens.typography.fontSize.md,
+                fontWeight: tokens.typography.fontWeight.bold,
                 color: 'var(--color-text-primary)',
                 marginBottom: 4,
               }}
             >
               {t('authEnterCode')}
             </div>
-            <div style={{ fontSize: 13, color: 'var(--color-text-tertiary)', marginBottom: 16 }}>
+            <div
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: 'var(--color-text-tertiary)',
+                marginBottom: 16,
+              }}
+            >
               {t('authCodeSentTo').replace('{email}', email)}
             </div>
 
@@ -519,8 +538,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 background: 'var(--glass-bg-light)',
                 border: '1px solid var(--glass-border-medium)',
                 color: 'var(--color-text-primary)',
-                fontSize: 20,
-                fontWeight: 700,
+                fontSize: tokens.typography.fontSize.xl,
+                fontWeight: tokens.typography.fontWeight.bold,
                 letterSpacing: 8,
                 textAlign: 'center',
                 outline: 'none',
@@ -538,9 +557,9 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 borderRadius: tokens.radius.lg,
                 background: tokens.gradient.primary,
                 border: 'none',
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: 14,
+                color: 'var(--color-on-accent)',
+                fontWeight: tokens.typography.fontWeight.bold,
+                fontSize: tokens.typography.fontSize.base,
                 cursor: loading || otp.length < 6 ? 'not-allowed' : 'pointer',
                 opacity: loading || otp.length < 6 ? 0.6 : 1,
                 display: 'flex',
@@ -582,8 +601,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 border: '1px solid var(--glass-border-medium)',
                 color:
                   resendCooldown > 0 ? 'var(--color-text-tertiary)' : 'var(--color-text-secondary)',
-                fontWeight: 500,
-                fontSize: 13,
+                fontWeight: tokens.typography.fontWeight.medium,
+                fontSize: tokens.typography.fontSize.sm,
                 cursor: resendCooldown > 0 || loading ? 'not-allowed' : 'pointer',
                 marginTop: 8,
               }}
@@ -598,7 +617,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
                 style={{
                   marginTop: 12,
                   color: 'var(--color-accent-error)',
-                  fontSize: 13,
+                  fontSize: tokens.typography.fontSize.sm,
                   textAlign: 'center',
                 }}
               >
