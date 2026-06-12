@@ -22,6 +22,7 @@ const FETCH_SCHEDULES: PlatformSchedule[] = [
   // bybit_copytrade), bitget_futures, hyperliquid, mexc are fetched by the
   // new unified pipeline. Re-adding them here would double-fetch.
   // Wave 2 retired: htx_futures, coinex, gateio, kucoin, bingx, xt.
+  // Wave 3 retired: btcc, bitunix, gmx, gains(gtrade), binance_web3, okx_web3.
   // Fast direct APIs — every 2h
   { platform: 'binance_futures', intervalMs: 2 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'binance_spot', intervalMs: 2 * 3600_000, windows: ['7d', '30d', '90d'] },
@@ -30,8 +31,6 @@ const FETCH_SCHEDULES: PlatformSchedule[] = [
   { platform: 'bybit_spot', intervalMs: 3 * 3600_000, windows: ['7d', '30d', '90d'] },
 
   // DEX — every 4h
-  { platform: 'gmx', intervalMs: 4 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'gains', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'dydx', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'aevo', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'drift', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
@@ -39,13 +38,11 @@ const FETCH_SCHEDULES: PlatformSchedule[] = [
 
   // Medium CEX — every 4-6h
   { platform: 'bitfinex', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'bitunix', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
 
   // Slow / fragile — every 6-8h
   { platform: 'weex', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'woox', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'etoro', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'btcc', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'toobit', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'polymarket', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
   { platform: 'copin', intervalMs: 8 * 3600_000, windows: ['7d', '30d', '90d'] },
@@ -53,8 +50,6 @@ const FETCH_SCHEDULES: PlatformSchedule[] = [
   // not SOURCE_TO_CONNECTOR_MAP. Stays on Vercel cron.
 
   // Web3 wallets
-  { platform: 'binance_web3', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
-  { platform: 'okx_web3', intervalMs: 6 * 3600_000, windows: ['7d', '30d', '90d'] },
 ]
 
 const SCORE_INTERVALS_MS = 2 * 3600_000 // every 2h
