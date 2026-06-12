@@ -107,6 +107,9 @@ scripts/output/
 scripts/local-scrape.mjs
 .env*.local
 ranking-arena.db
+/*.db
+/data/*.db
+/--version/
 logs/
 scripts/monitoring/reports/
 
