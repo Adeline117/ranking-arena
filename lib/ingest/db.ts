@@ -28,7 +28,9 @@ export function getIngestPool(): Pool {
 
   pool = new Pool({
     connectionString: url,
-    max: 5,
+    // main queue (3) + tier-c queue (2) + scheduler/maintenance can all
+    // hold a client concurrently; 5 was contention-edge at 23 sources.
+    max: 10,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
     // Supabase pooler requires TLS; local dev (127.0.0.1) does not.
