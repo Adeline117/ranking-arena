@@ -63,8 +63,19 @@ const CUM_PNL_KEY: Record<number, string> = {
 }
 const WIN_KEY: Record<number, string> = { 7: 'winRate7d', 30: 'winRate30d', 90: 'winRate90d' }
 
-function results(payload: unknown): Dict[] {
-  const data = (payload as Dict)?.data as Dict | undefined
+/** Unwrap the {search, timeframe} envelope the adapter stores in RAW (the TF
+ *  is carried with the payload so the parser is pure and re-parseable — the
+ *  rankStat holds all periods, so the TF can't come from the payload alone). */
+function unwrap(payload: unknown): { search: unknown; timeframe: number | null } {
+  const p = payload as Dict
+  if (p && typeof p === 'object' && 'search' in p) {
+    return { search: p.search, timeframe: num(p.timeframe) }
+  }
+  return { search: payload, timeframe: null }
+}
+
+function results(search: unknown): Dict[] {
+  const data = (search as Dict)?.data as Dict | undefined
   const list = data?.result
   return Array.isArray(list) ? (list as Dict[]) : []
 }
@@ -73,12 +84,14 @@ function results(payload: unknown): Dict[] {
  * trader/search page → rows. headline metrics use the requested TF's fields;
  * the full rankStat (every period) + risk rating land on traderMeta/raw so
  * the per-TF profile-stats requirement is met from the board crawl alone.
- * apiIdentity is the profile routing key (kept on traderMeta).
+ * apiIdentity is the profile routing key (kept on traderMeta). The TF comes
+ * from the RAW {search, timeframe} envelope (the adapter stores it there).
  */
 export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedLeaderboardPage {
-  const tf = (Number(ctx.meta?.timeframe) || 30) as RankingTimeframe
+  const { search, timeframe } = unwrap(payload)
+  const tf = (timeframe ?? (Number(ctx.meta?.timeframe) || 30)) as RankingTimeframe
   const rows: ParsedLeaderboardRow[] = []
-  const list = results(payload)
+  const list = results(search)
   for (let i = 0; i < list.length; i++) {
     const item = list[i]
     const trader = (item.trader ?? {}) as Dict
@@ -87,13 +100,14 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
     const uid = trader.uidStr ?? trader.uid
     if (uid === null || uid === undefined) continue
 
+    // Only TF-INDEPENDENT routing facts belong on traderMeta (it is one row
+    // per trader). apiIdentity routes the profile; the per-TF risk rating
+    // (riskLevel{7,30,90}Days, spec §11.12) is preserved in raw.rankStat and
+    // belongs in per-TF trader_stats.extras, NOT here (it would be clobbered
+    // by whichever TF wrote last).
     const traderMeta: Record<string, unknown> = {}
     if (rankStat.apiIdentity !== undefined)
       traderMeta.bingx_api_identity = String(rankStat.apiIdentity)
-    // risk rating 1-10 per TF (spec §11.12) → traderMeta for routing/feature use
-    const riskKey = `riskLevel${tf}Days`
-    const risk = int(rankStat[riskKey])
-    if (risk !== null) traderMeta.risk_rating = risk
 
     rows.push({
       exchangeTraderId: String(uid),
@@ -110,7 +124,7 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
       raw: item,
     })
   }
-  const total = int(((payload as Dict)?.data as Dict | undefined)?.total)
+  const total = int(((search as Dict)?.data as Dict | undefined)?.total)
   return { rows, reportedTotal: total }
 }
 

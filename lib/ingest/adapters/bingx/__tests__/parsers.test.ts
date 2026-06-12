@@ -7,17 +7,20 @@ function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
 }
 
-const ctxTf = (tf: number): ParseCtx => ({
+const ctx: ParseCtx = {
   sourceSlug: 'bingx_futures',
   currency: 'USDT',
   tfLabelMap: {},
   scrapedAt: '2026-06-11T00:00:00.000Z',
-  meta: { timeframe: tf },
-})
+  meta: {},
+}
+
+/** The adapter stores RAW as {search, timeframe}; tests mirror that envelope. */
+const wrapped = (tf: number): unknown => ({ search: fixture('search.json'), timeframe: tf })
 
 describe('parseBingxLeaderboardPage', () => {
   it('parses trader/search rows for the 30d timeframe', () => {
-    const page = parseBingxLeaderboardPage(fixture('search.json'), ctxTf(30))
+    const page = parseBingxLeaderboardPage(wrapped(30), ctx)
     expect(page.reportedTotal).toBe(2008)
     expect(page.rows.length).toBe(3)
     const first = page.rows[0]
@@ -31,26 +34,28 @@ describe('parseBingxLeaderboardPage', () => {
     expect(first.headlinePnl).toBeCloseTo(126.27, 2)
     // winRate30d 1 → 100%
     expect(first.headlineWinRate).toBeCloseTo(100, 5)
-    // apiIdentity + risk rating on traderMeta (spec §11.12)
-    expect(first.traderMeta).toMatchObject({
-      bingx_api_identity: '1579905006518878200',
-      risk_rating: 7,
-    })
+    // apiIdentity routing fact on traderMeta (TF-independent)
+    expect(first.traderMeta).toMatchObject({ bingx_api_identity: '1579905006518878200' })
+    // per-TF risk rating stays in raw.rankStat (spec §11.12), not traderMeta
+    expect(first.traderMeta?.risk_rating).toBeUndefined()
+    expect((first.raw as { rankStat: { riskLevel30Days: string } }).rankStat.riskLevel30Days).toBe(
+      '7'
+    )
   })
 
   it('selects the correct TF fields for 7d vs 90d', () => {
-    const p7 = parseBingxLeaderboardPage(fixture('search.json'), ctxTf(7))
-    const p90 = parseBingxLeaderboardPage(fixture('search.json'), ctxTf(90))
+    const p7 = parseBingxLeaderboardPage(wrapped(7), ctx)
+    const p90 = parseBingxLeaderboardPage(wrapped(90), ctx)
     // strRecent7DaysRate "+31.08%" vs strRecent90DaysRate "+1,052.28%"
     expect(p7.rows[0].headlineRoi).toBeCloseTo(31.08, 2)
     expect(p90.rows[0].headlineRoi).toBeCloseTo(1052.28, 2)
-    // 7d risk rating differs from 30d
-    expect(p7.rows[0].traderMeta).toMatchObject({ risk_rating: 5 })
   })
 
   it('returns empty on malformed payloads', () => {
-    expect(parseBingxLeaderboardPage({}, ctxTf(30)).rows).toHaveLength(0)
-    expect(parseBingxLeaderboardPage({ data: { result: 'x' } }, ctxTf(30)).rows).toHaveLength(0)
+    expect(parseBingxLeaderboardPage({}, ctx).rows).toHaveLength(0)
+    expect(
+      parseBingxLeaderboardPage({ search: { data: { result: 'x' } }, timeframe: 30 }, ctx).rows
+    ).toHaveLength(0)
   })
 })
 
