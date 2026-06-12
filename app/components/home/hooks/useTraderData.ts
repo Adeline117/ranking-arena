@@ -253,6 +253,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         sortDir?: string
         timeRange?: TimeRange
         exchange?: string
+        /** Background auto-refresh: skip LOAD_START so the table never dims/spins.
+            Data lands via LOAD_SUCCESS (fingerprint-deduped) without UI churn. */
+        silent?: boolean
       }
     ): Promise<void> => {
       // Merge opts into sticky filters — only override what caller explicitly passes
@@ -276,7 +279,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       const controller = new AbortController()
       abortControllers.set(cancelKey, controller)
 
-      dispatch({ type: 'LOAD_START' })
+      if (!opts?.silent) dispatch({ type: 'LOAD_START' })
 
       try {
         let url = `/api/traders?timeRange=${timeRange}&limit=${PAGE_SIZE}&page=${page}`
@@ -414,8 +417,10 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
 
     const silentRefresh = () => {
       lastFetchTime = Date.now()
-      // Sticky filters automatically preserve the current exchange
-      fetchPage(0)
+      // Sticky filters automatically preserve the current exchange.
+      // silent: a 60s background poll must not dim the table or show the
+      // refresh spinner — fingerprint dedup means most polls change nothing.
+      fetchPage(0, { silent: true })
         .then(() => {
           refreshFailCountRef.current = 0
         })

@@ -160,4 +160,32 @@ describe('useTraderData time range switch', () => {
     })
     expect(result.current.traders[0].id).toBe('trader-7d')
   })
+
+  it('silent fetch (auto-refresh) never flips loading', async () => {
+    const { resolveFetch } = mockFetchResolving([
+      { id: 'trader-90d', source: 'bybit', rank: 1, roi: 99 },
+    ])
+
+    const { result } = renderHook(() =>
+      useTraderData({
+        autoRefreshInterval: 0,
+        initialTraders: [initialTrader],
+        initialTotalCount: 1,
+      })
+    )
+
+    act(() => {
+      void result.current.fetchPage(0, { silent: true })
+    })
+
+    // No LOAD_START: table must not dim or show the refresh spinner.
+    expect(result.current.loading).toBe(false)
+    expect(result.current.traders).toHaveLength(1)
+
+    await act(async () => {
+      resolveFetch()
+      await Promise.resolve()
+    })
+    expect(result.current.loading).toBe(false)
+  })
 })
