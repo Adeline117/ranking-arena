@@ -19,7 +19,7 @@ import CategoryRankingTabs from '../ranking/CategoryRankingTabs'
 
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
-const ProUpgradeCTA = dynamic(() => import('./ProUpgradeCTA'), { ssr: false })
+const ProGate = dynamic(() => import('../ui/ProGate'), { ssr: false })
 const RankingFooter = dynamic(() => import('./RankingFooter'), { ssr: false })
 const LeaderboardChangelog = dynamic(() => import('../ranking/LeaderboardChangelog'), {
   ssr: false,
@@ -98,7 +98,6 @@ export default function RankingSection({
     handleResetFilters,
     handleFilterToggle,
     formatLastUpdated,
-    router,
   } = useRankingFilters({ traders, activeTimeRange, totalCount, categoryCounts, fetchPage })
 
   // Leaderboard movers
@@ -344,11 +343,12 @@ export default function RankingSection({
         }}
       >
         {!isPro && !loading && advancedFiltered.length > FREE_LEADERBOARD_LIMIT && (
-          <ProUpgradeCTA
-            language={language}
-            t={t}
-            freeLimit={FREE_LEADERBOARD_LIMIT}
-            onUpgrade={() => router.push('/pricing')}
+          <ProGate
+            variant="inline"
+            description={t('showingTopFreeLimit').replace(
+              '{limit}',
+              String(FREE_LEADERBOARD_LIMIT)
+            )}
           />
         )}
       </div>
