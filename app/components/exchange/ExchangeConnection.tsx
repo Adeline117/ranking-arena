@@ -66,7 +66,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
       const { data, error: fetchError } = await supabase
         .from('user_exchange_connections')
         .select(
-          'id, exchange, status, is_active, label, created_at, last_synced_at, updated_at, user_id'
+          'id, user_id, exchange, is_active, last_sync_at, last_sync_status, last_sync_error, created_at, updated_at'
         )
         .eq('user_id', actualUserId)
         .order('created_at', { ascending: false })
