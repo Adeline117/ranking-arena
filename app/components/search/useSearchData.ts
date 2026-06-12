@@ -179,9 +179,9 @@ export function useSearchData(open: boolean, query: string) {
     loadHotPosts()
   }, [loadTrendingSearches, loadHotPosts])
 
-  // Hot post title translation
+  // Hot post title translation (requires auth — anonymous visitors got a 401 on every page)
   useEffect(() => {
-    if (hotPosts.length === 0 || translating) return
+    if (hotPosts.length === 0 || translating || !isLoggedIn) return
 
     const langKey = (id: string) => `${language}:${id}`
 
@@ -250,7 +250,7 @@ export function useSearchData(open: boolean, query: string) {
       doTranslate()
       return prev // return unchanged until async finishes
     })
-  }, [language, hotPosts, translating])
+  }, [language, hotPosts, translating, isLoggedIn])
 
   // Unified search with debounce
   useEffect(() => {

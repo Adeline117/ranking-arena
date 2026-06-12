@@ -231,6 +231,12 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         return
       }
 
+      // /api/translate requires auth — skip silently for anonymous visitors
+      if (!accessToken) {
+        setTranslatingPosts(false)
+        return
+      }
+
       try {
         const items: Array<{
           id: string
@@ -298,7 +304,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         setTranslatingPosts(false)
       }
     },
-    [translatingPosts, translatedPosts, getTranslationCache, setTranslationCache]
+    [translatingPosts, translatedPosts, getTranslationCache, setTranslationCache, accessToken]
   )
 
   // Trigger translation when posts change

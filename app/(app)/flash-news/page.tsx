@@ -8,6 +8,7 @@ import { Box, Text } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import EmptyState from '@/app/components/ui/EmptyState'
 import CategoryFilter from './components/CategoryFilter'
 import NewsCard from './components/NewsCard'
@@ -102,6 +103,7 @@ const CATEGORY_COLORS_MAPPED: Record<string, string> = {
 export default function FlashNewsPage() {
   const { language, t } = useLanguage()
   const { showToast } = useToast()
+  const { isLoggedIn } = useAuthSession()
 
   const [news, setNews] = useState<FlashNews[]>([])
   const [loading, setLoading] = useState(true)
@@ -231,6 +233,8 @@ export default function FlashNewsPage() {
   // Translate content for items that need it
   const translateNewsContent = useCallback(
     async (items: FlashNews[]) => {
+      // /api/translate requires auth — skip silently for anonymous visitors
+      if (!isLoggedIn) return
       const targetLang = language as 'zh' | 'en'
       const needsTranslation = items
         .filter((item) => {
@@ -285,7 +289,7 @@ export default function FlashNewsPage() {
         })
       }
     },
-    [language, translatedContent, translatingIds]
+    [language, translatedContent, translatingIds, isLoggedIn]
   )
 
   // Trigger translation when news or language changes
@@ -293,7 +297,7 @@ export default function FlashNewsPage() {
     if (news.length > 0) {
       translateNewsContent(news)
     }
-  }, [news, language]) // eslint-disable-line react-hooks/exhaustive-deps -- translateNewsContent changes on every render; only trigger on news/language change
+  }, [news, language, isLoggedIn]) // eslint-disable-line react-hooks/exhaustive-deps -- translateNewsContent changes on every render; only trigger on news/language/auth change
 
   // Clear translation cache on language change
   useEffect(() => {
