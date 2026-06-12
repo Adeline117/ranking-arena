@@ -15,6 +15,7 @@
 
 import { createHash } from 'crypto'
 import type {
+  BoardSeriesBlock,
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
@@ -23,6 +24,7 @@ import type {
   ParsedPosition,
   ParsedProfile,
   ParsedStats,
+  RankingTimeframe,
   Timeframe,
 } from '../../core/types'
 
@@ -115,6 +117,32 @@ export function parseToobitLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
     })
   }
   return { rows, reportedTotal: num((payload.board ?? {}).total) }
+}
+
+/**
+ * Board-level free series (spec §13.1): each board row embeds
+ * `leaderTradeProfit` = {date:"yyyymmdd", value} — the same daily cumulative
+ * ROI sparkline the profile page shows, so EVERY ranked trader gets a chart
+ * with no extra fetch. The board is per-TF (dataType), so the points belong
+ * to `timeframe`. Values are decimal fractions (×100), matching board ROI.
+ */
+export function parseToobitLeaderboardSeries(
+  raw: unknown,
+  _ctx: ParseCtx,
+  timeframe: RankingTimeframe
+): Map<string, BoardSeriesBlock[]> {
+  const out = new Map<string, BoardSeriesBlock[]>()
+  const payload = (raw ?? {}) as { board?: { list?: unknown } }
+  for (const item of objects(payload.board?.list)) {
+    const id = str(item.leaderUserId)
+    if (!id) continue
+    const points = objects(item.leaderTradeProfit)
+      .map((p) => ({ ts: dayIso(p.date), value: pct(p.value) }))
+      .filter((p): p is { ts: string; value: number } => p.ts !== null && p.value !== null)
+      .sort((a, b) => a.ts.localeCompare(b.ts))
+    if (points.length > 0) out.set(id, [{ timeframe, metric: 'roi', points }])
+  }
+  return out
 }
 
 // ── Profile (detail + radar + cumulative PnL series) ──

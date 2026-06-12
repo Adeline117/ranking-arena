@@ -23,7 +23,13 @@
  * Verified by live capture 2026-06-11 (blofin-*-debug scripts, deleted).
  */
 
-import type { ParseCtx, ParsedLeaderboardPage, ParsedLeaderboardRow } from '../../core/types'
+import type {
+  BoardSeriesBlock,
+  ParseCtx,
+  ParsedLeaderboardPage,
+  ParsedLeaderboardRow,
+  RankingTimeframe,
+} from '../../core/types'
 
 type Dict = Record<string, unknown>
 
@@ -83,4 +89,33 @@ export function parseBlofinLeaderboardPage(
   }
   const total = int(((payload as Dict)?.data as Dict | undefined)?.page_total)
   return { rows, reportedTotal: total }
+}
+
+/**
+ * Board-level free series (spec §13.1): each board row embeds
+ * `chart_data.roi` = {time(ms), data} — a per-TF cumulative ROI series
+ * (decimal fraction, ×100), so EVERY ranked trader gets a chart with no
+ * extra fetch. Blofin has NO per-uid profile endpoint (parseProfile is a
+ * no-op), so the board is the ONLY series source. The board is per-TF
+ * (range_time), so points belong to `timeframe`.
+ */
+export function parseBlofinLeaderboardSeries(
+  payload: unknown,
+  _ctx: ParseCtx,
+  timeframe: RankingTimeframe
+): Map<string, BoardSeriesBlock[]> {
+  const out = new Map<string, BoardSeriesBlock[]>()
+  for (const item of traderInfo(payload)) {
+    const id = item.uid
+    if (id === null || id === undefined) continue
+    const chartData = (item.chart_data ?? null) as Dict | null
+    const roi = Array.isArray(chartData?.roi) ? (chartData!.roi as Dict[]) : []
+    const points = roi
+      .map((p) => ({ t: num(p.time), value: pct(p.data) }))
+      .filter((p): p is { t: number; value: number } => p.t !== null && p.t > 0 && p.value !== null)
+      .sort((a, b) => a.t - b.t)
+      .map((p) => ({ ts: new Date(p.t).toISOString(), value: p.value }))
+    if (points.length > 0) out.set(String(id), [{ timeframe, metric: 'roi', points }])
+  }
+  return out
 }

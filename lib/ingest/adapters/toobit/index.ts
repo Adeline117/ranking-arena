@@ -45,6 +45,7 @@ import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
 import {
   parseToobitHistory,
   parseToobitLeaderboardPage,
+  parseToobitLeaderboardSeries,
   parseToobitPositions,
   parseToobitProfile,
 } from './parsers'
@@ -249,6 +250,7 @@ const toobitAdapter: SourceAdapter = {
   },
 
   parseLeaderboard: parseToobitLeaderboardPage,
+  parseLeaderboardSeries: parseToobitLeaderboardSeries,
   parseProfile: parseToobitProfile,
   parsePositions: parseToobitPositions,
   parseHistory: parseToobitHistory,

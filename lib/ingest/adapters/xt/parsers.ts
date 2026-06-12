@@ -27,11 +27,13 @@
  */
 
 import type {
+  BoardSeriesBlock,
   ParseCtx,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
   ParsedProfile,
   ParsedStats,
+  RankingTimeframe,
   Timeframe,
 } from '../../core/types'
 
@@ -115,6 +117,34 @@ export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedL
   // v3 (futures) reports result.total; v2 (spot) does not (→ null).
   const total = int(((payload as Dict)?.result as Dict | undefined)?.total)
   return { rows, reportedTotal: total }
+}
+
+/**
+ * Board-level free series (spec §13.1): each board row embeds a cumulative-
+ * income `chart` = {amount, time(ms)} for the board's TF (days=7|30|90), so
+ * EVERY ranked trader gets a PnL chart with no extra fetch — and XT has NO
+ * profile series at all (parseXtProfile returns series:[]), so this is the
+ * sole series path for XT. The leading {amount:0, time:0} seed point is a
+ * placeholder (epoch 0) and is dropped.
+ */
+export function parseXtLeaderboardSeries(
+  payload: unknown,
+  _ctx: ParseCtx,
+  timeframe: RankingTimeframe
+): Map<string, BoardSeriesBlock[]> {
+  const out = new Map<string, BoardSeriesBlock[]>()
+  for (const item of items(payload)) {
+    const id = item.accountId
+    if (id === null || id === undefined) continue
+    const chart = Array.isArray(item.chart) ? (item.chart as Dict[]) : []
+    const points = chart
+      .map((p) => ({ t: num(p.time), value: num(p.amount) }))
+      .filter((p): p is { t: number; value: number } => p.t !== null && p.t > 0 && p.value !== null)
+      .sort((a, b) => a.t - b.t)
+      .map((p) => ({ ts: new Date(p.t).toISOString(), value: p.value }))
+    if (points.length > 0) out.set(String(id), [{ timeframe, metric: 'pnl', points }])
+  }
+  return out
 }
 
 /** All-zero degenerate row (XT spot failure mode, spec §5.6): income,

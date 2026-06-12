@@ -161,6 +161,14 @@ export interface ParsedStats {
 /** metric names; _trading/_bot scope variants where the source splits them. */
 export type SeriesMetric = string
 
+/** One per-timeframe series block — shared by profile crawls (ParsedProfile)
+ *  and the optional board-level "free series" (adapter.parseLeaderboardSeries). */
+export interface BoardSeriesBlock {
+  timeframe: Timeframe
+  metric: SeriesMetric
+  points: SeriesPoint[]
+}
+
 export interface ParsedProfile {
   stats: ParsedStats[]
   series: Array<{

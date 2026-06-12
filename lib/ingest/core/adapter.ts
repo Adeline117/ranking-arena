@@ -13,6 +13,7 @@
  */
 
 import type {
+  BoardSeriesBlock,
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
@@ -75,6 +76,25 @@ export interface SourceAdapter {
   // ── Pure parsers ──
   parseLeaderboard(raw: unknown, ctx: ParseCtx): ParsedLeaderboardPage
   parseProfile(raw: unknown, ctx: ParseCtx): ParsedProfile
+
+  /**
+   * OPTIONAL board-level series (spec §13.1 "free series"). Some boards embed
+   * a per-trader cumulative ROI/PnL sparkline IN the leaderboard row (okx
+   * pnlRatios, toobit leaderTradeProfit, xt chart, blofin chart_data.roi,
+   * bitunix dailyWinRate/dailyPl). Decoding it costs ZERO extra fetches —
+   * the array already rides in row.raw from the Tier-A crawl. When present,
+   * EVERY ranked trader (not just topN) gets a chart for free, closing the
+   * long-tail coverage gap that otherwise waits on Tier-B/C profile fetches.
+   *
+   * Returns exchangeTraderId → series blocks for the given board TF. Adapters
+   * whose board has no inline series simply omit this method. PURE — same
+   * (raw, ctx) re-parse contract as the other parsers.
+   */
+  parseLeaderboardSeries?(
+    raw: unknown,
+    ctx: ParseCtx,
+    timeframe: RankingTimeframe
+  ): Map<string, BoardSeriesBlock[]>
   parsePositions(raw: unknown, ctx: ParseCtx): ParsedPosition[]
   parseHistory(raw: unknown, kind: HistoryKind, ctx: ParseCtx): ParsedHistoryRow[]
 }

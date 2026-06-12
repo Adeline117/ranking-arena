@@ -37,6 +37,7 @@ import { apiFetcher, replayJson, replayPaged, type JsonFetcher } from '../../fet
 import {
   parseBitunixHistory,
   parseBitunixLeaderboardPage,
+  parseBitunixLeaderboardSeries,
   parseBitunixPositions,
   parseBitunixProfile,
 } from './parsers'
@@ -225,6 +226,7 @@ const bitunixAdapter: SourceAdapter = {
   },
 
   parseLeaderboard: parseBitunixLeaderboardPage,
+  parseLeaderboardSeries: parseBitunixLeaderboardSeries,
   parseProfile: parseBitunixProfile,
   parsePositions: parseBitunixPositions,
   parseHistory: parseBitunixHistory,

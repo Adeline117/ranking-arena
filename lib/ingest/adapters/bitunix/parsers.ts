@@ -19,6 +19,7 @@
 
 import { createHash } from 'crypto'
 import type {
+  BoardSeriesBlock,
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
@@ -27,6 +28,7 @@ import type {
   ParsedPosition,
   ParsedProfile,
   ParsedStats,
+  RankingTimeframe,
   Timeframe,
 } from '../../core/types'
 
@@ -132,6 +134,34 @@ export function parseBitunixLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parse
     })
   }
   return { rows, reportedTotal: int(d?.total) }
+}
+
+/**
+ * Board-level free series (spec §13.1): each board row embeds a
+ * `dailyWinRate` = {date:int, amount} cumulative ROI sparkline (amount is a
+ * decimal fraction → pct, matching the profile's `dailyPoints(s.dailyWinRate,
+ * pct)` decode) and sometimes `dailyPl` (cumulative PnL). The board is
+ * per-TF (statisticType in the request), so the points belong to
+ * `timeframe`. Every ranked trader gets a chart with no extra fetch.
+ */
+export function parseBitunixLeaderboardSeries(
+  raw: unknown,
+  _ctx: ParseCtx,
+  timeframe: RankingTimeframe
+): Map<string, BoardSeriesBlock[]> {
+  const out = new Map<string, BoardSeriesBlock[]>()
+  const d = data(raw)
+  const items = Array.isArray(d?.records) ? (d.records as Dict[]) : []
+  for (const item of items) {
+    if (item.uid === undefined || item.uid === null) continue
+    const blocks: BoardSeriesBlock[] = []
+    const roiPoints = dailyPoints(item.dailyWinRate, pct) // 收益率 (cumulative, %)
+    if (roiPoints.length > 0) blocks.push({ timeframe, metric: 'roi', points: roiPoints })
+    const pnlPoints = dailyPoints(item.dailyPl, num) // 盈虧 (cumulative, USDT)
+    if (pnlPoints.length > 0) blocks.push({ timeframe, metric: 'pnl', points: pnlPoints })
+    if (blocks.length > 0) out.set(String(item.uid), blocks)
+  }
+  return out
 }
 
 interface ProfileBundle {

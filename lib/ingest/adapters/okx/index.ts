@@ -45,6 +45,7 @@ import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
 import {
   parseOkxHistory,
   parseOkxLeaderboardPage,
+  parseOkxLeaderboardSeries,
   parseOkxPositions,
   parseOkxProfile,
 } from './parsers'
@@ -288,6 +289,7 @@ const okxAdapter: SourceAdapter = {
   },
 
   parseLeaderboard: parseOkxLeaderboardPage,
+  parseLeaderboardSeries: parseOkxLeaderboardSeries,
   parseProfile: parseOkxProfile,
   parsePositions: parseOkxPositions,
   parseHistory: parseOkxHistory,

@@ -12,11 +12,16 @@
 import type { Job } from 'bullmq'
 import { getSourceBySlug, nativeRankingTimeframes } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
-import type { ParseCtx, ParsedLeaderboardRow, RawPage } from '@/lib/ingest/core/types'
+import type {
+  BoardSeriesBlock,
+  ParseCtx,
+  ParsedLeaderboardRow,
+  RawPage,
+} from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
-import { publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
+import { publishBoardSeries, publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
 
 export interface TierAResult {
@@ -68,10 +73,23 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
       // Parse pages and re-anchor positional in-page ranks globally.
       const pageSize = src.page_size ?? 100
       const rows: ParsedLeaderboardRow[] = []
+      // Board-level "free series" (spec §13.1): merged across pages, keyed by
+      // exchange_trader_id. Only populated for sources whose board embeds a
+      // per-trader sparkline (okx/toobit/xt/blofin/bitunix) — adapters without
+      // parseLeaderboardSeries contribute nothing and pay zero cost.
+      const boardSeries = new Map<string, BoardSeriesBlock[]>()
       for (const page of pages) {
         const parsed = adapter.parseLeaderboard(page.payload, ctx)
         for (const row of parsed.rows) {
           rows.push({ ...row, rank: (page.pageIndex - 1) * pageSize + row.rank })
+        }
+        if (adapter.parseLeaderboardSeries) {
+          const pageSeries = adapter.parseLeaderboardSeries(page.payload, ctx, timeframe)
+          for (const [traderId, blocks] of pageSeries) {
+            const existing = boardSeries.get(traderId)
+            if (existing) existing.push(...blocks)
+            else boardSeries.set(traderId, blocks)
+          }
         }
       }
 
@@ -102,6 +120,17 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
           `[tier-a] count check FAILED for ${src.slug} ${timeframe}d: ` +
             `actual=${valid.length} baseline=${result.verdict.baselineUsed} — ` +
             `snapshot ${result.snapshotId} recorded, serving keeps last good`
+        )
+      }
+
+      // Board-level free series (spec §13.1): every ranked trader gets a
+      // chart with no extra fetch — closes the long-tail series gap that
+      // otherwise waits on Tier-B topN / on-demand Tier-C.
+      if (boardSeries.size > 0) {
+        const seriesOut = await publishBoardSeries(src, boardSeries, result.traderIds)
+        console.log(
+          `[tier-a] ${src.slug} ${timeframe}d board series: ` +
+            `${seriesOut.points} pts for ${seriesOut.traders} traders`
         )
       }
 

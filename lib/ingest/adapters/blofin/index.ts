@@ -40,7 +40,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayPaged } from '../../fetch/capture'
-import { parseBlofinLeaderboardPage } from './parsers'
+import { parseBlofinLeaderboardPage, parseBlofinLeaderboardSeries } from './parsers'
 
 const ORIGIN = 'https://blofin.com'
 const LIST_PATHS: Record<string, string> = {
@@ -138,6 +138,7 @@ const blofinAdapter: SourceAdapter = {
   },
 
   parseLeaderboard: parseBlofinLeaderboardPage,
+  parseLeaderboardSeries: parseBlofinLeaderboardSeries,
   parseProfile: () => ({ stats: [], series: [], nickname: null, avatarUrlOrigin: null }),
   parsePositions: (): ParsedPosition[] => [],
   parseHistory: (_raw: unknown, _kind: HistoryKind): ParsedHistoryRow[] => [],
