@@ -31,7 +31,7 @@ import { fetchHandleAvatarMap } from './fetch-handles'
 import { enrichFromStatsDetail } from './enrich-stats-detail'
 import { deriveWrMddFromEquityCurve, deriveAdvancedFromEquityCurve } from './enrich-equity-curve'
 import { deriveAdvancedFromDailySnapshots } from './enrich-daily-snapshots'
-import { runPhase1 } from './phase1-select'
+import { runPhase1, getPhase1ReadSource } from './phase1-select'
 import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank-cleanup'
 import { scoreTraders, type ScoredTrader } from './score-traders'
 import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
@@ -412,6 +412,10 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       ok: warnings.length === 0,
       elapsed_ms: elapsed,
+      // ENDGAME cutover visibility: which Phase-1 reader actually ran
+      // (trader_latest | arena | diff). Lets the cutover be verified from the
+      // response instead of guessing from data side-effects.
+      read_source: getPhase1ReadSource(),
       stats,
       previous_counts: previousCounts,
       warnings: warnings.length > 0 ? warnings : undefined,
