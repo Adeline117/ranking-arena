@@ -2264,6 +2264,16 @@ a.ranking-filter-btn:active {
   border-width: 0;
 }
 
+/* WCAG 2.5.8 minimum tap target for small inline controls.
+   Keeps the visual size; extends the hit area via min sizes. */
+.tap-target {
+  min-width: 44px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* ============================================================
    Shared hover utilities — replace per-component onMouseEnter/
    onMouseLeave JS style mutation (see docs/LINTING_GUIDE.md).
