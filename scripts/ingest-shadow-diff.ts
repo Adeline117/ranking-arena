@@ -199,7 +199,12 @@ async function main() {
         if (side === 'legacy' && d.compared_count === 0) continue // no legacy rows — skip noise
 
         const valueMismatches = FIELDS.reduce((s, f) => s + d.fields[f].mismatches, 0)
-        const keysAligned = d.only_arena === 0 && d.only_compared === 0
+        // only_compared (rows in trader_latest but not in the latest arena
+        // snapshot) is BENIGN: board membership churns and the compat write
+        // is upsert-only — exactly the legacy connector's semantics, so
+        // ex-board traders linger until their next appearance. Real
+        // divergence is only_arena (compat MISSED rows it should have
+        // written) or value mismatches on matched keys.
         const verdict =
           side === 'legacy'
             ? 'INFO'
@@ -207,8 +212,10 @@ async function main() {
               ? 'EMPTY'
               : d.compared_count === 0
                 ? 'NO-SHADOW' // dual-write hasn't run for this (source, tf) yet
-                : keysAligned && valueMismatches === 0
-                  ? 'PASS'
+                : d.only_arena === 0 && valueMismatches === 0
+                  ? d.only_compared > 0
+                    ? 'PASS*' // * = stale ex-board residue in trader_latest (upsert-only, legacy-equivalent)
+                    : 'PASS'
                   : 'FAIL'
         if (verdict === 'FAIL') anyFail = true
 
