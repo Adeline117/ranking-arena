@@ -573,6 +573,26 @@ const EXCHANGE_LOGO_MAP: Record<string, string> = {
   paradex: '/icons/exchanges/dydx.png',
 }
 
+// All files in public/icons/exchanges/ are .png; the map historically
+// carried stale .jpg/.svg/.jpeg extensions (binance/okx/gmx/gains/mexc…)
+// that 404'd. Normalize every resolved path to .png so the map's exact
+// filename is irrelevant — only its basename matters.
+// New-source slug aliases the bare-prefix fallback can't derive:
+const LOGO_SLUG_ALIAS: Record<string, string> = {
+  gtrade: 'gains',
+  hyperliquid: 'hyperliquid',
+  binance_web3: 'binance',
+  okx_web3: 'okx',
+  bitget_bots: 'bitget',
+}
+
 export function getExchangeLogoUrl(source: string): string {
-  return EXCHANGE_LOGO_MAP[source] || `/icons/exchanges/${source.split('_')[0]}.png`
+  const mapped = EXCHANGE_LOGO_MAP[source]
+  if (mapped) {
+    // Force .png regardless of the stale extension recorded in the map.
+    return mapped.replace(/\.(jpg|jpeg|svg|webp)$/i, '.png')
+  }
+  const prefix = source.split('_')[0]
+  const base = LOGO_SLUG_ALIAS[source] ?? LOGO_SLUG_ALIAS[prefix] ?? prefix
+  return `/icons/exchanges/${base}.png`
 }
