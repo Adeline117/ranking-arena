@@ -125,7 +125,13 @@ export default function TraderProfileClient({
   servingFirstScreen,
   servingCapability,
 }: TraderProfileClientProps) {
-  const isServing = dataMode === 'serving' && Boolean(servingFirstScreen)
+  // ROOT-CAUSE FIX (2026-06-11): key serving mode off dataMode ALONE, not the
+  // presence of servingFirstScreen. A serving source must never fall back to the
+  // legacy /api/traders endpoint (which 404s for arena.* sources and renders a
+  // full-page "Trader Not Found" over an HTTP-200 page). The server now always
+  // ships a non-null servingFirstScreen for serving sources, but this guard is
+  // the belt-and-suspenders: even a null first-screen keeps us out of legacy mode.
+  const isServing = dataMode === 'serving'
   const router = useRouter()
   const searchParams = useSearchParams()
   const { t, language: _language } = useLanguage()

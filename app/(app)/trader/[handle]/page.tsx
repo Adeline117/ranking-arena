@@ -464,13 +464,40 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       redirect(`/u/${encodeURIComponent(userHandle)}`)
     }
 
-    const [firstScreen, capabilities] = await Promise.all([
+    const [firstScreenRaw, capabilities] = await Promise.all([
       cachedGetFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
       cachedCapabilities(),
     ])
 
+    // ROOT-CAUSE FIX (2026-06-11): a serving-only trader (exists only in arena.*,
+    // not in legacy trader_sources/leaderboard_ranks) MUST NEVER fall through to
+    // the legacy /api/traders endpoint — that endpoint 404s for serving sources,
+    // and the client then renders a full-page "Trader Not Found" even though the
+    // page itself returned HTTP 200. The previous code passed
+    // servingFirstScreen={null} on first-screen timeout, which flipped the client
+    // back into legacy mode. Instead, synthesize a minimal first-screen from the
+    // already-resolved identity so the client stays in serving mode and lets
+    // ServingProfilePanel fetch /core on its own (with its own skeletons + Tier-C
+    // background fetch). entries=[] is a valid empty board, not a missing trader.
+    const firstScreen: TraderFirstScreen =
+      firstScreenRaw ?? {
+        source: servingResolved.source,
+        exchangeTraderId: servingResolved.exchangeTraderId,
+        nickname: servingResolved.nickname,
+        avatarMirrorUrl: servingResolved.avatarMirrorUrl,
+        avatarOriginUrl: servingResolved.avatarOriginUrl,
+        avatarSrc: getTraderAvatarSrc({
+          avatarMirrorUrl: servingResolved.avatarMirrorUrl,
+          avatarOriginUrl: servingResolved.avatarOriginUrl,
+        }),
+        walletAddress: null,
+        traderKind: 'human',
+        botStrategy: null,
+        entries: [],
+      }
+
     // Tier-A hero numbers: prefer the 90d board entry (matches rankings).
-    const entries = firstScreen?.entries ?? []
+    const entries = firstScreen.entries ?? []
     const best =
       entries.find((e) => e.timeframe === 90) ??
       entries.find((e) => e.timeframe === 30) ??
@@ -480,11 +507,11 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null)
 
     const servingTraderData: UnregisteredTraderData = {
-      handle: firstScreen?.nickname ?? servingResolved.nickname ?? decodedHandle,
+      handle: firstScreen.nickname ?? servingResolved.nickname ?? decodedHandle,
       // Spec §1.4 avatar chain: mirror direct → proxied origin → null
       // (null → client renders gradient + initial fallback).
       avatar_url:
-        firstScreen?.avatarSrc ??
+        firstScreen.avatarSrc ??
         getTraderAvatarSrc({
           avatarMirrorUrl: servingResolved.avatarMirrorUrl,
           avatarOriginUrl: servingResolved.avatarOriginUrl,
@@ -516,8 +543,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       },
     ])
 
-    // NOTE: if the first screen timed out, servingFirstScreen is null and the
-    // client falls back to its legacy fetch path (graceful, never blank).
+    // servingFirstScreen is now ALWAYS non-null for serving sources (synthesized
+    // above on timeout), so the client stays in serving mode and never falls back
+    // to the legacy 404 path. ServingProfilePanel fetches /core for the body.
     return (
       <>
         <JsonLd data={servingJsonLd} />

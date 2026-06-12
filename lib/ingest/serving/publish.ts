@@ -357,28 +357,32 @@ export async function publishBoardSeries(
   seriesByTrader: Map<string, BoardSeriesBlock[]>,
   traderIds: Map<string, number>
 ): Promise<{ traders: number; points: number }> {
-  // Flatten to one row-set: {trader_id, timeframe, metric, ts, value}.
+  // Flatten to one row-set: {trader_id, timeframe, metric, ts, value},
+  // de-duplicated by the (trader_id, timeframe, metric, ts) upsert key —
+  // a trader can repeat across board pages, and a sparkline can carry the
+  // same date twice; Postgres rejects "ON CONFLICT affecting a row twice"
+  // unless we collapse those here first (last value wins).
   type Flat = { trader_id: number; timeframe: number; metric: string; ts: string; value: number }
-  const flat: Flat[] = []
-  let tradersWithSeries = 0
+  const byKey = new Map<string, Flat>()
+  const tradersSeen = new Set<number>()
   for (const [exchangeTraderId, blocks] of seriesByTrader) {
     const traderId = traderIds.get(exchangeTraderId)
     if (traderId === undefined) continue // not in the passed snapshot
-    let any = false
     for (const block of blocks) {
       for (const p of block.points) {
-        flat.push({
+        byKey.set(`${traderId}|${block.timeframe}|${block.metric}|${p.ts}`, {
           trader_id: traderId,
           timeframe: block.timeframe,
           metric: block.metric,
           ts: p.ts,
           value: p.value,
         })
-        any = true
+        tradersSeen.add(traderId)
       }
     }
-    if (any) tradersWithSeries += 1
   }
+  const flat = [...byKey.values()]
+  const tradersWithSeries = tradersSeen.size
   if (flat.length === 0) return { traders: 0, points: 0 }
 
   // Chunk the insert — boards reach thousands of traders × ~30-90 pts each.
