@@ -8,22 +8,15 @@ import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useUsers } from '../hooks/useUsers'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 interface UserManagementTabProps {
   accessToken: string | null
 }
 
 export default function UserManagementTab({ accessToken }: UserManagementTabProps) {
-  const {
-    users,
-    pagination,
-    loading,
-    error,
-    actionLoading,
-    loadUsers,
-    banUser,
-    unbanUser,
-  } = useUsers(accessToken)
+  const { users, pagination, loading, error, actionLoading, loadUsers, banUser, unbanUser } =
+    useUsers(accessToken)
   const { t, language } = useLanguage()
 
   const [search, setSearch] = useState('')
@@ -50,15 +43,22 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
     const reason = banReason[userId]?.trim()
     const success = await banUser(userId, reason)
     if (success) {
-      setShowBanInput(prev => ({ ...prev, [userId]: false }))
-      setBanReason(prev => ({ ...prev, [userId]: '' }))
+      setShowBanInput((prev) => ({ ...prev, [userId]: false }))
+      setBanReason((prev) => ({ ...prev, [userId]: '' }))
     }
   }
 
   return (
     <Card title={t('adminUserMgmt')}>
       {/* Search and Filter */}
-      <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
+      <Box
+        style={{
+          marginBottom: tokens.spacing[4],
+          display: 'flex',
+          gap: tokens.spacing[3],
+          flexWrap: 'wrap',
+        }}
+      >
         <Box style={{ display: 'flex', gap: tokens.spacing[2], flex: 1, minWidth: 200 }}>
           <input
             type="text"
@@ -89,7 +89,11 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
               size="sm"
               onClick={() => setFilter(f)}
             >
-              {f === 'all' ? t('adminFilterAll') : f === 'active' ? t('adminFilterActive') : t('adminFilterBanned')}
+              {f === 'all'
+                ? t('adminFilterAll')
+                : f === 'active'
+                  ? t('adminFilterActive')
+                  : t('adminFilterBanned')}
             </Button>
           ))}
         </Box>
@@ -103,7 +107,12 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
       ) : error ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
           <Text style={{ color: tokens.colors.accent.error }}>{error}</Text>
-          <Button variant="secondary" size="sm" onClick={() => loadUsers(1, search, filter)} style={{ marginTop: tokens.spacing[3] }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => loadUsers(1, search, filter)}
+            style={{ marginTop: tokens.spacing[3] }}
+          >
             {t('retry')}
           </Button>
         </Box>
@@ -114,15 +123,69 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
       ) : (
         <>
           <Box style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: tokens.typography.fontSize.sm }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
               <thead>
                 <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>{t('adminTableUser')}</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>{t('adminTableEmail')}</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'center', color: tokens.colors.text.tertiary }}>{t('adminTableFollowers')}</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'center', color: tokens.colors.text.tertiary }}>{t('adminTableStatus')}</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>{t('adminTableRegistered')}</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'right', color: tokens.colors.text.tertiary }}>{t('adminTableActions')}</th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    {t('adminTableUser')}
+                  </th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    {t('adminTableEmail')}
+                  </th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'center',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    {t('adminTableFollowers')}
+                  </th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'center',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    {t('adminTableStatus')}
+                  </th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    {t('adminTableRegistered')}
+                  </th>
+                  <th
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'right',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    {t('adminTableActions')}
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -135,7 +198,9 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     }}
                   >
                     <td style={{ padding: tokens.spacing[3] }}>
-                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                      <Box
+                        style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}
+                      >
                         <Box
                           style={{
                             width: 32,
@@ -148,7 +213,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                         >
                           {user.avatar_url ? (
                             <Image
-                              src={user.avatar_url.startsWith('data:') ? user.avatar_url : '/api/avatar?url=' + encodeURIComponent(user.avatar_url)}
+                              src={avatarSrc(user.avatar_url)}
                               alt={user.handle || user.email || 'User'}
                               width={32}
                               height={32}
@@ -184,7 +249,9 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                       </Box>
                     </td>
                     <td style={{ padding: tokens.spacing[3] }}>
-                      <Text size="sm" color="secondary">{user.email || '-'}</Text>
+                      <Text size="sm" color="secondary">
+                        {user.email || '-'}
+                      </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[3], textAlign: 'center' }}>
                       <Text size="sm" color="secondary">
@@ -222,7 +289,10 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     </td>
                     <td style={{ padding: tokens.spacing[3] }}>
                       <Text size="xs" color="tertiary">
-                        {new Date(user.created_at).toLocaleDateString(getLocaleFromLanguage(language), { year: 'numeric', month: 'short', day: 'numeric' })}
+                        {new Date(user.created_at).toLocaleDateString(
+                          getLocaleFromLanguage(language),
+                          { year: 'numeric', month: 'short', day: 'numeric' }
+                        )}
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[3], textAlign: 'right' }}>
@@ -236,12 +306,20 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                           {actionLoading[user.id] ? t('processing') : t('adminUnban')}
                         </Button>
                       ) : showBanInput[user.id] ? (
-                        <Box style={{ display: 'flex', gap: tokens.spacing[2], justifyContent: 'flex-end' }}>
+                        <Box
+                          style={{
+                            display: 'flex',
+                            gap: tokens.spacing[2],
+                            justifyContent: 'flex-end',
+                          }}
+                        >
                           <input
                             type="text"
                             placeholder={t('adminBanReasonPlaceholder')}
                             value={banReason[user.id] || ''}
-                            onChange={(e) => setBanReason(prev => ({ ...prev, [user.id]: e.target.value }))}
+                            onChange={(e) =>
+                              setBanReason((prev) => ({ ...prev, [user.id]: e.target.value }))
+                            }
                             style={{
                               width: 150,
                               padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
@@ -257,14 +335,19 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                             size="sm"
                             onClick={() => handleBan(user.id)}
                             disabled={actionLoading[user.id]}
-                            style={{ background: tokens.colors.accent.error, color: tokens.colors.white }}
+                            style={{
+                              background: tokens.colors.accent.error,
+                              color: tokens.colors.white,
+                            }}
                           >
                             {t('adminConfirmAction')}
                           </Button>
                           <Button
                             variant="text"
                             size="sm"
-                            onClick={() => setShowBanInput(prev => ({ ...prev, [user.id]: false }))}
+                            onClick={() =>
+                              setShowBanInput((prev) => ({ ...prev, [user.id]: false }))
+                            }
                           >
                             {t('cancel')}
                           </Button>
@@ -273,7 +356,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => setShowBanInput(prev => ({ ...prev, [user.id]: true }))}
+                          onClick={() => setShowBanInput((prev) => ({ ...prev, [user.id]: true }))}
                           disabled={user.role === 'admin'}
                         >
                           {t('adminBan')}
@@ -288,7 +371,14 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
 
           {/* Pagination */}
           {pagination.totalPages > 1 && (
-            <Box style={{ marginTop: tokens.spacing[4], display: 'flex', justifyContent: 'center', gap: tokens.spacing[2] }}>
+            <Box
+              style={{
+                marginTop: tokens.spacing[4],
+                display: 'flex',
+                justifyContent: 'center',
+                gap: tokens.spacing[2],
+              }}
+            >
               <Button
                 variant="secondary"
                 size="sm"

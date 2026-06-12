@@ -9,6 +9,7 @@ import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
 import { features } from '@/lib/features'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 interface UserInfo {
   handle: string | null
@@ -153,11 +154,7 @@ export default function MobileProfileMenu() {
           >
             {user?.avatarUrl ? (
               <img
-                src={
-                  user.avatarUrl.startsWith('data:')
-                    ? user.avatarUrl
-                    : `/api/avatar?url=${encodeURIComponent(user.avatarUrl)}`
-                }
+                src={avatarSrc(user.avatarUrl)}
                 alt={user?.handle || 'Avatar'}
                 width={56}
                 height={56}

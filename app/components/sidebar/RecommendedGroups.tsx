@@ -11,6 +11,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import SidebarCard from './SidebarCard'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 type Group = {
   id: string
@@ -37,11 +38,7 @@ function GroupAvatar({
   if (avatarUrl && !imgError) {
     return (
       <Image
-        src={
-          avatarUrl.startsWith('data:')
-            ? avatarUrl
-            : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
-        }
+        src={avatarSrc(avatarUrl)}
         alt={name}
         width={size}
         height={size}

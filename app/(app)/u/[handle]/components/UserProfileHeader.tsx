@@ -13,6 +13,7 @@ import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 import LevelBadge from '@/app/components/user/LevelBadge'
 
 import { features } from '@/lib/features'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import type { ServerProfile } from './types'
 
 const UserFollowButton = dynamic(() => import('@/app/components/ui/UserFollowButton'), {
@@ -161,11 +162,7 @@ export default function UserProfileHeader({
             </Text>
             {profile.avatar_url && (
               <Image
-                src={
-                  profile.avatar_url.startsWith('data:')
-                    ? profile.avatar_url
-                    : `/api/avatar?url=${encodeURIComponent(profile.avatar_url)}`
-                }
+                src={avatarSrc(profile.avatar_url)}
                 alt={profile.handle}
                 width={72}
                 height={72}

@@ -20,6 +20,7 @@ import {
   getAvatarGradient,
   getAvatarInitial,
 } from '@/lib/utils/avatar'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 // Lazy load heavy below-the-fold components
 const AdvancedMetricsCard = dynamic(() => import('./AdvancedMetricsCard'), { ssr: false })
@@ -66,12 +67,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
                 </span>
                 {data.profile.avatar_url ? (
                   <img
-                    src={
-                      data.profile.avatar_url?.startsWith('/') ||
-                      data.profile.avatar_url?.startsWith('data:')
-                        ? data.profile.avatar_url
-                        : `/api/avatar?url=${encodeURIComponent(data.profile.avatar_url || '')}`
-                    }
+                    src={avatarSrc(data.profile.avatar_url)}
                     alt={data.profile.display_name || traderKey}
                     width={64}
                     height={64}

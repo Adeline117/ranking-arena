@@ -7,10 +7,10 @@ import { Box, Text } from '../base'
 import {
   getAvatarGradient,
   getAvatarInitial,
-  isDirectAvatarSrc,
   isWalletAddress,
   generateBlockieSvg,
 } from '@/lib/utils/avatar'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { ProBadgeOverlay } from '../ui/ProBadge'
 
 interface TraderHeaderAvatarProps {
@@ -101,11 +101,7 @@ export function TraderHeaderAvatar({
         )}
         {effectiveAvatarUrl && !errored ? (
           <Image
-            src={
-              isDirectAvatarSrc(effectiveAvatarUrl)
-                ? effectiveAvatarUrl
-                : `/api/avatar?url=${encodeURIComponent(effectiveAvatarUrl)}`
-            }
+            src={avatarSrc(effectiveAvatarUrl)}
             alt={handle}
             width={48}
             height={48}

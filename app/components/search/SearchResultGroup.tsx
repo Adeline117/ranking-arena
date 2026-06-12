@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { localizedLabel } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import type { UnifiedSearchResult } from '@/app/api/search/route'
 
 // Category config for search results grouping
@@ -161,11 +162,7 @@ export function SearchResultGroup({
             >
               {result.avatar ? (
                 <Image
-                  src={
-                    result.avatar.startsWith('data:')
-                      ? result.avatar
-                      : `/api/avatar?url=${encodeURIComponent(result.avatar)}`
-                  }
+                  src={avatarSrc(result.avatar)}
                   alt={result.title || 'Avatar'}
                   width={28}
                   height={28}

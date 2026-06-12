@@ -7,6 +7,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useApplications } from '../hooks/useApplications'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 interface GroupApplicationsTabProps {
   accessToken: string | null
@@ -36,8 +37,8 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
     const reason = rejectReason[applicationId]?.trim()
     const success = await rejectApplication(applicationId, reason)
     if (success) {
-      setShowRejectInput(prev => ({ ...prev, [applicationId]: false }))
-      setRejectReason(prev => ({ ...prev, [applicationId]: '' }))
+      setShowRejectInput((prev) => ({ ...prev, [applicationId]: false }))
+      setRejectReason((prev) => ({ ...prev, [applicationId]: '' }))
     }
   }
 
@@ -81,7 +82,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                 >
                   {app.avatar_url ? (
                     <Image
-                      src={app.avatar_url.startsWith('data:') ? app.avatar_url : '/api/avatar?url=' + encodeURIComponent(app.avatar_url)}
+                      src={avatarSrc(app.avatar_url)}
                       alt={app.name}
                       width={60}
                       height={60}
@@ -97,11 +98,22 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
 
                 {/* Info */}
                 <Box style={{ flex: 1 }}>
-                  <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                  <Box
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                    }}
+                  >
                     <Box>
-                      <Text size="lg" weight="bold">{app.name}</Text>
+                      <Text size="lg" weight="bold">
+                        {app.name}
+                      </Text>
                       {app.name_en && (
-                        <Text size="sm" color="tertiary"> ({app.name_en})</Text>
+                        <Text size="sm" color="tertiary">
+                          {' '}
+                          ({app.name_en})
+                        </Text>
                       )}
                     </Box>
                     <Text size="xs" color="tertiary">
@@ -111,7 +123,10 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
 
                   {/* Applicant */}
                   <Text size="sm" color="secondary" style={{ marginTop: tokens.spacing[1] }}>
-                    {t('adminApplicant').replace('{handle}', app.applicant?.handle || app.applicant_id.slice(0, 8))}
+                    {t('adminApplicant').replace(
+                      '{handle}',
+                      app.applicant?.handle || app.applicant_id.slice(0, 8)
+                    )}
                   </Text>
 
                   {/* Description */}
@@ -131,31 +146,59 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                     <Box style={{ marginTop: tokens.spacing[2] }}>
                       <Text size="xs" color="tertiary">
                         {t('adminRoleNames')
-                          .replace('{admin}', app.role_names.admin?.zh || app.role_names.admin?.en || t('adminRoleDefault'))
-                          .replace('{member}', app.role_names.member?.zh || app.role_names.member?.en || t('adminRoleDefault'))}
+                          .replace(
+                            '{admin}',
+                            app.role_names.admin?.zh ||
+                              app.role_names.admin?.en ||
+                              t('adminRoleDefault')
+                          )
+                          .replace(
+                            '{member}',
+                            app.role_names.member?.zh ||
+                              app.role_names.member?.en ||
+                              t('adminRoleDefault')
+                          )}
                       </Text>
                     </Box>
                   )}
 
                   {/* Action buttons */}
-                  <Box style={{ marginTop: tokens.spacing[4], display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                  <Box
+                    style={{
+                      marginTop: tokens.spacing[4],
+                      display: 'flex',
+                      gap: tokens.spacing[2],
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     <Button
                       variant="primary"
                       size="sm"
                       onClick={() => approveApplication(app.id)}
                       disabled={actionLoading[app.id]}
-                      style={{ background: tokens.colors.accent?.success || 'var(--color-score-great)' }}
+                      style={{
+                        background: tokens.colors.accent?.success || 'var(--color-score-great)',
+                      }}
                     >
                       {actionLoading[app.id] ? t('processing') : t('adminApprove')}
                     </Button>
 
                     {showRejectInput[app.id] ? (
-                      <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center', flex: 1 }}>
+                      <Box
+                        style={{
+                          display: 'flex',
+                          gap: tokens.spacing[2],
+                          alignItems: 'center',
+                          flex: 1,
+                        }}
+                      >
                         <input
                           type="text"
                           placeholder={t('adminRejectReasonPlaceholder')}
                           value={rejectReason[app.id] || ''}
-                          onChange={(e) => setRejectReason(prev => ({ ...prev, [app.id]: e.target.value }))}
+                          onChange={(e) =>
+                            setRejectReason((prev) => ({ ...prev, [app.id]: e.target.value }))
+                          }
                           style={{
                             flex: 1,
                             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -171,14 +214,19 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                           size="sm"
                           onClick={() => handleReject(app.id)}
                           disabled={actionLoading[app.id]}
-                          style={{ background: tokens.colors.accent?.error || 'var(--color-accent-error)', color: tokens.colors.white }}
+                          style={{
+                            background: tokens.colors.accent?.error || 'var(--color-accent-error)',
+                            color: tokens.colors.white,
+                          }}
                         >
                           {t('adminConfirmReject')}
                         </Button>
                         <Button
                           variant="text"
                           size="sm"
-                          onClick={() => setShowRejectInput(prev => ({ ...prev, [app.id]: false }))}
+                          onClick={() =>
+                            setShowRejectInput((prev) => ({ ...prev, [app.id]: false }))
+                          }
                         >
                           {t('cancel')}
                         </Button>
@@ -187,7 +235,7 @@ export default function GroupApplicationsTab({ accessToken }: GroupApplicationsT
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => setShowRejectInput(prev => ({ ...prev, [app.id]: true }))}
+                        onClick={() => setShowRejectInput((prev) => ({ ...prev, [app.id]: true }))}
                         disabled={actionLoading[app.id]}
                       >
                         {t('adminReject')}

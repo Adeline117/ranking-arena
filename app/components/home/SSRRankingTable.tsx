@@ -6,6 +6,7 @@
 
 import type { InitialTrader } from '@/lib/getInitialTraders'
 import { formatROI, formatPnL } from '@/lib/utils/format'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 function getScoreStyle(score: number) {
   if (score >= 80)
@@ -147,7 +148,7 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               >
                 {trader.avatar_url ? (
                   <img
-                    src={`/api/avatar?url=${encodeURIComponent(trader.avatar_url)}`}
+                    src={avatarSrc(trader.avatar_url)}
                     alt=""
                     loading={rank <= 3 ? 'eager' : 'lazy'}
                     {...(rank === 1 ? { fetchPriority: 'high' as const } : {})}

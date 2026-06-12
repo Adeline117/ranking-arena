@@ -7,11 +7,19 @@ import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { logger } from '@/lib/logger'
 
 // Icons
 const ShareIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <circle cx="18" cy="5" r="3" />
     <circle cx="6" cy="12" r="3" />
     <circle cx="18" cy="19" r="3" />
@@ -20,33 +28,68 @@ const ShareIcon = ({ size = 16 }: { size?: number }) => (
 )
 
 const CheckIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2.5"
+  >
     <path d="M5 12l5 5L20 7" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
 
 const ClockIcon = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <circle cx="12" cy="12" r="10" />
     <path d="M12 6v6l4 2" />
   </svg>
 )
 
 const EyeIcon = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
     <circle cx="12" cy="12" r="3" />
   </svg>
 )
 
 const ArrowLeftIcon = ({ size = 16 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M19 12H5M12 19l-7-7 7-7" />
   </svg>
 )
 
 const WarningIcon = ({ size = 24 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
   </svg>
 )
@@ -101,7 +144,8 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
   const { showToast } = useToast()
   const [copied, setCopied] = useState(false)
 
-  const shareUrl = typeof window !== 'undefined' ? window.location.href : `/s/${snapshot.shareToken}`
+  const shareUrl =
+    typeof window !== 'undefined' ? window.location.href : `/s/${snapshot.shareToken}`
 
   const handleCopyLink = async () => {
     try {
@@ -117,13 +161,16 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr)
-    return date.toLocaleDateString(({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] || 'en-US', {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    })
+    return date.toLocaleDateString(
+      ({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] || 'en-US',
+      {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }
+    )
   }
 
   const formatROI = (roi: number) => {
@@ -271,7 +318,9 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                 </Text>
                 {snapshot.viewCount !== undefined && (
                   <>
-                    <Text size="xs" color="tertiary">·</Text>
+                    <Text size="xs" color="tertiary">
+                      ·
+                    </Text>
                     <EyeIcon size={12} />
                     <Text size="xs" color="tertiary">
                       {snapshot.viewCount.toLocaleString('en-US')}
@@ -346,22 +395,47 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               background: tokens.glass.bg.light,
             }}
           >
-            <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase' }}>
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              style={{ textAlign: 'center', textTransform: 'uppercase' }}
+            >
               {t('rank')}
             </Text>
             <Text size="xs" weight="bold" color="tertiary" style={{ textTransform: 'uppercase' }}>
               {t('trader')}
             </Text>
-            <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'center', textTransform: 'uppercase' }}>
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              style={{ textAlign: 'center', textTransform: 'uppercase' }}
+            >
               Score
             </Text>
-            <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase' }}>
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              style={{ textAlign: 'right', textTransform: 'uppercase' }}
+            >
               ROI
             </Text>
-            <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase' }}>
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              style={{ textAlign: 'right', textTransform: 'uppercase' }}
+            >
               Win%
             </Text>
-            <Text size="xs" weight="bold" color="tertiary" style={{ textAlign: 'right', textTransform: 'uppercase' }}>
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              style={{ textAlign: 'right', textTransform: 'uppercase' }}
+            >
               MDD
             </Text>
           </Box>
@@ -398,8 +472,8 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                           trader.rank === 1
                             ? 'var(--color-medal-gold)'
                             : trader.rank === 2
-                            ? 'var(--color-medal-silver)'
-                            : 'var(--color-medal-bronze)',
+                              ? 'var(--color-medal-silver)'
+                              : 'var(--color-medal-bronze)',
                       }}
                     >
                       {trader.rank}
@@ -412,7 +486,14 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                 </Box>
 
                 {/* Trader */}
-                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], minWidth: 0 }}>
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    minWidth: 0,
+                  }}
+                >
                   <div
                     style={{
                       width: 32,
@@ -440,7 +521,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                     </span>
                     {trader.avatarUrl && (
                       <img
-                        src={trader.avatarUrl.startsWith('data:') ? trader.avatarUrl : '/api/avatar?url=' + encodeURIComponent(trader.avatarUrl)}
+                        src={avatarSrc(trader.avatarUrl)}
                         alt={`${trader.handle || 'Trader'} avatar`}
                         width={36}
                         height={36}
@@ -453,7 +534,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                           objectFit: 'cover',
                         }}
                         onError={(e) => {
-                          (e.target as HTMLImageElement).style.display = 'none'
+                          ;(e.target as HTMLImageElement).style.display = 'none'
                         }}
                       />
                     )}
@@ -487,8 +568,8 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                           trader.arenaScore >= 60
                             ? `${tokens.colors.accent.success}20`
                             : trader.arenaScore >= 40
-                            ? `${tokens.colors.accent.warning}20`
-                            : tokens.glass.bg.light,
+                              ? `${tokens.colors.accent.warning}20`
+                              : tokens.glass.bg.light,
                         minWidth: 46,
                         textAlign: 'center',
                       }}
@@ -501,15 +582,17 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                             trader.arenaScore >= 60
                               ? tokens.colors.accent.success
                               : trader.arenaScore >= 40
-                              ? tokens.colors.accent.warning
-                              : tokens.colors.text.secondary,
+                                ? tokens.colors.accent.warning
+                                : tokens.colors.text.secondary,
                         }}
                       >
                         {trader.arenaScore.toFixed(1)}
                       </Text>
                     </Box>
                   ) : (
-                    <Text size="sm" color="tertiary">—</Text>
+                    <Text size="sm" color="tertiary">
+                      —
+                    </Text>
                   )}
                 </Box>
 
@@ -532,11 +615,14 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                       size="xs"
                       style={{
                         color:
-                          trader.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                          trader.pnl >= 0
+                            ? tokens.colors.accent.success
+                            : tokens.colors.accent.error,
                         opacity: 0.8,
                       }}
                     >
-                      {trader.pnl >= 0 ? '+' : ''}{formatPnL(trader.pnl)}
+                      {trader.pnl >= 0 ? '+' : ''}
+                      {formatPnL(trader.pnl)}
                     </Text>
                   )}
                 </Box>
@@ -562,10 +648,15 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                   weight="semibold"
                   style={{
                     textAlign: 'right',
-                    color: trader.maxDrawdown != null ? tokens.colors.accent.error : tokens.colors.text.tertiary,
+                    color:
+                      trader.maxDrawdown != null
+                        ? tokens.colors.accent.error
+                        : tokens.colors.text.tertiary,
                   }}
                 >
-                  {trader.maxDrawdown != null ? `-${Math.abs(trader.maxDrawdown).toFixed(0)}%` : '—'}
+                  {trader.maxDrawdown != null
+                    ? `-${Math.abs(trader.maxDrawdown).toFixed(0)}%`
+                    : '—'}
                 </Text>
               </Box>
             )

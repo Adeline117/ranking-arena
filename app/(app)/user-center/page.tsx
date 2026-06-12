@@ -13,6 +13,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import MembershipContent from './MembershipContent'
 import LevelTab from './components/LevelTab'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 type Tab = 'level' | 'membership'
 
@@ -316,11 +317,7 @@ function UserCenterPage() {
               {(userHandle || 'U').charAt(0).toUpperCase()}
               {userAvatarUrl && (
                 <Image
-                  src={
-                    userAvatarUrl.startsWith('data:')
-                      ? userAvatarUrl
-                      : `/api/avatar?url=${encodeURIComponent(userAvatarUrl)}`
-                  }
+                  src={avatarSrc(userAvatarUrl)}
                   alt={userHandle || 'User'}
                   width={56}
                   height={56}

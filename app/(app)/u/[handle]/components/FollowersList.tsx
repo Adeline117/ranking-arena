@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 export default function FollowersList({ profileId }: { profileId: string }) {
   const { t } = useLanguage()
@@ -108,11 +109,7 @@ export default function FollowersList({ profileId }: { profileId: string }) {
               >
                 {f.avatar_url ? (
                   <Image
-                    src={
-                      f.avatar_url.startsWith('data:')
-                        ? f.avatar_url
-                        : `/api/avatar?url=${encodeURIComponent(f.avatar_url)}`
-                    }
+                    src={avatarSrc(f.avatar_url)}
                     alt={f.handle}
                     width={40}
                     height={40}

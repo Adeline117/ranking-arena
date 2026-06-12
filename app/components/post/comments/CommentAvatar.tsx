@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ProBadgeOverlay } from '../../ui/ProBadge'
 import { commentStyles } from './commentStyles'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 // Pro badge inline icon (used next to usernames)
 export function ProBadge({ size = 14 }: { size?: number }): React.ReactNode {
@@ -58,11 +59,7 @@ export function CommentAvatar({
     >
       {avatarUrl ? (
         <Image
-          src={
-            avatarUrl.startsWith('data:')
-              ? avatarUrl
-              : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
-          }
+          src={avatarSrc(avatarUrl)}
           alt={`${handle || 'User'} avatar`}
           width={size}
           height={size}

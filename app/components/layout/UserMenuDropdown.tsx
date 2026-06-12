@@ -10,6 +10,7 @@ import { Box } from '../base'
 import { UserIcon, NotificationIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 const AccountSwitcher = dynamic(() => import('../ui/AccountSwitcher'), { ssr: false })
 
@@ -104,11 +105,7 @@ export default function UserMenuDropdown({
       >
         {myAvatarUrl && !avatarError ? (
           <Image
-            src={
-              myAvatarUrl.startsWith('data:')
-                ? myAvatarUrl
-                : `/api/avatar?url=${encodeURIComponent(myAvatarUrl)}`
-            }
+            src={avatarSrc(myAvatarUrl)}
             alt="Avatar"
             width={36}
             height={36}
