@@ -6,8 +6,7 @@ import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
-import { getCsrfHeaders } from '@/lib/api/client'
-import { hasLocalSession } from '@/lib/tracking'
+import { sendTrackingEvent } from '@/lib/tracking'
 
 /** Referral config per exchange */
 const REFERRAL_LINKS: Record<string, { url: string; code: string; color: string }> = {
@@ -129,18 +128,14 @@ export default function ExchangeLinksBar({
               }}
               onClick={() => {
                 // #33: Fire-and-forget click tracking for exchange link analytics.
-                // Endpoint requires auth — skip silently for anonymous visitors
-                // (this is passive analytics, not a login-prompting action).
-                if (!hasLocalSession()) return
-                fetch('/api/interactions', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-                  body: JSON.stringify({
-                    type: 'exchange_link_click',
-                    platform: acc.platform,
-                    traderKey: acc.traderKey,
-                  }),
-                }).catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget: analytics is non-critical
+                // sendTrackingEvent attaches Authorization + CSRF headers (the
+                // endpoint authenticates via Bearer token, not cookies) and
+                // silently no-ops for anonymous visitors.
+                sendTrackingEvent('/api/interactions', {
+                  type: 'exchange_link_click',
+                  platform: acc.platform,
+                  traderKey: acc.traderKey,
+                })
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.borderColor = tokens.colors.accent.primary + '80'

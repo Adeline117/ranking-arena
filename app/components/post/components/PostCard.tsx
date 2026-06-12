@@ -12,7 +12,7 @@ import { SensitiveContentWrapper } from './SensitiveContentWrapper'
 import LevelBadge from '@/app/components/user/LevelBadge'
 import { memo, useRef, useEffect } from 'react'
 import { useLanguage } from '../../Providers/LanguageProvider'
-import { hasLocalSession } from '@/lib/tracking'
+import { sendTrackingEvent } from '@/lib/tracking'
 
 // Visibility icon paths
 const VISIBILITY_ICONS: Record<string, string> = {
@@ -72,17 +72,13 @@ export const PostCard = memo(function PostCard({
       ([entry]) => {
         if (entry.isIntersecting && !reportedImpressions.has(post.id)) {
           reportedImpressions.add(post.id)
-          // /api/track only records for logged-in users (204 otherwise) — skip
-          // the beacon entirely for anonymous visitors to avoid console 403s.
-          if (hasLocalSession()) {
-            navigator.sendBeacon(
-              '/api/track',
-              JSON.stringify({
-                type: 'impression',
-                post_id: post.id,
-              })
-            )
-          }
+          // /api/track requires Authorization + CSRF headers (sendBeacon can't
+          // set headers → was always 403). sendTrackingEvent uses keepalive
+          // fetch with both headers and silently no-ops for anonymous visitors.
+          sendTrackingEvent('/api/track', {
+            type: 'impression',
+            post_id: post.id,
+          })
           observer.disconnect()
         }
       },
