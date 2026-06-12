@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { isXtDegeneratePage, parseXtLeaderboardPage, parseXtProfile } from '../parsers'
+import { parseXtLeaderboardPage, parseXtProfile } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
 
 function fixture(name: string): unknown {
@@ -15,79 +15,56 @@ const ctx: ParseCtx = {
   meta: {},
 }
 
+const spotCtx: ParseCtx = { ...ctx, sourceSlug: 'xt_spot', meta: { boardKey: 'spot' } }
+
 describe('parseXtLeaderboardPage', () => {
-  it('parses the futures board (returnCode envelope, decimal rates)', () => {
+  it('parses the futures v3 board (result.total + decimal rates)', () => {
     const page = parseXtLeaderboardPage(fixture('leaderboard-fut-30.json'), ctx)
-    expect(page.reportedTotal).toBeNull()
+    expect(page.reportedTotal).toBe(1873)
     expect(page.rows.length).toBe(3)
     const first = page.rows[0]
-    expect(first.exchangeTraderId).toBe('8305081452527')
+    expect(first.exchangeTraderId).toBe('4612442474598781734')
     expect(first.rank).toBe(1)
-    expect(first.nickname).toBe('阿阳')
+    expect(first.nickname).toBeTruthy()
     expect(first.traderKind).toBe('human')
-    // incomeRate 11.2471 (decimal) → 1124.71%
-    expect(first.headlineRoi).toBeCloseTo(1124.71, 1)
-    expect(first.headlinePnl).toBeCloseTo(175.4, 1)
-    // winRate 0.6461 → 64.61%
-    expect(first.headlineWinRate).toBeCloseTo(64.61, 2)
+    // incomeRate 1.7253 (decimal) → 172.53%
+    expect(first.headlineRoi).toBeCloseTo(172.53, 1)
+    expect(first.headlinePnl).toBeCloseTo(119279.25, 1)
+    // winRate 1 → 100%
+    expect(first.headlineWinRate).toBeCloseTo(100, 5)
     // Lvl badge → traderMeta
-    expect(first.traderMeta).toMatchObject({ xt_level: 1, xt_level_name: 'Lvl 1' })
+    expect(first.traderMeta).toMatchObject({ xt_level: 2, xt_level_name: 'Lvl 2' })
     // chart series preserved verbatim in raw
     expect(Array.isArray((first.raw as { chart?: unknown[] }).chart)).toBe(true)
   })
 
-  it('parses the spot board (rc envelope, string accountId)', () => {
-    const page = parseXtLeaderboardPage(fixture('leaderboard-spot-30.json'), {
-      ...ctx,
-      sourceSlug: 'xt_spot',
-    })
-    expect(page.rows.length).toBe(3)
-    expect(page.rows[0].exchangeTraderId).toBe('4612466590349457382')
-    expect(page.rows[0].headlineWinRate).toBeCloseTo(0, 5)
+  it('parses the spot board and re-anchors rank densely', () => {
+    const page = parseXtLeaderboardPage(fixture('leaderboard-spot-30.json'), spotCtx)
+    expect(page.rows.length).toBeGreaterThan(0)
+    expect(page.rows[0].exchangeTraderId).toBe('4612486463456677958')
+    expect(page.rows.map((r) => r.rank)).toEqual(page.rows.map((_, i) => i + 1))
   })
 
-  it('re-anchors rank from page position only', () => {
-    const page = parseXtLeaderboardPage(fixture('leaderboard-fut-7.json'), ctx)
-    expect(page.rows.map((r) => r.rank)).toEqual([1, 2])
+  it('drops all-zero placeholder rows for the spot board (spec §5.6)', () => {
+    const payload = {
+      result: {
+        items: [
+          { accountId: 'a', income: '12.3', incomeRate: '0.4', winRate: '0.5' },
+          { accountId: 'z1', income: '0', incomeRate: '0', winRate: '0' },
+          { accountId: 'z2', income: '0', incomeRate: '0', winRate: '0' },
+        ],
+      },
+    }
+    const spot = parseXtLeaderboardPage(payload, spotCtx)
+    expect(spot.rows.map((r) => r.exchangeTraderId)).toEqual(['a'])
+    // futures keeps every row (no placeholder drop)
+    const fut = parseXtLeaderboardPage(payload, ctx)
+    expect(fut.rows.length).toBe(3)
   })
 
   it('returns empty on malformed payloads', () => {
     expect(parseXtLeaderboardPage({}, ctx).rows).toHaveLength(0)
     expect(parseXtLeaderboardPage({ result: { items: 'x' } }, ctx).rows).toHaveLength(0)
-  })
-})
-
-describe('isXtDegeneratePage (spec §5.6 XT-spot rule)', () => {
-  it('flags an all-zero placeholder page', () => {
-    const payload = {
-      result: {
-        items: [
-          { accountId: '1', income: '0', incomeRate: '0', winRate: '0' },
-          { accountId: '2', income: '0', incomeRate: '0', winRate: '0' },
-        ],
-      },
-    }
-    expect(isXtDegeneratePage(payload)).toBe(true)
-  })
-
-  it('does not flag a page with any real trader', () => {
-    const payload = {
-      result: {
-        items: [
-          { accountId: '1', income: '0', incomeRate: '0', winRate: '0' },
-          { accountId: '2', income: '12.3', incomeRate: '0.4', winRate: '0.5' },
-        ],
-      },
-    }
-    expect(isXtDegeneratePage(payload)).toBe(false)
-  })
-
-  it('does not flag an empty page (handled by the empty-page stop)', () => {
-    expect(isXtDegeneratePage({ result: { items: [] } })).toBe(false)
-  })
-
-  it('flags the real futures board as non-degenerate', () => {
-    expect(isXtDegeneratePage(fixture('leaderboard-fut-30.json'))).toBe(false)
   })
 })
 

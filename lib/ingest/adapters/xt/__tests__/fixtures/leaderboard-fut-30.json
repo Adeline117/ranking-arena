@@ -3,155 +3,150 @@
   "msgInfo": "success",
   "error": null,
   "result": {
-    "hasPrev": false,
-    "hasNext": true,
+    "page": 1,
+    "ps": 10,
+    "total": 1873,
     "items": [
       {
-        "accountId": 8305081452527,
-        "nickName": "阿阳",
+        "accountId": "4612442474598781734",
+        "nickName": "Thomas Tang",
         "days": 30,
-        "income": "175.40481862",
-        "incomeRate": "11.2471",
-        "followerProfit": "-45.00817",
-        "totalFollowerProfit": "-45.00817",
+        "income": "119279.24774806",
+        "incomeRate": "1.7253",
+        "followerProfit": "753.29448",
+        "tradeDays": 480,
+        "totalFollowerProfit": "2359.04416",
         "followerTrade": null,
         "totalFollowerTrade": null,
-        "followerMargin": "780",
-        "totalFollowerMargin": "780",
-        "winRate": "0.6461",
-        "followerCount": "0",
-        "maxFollowerSize": 100,
-        "level": 1,
-        "levelName": "Lvl 1",
-        "label": ["Short term", "conservative"],
-        "avatar": "https://a.static-global.com/1/user/common/3f9fc83c-643b-4082-8ef7-5f7e3191419a-1761119853423.png",
-        "followNumber": 9,
-        "newFollowNumber": 9,
-        "maxRetraction": 1.4925,
-        "chart": [
-          {
-            "amount": "0",
-            "time": 0
-          },
-          {
-            "amount": "0",
-            "time": 1778716800000
-          },
-          {
-            "amount": "0",
-            "time": 1778803200000
-          },
-          {
-            "amount": "0",
-            "time": 1778889600000
-          },
-          {
-            "amount": "0",
-            "time": 1778976000000
-          },
-          {
-            "amount": "0",
-            "time": 1779062400000
-          }
-        ]
-      },
-      {
-        "accountId": 9523865650557,
-        "nickName": "XAI INVESTMENT",
-        "days": 30,
-        "income": "262.94879519",
-        "incomeRate": "6.8014",
-        "followerProfit": "-624.1565",
-        "totalFollowerProfit": "-624.1565",
-        "followerTrade": null,
-        "totalFollowerTrade": null,
-        "followerMargin": "4677.6289",
-        "totalFollowerMargin": "4697.2778",
-        "winRate": "0.9859",
-        "followerCount": "10",
-        "maxFollowerSize": 100,
-        "level": 1,
-        "levelName": "Lvl 1",
-        "label": [],
-        "avatar": "https://a.static-global.com/1/user/common/7c773c65-a6c2-4f52-96ee-eab81b828bd3-1780133710954.png",
-        "followNumber": 64,
-        "newFollowNumber": 64,
-        "maxRetraction": 0.0701,
-        "chart": [
-          {
-            "amount": "0",
-            "time": 0
-          },
-          {
-            "amount": "0",
-            "time": 1778716800000
-          },
-          {
-            "amount": "0",
-            "time": 1778803200000
-          },
-          {
-            "amount": "0",
-            "time": 1778889600000
-          },
-          {
-            "amount": "0",
-            "time": 1778976000000
-          },
-          {
-            "amount": "0",
-            "time": 1779062400000
-          }
-        ]
-      },
-      {
-        "accountId": 8680638710947,
-        "nickName": "财哥论币",
-        "days": 30,
-        "income": "4751.12600478",
-        "incomeRate": "3.0889",
-        "followerProfit": "-104.61172",
-        "totalFollowerProfit": "-139.16861",
-        "followerTrade": null,
-        "totalFollowerTrade": null,
-        "followerMargin": "876.39",
-        "totalFollowerMargin": "2356.96991711",
-        "winRate": "0.3148",
-        "followerCount": "2",
+        "followerMargin": "7367.34",
+        "totalFollowerMargin": "262477.24275347",
+        "winRate": "1",
+        "followerCount": "43",
         "maxFollowerSize": 300,
         "level": 2,
         "levelName": "Lvl 2",
-        "label": ["High frequency", "Short term"],
-        "avatar": "https://a.static-global.com/1/user/common/5a7c2436-c629-486a-ab57-7d62cde92acd-1779440611423.png",
-        "followNumber": 15,
-        "newFollowNumber": 15,
-        "maxRetraction": 6.9585,
+        "label": ["Short term", " Long term"],
+        "avatar": "https://a.static-global.com/1/user/common/f460f809-770f-4a9c-9407-879a1d3f4c74-1721969092379.png",
+        "followNumber": 103,
+        "newFollowNumber": 51,
+        "maxRetraction": 0.4257,
         "chart": [
           {
             "amount": "0",
             "time": 0
           },
           {
-            "amount": "0",
+            "amount": "-0.1213",
             "time": 1778716800000
           },
           {
-            "amount": "0",
+            "amount": "0.0932",
             "time": 1778803200000
           },
           {
-            "amount": "0",
+            "amount": "0.2432",
             "time": 1778889600000
           },
           {
-            "amount": "0",
+            "amount": "0.362",
             "time": 1778976000000
-          },
+          }
+        ],
+        "openPrivateDomain": false
+      },
+      {
+        "accountId": "4612538369543665062",
+        "nickName": "Capture3 (BTC)",
+        "days": 30,
+        "income": "12549.67375556",
+        "incomeRate": "0.1234",
+        "followerProfit": "0",
+        "tradeDays": 143,
+        "totalFollowerProfit": "0",
+        "followerTrade": null,
+        "totalFollowerTrade": null,
+        "followerMargin": "194.22",
+        "totalFollowerMargin": "244.22",
+        "winRate": "1",
+        "followerCount": "1",
+        "maxFollowerSize": 100,
+        "level": 1,
+        "levelName": "Lvl 1",
+        "label": [" Long term", "Low frequency", "conservative"],
+        "avatar": "https://a.static-global.com/1/user/common/0f1cf29f-bb5b-41a6-985d-00f192157e78-1768916620451.jpg",
+        "followNumber": 5,
+        "newFollowNumber": 5,
+        "maxRetraction": 0.0212,
+        "chart": [
           {
             "amount": "0",
-            "time": 1779062400000
+            "time": 0
+          },
+          {
+            "amount": "-0.0151",
+            "time": 1778716800000
+          },
+          {
+            "amount": "0.0018",
+            "time": 1778803200000
+          },
+          {
+            "amount": "0.0101",
+            "time": 1778889600000
+          },
+          {
+            "amount": "0.016",
+            "time": 1778976000000
           }
-        ]
+        ],
+        "openPrivateDomain": false
+      },
+      {
+        "accountId": "4612511774516843206",
+        "nickName": "Tom汤师爷",
+        "days": 30,
+        "income": "6289.28706995",
+        "incomeRate": "0.3924",
+        "followerProfit": "1205.54561",
+        "tradeDays": 85,
+        "totalFollowerProfit": "4967.3027",
+        "followerTrade": null,
+        "totalFollowerTrade": null,
+        "followerMargin": "13412.8620819",
+        "totalFollowerMargin": "42896.5038719",
+        "winRate": "0.8333",
+        "followerCount": "6",
+        "maxFollowerSize": 500,
+        "level": 3,
+        "levelName": "Lvl 3",
+        "label": ["Low frequency", "conservative", "Short term", " Long term"],
+        "avatar": "https://a.static-global.com/1/user/common/ab5d138f-69dc-4a18-85db-955625236ae9-1773834497592.png",
+        "followNumber": 10,
+        "newFollowNumber": 3,
+        "maxRetraction": 0.1611,
+        "chart": [
+          {
+            "amount": "0",
+            "time": 0
+          },
+          {
+            "amount": "-0.1611",
+            "time": 1778716800000
+          },
+          {
+            "amount": "0.0196",
+            "time": 1778803200000
+          },
+          {
+            "amount": "0.1071",
+            "time": 1778889600000
+          },
+          {
+            "amount": "0.1809",
+            "time": 1778976000000
+          }
+        ],
+        "openPrivateDomain": false
       }
     ]
   }

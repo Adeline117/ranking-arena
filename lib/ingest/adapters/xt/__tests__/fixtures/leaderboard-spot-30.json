@@ -7,143 +7,133 @@
     "hasNext": true,
     "items": [
       {
-        "accountId": "4612466590349457382",
-        "aid": 6800954951615,
-        "nickName": "naifoscrypt",
-        "avatar": "https://a.static-global.com/1/user/common/6208b5f2-7e70-4915-bd3e-7117ae36dbb9-1735845736632.png",
-        "level": 1,
-        "levelName": "Lvl 1",
-        "days": 30,
-        "income": "-48.81888",
-        "winRate": "0",
-        "followerProfit": "0",
-        "followerMargin": "0",
-        "incomeRate": "-0.5242",
-        "followerCount": 8,
-        "maxFollowerSize": 500,
-        "recentlyFollowNumber": 3,
-        "maxRetraction": 1.0832,
-        "equity": null,
-        "recommend": false,
-        "recommendWeight": null,
-        "firstTradeTime": 1775690570504,
-        "lastTradeTime": 1775690570504,
-        "displayEquity": false,
-        "tradeDays": 65,
-        "chart": [
-          {
-            "id": null,
-            "amount": "0.1097",
-            "time": 1778716800000
-          },
-          {
-            "id": null,
-            "amount": "-0.0474",
-            "time": 1778803200000
-          },
-          {
-            "id": null,
-            "amount": "-0.058",
-            "time": 1778889600000
-          },
-          {
-            "id": null,
-            "amount": "0.015",
-            "time": 1778976000000
-          },
-          {
-            "id": null,
-            "amount": "0.0982",
-            "time": 1779062400000
-          },
-          {
-            "id": null,
-            "amount": "0.1366",
-            "time": 1779148800000
-          }
-        ]
-      },
-      {
-        "accountId": "4612473507301998726",
-        "aid": 7016572847620,
-        "nickName": "ali raeisi :(",
+        "accountId": "4612486463456677958",
+        "aid": 7421989552258,
+        "nickName": "Jeane1417",
         "avatar": "https://a.static-global.com/1/user/common/bf5f42f8-e815-4817-9c13-2b14b4af24e0-1709539990384.png",
         "level": 1,
         "levelName": "Lvl 1",
         "days": 30,
-        "income": "-158.1950696",
-        "winRate": "0",
+        "income": "19.29996168",
+        "winRate": "1",
         "followerProfit": "0",
         "followerMargin": "0",
-        "incomeRate": "-0.3019",
+        "incomeRate": "0.0814",
         "followerCount": 0,
         "maxFollowerSize": 500,
         "recentlyFollowNumber": 0,
-        "maxRetraction": 0.3125,
+        "maxRetraction": 0,
         "equity": null,
         "recommend": false,
         "recommendWeight": null,
-        "firstTradeTime": 1769665342291,
-        "lastTradeTime": 1780674279205,
+        "firstTradeTime": 1779005727135,
+        "lastTradeTime": 1779064689429,
         "displayEquity": false,
-        "tradeDays": 134,
+        "tradeDays": 26,
         "chart": [
           {
             "id": null,
-            "amount": "0.0106",
+            "amount": "0",
             "time": 1778716800000
           },
           {
             "id": null,
-            "amount": "-0.0183",
+            "amount": "0",
             "time": 1778803200000
           },
           {
             "id": null,
-            "amount": "-0.0384",
+            "amount": "0",
             "time": 1778889600000
           },
           {
             "id": null,
-            "amount": "-0.048",
+            "amount": "0.0663",
             "time": 1778976000000
           },
           {
             "id": null,
-            "amount": "-0.0492",
+            "amount": "0.0814",
             "time": 1779062400000
-          },
-          {
-            "id": null,
-            "amount": "-0.06",
-            "time": 1779148800000
           }
         ]
       },
       {
-        "accountId": "4612404344642502630",
-        "aid": 4855776609279,
-        "nickName": "Le Bitcoineur",
-        "avatar": "https://a.static-global.com/1/user/common/b08bf62e-f714-4cd3-8fc6-eaf355333ee0-1766589374056.jpg",
+        "accountId": "4612452135272077094",
+        "aid": 6348696912569,
+        "nickName": "Tiaram",
+        "avatar": "https://a.static-global.com/1/user/common/bf5f42f8-e815-4817-9c13-2b14b4af24e0-1709539990384.png",
         "level": 1,
         "levelName": "Lvl 1",
         "days": 30,
-        "income": "-131.40802386",
-        "winRate": "0",
-        "followerProfit": "0",
+        "income": "34.95338799",
+        "winRate": "2",
+        "followerProfit": "3.9221126",
         "followerMargin": "0",
-        "incomeRate": "-0.2624",
-        "followerCount": 0,
+        "incomeRate": "0.0606",
+        "followerCount": 1,
         "maxFollowerSize": 500,
         "recentlyFollowNumber": 0,
-        "maxRetraction": 0.2624,
+        "maxRetraction": 0,
         "equity": null,
         "recommend": false,
         "recommendWeight": null,
-        "firstTradeTime": 1766704392039,
-        "lastTradeTime": 1780875897651,
+        "firstTradeTime": 1734445928327,
+        "lastTradeTime": 1755370766827,
         "displayEquity": false,
-        "tradeDays": 169,
+        "tradeDays": 542,
+        "chart": [
+          {
+            "id": null,
+            "amount": "0.0606",
+            "time": 1778716800000
+          },
+          {
+            "id": null,
+            "amount": "0.0606",
+            "time": 1778803200000
+          },
+          {
+            "id": null,
+            "amount": "0.0606",
+            "time": 1778889600000
+          },
+          {
+            "id": null,
+            "amount": "0.0606",
+            "time": 1778976000000
+          },
+          {
+            "id": null,
+            "amount": "0.0606",
+            "time": 1779062400000
+          }
+        ]
+      },
+      {
+        "accountId": "4612509792471283462",
+        "aid": 8150484387768,
+        "nickName": "Mahmud1984",
+        "avatar": "https://a.static-global.com/1/user/common/ff351dcb-7a67-4b71-8a55-55ad20c3c955-1778479089552.png",
+        "level": 1,
+        "levelName": "Lvl 1",
+        "days": 30,
+        "income": "9.97247512",
+        "winRate": "1",
+        "followerProfit": "0",
+        "followerMargin": "0",
+        "incomeRate": "0.031",
+        "followerCount": 0,
+        "maxFollowerSize": 500,
+        "recentlyFollowNumber": 0,
+        "maxRetraction": 0,
+        "equity": null,
+        "recommend": false,
+        "recommendWeight": null,
+        "firstTradeTime": 1780723879713,
+        "lastTradeTime": 1780861576464,
+        "displayEquity": false,
+        "tradeDays": 6,
         "chart": [
           {
             "id": null,
@@ -169,11 +159,6 @@
             "id": null,
             "amount": "0",
             "time": 1779062400000
-          },
-          {
-            "id": null,
-            "amount": "0",
-            "time": 1779148800000
           }
         ]
       }
