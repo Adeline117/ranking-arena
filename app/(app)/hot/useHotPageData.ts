@@ -177,7 +177,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         const postsData: Post[] = data.map((post: Record<string, unknown>) => {
           const createdAt = new Date(post.created_at as string)
           const diffMs = Date.now() - createdAt.getTime()
-          const timeStr = formatTimeAgo(post.created_at as string, language as 'zh' | 'en')
+          const timeStr = formatTimeAgo(post.created_at as string, language)
           const groupName = (post.group_name as string) || t('generalDiscussion')
           const groupNameEn = (post.group_name_en as string) || t('generalDiscussionEn')
 
@@ -463,7 +463,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
   useEffect(() => {
     if (posts.length > 0 && email) {
-      translateListPosts(posts, language as 'zh' | 'en')
+      // Translate pipeline only supports zh/en targets — ja/ko readers get English
+      translateListPosts(posts, language === 'zh' ? 'zh' : 'en')
     }
   }, [posts, language, translateListPosts, email])
 
