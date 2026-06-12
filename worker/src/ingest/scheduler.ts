@@ -90,21 +90,47 @@ export async function reconcileSchedulers(): Promise<void> {
     await localQueue.upsertJobScheduler(s.id, { every: s.everyMs }, { name: s.name, data: {} })
   }
 
-  // Remove stale schedulers across EVERY region queue (a source whose
-  // fetch_region changed leaves its old scheduler on the previous queue).
+  // Remove stale schedulers + REVIVE stuck ones across every region queue.
+  //
+  // Stuck-scheduler root fix (2026-06-12): BullMQ's upsertJobScheduler is
+  // idempotent when `every` is unchanged, so it does NOT advance a `next`
+  // fire-time that fell into the past — which happens when a worker was
+  // OOM-killed mid-crawl repeatedly: the job never completes, `next` never
+  // moves, and the source silently stops scheduling forever (xt/okx_web3
+  // sat at a 10h-old `next`). Detect any `next` older than ~2× its cadence
+  // and force-rebuild that scheduler so it fires again.
+  let revived = 0
+  const now = Date.now()
   for (const region of INGEST_REGIONS) {
     const q = getRegionQueue(region)
     const existing = await q.getJobSchedulers()
     for (const scheduler of existing) {
-      if (scheduler.id && !wanted.has(scheduler.id)) {
+      if (!scheduler.id) continue
+      if (!wanted.has(scheduler.id)) {
         await q.removeJobScheduler(scheduler.id)
         console.log(`[ingest-scheduler] removed stale scheduler ${scheduler.id} (${region})`)
+        continue
+      }
+      // Revive a scheduler whose next fire-time is badly overdue.
+      const every = typeof scheduler.every === 'number' ? scheduler.every : Number(scheduler.every)
+      if (scheduler.next && every && scheduler.next < now - 2 * every) {
+        await q.removeJobScheduler(scheduler.id)
+        await q.upsertJobScheduler(
+          scheduler.id,
+          { every },
+          { name: scheduler.name, data: scheduler.template?.data ?? {} }
+        )
+        revived++
+        console.log(
+          `[ingest-scheduler] revived stuck scheduler ${scheduler.id} ` +
+            `(next was ${Math.round((now - scheduler.next) / 3.6e6)}h overdue)`
+        )
       }
     }
   }
 
   console.log(
     `[ingest-scheduler] reconciled: ${sources.length} active sources, ` +
-      `${wanted.size} schedulers`
+      `${wanted.size} schedulers${revived ? `, revived ${revived} stuck` : ''}`
   )
 }
