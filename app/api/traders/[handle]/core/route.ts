@@ -53,8 +53,17 @@ export async function GET(
 
       const warm = await getCoreModules(supabase, resolved.source, resolved.exchangeTraderId, tf)
 
+      // A trader can have FRESH Tier-A stats but NO series/deep fields: Tier-A
+      // writes headline stats for every ranked trader, but charts come from
+      // the Tier-B/C profile crawl which only covers topN. Treating
+      // stats-fresh as fully-warm left ~99% of serving traders with an empty
+      // chart that never self-healed (the cold path never fired). So a warm
+      // answer must ALSO have chart series; otherwise it's stale → trigger a
+      // background Tier-C deep fetch while serving what we have.
+      const hasSeries = !!warm && Object.values(warm.series ?? {}).some((pts) => pts.length > 0)
+
       // Warm hit — the only edge-cacheable answer.
-      if (warm && isFresh(warm.provenance.asOf, CORE_FRESH_TTL_SECONDS)) {
+      if (warm && hasSeries && isFresh(warm.provenance.asOf, CORE_FRESH_TTL_SECONDS)) {
         return withCache(apiSuccess<TraderCoreResponse>(warm), {
           maxAge: 30,
           staleWhileRevalidate: 120,
