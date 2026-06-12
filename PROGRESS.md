@@ -30,7 +30,8 @@ Spec: `~/Desktop/ARENA_DATA_SPEC.md`；计划: `~/.claude/plans/snug-squishing-h
 - **读路径全量切换**：15 个 shadow 源批量翻 serving（现 23 serving / 7 shadow 等首个过门快照：bitunix/blofin×2/btcc/xt×2/bingx_spot）；`arena_resolve_trader` RPC 新增 legacy_platform 别名匹配（mexc/bybit/gateio… slug≠旧名的源此前进不了 serving 路径）；Redis `serving_sources` 扩到 32 项（slug+别名）。生产 curl 验证 8 平台 dataMode="serving"，post-deploy 5/5
 - **代码删除 ~45k LOC**：lib/connectors（71 文件）+ lib/cron/fetchers（45 文件）+ enrichment-runner + connector-db-adapter + lib/jobs + /api/v2/trader + 12 个 legacy-only API 路由 + admin/pipeline 页 + 4 个废弃脚本。每组 commit tsc+测试+build 全绿
 - **保留（有意）**：compat writer（rankings/leaderboard_ranks 仍读 trader_latest，直到 compute-leaderboard 重指 arena.score_inputs）；SSH 隧道（tier-c 远程区域驻地）；pipeline-health-check.mjs（独立 .mjs 诊断）
-- **已知 follow-up**：非 USDT 源（hyperliquid/gmx/gtrade/bybit_mt5/gate_cfd）无 compat 写入 → leaderboard_ranks 冻结在 06-08，rankings 列表需 compute-leaderboard 增读 arena.score_inputs（或非 USDT compat 变体）才恢复；VPS arena-scraper:3457 待手动停（已无调用方）
+- **Rankings 修复**：SOURCES_WITH_DATA 补 5 个 compat 平台（bitget_cfd/bitmart_futures/htx_spot 新增 + lbank/bitget_spot 从 DEAD_BLOCKED 复活）→ 三季全量重算：7D 2826→5754、30D 2721→6445、90D 3269→6430 行；**bitget 缺席 11 天后重回 rankings**（1348 futures + 596 cfd + 67 spot）
+- **已知 follow-up**：非 USDT 源（hyperliquid/gmx/gtrade/bybit_mt5/gate_cfd）无 compat 写入 → 其 leaderboard_ranks 旧行残留（hyperliquid 冻结 06-08），完全恢复需 compute-leaderboard 增读 arena.score_inputs（或非 USDT compat 变体）；VPS arena-scraper:3457 待手动停（已无调用方）；legacy arena-worker 进程仍跑旧码（调度已清空故无害，下次自然重启换新码）
 
 **后续**：Phase 3（OKX CEX/Toobit adapter 已落，待 VPS 解封验证、Bitfinex API）→ compute-leaderboard 重指 arena.score_inputs → 删 compat writer
 
