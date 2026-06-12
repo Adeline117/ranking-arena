@@ -5,6 +5,8 @@
  * Falls back to generic.svg for unknown symbols.
  */
 
+import { LOCAL_CRYPTO_ICONS } from './crypto-icon-manifest'
+
 const ICON_BASE_PATH = '/icons/crypto'
 
 /**
@@ -13,13 +15,12 @@ const ICON_BASE_PATH = '/icons/crypto'
  * Handles Hyperliquid exotic markets: "xyz:tsla" → "tsla", "xyz:cl" → "cl"
  */
 export function normalizeCoinSymbol(symbol: string): string {
-  return symbol
-    // Strip Hyperliquid xyz: prefix for exotic/RWA perp markets
-    .replace(/^xyz:/i, '')
-    .replace(/[-/]?(USDT|BUSD|USD|USDC|PERP|SWAP)$/i, '')
-    .replace(/[-/].*$/, '')
-    .toLowerCase()
-    .trim()
+  // Strip Hyperliquid xyz: prefix for exotic/RWA perp markets
+  const base = symbol.replace(/^xyz:/i, '')
+  const stripped = base.replace(/[-/]?(USDT|BUSD|USD|USDC|PERP|SWAP)$/i, '').replace(/[-/].*$/, '')
+  // If the symbol IS a quote currency (e.g. "USDT", "USDC"), stripping the
+  // suffix leaves an empty string — keep the original symbol in that case.
+  return (stripped || base.replace(/[-/].*$/, '')).toLowerCase().trim()
 }
 
 /**
@@ -27,8 +28,18 @@ export function normalizeCoinSymbol(symbol: string): string {
  * Strips the xyz: prefix before extracting initials.
  */
 export function getSymbolLabel(symbol: string): string {
-  const base = symbol.replace(/^xyz:/i, '').replace(/[-/]?(USDT|BUSD|USD|USDC|PERP|SWAP)$/i, '')
+  const raw = symbol.replace(/^xyz:/i, '')
+  const base = raw.replace(/[-/]?(USDT|BUSD|USD|USDC|PERP|SWAP)$/i, '') || raw
   return base.slice(0, 2).toUpperCase()
+}
+
+/**
+ * Whether a local SVG exists for this (already-normalized or raw) symbol.
+ * Checking before rendering an <img> avoids guaranteed-404 requests for
+ * tokens we have no icon file for — browsers always log those to console.
+ */
+export function hasLocalCryptoIcon(symbol: string): boolean {
+  return LOCAL_CRYPTO_ICONS.has(normalizeCoinSymbol(symbol))
 }
 
 /**
