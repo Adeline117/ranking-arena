@@ -133,6 +133,15 @@ html.theme-transition #main-content {
   --color-brand-light: var(--color-accent-primary-30);
   --color-brand-accent: #c9b8db;
   --color-brand-deep: #7055a0;
+
+  /* Brand gradients — themeable (consumed via tokens.gradient.*) */
+  --gradient-primary: linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #9d84b5 0%, #8b6fa8 100%);
+  --gradient-primary-subtle: linear-gradient(
+    135deg,
+    rgba(139, 111, 168, 0.2) 0%,
+    rgba(139, 111, 168, 0.05) 100%
+  );
   --color-accent-brand: #9373b5;
   --color-verified-onchain: #2fe57d;
   --color-verified-web3: #6d5ae6;
@@ -382,6 +391,15 @@ html.theme-transition #main-content {
 [data-theme='light'] {
   --background: #ffffff;
   --foreground: #111111;
+
+  /* Brand gradients — deeper purples for contrast on light surfaces */
+  --gradient-primary: linear-gradient(135deg, #8a6cb0 0%, #6f4e96 100%);
+  --gradient-primary-hover: linear-gradient(135deg, #9b7fc0 0%, #8a6cb0 100%);
+  --gradient-primary-subtle: linear-gradient(
+    135deg,
+    rgba(111, 78, 150, 0.12) 0%,
+    rgba(111, 78, 150, 0.04) 100%
+  );
 
   /* Background colors — softer than pure white for reduced glare */
   --color-bg-primary: #fafafe;

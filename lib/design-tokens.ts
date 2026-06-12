@@ -231,10 +231,13 @@ export const tokens = {
   // Gradient presets
   gradient: {
     // Brand gradients
-    primary: 'linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%)',
-    primaryHover: 'linear-gradient(135deg, #9d84b5 0%, #8b6fa8 100%)',
+    // Theme-aware via CSS vars (light mode gets its own stops in globals.css);
+    // literal fallbacks keep no-CSS contexts (global-error) rendering.
+    primary: 'var(--gradient-primary, linear-gradient(135deg, #8b6fa8 0%, #6b4f88 100%))',
+    primaryHover:
+      'var(--gradient-primary-hover, linear-gradient(135deg, #9d84b5 0%, #8b6fa8 100%))',
     primarySubtle:
-      'linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.05) 100%)',
+      'var(--gradient-primary-subtle, linear-gradient(135deg, rgba(139, 111, 168, 0.2) 0%, rgba(139, 111, 168, 0.05) 100%))',
 
     // Accent gradients
     purple: 'linear-gradient(135deg, #9B7EC8 0%, #7B5EA7 50%, #5E4580 100%)',
