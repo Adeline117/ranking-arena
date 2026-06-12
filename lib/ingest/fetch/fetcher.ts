@@ -153,6 +153,8 @@ function toTemplate(req: Request): ReplayRequestTemplate {
 class PlaywrightFetchSession implements FetchSession {
   private context: BrowserContext | null = null
   private pageInstance: Page | null = null
+  /** Last main-frame http(s) URL — restored after a mid-session context reset. */
+  private lastNavigatedUrl: string | null = null
   private readonly gate: PacedGate
   private readonly circuit: Circuit
 
@@ -205,8 +207,25 @@ class PlaywrightFetchSession implements FetchSession {
   async page(): Promise<Page> {
     if (this.pageInstance && !this.pageInstance.isClosed()) return this.pageInstance
     const ctx = await this.ensureContext()
-    this.pageInstance = ctx.pages()[0] ?? (await ctx.newPage())
-    return this.pageInstance
+    const page = ctx.pages()[0] ?? (await ctx.newPage())
+    this.pageInstance = page
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame() && /^https?:/.test(frame.url())) {
+        this.lastNavigatedUrl = frame.url()
+      }
+    })
+    // A mid-session resetContext() leaves the fresh page on about:blank
+    // while adapters' warm-once guards (warmedSessions WeakSet) still
+    // believe the origin is parked — every subsequent same-origin
+    // pageFetch then throws "TypeError: Failed to fetch" for the rest of
+    // the job (binance Tier-B 0/486, 2026-06-11). Restore the last
+    // navigated URL so in-page fetches keep their origin.
+    if (this.lastNavigatedUrl && page.url() === 'about:blank') {
+      await page
+        .goto(this.lastNavigatedUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+        .catch(() => undefined) // best-effort — adapter retries surface a dead origin
+    }
+    return page
   }
 
   async api(): Promise<APIRequestContext> {
