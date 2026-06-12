@@ -38,7 +38,7 @@ export interface HotPost {
 
 export function useSearchData(open: boolean, query: string) {
   const { t, language } = useLanguage()
-  const { userId, isLoggedIn, authChecked } = useAuthSession()
+  const { userId, isLoggedIn, authChecked, accessToken } = useAuthSession()
   const [searchHistory, setSearchHistory] = useState<string[]>([])
   const [hotPosts, setHotPosts] = useState<HotPost[]>([])
   const [trendingSearches, setTrendingSearches] = useState<TrendingSearchItem[]>([])
@@ -181,7 +181,7 @@ export function useSearchData(open: boolean, query: string) {
 
   // Hot post title translation (requires auth — anonymous visitors got a 401 on every page)
   useEffect(() => {
-    if (hotPosts.length === 0 || translating || !isLoggedIn) return
+    if (hotPosts.length === 0 || translating || !isLoggedIn || !accessToken) return
 
     const langKey = (id: string) => `${language}:${id}`
 
@@ -215,7 +215,13 @@ export function useSearchData(open: boolean, query: string) {
         try {
           const res = await fetch('/api/translate', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+            // /api/translate uses requireAuth (Bearer header only) — logged-in
+            // users 401'd without the Authorization header
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+              ...getCsrfHeaders(),
+            },
             body: JSON.stringify({
               items: postsToTranslate.map((p) => ({
                 id: p.id,
@@ -250,7 +256,7 @@ export function useSearchData(open: boolean, query: string) {
       doTranslate()
       return prev // return unchanged until async finishes
     })
-  }, [language, hotPosts, translating, isLoggedIn])
+  }, [language, hotPosts, translating, isLoggedIn, accessToken])
 
   // Unified search with debounce
   useEffect(() => {

@@ -5,6 +5,8 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useApiCheckout } from '@/lib/hooks/useApiCheckout'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { authedFetch } from '@/lib/api/client'
 import { SectionCard, getInputStyle } from './shared'
 
 interface ApiKey {
@@ -28,6 +30,9 @@ const TIER_LABELS: Record<string, { label: string; color: string; limit: string 
 
 export function ApiKeysSection() {
   const { showToast } = useToast()
+  // /api/user/api-keys is wrapped in withAuth, which only reads the
+  // Authorization Bearer header — these calls 401'd without it.
+  const { accessToken, authChecked } = useAuthSession()
   const {
     checkout: apiCheckout,
     isLoading: checkoutLoading,
@@ -40,15 +45,18 @@ export function ApiKeysSection() {
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null)
 
   const fetchKeys = useCallback(async () => {
+    if (!accessToken) {
+      if (authChecked) setLoading(false)
+      return
+    }
     try {
-      const res = await fetch('/api/user/api-keys')
+      const res = await authedFetch<{ data?: ApiKey[] }>('/api/user/api-keys', 'GET', accessToken)
       if (!res.ok) return
-      const json = await res.json()
-      setKeys(json.data ?? [])
+      setKeys(res.data?.data ?? [])
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [accessToken, authChecked])
 
   useEffect(() => {
     fetchKeys()
@@ -57,17 +65,17 @@ export function ApiKeysSection() {
   const createKey = async () => {
     setCreating(true)
     try {
-      const res = await fetch('/api/user/api-keys', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: newKeyName || 'Default' }),
-      })
-      const json = await res.json()
-      if (!res.ok) {
-        showToast(json.error || 'Failed to create key', 'error')
+      const res = await authedFetch<{ data?: { key: string }; error?: string }>(
+        '/api/user/api-keys',
+        'POST',
+        accessToken,
+        { name: newKeyName || 'Default' }
+      )
+      if (!res.ok || !res.data?.data) {
+        showToast(res.data?.error || 'Failed to create key', 'error')
         return
       }
-      setJustCreatedKey(json.data.key)
+      setJustCreatedKey(res.data.data.key)
       setNewKeyName('')
       await fetchKeys()
       showToast('API key created', 'success')
@@ -77,11 +85,7 @@ export function ApiKeysSection() {
   }
 
   const revokeKey = async (id: string) => {
-    const res = await fetch('/api/user/api-keys', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    })
+    const res = await authedFetch('/api/user/api-keys', 'PATCH', accessToken, { id })
     if (!res.ok) {
       showToast('Failed to revoke key', 'error')
       return
@@ -258,19 +262,23 @@ export function ApiKeysSection() {
   )
 }
 
+type UsageData = {
+  keys: { id: string; name: string }[]
+  daily: { api_key_id: string; date: string; request_count: number }[]
+  totals: Record<string, number>
+}
+
 function UsageChart() {
-  const [usage, setUsage] = useState<{
-    keys: { id: string; name: string }[]
-    daily: { api_key_id: string; date: string; request_count: number }[]
-    totals: Record<string, number>
-  } | null>(null)
+  const { accessToken } = useAuthSession()
+  const [usage, setUsage] = useState<UsageData | null>(null)
 
   useEffect(() => {
-    fetch('/api/user/api-keys/usage?days=30')
-      .then((r) => r.json())
-      .then((json) => setUsage(json.data ?? null))
+    if (!accessToken) return
+    // withAuth route — requires Authorization Bearer header
+    authedFetch<{ data?: UsageData }>('/api/user/api-keys/usage?days=30', 'GET', accessToken)
+      .then((res) => setUsage(res.data?.data ?? null))
       .catch(() => {})
-  }, [])
+  }, [accessToken])
 
   if (!usage || usage.daily.length === 0) {
     return (

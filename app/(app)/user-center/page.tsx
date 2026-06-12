@@ -156,6 +156,11 @@ function UserCenterPage() {
         setUserId(user.id)
         setEmail(user.email ?? null)
 
+        // /api/user/exp uses requireAuth (Bearer header only) — 401'd without the token
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+
         // Fetch profile + exp in parallel (reduced from 5 separate queries)
         const [profileResult, expResult] = await Promise.all([
           supabase
@@ -163,7 +168,11 @@ function UserCenterPage() {
             .select('handle, avatar_url')
             .eq('id', user.id)
             .maybeSingle(),
-          fetch('/api/user/exp'),
+          fetch('/api/user/exp', {
+            headers: session?.access_token
+              ? { Authorization: `Bearer ${session.access_token}` }
+              : undefined,
+          }),
         ])
 
         if (profileResult.data) {

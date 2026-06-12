@@ -22,6 +22,7 @@ import { renderContentWithControls } from './components/ContentPreview'
 import { ImageUploader, VideoUploader } from './components/MediaUploader'
 import { PollEditor } from './components/PollEditor'
 import type { UploadedImage, UploadedVideo, PollOption } from './types'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import {
   TITLE_MAX_LENGTH,
   CONTENT_MAX_LENGTH,
@@ -167,9 +168,12 @@ export default function NewPostPage() {
         formData.append('file', compressed)
         formData.append('userId', userId)
 
+        // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
+        const uploadToken = await tokenRefreshCoordinator.getValidToken()
         const response = await fetch('/api/posts/upload-image', {
           method: 'POST',
           headers: {
+            ...(uploadToken ? { Authorization: `Bearer ${uploadToken}` } : {}),
             ...getCsrfHeaders(),
           },
           body: formData,

@@ -133,10 +133,14 @@ function AuthCallbackContent() {
         const isNewUser = now - createdAt < 30_000
 
         // Fire-and-forget: send welcome email for new users
+        // (route auth reads only the Authorization Bearer header)
         if (isNewUser) {
           fetch('/api/email/welcome', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${session.access_token}`,
+            },
           })
             // eslint-disable-next-line no-restricted-syntax
             .catch(() => {
@@ -179,10 +183,14 @@ function AuthCallbackContent() {
           const isNewUser = now - createdAt < 30_000
 
           // Fire-and-forget: send welcome email for new users
+          // (route auth reads only the Authorization Bearer header)
           if (isNewUser) {
             fetch('/api/email/welcome', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${retrySession.access_token}`,
+              },
             })
               // eslint-disable-next-line no-restricted-syntax
               .catch(() => {

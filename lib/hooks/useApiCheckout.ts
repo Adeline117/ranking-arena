@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCsrfHeaders } from '@/lib/api/csrf'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 type ApiPlan = 'starter' | 'pro'
 
@@ -17,9 +18,21 @@ export function useApiCheckout() {
       setError(null)
 
       try {
+        // Server auth requires the Authorization Bearer header — without it,
+        // logged-in users got a 401 (cookie fallback can't see localStorage sessions).
+        const accessToken = await tokenRefreshCoordinator.getValidToken()
+        if (!accessToken) {
+          router.push(`/login?redirect=${encodeURIComponent('/api-docs')}`)
+          return
+        }
+
         const res = await fetch('/api/stripe/create-api-checkout', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
           body: JSON.stringify({ plan }),
         })
 

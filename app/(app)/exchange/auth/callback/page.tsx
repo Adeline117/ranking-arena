@@ -35,10 +35,13 @@ function ExchangeAuthCallbackContent() {
       }
 
       try {
+        // /api/exchange/oauth/callback uses getAuthUser (Bearer header only) —
+        // grab the session so we can attach the access token
         const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) {
+          data: { session },
+        } = await supabase.auth.getSession()
+        const user = session?.user
+        if (!user || !session?.access_token) {
           setStatus('error')
           setMessage(t('pleaseLogin'))
           router.push('/login')
@@ -49,6 +52,7 @@ function ExchangeAuthCallbackContent() {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
             ...getCsrfHeaders(),
           },
           body: JSON.stringify({

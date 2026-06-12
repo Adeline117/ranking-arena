@@ -375,6 +375,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const translateListPosts = useCallback(
     async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
       if (translatingList) return
+      // /api/translate requires auth (Bearer header) — skip for anonymous visitors
+      if (!accessToken) return
 
       const needsTranslation = postsToTranslate.filter((p) => {
         if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
@@ -423,6 +425,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
             ...getCsrfHeaders(),
           },
           body: JSON.stringify({ items, targetLang }),
@@ -457,7 +460,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         setTranslatingList(false)
       }
     },
-    [translatingList, translatedListPosts, isChineseText]
+    [translatingList, translatedListPosts, isChineseText, accessToken]
   )
 
   // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
@@ -471,8 +474,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Translate post content (with cache)
   const translateContent = useCallback(
     async (postId: string, content: string, targetLang: 'zh' | 'en') => {
-      // /api/translate requires auth — skip silently for anonymous visitors
-      if (!email) return
+      // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
+      if (!email || !accessToken) return
       const cacheKey = `${postId}-content-${targetLang}`
 
       if (translationCache[cacheKey]) {
@@ -487,6 +490,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
             ...getCsrfHeaders(),
           },
           body: JSON.stringify({
@@ -513,7 +517,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [translationCache, showToast, email]
+    [translationCache, showToast, email, accessToken]
   )
 
   // Track whether this modal was opened via navigation

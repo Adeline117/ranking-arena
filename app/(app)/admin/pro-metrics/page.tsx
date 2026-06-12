@@ -96,16 +96,19 @@ function MetricTile({
 
 export default function ProMetricsPage() {
   const { t } = useLanguage()
-  const { email, isAdmin, authChecking } = useAdminAuth()
+  const { email, isAdmin, authChecking, accessToken } = useAdminAuth()
   const [data, setData] = useState<ProMetricsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!isAdmin) return
+    if (!isAdmin || !accessToken) return
     let cancelled = false
     setLoading(true)
-    fetch('/api/admin/pro-metrics')
+    // withAdminAuth verifies the Authorization Bearer token — 401'd without it
+    fetch('/api/admin/pro-metrics', {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    })
       .then((res) => res.json())
       .then((payload) => {
         if (cancelled) return
@@ -125,7 +128,7 @@ export default function ProMetricsPage() {
     return () => {
       cancelled = true
     }
-  }, [isAdmin])
+  }, [isAdmin, accessToken])
 
   if (authChecking) {
     return (

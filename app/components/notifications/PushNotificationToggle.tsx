@@ -7,6 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ToggleSwitch } from '@/app/(app)/settings/components/shared'
 import { logger } from '@/lib/logger'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 type PushStatus = 'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'
 
@@ -30,12 +31,15 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
   const [status, setStatus] = useState<PushStatus>('loading')
   const [busy, setBusy] = useState(false)
 
-   
   const toast = useMemo(() => onToast || ((msg: string) => logger.warn(msg)), [onToast])
 
   // Check current status on mount
   useEffect(() => {
-    if (typeof window === 'undefined' || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+    if (
+      typeof window === 'undefined' ||
+      !('serviceWorker' in navigator) ||
+      !('PushManager' in window)
+    ) {
       setStatus('unsupported')
       return
     }
@@ -43,10 +47,12 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       setStatus('denied')
       return
     }
-    navigator.serviceWorker.ready.then(async (reg) => {
-      const sub = await reg.pushManager.getSubscription()
-      setStatus(sub ? 'subscribed' : 'unsubscribed')
-    }).catch(() => setStatus('unsupported'))
+    navigator.serviceWorker.ready
+      .then(async (reg) => {
+        const sub = await reg.pushManager.getSubscription()
+        setStatus(sub ? 'subscribed' : 'unsubscribed')
+      })
+      .catch(() => setStatus('unsupported'))
   }, [])
 
   const subscribe = useCallback(async () => {
@@ -71,10 +77,21 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
         applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
       })
 
+      // /api/push/subscribe is withAuth (Bearer header only) — 401'd without the token
+      const accessToken = await tokenRefreshCoordinator.getValidToken()
+      if (!accessToken) {
+        toast(t('pushNotificationError'), 'error')
+        return
+      }
+
       const json = sub.toJSON()
       await fetch('/api/push/subscribe', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
         body: JSON.stringify({
           token: sub.endpoint,
           provider: 'web',
@@ -101,9 +118,14 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       const reg = await navigator.serviceWorker.ready
       const sub = await reg.pushManager.getSubscription()
       if (sub) {
+        // /api/push/subscribe is withAuth (Bearer header only)
+        const accessToken = await tokenRefreshCoordinator.getValidToken()
         await fetch(`/api/push/subscribe?token=${encodeURIComponent(sub.endpoint)}`, {
           method: 'DELETE',
-          headers: { ...getCsrfHeaders() },
+          headers: {
+            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+            ...getCsrfHeaders(),
+          },
         })
         await sub.unsubscribe()
       }
@@ -116,13 +138,16 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
     }
   }, [t, toast])
 
-  const handleToggle = useCallback(async (enabled: boolean) => {
-    if (enabled) {
-      await subscribe()
-    } else {
-      await unsubscribe()
-    }
-  }, [subscribe, unsubscribe])
+  const handleToggle = useCallback(
+    async (enabled: boolean) => {
+      if (enabled) {
+        await subscribe()
+      } else {
+        await unsubscribe()
+      }
+    },
+    [subscribe, unsubscribe]
+  )
 
   if (status === 'unsupported') return null
 
@@ -143,7 +168,16 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       }}
     >
       <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="20"
+          height="20"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
           <path d="M13.73 21a2 2 0 0 1-3.46 0" />
         </svg>

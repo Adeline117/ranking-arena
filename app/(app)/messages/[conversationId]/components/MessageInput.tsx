@@ -7,6 +7,7 @@ import { Box, Text } from '@/app/components/base'
 import VoiceRecorder from '@/app/components/chat/VoiceRecorder'
 import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { getMediaTypeLabel } from './types'
 import type { MediaAttachment } from './types'
 import type { Sticker } from '@/lib/stickers'
@@ -80,9 +81,14 @@ export default function MessageInput({
       formData.append('file', file)
       formData.append('userId', userId)
       formData.append('conversationId', conversationId)
+      // /api/chat/upload is withAuth (Bearer header only) — 401'd without the token
+      const accessToken = await tokenRefreshCoordinator.getValidToken()
       const res = await fetch('/api/chat/upload', {
         method: 'POST',
-        headers: getCsrfHeaders(),
+        headers: {
+          ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+          ...getCsrfHeaders(),
+        },
         body: formData,
       })
       const data = await res.json()
@@ -118,9 +124,13 @@ export default function MessageInput({
           formData.append('file', file)
           formData.append('userId', userId)
           formData.append('conversationId', conversationId)
+          const accessToken = await tokenRefreshCoordinator.getValidToken()
           const res = await globalThis.fetch('/api/chat/upload', {
             method: 'POST',
-            headers: getCsrfHeaders(),
+            headers: {
+              ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
+              ...getCsrfHeaders(),
+            },
             body: formData,
           })
           const data = await res.json()

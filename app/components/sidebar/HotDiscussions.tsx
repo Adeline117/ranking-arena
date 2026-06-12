@@ -171,7 +171,11 @@ async function fetchHotPosts(_key: string, limit: number, targetLang?: string): 
           if (!data.session) return // Skip translate for unauthenticated users (avoids 401)
           fetch('/api/translate', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${data.session.access_token}`,
+              ...getCsrfHeaders(),
+            },
             body: JSON.stringify({ items: needsTranslation.slice(0, 20), targetLang }),
           })
             // eslint-disable-next-line no-restricted-syntax

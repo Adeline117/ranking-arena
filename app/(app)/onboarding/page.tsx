@@ -27,7 +27,8 @@ export default function OnboardingPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const returnUrl = searchParams.get('returnUrl')
-  const afterOnboarding = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/'
+  const afterOnboarding =
+    returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/'
   const { showToast } = useToast()
   const [language, setLang] = useState<Language>('zh')
   const [theme, setTheme] = useState<Theme>('dark')
@@ -59,15 +60,18 @@ export default function OnboardingPage() {
       router.replace('/')
       return
     }
-    supabase.auth.getUser().then(({ data }) => {
-      if (data.user) {
-        setUserId(data.user.id)
-      } else {
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        if (data.user) {
+          setUserId(data.user.id)
+        } else {
+          router.replace('/login?returnUrl=/onboarding')
+        }
+      })
+      .catch(() => {
         router.replace('/login?returnUrl=/onboarding')
-      }
-    }).catch(() => {
-      router.replace('/login?returnUrl=/onboarding')
-    })
+      })
   }, [router])
 
   const fetchTraders = useCallback(async () => {
@@ -76,8 +80,11 @@ export default function OnboardingPage() {
       const res = await fetch('/api/sidebar/top-traders')
       const data = await res.json()
       setTraders(data.traders || [])
-    } catch (err) { logger.error('Failed to fetch traders', err) }
-    finally { setLoadingTraders(false) }
+    } catch (err) {
+      logger.error('Failed to fetch traders', err)
+    } finally {
+      setLoadingTraders(false)
+    }
   }, [])
 
   const fetchGroups = useCallback(async () => {
@@ -87,11 +94,17 @@ export default function OnboardingPage() {
       const data = await res.json()
       const raw = data.data?.groups || data.data || data.groups || []
       setGroups(Array.isArray(raw) ? raw : [])
-    } catch (err) { logger.error('Failed to fetch groups', err) }
-    finally { setLoadingGroups(false) }
+    } catch (err) {
+      logger.error('Failed to fetch groups', err)
+    } finally {
+      setLoadingGroups(false)
+    }
   }, [])
 
-  const handleLanguageChange = (lang: Language) => { setLang(lang); setLanguage(lang) }
+  const handleLanguageChange = (lang: Language) => {
+    setLang(lang)
+    setLanguage(lang)
+  }
   const handleThemeChange = (newTheme: Theme) => {
     setTheme(newTheme)
     localStorage.setItem('theme', newTheme)
@@ -130,7 +143,9 @@ export default function OnboardingPage() {
   }, [step, saving]) // eslint-disable-line react-hooks/exhaustive-deps -- goToStep/saveAndComplete/router are stable
 
   const toggleInterest = (id: string) => {
-    setSelectedInterests(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id])
+    setSelectedInterests((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    )
   }
 
   // Batch follow/join: queue actions and flush in parallel after a debounce
@@ -139,30 +154,54 @@ export default function OnboardingPage() {
   const followFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const joinFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const flushFollowQueue = useCallback(() => {
+  const flushFollowQueue = useCallback(async () => {
     const queue = new Map(followQueueRef.current)
     followQueueRef.current.clear()
     if (queue.size === 0) return
-    const promises = Array.from(queue.entries()).map(([traderId, action]) =>
-      fetch('/api/follow', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-        body: JSON.stringify({ traderId, action }),
-      }).catch(() => { /* swallow individual failures; UI already updated optimistically */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+    // /api/follow is withAuth (Bearer header only) — calls 401'd without the token
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    const promises = Array.from(queue.entries()).map(
+      ([traderId, action]) =>
+        fetch('/api/follow', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ traderId, action }),
+        }).catch(() => {
+          /* swallow individual failures; UI already updated optimistically */
+        }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     )
     Promise.all(promises)
   }, [])
 
-  const flushJoinQueue = useCallback(() => {
+  const flushJoinQueue = useCallback(async () => {
     const queue = new Map(joinQueueRef.current)
     joinQueueRef.current.clear()
     if (queue.size === 0) return
-    const promises = Array.from(queue.entries()).map(([groupId, action]) =>
-      fetch('/api/groups/subscribe', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
-        body: JSON.stringify({ groupId, action }),
-      }).catch(() => { /* swallow individual failures; UI already updated optimistically */ }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+    // /api/groups/subscribe is withAuth (Bearer header only) — calls 401'd without the token
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.access_token) return
+    const promises = Array.from(queue.entries()).map(
+      ([groupId, action]) =>
+        fetch('/api/groups/subscribe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${session.access_token}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ groupId, action }),
+        }).catch(() => {
+          /* swallow individual failures; UI already updated optimistically */
+        }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
     )
     Promise.all(promises)
   }, [])
@@ -175,7 +214,8 @@ export default function OnboardingPage() {
     }
     const isFollowed = followedTraders.has(traderId)
     const next = new Set(followedTraders)
-    if (isFollowed) next.delete(traderId); else next.add(traderId)
+    if (isFollowed) next.delete(traderId)
+    else next.add(traderId)
     setFollowedTraders(next)
     // Queue the action and debounce the flush
     followQueueRef.current.set(traderId, isFollowed ? 'unfollow' : 'follow')
@@ -187,7 +227,8 @@ export default function OnboardingPage() {
     if (!userId) return
     const isJoined = joinedGroups.has(groupId)
     const next = new Set(joinedGroups)
-    if (isJoined) next.delete(groupId); else next.add(groupId)
+    if (isJoined) next.delete(groupId)
+    else next.add(groupId)
     setJoinedGroups(next)
     // Queue the action and debounce the flush
     joinQueueRef.current.set(groupId, isJoined ? 'leave' : 'join')
@@ -219,13 +260,32 @@ export default function OnboardingPage() {
     } catch (err) {
       logger.error('Error completing onboarding:', err)
       showToast(tr('saveFailed'), 'error')
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (!mounted) {
     return (
-      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ width: 40, height: 40, border: '3px solid var(--color-accent-primary-20)', borderTopColor: 'var(--color-brand)', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <div
+          style={{
+            width: 40,
+            height: 40,
+            border: '3px solid var(--color-accent-primary-20)',
+            borderTopColor: 'var(--color-brand)',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }}
+        />
       </Box>
     )
   }
@@ -249,50 +309,111 @@ export default function OnboardingPage() {
   const stepIndex = STEPS.indexOf(step)
 
   return (
-    <Box style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, position: 'relative', overflow: 'hidden' }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
       <div className={`onboarding-bg ${theme}`} />
 
-      <Box className="onboarding-card" style={{
-        maxWidth: 560, width: '100%', background: obTheme.cardBg, border: `1px solid ${obTheme.cardBorder}`,
-        borderRadius: 28, padding: 'clamp(24px, 5vw, 44px) clamp(20px, 4vw, 36px)', position: 'relative', zIndex: 1,
-        boxShadow: isDark
-          ? '0 25px 50px -12px var(--color-overlay-dark), 0 0 100px var(--color-notification-unread)'
-          : '0 25px 50px -12px var(--color-overlay-subtle), 0 0 100px var(--color-accent-primary-10)',
-      }}>
+      <Box
+        className="onboarding-card"
+        style={{
+          maxWidth: 560,
+          width: '100%',
+          background: obTheme.cardBg,
+          border: `1px solid ${obTheme.cardBorder}`,
+          borderRadius: 28,
+          padding: 'clamp(24px, 5vw, 44px) clamp(20px, 4vw, 36px)',
+          position: 'relative',
+          zIndex: 1,
+          boxShadow: isDark
+            ? '0 25px 50px -12px var(--color-overlay-dark), 0 0 100px var(--color-notification-unread)'
+            : '0 25px 50px -12px var(--color-overlay-subtle), 0 0 100px var(--color-accent-primary-10)',
+        }}
+      >
         {/* Progress bar - hidden on complete step */}
-        <Box style={{ display: step === 'complete' ? 'none' : 'flex', justifyContent: 'center', gap: 10, marginBottom: 36 }}>
+        <Box
+          style={{
+            display: step === 'complete' ? 'none' : 'flex',
+            justifyContent: 'center',
+            gap: 10,
+            marginBottom: 36,
+          }}
+        >
           {STEPS.map((s, i) => (
-            <Box key={s} className={`progress-dot ${stepIndex === i ? 'active' : ''}`} style={{
-              width: stepIndex === i ? 28 : 10, height: 10, borderRadius: 5,
-              background: i <= stepIndex
-                ? obTheme.brandGradient
-                : isDark ? 'var(--glass-border-light)' : 'var(--color-overlay-subtle)',
-              transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
-            }} />
+            <Box
+              key={s}
+              className={`progress-dot ${stepIndex === i ? 'active' : ''}`}
+              style={{
+                width: stepIndex === i ? 28 : 10,
+                height: 10,
+                borderRadius: 5,
+                background:
+                  i <= stepIndex
+                    ? obTheme.brandGradient
+                    : isDark
+                      ? 'var(--glass-border-light)'
+                      : 'var(--color-overlay-subtle)',
+                transition: 'all 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              }}
+            />
           ))}
         </Box>
 
         {step === 'welcome' && (
-          <WelcomeStep theme={obTheme} language={language} currentTheme={theme} tr={tr}
-            onLanguageChange={handleLanguageChange} onThemeChange={handleThemeChange}
-            onContinue={() => goToStep('interests')} />
+          <WelcomeStep
+            theme={obTheme}
+            language={language}
+            currentTheme={theme}
+            tr={tr}
+            onLanguageChange={handleLanguageChange}
+            onThemeChange={handleThemeChange}
+            onContinue={() => goToStep('interests')}
+          />
         )}
         {step === 'interests' && (
-          <InterestsStep theme={obTheme} selectedInterests={selectedInterests} tr={tr}
-            onToggleInterest={toggleInterest} onBack={() => goToStep('welcome')}
-            onContinue={() => goToStep('traders')} />
+          <InterestsStep
+            theme={obTheme}
+            selectedInterests={selectedInterests}
+            tr={tr}
+            onToggleInterest={toggleInterest}
+            onBack={() => goToStep('welcome')}
+            onContinue={() => goToStep('traders')}
+          />
         )}
         {step === 'traders' && (
-          <TradersStep theme={obTheme} language={language} traders={traders}
-            followedTraders={followedTraders} loadingTraders={loadingTraders} tr={tr}
-            onFollowTrader={handleFollowTrader} onBack={() => goToStep('interests')}
-            onContinue={() => goToStep('groups')} />
+          <TradersStep
+            theme={obTheme}
+            language={language}
+            traders={traders}
+            followedTraders={followedTraders}
+            loadingTraders={loadingTraders}
+            tr={tr}
+            onFollowTrader={handleFollowTrader}
+            onBack={() => goToStep('interests')}
+            onContinue={() => goToStep('groups')}
+          />
         )}
         {step === 'groups' && (
-          <GroupsStep theme={obTheme} language={language} groups={groups}
-            joinedGroups={joinedGroups} loadingGroups={loadingGroups} saving={saving} tr={tr}
-            onJoinGroup={handleJoinGroup} onBack={() => goToStep('traders')}
-            onComplete={saveAndComplete} />
+          <GroupsStep
+            theme={obTheme}
+            language={language}
+            groups={groups}
+            joinedGroups={joinedGroups}
+            loadingGroups={loadingGroups}
+            saving={saving}
+            tr={tr}
+            onJoinGroup={handleJoinGroup}
+            onBack={() => goToStep('traders')}
+            onComplete={saveAndComplete}
+          />
         )}
         {step === 'complete' && (
           <CompleteStep theme={obTheme} tr={tr} onGoRankings={() => router.push(afterOnboarding)} />
