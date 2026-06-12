@@ -253,6 +253,7 @@ export default function RankingSection({
           {onRetry && (
             <button
               onClick={onRetry}
+              className="tap-target"
               style={{
                 padding: '8px 20px',
                 borderRadius: 6,
@@ -283,8 +284,8 @@ export default function RankingSection({
           {hasActiveFilters && (
             <button
               onClick={handleResetFilters}
+              className="tap-target"
               style={{
-                display: 'block',
                 margin: '12px auto 0',
                 padding: '6px 16px',
                 borderRadius: 6,

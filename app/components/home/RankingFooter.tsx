@@ -107,17 +107,15 @@ export default function RankingFooter({
           {onRefresh && (
             <button
               onClick={onRefresh}
-              aria-label={t('refresh') || 'Refresh rankings'}
+              aria-label={t('refresh')}
+              className="tap-target"
               style={{
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
                 color: 'inherit',
-                padding: 8,
-                display: 'flex',
-                alignItems: 'center',
               }}
-              title={t('refresh') || 'Refresh'}
+              title={t('refresh')}
             >
               <svg
                 width={11}
