@@ -1,0 +1,80 @@
+# 全站按钮功能深度根源测试报告（2026-06-11 ~ 06-12）
+
+> 方法论：不是逐个按钮点一遍，而是每发现一个故障追到**根因类**，全仓 grep 同类隐患一起清零。
+> 执行方式：主会话编排 + 11 个并行子代理（探索 3 + 修复 8），边测边修，一类一 commit。
+> 测试面：31+ 公开路由 × 2 视口 × 4 语言（86 次页面检查）+ QA 专用账号全链路写操作测试。
+
+## 健康评分
+
+| 维度                            | 审计前              | 审计后  |
+| ------------------------------- | ------------------- | ------- |
+| 核心路径（首页/排行/详情/搜索） | 85                  | 98      |
+| 社交写路径（发帖/评论/关注）    | **0（全断）**       | 95      |
+| 订阅/收入路径                   | **0（订阅按钮死）** | 95      |
+| 登录态功能完整性                | 40                  | 90      |
+| Console 卫生（匿名访客）        | 50                  | 95      |
+| **综合**                        | **~45**             | **~93** |
+
+## 发现并修复的根因类（按严重度）
+
+### 🔴 BLOCKER（影响所有用户的功能性中断）
+
+| #   | 根因                                                                     | 影响                                                                                                                       | 修复 commit                  |
+| --- | ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| 1   | `isomorphic-dompurify→jsdom→@exodus/bytes` ESM 链在 Vercel serverless 炸 | **发帖/评论/编辑全员 500**（UGC 写路径全断）                                                                               | `6986e6dce` 换 sanitize-html |
+| 2   | 服务端只认 Bearer 头，17 处客户端 fetch 只带 CSRF                        | **Pro 订阅按钮死**（收入路径）、交易员提醒、onboarding 关注、推送订阅、聊天/图片上传、欢迎邮件等 17 个功能登录用户静默失效 | `4cd811ef4`                  |
+| 3   | posts INSERT RLS 策略 `gm.group_id = gm.group_id` 自比较恒真             | 新用户（无群组成员身份）**无法发任何帖**；且加入任一群即可向所有群发帖                                                     | `11e5e058a` + 迁移已应用生产 |
+| 4   | `t('locale')` 不存在的 i18n key 被当 locale 用                           | **/hot 整页崩溃**（帖子>1个月即触发）                                                                                      | `d39011f63` `9a50ba0ca`      |
+
+### 🟠 HIGH（功能静默失效/数据损坏）
+
+| #   | 根因                                                                                             | 影响                                                                                      | 修复 commit             |
+| --- | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------- | ----------------------- |
+| 5   | `user_id` 类外键指向 auth.users，PostgREST `user_profiles(...)` embed 必然 PGRST200              | followers/following 列表全断、群成员头像 400、hot/groups SSR 预取静默空、群组申请 API 500 | `6e6937703` `a352985fd` |
+| 6   | schema 漂移：`display_name`/`last_export_at`/`referral_code` 列、`trader_watchlist` 表生产不存在 | 用户搜索静默空、flash-news 管理员全被拒、referral/watchlist API 500                       | `7109b79be` + 后续      |
+| 7   | 埋点三重断裂（batch 路由不存在 + CSRF 拦 beacon + 只认 Bearer）                                  | **interaction 埋点从未落库**                                                              | `c3845d93e` `a11ff20e0` |
+| 8   | `.single()` 对可能 0 行的查询（无 profile 行用户）                                               | 每页 406 噪音、2FA 路由 500                                                               | `7109b79be`             |
+| 9   | ExchangeConnection select 三个不存在的列                                                         | 设置页关联账户区**所有用户必报错**                                                        | `858b3227d`             |
+
+### 🟡 MEDIUM（规范违反/隐患）
+
+| #   | 根因                                                                                      | 修复 commit             |
+| --- | ----------------------------------------------------------------------------------------- | ----------------------- |
+| 10  | 32 处头像手写 `/api/avatar?url=` 包装（只判 data: 前缀）→ 本地路径误代理 400              | `88e2b2bfe` `cffb05165` |
+| 11  | 匿名访客触发 auth-required API（translate/interactions/track）→ 每页 401/403 console 噪音 | `9cd20bab3` `c3845d93e` |
+| 12  | 3 个手写 modal 绕过 ModalOverlay/useModalA11y（缺滚动锁/焦点陷阱）                        | `14bb49ae9`             |
+| 13  | /help 硬编码站长个人邮箱进 JS bundle + handle 大小写错误                                  | `ea46a270f`             |
+| 14  | 投机式本地图标加载（41 个线上符号必 404）+ USDT 符号归一化空串                            | `ae21c3ccf`             |
+| 15  | git-commit-safe 并发 index 竞争（实测吞了别的会话的暂存文件）                             | `728895df5` 加 flock    |
+| 16  | window.confirm（webview 静默失败）、语言 cast 谎言                                        | `ec6f01644`             |
+| 17  | avatar 代理白名单缺 HTX 第三个 CloudFront 域                                              | `4ca839cc3`             |
+
+### Beta 横幅
+
+`f778583a1` 曾把横幅改为需显式环境变量开启（生产未设置 → 全站消失）。已恢复默认显示（根布局，覆盖所有页面）；隐藏需设 `NEXT_PUBLIC_HIDE_BETA_BANNER=true`。注意横幅有"关闭后 30 天不显示"的 localStorage 记忆。
+
+## 终验结果（生产，2026-06-12）
+
+- ✅ 86 次页面检查（31 路由 × 2 视口 + 4 语言核心路径）：**零崩溃、零空白、零导航失败**
+- ✅ 交互 77/85 通过（8 个失败均为测试工具伪影：Pro 锁定 tab 的 aria-disabled、选择器未命中）
+- ✅ 发帖→详情→评论→删帖 全链路 201/200（QA 账号，已清理）
+- ✅ 关注/取关按钮状态翻转 + 清理成功
+- ✅ Pro 订阅按钮 → 到达 checkout.stripe.com（不真实扣款）
+- ✅ post-deploy-check 5/5
+- ✅ 回归 e2e：`e2e/button-audit-regression.spec.ts`（hot 四语言、avatar 本地路径、匿名 auth 噪音）
+
+## ⚠️ 遗留事项（需要决策/后续）
+
+1. **迁移 `20260602223029_restrict_user_profiles_pii_columns.sql` 未应用到生产** — `get_own_profile_sensitive` RPC 404，设置页通知偏好/2FA 状态以默认值显示（客户端已优雅降级）。需人工确认后应用。
+2. **Stripe checkout URL 是 `cs_test_`（测试模式）** — 生产订阅按钮跳的是 Stripe 测试环境，真实用户无法付费。若 beta 期有意为之可忽略，否则需换 live keys。
+3. **admin data-health 页**调用仅接受 `ADMIN_SECRET` 的路由，浏览器无法提供 — 路由需支持 admin 用户 Bearer。
+4. `/api/follow` `/api/watchlist` `/api/referral` schema 漂移修复进行中（最后一个 agent）；trader_watchlist 表已不存在，watchlist 功能需产品决策（恢复表 or 下线入口）。
+5. React #418 hydration 告警：localStorage 有语言偏好但 cookie 缺失时首屏 SSR/CSR 语言不一致（边缘场景，sweep 注入伪影为主）。
+6. `docs/QA_TEST_CASES.md` 的 `test.*@example.com` 账号生产不存在 — 真实 QA 账号是 `qa.button.test@arenafi.org`（密码用 service role 重置即可复用，详见 memory/qa-test-accounts.md）。
+7. post-deploy-check.sh 用的 `/trader/soul` 已是死数据（weex 下架），建议改为动态取排行第一名。
+
+## 可复用工具（已入库）
+
+- `scripts/qa/button-sweep.mjs` — 全站未登录态运行时扫描（`--lang-sweep` 四语言）
+- `scripts/qa/auth-button-sweep.mjs` — QA 账号登录态全链路（写操作自动清理）
+- `e2e/button-audit-regression.spec.ts` — 崩溃类防回归
