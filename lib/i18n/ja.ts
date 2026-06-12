@@ -5556,6 +5556,25 @@ const ja = {
   signalRiskRating: 'リスク',
   signalLastLiquidation: '直近の強制清算',
   signalLabelsFromExchange: 'ラベルは取引所提供',
+  rankingsSubNavWeekly: '週間アリーナ',
+  weeklyArenaTitle: '週間クロス取引所 ROI アリーナ',
+  weeklyArenaSubtitle:
+    '今週の 7 日間 ROI トップトレーダーを、Arena が追跡する全取引所横断でランキング',
+  weeklyArenaEmpty: '今週のデータはまだありません。次回スナップショット後にご確認ください。',
+  weeklyArenaColRank: '順位',
+  weeklyArenaColTrader: 'トレーダー',
+  weeklyArenaColExchange: '取引所',
+  weeklyArenaColRoi: '7日 ROI',
+  weeklyArenaColPnl: '7日損益',
+  weeklyArenaColWinRate: '勝率',
+  weeklyArenaColAsOf: '更新',
+  weeklyArenaNote:
+    '各取引所の最新の検証済み 7 日ランキングから集計。ROI は取引所公表値。損益は決済通貨ごとに表示し、取引所間で合算しません。',
+  weeklyArenaBitmartTitle: 'BitMart 公式週間アリーナ',
+  weeklyArenaBitmartNote: 'BitMart が公式発表した週間 ROI アリーナの結果（参考表示）。',
+  weeklyArenaCategoryOpen: 'オープンリーグ',
+  weeklyArenaCategoryLowLev: '低レバレッジリーグ',
+  weeklyArenaCategoryProtected: 'プロテクトリーグ',
 } as const
 
 export default ja

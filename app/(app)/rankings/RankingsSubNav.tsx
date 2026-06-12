@@ -10,6 +10,7 @@ const TAB_KEYS = [
   { href: '/rankings/tokens', key: 'rankingsSubNavTokens' as const },
   { href: '/rankings/bots', key: 'rankingsSubNavBots' as const },
   { href: '/rankings/exchanges', key: 'rankingsSubNavExchanges' as const },
+  { href: '/rankings/weekly', key: 'rankingsSubNavWeekly' as const },
 ]
 
 export default function RankingsSubNav() {
@@ -33,7 +34,8 @@ export default function RankingsSubNav() {
               (pathname.startsWith('/rankings/') &&
                 !pathname.startsWith('/rankings/tokens') &&
                 !pathname.startsWith('/rankings/bots') &&
-                !pathname.startsWith('/rankings/exchanges'))
+                !pathname.startsWith('/rankings/exchanges') &&
+                !pathname.startsWith('/rankings/weekly'))
             : pathname.startsWith(tab.href)
         return (
           <Link

@@ -5790,6 +5790,24 @@ const ko = {
   signalRiskRating: '리스크',
   signalLastLiquidation: '최근 강제 청산',
   signalLabelsFromExchange: '거래소 제공 라벨',
+  rankingsSubNavWeekly: '주간 아레나',
+  weeklyArenaTitle: '주간 크로스 거래소 ROI 아레나',
+  weeklyArenaSubtitle: '이번 주 7일 ROI 상위 트레이더를 Arena가 추적하는 모든 거래소에 걸쳐 랭킹',
+  weeklyArenaEmpty: '이번 주 데이터가 아직 없습니다. 다음 스냅샷 이후 다시 확인하세요.',
+  weeklyArenaColRank: '순위',
+  weeklyArenaColTrader: '트레이더',
+  weeklyArenaColExchange: '거래소',
+  weeklyArenaColRoi: '7일 ROI',
+  weeklyArenaColPnl: '7일 손익',
+  weeklyArenaColWinRate: '승률',
+  weeklyArenaColAsOf: '업데이트',
+  weeklyArenaNote:
+    '각 거래소의 최신 검증된 7일 리더보드에서 집계합니다. ROI는 거래소 공시 기준이며, 손익은 결제 통화별로 표시되고 거래소 간 합산하지 않습니다.',
+  weeklyArenaBitmartTitle: 'BitMart 공식 주간 아레나',
+  weeklyArenaBitmartNote: 'BitMart가 공식 발표한 주간 ROI 아레나 결과 — 참고용입니다.',
+  weeklyArenaCategoryOpen: '오픈 리그',
+  weeklyArenaCategoryLowLev: '저레버리지 리그',
+  weeklyArenaCategoryProtected: '보호 리그',
 } as const
 
 export default ko

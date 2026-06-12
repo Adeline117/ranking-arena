@@ -249,6 +249,12 @@ export default async function sitemap({
         changeFrequency: 'daily',
         priority: 0.8,
       },
+      {
+        url: `${BASE_URL}/rankings/weekly`,
+        lastModified: now,
+        changeFrequency: 'daily',
+        priority: 0.8,
+      },
       { url: `${BASE_URL}/pricing`, lastModified: now, changeFrequency: 'monthly', priority: 0.7 },
       {
         url: `${BASE_URL}/methodology`,
