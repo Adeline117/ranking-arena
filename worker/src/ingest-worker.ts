@@ -105,16 +105,23 @@ async function main(): Promise<void> {
   // Dedicated Tier-C worker: user-facing on-demand fetches get their own
   // slots so they never queue behind hours-long Tier-A/B bulk crawls
   // (the API route's polling window is 8s).
-  const tiercWorker = new Worker(TIERC_QUEUE_NAME, route, {
-    connection: ingestConnection(),
-    concurrency: 2,
-  })
-  tiercWorker.on('completed', (job) => {
-    console.log(`[ingest-worker] ✓ tierc ${job.id}`)
-  })
-  tiercWorker.on('failed', (job, err) => {
-    console.error(`[ingest-worker] ✗ tierc ${job?.id}:`, err.message)
-  })
+  // ONLY on the primary node (consumes 'local'): a region-pinned satellite
+  // (e.g. SG VPS, INGEST_REGIONS=vps_sg) must not steal Tier-C jobs for
+  // local-region sources — it would run them from the wrong egress IP and
+  // lacks the branded-chrome channel some sources need (bybit).
+  let tiercWorker: Worker | null = null
+  if (regions.includes('local')) {
+    tiercWorker = new Worker(TIERC_QUEUE_NAME, route, {
+      connection: ingestConnection(),
+      concurrency: 2,
+    })
+    tiercWorker.on('completed', (job) => {
+      console.log(`[ingest-worker] ✓ tierc ${job.id}`)
+    })
+    tiercWorker.on('failed', (job, err) => {
+      console.error(`[ingest-worker] ✗ tierc ${job?.id}:`, err.message)
+    })
+  }
 
   await reconcileSchedulers()
   // Re-reconcile hourly: sources rows are the live config (spec §2.1).
@@ -130,7 +137,7 @@ async function main(): Promise<void> {
     console.log(`[ingest-worker] ${signal} — shutting down…`)
     clearInterval(reconcileTimer)
     await Promise.all(workers.map((w) => w.close()))
-    await tiercWorker.close()
+    await tiercWorker?.close()
     const { closeIngestPool } = await import('@/lib/ingest/db')
     await closeIngestPool()
     await closeConnection()
