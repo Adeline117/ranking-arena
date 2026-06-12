@@ -171,6 +171,7 @@ export async function GET(request: NextRequest) {
       'bingx.com',
       // CoinEx
       'coinex.com',
+      'coinexstatic.com', // file.coinexstatic.com — CoinEx avatar CDN
       // LBank
       'lbkrs.com',
       'lbank.com',
@@ -213,6 +214,20 @@ export async function GET(request: NextRequest) {
       'hyperliquid.xyz',
       // Jupiter
       'jup.ag',
+      // Gate.io / Gate CFD avatar CDNs (enumerated from arena.* serving rows,
+      // 2026-06-11) — gavatar.staticimgs.com + img.gatenft.io serve gate avatars.
+      'staticimgs.com',
+      'gatenft.io',
+      // OKX legacy avatar CDN (static.coinall.ltd)
+      'coinall.ltd',
+      // Long-tail serving-source avatar CDNs (enumerated from arena.traders,
+      // 2026-06-11). Each backs ≥1 active serving source's trader avatars.
+      'snidefender.com', // api-img.snidefender.com
+      'p2primeglobal.com', // public.p2primeglobal.com
+      'hotfullmoon.com', // nft.hotfullmoon.com
+      'saasexch.com', // public.saasexch.com
+      'cbearq.cn', // public.s.cbearq.cn
+      'dm1mubcttd115.cloudfront.net', // pinned exact subdomain (avoid open proxy)
       // Our CDN
       'arenafi.org',
       // GitHub
