@@ -15,6 +15,7 @@ import PostFeed from '@/app/components/post/PostFeed'
 import { Box, Text } from '@/app/components/base'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 type Group = {
   id: string
@@ -284,11 +285,7 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
                       >
                         {g.avatar_url ? (
                           <Image
-                            src={
-                              g.avatar_url.startsWith('data:')
-                                ? g.avatar_url
-                                : `/api/avatar?url=${encodeURIComponent(g.avatar_url)}`
-                            }
+                            src={avatarSrc(g.avatar_url)}
                             alt={displayName}
                             width={40}
                             height={40}

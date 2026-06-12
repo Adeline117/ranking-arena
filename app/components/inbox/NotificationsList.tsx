@@ -14,6 +14,7 @@ import { type NotificationWithActor } from '@/lib/types'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 type Notification = NotificationWithActor
 
@@ -408,11 +409,7 @@ export default function NotificationsList() {
                     >
                       {notif.actor_avatar_url ? (
                         <Image
-                          src={
-                            notif.actor_avatar_url.startsWith('data:')
-                              ? notif.actor_avatar_url
-                              : `/api/avatar?url=${encodeURIComponent(notif.actor_avatar_url)}`
-                          }
+                          src={avatarSrc(notif.actor_avatar_url)}
                           alt={`${notif.actor_handle || 'User'} avatar`}
                           width={32}
                           height={32}

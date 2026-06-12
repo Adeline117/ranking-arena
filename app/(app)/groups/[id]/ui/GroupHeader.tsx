@@ -5,6 +5,7 @@ import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 type Group = {
   id: string
@@ -102,11 +103,7 @@ export default function GroupHeader({
           </Text>
           {group.avatar_url && (
             <img
-              src={
-                group.avatar_url.startsWith('data:')
-                  ? group.avatar_url
-                  : `/api/avatar?url=${encodeURIComponent(group.avatar_url)}`
-              }
+              src={avatarSrc(group.avatar_url)}
               alt={group.name}
               width={72}
               height={72}
@@ -224,11 +221,7 @@ export default function GroupHeader({
                           >
                             {m.avatar_url ? (
                               <img
-                                src={
-                                  m.avatar_url.startsWith('data:')
-                                    ? m.avatar_url
-                                    : `/api/avatar?url=${encodeURIComponent(m.avatar_url)}`
-                                }
+                                src={avatarSrc(m.avatar_url)}
                                 alt={m.handle || 'Member'}
                                 width={20}
                                 height={20}

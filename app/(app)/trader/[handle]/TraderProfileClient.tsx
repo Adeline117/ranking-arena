@@ -26,7 +26,8 @@ import { type ExtendedPerformance } from '@/app/components/trader/OverviewPerfor
 // MarketCorrelationCard removed -- beta_btc/beta_eth/alpha never computed by pipeline (P0-5)
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
-import { getAvatarGradient, isDirectAvatarSrc } from '@/lib/utils/avatar'
+import { getAvatarGradient } from '@/lib/utils/avatar'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 // JSON-LD structured data is emitted by the server component (page.tsx).
 // Do NOT emit it here — that causes duplicate ProfilePage + BreadcrumbList.
 import { RankSparkline } from '@/app/components/ranking/RankSparkline'
@@ -486,11 +487,7 @@ export default function TraderProfileClient({
           >
             {data.avatar_url ? (
               <Image
-                src={
-                  isDirectAvatarSrc(data.avatar_url)
-                    ? data.avatar_url
-                    : `/api/avatar?url=${encodeURIComponent(data.avatar_url)}`
-                }
+                src={avatarSrc(data.avatar_url)}
                 alt={displayName}
                 width={28}
                 height={28}

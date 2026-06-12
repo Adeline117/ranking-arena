@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '@/app/components/base'
 import { SearchResult } from './types'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) => void }) {
   const { t } = useLanguage()
@@ -37,10 +38,12 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
   }, [query, search])
 
   return (
-    <Box style={{
-      maxWidth: '600px',
-      margin: `0 auto ${tokens.spacing[8]}`,
-    }}>
+    <Box
+      style={{
+        maxWidth: '600px',
+        margin: `0 auto ${tokens.spacing[8]}`,
+      }}
+    >
       <input
         type="text"
         value={query}
@@ -65,13 +68,15 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
       )}
 
       {results.length > 0 && (
-        <Box style={{
-          marginTop: tokens.spacing[2],
-          border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.lg,
-          overflow: 'hidden',
-          backgroundColor: tokens.colors.bg.secondary,
-        }}>
+        <Box
+          style={{
+            marginTop: tokens.spacing[2],
+            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.lg,
+            overflow: 'hidden',
+            backgroundColor: tokens.colors.bg.secondary,
+          }}
+        >
           {results.map((r, i) => (
             <button
               key={`${r.source}-${r.source_trader_id}-${i}`}
@@ -83,7 +88,8 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
                 gap: tokens.spacing[3],
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                 border: 'none',
-                borderBottom: i < results.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+                borderBottom:
+                  i < results.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
                 backgroundColor: 'transparent',
                 color: tokens.colors.text.primary,
                 cursor: 'pointer',
@@ -92,14 +98,19 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
             >
               {r.avatar_url && (
                 <img
-                  src={r.avatar_url.startsWith('data:') ? r.avatar_url : '/api/avatar?url=' + encodeURIComponent(r.avatar_url)}
+                  src={avatarSrc(r.avatar_url)}
                   alt={r.handle || 'Trader'}
                   style={{ width: 32, height: 32, borderRadius: '50%' }}
                 />
               )}
               <Box style={{ flex: 1 }}>
                 <Text style={{ fontWeight: 600 }}>{r.handle}</Text>
-                <Text style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
+                <Text
+                  style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: tokens.colors.text.tertiary,
+                  }}
+                >
                   {r.source}
                   {r.arena_score ? ` | Score: ${r.arena_score.toFixed(1)}` : ''}
                 </Text>

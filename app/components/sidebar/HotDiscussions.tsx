@@ -14,6 +14,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { useDeferredKey } from '@/lib/hooks/useDeferredKey'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 type HotPost = {
   id: string
@@ -385,11 +386,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                 >
                   {post.author_avatar_url ? (
                     <Image
-                      src={
-                        post.author_avatar_url.startsWith('data:')
-                          ? post.author_avatar_url
-                          : `/api/avatar?url=${encodeURIComponent(post.author_avatar_url)}`
-                      }
+                      src={avatarSrc(post.author_avatar_url)}
                       alt={post.author_handle || 'User avatar'}
                       width={18}
                       height={18}

@@ -16,6 +16,7 @@ import { ACTIVITY_META } from '@/lib/types/activities'
 import { tokens } from '@/lib/design-tokens'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 const logger = createLogger('feed-detail')
 
@@ -186,11 +187,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
           >
             {activity.avatar_url ? (
               <Image
-                src={
-                  activity.avatar_url.startsWith('data:')
-                    ? activity.avatar_url
-                    : `/api/avatar?url=${encodeURIComponent(activity.avatar_url)}`
-                }
+                src={avatarSrc(activity.avatar_url)}
                 alt={activity.handle ?? 'Trader'}
                 width={48}
                 height={48}

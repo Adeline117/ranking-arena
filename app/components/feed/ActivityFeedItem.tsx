@@ -16,6 +16,7 @@ import { tokens } from '@/lib/design-tokens'
 import { ACTIVITY_META } from '@/lib/types/activities'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import ActivityIcon from './ActivityIcon'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -116,11 +117,7 @@ export default function ActivityFeedItem({
       <div style={{ flexShrink: 0 }}>
         {activity.avatar_url ? (
           <Image
-            src={
-              activity.avatar_url.startsWith('data:')
-                ? activity.avatar_url
-                : `/api/avatar?url=${encodeURIComponent(activity.avatar_url)}`
-            }
+            src={avatarSrc(activity.avatar_url)}
             alt={activity.handle ?? 'Trader'}
             width={32}
             height={32}

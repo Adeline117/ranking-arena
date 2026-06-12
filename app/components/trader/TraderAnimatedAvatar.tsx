@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 export interface TraderAnimatedAvatarProps {
   avatarUrl?: string
@@ -66,11 +67,7 @@ export function TraderAnimatedAvatar({
       {/* Avatar image */}
       {avatarUrl && !imageError && (
         <Image
-          src={
-            avatarUrl.startsWith('/') || avatarUrl.startsWith('data:')
-              ? avatarUrl
-              : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
-          }
+          src={avatarSrc(avatarUrl)}
           alt={handle}
           fill
           sizes="64px"

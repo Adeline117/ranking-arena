@@ -30,6 +30,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
 import { trackEvent } from '@/lib/analytics/track'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 interface Group {
   id: string
@@ -963,11 +964,7 @@ function RelatedGroupsSidebar({
                 </Text>
                 {relGroup.avatar_url && (
                   <img
-                    src={
-                      relGroup.avatar_url.startsWith('data:')
-                        ? relGroup.avatar_url
-                        : `/api/avatar?url=${encodeURIComponent(relGroup.avatar_url)}`
-                    }
+                    src={avatarSrc(relGroup.avatar_url)}
                     alt={relGroup.name}
                     width={40}
                     height={40}

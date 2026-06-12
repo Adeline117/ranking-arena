@@ -14,6 +14,7 @@ import {
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import type { TraderProfile } from '@/lib/data/trader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 // Extended type for similar traders with performance metrics
 interface SimilarTraderWithMetrics extends TraderProfile {
@@ -70,11 +71,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
     >
       {avatarUrl && !imageError && (
         <Image
-          src={
-            avatarUrl.startsWith('/') || avatarUrl.startsWith('data:')
-              ? avatarUrl
-              : `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
-          }
+          src={avatarSrc(avatarUrl)}
           alt={handle}
           fill
           sizes="40px"

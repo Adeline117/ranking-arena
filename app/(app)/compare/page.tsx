@@ -22,6 +22,7 @@ import ExportButton from '@/app/components/common/ExportButton'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
+import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 interface TraderCompareData {
   id: string
@@ -430,11 +431,7 @@ function CompareContent() {
                     >
                       {ft.avatar_url ? (
                         <img
-                          src={
-                            ft.avatar_url.startsWith('data:')
-                              ? ft.avatar_url
-                              : '/api/avatar?url=' + encodeURIComponent(ft.avatar_url)
-                          }
+                          src={avatarSrc(ft.avatar_url)}
                           alt={ft.handle || 'Trader avatar'}
                           width={32}
                           height={32}
