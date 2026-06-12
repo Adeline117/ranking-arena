@@ -13,6 +13,7 @@ import AnomalyMetrics from './components/AnomalyMetrics'
 import SystemMetrics from './components/SystemMetrics'
 import MetricsTrends from './components/MetricsTrends'
 import EnrichmentCompleteness from './components/EnrichmentCompleteness'
+import ArenaPipelinePanel from './components/ArenaPipelinePanel'
 
 interface SchedulerData {
   enabled: boolean
@@ -240,6 +241,9 @@ export default function MonitoringPage() {
               <HealthScoreCard health={data.health} timestamp={data.timestamp} />
               <AlertsPanel alerts={data.alerts} />
             </Box>
+
+            {/* Arena Ingest Pipeline (new pipeline, per-source gate health) */}
+            <ArenaPipelinePanel accessToken={accessToken!} />
 
             {/* Scheduler Metrics */}
             <SchedulerMetrics data={data.scheduler} />
