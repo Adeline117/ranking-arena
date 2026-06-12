@@ -7,6 +7,7 @@ import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { hasLocalSession } from '@/lib/tracking'
 
 /** Referral config per exchange */
 const REFERRAL_LINKS: Record<string, { url: string; code: string; color: string }> = {
@@ -127,7 +128,10 @@ export default function ExchangeLinksBar({
                 cursor: 'pointer',
               }}
               onClick={() => {
-                // #33: Fire-and-forget click tracking for exchange link analytics
+                // #33: Fire-and-forget click tracking for exchange link analytics.
+                // Endpoint requires auth — skip silently for anonymous visitors
+                // (this is passive analytics, not a login-prompting action).
+                if (!hasLocalSession()) return
                 fetch('/api/interactions', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },

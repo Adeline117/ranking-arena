@@ -20,6 +20,26 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null
 const FLUSH_INTERVAL = 5000 // Batch flush every 5s (PostHog pattern)
 const MAX_QUEUE_SIZE = 20
 
+// Matches `storageKey` in lib/supabase/client.ts — Supabase persists the session here.
+// Cheap synchronous login signal: lets us skip auth-required tracking endpoints for
+// anonymous visitors (avoids 401/403 console noise) without importing the Supabase client.
+const AUTH_STORAGE_KEY = 'arena-auth'
+
+/**
+ * Synchronous best-effort login check (reads the persisted Supabase session key).
+ * Use to gate fire-and-forget tracking calls to auth-required endpoints so
+ * anonymous visitors don't generate 401/403 console errors. NOT a security
+ * boundary — the server still validates the real token.
+ */
+export function hasLocalSession(): boolean {
+  if (typeof window === 'undefined') return false
+  try {
+    return !!window.localStorage.getItem(AUTH_STORAGE_KEY)
+  } catch {
+    return false // localStorage blocked (private mode) — treat as anonymous
+  }
+}
+
 function dedupKey(event: InteractionEvent): string {
   return `${event.action}:${event.target_type}:${event.target_id}`
 }
@@ -27,6 +47,10 @@ function dedupKey(event: InteractionEvent): string {
 function flushQueue(): void {
   if (eventQueue.length === 0) return
   const batch = eventQueue.splice(0, eventQueue.length)
+
+  // /api/interactions[/batch] requires auth — drop silently for anonymous
+  // visitors instead of firing a request that 401/403s in the console.
+  if (!hasLocalSession()) return
   const body = JSON.stringify({ events: batch })
 
   // Use sendBeacon for reliability (survives page close)
