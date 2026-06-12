@@ -2265,6 +2265,35 @@ a.ranking-filter-btn:active {
 }
 
 /* ============================================================
+   Shared hover utilities — replace per-component onMouseEnter/
+   onMouseLeave JS style mutation (see docs/LINTING_GUIDE.md).
+   Theme-aware via CSS vars; no-op on touch devices.
+   ============================================================ */
+.hover-bg {
+  transition: background 0.15s ease;
+}
+.hover-raise {
+  transition:
+    box-shadow 0.15s ease,
+    transform 0.15s ease;
+}
+.hover-accent-border {
+  transition: border-color 0.15s ease;
+}
+@media (hover: hover) {
+  .hover-bg:hover {
+    background: var(--color-bg-hover);
+  }
+  .hover-raise:hover {
+    box-shadow: var(--shadow-card-hover);
+    transform: translateY(-1px);
+  }
+  .hover-accent-border:hover {
+    border-color: var(--color-accent-primary);
+  }
+}
+
+/* ============================================================
    Global Input Focus Styles
    ============================================================ */
 
