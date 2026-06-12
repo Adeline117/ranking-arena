@@ -63,9 +63,11 @@ export interface TierCJobData {
   surface: 'profile' | 'positions' | 'position_history' | 'orders' | 'transfers' | 'copiers'
 }
 
-/** Deterministic jobId = coalescing key (single-flight, spec §2.4). */
+/** Deterministic jobId = coalescing key (single-flight, spec §2.4).
+ *  BullMQ rejects custom ids containing ':' — '--' is the separator.
+ *  Must stay in sync with lib/data/serving/tier-c.ts (Vercel-side copy). */
 export function tierCJobId(d: TierCJobData): string {
-  return `tierc:${d.sourceSlug}:${d.exchangeTraderId}:${d.timeframe}:${d.surface}`
+  return ['tierc', d.sourceSlug, d.exchangeTraderId, d.timeframe, d.surface].join('--')
 }
 
 /** Redis key the worker publishes Tier-C results to (render-before-persist). */
