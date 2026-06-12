@@ -15,7 +15,7 @@
  *      the newly selected timeframe.
  */
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -23,6 +23,7 @@ import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import { useTraderRecords, useCopierAggregate } from '@/lib/hooks/useTraderRecords'
 import { PeriodSelector, type Period } from '@/app/components/trader/performance/PeriodSelector'
 import MetricGrid from './MetricGrid'
+import SignalChips from './SignalChips'
 import CoreCharts from './CoreCharts'
 import ModuleDegraded from './ModuleDegraded'
 import RecordsTable, { type RecordColumn } from './RecordsTable'
@@ -174,6 +175,22 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
 
   const core = useTraderCore({ source, exchangeTraderId, tf })
 
+  // 独家信号 (spec §12.2/§12.3): numeric extras the registry knows (nav —
+  // BitMart/Gate net asset value) are promoted into the stats grid; the
+  // qualitative ones (style labels, risk rating, last liquidation) render
+  // as SignalChips. Both NULL-collapse when the source has no signal.
+  const gridStats = useMemo<Record<string, number | string | null>>(() => {
+    if (!core.modules) return {}
+    const merged = { ...core.modules.stats }
+    for (const key of ['nav', 'risk_rating'] as const) {
+      if (merged[key] !== undefined) continue
+      const raw = core.modules.extras[key]
+      const n = typeof raw === 'string' ? Number(raw) : raw
+      if (typeof n === 'number' && Number.isFinite(n)) merged[key] = n
+    }
+    return merged
+  }, [core.modules])
+
   // Record sub-tabs: capability-driven; only opened tabs ever fetch.
   const kinds: RecordKind[] = capability
     ? (Object.keys(KIND_TAB_I18N) as RecordKind[]).filter((k) => capability.surfaces[k])
@@ -216,9 +233,16 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
               {t('moduleDataPending')}
             </Text>
           )}
+          <SignalChips source={source} extras={core.modules.extras} />
           <MetricGrid
-            stats={core.modules.stats}
-            capabilityMetrics={capability?.metrics ?? Object.keys(core.modules.stats)}
+            stats={gridStats}
+            capabilityMetrics={[
+              ...(capability?.metrics ?? Object.keys(core.modules.stats)),
+              // Extras-sourced metrics aren't in the capability RPC's
+              // trader_stats column scan — allow them when present.
+              'nav',
+              'risk_rating',
+            ]}
             currency={core.modules.currency}
           />
           <CoreCharts series={core.modules.series} timeframe={tf} />

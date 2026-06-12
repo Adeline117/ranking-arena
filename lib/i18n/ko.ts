@@ -5786,6 +5786,10 @@ const ko = {
   botStrategyGrid: '그리드',
   botStrategyAi: 'AI',
   currencyMixedNote: '서로 다른 결제 통화는 집계할 수 없습니다.',
+  signalStyleLabels: '거래 스타일 시그널',
+  signalRiskRating: '리스크',
+  signalLastLiquidation: '최근 강제 청산',
+  signalLabelsFromExchange: '거래소 제공 라벨',
 } as const
 
 export default ko

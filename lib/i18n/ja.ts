@@ -5552,6 +5552,10 @@ const ja = {
   botStrategyGrid: 'グリッド',
   botStrategyAi: 'AI',
   currencyMixedNote: '異なる決済通貨間では集計できません。',
+  signalStyleLabels: '取引スタイルシグナル',
+  signalRiskRating: 'リスク',
+  signalLastLiquidation: '直近の強制清算',
+  signalLabelsFromExchange: 'ラベルは取引所提供',
 } as const
 
 export default ja

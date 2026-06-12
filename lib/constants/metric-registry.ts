@@ -64,7 +64,8 @@ export const METRIC_REGISTRY: readonly MetricDef[] = [
     tier: 'advanced',
     inverted: true,
   },
-  { key: 'nav', i18nKey: 'metricNav', format: 'money', tier: 'advanced' },
+  // NAV is a unit net value (BitMart "Latest NAV" starts at 1.0), not money.
+  { key: 'nav', i18nKey: 'metricNav', format: 'ratio', tier: 'advanced' },
 ] as const
 
 /** Metrics displayable for one trader: capability ∩ non-NULL values. */
