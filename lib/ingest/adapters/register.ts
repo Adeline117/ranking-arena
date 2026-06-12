@@ -31,4 +31,7 @@ import './bingx'
 // Phase 2 — long-tail batch 3 (wave 2)
 import './btcc'
 
+// Phase 2 — wave 2 on-chain (pure HTTP / JSON APIs)
+import './gmx'
+
 export {}
