@@ -248,7 +248,49 @@ class PlaywrightFetchSession implements FetchSession {
     }
   }
 
+  /** Connection-loss signatures from a dead remote browser / SSH-tunnel blip. */
+  private static isConnectionLoss(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err)
+    return /Browser closed|Target closed|browser has been closed|disconnected|WebSocket/i.test(msg)
+  }
+
+  /** Tear down the dead context so ensureContext() reconnects fresh. */
+  private async resetContext(): Promise<void> {
+    try {
+      this.context
+        ?.browser()
+        ?.close()
+        .catch(() => undefined)
+    } catch {
+      // already gone
+    }
+    this.context = null
+    this.pageInstance = null
+  }
+
   async pageFetch(template: ReplayRequestTemplate): Promise<{ status: number; json: unknown }> {
+    // A 480-page crawl rides one WS connection for ~20 min; without
+    // in-place recovery a single tunnel blip aborts the whole timeframe
+    // and the retry re-fetches everything from page 1. One reconnect
+    // attempt turns a crawl-fatal disconnect into a single-page hiccup.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await this.pageFetchOnce(template)
+      } catch (err) {
+        if (attempt >= 1 || !PlaywrightFetchSession.isConnectionLoss(err)) throw err
+        console.warn(
+          `[ingest] ${this.sourceSlug}: browser connection lost mid-fetch — reconnecting…`
+        )
+        await this.resetContext()
+        // Remote contexts restore cookies via source_secrets on reconnect;
+        // local persistent profiles carry their own state on disk.
+      }
+    }
+  }
+
+  private async pageFetchOnce(
+    template: ReplayRequestTemplate
+  ): Promise<{ status: number; json: unknown }> {
     const page = await this.page()
     return page.evaluate(
       async (t) => {

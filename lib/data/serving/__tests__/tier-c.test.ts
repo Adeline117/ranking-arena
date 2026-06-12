@@ -1,20 +1,11 @@
 /**
- * Tier-C bridge tests: key-builder parity with the worker module (the two
- * are duplicated on purpose — this test is the sync guard) and result
- * payload → TraderCoreModules mapping.
+ * Tier-C bridge tests: the key contract is one shared module imported by
+ * both sides (drift-proof), plus result payload → TraderCoreModules mapping.
  */
 
-import { readFileSync } from 'fs'
-import { join } from 'path'
 import { tierCJobId, tierCResultKey, coreModulesFromTierC } from '../tier-c'
 
-describe('tier-c key builders stay in sync with worker/src/ingest/queues', () => {
-  // Importing the worker module would drag bullmq (untransformed ESM) into
-  // jest, so the parity guard asserts on the worker SOURCE text instead.
-  const workerSource = readFileSync(
-    join(__dirname, '../../../../worker/src/ingest/queues.ts'),
-    'utf8'
-  )
+describe('tier-c key contract is a single shared module (drift-proof)', () => {
   const req = {
     sourceSlug: 'bitget_futures',
     exchangeTraderId: 'beb24d718eb23b54ac91',
@@ -22,19 +13,31 @@ describe('tier-c key builders stay in sync with worker/src/ingest/queues', () =>
     surface: 'profile' as const,
   }
 
-  it('jobId template parity (no ":" — BullMQ rejects colon custom ids)', () => {
-    expect(tierCJobId(req)).toBe('tierc--bitget_futures--beb24d718eb23b54ac91--30--profile')
-    expect(tierCJobId(req)).not.toContain(':')
-    expect(workerSource).toContain(
-      "['tierc', d.sourceSlug, d.exchangeTraderId, d.timeframe, d.surface].join('--')"
+  it('route re-exports the IDENTICAL functions from lib/ingest/core/tier-c-keys', async () => {
+    // The old guard diffed source strings of two hand-copied builders — and
+    // they drifted anyway (':' jobId BullMQ rejects). Both sides now import
+    // one zero-dependency module; identity is the proof.
+    const shared = await import('@/lib/ingest/core/tier-c-keys')
+    expect(tierCJobId).toBe(shared.tierCJobId)
+    expect(tierCResultKey).toBe(shared.tierCResultKey)
+    // Worker side re-exports from the same module (source-level assertion is
+    // cheap insurance against someone re-inlining a copy there).
+    const { readFileSync } = await import('fs')
+    const { join } = await import('path')
+    const workerSource = readFileSync(
+      join(__dirname, '../../../../worker/src/ingest/queues.ts'),
+      'utf8'
     )
+    expect(workerSource).toContain("from '@/lib/ingest/core/tier-c-keys'")
   })
 
-  it('result key template parity', () => {
+  it('jobId has no ":" (BullMQ rejects colon custom ids)', () => {
+    expect(tierCJobId(req)).toBe('tierc--bitget_futures--beb24d718eb23b54ac91--30--profile')
+    expect(tierCJobId(req)).not.toContain(':')
+  })
+
+  it('result key shape', () => {
     expect(tierCResultKey(req)).toBe('arena:live:bitget_futures:beb24d718eb23b54ac91:30:profile')
-    expect(workerSource).toContain(
-      '`arena:live:${d.sourceSlug}:${d.exchangeTraderId}:${d.timeframe}:${d.surface}`'
-    )
   })
 })
 

@@ -13,10 +13,8 @@
  * worker/.env) in the Vercel environment. Without it every call resolves
  * null and routes degrade to 'pending'.
  *
- * The jobId/result-key builders are duplicated from
- * worker/src/ingest/queues.ts (tierCJobId/tierCResultKey) on purpose:
- * importing worker code would drag its connection module into the app
- * bundle. KEEP THE TWO IN SYNC.
+ * The jobId/result-key builders live in lib/ingest/core/tier-c-keys.ts
+ * (zero-dependency), imported by BOTH sides — hand-sync no longer exists.
  */
 
 import type { ConnectionOptions, Queue } from 'bullmq'
@@ -34,17 +32,10 @@ export interface TierCRequest {
   surface: TierCSurface
 }
 
-/** MUST match worker/src/ingest/queues.ts tierCJobId().
- *  BullMQ rejects custom ids containing ':' — '--' is the separator
- *  (the original ':' format silently failed every enqueue). */
-export function tierCJobId(d: TierCRequest): string {
-  return ['tierc', d.sourceSlug, d.exchangeTraderId, d.timeframe, d.surface].join('--')
-}
-
-/** MUST match worker/src/ingest/queues.ts tierCResultKey(). */
-export function tierCResultKey(d: TierCRequest): string {
-  return `arena:live:${d.sourceSlug}:${d.exchangeTraderId}:${d.timeframe}:${d.surface}`
-}
+// Single shared contract — lib/ingest/core/tier-c-keys.ts is zero-dependency
+// (no Playwright/pg), safe for the Vercel bundle. Drift class eliminated.
+import { tierCJobId, tierCResultKey } from '@/lib/ingest/core/tier-c-keys'
+export { tierCJobId, tierCResultKey }
 
 const TIER_C_JOB_NAME = 'tierc:profile' // INGEST_JOB.TIER_C
 const QUEUE_NAME = 'arena-ingest-tierc' // TIERC_QUEUE_NAME — dedicated user-facing queue
