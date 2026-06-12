@@ -1,0 +1,72 @@
+{
+  "errno": "OK",
+  "message": "Success",
+  "data": {
+    "list": [
+      {
+        "pnl_total": "0",
+        "roi_total": "0",
+        "statistical_time": "2026-06-04T00:00:00Z",
+        "pnl": "0",
+        "roi": "0"
+      },
+      {
+        "pnl_total": "219.8172067",
+        "roi_total": "0.153716",
+        "statistical_time": "2026-06-05T00:00:00Z",
+        "pnl": "219.8172067",
+        "roi": "0.153716"
+      },
+      {
+        "pnl_total": "-77.1596767",
+        "roi_total": "-0.026288",
+        "statistical_time": "2026-06-06T00:00:00Z",
+        "pnl": "-296.9768834",
+        "roi": "-0.180004"
+      },
+      {
+        "pnl_total": "-370.4462662",
+        "roi_total": "-0.243078",
+        "statistical_time": "2026-06-07T00:00:00Z",
+        "pnl": "-293.2865895",
+        "roi": "-0.21679"
+      },
+      {
+        "pnl_total": "189.0711997",
+        "roi_total": "0.284981",
+        "statistical_time": "2026-06-08T00:00:00Z",
+        "pnl": "559.5174659",
+        "roi": "0.528059"
+      },
+      {
+        "pnl_total": "203.7264276",
+        "roi_total": "0.294033",
+        "statistical_time": "2026-06-09T00:00:00Z",
+        "pnl": "14.6552279",
+        "roi": "0.009052"
+      },
+      {
+        "pnl_total": "384.539293",
+        "roi_total": "0.404707",
+        "statistical_time": "2026-06-10T00:00:00Z",
+        "pnl": "180.8128654",
+        "roi": "0.110674"
+      },
+      {
+        "pnl_total": "434.5081054",
+        "roi_total": "0.432245",
+        "statistical_time": "2026-06-11T00:00:00Z",
+        "pnl": "49.9688124",
+        "roi": "0.027538"
+      },
+      {
+        "pnl_total": "446.4112405",
+        "roi_total": "0.438629",
+        "statistical_time": "2026-06-12T00:00:00Z",
+        "pnl": "11.9031351",
+        "roi": "0.006384"
+      }
+    ]
+  },
+  "success": true
+}

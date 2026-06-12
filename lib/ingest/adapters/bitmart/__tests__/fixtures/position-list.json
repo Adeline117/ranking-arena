@@ -1,0 +1,66 @@
+{
+  "errno": "OK",
+  "message": "Success",
+  "data": {
+    "positions": [
+      {
+        "contract_name": "ETHUSDT",
+        "size": "5.97",
+        "base_coin": "ETH",
+        "quote_coin": "USDT",
+        "im": "49.93",
+        "mm": "37.4524965",
+        "realised_profit": "-5.99",
+        "earnings": "-5.99992164",
+        "hold_fee": "0",
+        "open_type": 2,
+        "position_type": 2,
+        "created_at": "2026-06-12T02:10:56.500019928Z",
+        "updated_at": "2026-06-12T02:10:56.500025405Z",
+        "open_avg_price": "1675.02",
+        "mark_price": "1672.92",
+        "position_mode": 1,
+        "bind_leverage": "200",
+        "liquidation_value": "1982.1",
+        "margin_ratio": "0.0198",
+        "pnl": "12.53",
+        "pnl_ratio": "0.251",
+        "contract_id": 2,
+        "position_id": 3000374081546497,
+        "notional_value": "9999.86",
+        "price_unit": "0.01"
+      }
+    ],
+    "total": 1,
+    "list": [
+      {
+        "contract_name": "ETHUSDT",
+        "size": "5.97",
+        "base_coin": "ETH",
+        "quote_coin": "USDT",
+        "im": "49.93",
+        "mm": "37.4524965",
+        "realised_profit": "-5.99",
+        "earnings": "-5.99992164",
+        "hold_fee": "0",
+        "open_type": 2,
+        "position_type": 2,
+        "created_at": "2026-06-12T02:10:56.500019928Z",
+        "updated_at": "2026-06-12T02:10:56.500025405Z",
+        "open_avg_price": "1675.02",
+        "mark_price": "1672.92",
+        "position_mode": 1,
+        "bind_leverage": "200",
+        "liquidation_value": "1982.1",
+        "margin_ratio": "0.0198",
+        "pnl": "12.53",
+        "pnl_ratio": "0.251",
+        "contract_id": 2,
+        "position_id": 3000374081546497,
+        "notional_value": "9999.86",
+        "price_unit": "0.01"
+      }
+    ]
+  },
+  "success": true
+}

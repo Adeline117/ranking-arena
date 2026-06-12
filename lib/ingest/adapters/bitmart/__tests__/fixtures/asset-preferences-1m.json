@@ -1,0 +1,6 @@
+{
+  "errno": "OK",
+  "message": "Success",
+  "data": { "list": [{ "contract": "ETH", "trade_amount": "577656.360272" }] },
+  "success": true
+}

@@ -1,0 +1,6 @@
+{
+  "errno": "OK",
+  "message": "Success",
+  "data": { "master": { "follower_num": 3, "aum": "2642.1646", "max_aum": "", "left_aum": "" } },
+  "success": true
+}
