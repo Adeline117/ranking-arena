@@ -31,6 +31,12 @@ import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
 import { trackEvent } from '@/lib/analytics/track'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import dynamic from 'next/dynamic'
+
+const ProUpsellModal = dynamic(
+  () => import('@/app/components/ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
+  { ssr: false }
+)
 
 interface Group {
   id: string
@@ -130,6 +136,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
+  const [proUpsellOpen, setProUpsellOpen] = useState(false)
 
   // Member preview (avatar stack)
   const [memberPreviews, setMemberPreviews] = useState<
@@ -268,7 +275,11 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
         const response = await fetch('/api/translate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
           body: JSON.stringify({ items, targetLang }),
         })
 
@@ -512,7 +523,10 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         return
       }
       if (!bypassPro && group?.is_premium_only && !isPro) {
-        showToast(t('proMembersOnly'), 'warning')
+        // Upsell modal instead of a dead-end toast (API still enforces
+        // premium membership server-side — this is the UX layer only).
+        trackEvent('paywall_blocked', { source: 'premium_group_join' })
+        setProUpsellOpen(true)
         return
       }
 
@@ -897,6 +911,12 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             onClose={() => setShowMembersList(false)}
           />
         )}
+
+        <ProUpsellModal
+          open={proUpsellOpen}
+          onClose={() => setProUpsellOpen(false)}
+          featureKey="proMembersOnly"
+        />
       </Box>
     </PageWrapper>
   )
