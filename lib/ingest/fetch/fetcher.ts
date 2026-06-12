@@ -11,6 +11,10 @@
  *            region-pinned browser: all adapter code runs here, and JSON
  *            replay uses the browser-context APIRequestContext so replay
  *            egress IP == session IP automatically.
+ *   EXCEPTION: a worker node deployed inside a region sets
+ *            INGEST_LOCAL_REGION (e.g. 'vps_sg') and then treats sources
+ *            of that region exactly like 'local' — browsers launch on the
+ *            node itself, no remote WS involved.
  *
  * Every context is created with timezoneId 'UTC' + locale 'en-US' — a
  * worker machine's local timezone must never shift parsed daily series
@@ -89,6 +93,18 @@ export function getCircuitState(sourceSlug: string): CircuitState {
   return getCircuit(sourceSlug).getState()
 }
 
+/**
+ * The region THIS machine serves with locally-launched browsers.
+ * Default 'local' (Mac Mini). A worker node deployed inside a region —
+ * e.g. the SG VPS running with INGEST_LOCAL_REGION=vps_sg — treats
+ * sources pinned to that region as local: it launchPersistentContext's
+ * on its own disk instead of dialing a remote run-server, eliminating
+ * the SSH-tunnel → remote-WS failure chain for that region entirely.
+ */
+function isLocalRegion(region: string): boolean {
+  return region === (process.env.INGEST_LOCAL_REGION ?? 'local')
+}
+
 function remoteWsEndpoint(region: 'vps_sg' | 'vps_jp'): string {
   const env = region === 'vps_sg' ? 'PLAYWRIGHT_WS_SG' : 'PLAYWRIGHT_WS_JP'
   const ws = process.env[env]
@@ -151,7 +167,11 @@ class PlaywrightFetchSession implements FetchSession {
   private async ensureContext(): Promise<BrowserContext> {
     if (this.context) return this.context
 
-    if (this.src.fetch_region === 'local') {
+    // Local when fetch_region is literally 'local' OR matches this node's
+    // INGEST_LOCAL_REGION (a region-resident worker runs browsers itself).
+    // Keep the literal 'local' check first so TS narrows the else branch
+    // for remoteWsEndpoint().
+    if (this.src.fetch_region === 'local' || isLocalRegion(this.src.fetch_region)) {
       const userDataDir = path.join(process.cwd(), '.arena-ingest', 'profiles', this.src.slug)
       // Some Akamai-fronted sources (Bybit: net::ERR_HTTP2_PROTOCOL_ERROR)
       // TLS-fingerprint-block the bundled Chromium even on page loads, but
@@ -363,8 +383,9 @@ class PlaywrightFetchSession implements FetchSession {
     if (this.context) {
       const browser = this.context.browser()
       await this.context.close().catch(logCloseError('context'))
-      // Remote connections own a browser handle; persistent contexts do not.
-      if (browser && this.src.fetch_region !== 'local') {
+      // Remote connections own a browser handle; persistent contexts
+      // (literal 'local' or this node's INGEST_LOCAL_REGION) do not.
+      if (browser && this.src.fetch_region !== 'local' && !isLocalRegion(this.src.fetch_region)) {
         await browser.close().catch(logCloseError('browser'))
       }
       this.context = null
