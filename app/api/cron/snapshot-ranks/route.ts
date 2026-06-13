@@ -47,14 +47,23 @@ export const GET = withCron('snapshot-ranks', async (_request: NextRequest) => {
         return 0
       }
 
-      const records = rows.map((row) => ({
-        platform: row.source,
-        trader_key: row.source_trader_id,
-        period,
-        rank: row.rank,
-        arena_score: row.arena_score,
-        snapshot_date: today,
-      }))
+      // rank 在 leaderboard_ranks 可空,但 rank_history.rank 非空 —— 跳过空 rank
+      // 行(flatMap 在 else 分支收窄 row.rank 为 number)。查询已 .not('rank',is,null),
+      // 此处是类型安全 + 防御双保险。
+      const records = rows.flatMap((row) =>
+        row.rank == null
+          ? []
+          : [
+              {
+                platform: row.source,
+                trader_key: row.source_trader_id,
+                period,
+                rank: row.rank,
+                arena_score: row.arena_score,
+                snapshot_date: today,
+              },
+            ]
+      )
 
       let inserted = 0
       for (let i = 0; i < records.length; i += UPSERT_BATCH) {
