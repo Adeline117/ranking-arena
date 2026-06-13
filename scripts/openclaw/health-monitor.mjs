@@ -63,14 +63,28 @@ function saveAlertState(state) {
  */
 function shouldSendAlert(issueFingerprint) {
   const state = loadAlertState()
-  const lastSent = state[issueFingerprint]
-  if (lastSent && Date.now() - lastSent < ALERT_COOLDOWN_MS) {
+  const entry = state[issueFingerprint]
+  // Back-compat: old state stored a bare timestamp.
+  const lastSent = typeof entry === 'number' ? entry : entry?.ts
+  const streak = typeof entry === 'object' ? (entry?.streak ?? 1) : 1
+
+  // Chronic-condition backoff: a fingerprint that keeps firing doubles its
+  // cooldown each consecutive send (2h → 4h → 8h → 16h → cap 24h). A
+  // permanently-degraded panel used to page every single 2h cron run —
+  // 12 walls of text a day saying the same thing. Recovery (a run with no
+  // issues) clears the state file entry, so a NEW incident pages immediately.
+  const effectiveCooldown = Math.min(
+    ALERT_COOLDOWN_MS * Math.pow(2, Math.max(0, streak - 1)),
+    24 * 60 * 60 * 1000
+  )
+  if (lastSent && Date.now() - lastSent < effectiveCooldown) {
     return false
   }
-  state[issueFingerprint] = Date.now()
-  // Cleanup entries older than 24h
-  for (const [key, ts] of Object.entries(state)) {
-    if (Date.now() - ts > 24 * 60 * 60 * 1000) delete state[key]
+  state[issueFingerprint] = { ts: Date.now(), streak: lastSent ? streak + 1 : 1 }
+  // Cleanup entries older than 48h (covers the 24h max backoff window)
+  for (const [key, val] of Object.entries(state)) {
+    const ts = typeof val === 'number' ? val : val?.ts
+    if (!ts || Date.now() - ts > 48 * 60 * 60 * 1000) delete state[key]
   }
   saveAlertState(state)
   return true
@@ -378,6 +392,10 @@ async function runHealthCheck() {
 
     return { status: 'alert', issues }
   }
+
+  // Recovery: clear the dedup/backoff state so the NEXT incident pages
+  // immediately instead of inheriting a chronic-condition cooldown.
+  saveAlertState({})
 
   console.log(`✅ All healthy (basic: ${basicHealth?.status}, pipeline: ${pipelineHealth?.status})`)
   return { status: 'healthy' }
