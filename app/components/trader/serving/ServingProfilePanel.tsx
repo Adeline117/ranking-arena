@@ -20,6 +20,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderCore } from '@/lib/hooks/useTraderCore'
+import { useBotHeader } from '@/lib/hooks/useBotHeader'
 import { useTraderRecords, useCopierAggregate } from '@/lib/hooks/useTraderRecords'
 import { PeriodSelector, type Period } from '@/app/components/trader/performance/PeriodSelector'
 import MetricGrid from './MetricGrid'
@@ -28,6 +29,7 @@ import CoreCharts from './CoreCharts'
 import ModuleDegraded from './ModuleDegraded'
 import RecordsTable, { type RecordColumn } from './RecordsTable'
 import CopierAggregatePanel from './CopierAggregatePanel'
+import BotHeaderCard from './BotHeaderCard'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import type {
   RecordKind,
@@ -175,6 +177,10 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
 
   const core = useTraderCore({ source, exchangeTraderId, tf })
 
+  // Bot profile header (spec §1.3) — only fetched for bot traders.
+  const isBot = firstScreen.traderKind === 'bot'
+  const { bot } = useBotHeader({ source, exchangeTraderId, enabled: isBot })
+
   // 独家信号 (spec §12.2/§12.3): numeric extras the registry knows (nav —
   // BitMart/Gate net asset value) are promoted into the stats grid; the
   // qualitative ones (style labels, risk rating, last liquidation) render
@@ -223,6 +229,9 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
   return (
     <Box style={{ marginTop: tokens.spacing[4] }}>
       <style>{`@keyframes servingPulse { 0% { background-position: 200% 0 } 100% { background-position: -200% 0 } }`}</style>
+
+      {/* ── Bot header (spec §1.3): strategy/pair/runtime/profit-share/owner ── */}
+      {isBot && bot && <BotHeaderCard bot={bot} style={{ marginBottom: tokens.spacing[3] }} />}
 
       {/* ── Core modules (spec §2.4-2): one request per timeframe ── */}
       <PeriodSelector
