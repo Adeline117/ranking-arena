@@ -58,10 +58,12 @@ export function getIngestPool(): Pool {
     // their OWN pool. With the SESSION pooler (5432, see guard above) each
     // connection is a dedicated Postgres backend, so the budget is against
     // Postgres max_connections (90), not a tiny Supavisor transaction pool.
-    // Mac peak demand is INGEST_CONCURRENCY(3) + tier-c(2) + scheduler(1) ≈ 6,
-    // so 8 covers it; two nodes = 16 backends, far under 90 (≈30 used by the
-    // rest of the system). Verified steady state: exactly 8+8 in pg_stat_activity.
-    max: 8,
+    // Mac peak demand is INGEST_CONCURRENCY(5) + tier-c(2) + scheduler(1) ≈ 8,
+    // so 10 covers it with headroom; two nodes = 20 backends, far under Postgres
+    // max_connections(90) — only ~30 used by the rest of the system. Session
+    // pooler gives dedicated backends, so this budgets against 90, not a tiny
+    // Supavisor transaction pool.
+    max: 10,
     // CRITICAL: must be SHORTER than Supavisor's server-side idle timeout.
     // At 30s, node-pg kept clients Supavisor had already closed → the next
     // checkout got a dead socket and threw `EDBHANDLEREXITED`. Releasing

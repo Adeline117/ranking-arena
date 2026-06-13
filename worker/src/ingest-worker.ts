@@ -30,9 +30,16 @@ import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
 import { startFailoverManager } from './ingest/failover'
 
-// Playwright sessions are heavy on a Mac Mini; per-source serialization
-// happens inside processors (one session per source at a time).
-const INGEST_CONCURRENCY = 3
+// Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
+// rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
+// fell BELOW the arrival rate (~25-30/h from 35 sources × tier A/B/D cadences),
+// so the queue grew unboundedly (159 waiting) and low-priority sources
+// (gmx/gtrade) starved 10h+ at the tail. 5 roughly doubles drain to match
+// arrival. Most sources are now pure-HTTP (light); browser sources still
+// serialize one session each, and remote-region (vps_jp) sources use a remote
+// WS so the Mac launches no local Chromium for them — so peak local browser
+// count stays well under 5. pm2 max_memory_restart raised to 1536M to match.
+const INGEST_CONCURRENCY = 5
 
 async function route(job: Job): Promise<unknown> {
   switch (job.name) {
