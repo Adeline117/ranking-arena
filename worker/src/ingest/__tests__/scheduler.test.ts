@@ -111,10 +111,14 @@ describe('reconcileSchedulers cleanup/revival', () => {
     // Immediate priority-1 kick so the revived source crawls NOW, not after a
     // full 5h cadence (take-4).
     const kick = mockQueue.add.mock.calls.find((c) =>
-      c[2]?.jobId?.startsWith('revive-kick:tiera:srcx')
+      c[2]?.jobId?.startsWith('revive-kick-tiera-srcx')
     )
     expect(kick).toBeDefined()
     expect(kick?.[2]?.priority).toBe(1)
+    // take-5 regression lock: jobId must NOT contain ':' — BullMQ rejects it
+    // ("Custom Id cannot contain :"), and the awaited add() throw aborted the
+    // whole reconcile loop so revival never kicked anything.
+    expect(kick?.[2]?.jobId).not.toContain(':')
   })
 
   it('never interrupts an active long crawl even if the scheduler is >2x overdue', async () => {
