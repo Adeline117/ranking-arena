@@ -125,8 +125,24 @@ export async function reconcileSchedulers(): Promise<void> {
       }
       const every = typeof scheduler.every === 'number' ? scheduler.every : Number(scheduler.every)
       if (!scheduler.next || !every || scheduler.next >= now - REVIVE_GRACE_MS) continue
+      const overdueMs = now - scheduler.next
       const iterationJob = await q.getJob(`repeat:${key}:${scheduler.next}`)
-      if (iterationJob) continue // queued behind a backlog — chain intact
+      let reason: string
+      if (!iterationJob) {
+        reason = 'iteration job missing'
+      } else {
+        // Iteration EXISTS. Normally that means it's queued behind a backlog —
+        // leave it. BUT (2026-06-13 take-3): a starved iteration can sit in
+        // `waiting` for 10h+ while priority-1 jobs jump ahead; the scheduler
+        // won't advance past a never-running iteration → permanent deadlock
+        // (bitget×5/gate_cfd/blofin/btcc all stuck 17-36h, raw_objects + snapshots
+        // both frozen). So: if BADLY overdue (>2× cadence) AND the iteration is
+        // NOT currently running, rebuild to break the deadlock — but never
+        // interrupt an active long crawl (25-90min Tier-A).
+        const state = await iterationJob.getState().catch(() => 'unknown')
+        if (overdueMs < 2 * every || state === 'active') continue
+        reason = `iteration stuck in ${state}`
+      }
       await q.removeJobScheduler(key)
       await q.upsertJobScheduler(
         key,
@@ -136,7 +152,7 @@ export async function reconcileSchedulers(): Promise<void> {
       revived++
       console.log(
         `[ingest-scheduler] revived stuck scheduler ${key} ` +
-          `(next was ${Math.round((now - scheduler.next) / 60_000)}min overdue, iteration job missing)`
+          `(next ${Math.round(overdueMs / 60_000)}min overdue, ${reason})`
       )
     }
   }
