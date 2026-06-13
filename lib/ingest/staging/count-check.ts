@@ -47,7 +47,14 @@ export interface CountBaseline {
   baseline: number | null
   /** true while we are still comparing against the stale survey number. */
   isBootstrap: boolean
+  /** true when a SUSTAINED level-shift was adopted to break a deadlock. */
+  shifted?: boolean
 }
+
+/** Consecutive consistent crawls required to ratify a level-shift. */
+export const SHIFT_CONFIRM_CRAWLS = 3
+/** Max spread among the confirming crawls for them to count as "consistent". */
+export const SHIFT_MAX_SPREAD_PCT = 10
 
 /**
  * Survey counts age (boards grow/shrink over months) — a 6-month-old
@@ -79,9 +86,41 @@ export async function getCountBaseline(
   )
   if (rows.length >= 3) {
     const m = median(rows.map((r) => r.actual_count))
+    const passedMedian = m === null ? null : Math.round(m)
+
+    // Deadlock escape hatch: a board that legitimately grew/shrank >10% can
+    // never pass again — no new passing crawl enters the median, so it stays
+    // frozen at the pre-shift level and every crawl is rejected forever
+    // (gate_futures: stuck at 734 while the board sat at ~971). Detect a
+    // SUSTAINED shift — the last N crawls (ANY status) clustered tightly
+    // around a new level that differs from the frozen median by >10% — and
+    // adopt the new level. A one-off truncated crawl can't qualify (it isn't
+    // consistent across N consecutive crawls), so transient anomalies are
+    // still rejected; only a persistent new normal un-sticks the board.
+    if (passedMedian !== null) {
+      const { rows: recent } = await getIngestPool().query<{ actual_count: number }>(
+        `SELECT actual_count
+           FROM arena.leaderboard_snapshots
+          WHERE source_id = $1 AND timeframe = $2
+          ORDER BY scraped_at DESC
+          LIMIT $3`,
+        [sourceId, timeframe, SHIFT_CONFIRM_CRAWLS]
+      )
+      if (recent.length === SHIFT_CONFIRM_CRAWLS) {
+        const counts = recent.map((r) => r.actual_count)
+        const recentMedian = median(counts)
+        if (recentMedian && recentMedian > 0) {
+          const spreadPct = ((Math.max(...counts) - Math.min(...counts)) / recentMedian) * 100
+          const driftPct = (Math.abs(recentMedian - passedMedian) / passedMedian) * 100
+          if (spreadPct <= SHIFT_MAX_SPREAD_PCT && driftPct > ROLLING_DEVIATION_PCT) {
+            return { baseline: Math.round(recentMedian), isBootstrap: false, shifted: true }
+          }
+        }
+      }
+    }
     // snapshots.baseline_used is an int column — an even-length median
     // (e.g. 1663.5) must be rounded before publish.
-    return { baseline: m === null ? null : Math.round(m), isBootstrap: false }
+    return { baseline: passedMedian, isBootstrap: false }
   }
   return { baseline: expectedCount, isBootstrap: true }
 }
