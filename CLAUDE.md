@@ -288,6 +288,28 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
 5. **每日哨兵** `scripts/openclaw/schema-canary-sentinel.mjs`（7:30 crontab）是
    兜底，不是借口 —— 它每天替你跑契约检查 + 写路径金丝雀，失败 Telegram 告警。
 
+### 多会话编排纪律 — MANDATORY（漂移与卡死的元层根源）
+
+Arena 同时跑最多 7 个 claude 会话 + cron + worker,**共用同一个仓库目录**。
+2026-06 血泪教训(全部活生生发生过):
+
+1. **schema 变更走单一通道,串行化。** 多个会话各自手工 SQL-editor/MCP 应用
+   迁移、用任意名字 → 仓库↔ledger 失配、幻影表、~200 迁移漂移。规则:迁移
+   一次一个会话、经 `scripts/new-migration.sh`(纯时间戳)生成、`supabase db
+push` 应用(ledger.name = 文件名,核对才可靠)。别手工 SQL-editor 改 schema。
+2. **绝不往 pre-push 关键路径塞无界操作。** 钩子在每次推送跑、共用于全部会话、
+   只有 120s 看门狗。任何无界 git/网络/lint 操作在高负载下卡住 → **拖垮所有
+   会话的推送**(本会话一个加了无界 `git diff` 的守卫干过这事)。钩子里的检查
+   必须**快、有界(timeout)、fail-open**;重活交给 CI。
+3. **共享工作树 = 改 `database.types.ts`/eslint.config/tsconfig 等核心文件会
+   立刻影响所有会话**(它们的 pre-push tsc/lint 当场用你改的版本)。高风险
+   核心文件的改动先在隔离 worktree 验证(`git worktree` 或 Agent isolation),
+   tsc/lint 干净再落共享树。
+4. **机器是生产 worker。** 并发会话 fork 风暴会把 macOS `syspolicyd`(Gatekeeper)
+   顶到 100%,所有 spawn 进程的命令(git/node)排队卡死,而 MCP/文件 IO 不受影响
+   (诊断信号:bash 挂但 MCP 秒回 = syspolicyd 饱和)。解药:`sudo killall
+syspolicyd`(launchd 重启)+ 减少并发会话。
+
 ### Database Concurrency Safety — MANDATORY
 
 - **Counters**: NEVER use trigger-based `SET count = count + 1`. Use atomic RPC functions (`increment_*_count` / `decrement_*_count` from migration 00021) called explicitly in API handlers.
