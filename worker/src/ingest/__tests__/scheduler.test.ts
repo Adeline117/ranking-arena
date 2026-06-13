@@ -15,6 +15,7 @@ const mockQueue = {
   removeJobScheduler: jest.fn().mockResolvedValue(undefined),
   getJobSchedulers: jest.fn().mockResolvedValue([]),
   getJob: jest.fn().mockResolvedValue(null),
+  add: jest.fn().mockResolvedValue(undefined),
 }
 
 jest.mock('../queues', () => ({
@@ -107,6 +108,13 @@ describe('reconcileSchedulers cleanup/revival', () => {
     expect(mockQueue.removeJobScheduler).toHaveBeenCalledWith('tiera:srcx')
     const upsertKeys = mockQueue.upsertJobScheduler.mock.calls.map((c) => c[0])
     expect(upsertKeys.filter((k) => k === 'tiera:srcx').length).toBeGreaterThanOrEqual(2)
+    // Immediate priority-1 kick so the revived source crawls NOW, not after a
+    // full 5h cadence (take-4).
+    const kick = mockQueue.add.mock.calls.find((c) =>
+      c[2]?.jobId?.startsWith('revive-kick:tiera:srcx')
+    )
+    expect(kick).toBeDefined()
+    expect(kick?.[2]?.priority).toBe(1)
   })
 
   it('never interrupts an active long crawl even if the scheduler is >2x overdue', async () => {
