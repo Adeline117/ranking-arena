@@ -29,21 +29,38 @@ export function getIngestPool(): Pool {
   const url = process.env.INGEST_DATABASE_URL ?? process.env.DATABASE_URL
   if (!url) {
     throw new Error(
-      '[ingest] INGEST_DATABASE_URL not set. Use the Supabase pooler URI ' +
-        '(Dashboard → Connect → Transaction pooler).'
+      '[ingest] INGEST_DATABASE_URL not set. Use the Supabase SESSION pooler URI ' +
+        '(Dashboard → Connect → Session pooler, port 5432) — NOT the transaction ' +
+        'pooler (6543). See the architecture note below.'
+    )
+  }
+
+  // ── Pooler-mode guard (2026-06-12 root-cause prevention) ──
+  // A persistent worker with its OWN node-pg pool MUST use the SESSION pooler
+  // (5432) or a direct connection — each client gets a dedicated upstream
+  // Postgres backend. The TRANSACTION pooler (6543) multiplexes a tiny shared
+  // upstream pool meant for serverless; a long-lived pooled worker starves it
+  // → `ECHECKOUTTIMEOUT in Transaction mode` even while Postgres has 60/90 free.
+  // This silent misfit cost hours to diagnose; if a redeploy ever reverts the
+  // URL to :6543, scream at startup instead of melting down quietly.
+  if (/:6543\b/.test(url) && !url.includes('127.0.0.1') && !url.includes('localhost')) {
+    console.error(
+      '[ingest] ⚠️ INGEST_DATABASE_URL points at the TRANSACTION pooler (:6543). ' +
+        'A persistent worker MUST use the SESSION pooler (:5432) — the transaction ' +
+        'pooler will starve under its node-pg pool (ECHECKOUTTIMEOUT). Switch the port to 5432.'
     )
   }
 
   pool = new Pool({
     connectionString: url,
-    // ── Multi-node shared-pooler budget (2026-06-12 pool-exhaustion fix) ──
+    // ── Multi-node budget (2026-06-12 pool-exhaustion fix) ──
     // BOTH ingest nodes (Mac `local` + SG `vps_sg`) import this file and open
-    // their OWN pool against the SAME Supabase transaction pooler (Supavisor).
-    // Supavisor's default transaction pool_size is small (~15 on smaller
-    // tiers); 10×2 nodes + legacy worker + Vercel reads saturated it →
-    // `ECHECKOUTTIMEOUT in Transaction mode`. Mac peak demand is only
-    // INGEST_CONCURRENCY(3) + tier-c(2) + scheduler(1) ≈ 6, so 8 covers it
-    // with headroom while keeping the two-node footprint (16) under budget.
+    // their OWN pool. With the SESSION pooler (5432, see guard above) each
+    // connection is a dedicated Postgres backend, so the budget is against
+    // Postgres max_connections (90), not a tiny Supavisor transaction pool.
+    // Mac peak demand is INGEST_CONCURRENCY(3) + tier-c(2) + scheduler(1) ≈ 6,
+    // so 8 covers it; two nodes = 16 backends, far under 90 (≈30 used by the
+    // rest of the system). Verified steady state: exactly 8+8 in pg_stat_activity.
     max: 8,
     // CRITICAL: must be SHORTER than Supavisor's server-side idle timeout.
     // At 30s, node-pg kept clients Supavisor had already closed → the next
