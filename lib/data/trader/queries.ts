@@ -39,7 +39,15 @@ export async function safeQuery<T>(
         result.error.message?.includes('does not exist') ||
         result.error.message?.includes('relation'))
     ) {
-      // Known non-fatal errors (table doesn't exist during migration, etc.)
+      // Schema object missing (42P01 表 / 42703 列 "does not exist")。
+      // 2026-06 教训:此处过去静默返回 null,正是 schema 漂移长期隐形、
+      // 发帖/支付/点赞静默 500 数天无人知的根源。必须 log —— 迁移中的临时
+      // 缺失是噪音,但持续出现 = 漂移信号(被 schema-contract-check / 哨兵抓)。
+      logger.warn(
+        '[safeQuery] schema object missing (drift?):',
+        result.error.code,
+        result.error.message
+      )
       return success(null)
     }
     if (result.error) {
