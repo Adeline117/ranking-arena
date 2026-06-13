@@ -44,12 +44,15 @@ jest.mock('@/lib/cron/utils', () => ({
   })),
 }))
 
-jest.mock('@/lib/cron/fetchers', () => ({
-  getSupportedInlinePlatforms: jest.fn(() => ['binance_futures', 'bybit']),
-}))
+// （已删 @/lib/cron/fetchers 的死 mock —— 该模块在 D3+D4 退役删除，route 不再引用，
+// jest 解析不到已删模块路径会导致整个 suite "Configuration error" 无法加载。）
 
 jest.mock('@/lib/constants/exchanges', () => ({
   DEAD_BLOCKED_PLATFORMS: [],
+  // route 用 SOURCES_WITH_DATA 作为待检平台列表（buildFreshnessReport 第一行
+  // .filter 之）。不提供则 undefined.filter → loop 前抛 → GET catch → 500。
+  // 给恰好 2 个平台以匹配下方 summary.fresh === 2 的断言。
+  SOURCES_WITH_DATA: ['binance_futures', 'bybit'],
 }))
 
 jest.mock('@/lib/alerts/send-alert', () => ({
