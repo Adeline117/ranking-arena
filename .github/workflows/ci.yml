@@ -293,6 +293,14 @@ jobs:
         id: evaluator
         continue-on-error: true
 
+      # Schema 契约检查(P1):代码 .from()/.rpc() 依赖 vs 生产实际清单做差集。
+      # 用本会话验证过 green 的脚本。首次引入设 continue-on-error(只报告不阻断),
+      # 确认一次绿色 CI 运行后,移除 continue-on-error 提升为阻断门。
+      - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
+        run: npm run qa:schema
+        continue-on-error: true
+        id: schema_contract
+
       - name: Alert on data inconsistency
         if: steps.e2e_check.outcome == 'failure' || (steps.evaluator.outputs.score != '' && steps.evaluator.outputs.score < 60)
         run: |
