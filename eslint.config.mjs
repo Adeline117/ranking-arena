@@ -237,6 +237,29 @@ const eslintConfig = defineConfig([
     },
   },
   // ============================================
+  // CAST-BAN RATCHET: DB 层文件(2026-06 核实 cast-clean)锁 ERROR。
+  // 新的 `as any`/`as SupabaseClient`/`as unknown` 在这些文件里 = 阻断推送,
+  // 这才是 P0 编译时接地的真 enforcement(不再只是 warn 噪音)。清理干净的
+  // 新文件往这里加。eslint 已验证这些文件当前通过(0 cast)。
+  // ============================================
+  {
+    files: [
+      'lib/supabase/read-replica.ts',
+      'lib/supabase/server.ts',
+      'lib/data/posts.ts',
+      'lib/data/comments.ts',
+      'lib/data/notifications.ts',
+      'lib/data/unified.ts',
+      'lib/data/hashtags.ts',
+      'lib/data/avoid-list.ts',
+      'lib/data/trader.ts',
+      'lib/data/posts-weighted.ts',
+    ],
+    rules: {
+      'no-restricted-syntax': ['error', ...baseRestrictedSyntax, ...castRestrictedSyntax],
+    },
+  },
+  // ============================================
   // Ingest framework boundary (ARENA_DATA_SPEC §2.1)
   // app/** may import lib/ingest contracts (core/*, fetch/types) but never
   // the Playwright-touching implementations or the direct-PG pool — those
