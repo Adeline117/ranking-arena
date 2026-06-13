@@ -151,12 +151,29 @@ export async function reconcileSchedulers(): Promise<void> {
       // a revived source waits 5h to crawl (bitget×5 sat idle 1.5h post-revival
       // producing zero RAW). Enqueue an immediate priority-1 one-off so the
       // source crawls NOW; the scheduler then resumes its normal cadence.
-      await q.add(scheduler.name, tmplData, {
-        priority: 1,
-        jobId: `revive-kick:${key}:${now}`,
-        removeOnComplete: true,
-        removeOnFail: { age: 3600 },
-      })
+      //
+      // take-5 (2026-06-13): jobId MUST NOT contain ':' — BullMQ throws
+      // "Custom Id cannot contain :" and, because this add() is awaited inside
+      // the reconcile loop, the throw aborted the ENTIRE reconcile (every
+      // later source skipped). `key` is `tiera:<slug>`, so the old
+      // `revive-kick:${key}:${now}` template always tripped it — revival has
+      // never actually kicked since take-4 shipped. Sanitize the colons.
+      // Defense in depth: a kick failure must never abort the reconcile loop
+      // (that was the take-4 blast radius). The scheduler is already rebuilt
+      // above; the kick is a best-effort latency optimization on top.
+      try {
+        await q.add(scheduler.name, tmplData, {
+          priority: 1,
+          jobId: `revive-kick-${key.replace(/:/g, '-')}-${now}`,
+          removeOnComplete: true,
+          removeOnFail: { age: 3600 },
+        })
+      } catch (err) {
+        console.error(
+          `[ingest-scheduler] revive-kick for ${key} failed (scheduler still rebuilt): ` +
+            (err instanceof Error ? err.message : String(err))
+        )
+      }
       revived++
       console.log(
         `[ingest-scheduler] revived stuck scheduler ${key} + immediate kick ` +
