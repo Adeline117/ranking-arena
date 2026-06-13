@@ -33,6 +33,16 @@ const PER_PLATFORM_LIMIT = 1000
 // mid-cadence — the count-check gate already guarantees quality here).
 const MAX_AGE_HOURS = 48
 
+// Defense-in-depth sanity floor (root-cause-of-root-cause for the 2026-06-13
+// collapse): the original RPC silently truncated at PostgREST's ~1000-row cap,
+// the read returned only bitget, and compute's platform cleanup then WIPED
+// every other source from leaderboard_ranks. A degraded/partial read must NEVER
+// be allowed to reach the cleanup. If the read is implausibly small we THROW —
+// the compute aborts and leaves the existing leaderboard untouched (stale beats
+// collapsed). Normal reads are 15k+ rows across 18-26 platforms.
+const MIN_PLAUSIBLE_SOURCES = 10
+const MIN_PLAUSIBLE_ROWS = 3000
+
 interface RpcRow {
   platform: string
   trader_key: string
@@ -69,22 +79,27 @@ export async function fetchPhase1FromArena(
 ): Promise<Map<string, number>> {
   const countBySource = new Map<string, number>()
 
-  const { data, error } = await (supabase as any).rpc('arena_score_inputs', {
+  // Use the jsonb variant: a table-returning RPC is capped at PostgREST's
+  // ~1000-row limit (the cause of the 06-13 collapse), but a single jsonb row
+  // carrying the whole array has no row-count cap.
+  const { data, error } = await (supabase as any).rpc('arena_score_inputs_json', {
     p_window: season,
     p_per_platform_limit: PER_PLATFORM_LIMIT,
     p_max_age_hours: MAX_AGE_HOURS,
   })
 
+  // THROW (not silent empty return): an errored read must abort the compute, not
+  // hand it an empty map that the cleanup turns into a wiped leaderboard.
   if (error) {
-    logger.error(
-      `[${season}] arena_score_inputs RPC failed: ${error.message} (code=${error.code}) — NO arena rows loaded`
+    throw new Error(
+      `[${season}] arena_score_inputs_json RPC failed: ${error.message} (code=${error.code})`
     )
-    return countBySource
   }
-  const rows = (data ?? []) as RpcRow[]
+  const rows = (Array.isArray(data) ? data : []) as RpcRow[]
   if (rows.length === 0) {
-    logger.warn(`[${season}] arena_score_inputs returned 0 rows`)
-    return countBySource
+    throw new Error(
+      `[${season}] arena_score_inputs_json returned 0 rows — aborting (would collapse leaderboard)`
+    )
   }
 
   for (const d of rows) {
@@ -118,8 +133,19 @@ export async function fetchPhase1FromArena(
     countBySource.set(d.platform, (countBySource.get(d.platform) ?? 0) + 1)
   }
 
+  // Sanity floor: refuse to feed an implausibly small read into scoring +
+  // cleanup. Throwing aborts the whole compute, leaving the prior leaderboard
+  // intact rather than letting cleanup wipe it down to whatever partial set
+  // survived. This is the guard that would have prevented the 06-13 collapse.
+  if (countBySource.size < MIN_PLAUSIBLE_SOURCES || rows.length < MIN_PLAUSIBLE_ROWS) {
+    throw new Error(
+      `[${season}] arena read implausibly small (${rows.length} rows / ${countBySource.size} platforms; ` +
+        `floor ${MIN_PLAUSIBLE_ROWS} rows / ${MIN_PLAUSIBLE_SOURCES} platforms) — aborting to protect leaderboard`
+    )
+  }
+
   logger.info(
-    `[${season}] arena_score_inputs: ${rows.length} rows across ${countBySource.size} platforms`
+    `[${season}] arena_score_inputs_json: ${rows.length} rows across ${countBySource.size} platforms`
   )
   return countBySource
 }
