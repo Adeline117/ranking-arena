@@ -85,10 +85,37 @@ describe('reconcileSchedulers cleanup/revival', () => {
     expect(upsertKeys.filter((k) => k === 'tiera:srcx').length).toBeGreaterThanOrEqual(2)
   })
 
-  it('leaves a backlogged-but-intact chain alone (iteration job still queued)', async () => {
-    const staleNext = Date.now() - 30 * 60_000
+  it('leaves a mildly-overdue backlogged chain alone (<2x cadence, iteration queued)', async () => {
+    const staleNext = Date.now() - 30 * 60_000 // 30min overdue, cadence is 1h → <2x
     mockQueue.getJobSchedulers.mockResolvedValue([scheduler('tiera:srcx', staleNext)])
-    mockQueue.getJob.mockResolvedValue({ id: `repeat:tiera:srcx:${staleNext}` })
+    mockQueue.getJob.mockResolvedValue({
+      id: `repeat:tiera:srcx:${staleNext}`,
+      getState: async () => 'waiting',
+    })
+    await reconcileSchedulers()
+    expect(mockQueue.removeJobScheduler).not.toHaveBeenCalled()
+  })
+
+  it('revives a deadlocked chain: iteration stuck in waiting AND >2x cadence overdue', async () => {
+    const staleNext = Date.now() - 3 * HOUR // 3h overdue, cadence 1h → >2x
+    mockQueue.getJobSchedulers.mockResolvedValue([scheduler('tiera:srcx', staleNext)])
+    mockQueue.getJob.mockResolvedValue({
+      id: `repeat:tiera:srcx:${staleNext}`,
+      getState: async () => 'waiting', // exists but never running (starved)
+    })
+    await reconcileSchedulers()
+    expect(mockQueue.removeJobScheduler).toHaveBeenCalledWith('tiera:srcx')
+    const upsertKeys = mockQueue.upsertJobScheduler.mock.calls.map((c) => c[0])
+    expect(upsertKeys.filter((k) => k === 'tiera:srcx').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('never interrupts an active long crawl even if the scheduler is >2x overdue', async () => {
+    const staleNext = Date.now() - 3 * HOUR
+    mockQueue.getJobSchedulers.mockResolvedValue([scheduler('tiera:srcx', staleNext)])
+    mockQueue.getJob.mockResolvedValue({
+      id: `repeat:tiera:srcx:${staleNext}`,
+      getState: async () => 'active', // 25-90min Tier-A crawl mid-flight
+    })
     await reconcileSchedulers()
     expect(mockQueue.removeJobScheduler).not.toHaveBeenCalled()
   })
