@@ -44,25 +44,35 @@ export async function processFreshness(_job: Job): Promise<{ stale: number }> {
              l.last_good < now() - (e.max_age_hours || ' hours')::interval)`
   )
 
+  // ONE alert per source per run, not one per (source × timeframe) — a fully
+  // stalled source used to emit 3 surfaces × 48 runs/day. Combined with the
+  // page cooldown in alerting.ts this caps real-time noise at ~4 pages per
+  // stalled source per day.
+  const bySlug = new Map<string, typeof rows>()
   for (const raw of rows) {
+    const list = bySlug.get(raw.slug) ?? []
+    list.push(raw)
+    bySlug.set(raw.slug, list)
+  }
+
+  for (const [slug, surfaces] of bySlug) {
     // pg returns numeric columns as strings — coerce before formatting.
-    const s = {
-      ...raw,
-      age_hours: raw.age_hours === null ? null : Number(raw.age_hours),
-      max_age_hours: Number(raw.max_age_hours),
-    }
+    const parts = surfaces.map((raw) => {
+      const age = raw.age_hours === null ? null : Number(raw.age_hours)
+      const sla = Number(raw.max_age_hours)
+      return age === null
+        ? `${raw.timeframe}d never crawled (SLA ${sla.toFixed(1)}h)`
+        : `${raw.timeframe}d ${age.toFixed(1)}h old (SLA ${sla.toFixed(1)}h)`
+    })
     // "Never crawled" is a rollout state, not an incident — digest only
     // (tier 'maint' never pages); a stale previously-good board pages
     // per §15 when the source is phase<=1.
+    const anyStale = surfaces.some((raw) => raw.age_hours !== null)
     await alert(redis, {
-      sourceSlug: s.slug,
-      phase: s.phase,
-      tier: s.age_hours === null ? 'maint' : 'A',
-      message:
-        s.age_hours === null
-          ? `no passed snapshot yet for ${s.timeframe}d (SLA ${s.max_age_hours.toFixed(1)}h)`
-          : `${s.timeframe}d board stale: ${s.age_hours.toFixed(1)}h old ` +
-            `(SLA ${s.max_age_hours.toFixed(1)}h)`,
+      sourceSlug: slug,
+      phase: surfaces[0].phase,
+      tier: anyStale ? 'A' : 'maint',
+      message: `stale boards: ${parts.join('; ')}`,
     })
   }
 

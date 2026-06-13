@@ -38,14 +38,32 @@ async function sendTelegram(text: string): Promise<void> {
   }
 }
 
-/** Route an alert: page now (phase<=1 Tier A) or queue for the digest. */
+/** A paged (source, tier) re-pages at most once per this window. The
+ *  condition is re-asserted by the 30-min sentinel anyway — repeating the
+ *  same page 48×/day is how 几百条/天 happened (2026-06-12: stalled sources
+ *  × per-surface alerts × no cooldown). The daily digest keeps the full
+ *  history regardless. */
+const PAGE_COOLDOWN_SECONDS = 6 * 3600
+
+/** Route an alert: page now (phase<=1 Tier A, cooldown-gated) or queue for
+ *  the digest. */
 export async function alert(redis: IORedis, a: Omit<IngestAlert, 'at'>): Promise<void> {
   const full: IngestAlert = { ...a, at: new Date().toISOString() }
   const pages = a.tier === 'A' && a.phase <= 1
   if (pages) {
-    await sendTelegram(`🚨 [ingest ${full.sourceSlug} Tier-${full.tier}] ${full.message}`)
+    // SET NX EX = atomic "first pager in the window wins" across workers.
+    const gate = await redis.set(
+      `arena:ingest:page-cooldown:${full.sourceSlug}:${full.tier}`,
+      full.at,
+      'EX',
+      PAGE_COOLDOWN_SECONDS,
+      'NX'
+    )
+    if (gate === 'OK') {
+      await sendTelegram(`🚨 [ingest ${full.sourceSlug} Tier-${full.tier}] ${full.message}`)
+    }
   }
-  // Everything (paged or not) lands in the digest for the daily summary.
+  // Everything (paged, cooled-down, or digest-tier) lands in the daily digest.
   await redis.rpush(DIGEST_KEY, JSON.stringify(full))
   await redis.ltrim(DIGEST_KEY, -2000, -1) // bound the list
 }
