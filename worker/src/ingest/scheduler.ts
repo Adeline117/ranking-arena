@@ -143,15 +143,23 @@ export async function reconcileSchedulers(): Promise<void> {
         if (overdueMs < 2 * every || state === 'active') continue
         reason = `iteration stuck in ${state}`
       }
+      const tmplData = scheduler.template?.data ?? {}
       await q.removeJobScheduler(key)
-      await q.upsertJobScheduler(
-        key,
-        { every },
-        { name: scheduler.name, data: scheduler.template?.data ?? {} }
-      )
+      await q.upsertJobScheduler(key, { every }, { name: scheduler.name, data: tmplData })
+      // CRITICAL (2026-06-13 take-4): upsertJobScheduler's first iteration only
+      // fires after a full `every` interval — for a 5h-cadence Tier-A that means
+      // a revived source waits 5h to crawl (bitget×5 sat idle 1.5h post-revival
+      // producing zero RAW). Enqueue an immediate priority-1 one-off so the
+      // source crawls NOW; the scheduler then resumes its normal cadence.
+      await q.add(scheduler.name, tmplData, {
+        priority: 1,
+        jobId: `revive-kick:${key}:${now}`,
+        removeOnComplete: true,
+        removeOnFail: { age: 3600 },
+      })
       revived++
       console.log(
-        `[ingest-scheduler] revived stuck scheduler ${key} ` +
+        `[ingest-scheduler] revived stuck scheduler ${key} + immediate kick ` +
           `(next ${Math.round(overdueMs / 60_000)}min overdue, ${reason})`
       )
     }
