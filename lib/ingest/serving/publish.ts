@@ -126,7 +126,17 @@ export async function publishLeaderboardSnapshot(
   const { src, timeframe, rows, rejects, rawObjectId } = input
   const expectedCount =
     input.expectedCountOverride !== undefined ? input.expectedCountOverride : src.expected_count
-  const { baseline, isBootstrap } = await getCountBaseline(src.id, timeframe, expectedCount)
+  const { baseline, isBootstrap, shifted } = await getCountBaseline(
+    src.id,
+    timeframe,
+    expectedCount
+  )
+  if (shifted) {
+    console.warn(
+      `[publish] ${src.slug} tf${timeframe}: sustained level-shift detected — ` +
+        `adopting new baseline ${baseline} (was frozen, board un-stuck), actual=${rows.length}`
+    )
+  }
   const verdict = evaluateCount(
     rows.length,
     baseline,
