@@ -84,43 +84,56 @@ export async function getCountBaseline(
       LIMIT 7`,
     [sourceId, timeframe]
   )
-  if (rows.length >= 3) {
-    const m = median(rows.map((r) => r.actual_count))
-    const passedMedian = m === null ? null : Math.round(m)
 
-    // Deadlock escape hatch: a board that legitimately grew/shrank >10% can
-    // never pass again — no new passing crawl enters the median, so it stays
-    // frozen at the pre-shift level and every crawl is rejected forever
-    // (gate_futures: stuck at 734 while the board sat at ~971). Detect a
-    // SUSTAINED shift — the last N crawls (ANY status) clustered tightly
-    // around a new level that differs from the frozen median by >10% — and
-    // adopt the new level. A one-off truncated crawl can't qualify (it isn't
-    // consistent across N consecutive crawls), so transient anomalies are
-    // still rejected; only a persistent new normal un-sticks the board.
-    if (passedMedian !== null) {
-      const { rows: recent } = await getIngestPool().query<{ actual_count: number }>(
-        `SELECT actual_count
-           FROM arena.leaderboard_snapshots
-          WHERE source_id = $1 AND timeframe = $2
-          ORDER BY scraped_at DESC
-          LIMIT $3`,
-        [sourceId, timeframe, SHIFT_CONFIRM_CRAWLS]
-      )
-      if (recent.length === SHIFT_CONFIRM_CRAWLS) {
-        const counts = recent.map((r) => r.actual_count)
-        const recentMedian = median(counts)
-        if (recentMedian && recentMedian > 0) {
-          const spreadPct = ((Math.max(...counts) - Math.min(...counts)) / recentMedian) * 100
-          const driftPct = (Math.abs(recentMedian - passedMedian) / passedMedian) * 100
-          if (spreadPct <= SHIFT_MAX_SPREAD_PCT && driftPct > ROLLING_DEVIATION_PCT) {
-            return { baseline: Math.round(recentMedian), isBootstrap: false, shifted: true }
-          }
+  // Current baseline: rolling median of real passing crawls once we have ≥3,
+  // else the (loose) day-one survey number.
+  const hasRolling = rows.length >= 3
+  const rollingMedian = hasRolling ? median(rows.map((r) => r.actual_count)) : null
+  const baseline = hasRolling
+    ? rollingMedian === null
+      ? null
+      : Math.round(rollingMedian)
+    : expectedCount
+  const isBootstrap = !hasRolling
+
+  // Deadlock escape hatch (applies to BOTH the rolling median AND the bootstrap
+  // survey number): either can deadlock a source out of ever passing —
+  //  - rolling: a board that grew/shrank >10% never enters a new passing crawl,
+  //    so the median stays frozen at the pre-shift level (gate_futures: stuck at
+  //    734 while the board sat at ~971).
+  //  - bootstrap: a stale/wrong survey count permanently rejects a board that
+  //    never matched it (xt_spot: expected 84 vs a real ~35 board, and per-TF
+  //    sizes differ so no single expected_count fits — 7d/30d/90d each need
+  //    their own real level).
+  // Detect a SUSTAINED level: the last N crawls (ANY status) clustered tightly
+  // (spread ≤10%) around a level that deviates from the current baseline by more
+  // than the applicable tolerance → adopt it. A one-off truncated crawl can't
+  // qualify (not consistent across N consecutive), so transient anomalies are
+  // still rejected; only a persistent new normal un-sticks the board.
+  if (baseline !== null && baseline > 0) {
+    const { rows: recent } = await getIngestPool().query<{ actual_count: number }>(
+      `SELECT actual_count
+         FROM arena.leaderboard_snapshots
+        WHERE source_id = $1 AND timeframe = $2
+        ORDER BY scraped_at DESC
+        LIMIT $3`,
+      [sourceId, timeframe, SHIFT_CONFIRM_CRAWLS]
+    )
+    if (recent.length === SHIFT_CONFIRM_CRAWLS) {
+      const counts = recent.map((r) => r.actual_count)
+      const recentMedian = median(counts)
+      if (recentMedian && recentMedian > 0) {
+        const spreadPct = ((Math.max(...counts) - Math.min(...counts)) / recentMedian) * 100
+        const tolerance = isBootstrap ? BOOTSTRAP_DEVIATION_PCT : ROLLING_DEVIATION_PCT
+        const driftPct = (Math.abs(recentMedian - baseline) / baseline) * 100
+        if (spreadPct <= SHIFT_MAX_SPREAD_PCT && driftPct > tolerance) {
+          return { baseline: Math.round(recentMedian), isBootstrap: false, shifted: true }
         }
       }
     }
-    // snapshots.baseline_used is an int column — an even-length median
-    // (e.g. 1663.5) must be rounded before publish.
-    return { baseline: passedMedian, isBootstrap: false }
   }
-  return { baseline: expectedCount, isBootstrap: true }
+
+  // snapshots.baseline_used is an int column — an even-length median
+  // (e.g. 1663.5) is already rounded above.
+  return { baseline, isBootstrap }
 }
