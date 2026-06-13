@@ -85,6 +85,31 @@ const appWarnOnlySyntax = [
   },
 ]
 
+// ── Type-assertion bypass guard (P0 键石: 编译时 schema 接地) ──
+// `as any` / `as SupabaseClient` / `as unknown` 把代码从生成类型
+// (database.types.ts) 里挖出来,绕过 tsc 这道最早最便宜的 schema 防线 —
+// 正是 2026-06 漂移类(引用已删列 display_name 等)能编译通过的原因。
+// 当前 warn-only(全局),与 appWarnOnlySyntax 同策略:先警告新代码,
+// 烧完 71 个旧 cast 的积压后再逐文件锁 error。绝不一次性硬禁。
+// 见 CLAUDE.md「AI Schema 接地」+ docs/LINTING_GUIDE.md。
+const castRestrictedSyntax = [
+  {
+    selector: "TSAsExpression[typeAnnotation.type='TSAnyKeyword']",
+    message:
+      '`as any` 绕过类型系统 —— schema 漂移就是这样躲过 tsc 的。改用 database.types.ts 的生成类型,或先用 MCP/REST 确认列存在。',
+  },
+  {
+    selector: "TSAsExpression[typeAnnotation.type='TSUnknownKeyword']",
+    message:
+      '`as unknown` (常见于 `as unknown as X` 双重断言) 绕过类型系统。用生成类型或正确的类型守卫,别强转。',
+  },
+  {
+    selector: "TSAsExpression[typeAnnotation.typeName.name='SupabaseClient']",
+    message:
+      '`as SupabaseClient` 把客户端降级成无类型,select/from 不再被 schema 校验 —— 漂移温床。用 SupabaseClient<Database> 泛型客户端(lib/supabase/client).',
+  },
+]
+
 const eslintConfig = defineConfig([
   ...nextVitals,
   ...nextTs,
@@ -140,7 +165,8 @@ const eslintConfig = defineConfig([
 
       // Detect empty Promise .catch() callbacks like .catch(() => {})
       // Use fireAndForget() from lib/utils/logger instead for proper logging
-      'no-restricted-syntax': ['warn', ...baseRestrictedSyntax],
+      // + castRestrictedSyntax: 全局 warn 禁 cast 绕类型(P0 键石,覆盖 lib/)
+      'no-restricted-syntax': ['warn', ...baseRestrictedSyntax, ...castRestrictedSyntax],
     },
   },
   // ============================================
@@ -155,6 +181,7 @@ const eslintConfig = defineConfig([
         ...baseRestrictedSyntax,
         ...appRestrictedSyntax,
         ...appWarnOnlySyntax,
+        ...castRestrictedSyntax,
       ],
     },
   },
@@ -201,10 +228,12 @@ const eslintConfig = defineConfig([
   // See docs/system-principles.md for rationale
   // ============================================
   // Exempt: auth hook implementation and server-side API routes (which use JWT verification)
+  // 保留 System State Management 豁免,但仍 warn 禁 cast —— app/api 是 DB cast 重灾区,
+  // 不能整条规则关掉(P0 键石)。
   {
     files: ['lib/hooks/useAuthSession.ts', 'app/api/**/*.ts'],
     rules: {
-      'no-restricted-syntax': 'off',
+      'no-restricted-syntax': ['warn', ...castRestrictedSyntax],
     },
   },
   // ============================================
