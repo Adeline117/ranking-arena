@@ -9,6 +9,20 @@
  * @jest-environment node
  */
 
+// route 读 env.STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET（来自 @/lib/env，import 时
+// zod 固化）。不 mock 它则测试 beforeEach 设的 process.env 进不去 → route 走 503 配置
+// 缺失分支，而非到达签名校验返回 400。用 Proxy 让 env.* 在调用时读 process.env。
+jest.mock('@/lib/env', () => ({
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        return process.env[String(key)]
+      },
+    }
+  ),
+}))
+
 jest.mock('@supabase/supabase-js', () => ({
   createClient: () => ({
     from: jest.fn().mockReturnValue({
