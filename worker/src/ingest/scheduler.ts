@@ -31,12 +31,18 @@ export async function reconcileSchedulers(): Promise<void> {
     // co-located with that region picks them up (remote-WS chain gone).
     const queue = getRegionQueue(src.fetch_region)
 
+    // ── Tier priority (2026-06-12 head-of-line-blocking fix) ──
+    // BullMQ priority: 1 = highest. Slow tier-B deep-profile crawls (10-40min)
+    // were monopolizing all worker slots, starving fast tier-A leaderboard
+    // crawls (seconds, user-facing rankings) for 10h+ in the queue. Priority
+    // makes a freed slot pick tier-A first, then tier-D positions, and tier-B
+    // only fills spare slots — rankings stay fresh, profiles degrade gracefully.
     const tierA = `tiera:${src.slug}`
     wanted.add(tierA)
     await queue.upsertJobScheduler(
       tierA,
       { every: src.cadence_tier_a_seconds * 1000 },
-      { name: INGEST_JOB.TIER_A, data }
+      { name: INGEST_JOB.TIER_A, data, opts: { priority: 1 } }
     )
 
     const tierB = `tierb:${src.slug}`
@@ -44,7 +50,7 @@ export async function reconcileSchedulers(): Promise<void> {
     await queue.upsertJobScheduler(
       tierB,
       { every: src.cadence_tier_b_seconds * 1000 },
-      { name: INGEST_JOB.TIER_B, data }
+      { name: INGEST_JOB.TIER_B, data, opts: { priority: 6 } }
     )
 
     const tierD = `tierd:${src.slug}`
@@ -52,7 +58,7 @@ export async function reconcileSchedulers(): Promise<void> {
     await queue.upsertJobScheduler(
       tierD,
       { every: src.cadence_tier_d_seconds * 1000 },
-      { name: INGEST_JOB.TIER_D, data }
+      { name: INGEST_JOB.TIER_D, data, opts: { priority: 3 } }
     )
 
     // Series backfill (spec §13.1): slow sweep of ranked traders beyond
@@ -67,7 +73,7 @@ export async function reconcileSchedulers(): Promise<void> {
       await queue.upsertJobScheduler(
         seriesBackfill,
         { every: Math.max(60, cadenceSec) * 1000 },
-        { name: INGEST_JOB.TIER_B_SERIES, data }
+        { name: INGEST_JOB.TIER_B_SERIES, data, opts: { priority: 9 } }
       )
     }
 
@@ -78,7 +84,7 @@ export async function reconcileSchedulers(): Promise<void> {
       await queue.upsertJobScheduler(
         derive,
         { every: src.cadence_tier_a_seconds * 1000 },
-        { name: INGEST_JOB.DERIVE_BOARDS, data }
+        { name: INGEST_JOB.DERIVE_BOARDS, data, opts: { priority: 2 } }
       )
     }
   }
