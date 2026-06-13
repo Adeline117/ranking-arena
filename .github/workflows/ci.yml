@@ -196,7 +196,8 @@ jobs:
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-build-anon-placeholder' }}
           SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'ci-build-service-placeholder' }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-build-cron-placeholder' }}
+          # CriticalEnvSchema 要求 CRON_SECRET ≥32 字符，dummy 兜底须够长。
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-build-placeholder-cron-secret-0000000000' }}
 
       - name: Bundle size check
         run: |
