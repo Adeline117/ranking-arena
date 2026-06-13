@@ -73,6 +73,7 @@
     "backup:r2:full": "node scripts/maintenance/backup-to-r2.mjs --full",
     "qa:serving": "node scripts/qa/serving-acceptance.mjs",
     "qa:schema": "node scripts/qa/schema-contract-check.mjs",
+    "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
     "qa:buttons": "node scripts/qa/button-sweep.mjs"
   },
   "dependencies": {
