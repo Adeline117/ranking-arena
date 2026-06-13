@@ -267,6 +267,27 @@ These enforce: (1) fire-and-forget (never blocks response), (2) dedup (same acto
 - Migrations named: `YYYYMMDDHHMMSS_description.sql` — always generate via `scripts/new-migration.sh <description>` (collision-proof)
 - Use `source` + `source_trader_id` as composite key for traders
 
+### AI Schema 接地 — MANDATORY（防 schema 漂移的根源约束）
+
+**根源教训（2026-06）**：~200 个迁移从未应用到生产（仓库写了 ≠ 生产有），
+代码凭"用户表应该有 display_name"之类的**先验**写查询，而非查真实状态，
+导致发帖/点赞/订阅/支付记录长期静默 500，无人发现。根因是 **AI 生成速度
+远超验证速度**。对策：把"接地"做成写代码前的反射，而非事后追。
+
+1. **写任何 `.from('x')` / `.rpc('y')` / `select('col')` 前，先确认 x/y/col 在
+   _生产_ 存在** —— 用 Supabase MCP（`execute_sql` / `list_tables`）或
+   `curl $SUPABASE_URL/rest/v1/<table>?select=<col>&limit=0`（42703=列不存在，
+   PGRST205=表不存在，PGRST202=函数不存在）。**绝不凭训练先验假设 schema。**
+2. **新迁移写完必须 `apply_migration` 到生产，并 `npm run qa:schema` 确认契约
+   仍绿** —— "迁移文件进了仓库"不等于"生产有这张表"。绝不用字母后缀命名
+   （`20260319h_*` 无法进 ledger）；只用 `scripts/new-migration.sh`（纯时间戳）。
+3. **禁止 `as any` / `as SupabaseClient` 绕过生成类型** —— `database.types.ts`
+   由生产 schema 生成，是编译时接地；cast 绕过它 = 自废 tsc 这道最早的防线。
+4. **catch / safeQuery 里的 DB 错误必须 log，不许静默吞** —— 静默失败让漂移
+   隐形累积；会爆炸的系统会被立刻修，安静失败的系统积债到用户撞见。
+5. **每日哨兵** `scripts/openclaw/schema-canary-sentinel.mjs`（7:30 crontab）是
+   兜底，不是借口 —— 它每天替你跑契约检查 + 写路径金丝雀，失败 Telegram 告警。
+
 ### Database Concurrency Safety — MANDATORY
 
 - **Counters**: NEVER use trigger-based `SET count = count + 1`. Use atomic RPC functions (`increment_*_count` / `decrement_*_count` from migration 00021) called explicitly in API handlers.
