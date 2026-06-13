@@ -36,11 +36,24 @@ export function getIngestPool(): Pool {
 
   pool = new Pool({
     connectionString: url,
-    // main queue (3) + tier-c queue (2) + scheduler/maintenance can all
-    // hold a client concurrently; 5 was contention-edge at 23 sources.
-    max: 10,
-    idleTimeoutMillis: 30_000,
+    // ── Multi-node shared-pooler budget (2026-06-12 pool-exhaustion fix) ──
+    // BOTH ingest nodes (Mac `local` + SG `vps_sg`) import this file and open
+    // their OWN pool against the SAME Supabase transaction pooler (Supavisor).
+    // Supavisor's default transaction pool_size is small (~15 on smaller
+    // tiers); 10×2 nodes + legacy worker + Vercel reads saturated it →
+    // `ECHECKOUTTIMEOUT in Transaction mode`. Mac peak demand is only
+    // INGEST_CONCURRENCY(3) + tier-c(2) + scheduler(1) ≈ 6, so 8 covers it
+    // with headroom while keeping the two-node footprint (16) under budget.
+    max: 8,
+    // CRITICAL: must be SHORTER than Supavisor's server-side idle timeout.
+    // At 30s, node-pg kept clients Supavisor had already closed → the next
+    // checkout got a dead socket and threw `EDBHANDLEREXITED`. Releasing
+    // idle clients at 10s both avoids stale sockets AND returns the pooler
+    // slot to the other node faster.
+    idleTimeoutMillis: 10_000,
     connectionTimeoutMillis: 10_000,
+    // Surface a half-open socket before a query rides it into EDBHANDLEREXITED.
+    keepAlive: true,
     // Supabase pooler requires TLS; local dev (127.0.0.1) does not.
     ssl:
       url.includes('127.0.0.1') || url.includes('localhost')
