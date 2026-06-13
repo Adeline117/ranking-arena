@@ -124,6 +124,7 @@ export async function GET(req: NextRequest) {
     // --- Aggregate data freshness per platform ---
     const platformFreshness: Record<string, { latestUpdate: string; ageHours: number }> = {}
     for (const row of freshnessRes.data || []) {
+      if (!row.updated_at) continue // updated_at 可空 —— 无时间戳无法算新鲜度,跳过
       if (!platformFreshness[row.platform]) {
         const ageMs = now - new Date(row.updated_at).getTime()
         platformFreshness[row.platform] = {

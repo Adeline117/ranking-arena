@@ -1,3 +1,5 @@
+// AUTO-GENERATED from production schema via Supabase MCP — DO NOT EDIT BY HAND.
+// Regenerate: npm run gen:types   |   Drift gate: schema-contract-check / gen:types:check
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
@@ -288,6 +290,77 @@ export type Database = {
         }
         Relationships: []
       }
+      api_key_usage_daily: {
+        Row: {
+          api_key_id: string
+          date: string
+          id: string
+          request_count: number
+        }
+        Insert: {
+          api_key_id: string
+          date: string
+          id?: string
+          request_count?: number
+        }
+        Update: {
+          api_key_id?: string
+          date?: string
+          id?: string
+          request_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'api_key_usage_daily_api_key_id_fkey'
+            columns: ['api_key_id']
+            isOneToOne: false
+            referencedRelation: 'api_keys'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      api_keys: {
+        Row: {
+          active: boolean
+          created_at: string
+          daily_limit: number
+          id: string
+          key: string
+          last_used_at: string | null
+          name: string
+          request_count_today: number
+          revoked_at: string | null
+          tier: string
+          user_id: string
+        }
+        Insert: {
+          active?: boolean
+          created_at?: string
+          daily_limit?: number
+          id?: string
+          key: string
+          last_used_at?: string | null
+          name?: string
+          request_count_today?: number
+          revoked_at?: string | null
+          tier?: string
+          user_id: string
+        }
+        Update: {
+          active?: boolean
+          created_at?: string
+          daily_limit?: number
+          id?: string
+          key?: string
+          last_used_at?: string | null
+          name?: string
+          request_count_today?: number
+          revoked_at?: string | null
+          tier?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       authorization_sync_logs: {
         Row: {
           authorization_id: string
@@ -325,6 +398,54 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      avoid_votes: {
+        Row: {
+          created_at: string
+          follow_duration_days: number | null
+          id: string
+          loss_amount: number | null
+          loss_percent: number | null
+          reason: string | null
+          reason_type: string | null
+          screenshot_url: string | null
+          source: string
+          status: string
+          trader_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          follow_duration_days?: number | null
+          id?: string
+          loss_amount?: number | null
+          loss_percent?: number | null
+          reason?: string | null
+          reason_type?: string | null
+          screenshot_url?: string | null
+          source: string
+          status?: string
+          trader_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          follow_duration_days?: number | null
+          id?: string
+          loss_amount?: number | null
+          loss_percent?: number | null
+          reason?: string | null
+          reason_type?: string | null
+          screenshot_url?: string | null
+          source?: string
+          status?: string
+          trader_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       backup_codes: {
         Row: {
@@ -370,54 +491,6 @@ export type Database = {
           created_at?: string | null
         }
         Relationships: []
-      }
-      book_ratings: {
-        Row: {
-          created_at: string | null
-          id: string
-          library_item_id: string
-          rating: number | null
-          review: string | null
-          status: string | null
-          updated_at: string | null
-          user_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string
-          library_item_id: string
-          rating?: number | null
-          review?: string | null
-          status?: string | null
-          updated_at?: string | null
-          user_id: string
-        }
-        Update: {
-          created_at?: string | null
-          id?: string
-          library_item_id?: string
-          rating?: number | null
-          review?: string | null
-          status?: string | null
-          updated_at?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'book_ratings_library_item_id_fkey'
-            columns: ['library_item_id']
-            isOneToOne: false
-            referencedRelation: 'library_items'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'book_ratings_user_id_fkey'
-            columns: ['user_id']
-            isOneToOne: false
-            referencedRelation: 'users'
-            referencedColumns: ['id']
-          },
-        ]
       }
       bookmark_folders: {
         Row: {
@@ -830,60 +903,6 @@ export type Database = {
           },
         ]
       }
-      cluster_members: {
-        Row: {
-          cluster_id: number
-          similarity_score: number | null
-          wallet_id: number
-        }
-        Insert: {
-          cluster_id: number
-          similarity_score?: number | null
-          wallet_id: number
-        }
-        Update: {
-          cluster_id?: number
-          similarity_score?: number | null
-          wallet_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'cluster_members_cluster_id_fkey'
-            columns: ['cluster_id']
-            isOneToOne: false
-            referencedRelation: 'clusters'
-            referencedColumns: ['cluster_id']
-          },
-          {
-            foreignKeyName: 'cluster_members_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
-      }
-      clusters: {
-        Row: {
-          cluster_id: number
-          cluster_type: string | null
-          created_at: string | null
-          score: number | null
-        }
-        Insert: {
-          cluster_id?: number
-          cluster_type?: string | null
-          created_at?: string | null
-          score?: number | null
-        }
-        Update: {
-          cluster_id?: number
-          cluster_type?: string | null
-          created_at?: string | null
-          score?: number | null
-        }
-        Relationships: []
-      }
       collection_items: {
         Row: {
           added_at: string | null
@@ -1007,6 +1026,101 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      competition_entries: {
+        Row: {
+          baseline_value: number | null
+          competition_id: string
+          current_value: number | null
+          id: string
+          joined_at: string | null
+          platform: string
+          rank: number | null
+          trader_id: string
+          user_id: string
+        }
+        Insert: {
+          baseline_value?: number | null
+          competition_id: string
+          current_value?: number | null
+          id?: string
+          joined_at?: string | null
+          platform: string
+          rank?: number | null
+          trader_id: string
+          user_id: string
+        }
+        Update: {
+          baseline_value?: number | null
+          competition_id?: string
+          current_value?: number | null
+          id?: string
+          joined_at?: string | null
+          platform?: string
+          rank?: number | null
+          trader_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'competition_entries_competition_id_fkey'
+            columns: ['competition_id']
+            isOneToOne: false
+            referencedRelation: 'competitions'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      competitions: {
+        Row: {
+          created_at: string | null
+          creator_id: string
+          description: string | null
+          end_at: string
+          entry_fee_cents: number | null
+          id: string
+          max_participants: number | null
+          metric: string
+          prize_pool_cents: number | null
+          rules: Json | null
+          start_at: string
+          status: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          creator_id: string
+          description?: string | null
+          end_at: string
+          entry_fee_cents?: number | null
+          id?: string
+          max_participants?: number | null
+          metric?: string
+          prize_pool_cents?: number | null
+          rules?: Json | null
+          start_at: string
+          status?: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          creator_id?: string
+          description?: string | null
+          end_at?: string
+          entry_fee_cents?: number | null
+          id?: string
+          max_participants?: number | null
+          metric?: string
+          prize_pool_cents?: number | null
+          rules?: Json | null
+          start_at?: string
+          status?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       content_reports: {
         Row: {
@@ -1222,60 +1336,6 @@ export type Database = {
         }
         Relationships: []
       }
-      daily_trader_stats: {
-        Row: {
-          arena_score: number | null
-          captured_at: string | null
-          followers: number | null
-          id: number
-          max_drawdown: number | null
-          pnl: number | null
-          rank: number | null
-          roi: number | null
-          roi_30d: number | null
-          roi_7d: number | null
-          snapshot_date: string
-          source: string
-          source_trader_id: string
-          trades_count: number | null
-          win_rate: number | null
-        }
-        Insert: {
-          arena_score?: number | null
-          captured_at?: string | null
-          followers?: number | null
-          id?: number
-          max_drawdown?: number | null
-          pnl?: number | null
-          rank?: number | null
-          roi?: number | null
-          roi_30d?: number | null
-          roi_7d?: number | null
-          snapshot_date: string
-          source: string
-          source_trader_id: string
-          trades_count?: number | null
-          win_rate?: number | null
-        }
-        Update: {
-          arena_score?: number | null
-          captured_at?: string | null
-          followers?: number | null
-          id?: number
-          max_drawdown?: number | null
-          pnl?: number | null
-          rank?: number | null
-          roi?: number | null
-          roi_30d?: number | null
-          roi_7d?: number | null
-          snapshot_date?: string
-          source?: string
-          source_trader_id?: string
-          trades_count?: number | null
-          win_rate?: number | null
-        }
-        Relationships: []
-      }
       db_cache: {
         Row: {
           key: string
@@ -1377,30 +1437,6 @@ export type Database = {
         }
         Relationships: []
       }
-      exp_transactions: {
-        Row: {
-          action: string
-          created_at: string | null
-          exp_amount: number
-          id: number
-          user_id: string | null
-        }
-        Insert: {
-          action: string
-          created_at?: string | null
-          exp_amount: number
-          id?: number
-          user_id?: string | null
-        }
-        Update: {
-          action?: string
-          created_at?: string | null
-          exp_amount?: number
-          id?: number
-          user_id?: string | null
-        }
-        Relationships: []
-      }
       feedback: {
         Row: {
           created_at: string | null
@@ -1438,6 +1474,7 @@ export type Database = {
         Row: {
           category: string | null
           content: string | null
+          content_en: string | null
           content_zh: string | null
           created_at: string | null
           id: string
@@ -1453,6 +1490,7 @@ export type Database = {
         Insert: {
           category?: string | null
           content?: string | null
+          content_en?: string | null
           content_zh?: string | null
           created_at?: string | null
           id?: string
@@ -1468,6 +1506,7 @@ export type Database = {
         Update: {
           category?: string | null
           content?: string | null
+          content_en?: string | null
           content_zh?: string | null
           created_at?: string | null
           id?: string
@@ -1482,62 +1521,52 @@ export type Database = {
         }
         Relationships: []
       }
+      folder_subscriptions: {
+        Row: {
+          created_at: string
+          folder_id: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          folder_id: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          folder_id?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'folder_subscriptions_folder_id_fkey'
+            columns: ['folder_id']
+            isOneToOne: false
+            referencedRelation: 'bookmark_folders'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       follows: {
         Row: {
           created_at: string | null
           trader_id: string
-          user_id: string | null
+          user_id: string
         }
         Insert: {
           created_at?: string | null
           trader_id: string
-          user_id?: string | null
+          user_id: string
         }
         Update: {
           created_at?: string | null
           trader_id?: string
-          user_id?: string | null
+          user_id?: string
         }
         Relationships: []
-      }
-      funding_hubs: {
-        Row: {
-          cluster_id: number | null
-          hub_id: number
-          hub_type: string | null
-          indicator_score: number | null
-          wallet_id: number | null
-        }
-        Insert: {
-          cluster_id?: number | null
-          hub_id?: number
-          hub_type?: string | null
-          indicator_score?: number | null
-          wallet_id?: number | null
-        }
-        Update: {
-          cluster_id?: number | null
-          hub_id?: number
-          hub_type?: string | null
-          indicator_score?: number | null
-          wallet_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'funding_hubs_cluster_id_fkey'
-            columns: ['cluster_id']
-            isOneToOne: false
-            referencedRelation: 'clusters'
-            referencedColumns: ['cluster_id']
-          },
-          {
-            foreignKeyName: 'funding_hubs_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
       }
       funding_rates: {
         Row: {
@@ -2164,6 +2193,69 @@ export type Database = {
         }
         Relationships: []
       }
+      hashtags: {
+        Row: {
+          created_at: string | null
+          id: string
+          post_count: number | null
+          tag: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          post_count?: number | null
+          tag: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          post_count?: number | null
+          tag?: string
+        }
+        Relationships: []
+      }
+      hot_topics: {
+        Row: {
+          category: string
+          created_at: string | null
+          heat_score: number
+          id: string
+          keyword: string
+          keyword_zh: string | null
+          mention_count: number
+          related_coins: string[] | null
+          source: string
+          trend: string
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string
+          created_at?: string | null
+          heat_score?: number
+          id?: string
+          keyword: string
+          keyword_zh?: string | null
+          mention_count?: number
+          related_coins?: string[] | null
+          source?: string
+          trend?: string
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string
+          created_at?: string | null
+          heat_score?: number
+          id?: string
+          keyword?: string
+          keyword_zh?: string | null
+          mention_count?: number
+          related_coins?: string[] | null
+          source?: string
+          trend?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       institutions: {
         Row: {
           avg_rating: number | null
@@ -2230,48 +2322,6 @@ export type Database = {
         }
         Relationships: []
       }
-      interactions: {
-        Row: {
-          action_detail: string | null
-          action_type: string | null
-          interaction_id: number
-          project_id: number | null
-          timestamp: string | null
-          wallet_id: number | null
-        }
-        Insert: {
-          action_detail?: string | null
-          action_type?: string | null
-          interaction_id?: number
-          project_id?: number | null
-          timestamp?: string | null
-          wallet_id?: number | null
-        }
-        Update: {
-          action_detail?: string | null
-          action_type?: string | null
-          interaction_id?: number
-          project_id?: number | null
-          timestamp?: string | null
-          wallet_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'interactions_project_id_fkey'
-            columns: ['project_id']
-            isOneToOne: false
-            referencedRelation: 'projects'
-            referencedColumns: ['project_id']
-          },
-          {
-            foreignKeyName: 'interactions_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
-      }
       kol_applications: {
         Row: {
           created_at: string | null
@@ -2319,35 +2369,6 @@ export type Database = {
           user_id?: string | null
         }
         Relationships: []
-      }
-      labels: {
-        Row: {
-          confidence: number | null
-          label: string
-          source: string | null
-          wallet_id: number
-        }
-        Insert: {
-          confidence?: number | null
-          label: string
-          source?: string | null
-          wallet_id: number
-        }
-        Update: {
-          confidence?: number | null
-          label?: string
-          source?: string | null
-          wallet_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'labels_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
       }
       leaderboard_count_cache: {
         Row: {
@@ -2460,7 +2481,7 @@ export type Database = {
           avatar_url: string | null
           avg_holding_hours: number | null
           calmar_ratio: number | null
-          computed_at: string
+          computed_at: string | null
           copiers: number | null
           execution_score: number | null
           followers: number | null
@@ -2473,7 +2494,7 @@ export type Database = {
           pnl: number | null
           profit_factor: number | null
           profitability_score: number | null
-          rank: number
+          rank: number | null
           rank_change: number | null
           risk_control_score: number | null
           roi: number | null
@@ -2483,7 +2504,7 @@ export type Database = {
           sortino_ratio: number | null
           source: string
           source_trader_id: string
-          source_type: string
+          source_type: string | null
           style_confidence: number | null
           trader_type: string | null
           trades_count: number | null
@@ -2495,7 +2516,7 @@ export type Database = {
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
-          computed_at?: string
+          computed_at?: string | null
           copiers?: number | null
           execution_score?: number | null
           followers?: number | null
@@ -2508,7 +2529,7 @@ export type Database = {
           pnl?: number | null
           profit_factor?: number | null
           profitability_score?: number | null
-          rank: number
+          rank?: number | null
           rank_change?: number | null
           risk_control_score?: number | null
           roi?: number | null
@@ -2518,7 +2539,7 @@ export type Database = {
           sortino_ratio?: number | null
           source: string
           source_trader_id: string
-          source_type?: string
+          source_type?: string | null
           style_confidence?: number | null
           trader_type?: string | null
           trades_count?: number | null
@@ -2530,7 +2551,7 @@ export type Database = {
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
-          computed_at?: string
+          computed_at?: string | null
           copiers?: number | null
           execution_score?: number | null
           followers?: number | null
@@ -2543,7 +2564,7 @@ export type Database = {
           pnl?: number | null
           profit_factor?: number | null
           profitability_score?: number | null
-          rank?: number
+          rank?: number | null
           rank_change?: number | null
           risk_control_score?: number | null
           roi?: number | null
@@ -2553,7 +2574,7 @@ export type Database = {
           sortino_ratio?: number | null
           source?: string
           source_trader_id?: string
-          source_type?: string
+          source_type?: string | null
           style_confidence?: number | null
           trader_type?: string | null
           trades_count?: number | null
@@ -2684,117 +2705,6 @@ export type Database = {
           },
         ]
       }
-      library_items: {
-        Row: {
-          ai_summary: string | null
-          author: string | null
-          buy_url: string | null
-          category: string
-          content_url: string | null
-          cover_url: string | null
-          created_at: string | null
-          crypto_symbols: string[] | null
-          description: string | null
-          doi: string | null
-          download_count: number | null
-          epub_url: string | null
-          file_key: string | null
-          file_size_bytes: number | null
-          id: string
-          is_free: boolean | null
-          isbn: string | null
-          language: string | null
-          language_group_id: string | null
-          page_count: number | null
-          pdf_url: string | null
-          publish_date: string | null
-          publisher: string | null
-          rating: number | null
-          rating_count: number | null
-          source: string | null
-          source_url: string | null
-          subcategory: string | null
-          tags: string[] | null
-          title: string
-          title_en: string | null
-          title_zh: string | null
-          updated_at: string | null
-          view_count: number | null
-        }
-        Insert: {
-          ai_summary?: string | null
-          author?: string | null
-          buy_url?: string | null
-          category: string
-          content_url?: string | null
-          cover_url?: string | null
-          created_at?: string | null
-          crypto_symbols?: string[] | null
-          description?: string | null
-          doi?: string | null
-          download_count?: number | null
-          epub_url?: string | null
-          file_key?: string | null
-          file_size_bytes?: number | null
-          id?: string
-          is_free?: boolean | null
-          isbn?: string | null
-          language?: string | null
-          language_group_id?: string | null
-          page_count?: number | null
-          pdf_url?: string | null
-          publish_date?: string | null
-          publisher?: string | null
-          rating?: number | null
-          rating_count?: number | null
-          source?: string | null
-          source_url?: string | null
-          subcategory?: string | null
-          tags?: string[] | null
-          title: string
-          title_en?: string | null
-          title_zh?: string | null
-          updated_at?: string | null
-          view_count?: number | null
-        }
-        Update: {
-          ai_summary?: string | null
-          author?: string | null
-          buy_url?: string | null
-          category?: string
-          content_url?: string | null
-          cover_url?: string | null
-          created_at?: string | null
-          crypto_symbols?: string[] | null
-          description?: string | null
-          doi?: string | null
-          download_count?: number | null
-          epub_url?: string | null
-          file_key?: string | null
-          file_size_bytes?: number | null
-          id?: string
-          is_free?: boolean | null
-          isbn?: string | null
-          language?: string | null
-          language_group_id?: string | null
-          page_count?: number | null
-          pdf_url?: string | null
-          publish_date?: string | null
-          publisher?: string | null
-          rating?: number | null
-          rating_count?: number | null
-          source?: string | null
-          source_url?: string | null
-          subcategory?: string | null
-          tags?: string[] | null
-          title?: string
-          title_en?: string | null
-          title_zh?: string | null
-          updated_at?: string | null
-          view_count?: number | null
-        }
-        Relationships: []
-      }
       liquidation_stats: {
         Row: {
           created_at: string | null
@@ -2903,6 +2813,438 @@ export type Database = {
         }
         Relationships: []
       }
+      lr_30d: {
+        Row: {
+          arena_score: number | null
+          avatar_url: string | null
+          avg_holding_hours: number | null
+          calmar_ratio: number | null
+          computed_at: string | null
+          copiers: number | null
+          execution_score: number | null
+          followers: number | null
+          handle: string | null
+          id: number
+          is_new: boolean | null
+          is_outlier: boolean | null
+          max_drawdown: number | null
+          metrics_estimated: boolean | null
+          pnl: number | null
+          profit_factor: number | null
+          profitability_score: number | null
+          rank: number | null
+          rank_change: number | null
+          risk_control_score: number | null
+          roi: number | null
+          score_completeness: string | null
+          season_id: string
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          source: string
+          source_trader_id: string
+          source_type: string | null
+          style_confidence: number | null
+          trader_type: string | null
+          trades_count: number | null
+          trading_style: string | null
+          win_rate: number | null
+        }
+        Insert: {
+          arena_score?: number | null
+          avatar_url?: string | null
+          avg_holding_hours?: number | null
+          calmar_ratio?: number | null
+          computed_at?: string | null
+          copiers?: number | null
+          execution_score?: number | null
+          followers?: number | null
+          handle?: string | null
+          id?: number
+          is_new?: boolean | null
+          is_outlier?: boolean | null
+          max_drawdown?: number | null
+          metrics_estimated?: boolean | null
+          pnl?: number | null
+          profit_factor?: number | null
+          profitability_score?: number | null
+          rank?: number | null
+          rank_change?: number | null
+          risk_control_score?: number | null
+          roi?: number | null
+          score_completeness?: string | null
+          season_id: string
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          source: string
+          source_trader_id: string
+          source_type?: string | null
+          style_confidence?: number | null
+          trader_type?: string | null
+          trades_count?: number | null
+          trading_style?: string | null
+          win_rate?: number | null
+        }
+        Update: {
+          arena_score?: number | null
+          avatar_url?: string | null
+          avg_holding_hours?: number | null
+          calmar_ratio?: number | null
+          computed_at?: string | null
+          copiers?: number | null
+          execution_score?: number | null
+          followers?: number | null
+          handle?: string | null
+          id?: number
+          is_new?: boolean | null
+          is_outlier?: boolean | null
+          max_drawdown?: number | null
+          metrics_estimated?: boolean | null
+          pnl?: number | null
+          profit_factor?: number | null
+          profitability_score?: number | null
+          rank?: number | null
+          rank_change?: number | null
+          risk_control_score?: number | null
+          roi?: number | null
+          score_completeness?: string | null
+          season_id?: string
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          source?: string
+          source_trader_id?: string
+          source_type?: string | null
+          style_confidence?: number | null
+          trader_type?: string | null
+          trades_count?: number | null
+          trading_style?: string | null
+          win_rate?: number | null
+        }
+        Relationships: []
+      }
+      lr_7d: {
+        Row: {
+          arena_score: number | null
+          avatar_url: string | null
+          avg_holding_hours: number | null
+          calmar_ratio: number | null
+          computed_at: string | null
+          copiers: number | null
+          execution_score: number | null
+          followers: number | null
+          handle: string | null
+          id: number
+          is_new: boolean | null
+          is_outlier: boolean | null
+          max_drawdown: number | null
+          metrics_estimated: boolean | null
+          pnl: number | null
+          profit_factor: number | null
+          profitability_score: number | null
+          rank: number | null
+          rank_change: number | null
+          risk_control_score: number | null
+          roi: number | null
+          score_completeness: string | null
+          season_id: string
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          source: string
+          source_trader_id: string
+          source_type: string | null
+          style_confidence: number | null
+          trader_type: string | null
+          trades_count: number | null
+          trading_style: string | null
+          win_rate: number | null
+        }
+        Insert: {
+          arena_score?: number | null
+          avatar_url?: string | null
+          avg_holding_hours?: number | null
+          calmar_ratio?: number | null
+          computed_at?: string | null
+          copiers?: number | null
+          execution_score?: number | null
+          followers?: number | null
+          handle?: string | null
+          id?: number
+          is_new?: boolean | null
+          is_outlier?: boolean | null
+          max_drawdown?: number | null
+          metrics_estimated?: boolean | null
+          pnl?: number | null
+          profit_factor?: number | null
+          profitability_score?: number | null
+          rank?: number | null
+          rank_change?: number | null
+          risk_control_score?: number | null
+          roi?: number | null
+          score_completeness?: string | null
+          season_id: string
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          source: string
+          source_trader_id: string
+          source_type?: string | null
+          style_confidence?: number | null
+          trader_type?: string | null
+          trades_count?: number | null
+          trading_style?: string | null
+          win_rate?: number | null
+        }
+        Update: {
+          arena_score?: number | null
+          avatar_url?: string | null
+          avg_holding_hours?: number | null
+          calmar_ratio?: number | null
+          computed_at?: string | null
+          copiers?: number | null
+          execution_score?: number | null
+          followers?: number | null
+          handle?: string | null
+          id?: number
+          is_new?: boolean | null
+          is_outlier?: boolean | null
+          max_drawdown?: number | null
+          metrics_estimated?: boolean | null
+          pnl?: number | null
+          profit_factor?: number | null
+          profitability_score?: number | null
+          rank?: number | null
+          rank_change?: number | null
+          risk_control_score?: number | null
+          roi?: number | null
+          score_completeness?: string | null
+          season_id?: string
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          source?: string
+          source_trader_id?: string
+          source_type?: string | null
+          style_confidence?: number | null
+          trader_type?: string | null
+          trades_count?: number | null
+          trading_style?: string | null
+          win_rate?: number | null
+        }
+        Relationships: []
+      }
+      lr_90d: {
+        Row: {
+          arena_score: number | null
+          avatar_url: string | null
+          avg_holding_hours: number | null
+          calmar_ratio: number | null
+          computed_at: string | null
+          copiers: number | null
+          execution_score: number | null
+          followers: number | null
+          handle: string | null
+          id: number
+          is_new: boolean | null
+          is_outlier: boolean | null
+          max_drawdown: number | null
+          metrics_estimated: boolean | null
+          pnl: number | null
+          profit_factor: number | null
+          profitability_score: number | null
+          rank: number | null
+          rank_change: number | null
+          risk_control_score: number | null
+          roi: number | null
+          score_completeness: string | null
+          season_id: string
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          source: string
+          source_trader_id: string
+          source_type: string | null
+          style_confidence: number | null
+          trader_type: string | null
+          trades_count: number | null
+          trading_style: string | null
+          win_rate: number | null
+        }
+        Insert: {
+          arena_score?: number | null
+          avatar_url?: string | null
+          avg_holding_hours?: number | null
+          calmar_ratio?: number | null
+          computed_at?: string | null
+          copiers?: number | null
+          execution_score?: number | null
+          followers?: number | null
+          handle?: string | null
+          id?: number
+          is_new?: boolean | null
+          is_outlier?: boolean | null
+          max_drawdown?: number | null
+          metrics_estimated?: boolean | null
+          pnl?: number | null
+          profit_factor?: number | null
+          profitability_score?: number | null
+          rank?: number | null
+          rank_change?: number | null
+          risk_control_score?: number | null
+          roi?: number | null
+          score_completeness?: string | null
+          season_id: string
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          source: string
+          source_trader_id: string
+          source_type?: string | null
+          style_confidence?: number | null
+          trader_type?: string | null
+          trades_count?: number | null
+          trading_style?: string | null
+          win_rate?: number | null
+        }
+        Update: {
+          arena_score?: number | null
+          avatar_url?: string | null
+          avg_holding_hours?: number | null
+          calmar_ratio?: number | null
+          computed_at?: string | null
+          copiers?: number | null
+          execution_score?: number | null
+          followers?: number | null
+          handle?: string | null
+          id?: number
+          is_new?: boolean | null
+          is_outlier?: boolean | null
+          max_drawdown?: number | null
+          metrics_estimated?: boolean | null
+          pnl?: number | null
+          profit_factor?: number | null
+          profitability_score?: number | null
+          rank?: number | null
+          rank_change?: number | null
+          risk_control_score?: number | null
+          roi?: number | null
+          score_completeness?: string | null
+          season_id?: string
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          source?: string
+          source_trader_id?: string
+          source_type?: string | null
+          style_confidence?: number | null
+          trader_type?: string | null
+          trades_count?: number | null
+          trading_style?: string | null
+          win_rate?: number | null
+        }
+        Relationships: []
+      }
+      lr_default: {
+        Row: {
+          arena_score: number | null
+          avatar_url: string | null
+          avg_holding_hours: number | null
+          calmar_ratio: number | null
+          computed_at: string | null
+          copiers: number | null
+          execution_score: number | null
+          followers: number | null
+          handle: string | null
+          id: number
+          is_new: boolean | null
+          is_outlier: boolean | null
+          max_drawdown: number | null
+          metrics_estimated: boolean | null
+          pnl: number | null
+          profit_factor: number | null
+          profitability_score: number | null
+          rank: number | null
+          rank_change: number | null
+          risk_control_score: number | null
+          roi: number | null
+          score_completeness: string | null
+          season_id: string
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          source: string
+          source_trader_id: string
+          source_type: string | null
+          style_confidence: number | null
+          trader_type: string | null
+          trades_count: number | null
+          trading_style: string | null
+          win_rate: number | null
+        }
+        Insert: {
+          arena_score?: number | null
+          avatar_url?: string | null
+          avg_holding_hours?: number | null
+          calmar_ratio?: number | null
+          computed_at?: string | null
+          copiers?: number | null
+          execution_score?: number | null
+          followers?: number | null
+          handle?: string | null
+          id?: number
+          is_new?: boolean | null
+          is_outlier?: boolean | null
+          max_drawdown?: number | null
+          metrics_estimated?: boolean | null
+          pnl?: number | null
+          profit_factor?: number | null
+          profitability_score?: number | null
+          rank?: number | null
+          rank_change?: number | null
+          risk_control_score?: number | null
+          roi?: number | null
+          score_completeness?: string | null
+          season_id: string
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          source: string
+          source_trader_id: string
+          source_type?: string | null
+          style_confidence?: number | null
+          trader_type?: string | null
+          trades_count?: number | null
+          trading_style?: string | null
+          win_rate?: number | null
+        }
+        Update: {
+          arena_score?: number | null
+          avatar_url?: string | null
+          avg_holding_hours?: number | null
+          calmar_ratio?: number | null
+          computed_at?: string | null
+          copiers?: number | null
+          execution_score?: number | null
+          followers?: number | null
+          handle?: string | null
+          id?: number
+          is_new?: boolean | null
+          is_outlier?: boolean | null
+          max_drawdown?: number | null
+          metrics_estimated?: boolean | null
+          pnl?: number | null
+          profit_factor?: number | null
+          profitability_score?: number | null
+          rank?: number | null
+          rank_change?: number | null
+          risk_control_score?: number | null
+          roi?: number | null
+          score_completeness?: string | null
+          season_id?: string
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          source?: string
+          source_trader_id?: string
+          source_type?: string | null
+          style_confidence?: number | null
+          trader_type?: string | null
+          trades_count?: number | null
+          trading_style?: string | null
+          win_rate?: number | null
+        }
+        Relationships: []
+      }
       manipulation_alert_history: {
         Row: {
           action: string
@@ -2940,13 +3282,6 @@ export type Database = {
             columns: ['alert_id']
             isOneToOne: false
             referencedRelation: 'manipulation_alerts'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'manipulation_alert_history_alert_id_fkey'
-            columns: ['alert_id']
-            isOneToOne: false
-            referencedRelation: 'v_recent_alerts'
             referencedColumns: ['id']
           },
         ]
@@ -3068,48 +3403,6 @@ export type Database = {
         }
         Relationships: []
       }
-      notification_history: {
-        Row: {
-          body: string
-          channel_id: string | null
-          clicked_at: string | null
-          data: Json | null
-          delivered_at: string | null
-          error: string | null
-          id: string
-          sent_at: string
-          status: string
-          title: string
-          user_id: string
-        }
-        Insert: {
-          body: string
-          channel_id?: string | null
-          clicked_at?: string | null
-          data?: Json | null
-          delivered_at?: string | null
-          error?: string | null
-          id?: string
-          sent_at?: string
-          status?: string
-          title: string
-          user_id: string
-        }
-        Update: {
-          body?: string
-          channel_id?: string | null
-          clicked_at?: string | null
-          data?: Json | null
-          delivered_at?: string | null
-          error?: string | null
-          id?: string
-          sent_at?: string
-          status?: string
-          title?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
       notifications: {
         Row: {
           actor_id: string | null
@@ -3206,6 +3499,39 @@ export type Database = {
           platform?: string
           symbol?: string
           timestamp?: string
+        }
+        Relationships: []
+      }
+      payment_history: {
+        Row: {
+          amount: number | null
+          created_at: string
+          currency: string | null
+          id: number
+          status: string
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          amount?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: never
+          status: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          amount?: number | null
+          created_at?: string
+          currency?: string | null
+          id?: never
+          status?: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -3539,6 +3865,68 @@ export type Database = {
           },
         ]
       }
+      post_emoji_reactions: {
+        Row: {
+          created_at: string | null
+          emoji: string
+          id: string
+          post_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          emoji: string
+          id?: string
+          post_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          emoji?: string
+          id?: string
+          post_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'post_emoji_reactions_post_id_fkey'
+            columns: ['post_id']
+            isOneToOne: false
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      post_hashtags: {
+        Row: {
+          hashtag_id: string
+          post_id: string
+        }
+        Insert: {
+          hashtag_id: string
+          post_id: string
+        }
+        Update: {
+          hashtag_id?: string
+          post_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'post_hashtags_hashtag_id_fkey'
+            columns: ['hashtag_id']
+            isOneToOne: false
+            referencedRelation: 'hashtags'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'post_hashtags_post_id_fkey'
+            columns: ['post_id']
+            isOneToOne: false
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       post_likes: {
         Row: {
           created_at: string | null
@@ -3811,6 +4199,77 @@ export type Database = {
           },
         ]
       }
+      pro_official_group_members: {
+        Row: {
+          created_at: string
+          id: string
+          pro_group_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          pro_group_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          pro_group_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'pro_official_group_members_pro_group_id_fkey'
+            columns: ['pro_group_id']
+            isOneToOne: false
+            referencedRelation: 'pro_official_groups'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      pro_official_groups: {
+        Row: {
+          created_at: string
+          current_member_count: number
+          group_id: string
+          group_number: number
+          id: string
+          is_active: boolean
+        }
+        Insert: {
+          created_at?: string
+          current_member_count?: number
+          group_id: string
+          group_number: number
+          id?: string
+          is_active?: boolean
+        }
+        Update: {
+          created_at?: string
+          current_member_count?: number
+          group_id?: string
+          group_number?: number
+          id?: string
+          is_active?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'pro_official_groups_group_id_fkey'
+            columns: ['group_id']
+            isOneToOne: true
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
+          },
+          {
+            foreignKeyName: 'pro_official_groups_group_id_fkey'
+            columns: ['group_id']
+            isOneToOne: true
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       project_cache: {
         Row: {
           bt_t: number | null
@@ -3847,165 +4306,6 @@ export type Database = {
           rf_t?: number | null
           sybils?: number | null
           total?: number | null
-        }
-        Relationships: []
-      }
-      project_interactions: {
-        Row: {
-          id: number
-          status: string | null
-          task_id: number | null
-          timestamp: string | null
-          wallet_id: number | null
-        }
-        Insert: {
-          id?: number
-          status?: string | null
-          task_id?: number | null
-          timestamp?: string | null
-          wallet_id?: number | null
-        }
-        Update: {
-          id?: number
-          status?: string | null
-          task_id?: number | null
-          timestamp?: string | null
-          wallet_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'project_interactions_task_id_fkey'
-            columns: ['task_id']
-            isOneToOne: false
-            referencedRelation: 'tasks'
-            referencedColumns: ['task_id']
-          },
-          {
-            foreignKeyName: 'project_interactions_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
-      }
-      project_labels: {
-        Row: {
-          confidence: number
-          confidence_basis: string | null
-          evidence_ref: string | null
-          imported_at: string | null
-          label: string
-          project_id: number
-          project_label_id: number
-          rule_ref: string | null
-          source: string
-          wallet_id: number
-        }
-        Insert: {
-          confidence: number
-          confidence_basis?: string | null
-          evidence_ref?: string | null
-          imported_at?: string | null
-          label: string
-          project_id: number
-          project_label_id?: number
-          rule_ref?: string | null
-          source: string
-          wallet_id: number
-        }
-        Update: {
-          confidence?: number
-          confidence_basis?: string | null
-          evidence_ref?: string | null
-          imported_at?: string | null
-          label?: string
-          project_id?: number
-          project_label_id?: number
-          rule_ref?: string | null
-          source?: string
-          wallet_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'project_labels_project_id_fkey'
-            columns: ['project_id']
-            isOneToOne: false
-            referencedRelation: 'projects'
-            referencedColumns: ['project_id']
-          },
-          {
-            foreignKeyName: 'project_labels_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
-      }
-      project_wallets: {
-        Row: {
-          imported_at: string | null
-          project_id: number
-          project_wallet_id: number
-          source: string
-          source_ref: string | null
-          wallet_id: number
-        }
-        Insert: {
-          imported_at?: string | null
-          project_id: number
-          project_wallet_id?: number
-          source: string
-          source_ref?: string | null
-          wallet_id: number
-        }
-        Update: {
-          imported_at?: string | null
-          project_id?: number
-          project_wallet_id?: number
-          source?: string
-          source_ref?: string | null
-          wallet_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'project_wallets_project_id_fkey'
-            columns: ['project_id']
-            isOneToOne: false
-            referencedRelation: 'projects'
-            referencedColumns: ['project_id']
-          },
-          {
-            foreignKeyName: 'project_wallets_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
-      }
-      projects: {
-        Row: {
-          category: string | null
-          chain: string | null
-          contract_address: string | null
-          name: string | null
-          project_id: number
-        }
-        Insert: {
-          category?: string | null
-          chain?: string | null
-          contract_address?: string | null
-          name?: string | null
-          project_id?: number
-        }
-        Update: {
-          category?: string | null
-          chain?: string | null
-          contract_address?: string | null
-          name?: string | null
-          project_id?: number
         }
         Relationships: []
       }
@@ -4054,6 +4354,45 @@ export type Database = {
           token?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      quiz_results: {
+        Row: {
+          answers: Json | null
+          created_at: string | null
+          id: string
+          language: string | null
+          match_percent: number | null
+          primary_type: string
+          scores: Json | null
+          secondary_type: string | null
+          session_id: string
+          user_id: string | null
+        }
+        Insert: {
+          answers?: Json | null
+          created_at?: string | null
+          id?: string
+          language?: string | null
+          match_percent?: number | null
+          primary_type: string
+          scores?: Json | null
+          secondary_type?: string | null
+          session_id: string
+          user_id?: string | null
+        }
+        Update: {
+          answers?: Json | null
+          created_at?: string | null
+          id?: string
+          language?: string | null
+          match_percent?: number | null
+          primary_type?: string
+          scores?: Json | null
+          secondary_type?: string | null
+          session_id?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -4435,34 +4774,44 @@ export type Database = {
         }
         Relationships: []
       }
-      risk_scores: {
+      saved_filters: {
         Row: {
-          score_type: string
-          score_value: number | null
-          updated_at: string | null
-          wallet_id: number
+          created_at: string
+          description: string | null
+          filter_config: Json
+          id: string
+          is_default: boolean
+          last_used_at: string | null
+          name: string
+          updated_at: string
+          use_count: number
+          user_id: string
         }
         Insert: {
-          score_type: string
-          score_value?: number | null
-          updated_at?: string | null
-          wallet_id: number
+          created_at?: string
+          description?: string | null
+          filter_config?: Json
+          id?: string
+          is_default?: boolean
+          last_used_at?: string | null
+          name: string
+          updated_at?: string
+          use_count?: number
+          user_id: string
         }
         Update: {
-          score_type?: string
-          score_value?: number | null
-          updated_at?: string | null
-          wallet_id?: number
+          created_at?: string
+          description?: string | null
+          filter_config?: Json
+          id?: string
+          is_default?: boolean
+          last_used_at?: string | null
+          name?: string
+          updated_at?: string
+          use_count?: number
+          user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: 'risk_scores_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
+        Relationships: []
       }
       scrape_telemetry: {
         Row: {
@@ -4536,54 +4885,6 @@ export type Database = {
         }
         Relationships: []
       }
-      signals: {
-        Row: {
-          created_at: string
-          entry: number | null
-          exit: number | null
-          id: string
-          pnl: number | null
-          side: string
-          symbol: string
-          trader_id: string | null
-        }
-        Insert: {
-          created_at?: string
-          entry?: number | null
-          exit?: number | null
-          id?: string
-          pnl?: number | null
-          side: string
-          symbol: string
-          trader_id?: string | null
-        }
-        Update: {
-          created_at?: string
-          entry?: number | null
-          exit?: number | null
-          id?: string
-          pnl?: number | null
-          side?: string
-          symbol?: string
-          trader_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'signals_trader_id_fkey'
-            columns: ['trader_id']
-            isOneToOne: false
-            referencedRelation: 'traders_legacy'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'signals_trader_id_fkey'
-            columns: ['trader_id']
-            isOneToOne: false
-            referencedRelation: 'view_leaderboard_top10'
-            referencedColumns: ['trader_id']
-          },
-        ]
-      }
       snapshot_traders: {
         Row: {
           arena_score: number | null
@@ -4652,51 +4953,6 @@ export type Database = {
             isOneToOne: false
             referencedRelation: 'ranking_snapshots'
             referencedColumns: ['id']
-          },
-        ]
-      }
-      strategies: {
-        Row: {
-          created_at: string
-          id: string
-          roi: number
-          timeframe: string | null
-          title: string
-          trader_id: string | null
-          win_rate: number
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          roi?: number
-          timeframe?: string | null
-          title: string
-          trader_id?: string | null
-          win_rate?: number
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          roi?: number
-          timeframe?: string | null
-          title?: string
-          trader_id?: string | null
-          win_rate?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'strategies_trader_id_fkey'
-            columns: ['trader_id']
-            isOneToOne: false
-            referencedRelation: 'traders_legacy'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'strategies_trader_id_fkey'
-            columns: ['trader_id']
-            isOneToOne: false
-            referencedRelation: 'view_leaderboard_top10'
-            referencedColumns: ['trader_id']
           },
         ]
       }
@@ -4781,35 +5037,56 @@ export type Database = {
         }
         Relationships: []
       }
-      tasks: {
+      tips: {
         Row: {
-          description: string | null
-          name: string | null
-          project_id: number | null
-          task_id: number
-          task_type: string | null
+          amount_cents: number
+          completed_at: string | null
+          created_at: string
+          from_user_id: string
+          id: string
+          message: string | null
+          post_id: string | null
+          status: string
+          stripe_checkout_session_id: string | null
+          stripe_payment_intent_id: string | null
+          to_user_id: string | null
+          updated_at: string
         }
         Insert: {
-          description?: string | null
-          name?: string | null
-          project_id?: number | null
-          task_id?: number
-          task_type?: string | null
+          amount_cents: number
+          completed_at?: string | null
+          created_at?: string
+          from_user_id: string
+          id?: string
+          message?: string | null
+          post_id?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          to_user_id?: string | null
+          updated_at?: string
         }
         Update: {
-          description?: string | null
-          name?: string | null
-          project_id?: number | null
-          task_id?: number
-          task_type?: string | null
+          amount_cents?: number
+          completed_at?: string | null
+          created_at?: string
+          from_user_id?: string
+          id?: string
+          message?: string | null
+          post_id?: string | null
+          status?: string
+          stripe_checkout_session_id?: string | null
+          stripe_payment_intent_id?: string | null
+          to_user_id?: string | null
+          updated_at?: string
         }
         Relationships: [
           {
-            foreignKeyName: 'tasks_project_id_fkey'
-            columns: ['project_id']
+            foreignKeyName: 'tips_post_id_fkey'
+            columns: ['post_id']
             isOneToOne: false
-            referencedRelation: 'projects'
-            referencedColumns: ['project_id']
+            referencedRelation: 'posts'
+            referencedColumns: ['id']
           },
         ]
       }
@@ -4870,258 +5147,6 @@ export type Database = {
           tags?: string[] | null
           updated_at?: string | null
           website?: string | null
-        }
-        Relationships: []
-      }
-      tph_2026_01: {
-        Row: {
-          captured_at: string
-          close_time: string | null
-          closed_size: number | null
-          created_at: string
-          direction: string
-          entry_price: number | null
-          exit_price: number | null
-          id: string
-          margin_mode: string | null
-          max_position_size: number | null
-          open_time: string | null
-          pnl_pct: number | null
-          pnl_usd: number | null
-          position_type: string | null
-          source: string
-          source_trader_id: string
-          status: string | null
-          symbol: string
-        }
-        Insert: {
-          captured_at: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source: string
-          source_trader_id: string
-          status?: string | null
-          symbol: string
-        }
-        Update: {
-          captured_at?: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction?: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source?: string
-          source_trader_id?: string
-          status?: string | null
-          symbol?: string
-        }
-        Relationships: []
-      }
-      tph_2026_02: {
-        Row: {
-          captured_at: string
-          close_time: string | null
-          closed_size: number | null
-          created_at: string
-          direction: string
-          entry_price: number | null
-          exit_price: number | null
-          id: string
-          margin_mode: string | null
-          max_position_size: number | null
-          open_time: string | null
-          pnl_pct: number | null
-          pnl_usd: number | null
-          position_type: string | null
-          source: string
-          source_trader_id: string
-          status: string | null
-          symbol: string
-        }
-        Insert: {
-          captured_at: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source: string
-          source_trader_id: string
-          status?: string | null
-          symbol: string
-        }
-        Update: {
-          captured_at?: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction?: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source?: string
-          source_trader_id?: string
-          status?: string | null
-          symbol?: string
-        }
-        Relationships: []
-      }
-      tph_2026_03: {
-        Row: {
-          captured_at: string
-          close_time: string | null
-          closed_size: number | null
-          created_at: string
-          direction: string
-          entry_price: number | null
-          exit_price: number | null
-          id: string
-          margin_mode: string | null
-          max_position_size: number | null
-          open_time: string | null
-          pnl_pct: number | null
-          pnl_usd: number | null
-          position_type: string | null
-          source: string
-          source_trader_id: string
-          status: string | null
-          symbol: string
-        }
-        Insert: {
-          captured_at: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source: string
-          source_trader_id: string
-          status?: string | null
-          symbol: string
-        }
-        Update: {
-          captured_at?: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction?: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source?: string
-          source_trader_id?: string
-          status?: string | null
-          symbol?: string
-        }
-        Relationships: []
-      }
-      tph_2026_04: {
-        Row: {
-          captured_at: string
-          close_time: string | null
-          closed_size: number | null
-          created_at: string
-          direction: string
-          entry_price: number | null
-          exit_price: number | null
-          id: string
-          margin_mode: string | null
-          max_position_size: number | null
-          open_time: string | null
-          pnl_pct: number | null
-          pnl_usd: number | null
-          position_type: string | null
-          source: string
-          source_trader_id: string
-          status: string | null
-          symbol: string
-        }
-        Insert: {
-          captured_at: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source: string
-          source_trader_id: string
-          status?: string | null
-          symbol: string
-        }
-        Update: {
-          captured_at?: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction?: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source?: string
-          source_trader_id?: string
-          status?: string | null
-          symbol?: string
         }
         Relationships: []
       }
@@ -5251,69 +5276,6 @@ export type Database = {
         }
         Relationships: []
       }
-      tph_archive: {
-        Row: {
-          captured_at: string
-          close_time: string | null
-          closed_size: number | null
-          created_at: string
-          direction: string
-          entry_price: number | null
-          exit_price: number | null
-          id: string
-          margin_mode: string | null
-          max_position_size: number | null
-          open_time: string | null
-          pnl_pct: number | null
-          pnl_usd: number | null
-          position_type: string | null
-          source: string
-          source_trader_id: string
-          status: string | null
-          symbol: string
-        }
-        Insert: {
-          captured_at: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source: string
-          source_trader_id: string
-          status?: string | null
-          symbol: string
-        }
-        Update: {
-          captured_at?: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string
-          direction?: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source?: string
-          source_trader_id?: string
-          status?: string | null
-          symbol?: string
-        }
-        Relationships: []
-      }
       trader_activities: {
         Row: {
           activity_text: string
@@ -5359,6 +5321,53 @@ export type Database = {
         }
         Relationships: []
       }
+      trader_alert_logs: {
+        Row: {
+          alert_id: string | null
+          alert_type: string
+          change_percent: number | null
+          created_at: string
+          id: string
+          message: string | null
+          new_value: number | null
+          old_value: number | null
+          trader_id: string
+          user_id: string
+        }
+        Insert: {
+          alert_id?: string | null
+          alert_type: string
+          change_percent?: number | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          new_value?: number | null
+          old_value?: number | null
+          trader_id: string
+          user_id: string
+        }
+        Update: {
+          alert_id?: string | null
+          alert_type?: string
+          change_percent?: number | null
+          created_at?: string
+          id?: string
+          message?: string | null
+          new_value?: number | null
+          old_value?: number | null
+          trader_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'trader_alert_logs_alert_id_fkey'
+            columns: ['alert_id']
+            isOneToOne: false
+            referencedRelation: 'trader_alerts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       trader_alerts: {
         Row: {
           alert_drawdown: boolean | null
@@ -5380,6 +5389,7 @@ export type Database = {
           price_below_value: number | null
           price_symbol: string | null
           rank_change_threshold: number | null
+          read_at: string | null
           roi_change_threshold: number | null
           score_change_threshold: number | null
           source: string | null
@@ -5407,6 +5417,7 @@ export type Database = {
           price_below_value?: number | null
           price_symbol?: string | null
           rank_change_threshold?: number | null
+          read_at?: string | null
           roi_change_threshold?: number | null
           score_change_threshold?: number | null
           source?: string | null
@@ -5434,6 +5445,7 @@ export type Database = {
           price_below_value?: number | null
           price_symbol?: string | null
           rank_change_threshold?: number | null
+          read_at?: string | null
           roi_change_threshold?: number | null
           score_change_threshold?: number | null
           source?: string | null
@@ -5782,63 +5794,6 @@ export type Database = {
         }
         Relationships: []
       }
-      trader_flags: {
-        Row: {
-          alert_id: string | null
-          created_at: string | null
-          expires_at: string | null
-          flag_status: string
-          flagged_by: string | null
-          id: string
-          notes: string | null
-          platform: string
-          reason: string
-          trader_key: string
-          updated_at: string | null
-        }
-        Insert: {
-          alert_id?: string | null
-          created_at?: string | null
-          expires_at?: string | null
-          flag_status: string
-          flagged_by?: string | null
-          id?: string
-          notes?: string | null
-          platform: string
-          reason: string
-          trader_key: string
-          updated_at?: string | null
-        }
-        Update: {
-          alert_id?: string | null
-          created_at?: string | null
-          expires_at?: string | null
-          flag_status?: string
-          flagged_by?: string | null
-          id?: string
-          notes?: string | null
-          platform?: string
-          reason?: string
-          trader_key?: string
-          updated_at?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'trader_flags_alert_id_fkey'
-            columns: ['alert_id']
-            isOneToOne: false
-            referencedRelation: 'manipulation_alerts'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'trader_flags_alert_id_fkey'
-            columns: ['alert_id']
-            isOneToOne: false
-            referencedRelation: 'v_recent_alerts'
-            referencedColumns: ['id']
-          },
-        ]
-      }
       trader_follows: {
         Row: {
           created_at: string | null
@@ -5908,6 +5863,81 @@ export type Database = {
         }
         Relationships: []
       }
+      trader_latest: {
+        Row: {
+          arena_score: number | null
+          calmar_ratio: number | null
+          copiers: number | null
+          downside_volatility_pct: number | null
+          fetched_at: string | null
+          followers: number | null
+          market_type: string
+          max_drawdown: number | null
+          metrics: Json | null
+          platform: string
+          pnl_usd: number | null
+          provenance: Json | null
+          quality_flags: Json | null
+          roi_pct: number | null
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          trader_key: string
+          trades_count: number | null
+          updated_at: string | null
+          volatility_pct: number | null
+          win_rate: number | null
+          window: string
+        }
+        Insert: {
+          arena_score?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          downside_volatility_pct?: number | null
+          fetched_at?: string | null
+          followers?: number | null
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json | null
+          platform: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          trader_key: string
+          trades_count?: number | null
+          updated_at?: string | null
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window: string
+        }
+        Update: {
+          arena_score?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          downside_volatility_pct?: number | null
+          fetched_at?: string | null
+          followers?: number | null
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json | null
+          platform?: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          trader_key?: string
+          trades_count?: number | null
+          updated_at?: string | null
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window?: string
+        }
+        Relationships: []
+      }
       trader_links: {
         Row: {
           created_at: string | null
@@ -5937,59 +5967,6 @@ export type Database = {
           verified_at?: string | null
         }
         Relationships: []
-      }
-      trader_merges: {
-        Row: {
-          from_trader_id: string
-          id: number
-          merged_at: string
-          reason: string | null
-          to_trader_id: string
-        }
-        Insert: {
-          from_trader_id: string
-          id?: number
-          merged_at?: string
-          reason?: string | null
-          to_trader_id: string
-        }
-        Update: {
-          from_trader_id?: string
-          id?: number
-          merged_at?: string
-          reason?: string | null
-          to_trader_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'trader_merges_from_trader_id_fkey'
-            columns: ['from_trader_id']
-            isOneToOne: false
-            referencedRelation: 'traders_legacy'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'trader_merges_from_trader_id_fkey'
-            columns: ['from_trader_id']
-            isOneToOne: false
-            referencedRelation: 'view_leaderboard_top10'
-            referencedColumns: ['trader_id']
-          },
-          {
-            foreignKeyName: 'trader_merges_to_trader_id_fkey'
-            columns: ['to_trader_id']
-            isOneToOne: false
-            referencedRelation: 'traders_legacy'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'trader_merges_to_trader_id_fkey'
-            columns: ['to_trader_id']
-            isOneToOne: false
-            referencedRelation: 'view_leaderboard_top10'
-            referencedColumns: ['trader_id']
-          },
-        ]
       }
       trader_portfolio: {
         Row: {
@@ -6031,69 +6008,6 @@ export type Database = {
         Relationships: []
       }
       trader_position_history: {
-        Row: {
-          captured_at: string
-          close_time: string | null
-          closed_size: number | null
-          created_at: string | null
-          direction: string
-          entry_price: number | null
-          exit_price: number | null
-          id: string
-          margin_mode: string | null
-          max_position_size: number | null
-          open_time: string | null
-          pnl_pct: number | null
-          pnl_usd: number | null
-          position_type: string | null
-          source: string
-          source_trader_id: string
-          status: string | null
-          symbol: string
-        }
-        Insert: {
-          captured_at: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string | null
-          direction: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source: string
-          source_trader_id: string
-          status?: string | null
-          symbol: string
-        }
-        Update: {
-          captured_at?: string
-          close_time?: string | null
-          closed_size?: number | null
-          created_at?: string | null
-          direction?: string
-          entry_price?: number | null
-          exit_price?: number | null
-          id?: string
-          margin_mode?: string | null
-          max_position_size?: number | null
-          open_time?: string | null
-          pnl_pct?: number | null
-          pnl_usd?: number | null
-          position_type?: string | null
-          source?: string
-          source_trader_id?: string
-          status?: string | null
-          symbol?: string
-        }
-        Relationships: []
-      }
-      trader_position_history_partitioned: {
         Row: {
           captured_at: string
           close_time: string | null
@@ -6426,362 +6340,6 @@ export type Database = {
         }
         Relationships: []
       }
-      trader_scores: {
-        Row: {
-          arena_score: number
-          drawdown_score: number | null
-          id: number
-          meets_threshold: boolean | null
-          return_score: number | null
-          season_id: string
-          source: string
-          source_trader_id: string
-          stability_score: number | null
-          updated_at: string | null
-        }
-        Insert: {
-          arena_score?: number
-          drawdown_score?: number | null
-          id?: number
-          meets_threshold?: boolean | null
-          return_score?: number | null
-          season_id: string
-          source: string
-          source_trader_id: string
-          stability_score?: number | null
-          updated_at?: string | null
-        }
-        Update: {
-          arena_score?: number
-          drawdown_score?: number | null
-          id?: number
-          meets_threshold?: boolean | null
-          return_score?: number | null
-          season_id?: string
-          source?: string
-          source_trader_id?: string
-          stability_score?: number | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
-      trader_seasons: {
-        Row: {
-          arena_score: number
-          created_at: string
-          id: string
-          max_drawdown: number
-          roi: number
-          season: string
-          trader_id: string
-        }
-        Insert: {
-          arena_score: number
-          created_at?: string
-          id?: string
-          max_drawdown?: number
-          roi: number
-          season: string
-          trader_id: string
-        }
-        Update: {
-          arena_score?: number
-          created_at?: string
-          id?: string
-          max_drawdown?: number
-          roi?: number
-          season?: string
-          trader_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'trader_seasons_trader_id_fkey'
-            columns: ['trader_id']
-            isOneToOne: false
-            referencedRelation: 'traders_legacy'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'trader_seasons_trader_id_fkey'
-            columns: ['trader_id']
-            isOneToOne: false
-            referencedRelation: 'view_leaderboard_top10'
-            referencedColumns: ['trader_id']
-          },
-        ]
-      }
-      trader_snapshots: {
-        Row: {
-          alpha: number | null
-          alpha_score: number | null
-          arena_score: number | null
-          arena_score_v3: number | null
-          asset_preference: string[] | null
-          aum: number | null
-          authorization_id: string | null
-          avg_holding_hours: number | null
-          beta_btc: number | null
-          beta_eth: number | null
-          calmar_ratio: number | null
-          captured_at: string | null
-          consistency_score: number | null
-          downside_volatility_pct: number | null
-          execution_score: number | null
-          followers: number | null
-          full_confidence_at: string | null
-          holding_days: number | null
-          id: number
-          is_authorized: boolean | null
-          last_qualified_at: string | null
-          market_condition_tags: Json | null
-          max_consecutive_losses: number | null
-          max_consecutive_wins: number | null
-          max_drawdown: number | null
-          max_drawdown_30d: number | null
-          max_drawdown_7d: number | null
-          metrics_data_points: number | null
-          metrics_quality: string | null
-          pnl: number | null
-          pnl_30d: number | null
-          pnl_7d: number | null
-          pnl_score: number | null
-          profit_factor: number | null
-          profit_loss_ratio: number | null
-          profitability_score: number | null
-          rank: number | null
-          recovery_factor: number | null
-          risk_adjusted_score_v3: number | null
-          risk_control_score: number | null
-          roi: number | null
-          roi_30d: number | null
-          roi_7d: number | null
-          score_completeness: string | null
-          score_penalty: number | null
-          season_id: string | null
-          sharpe_ratio: number | null
-          snapshot_date: string | null
-          sortino_ratio: number | null
-          source: string
-          source_trader_id: string
-          style_confidence: number | null
-          tracked_since: string | null
-          trader_type: string | null
-          trades_count: number | null
-          trading_style: string | null
-          volatility_pct: number | null
-          win_rate: number | null
-          win_rate_30d: number | null
-          win_rate_7d: number | null
-        }
-        Insert: {
-          alpha?: number | null
-          alpha_score?: number | null
-          arena_score?: number | null
-          arena_score_v3?: number | null
-          asset_preference?: string[] | null
-          aum?: number | null
-          authorization_id?: string | null
-          avg_holding_hours?: number | null
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          captured_at?: string | null
-          consistency_score?: number | null
-          downside_volatility_pct?: number | null
-          execution_score?: number | null
-          followers?: number | null
-          full_confidence_at?: string | null
-          holding_days?: number | null
-          id?: number
-          is_authorized?: boolean | null
-          last_qualified_at?: string | null
-          market_condition_tags?: Json | null
-          max_consecutive_losses?: number | null
-          max_consecutive_wins?: number | null
-          max_drawdown?: number | null
-          max_drawdown_30d?: number | null
-          max_drawdown_7d?: number | null
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          pnl?: number | null
-          pnl_30d?: number | null
-          pnl_7d?: number | null
-          pnl_score?: number | null
-          profit_factor?: number | null
-          profit_loss_ratio?: number | null
-          profitability_score?: number | null
-          rank?: number | null
-          recovery_factor?: number | null
-          risk_adjusted_score_v3?: number | null
-          risk_control_score?: number | null
-          roi?: number | null
-          roi_30d?: number | null
-          roi_7d?: number | null
-          score_completeness?: string | null
-          score_penalty?: number | null
-          season_id?: string | null
-          sharpe_ratio?: number | null
-          snapshot_date?: string | null
-          sortino_ratio?: number | null
-          source: string
-          source_trader_id: string
-          style_confidence?: number | null
-          tracked_since?: string | null
-          trader_type?: string | null
-          trades_count?: number | null
-          trading_style?: string | null
-          volatility_pct?: number | null
-          win_rate?: number | null
-          win_rate_30d?: number | null
-          win_rate_7d?: number | null
-        }
-        Update: {
-          alpha?: number | null
-          alpha_score?: number | null
-          arena_score?: number | null
-          arena_score_v3?: number | null
-          asset_preference?: string[] | null
-          aum?: number | null
-          authorization_id?: string | null
-          avg_holding_hours?: number | null
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          captured_at?: string | null
-          consistency_score?: number | null
-          downside_volatility_pct?: number | null
-          execution_score?: number | null
-          followers?: number | null
-          full_confidence_at?: string | null
-          holding_days?: number | null
-          id?: number
-          is_authorized?: boolean | null
-          last_qualified_at?: string | null
-          market_condition_tags?: Json | null
-          max_consecutive_losses?: number | null
-          max_consecutive_wins?: number | null
-          max_drawdown?: number | null
-          max_drawdown_30d?: number | null
-          max_drawdown_7d?: number | null
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          pnl?: number | null
-          pnl_30d?: number | null
-          pnl_7d?: number | null
-          pnl_score?: number | null
-          profit_factor?: number | null
-          profit_loss_ratio?: number | null
-          profitability_score?: number | null
-          rank?: number | null
-          recovery_factor?: number | null
-          risk_adjusted_score_v3?: number | null
-          risk_control_score?: number | null
-          roi?: number | null
-          roi_30d?: number | null
-          roi_7d?: number | null
-          score_completeness?: string | null
-          score_penalty?: number | null
-          season_id?: string | null
-          sharpe_ratio?: number | null
-          snapshot_date?: string | null
-          sortino_ratio?: number | null
-          source?: string
-          source_trader_id?: string
-          style_confidence?: number | null
-          tracked_since?: string | null
-          trader_type?: string | null
-          trades_count?: number | null
-          trading_style?: string | null
-          volatility_pct?: number | null
-          win_rate?: number | null
-          win_rate_30d?: number | null
-          win_rate_7d?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'trader_snapshots_authorization_id_fkey'
-            columns: ['authorization_id']
-            isOneToOne: false
-            referencedRelation: 'trader_authorizations'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      trader_latest: {
-        Row: {
-          arena_score: number | null
-          calmar_ratio: number | null
-          copiers: number | null
-          downside_volatility_pct: number | null
-          fetched_at: string
-          followers: number | null
-          market_type: string
-          max_drawdown: number | null
-          metrics: Json
-          platform: string
-          pnl_usd: number | null
-          provenance: Json | null
-          quality_flags: Json | null
-          roi_pct: number | null
-          sharpe_ratio: number | null
-          sortino_ratio: number | null
-          trader_key: string
-          trades_count: number | null
-          updated_at: string
-          volatility_pct: number | null
-          win_rate: number | null
-          window: string
-        }
-        Insert: {
-          arena_score?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          downside_volatility_pct?: number | null
-          fetched_at?: string
-          followers?: number | null
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          platform: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          trader_key: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window: string
-        }
-        Update: {
-          arena_score?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          downside_volatility_pct?: number | null
-          fetched_at?: string
-          followers?: number | null
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          platform?: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          trader_key?: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window?: string
-        }
-        Relationships: []
-      }
       trader_snapshots_v2: {
         Row: {
           alpha: number | null
@@ -6992,637 +6550,322 @@ export type Database = {
         }
         Relationships: []
       }
-      trader_snapshots_v2_p2025_12: {
-        Row: {
-          alpha: number | null
-          arena_score: number | null
-          as_of_ts: string
-          beta_btc: number | null
-          beta_eth: number | null
-          calmar_ratio: number | null
-          copiers: number | null
-          created_at: string
-          downside_volatility_pct: number | null
-          drawdown_score: number | null
-          followers: number | null
-          id: string
-          market_type: string
-          max_drawdown: number | null
-          metrics: Json
-          metrics_data_points: number | null
-          metrics_quality: string | null
-          platform: string
-          pnl_usd: number | null
-          provenance: Json | null
-          quality_flags: Json | null
-          return_score: number | null
-          roi_pct: number | null
-          sharpe_ratio: number | null
-          sortino_ratio: number | null
-          stability_score: number | null
-          trader_key: string
-          trades_count: number | null
-          updated_at: string
-          volatility_pct: number | null
-          win_rate: number | null
-          window: string
-        }
-        Insert: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window: string
-        }
-        Update: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform?: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key?: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window?: string
-        }
-        Relationships: []
-      }
-      trader_snapshots_v2_p2026_01: {
-        Row: {
-          alpha: number | null
-          arena_score: number | null
-          as_of_ts: string
-          beta_btc: number | null
-          beta_eth: number | null
-          calmar_ratio: number | null
-          copiers: number | null
-          created_at: string
-          downside_volatility_pct: number | null
-          drawdown_score: number | null
-          followers: number | null
-          id: string
-          market_type: string
-          max_drawdown: number | null
-          metrics: Json
-          metrics_data_points: number | null
-          metrics_quality: string | null
-          platform: string
-          pnl_usd: number | null
-          provenance: Json | null
-          quality_flags: Json | null
-          return_score: number | null
-          roi_pct: number | null
-          sharpe_ratio: number | null
-          sortino_ratio: number | null
-          stability_score: number | null
-          trader_key: string
-          trades_count: number | null
-          updated_at: string
-          volatility_pct: number | null
-          win_rate: number | null
-          window: string
-        }
-        Insert: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window: string
-        }
-        Update: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform?: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key?: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window?: string
-        }
-        Relationships: []
-      }
-      trader_snapshots_v2_p2026_02: {
-        Row: {
-          alpha: number | null
-          arena_score: number | null
-          as_of_ts: string
-          beta_btc: number | null
-          beta_eth: number | null
-          calmar_ratio: number | null
-          copiers: number | null
-          created_at: string
-          downside_volatility_pct: number | null
-          drawdown_score: number | null
-          followers: number | null
-          id: string
-          market_type: string
-          max_drawdown: number | null
-          metrics: Json
-          metrics_data_points: number | null
-          metrics_quality: string | null
-          platform: string
-          pnl_usd: number | null
-          provenance: Json | null
-          quality_flags: Json | null
-          return_score: number | null
-          roi_pct: number | null
-          sharpe_ratio: number | null
-          sortino_ratio: number | null
-          stability_score: number | null
-          trader_key: string
-          trades_count: number | null
-          updated_at: string
-          volatility_pct: number | null
-          win_rate: number | null
-          window: string
-        }
-        Insert: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window: string
-        }
-        Update: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform?: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key?: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window?: string
-        }
-        Relationships: []
-      }
-      trader_snapshots_v2_p2026_03: {
-        Row: {
-          alpha: number | null
-          arena_score: number | null
-          as_of_ts: string
-          beta_btc: number | null
-          beta_eth: number | null
-          calmar_ratio: number | null
-          copiers: number | null
-          created_at: string
-          downside_volatility_pct: number | null
-          drawdown_score: number | null
-          followers: number | null
-          id: string
-          market_type: string
-          max_drawdown: number | null
-          metrics: Json
-          metrics_data_points: number | null
-          metrics_quality: string | null
-          platform: string
-          pnl_usd: number | null
-          provenance: Json | null
-          quality_flags: Json | null
-          return_score: number | null
-          roi_pct: number | null
-          sharpe_ratio: number | null
-          sortino_ratio: number | null
-          stability_score: number | null
-          trader_key: string
-          trades_count: number | null
-          updated_at: string
-          volatility_pct: number | null
-          win_rate: number | null
-          window: string
-        }
-        Insert: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window: string
-        }
-        Update: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform?: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key?: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window?: string
-        }
-        Relationships: []
-      }
-      trader_snapshots_v2_p2026_04: {
-        Row: {
-          alpha: number | null
-          arena_score: number | null
-          as_of_ts: string
-          beta_btc: number | null
-          beta_eth: number | null
-          calmar_ratio: number | null
-          copiers: number | null
-          created_at: string
-          downside_volatility_pct: number | null
-          drawdown_score: number | null
-          followers: number | null
-          id: string
-          market_type: string
-          max_drawdown: number | null
-          metrics: Json
-          metrics_data_points: number | null
-          metrics_quality: string | null
-          platform: string
-          pnl_usd: number | null
-          provenance: Json | null
-          quality_flags: Json | null
-          return_score: number | null
-          roi_pct: number | null
-          sharpe_ratio: number | null
-          sortino_ratio: number | null
-          stability_score: number | null
-          trader_key: string
-          trades_count: number | null
-          updated_at: string
-          volatility_pct: number | null
-          win_rate: number | null
-          window: string
-        }
-        Insert: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window: string
-        }
-        Update: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform?: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key?: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window?: string
-        }
-        Relationships: []
-      }
-      trader_snapshots_v2_p2026_05: {
-        Row: {
-          alpha: number | null
-          arena_score: number | null
-          as_of_ts: string
-          beta_btc: number | null
-          beta_eth: number | null
-          calmar_ratio: number | null
-          copiers: number | null
-          created_at: string
-          downside_volatility_pct: number | null
-          drawdown_score: number | null
-          followers: number | null
-          id: string
-          market_type: string
-          max_drawdown: number | null
-          metrics: Json
-          metrics_data_points: number | null
-          metrics_quality: string | null
-          platform: string
-          pnl_usd: number | null
-          provenance: Json | null
-          quality_flags: Json | null
-          return_score: number | null
-          roi_pct: number | null
-          sharpe_ratio: number | null
-          sortino_ratio: number | null
-          stability_score: number | null
-          trader_key: string
-          trades_count: number | null
-          updated_at: string
-          volatility_pct: number | null
-          win_rate: number | null
-          window: string
-        }
-        Insert: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window: string
-        }
-        Update: {
-          alpha?: number | null
-          arena_score?: number | null
-          as_of_ts?: string
-          beta_btc?: number | null
-          beta_eth?: number | null
-          calmar_ratio?: number | null
-          copiers?: number | null
-          created_at?: string
-          downside_volatility_pct?: number | null
-          drawdown_score?: number | null
-          followers?: number | null
-          id?: string
-          market_type?: string
-          max_drawdown?: number | null
-          metrics?: Json
-          metrics_data_points?: number | null
-          metrics_quality?: string | null
-          platform?: string
-          pnl_usd?: number | null
-          provenance?: Json | null
-          quality_flags?: Json | null
-          return_score?: number | null
-          roi_pct?: number | null
-          sharpe_ratio?: number | null
-          sortino_ratio?: number | null
-          stability_score?: number | null
-          trader_key?: string
-          trades_count?: number | null
-          updated_at?: string
-          volatility_pct?: number | null
-          win_rate?: number | null
-          window?: string
-        }
-        Relationships: []
-      }
       trader_snapshots_v2_p2026_06: {
+        Row: {
+          alpha: number | null
+          arena_score: number | null
+          as_of_ts: string
+          beta_btc: number | null
+          beta_eth: number | null
+          calmar_ratio: number | null
+          copiers: number | null
+          created_at: string
+          downside_volatility_pct: number | null
+          drawdown_score: number | null
+          followers: number | null
+          id: string
+          market_type: string
+          max_drawdown: number | null
+          metrics: Json
+          metrics_data_points: number | null
+          metrics_quality: string | null
+          platform: string
+          pnl_usd: number | null
+          provenance: Json | null
+          quality_flags: Json | null
+          return_score: number | null
+          roi_pct: number | null
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          stability_score: number | null
+          trader_key: string
+          trades_count: number | null
+          updated_at: string
+          volatility_pct: number | null
+          win_rate: number | null
+          window: string
+        }
+        Insert: {
+          alpha?: number | null
+          arena_score?: number | null
+          as_of_ts?: string
+          beta_btc?: number | null
+          beta_eth?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          created_at?: string
+          downside_volatility_pct?: number | null
+          drawdown_score?: number | null
+          followers?: number | null
+          id?: string
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json
+          metrics_data_points?: number | null
+          metrics_quality?: string | null
+          platform: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          return_score?: number | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          stability_score?: number | null
+          trader_key: string
+          trades_count?: number | null
+          updated_at?: string
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window: string
+        }
+        Update: {
+          alpha?: number | null
+          arena_score?: number | null
+          as_of_ts?: string
+          beta_btc?: number | null
+          beta_eth?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          created_at?: string
+          downside_volatility_pct?: number | null
+          drawdown_score?: number | null
+          followers?: number | null
+          id?: string
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json
+          metrics_data_points?: number | null
+          metrics_quality?: string | null
+          platform?: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          return_score?: number | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          stability_score?: number | null
+          trader_key?: string
+          trades_count?: number | null
+          updated_at?: string
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window?: string
+        }
+        Relationships: []
+      }
+      trader_snapshots_v2_p2026_07: {
+        Row: {
+          alpha: number | null
+          arena_score: number | null
+          as_of_ts: string
+          beta_btc: number | null
+          beta_eth: number | null
+          calmar_ratio: number | null
+          copiers: number | null
+          created_at: string
+          downside_volatility_pct: number | null
+          drawdown_score: number | null
+          followers: number | null
+          id: string
+          market_type: string
+          max_drawdown: number | null
+          metrics: Json
+          metrics_data_points: number | null
+          metrics_quality: string | null
+          platform: string
+          pnl_usd: number | null
+          provenance: Json | null
+          quality_flags: Json | null
+          return_score: number | null
+          roi_pct: number | null
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          stability_score: number | null
+          trader_key: string
+          trades_count: number | null
+          updated_at: string
+          volatility_pct: number | null
+          win_rate: number | null
+          window: string
+        }
+        Insert: {
+          alpha?: number | null
+          arena_score?: number | null
+          as_of_ts?: string
+          beta_btc?: number | null
+          beta_eth?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          created_at?: string
+          downside_volatility_pct?: number | null
+          drawdown_score?: number | null
+          followers?: number | null
+          id?: string
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json
+          metrics_data_points?: number | null
+          metrics_quality?: string | null
+          platform: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          return_score?: number | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          stability_score?: number | null
+          trader_key: string
+          trades_count?: number | null
+          updated_at?: string
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window: string
+        }
+        Update: {
+          alpha?: number | null
+          arena_score?: number | null
+          as_of_ts?: string
+          beta_btc?: number | null
+          beta_eth?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          created_at?: string
+          downside_volatility_pct?: number | null
+          drawdown_score?: number | null
+          followers?: number | null
+          id?: string
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json
+          metrics_data_points?: number | null
+          metrics_quality?: string | null
+          platform?: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          return_score?: number | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          stability_score?: number | null
+          trader_key?: string
+          trades_count?: number | null
+          updated_at?: string
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window?: string
+        }
+        Relationships: []
+      }
+      trader_snapshots_v2_p2026_08: {
+        Row: {
+          alpha: number | null
+          arena_score: number | null
+          as_of_ts: string
+          beta_btc: number | null
+          beta_eth: number | null
+          calmar_ratio: number | null
+          copiers: number | null
+          created_at: string
+          downside_volatility_pct: number | null
+          drawdown_score: number | null
+          followers: number | null
+          id: string
+          market_type: string
+          max_drawdown: number | null
+          metrics: Json
+          metrics_data_points: number | null
+          metrics_quality: string | null
+          platform: string
+          pnl_usd: number | null
+          provenance: Json | null
+          quality_flags: Json | null
+          return_score: number | null
+          roi_pct: number | null
+          sharpe_ratio: number | null
+          sortino_ratio: number | null
+          stability_score: number | null
+          trader_key: string
+          trades_count: number | null
+          updated_at: string
+          volatility_pct: number | null
+          win_rate: number | null
+          window: string
+        }
+        Insert: {
+          alpha?: number | null
+          arena_score?: number | null
+          as_of_ts?: string
+          beta_btc?: number | null
+          beta_eth?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          created_at?: string
+          downside_volatility_pct?: number | null
+          drawdown_score?: number | null
+          followers?: number | null
+          id?: string
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json
+          metrics_data_points?: number | null
+          metrics_quality?: string | null
+          platform: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          return_score?: number | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          stability_score?: number | null
+          trader_key: string
+          trades_count?: number | null
+          updated_at?: string
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window: string
+        }
+        Update: {
+          alpha?: number | null
+          arena_score?: number | null
+          as_of_ts?: string
+          beta_btc?: number | null
+          beta_eth?: number | null
+          calmar_ratio?: number | null
+          copiers?: number | null
+          created_at?: string
+          downside_volatility_pct?: number | null
+          drawdown_score?: number | null
+          followers?: number | null
+          id?: string
+          market_type?: string
+          max_drawdown?: number | null
+          metrics?: Json
+          metrics_data_points?: number | null
+          metrics_quality?: string | null
+          platform?: string
+          pnl_usd?: number | null
+          provenance?: Json | null
+          quality_flags?: Json | null
+          return_score?: number | null
+          roi_pct?: number | null
+          sharpe_ratio?: number | null
+          sortino_ratio?: number | null
+          stability_score?: number | null
+          trader_key?: string
+          trades_count?: number | null
+          updated_at?: string
+          volatility_pct?: number | null
+          win_rate?: number | null
+          window?: string
+        }
+        Relationships: []
+      }
+      trader_snapshots_v2_p2026_09: {
         Row: {
           alpha: number | null
           arena_score: number | null
@@ -7733,12 +6976,15 @@ export type Database = {
           avatar_url: string | null
           bot_category: string | null
           claimed_by_user_id: string | null
+          contract_bytecode_size: number | null
+          contract_checked_at: string | null
           created_at: string | null
           handle: string | null
           id: number
           identity_type: string
           is_active: boolean | null
           is_bot: boolean | null
+          is_contract: boolean | null
           last_refreshed_at: string | null
           last_seen_at: string | null
           market_type: string | null
@@ -7759,12 +7005,15 @@ export type Database = {
           avatar_url?: string | null
           bot_category?: string | null
           claimed_by_user_id?: string | null
+          contract_bytecode_size?: number | null
+          contract_checked_at?: string | null
           created_at?: string | null
           handle?: string | null
           id?: number
           identity_type?: string
           is_active?: boolean | null
           is_bot?: boolean | null
+          is_contract?: boolean | null
           last_refreshed_at?: string | null
           last_seen_at?: string | null
           market_type?: string | null
@@ -7785,12 +7034,15 @@ export type Database = {
           avatar_url?: string | null
           bot_category?: string | null
           claimed_by_user_id?: string | null
+          contract_bytecode_size?: number | null
+          contract_checked_at?: string | null
           created_at?: string | null
           handle?: string | null
           id?: number
           identity_type?: string
           is_active?: boolean | null
           is_bot?: boolean | null
+          is_contract?: boolean | null
           last_refreshed_at?: string | null
           last_seen_at?: string | null
           market_type?: string | null
@@ -7805,66 +7057,6 @@ export type Database = {
           tier_updated_at?: string | null
           trader_id?: string | null
           verified_by_user?: boolean
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'trader_sources_trader_id_fkey'
-            columns: ['trader_id']
-            isOneToOne: false
-            referencedRelation: 'traders_legacy'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'trader_sources_trader_id_fkey'
-            columns: ['trader_id']
-            isOneToOne: false
-            referencedRelation: 'view_leaderboard_top10'
-            referencedColumns: ['trader_id']
-          },
-        ]
-      }
-      trader_sources_v2: {
-        Row: {
-          created_at: string
-          discovered_at: string
-          display_name: string | null
-          id: string
-          is_active: boolean
-          last_seen_at: string
-          market_type: string
-          platform: string
-          profile_url: string | null
-          raw: Json | null
-          trader_key: string
-          updated_at: string
-        }
-        Insert: {
-          created_at?: string
-          discovered_at?: string
-          display_name?: string | null
-          id?: string
-          is_active?: boolean
-          last_seen_at?: string
-          market_type?: string
-          platform: string
-          profile_url?: string | null
-          raw?: Json | null
-          trader_key: string
-          updated_at?: string
-        }
-        Update: {
-          created_at?: string
-          discovered_at?: string
-          display_name?: string | null
-          id?: string
-          is_active?: boolean
-          last_seen_at?: string
-          market_type?: string
-          platform?: string
-          profile_url?: string | null
-          raw?: Json | null
-          trader_key?: string
-          updated_at?: string
         }
         Relationships: []
       }
@@ -7985,256 +7177,32 @@ export type Database = {
         }
         Relationships: []
       }
-      traders: {
+      trader_watchlist: {
         Row: {
-          activity_tier: string | null
-          aum: number | null
-          avatar_url: string | null
-          bio: string | null
-          bio_source: string | null
-          bot_category: string | null
-          claimed_by_user_id: string | null
-          copiers: number | null
-          created_at: string | null
-          followers: number | null
+          created_at: string
           handle: string | null
           id: string
-          is_active: boolean | null
-          is_bot: boolean | null
-          last_refreshed_at: string | null
-          last_seen_at: string | null
-          market_type: string
-          next_refresh_at: string | null
-          platform: string
-          profile_url: string | null
-          provenance: Json | null
-          refresh_priority: number | null
-          score_confidence: string | null
-          tags: string[] | null
-          trader_key: string
-          trader_type: string | null
-          updated_at: string | null
-          verified_by_user: boolean | null
+          source: string
+          source_trader_id: string
+          user_id: string
         }
         Insert: {
-          activity_tier?: string | null
-          aum?: number | null
-          avatar_url?: string | null
-          bio?: string | null
-          bio_source?: string | null
-          bot_category?: string | null
-          claimed_by_user_id?: string | null
-          copiers?: number | null
-          created_at?: string | null
-          followers?: number | null
+          created_at?: string
           handle?: string | null
           id?: string
-          is_active?: boolean | null
-          is_bot?: boolean | null
-          last_refreshed_at?: string | null
-          last_seen_at?: string | null
-          market_type?: string
-          next_refresh_at?: string | null
-          platform: string
-          profile_url?: string | null
-          provenance?: Json | null
-          refresh_priority?: number | null
-          score_confidence?: string | null
-          tags?: string[] | null
-          trader_key: string
-          trader_type?: string | null
-          updated_at?: string | null
-          verified_by_user?: boolean | null
+          source: string
+          source_trader_id: string
+          user_id: string
         }
         Update: {
-          activity_tier?: string | null
-          aum?: number | null
-          avatar_url?: string | null
-          bio?: string | null
-          bio_source?: string | null
-          bot_category?: string | null
-          claimed_by_user_id?: string | null
-          copiers?: number | null
-          created_at?: string | null
-          followers?: number | null
+          created_at?: string
           handle?: string | null
           id?: string
-          is_active?: boolean | null
-          is_bot?: boolean | null
-          last_refreshed_at?: string | null
-          last_seen_at?: string | null
-          market_type?: string
-          next_refresh_at?: string | null
-          platform?: string
-          profile_url?: string | null
-          provenance?: Json | null
-          refresh_priority?: number | null
-          score_confidence?: string | null
-          tags?: string[] | null
-          trader_key?: string
-          trader_type?: string | null
-          updated_at?: string | null
-          verified_by_user?: boolean | null
+          source?: string
+          source_trader_id?: string
+          user_id?: string
         }
         Relationships: []
-      }
-      traders_legacy: {
-        Row: {
-          bio: string | null
-          created_at: string
-          followers: number
-          handle: string
-          id: string
-          merged_to: string | null
-          roi: number | null
-          season: string
-          source: string | null
-          source_trader_id: string | null
-          updated_at: string | null
-          win_rate: number | null
-        }
-        Insert: {
-          bio?: string | null
-          created_at?: string
-          followers?: number
-          handle: string
-          id?: string
-          merged_to?: string | null
-          roi?: number | null
-          season?: string
-          source?: string | null
-          source_trader_id?: string | null
-          updated_at?: string | null
-          win_rate?: number | null
-        }
-        Update: {
-          bio?: string | null
-          created_at?: string
-          followers?: number
-          handle?: string
-          id?: string
-          merged_to?: string | null
-          roi?: number | null
-          season?: string
-          source?: string | null
-          source_trader_id?: string | null
-          updated_at?: string | null
-          win_rate?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'traders_merged_to_fkey'
-            columns: ['merged_to']
-            isOneToOne: false
-            referencedRelation: 'traders_legacy'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'traders_merged_to_fkey'
-            columns: ['merged_to']
-            isOneToOne: false
-            referencedRelation: 'view_leaderboard_top10'
-            referencedColumns: ['trader_id']
-          },
-        ]
-      }
-      transactions: {
-        Row: {
-          block_number: number | null
-          chain: string | null
-          gas_price: number | null
-          gas_used: number | null
-          hash: string | null
-          method: string | null
-          raw_input: string | null
-          success: boolean | null
-          timestamp: string | null
-          tx_id: number
-          wallet_id: number | null
-        }
-        Insert: {
-          block_number?: number | null
-          chain?: string | null
-          gas_price?: number | null
-          gas_used?: number | null
-          hash?: string | null
-          method?: string | null
-          raw_input?: string | null
-          success?: boolean | null
-          timestamp?: string | null
-          tx_id?: number
-          wallet_id?: number | null
-        }
-        Update: {
-          block_number?: number | null
-          chain?: string | null
-          gas_price?: number | null
-          gas_used?: number | null
-          hash?: string | null
-          method?: string | null
-          raw_input?: string | null
-          success?: boolean | null
-          timestamp?: string | null
-          tx_id?: number
-          wallet_id?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'transactions_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
-      }
-      transfers: {
-        Row: {
-          amount: number | null
-          chain: string | null
-          from_wallet_id: number | null
-          timestamp: string | null
-          to_wallet_id: number | null
-          token_address: string | null
-          transfer_id: number
-          tx_hash: string | null
-        }
-        Insert: {
-          amount?: number | null
-          chain?: string | null
-          from_wallet_id?: number | null
-          timestamp?: string | null
-          to_wallet_id?: number | null
-          token_address?: string | null
-          transfer_id?: number
-          tx_hash?: string | null
-        }
-        Update: {
-          amount?: number | null
-          chain?: string | null
-          from_wallet_id?: number | null
-          timestamp?: string | null
-          to_wallet_id?: number | null
-          token_address?: string | null
-          transfer_id?: number
-          tx_hash?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'transfers_from_wallet_id_fkey'
-            columns: ['from_wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-          {
-            foreignKeyName: 'transfers_to_wallet_id_fkey'
-            columns: ['to_wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
       }
       translation_cache: {
         Row: {
@@ -8319,30 +7287,6 @@ export type Database = {
           metadata?: Json | null
           target_id?: string
           target_type?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      user_activity: {
-        Row: {
-          action: string
-          created_at: string
-          id: string
-          metadata: Json | null
-          user_id: string
-        }
-        Insert: {
-          action: string
-          created_at?: string
-          id?: string
-          metadata?: Json | null
-          user_id: string
-        }
-        Update: {
-          action?: string
-          created_at?: string
-          id?: string
-          metadata?: Json | null
           user_id?: string
         }
         Relationships: []
@@ -8728,6 +7672,8 @@ export type Database = {
       }
       user_profiles: {
         Row: {
+          api_stripe_subscription_id: string | null
+          api_tier: string
           avatar_url: string | null
           ban_expires_at: string | null
           banned_at: string | null
@@ -8755,6 +7701,7 @@ export type Database = {
           is_verified: boolean | null
           is_verified_trader: boolean | null
           kol_tier: string | null
+          last_export_at: string | null
           last_seen_at: string | null
           linked_trader_count: number | null
           market_pairs: Json | null
@@ -8768,6 +7715,8 @@ export type Database = {
           original_handle: string | null
           pro_expires_at: string | null
           pro_plan: string | null
+          referral_code: string | null
+          referred_by: string | null
           reputation_score: number | null
           role: string | null
           search_history: Json | null
@@ -8790,6 +7739,8 @@ export type Database = {
           weight: number | null
         }
         Insert: {
+          api_stripe_subscription_id?: string | null
+          api_tier?: string
           avatar_url?: string | null
           ban_expires_at?: string | null
           banned_at?: string | null
@@ -8817,6 +7768,7 @@ export type Database = {
           is_verified?: boolean | null
           is_verified_trader?: boolean | null
           kol_tier?: string | null
+          last_export_at?: string | null
           last_seen_at?: string | null
           linked_trader_count?: number | null
           market_pairs?: Json | null
@@ -8830,6 +7782,8 @@ export type Database = {
           original_handle?: string | null
           pro_expires_at?: string | null
           pro_plan?: string | null
+          referral_code?: string | null
+          referred_by?: string | null
           reputation_score?: number | null
           role?: string | null
           search_history?: Json | null
@@ -8852,6 +7806,8 @@ export type Database = {
           weight?: number | null
         }
         Update: {
+          api_stripe_subscription_id?: string | null
+          api_tier?: string
           avatar_url?: string | null
           ban_expires_at?: string | null
           banned_at?: string | null
@@ -8879,6 +7835,7 @@ export type Database = {
           is_verified?: boolean | null
           is_verified_trader?: boolean | null
           kol_tier?: string | null
+          last_export_at?: string | null
           last_seen_at?: string | null
           linked_trader_count?: number | null
           market_pairs?: Json | null
@@ -8892,6 +7849,8 @@ export type Database = {
           original_handle?: string | null
           pro_expires_at?: string | null
           pro_plan?: string | null
+          referral_code?: string | null
+          referred_by?: string | null
           reputation_score?: number | null
           role?: string | null
           search_history?: Json | null
@@ -8913,28 +7872,56 @@ export type Database = {
           wallet_address?: string | null
           weight?: number | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'user_profiles_referred_by_fkey'
+            columns: ['referred_by']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'user_profiles_referred_by_fkey'
+            columns: ['referred_by']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'user_profiles_referred_by_fkey'
+            columns: ['referred_by']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
       }
-      user_streaks: {
+      user_strikes: {
         Row: {
-          current_streak: number
-          last_active_date: string | null
-          longest_streak: number
-          total_active_days: number
+          created_at: string | null
+          expires_at: string | null
+          id: string
+          issued_by: string | null
+          reason: string
+          strike_type: string
           user_id: string
         }
         Insert: {
-          current_streak?: number
-          last_active_date?: string | null
-          longest_streak?: number
-          total_active_days?: number
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          issued_by?: string | null
+          reason: string
+          strike_type: string
           user_id: string
         }
         Update: {
-          current_streak?: number
-          last_active_date?: string | null
-          longest_streak?: number
-          total_active_days?: number
+          created_at?: string | null
+          expires_at?: string | null
+          id?: string
+          issued_by?: string | null
+          reason?: string
+          strike_type?: string
           user_id?: string
         }
         Relationships: []
@@ -9029,136 +8016,8 @@ export type Database = {
         }
         Relationships: []
       }
-      wallet_metadata: {
-        Row: {
-          key: string
-          source: string | null
-          value: string | null
-          wallet_id: number
-        }
-        Insert: {
-          key: string
-          source?: string | null
-          value?: string | null
-          wallet_id: number
-        }
-        Update: {
-          key?: string
-          source?: string | null
-          value?: string | null
-          wallet_id?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'wallet_metadata_wallet_id_fkey'
-            columns: ['wallet_id']
-            isOneToOne: false
-            referencedRelation: 'wallets'
-            referencedColumns: ['wallet_id']
-          },
-        ]
-      }
-      wallets: {
-        Row: {
-          address: string
-          chain: string | null
-          created_by: string | null
-          first_seen: string | null
-          is_flagged: boolean | null
-          last_seen: string | null
-          risk_level: string | null
-          sybil_score: number | null
-          wallet_id: number
-          wallet_type: string | null
-        }
-        Insert: {
-          address: string
-          chain?: string | null
-          created_by?: string | null
-          first_seen?: string | null
-          is_flagged?: boolean | null
-          last_seen?: string | null
-          risk_level?: string | null
-          sybil_score?: number | null
-          wallet_id?: number
-          wallet_type?: string | null
-        }
-        Update: {
-          address?: string
-          chain?: string | null
-          created_by?: string | null
-          first_seen?: string | null
-          is_flagged?: boolean | null
-          last_seen?: string | null
-          risk_level?: string | null
-          sybil_score?: number | null
-          wallet_id?: number
-          wallet_type?: string | null
-        }
-        Relationships: []
-      }
     }
     Views: {
-      arena_leaderboard_30d: {
-        Row: {
-          arena_score: number | null
-          avatar_url: string | null
-          drawdown_score: number | null
-          followers: number | null
-          handle: string | null
-          id: string | null
-          max_drawdown: number | null
-          pnl: number | null
-          rank: number | null
-          return_score: number | null
-          roi: number | null
-          source: string | null
-          stability_score: number | null
-          trades_count: number | null
-          win_rate: number | null
-        }
-        Relationships: []
-      }
-      arena_leaderboard_7d: {
-        Row: {
-          arena_score: number | null
-          avatar_url: string | null
-          drawdown_score: number | null
-          followers: number | null
-          handle: string | null
-          id: string | null
-          max_drawdown: number | null
-          pnl: number | null
-          rank: number | null
-          return_score: number | null
-          roi: number | null
-          source: string | null
-          stability_score: number | null
-          trades_count: number | null
-          win_rate: number | null
-        }
-        Relationships: []
-      }
-      arena_leaderboard_90d: {
-        Row: {
-          arena_score: number | null
-          avatar_url: string | null
-          drawdown_score: number | null
-          followers: number | null
-          handle: string | null
-          id: string | null
-          max_drawdown: number | null
-          pnl: number | null
-          rank: number | null
-          return_score: number | null
-          roi: number | null
-          source: string | null
-          stability_score: number | null
-          trades_count: number | null
-          win_rate: number | null
-        }
-        Relationships: []
-      }
       group_subscription_stats: {
         Row: {
           active_subscribers: number | null
@@ -9169,22 +8028,6 @@ export type Database = {
           subscription_price_yearly: number | null
           total_revenue: number | null
           trial_users: number | null
-        }
-        Relationships: []
-      }
-      mv_daily_rankings: {
-        Row: {
-          avatar_url: string | null
-          avg_arena_score: number | null
-          avg_roi: number | null
-          day: string | null
-          handle: string | null
-          market_type: string | null
-          max_pnl: number | null
-          snapshot_count: number | null
-          source: string | null
-          source_trader_id: string | null
-          time_window: string | null
         }
         Relationships: []
       }
@@ -9293,120 +8136,17 @@ export type Database = {
         }
         Relationships: []
       }
-      trader_sources_compat: {
+      trader_avoid_scores: {
         Row: {
-          activity_tier: string | null
-          avatar_url: string | null
-          bot_category: string | null
-          claimed_by_user_id: string | null
-          created_at: string | null
-          handle: string | null
-          id: string | null
-          identity_type: string | null
-          is_active: boolean | null
-          is_bot: boolean | null
-          last_refreshed_at: string | null
-          last_seen_at: string | null
-          market_type: string | null
-          next_refresh_at: string | null
-          profile_url: string | null
-          refresh_priority: number | null
-          score_confidence: string | null
+          avg_follow_days: number | null
+          avg_loss_percent: number | null
+          avoid_count: number | null
+          fake_data_count: number | null
+          high_drawdown_count: number | null
+          inconsistent_count: number | null
+          latest_vote_at: string | null
           source: string | null
-          source_kind: string | null
-          source_trader_id: string | null
-          source_type: string | null
-          tier_updated_at: string | null
           trader_id: string | null
-          verified_by_user: boolean | null
-        }
-        Insert: {
-          activity_tier?: string | null
-          avatar_url?: string | null
-          bot_category?: string | null
-          claimed_by_user_id?: string | null
-          created_at?: string | null
-          handle?: string | null
-          id?: string | null
-          identity_type?: never
-          is_active?: boolean | null
-          is_bot?: boolean | null
-          last_refreshed_at?: string | null
-          last_seen_at?: string | null
-          market_type?: string | null
-          next_refresh_at?: string | null
-          profile_url?: string | null
-          refresh_priority?: number | null
-          score_confidence?: string | null
-          source?: string | null
-          source_kind?: never
-          source_trader_id?: string | null
-          source_type?: string | null
-          tier_updated_at?: never
-          trader_id?: never
-          verified_by_user?: boolean | null
-        }
-        Update: {
-          activity_tier?: string | null
-          avatar_url?: string | null
-          bot_category?: string | null
-          claimed_by_user_id?: string | null
-          created_at?: string | null
-          handle?: string | null
-          id?: string | null
-          identity_type?: never
-          is_active?: boolean | null
-          is_bot?: boolean | null
-          last_refreshed_at?: string | null
-          last_seen_at?: string | null
-          market_type?: string | null
-          next_refresh_at?: string | null
-          profile_url?: string | null
-          refresh_priority?: number | null
-          score_confidence?: string | null
-          source?: string | null
-          source_kind?: never
-          source_trader_id?: string | null
-          source_type?: string | null
-          tier_updated_at?: never
-          trader_id?: never
-          verified_by_user?: boolean | null
-        }
-        Relationships: []
-      }
-      trader_unified_view: {
-        Row: {
-          arena_score: number | null
-          avatar_url: string | null
-          avg_holding_hours: number | null
-          bio: string | null
-          calmar_ratio: number | null
-          computed_at: string | null
-          copiers: number | null
-          display_name: string | null
-          followers: number | null
-          handle: string | null
-          is_outlier: boolean | null
-          market_type: string | null
-          max_drawdown: number | null
-          period: string | null
-          platform: string | null
-          pnl: number | null
-          profile_url: string | null
-          profit_factor: number | null
-          profitability_score: number | null
-          rank: number | null
-          risk_control_score: number | null
-          roi: number | null
-          score_completeness: string | null
-          sharpe_ratio: number | null
-          sortino_ratio: number | null
-          source_type: string | null
-          trader_key: string | null
-          trader_type: string | null
-          trades_count: number | null
-          trading_style: string | null
-          win_rate: number | null
         }
         Relationships: []
       }
@@ -9446,47 +8186,58 @@ export type Database = {
         }
         Relationships: []
       }
-      v_recent_alerts: {
-        Row: {
-          alert_type: string | null
-          auto_action: string | null
-          created_at: string | null
-          flagged_traders: number | null
-          id: string | null
-          severity: string | null
-          status: string | null
-          trader_count: number | null
-          traders: string[] | null
-          updated_at: string | null
-        }
-        Relationships: []
-      }
-      v_suspicious_traders: {
-        Row: {
-          alert_count: number | null
-          alert_types: string[] | null
-          flag_status: string | null
-          last_flagged_at: string | null
-          max_severity: string | null
-          platform: string | null
-          trader_key: string | null
-        }
-        Relationships: []
-      }
-      view_leaderboard_top10: {
-        Row: {
-          captured_at: string | null
-          followers: number | null
-          handle: string | null
-          roi: number | null
-          trader_id: string | null
-          win_rate: number | null
-        }
-        Relationships: []
-      }
     }
     Functions: {
+      acquire_leaderboard_lock: { Args: { season: string }; Returns: boolean }
+      adjust_pro_group_member_count: {
+        Args: { p_delta: number; p_group_id: string }
+        Returns: undefined
+      }
       archive_old_notifications: { Args: never; Returns: undefined }
+      arena_copier_aggregate: {
+        Args: { p_source: string; p_trader: string }
+        Returns: Json
+      }
+      arena_core_modules: {
+        Args: { p_source: string; p_timeframe: number; p_trader: string }
+        Returns: Json
+      }
+      arena_exchange_rankings: { Args: { p_timeframe: number }; Returns: Json }
+      arena_first_screen: {
+        Args: { p_source: string; p_trader: string }
+        Returns: Json
+      }
+      arena_latest_snapshot_at: { Args: never; Returns: string }
+      arena_pipeline_panel: {
+        Args: never
+        Returns: {
+          actual_count: number
+          compat_platform: string
+          compat_rows: number
+          last_passed_at: string
+          phase: number
+          rejects_24h: number
+          serving_mode: string
+          slug: string
+          status: string
+          timeframe: number
+        }[]
+      }
+      arena_records_page: {
+        Args: {
+          p_cursor?: string
+          p_kind: string
+          p_limit?: number
+          p_source: string
+          p_tf?: number
+          p_trader: string
+        }
+        Returns: Json
+      }
+      arena_resolve_trader: {
+        Args: { p_handle: string; p_source?: string }
+        Returns: Json
+      }
       arena_score: {
         Args: {
           max_drawdown: number
@@ -9497,6 +8248,48 @@ export type Database = {
         }
         Returns: number
       }
+      arena_score_features: {
+        Args: { p_source: string; p_trader: string }
+        Returns: Json
+      }
+      arena_score_inputs: {
+        Args: {
+          p_max_age_hours?: number
+          p_per_platform_limit?: number
+          p_window: string
+        }
+        Returns: {
+          as_of: string
+          avatar_url: string
+          board_rank: number
+          calmar_ratio: number
+          copiers: number
+          currency: string
+          handle: string
+          market_type: string
+          max_drawdown: number
+          platform: string
+          pnl_usd: number
+          roi_pct: number
+          sharpe_ratio: number
+          sortino_ratio: number
+          trader_key: string
+          trader_kind: string
+          trades_count: number
+          volatility_pct: number
+          win_rate: number
+        }[]
+      }
+      arena_score_inputs_json: {
+        Args: {
+          p_max_age_hours?: number
+          p_per_platform_limit?: number
+          p_window: string
+        }
+        Returns: Json
+      }
+      arena_source_capabilities: { Args: never; Returns: Json }
+      arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }
       bulk_update_snapshot_metrics: { Args: { updates: Json }; Returns: number }
       bytea_to_text: { Args: { data: string }; Returns: string }
@@ -9571,8 +8364,16 @@ export type Database = {
         Args: { p_receiver_id: string; p_sender_id: string }
         Returns: Json
       }
+      check_lifetime_spots_available: {
+        Args: { max_spots?: number }
+        Returns: boolean
+      }
       check_mutual_follow: {
         Args: { user_a: string; user_b: string }
+        Returns: boolean
+      }
+      check_trader_suspicion: {
+        Args: { p_platform: string; p_trader_id: string }
         Returns: boolean
       }
       claim_refresh_job: {
@@ -9626,6 +8427,7 @@ export type Database = {
           target_table: string
         }[]
       }
+      cleanup_old_heartbeats: { Args: never; Returns: undefined }
       cleanup_old_refresh_jobs: { Args: never; Returns: number }
       cleanup_snapshot_violations: {
         Args: { batch_limit?: number }
@@ -9634,11 +8436,18 @@ export type Database = {
           issue: string
         }[]
       }
+      cleanup_stale_platform_rows: {
+        Args: {
+          p_keep_trader_ids: string[]
+          p_season_id: string
+          p_source: string
+        }
+        Returns: number
+      }
       clip: {
         Args: { max_val: number; min_val: number; val: number }
         Returns: number
       }
-      compute_leaderboard_snapshot: { Args: never; Returns: number }
       count_distinct_projects: { Args: never; Returns: number }
       count_trader_followers: {
         Args: { trader_ids: string[] }
@@ -9703,8 +8512,16 @@ export type Database = {
       }
       exec_sql: { Args: { sql: string }; Returns: undefined }
       expire_group_subscriptions: { Args: never; Returns: number }
-      expire_trader_flags: { Args: never; Returns: undefined }
       fill_null_pnl_from_siblings: { Args: never; Returns: number }
+      find_data_gaps: {
+        Args: { p_limit?: number; p_max_age_hours?: number }
+        Returns: {
+          gap_hours: number
+          last_computed: string
+          source: string
+          source_trader_id: string
+        }[]
+      }
       fix_snapshot_violations: {
         Args: { batch_size?: number }
         Returns: {
@@ -9713,10 +8530,28 @@ export type Database = {
         }[]
       }
       generate_share_token: { Args: never; Returns: string }
+      get_active_connections: { Args: never; Returns: number }
       get_author_weight: { Args: { p_author_id: string }; Returns: number }
+      get_connection_stats: {
+        Args: never
+        Returns: {
+          count: number
+          oldest_query_seconds: number
+          state: string
+        }[]
+      }
       get_content_quality_score: {
         Args: { p_content: string; p_images: Json; p_poll_id: string }
         Returns: number
+      }
+      get_data_gap_summary: {
+        Args: { p_max_age_hours?: number }
+        Returns: {
+          avg_gap_hours: number
+          gap_count: number
+          max_gap_hours: number
+          source: string
+        }[]
       }
       get_distinct_sources:
         | {
@@ -9744,7 +8579,7 @@ export type Database = {
           avatar_url: string | null
           avg_holding_hours: number | null
           calmar_ratio: number | null
-          computed_at: string
+          computed_at: string | null
           copiers: number | null
           execution_score: number | null
           followers: number | null
@@ -9757,7 +8592,7 @@ export type Database = {
           pnl: number | null
           profit_factor: number | null
           profitability_score: number | null
-          rank: number
+          rank: number | null
           rank_change: number | null
           risk_control_score: number | null
           roi: number | null
@@ -9767,7 +8602,7 @@ export type Database = {
           sortino_ratio: number | null
           source: string
           source_trader_id: string
-          source_type: string
+          source_type: string | null
           style_confidence: number | null
           trader_type: string | null
           trades_count: number | null
@@ -9784,6 +8619,13 @@ export type Database = {
       get_dm_count_before_reply: {
         Args: { receiver: string; sender: string }
         Returns: number
+      }
+      get_expected_platform_counts: {
+        Args: { p_season_id: string }
+        Returns: {
+          expected_count: number
+          source: string
+        }[]
       }
       get_following_feed: {
         Args: { p_limit?: number; p_offset?: number; p_user_id: string }
@@ -9938,6 +8780,32 @@ export type Database = {
         Args: { user_a: string; user_b: string }
         Returns: string
       }
+      get_own_profile_sensitive: {
+        Args: never
+        Returns: {
+          email: string
+          email_digest: string
+          interests: Json
+          market_pairs: Json
+          notify_comment: boolean
+          notify_follow: boolean
+          notify_like: boolean
+          notify_mention: boolean
+          notify_message: boolean
+          onboarding_completed: boolean
+          original_email: string
+          pro_expires_at: string
+          pro_plan: string
+          search_history: Json
+          settings_version: number
+          stripe_subscription_id: string
+          totp_enabled: boolean
+          utm_campaign: string
+          utm_medium: string
+          utm_source: string
+          wallet_address: string
+        }[]
+      }
       get_pending_critical_anomalies_count: { Args: never; Returns: number }
       get_personalized_feed: {
         Args: { p_limit?: number; p_offset?: number; p_user_id: string }
@@ -9969,6 +8837,13 @@ export type Database = {
           status: string
         }[]
       }
+      get_platform_freshness: {
+        Args: never
+        Returns: {
+          latest: string
+          source: string
+        }[]
+      }
       get_platform_stats: {
         Args: { p_season_id?: string }
         Returns: {
@@ -9977,6 +8852,15 @@ export type Database = {
           avg_win_rate: number
           median_score: number
           platform: string
+          trader_count: number
+        }[]
+      }
+      get_popular_tokens: {
+        Args: { lookback_days?: number; max_tokens?: number }
+        Returns: {
+          token: string
+          total_pnl: number
+          trade_count: number
           trader_count: number
         }[]
       }
@@ -9999,6 +8883,14 @@ export type Database = {
         }[]
       }
       get_time_decay: { Args: { p_hours: number }; Returns: number }
+      get_top_trust_ratio: {
+        Args: { p_season_id?: string; p_top_n?: number }
+        Returns: {
+          full_count: number
+          ratio: number
+          total_count: number
+        }[]
+      }
       get_trader_tracked_since: {
         Args: { p_source: string; p_source_trader_id: string }
         Returns: string
@@ -10012,6 +8904,29 @@ export type Database = {
         Returns: {
           content_id: string
           translated_text: string
+        }[]
+      }
+      get_user_notifications: {
+        Args: {
+          p_limit?: number
+          p_offset?: number
+          p_unread_only?: boolean
+          p_user_id: string
+        }
+        Returns: {
+          actor_avatar_url: string
+          actor_handle: string
+          actor_id: string
+          created_at: string
+          id: string
+          link: string
+          message: string
+          read: boolean
+          reference_id: string
+          title: string
+          type: string
+          unread_count: number
+          user_id: string
         }[]
       }
       has_valid_group_subscription: {
@@ -10143,6 +9058,15 @@ export type Database = {
         Args: { curlopt: string; value: string }
         Returns: boolean
       }
+      immutable_date_trunc_hour: { Args: { ts: string }; Returns: string }
+      increment_api_key_usage: {
+        Args: { p_key: string }
+        Returns: {
+          allowed: boolean
+          daily_limit: number
+          remaining: number
+        }[]
+      }
       increment_bookmark_count: {
         Args: { post_id: string }
         Returns: {
@@ -10179,60 +9103,6 @@ export type Database = {
       }
       increment_view_count: { Args: { post_id: string }; Returns: undefined }
       is_group_admin: { Args: { gid: string; uid: string }; Returns: boolean }
-      library_items_by_lang: {
-        Args: {
-          p_category?: string
-          p_limit?: number
-          p_offset?: number
-          p_preferred_lang?: string
-        }
-        Returns: {
-          ai_summary: string | null
-          author: string | null
-          buy_url: string | null
-          category: string
-          content_url: string | null
-          cover_url: string | null
-          created_at: string | null
-          crypto_symbols: string[] | null
-          description: string | null
-          doi: string | null
-          download_count: number | null
-          epub_url: string | null
-          file_key: string | null
-          file_size_bytes: number | null
-          id: string
-          is_free: boolean | null
-          isbn: string | null
-          language: string | null
-          language_group_id: string | null
-          page_count: number | null
-          pdf_url: string | null
-          publish_date: string | null
-          publisher: string | null
-          rating: number | null
-          rating_count: number | null
-          source: string | null
-          source_url: string | null
-          subcategory: string | null
-          tags: string[] | null
-          title: string
-          title_en: string | null
-          title_zh: string | null
-          updated_at: string | null
-          view_count: number | null
-        }[]
-        SetofOptions: {
-          from: '*'
-          to: 'library_items'
-          isOneToOne: false
-          isSetofReturn: true
-        }
-      }
-      migrate_position_history_batch: {
-        Args: { batch_size?: number }
-        Returns: number
-      }
       project_stats: {
         Args: never
         Returns: {
@@ -10247,14 +9117,7 @@ export type Database = {
           total: number
         }[]
       }
-      recalculate_all_user_weights: {
-        Args: never
-        Returns: {
-          new_weight: number
-          old_weight: number
-          user_id: string
-        }[]
-      }
+      qa_schema_inventory: { Args: never; Returns: Json }
       recommend_by_collaborative_filtering: {
         Args: { p_limit?: number; p_target_type?: string; p_user_id: string }
         Returns: {
@@ -10271,13 +9134,27 @@ export type Database = {
           score: number
         }[]
       }
+      recount_all_follow_counts: {
+        Args: never
+        Returns: {
+          updated_count: number
+        }[]
+      }
+      recount_hashtag_posts: {
+        Args: { hashtag_ids: string[] }
+        Returns: undefined
+      }
       refresh_hot_scores: { Args: never; Returns: undefined }
       refresh_hot_scores_incremental: { Args: never; Returns: number }
       refresh_leaderboard_count_cache: { Args: never; Returns: undefined }
       refresh_materialized_views: { Args: never; Returns: undefined }
+      release_leaderboard_lock: { Args: { season: string }; Returns: boolean }
       release_stale_locks: { Args: never; Returns: number }
+      rerank_leaderboard: { Args: { p_season_id: string }; Returns: number }
+      reset_api_key_daily_counts: { Args: never; Returns: undefined }
       reset_daily_api_calls: { Args: never; Returns: undefined }
       reset_monthly_usage: { Args: never; Returns: undefined }
+      rollup_api_key_usage: { Args: never; Returns: undefined }
       safe_log1p: { Args: { x: number }; Returns: number }
       scan_data_quality_anomalies: {
         Args: never
@@ -10353,7 +9230,12 @@ export type Database = {
         }[]
       }
       text_to_bytea: { Args: { data: string }; Returns: string }
+      toggle_post_reaction: {
+        Args: { p_post_id: string; p_reaction_type?: string; p_user_id: string }
+        Returns: Json
+      }
       trunc_hour: { Args: { ts: string }; Returns: string }
+      update_post_report_counts: { Args: never; Returns: number }
       update_post_velocity: { Args: never; Returns: number }
       update_subscription_and_profile: {
         Args: {
@@ -10365,6 +9247,15 @@ export type Database = {
           p_stripe_customer_id: string
           p_stripe_sub_id: string
           p_tier: string
+          p_user_id: string
+        }
+        Returns: undefined
+      }
+      update_user_api_tier: {
+        Args: {
+          p_api_tier: string
+          p_daily_limit: number
+          p_stripe_subscription_id: string
           p_user_id: string
         }
         Returns: undefined
