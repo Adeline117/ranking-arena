@@ -92,9 +92,22 @@ cat > "$FULL_PATH" <<EOF
 -- [ ] Check-then-act patterns: use pg_advisory_xact_lock or SELECT FOR UPDATE
 -- [ ] FK to parent: include ON DELETE CASCADE
 -- [ ] New functions: add SET search_path = public, SECURITY DEFINER if needed
+-- [ ] 应用后跑 npm run qa:schema 核对落地 —— "写进仓库 ≠ 应用到生产"(2026-06 漂移教训)
 
 -- Up
 -- TODO — write the migration SQL here
 EOF
+
+# 验证即副产品(2026-06 教训):迁移"写进仓库"≠"应用到生产"。
+# 应用 + 核对落地是这个迁移的 definition-of-done,不是可选项。提示走 stderr,
+# 不污染 stdout 返回的路径(调用方会 capture $FULL_PATH)。
+cat >&2 <<NUDGE
+
+下一步(别只写不应用 —— ~200 迁移漂移就是这么来的):
+  1. 写 SQL 进上面的文件
+  2. 应用到生产: supabase db push (name 与文件描述一致, ledger 才对得上)
+                 或 Supabase MCP apply_migration
+  3. 核对落地: npm run qa:schema   (代码 DB 依赖 vs 生产现实)
+NUDGE
 
 echo "$FULL_PATH"
