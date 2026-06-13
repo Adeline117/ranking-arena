@@ -301,6 +301,13 @@ jobs:
         continue-on-error: true
         id: schema_contract
 
+      # 迁移落地核对(P1):baseline 后仓库迁移必须都在生产 ledger。
+      # 首次 continue-on-error,确认一次绿色运行后提升为阻断门。
+      - name: Migration ledger check (仓库迁移 vs 生产 ledger)
+        run: npm run qa:migrations
+        continue-on-error: true
+        id: migration_ledger
+
       - name: Alert on data inconsistency
         if: steps.e2e_check.outcome == 'failure' || (steps.evaluator.outputs.score != '' && steps.evaluator.outputs.score < 60)
         run: |
