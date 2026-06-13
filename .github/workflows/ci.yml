@@ -187,6 +187,16 @@ jobs:
       - run: npm run build
         env:
           NODE_ENV: production
+          # build 时 next 收集页面数据会评估路由模块，@/lib/env 对 CRON_SECRET /
+          # SUPABASE_* 做 fail-fast 校验（NODE_ENV=production 时硬抛）。Vercel build
+          # 这些 env 全有，CI 之前没给 → "Failed to collect page data" 卡 build。
+          # 优先用 repo secrets（匹配 Vercel，潜在 build 时 fetch 不挂），缺则 dummy 兜底
+          # （build 是静态的，纯占位让模块校验通过即可）。
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-build-anon-placeholder' }}
+          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'ci-build-service-placeholder' }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-build-cron-placeholder' }}
 
       - name: Bundle size check
         run: |
