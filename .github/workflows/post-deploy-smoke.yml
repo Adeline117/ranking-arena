@@ -17,6 +17,11 @@ jobs:
       - name: Wait for deployment to propagate
         run: sleep 45
 
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
       - name: Smoke test critical paths
         id: smoke
         run: |
@@ -105,3 +110,29 @@ jobs:
       - name: Report success
         if: steps.smoke.outputs.fail == '0'
         run: echo "✅ All ${{ steps.smoke.outputs.total }} critical paths healthy after deployment"
+
+      # 写路径金丝雀(P2):GET smoke 过后,用 QA 账号真跑 发帖→赞→评论→删
+      # (自动清理)—— 在部署当下(分钟级)抓住"发帖对全员 500"这类写路径中断,
+      # 而非靠每日哨兵 24h 后才发现。本次整件事的起点正是这类(/hot 发帖崩)。
+      # continue-on-error + 仅告警不自动回滚:写金丝雀的误报不该回滚好部署;
+      # 首次确认稳定后再考虑收紧。脚本零依赖(纯 node+fetch),无需 npm ci。
+      - name: Write-path canary (post→like→comment→delete)
+        id: canary
+        if: steps.smoke.outputs.fail == '0'
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/openclaw/schema-canary-sentinel.mjs
+
+      - name: Alert if write-path canary failed
+        if: steps.canary.outcome == 'failure'
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" ]; then
+            MSG="⚠️ *写路径金丝雀失败(部署后)*%0A%0AGET 路径正常,但 发帖/赞/评论/删 链路有问题%0ACommit: \`${GITHUB_SHA:0:8}\`%0A未自动回滚 —— 人工确认写路径(可能是 schema/RLS/依赖)。"
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
+              -d "text=${MSG}" -d "parse_mode=Markdown" || true
+          fi
+          echo "::warning::Post-deploy write-path canary failed — 见上方日志"
