@@ -458,6 +458,13 @@ const nextConfig = {
     'resend',
     'nodemailer',
     '@sentry/profiling-node',
+    // 可选 runtime require（均裹在 try/catch / globalThis.require 里，未装也优雅降级）。
+    // Next 16 默认 Turbopack（vercel.json buildCommand: next build），webpack 的
+    // IgnorePlugin 兜底不生效 → 必须 externalize，否则 Turbopack 静态解析 require()
+    // 找不到模块直接 build 失败。externalize 后留给运行时 require，缺失即走 catch。
+    'undici', // lib/search/meilisearch.ts — 自签 TLS 的 undici Agent
+    '@mathieuc/tradingview', // lib/utils/tradingview-ws.ts — TradingView WS（依赖 ws）
+    '@stripe/crypto', // stripe SDK 的可选 crypto provider（无源码直接 import）
   ],
 
   // 实验性功能
