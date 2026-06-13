@@ -113,6 +113,13 @@ jobs:
       - run: npm run lint
       - run: npx tsc --noEmit
 
+      # Schema 契约真阻断门(P1)。放在 lint-typecheck(而非 data-consistency)是
+      # 因为它只需 node + 生产访问,不依赖 build/unit-tests —— 这样它独立运行,
+      # 不被预先的 Build/测试腐烂卡住(2026-06 自查:CI 早已多处全红)。
+      # 代码引用生产不存在的表/RPC = 漂移 = CI 红。env 由顶层提供,缺 env fail-loud。
+      - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
+        run: npm run qa:schema
+
       - name: Migration lint — block dangerous DDL
         run: |
           CHANGED=$(git diff --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
@@ -293,13 +300,8 @@ jobs:
         id: evaluator
         continue-on-error: true
 
-      # Schema 契约检查(P1):代码 .from()/.rpc() 依赖 vs 生产实际清单做差集。
-      # 真阻断门(2026-06 自查:去掉 continue-on-error)—— 代码引用生产不存在的
-      # 表/RPC = 漂移 = CI 红。本地多次验证 green;env(URL+service-role)由顶层
-      # env 提供;脚本对缺 env fail-loud(readEnv throw),不会静默假通过。
-      - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
-        run: npm run qa:schema
-        id: schema_contract
+      # schema-contract 已移到 lint-typecheck job(不依赖 build/unit-tests,独立
+      # 运行,见上)。这里只留 advisory 的 ledger 核对。
 
       # 迁移落地核对(P1):baseline 后仓库迁移必须都在生产 ledger。
       # 首次 continue-on-error,确认一次绿色运行后提升为阻断门。
