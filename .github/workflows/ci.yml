@@ -294,11 +294,11 @@ jobs:
         continue-on-error: true
 
       # Schema 契约检查(P1):代码 .from()/.rpc() 依赖 vs 生产实际清单做差集。
-      # 用本会话验证过 green 的脚本。首次引入设 continue-on-error(只报告不阻断),
-      # 确认一次绿色 CI 运行后,移除 continue-on-error 提升为阻断门。
+      # 真阻断门(2026-06 自查:去掉 continue-on-error)—— 代码引用生产不存在的
+      # 表/RPC = 漂移 = CI 红。本地多次验证 green;env(URL+service-role)由顶层
+      # env 提供;脚本对缺 env fail-loud(readEnv throw),不会静默假通过。
       - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
         run: npm run qa:schema
-        continue-on-error: true
         id: schema_contract
 
       # 迁移落地核对(P1):baseline 后仓库迁移必须都在生产 ledger。
