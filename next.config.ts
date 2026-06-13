@@ -48,6 +48,10 @@ const nextConfig = {
       '@solana-program/system': './lib/stubs/empty.js',
       '@solana-program/memo': './lib/stubs/empty.js',
       '@solana-program/token': './lib/stubs/empty.js',
+      // stripe SDK 的可选 crypto provider —— 仅 Deno/edge 的 SubtleCryptoProvider
+      // 用到；Node 运行时走内置 crypto，从不 import 它。serverExternalPackages 拦不住
+      // 它（stripe 包内部引用，非我们源码的 require），故 stub 成空，与上面可选 peer 同理。
+      '@stripe/crypto': './lib/stubs/empty.js',
     },
   },
 
