@@ -5523,6 +5523,8 @@ const ja = {
   tabCopiers: 'コピーユーザー',
   recordsEmpty: '記録がありません',
   recordsLoadMore: 'もっと見る',
+  assetPreference: '資産選好',
+  assetOther: 'その他',
   colSymbol: '銘柄',
   colSide: '方向',
   colLeverage: 'レバレッジ',

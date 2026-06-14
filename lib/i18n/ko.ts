@@ -5757,6 +5757,8 @@ const ko = {
   tabCopiers: '카피어',
   recordsEmpty: '표시할 기록이 없습니다',
   recordsLoadMore: '더 보기',
+  assetPreference: '자산 선호도',
+  assetOther: '기타',
   colSymbol: '심볼',
   colSide: '방향',
   colLeverage: '레버리지',

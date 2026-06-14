@@ -26,6 +26,7 @@ import { PeriodSelector, type Period } from '@/app/components/trader/performance
 import MetricGrid from './MetricGrid'
 import SignalChips from './SignalChips'
 import CoreCharts from './CoreCharts'
+import AssetPreference from './AssetPreference'
 import ModuleDegraded from './ModuleDegraded'
 import RecordsTable, { type RecordColumn } from './RecordsTable'
 import CopierAggregatePanel from './CopierAggregatePanel'
@@ -291,6 +292,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             currency={core.modules.currency}
           />
           <CoreCharts series={core.modules.series} timeframe={tf} />
+          <AssetPreference extras={core.modules.extras} />
           <ProvenanceFooter
             provenance={core.modules.provenance}
             exchangeName={capability?.exchangeName}
