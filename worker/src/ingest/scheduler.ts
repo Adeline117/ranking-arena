@@ -8,7 +8,17 @@
  */
 
 import { getActiveSources } from '@/lib/ingest/sources'
-import { getIngestQueue, getRegionQueue, INGEST_JOB, INGEST_REGIONS } from './queues'
+import {
+  FAST_LANE_ENABLED,
+  getFastQueue,
+  getIngestQueue,
+  getRegionQueue,
+  INGEST_JOB,
+  INGEST_REGIONS,
+  isFastTierA,
+  regionFastQueueName,
+  regionQueueName,
+} from './queues'
 
 /** Maintenance jobs are framework-level, not per-source. */
 const STATIC_SCHEDULERS = [
@@ -22,31 +32,42 @@ const STATIC_SCHEDULERS = [
 
 export async function reconcileSchedulers(): Promise<void> {
   const sources = await getActiveSources()
-  // scheduler id → its region queue; stale cleanup walks every region.
-  const wanted = new Set<string>()
+  // scheduler key → the queue NAME it must live on. A Set isn't enough: a
+  // source can MOVE between the bulk and fast lanes (board grows past
+  // FAST_TIER_A_MAX_COUNT), and the cleanup pass must then remove the stale
+  // tiera:<slug> from the OLD queue — but the key is still "wanted", just on a
+  // different queue. So cleanup keys off (key, queueName), not key alone.
+  const wanted = new Map<string, string>()
 
   for (const src of sources) {
     const data = { sourceSlug: src.slug }
     // Bulk tiers run on the source's fetch_region queue so a worker
     // co-located with that region picks them up (remote-WS chain gone).
     const queue = getRegionQueue(src.fetch_region)
+    const bulkName = regionQueueName(src.fetch_region)
 
-    // ── Tier priority (2026-06-12 head-of-line-blocking fix) ──
-    // BullMQ priority: 1 = highest. Slow tier-B deep-profile crawls (10-40min)
-    // were monopolizing all worker slots, starving fast tier-A leaderboard
-    // crawls (seconds, user-facing rankings) for 10h+ in the queue. Priority
-    // makes a freed slot pick tier-A first, then tier-D positions, and tier-B
-    // only fills spare slots — rankings stay fresh, profiles degrade gracefully.
+    // ── Tier-A lane split (2026-06-13 slot-starvation root fix) ──
+    // BullMQ priority alone can't fix this: priority picks which job grabs a
+    // FREED slot, but never preempts a running one — so a giant multi-hour
+    // crawl (bybit_mt5 ≈29k traders/2-3h) holds a slot for hours and the small
+    // user-facing leaderboards behind it sit 14-24h stale. Light Tier-A
+    // (board ≤ FAST_TIER_A_MAX_COUNT) is siphoned to a SEPARATE fast-lane queue
+    // + worker pool that the giants can never touch; heavy Tier-A + all
+    // Tier-B/D/series/derive stay on the bulk queue. Priority 1 still applies
+    // within the fast lane.
+    const onFast = FAST_LANE_ENABLED && isFastTierA(src.expected_count)
+    const tierAQueue = onFast ? getFastQueue(src.fetch_region) : queue
+    const tierAName = onFast ? regionFastQueueName(src.fetch_region) : bulkName
     const tierA = `tiera:${src.slug}`
-    wanted.add(tierA)
-    await queue.upsertJobScheduler(
+    wanted.set(tierA, tierAName)
+    await tierAQueue.upsertJobScheduler(
       tierA,
       { every: src.cadence_tier_a_seconds * 1000 },
       { name: INGEST_JOB.TIER_A, data, opts: { priority: 1 } }
     )
 
     const tierB = `tierb:${src.slug}`
-    wanted.add(tierB)
+    wanted.set(tierB, bulkName)
     await queue.upsertJobScheduler(
       tierB,
       { every: src.cadence_tier_b_seconds * 1000 },
@@ -54,7 +75,7 @@ export async function reconcileSchedulers(): Promise<void> {
     )
 
     const tierD = `tierd:${src.slug}`
-    wanted.add(tierD)
+    wanted.set(tierD, bulkName)
     await queue.upsertJobScheduler(
       tierD,
       { every: src.cadence_tier_d_seconds * 1000 },
@@ -69,7 +90,7 @@ export async function reconcileSchedulers(): Promise<void> {
     if (backfillTopN > src.deep_profile_topn) {
       const cadenceSec = Number(src.meta?.series_backfill_cadence_seconds ?? 1800)
       const seriesBackfill = `tierbs:${src.slug}`
-      wanted.add(seriesBackfill)
+      wanted.set(seriesBackfill, bulkName)
       await queue.upsertJobScheduler(
         seriesBackfill,
         { every: Math.max(60, cadenceSec) * 1000 },
@@ -80,7 +101,7 @@ export async function reconcileSchedulers(): Promise<void> {
     // Derived boards (MEXC/BTCC): synthesize after each Tier-A cadence.
     if (src.timeframes_derived.length > 0) {
       const derive = `derive:${src.slug}`
-      wanted.add(derive)
+      wanted.set(derive, bulkName)
       await queue.upsertJobScheduler(
         derive,
         { every: src.cadence_tier_a_seconds * 1000 },
@@ -92,7 +113,7 @@ export async function reconcileSchedulers(): Promise<void> {
   // Framework maintenance always runs on the primary (local) node.
   const localQueue = getIngestQueue()
   for (const s of STATIC_SCHEDULERS) {
-    wanted.add(s.id)
+    wanted.set(s.id, regionQueueName('local'))
     await localQueue.upsertJobScheduler(s.id, { every: s.everyMs }, { name: s.name, data: {} })
   }
 
@@ -112,15 +133,21 @@ export async function reconcileSchedulers(): Promise<void> {
   const REVIVE_GRACE_MS = 5 * 60_000
   let revived = 0
   const now = Date.now()
-  for (const region of INGEST_REGIONS) {
-    const q = getRegionQueue(region)
+  // Walk BOTH lanes per region: a scheduler on the wrong lane (key wanted, but
+  // queueName mismatch) is stale and must be removed so the source doesn't run
+  // on two queues at once after a bulk⇄fast migration.
+  const queuesToWalk = INGEST_REGIONS.flatMap((region) => [
+    { q: getRegionQueue(region), name: regionQueueName(region) },
+    { q: getFastQueue(region), name: regionFastQueueName(region) },
+  ])
+  for (const { q, name: queueName } of queuesToWalk) {
     const existing = await q.getJobSchedulers()
     for (const scheduler of existing) {
       const key = scheduler.key
       if (!key) continue
-      if (!wanted.has(key)) {
+      if (wanted.get(key) !== queueName) {
         await q.removeJobScheduler(key)
-        console.log(`[ingest-scheduler] removed stale scheduler ${key} (${region})`)
+        console.log(`[ingest-scheduler] removed stale scheduler ${key} (${queueName})`)
         continue
       }
       const every = typeof scheduler.every === 'number' ? scheduler.every : Number(scheduler.every)
