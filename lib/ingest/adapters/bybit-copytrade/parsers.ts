@@ -269,6 +269,11 @@ export function parseBybitCopytradeProfile(raw: unknown, ctx: ParseCtx): ParsedP
     if (typeof info.leaderUserIntroduction === 'string' && info.leaderUserIntroduction !== '') {
       extras.bio = info.leaderUserIntroduction
     }
+    // P1: per-period loss count (winCount already lands as winPositions) +
+    // wallet (margin) balance — both present in the payload.
+    if (lossCount !== null) extras.loss_trades = lossCount
+    const walletBalance = e(info.walletBalanceE8, 8)
+    if (walletBalance !== null) extras.wallet_balance = walletBalance
 
     stats.push({
       timeframe: tf as Timeframe,
