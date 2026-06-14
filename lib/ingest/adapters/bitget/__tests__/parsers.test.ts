@@ -161,6 +161,10 @@ describe('parseBitgetProfile (live-captured fixtures, 2026-06-11)', () => {
       copier_count_max: 100,
     })
     expect(profile.stats[0].extras.style_labels).toContain('高频')
+    // P1: loss_trades + longest_holding + holding-duration distribution captured.
+    expect(typeof profile.stats[0].extras.loss_trades).toBe('number')
+    expect(typeof profile.stats[0].extras.longest_holding_time_secs).toBe('number')
+    expect(Array.isArray(profile.stats[0].extras.holding_distribution)).toBe(true)
   })
 
   it('parses roi + pnl cumulative chart series consistent with the stats block', () => {

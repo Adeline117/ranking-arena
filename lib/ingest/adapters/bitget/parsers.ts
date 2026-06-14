@@ -163,6 +163,14 @@ export function parseBitgetProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (st.largestProfit !== undefined) extras.largest_profit = num(st.largestProfit)
     if (st.largestLoss !== undefined) extras.largest_loss = num(st.largestLoss)
     if (st.longShortRatio !== undefined) extras.long_short_ratio = st.longShortRatio
+    if (st.lossTrades !== undefined) extras.loss_trades = int(st.lossTrades)
+    if (positionTime) {
+      // 平均/最长持仓时长 + 按时长桶的盈亏分布(positionTimeDTO.rows),供前端
+      // 持仓时长分布模块(spec §2.5c)。longestHoldingTime 同 averageHoldingTime 为秒。
+      const longest = num(positionTime.longestHoldingTime)
+      if (longest !== null) extras.longest_holding_time_secs = longest
+      if (Array.isArray(positionTime.rows)) extras.holding_distribution = positionTime.rows
+    }
     if (info) {
       if (info.settledInDays !== undefined) extras.settled_in_days = int(info.settledInDays)
       if (info.followerCount !== undefined) extras.copier_count_current = int(info.followerCount)
@@ -374,6 +382,13 @@ function parseBitgetUtaProfile(
     }
     if (inner?.curFollowCount !== undefined) extras.copier_count_current = int(inner.curFollowCount)
     if (inner?.maxFollowCount !== undefined) extras.copier_count_max = int(inner.maxFollowCount)
+    // Account equity ("Total Equity" on the UTA card). Masked to "****" for
+    // non-followers — num() returns null then, so this only lands when visible.
+    if (perf.totalEquity !== undefined) {
+      const eq = num(perf.totalEquity)
+      if (eq !== null) extras.total_equity = eq
+    }
+    if (inner?.followProfit30d !== undefined) extras.copier_pnl_30d = num(inner.followProfit30d)
 
     stats.push({
       timeframe: tf,
