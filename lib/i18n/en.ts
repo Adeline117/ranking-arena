@@ -5878,6 +5878,8 @@ const en = {
   tabCopiers: 'Copiers',
   recordsEmpty: 'No records to show',
   recordsLoadMore: 'Load more',
+  assetPreference: 'Asset Preference',
+  assetOther: 'Other',
   colSymbol: 'Symbol',
   colSide: 'Side',
   colLeverage: 'Leverage',

@@ -5745,6 +5745,8 @@ const zh = {
   tabCopiers: '跟单者',
   recordsEmpty: '暂无记录',
   recordsLoadMore: '加载更多',
+  assetPreference: '资产偏好',
+  assetOther: '其他',
   colSymbol: '币对',
   colSide: '方向',
   colLeverage: '杠杆',
