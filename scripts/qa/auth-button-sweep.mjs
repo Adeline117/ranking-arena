@@ -43,6 +43,9 @@ async function main() {
     } catch {}
   }, session)
   const projectRef = 'iknktzifjdyujdccyhsv'
+  // cookie domain 随 BASE 变（localhost 不能用 .arenafi.org，否则 cookie 不发送）
+  const host = new URL(BASE).hostname
+  const cookieDomain = host === 'localhost' ? 'localhost' : '.arenafi.org'
   // CSRF 格式（proxy.ts validateTimedCsrfToken）：base36 时间戳 + '.' + 64 hex
   const CSRF = `${Date.now().toString(36)}.${Array.from(crypto.getRandomValues(new Uint8Array(32)))
     .map((b) => b.toString(16).padStart(2, '0'))
@@ -51,16 +54,16 @@ async function main() {
     {
       name: `sb-${projectRef}-auth-token`,
       value: encodeURIComponent(JSON.stringify(session)),
-      domain: '.arenafi.org',
+      domain: cookieDomain,
       path: '/',
     },
     {
       name: `sb-${projectRef}-auth-token.0`,
       value: Buffer.from(JSON.stringify(session)).toString('base64'),
-      domain: '.arenafi.org',
+      domain: cookieDomain,
       path: '/',
     },
-    { name: 'csrf-token', value: CSRF, domain: '.arenafi.org', path: '/' },
+    { name: 'csrf-token', value: CSRF, domain: cookieDomain, path: '/' },
   ])
 
   const page = await ctx.newPage()
@@ -293,6 +296,50 @@ async function main() {
   await goto('/settings')
   const sText = await page.evaluate(() => document.body.innerText).catch(() => '')
   note(/Something went wrong/.test(sText) ? 'FAIL /settings 崩溃' : 'OK /settings 渲染')
+
+  // ---------- Step 8: 社交旅程 — 群组 + inbox + messages + feed ----------
+  newBucket('8-social-journey')
+  const renderCheck = async (path, label) => {
+    await goto(path)
+    const txt = await page.evaluate(() => document.body.innerText).catch(() => '')
+    const crashed = /Something went wrong|出错了|页面加载失败/.test(txt)
+    const blank = txt.replace(/\s/g, '').length < 30
+    note(crashed ? `FAIL ${label} 崩溃` : blank ? `WARN ${label} 空白` : `OK ${label} 渲染`)
+    return !crashed && !blank
+  }
+  await renderCheck('/groups', '群组列表')
+  // 进第一个群组详情（/groups/[id]）
+  try {
+    const g = await apiCall('/api/groups?limit=1', { method: 'GET' })
+    const gid = g?.body?.data?.groups?.[0]?.id
+    if (gid) await renderCheck(`/groups/${gid}`, '群组详情')
+    else note('SKIP 无群组样本')
+  } catch (e) {
+    note(`SKIP 群组详情取 ID 失败: ${String(e.message).slice(0, 60)}`)
+  }
+  await renderCheck('/inbox', 'inbox')
+  await renderCheck('/messages', '私信列表')
+  await renderCheck('/feed', 'feed 动态')
+  await renderCheck('/following', '关注列表')
+
+  // ---------- Step 9: 账号管理 — 资料编辑 + 收藏增删 ----------
+  newBucket('9-account-journey')
+  await renderCheck('/user-center', '个人中心')
+  await renderCheck('/my-posts', '我的帖子')
+  await renderCheck('/portfolio', '组合')
+  // 收藏夹（/favorites）渲染检查
+  await renderCheck('/favorites', '收藏夹')
+  await renderCheck('/settings/linked-accounts', '设置-关联账号')
+  // 注：资料编辑（bio/头像）由 settings 页经 supabase client 直写，无独立 REST
+  // 端点，UI 写测在 button-sweep 交互层覆盖；此处仅做页面渲染健康检查。
+
+  // ---------- Step 10: 交易所授权旅程（只到授权页，不真实绑定）----------
+  newBucket('10-exchange-auth-journey')
+  await renderCheck('/exchange/auth', '交易所授权入口')
+  await renderCheck('/exchange/auth/api-key', 'API key 授权')
+  await renderCheck('/claim', 'claim 入口')
+  await renderCheck('/trader/authorize', '交易员认证')
+  await renderCheck('/settings/linked-accounts', '关联账号')
 
   await browser.close()
 

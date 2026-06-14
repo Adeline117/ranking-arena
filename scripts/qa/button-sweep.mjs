@@ -17,34 +17,101 @@ const LANG_SWEEP = process.argv.includes('--lang-sweep')
 const PAGE_DELAY_MS = 1000 // production politeness
 
 // 动态 ID 在 main() 里从 API 取
+// 覆盖全部 83 个 page.tsx 路由：静态路由直列；动态路由在 main() 取真实 ID；
+// 需登录态的动态路由（messages/favorites/post-edit/group-manage 等）由
+// auth-button-sweep.mjs 覆盖，这里 log skip 原因（不静默跳过）。
 const STATIC_ROUTES = [
+  // 核心路径
   '/',
   '/rankings',
   '/rankings/tokens',
   '/rankings/bots',
   '/rankings/exchanges',
   '/rankings/weekly',
-  '/trader/soul',
+  '/trader/soul', // 已知公开交易员（/trader/[handle]）
   '/hot',
   '/feed',
-  '/groups',
+  '/search?q=btc',
+  '/compare',
+  // 市场
   '/market',
   '/market/funding-rates',
   '/market/open-interest',
-  '/search?q=btc',
-  '/login',
+  // 社交 / 内容
+  '/groups',
+  '/groups/apply',
+  '/competitions',
+  '/competitions/create', // 未登录应跳登录墙
+  '/flash-news',
+  '/quiz',
+  '/quiz/questions',
+  '/quiz/result',
+  // 营收 / 转化
   '/pricing',
+  '/pricing/success',
+  '/referral',
+  '/tip/success',
+  // 账号 / 认证（未登录应跳登录墙而非崩）
+  '/login',
+  '/onboarding',
+  '/logout',
+  '/reset-password',
+  '/auth/callback',
+  '/claim',
+  '/exchange/auth',
+  '/exchange/auth/api-key',
+  '/exchange/auth/callback',
+  '/trader/authorize',
+  // 登录态页（未登录应 redirect/空态，不崩）
+  '/notifications',
+  '/settings',
+  '/settings/linked-accounts',
+  '/watchlist',
+  '/favorites',
+  '/portfolio',
+  '/following',
+  '/messages',
+  '/inbox',
+  '/my-posts',
+  '/user-center',
+  // 内容 / 帮助 / 法务
   '/learn',
+  '/learn/how-arena-score-works', // /learn/[slug]
   '/methodology',
   '/help',
+  '/api-docs',
+  '/status',
+  '/offline',
   '/about',
-  '/quiz',
-  '/competitions',
-  '/flash-news',
-  '/compare',
-  '/notifications', // 未登录应跳登录墙而非崩
-  '/settings',
-  '/watchlist',
+  '/privacy',
+  '/terms',
+  '/disclaimer',
+  '/dmca',
+  // 管理后台（未登录应 403/redirect，不崩）
+  '/admin',
+  '/admin/monitoring',
+  '/admin/monitoring/pipeline',
+  '/admin/pro-metrics',
+  '/admin/data-health',
+  '/admin/reports',
+  // 硬编码 token/tag 动态路由
+  '/rankings/tokens/BTC', // /rankings/tokens/[token]
+  '/s/BTC', // /s/[token]
+  '/hashtag/btc', // /hashtag/[tag]
+  '/exchange/binance', // /exchange/[slug]
+  '/wrapped/soul', // /wrapped/[handle]
+  '/u/arena_bot', // /u/[handle]
+]
+
+// 需登录态、无公开样本 ID 的动态路由 —— 由 auth-button-sweep 覆盖，此处显式记录
+const SKIPPED_AUTH_ROUTES = [
+  '/channels/[channelId]',
+  '/messages/[conversationId]',
+  '/favorites/[folderId]',
+  '/post/[id]/edit',
+  '/groups/[id]/new',
+  '/groups/[id]/manage',
+  '/u/[handle]/new',
 ]
 
 const CORE_LANG_ROUTES = ['/', '/rankings', '/trader/soul', '/hot', '/pricing', '/search?q=btc']
@@ -206,17 +273,44 @@ function summarize(results) {
 }
 
 async function main() {
-  // 取动态 ID
+  // 取动态 ID（每个独立 try，单点失败不影响其余；取不到即显式 skip 记录）
   const routes = [...STATIC_ROUTES]
-  try {
-    const posts = await fetch(`${BASE}/api/posts?limit=1`).then((r) => r.json())
-    const postId = posts?.data?.posts?.[0]?.id
-    if (postId) routes.push(`/post/${postId}`)
-    const groups = await fetch(`${BASE}/api/groups?limit=1`).then((r) => r.json())
-    const groupId = groups?.data?.groups?.[0]?.id
-    if (groupId) routes.push(`/groups/${groupId}`)
-  } catch {}
-  routes.push('/s/BTC', '/hashtag/btc')
+  const skips = [...SKIPPED_AUTH_ROUTES.map((r) => `${r} (需登录态 → auth-sweep)`)]
+  const jget = (p) =>
+    fetch(`${BASE}${p}`, { signal: AbortSignal.timeout(15000) }).then((r) => r.json())
+  const addDynamic = async (label, fn) => {
+    try {
+      const route = await fn()
+      if (route) routes.push(route)
+      else skips.push(`${label}（API 返回空样本）`)
+    } catch (e) {
+      skips.push(`${label}（取 ID 失败: ${String(e.message).slice(0, 80)}）`)
+    }
+  }
+  await addDynamic('/post/[id]', async () => {
+    const id = (await jget('/api/posts?limit=1'))?.data?.posts?.[0]?.id
+    return id && `/post/${id}`
+  })
+  await addDynamic('/groups/[id]', async () => {
+    const id = (await jget('/api/groups?limit=1'))?.data?.groups?.[0]?.id
+    return id && `/groups/${id}`
+  })
+  await addDynamic('/feed/[id]', async () => {
+    const id = (await jget('/api/feed?limit=1'))?.data?.activities?.[0]?.id
+    return id && `/feed/${id}`
+  })
+  await addDynamic('/bot/[id]', async () => {
+    const id = (await jget('/api/bots?limit=1'))?.bots?.[0]?.id
+    return id && `/bot/${id}`
+  })
+  await addDynamic('/share/rank/[trader_key]', async () => {
+    const key = (await jget('/api/rankings?window=30d&limit=1'))?.data?.traders?.[0]?.trader_key
+    return key && `/share/rank/${key}`
+  })
+  await addDynamic('/competitions/[id]', async () => {
+    const id = (await jget('/api/competitions?limit=1'))?.data?.competitions?.[0]?.id
+    return id && `/competitions/${id}`
+  })
 
   const browser = await chromium.launch({ headless: true })
   const results = []
@@ -263,6 +357,10 @@ async function main() {
 
   console.log(`\n== 结果: ${results.length} 次页面检查, ${problems.length} 个问题 ==`)
   for (const p of problems) console.log(p)
+  if (skips.length) {
+    console.log(`\n== 显式跳过 ${skips.length} 个动态路由（非静默） ==`)
+    for (const s of skips) console.log(`  SKIP ${s}`)
+  }
   console.log('\n完整数据: /tmp/arena-button-sweep.json')
   process.exit(0)
 }
