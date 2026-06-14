@@ -98,7 +98,23 @@ lead_start_time(带单起始) · copier_count / copier_count_max · futures_type
 
 ### 2.5 Asset Preferences(资产偏好)
 
-饼图:`asset + weight%`(已实现)。
+饼图:`asset + weight%`(已实现)。`带单交易对` chips(mexc:交易哪些 symbol)。
+
+### 2.5b 能力分析雷达(mexc 等)
+
+五维雷达 `收益 · 胜率 · 最大连胜 · 盈利笔数 · 单笔最高` + 总评级(S/A/B…)+ 每维
+百分位(位于前 X%)。→ **复用 legacy `TradingStyleRadar`**。
+
+### 2.5c 持仓时长分布(mexc/gate/bitget 等)
+
+`平均持仓时间 · 最长持仓时间` + 按时长桶的盈/亏直方图;按订单 / 按仓位切换。
+
+### 2.5d 链上(web3/gmx/hyperliquid/gtrade)专属
+
+`total_balance · total_trades · total_traded_tokens · realized_pnl(+PnL 日历)·
+win_rate 分布桶 · volume · avg_buy · txns · top_earning_tokens · token_distribution`;
+记录区:Active Positions(token·price·balance·unrealized_pnl·proportion)/ Realized
+PnL / Transaction History;**地址必须可复制**。
 
 ### 2.6 记录区(tabs,全部翻页抓全)
 
