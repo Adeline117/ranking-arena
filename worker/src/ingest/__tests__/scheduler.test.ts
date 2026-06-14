@@ -17,6 +17,15 @@ const mockQueue = {
   getJob: jest.fn().mockResolvedValue(null),
   add: jest.fn().mockResolvedValue(undefined),
 }
+// Fast-lane queue is a SEPARATE BullMQ queue; mock it independently so the
+// cleanup pass walks both lanes (bulk + fast) like production.
+const mockFastQueue = {
+  upsertJobScheduler: jest.fn().mockResolvedValue(undefined),
+  removeJobScheduler: jest.fn().mockResolvedValue(undefined),
+  getJobSchedulers: jest.fn().mockResolvedValue([]),
+  getJob: jest.fn().mockResolvedValue(null),
+  add: jest.fn().mockResolvedValue(undefined),
+}
 
 jest.mock('../queues', () => ({
   INGEST_JOB: {
@@ -33,6 +42,12 @@ jest.mock('../queues', () => ({
   INGEST_REGIONS: ['local'],
   getIngestQueue: () => mockQueue,
   getRegionQueue: () => mockQueue,
+  getFastQueue: () => mockFastQueue,
+  regionQueueName: (r: string) => (r === 'local' ? 'arena-ingest' : `arena-ingest-${r}`),
+  regionFastQueueName: (r: string) =>
+    r === 'local' ? 'arena-ingest-fast' : `arena-ingest-fast-${r}`,
+  isFastTierA: (c: number | null | undefined) => typeof c === 'number' && c > 0 && c <= 3000,
+  FAST_LANE_ENABLED: true,
 }))
 
 jest.mock('@/lib/ingest/sources', () => ({
@@ -51,6 +66,7 @@ jest.mock('@/lib/ingest/sources', () => ({
 }))
 
 import { reconcileSchedulers } from '../scheduler'
+import { getActiveSources } from '@/lib/ingest/sources'
 
 const HOUR = 3600_000
 
@@ -137,5 +153,72 @@ describe('reconcileSchedulers cleanup/revival', () => {
     await reconcileSchedulers()
     expect(mockQueue.removeJobScheduler).not.toHaveBeenCalled()
     expect(mockQueue.getJob).not.toHaveBeenCalled()
+  })
+
+  // ── Fast-lane routing (2026-06-13 slot-starvation root fix) ──
+  const baseSource = {
+    fetch_region: 'local',
+    cadence_tier_a_seconds: 3600,
+    cadence_tier_b_seconds: 7200,
+    cadence_tier_d_seconds: 1800,
+    deep_profile_topn: 300,
+    timeframes_derived: [],
+    meta: {},
+  }
+
+  it('routes a small board Tier-A to the fast queue, other tiers to bulk', async () => {
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([
+      { ...baseSource, slug: 'smallsrc', expected_count: 500 },
+    ])
+    await reconcileSchedulers()
+    // Tier-A on the fast queue…
+    expect(mockFastQueue.upsertJobScheduler).toHaveBeenCalledWith(
+      'tiera:smallsrc',
+      expect.anything(),
+      expect.objectContaining({ name: 'tiera:leaderboard' })
+    )
+    // …and NOT on bulk; Tier-B/D stay on bulk.
+    const bulkTierAKeys = mockQueue.upsertJobScheduler.mock.calls
+      .map((c) => c[0])
+      .filter((k) => k === 'tiera:smallsrc')
+    expect(bulkTierAKeys).toHaveLength(0)
+    expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
+      'tierb:smallsrc',
+      expect.anything(),
+      expect.objectContaining({ name: 'tierb:profiles' })
+    )
+  })
+
+  it('keeps a giant board Tier-A on the bulk queue (heavy, > threshold)', async () => {
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([
+      { ...baseSource, slug: 'bigsrc', expected_count: 29000 },
+    ])
+    await reconcileSchedulers()
+    expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
+      'tiera:bigsrc',
+      expect.anything(),
+      expect.objectContaining({ name: 'tiera:leaderboard' })
+    )
+    const fastTierAKeys = mockFastQueue.upsertJobScheduler.mock.calls
+      .map((c) => c[0])
+      .filter((k) => k === 'tiera:bigsrc')
+    expect(fastTierAKeys).toHaveLength(0)
+  })
+
+  it('treats NULL expected_count as heavy (unknown size → bulk)', async () => {
+    ;(getActiveSources as jest.Mock).mockResolvedValueOnce([
+      { ...baseSource, slug: 'unknownsrc', expected_count: null },
+    ])
+    await reconcileSchedulers()
+    expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
+      'tiera:unknownsrc',
+      expect.anything(),
+      expect.objectContaining({ name: 'tiera:leaderboard' })
+    )
+    expect(mockFastQueue.upsertJobScheduler).not.toHaveBeenCalledWith(
+      'tiera:unknownsrc',
+      expect.anything(),
+      expect.anything()
+    )
   })
 })
