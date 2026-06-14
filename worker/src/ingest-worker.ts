@@ -26,7 +26,7 @@ import {
   consumedRegions,
   regionQueueName,
   regionFastQueueName,
-  FAST_LANE_ENABLED,
+  fastLaneEnabled,
 } from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
@@ -129,7 +129,7 @@ async function main(): Promise<void> {
   // crawls can never occupy these slots, so small user-facing leaderboards
   // stay fresh regardless of giant-board backlog. Gated by INGEST_FAST_LANE so
   // the lane only spins up once BOTH nodes are enabled together (see queues.ts).
-  const fastWorkers = !FAST_LANE_ENABLED
+  const fastWorkers = !fastLaneEnabled()
     ? []
     : regions.map((region) => {
         const w = new Worker(regionFastQueueName(region), route, {
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
 
   console.log(
     `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY}` +
-      `, fast-lane=${FAST_LANE_ENABLED ? `on×${FAST_CONCURRENCY}` : 'off'})`
+      `, fast-lane=${fastLaneEnabled() ? `on×${FAST_CONCURRENCY}` : 'off'})`
   )
 
   let shuttingDown = false

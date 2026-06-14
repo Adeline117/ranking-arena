@@ -9,7 +9,7 @@
 
 import { getActiveSources } from '@/lib/ingest/sources'
 import {
-  FAST_LANE_ENABLED,
+  fastLaneEnabled,
   getFastQueue,
   getIngestQueue,
   getRegionQueue,
@@ -55,7 +55,7 @@ export async function reconcileSchedulers(): Promise<void> {
     // + worker pool that the giants can never touch; heavy Tier-A + all
     // Tier-B/D/series/derive stay on the bulk queue. Priority 1 still applies
     // within the fast lane.
-    const onFast = FAST_LANE_ENABLED && isFastTierA(src.expected_count)
+    const onFast = fastLaneEnabled() && isFastTierA(src.expected_count)
     const tierAQueue = onFast ? getFastQueue(src.fetch_region) : queue
     const tierAName = onFast ? regionFastQueueName(src.fetch_region) : bulkName
     const tierA = `tiera:${src.slug}`
