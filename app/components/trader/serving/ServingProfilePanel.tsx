@@ -214,14 +214,25 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
   const kinds: RecordKind[] = capability
     ? (Object.keys(KIND_TAB_I18N) as RecordKind[]).filter((k) => capability.surfaces[k])
     : []
-  // Auto-select the first available record tab so the table (positions /
-  // history, with its keyset "load more") renders immediately on open. A null
-  // default made the whole records area show an empty placeholder until the
-  // user happened to click a tab — read as "the data and paging are gone".
-  // Once the user clicks, `activeKind` takes over; until then fall back to
-  // kinds[0] (positions > history > orders > transfers > copiers by order).
+  // Auto-select a record tab so the table (with its keyset "load more")
+  // renders immediately on open. A null default made the whole records area
+  // show an empty placeholder until the user happened to click a tab — read as
+  // "the data and paging are gone". Prefer the data-rich CLOSED-trade history
+  // as the landing tab: open `positions` is frequently empty (trader flat right
+  // now) so defaulting to it still looks dataless; position_history is the
+  // long, paginated record the user remembers. Tabs still display in the
+  // conventional order; only the default selection is reordered. Once the user
+  // clicks, `activeKind` takes over.
+  const AUTO_SELECT_ORDER: RecordKind[] = [
+    'position_history',
+    'positions',
+    'orders',
+    'transfers',
+    'copiers',
+  ]
   const [activeKind, setActiveKind] = useState<RecordKind | null>(null)
-  const effectiveKind: RecordKind | null = activeKind ?? kinds[0] ?? null
+  const defaultKind = AUTO_SELECT_ORDER.find((k) => kinds.includes(k)) ?? kinds[0] ?? null
+  const effectiveKind: RecordKind | null = activeKind ?? defaultKind
 
   const availability = capability
     ? {
