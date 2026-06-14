@@ -457,8 +457,17 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     'undefined',
     '',
   ])
+  // Truncate raw wallet addresses (0x hex or bare base58 Solana/Tron) so they
+  // don't overflow the name cell on mobile. Returns null if not address-like.
+  const truncAddr = (s: string): string | null => {
+    if (s.startsWith('0x') && s.length >= 10) return `${s.slice(0, 6)}...${s.slice(-4)}`
+    if (/^[1-9A-HJ-NP-Za-km-z]{30,50}$/.test(s)) return `${s.slice(0, 4)}...${s.slice(-4)}`
+    return null
+  }
   const formatDisplayName = (handle: string | null, traderId: string): string => {
-    if (handle && !PLACEHOLDER_NAMES.has(handle)) return handle
+    // A real handle may itself be a raw address (e.g. okx_web3_solana stores the
+    // full base58 address as handle) — truncate those before returning.
+    if (handle && !PLACEHOLDER_NAMES.has(handle)) return truncAddr(handle) ?? handle
     // Format 0x addresses as "0x1234...5678"
     if (traderId?.startsWith('0x') && traderId.length >= 10) {
       return `${traderId.slice(0, 6)}...${traderId.slice(-4)}`
@@ -469,7 +478,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       if (addr?.startsWith('0x') && addr.length >= 10)
         return `${addr.slice(0, 6)}...${addr.slice(-4)}`
     }
-    return traderId || 'Anonymous'
+    return truncAddr(traderId) ?? traderId ?? 'Anonymous'
   }
 
   const traders = paginatedRows.map((row: Record<string, unknown>, idx: number) => {

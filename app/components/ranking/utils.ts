@@ -1,6 +1,6 @@
 import { SOURCE_TYPE_MAP, EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { tokens } from '@/lib/design-tokens'
-import { t } from "@/lib/i18n"
+import { t } from '@/lib/i18n'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 
 // Re-export canonical formatters from lib/utils/format
@@ -14,15 +14,25 @@ export { formatROI, formatPnL } from '@/lib/utils/format'
  */
 export function getPnLTooltip(source: string, _language: string): string {
   const traderPnlSources = ['binance', 'binance_futures', 'binance_spot', 'binance_web3']
-  const followerPnlSources = ['bybit', 'bitget', 'bitget_futures', 'bitget_spot', 'kucoin', 'mexc', 'htx', 'htx_futures', 'weex']
+  const followerPnlSources = [
+    'bybit',
+    'bitget',
+    'bitget_futures',
+    'bitget_spot',
+    'kucoin',
+    'mexc',
+    'htx',
+    'htx_futures',
+    'weex',
+  ]
 
   const sourceLower = source.toLowerCase()
 
-  if (traderPnlSources.some(s => sourceLower.includes(s))) {
+  if (traderPnlSources.some((s) => sourceLower.includes(s))) {
     return t('pnlTraderOwn')
   }
 
-  if (followerPnlSources.some(s => sourceLower.includes(s))) {
+  if (followerPnlSources.some((s) => sourceLower.includes(s))) {
     return t('pnlFollowers')
   }
 
@@ -38,14 +48,15 @@ export function parseSourceInfo(src: string, t: (key: string) => string): Source
   // Use central SOURCE_TYPE_MAP as single source of truth
   const sourceTagColor = tokens.colors.text.tertiary
   const typeMap: Record<string, { label: string; color: string }> = {
-    'futures': { label: t('categoryFutures'), color: sourceTagColor },
-    'spot': { label: t('categorySpot'), color: sourceTagColor },
-    'web3': { label: t('categoryWeb3'), color: sourceTagColor },
+    futures: { label: t('categoryFutures'), color: sourceTagColor },
+    spot: { label: t('categorySpot'), color: sourceTagColor },
+    web3: { label: t('categoryWeb3'), color: sourceTagColor },
   }
 
   const sourceLower = src.toLowerCase()
   const type = SOURCE_TYPE_MAP[sourceLower] || 'futures'
-  const exchangeName = EXCHANGE_NAMES[sourceLower] || src.split('_')[0].replace(/^\w/, c => c.toUpperCase())
+  const exchangeName =
+    EXCHANGE_NAMES[sourceLower] || src.split('_')[0].replace(/^\w/, (c) => c.toUpperCase())
   const typeInfo = typeMap[type] || { label: type, color: sourceTagColor }
 
   return {
@@ -79,6 +90,12 @@ export function formatDisplayName(name: string, platform?: string): string {
   else if (name.startsWith('0x') && name.length > 20) {
     formatted = `${name.substring(0, 6)}...${name.substring(name.length - 4)}`
   }
+  // Bare base58 wallet addresses (Solana/Tron etc.) — no 0x prefix, base58 alphabet
+  // (excludes 0/O/I/l), 30–50 chars. Without this they render full-length and
+  // overflow/clip the name cell on mobile (375px). Middle-truncate like 0x.
+  else if (/^[1-9A-HJ-NP-Za-km-z]{30,50}$/.test(name)) {
+    formatted = `${name.substring(0, 4)}...${name.substring(name.length - 4)}`
+  }
   // Filter out known placeholder / test-data patterns
   else if (/^中台未注册/.test(name)) {
     const label = platform ? formatPlatformShort(platform) : ''
@@ -86,7 +103,9 @@ export function formatDisplayName(name: string, platform?: string): string {
   }
   // Platform-generated placeholder names → show as "Platform #ID"
   else if (name.match(/^(?:XT|MEXC|CoinEx|KuCoin|BingX|Binance)\s+Trader\s+(\w+)$/i)) {
-    const placeholderMatch = name.match(/^(?:XT|MEXC|CoinEx|KuCoin|BingX|Binance)\s+Trader\s+(\w+)$/i)!
+    const placeholderMatch = name.match(
+      /^(?:XT|MEXC|CoinEx|KuCoin|BingX|Binance)\s+Trader\s+(\w+)$/i
+    )!
     const label = platform ? formatPlatformShort(platform) : name.split(' ')[0]
     formatted = `${label} #${placeholderMatch[1].slice(-6)}`
   }
@@ -108,11 +127,10 @@ export function formatDisplayName(name: string, platform?: string): string {
   // Truncate long names
   else if (name.length > 60) {
     formatted = name.slice(0, 57) + '...'
-  }
-  else {
+  } else {
     formatted = name
   }
-  
+
   // Apply profanity filter to all display names
   return sanitizeDisplayName(formatted)
 }
