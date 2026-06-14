@@ -11,10 +11,7 @@ import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('bots-api')
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
 
@@ -22,8 +19,15 @@ export async function GET(
     const { id } = await params
     const supabase = getSupabaseAdmin() as SupabaseClient
 
-    // Fetch bot source - try by slug first, then by UUID
-    let botQuery = supabase.from('bot_sources').select('id, slug, name, description, avatar_url, exchange, strategy_type, status, created_at, updated_at')
+    // Fetch bot source - try by slug first, then by UUID.
+    // Column set must match the real bot_sources schema (see /api/bots list route +
+    // bot detail page field usage). Selecting non-existent columns (avatar_url/
+    // exchange/strategy_type/status) makes .single() error → spurious 404.
+    let botQuery = supabase
+      .from('bot_sources')
+      .select(
+        'id, slug, name, description, category, chain, token_symbol, contract_address, token_address, website_url, twitter_handle, telegram_url, logo_url, launch_date, is_active'
+      )
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)
     botQuery = isUuid ? botQuery.eq('id', id) : botQuery.eq('slug', id)
 
@@ -32,32 +36,32 @@ export async function GET(
       return NextResponse.json({ error: 'Bot not found' }, { status: 404 })
     }
 
-    // Fetch all snapshots and equity curve in parallel
-    const [{ data: snapshots }, { data: equityCurve }] = await Promise.all([
-      supabase
-        .from('bot_snapshots')
-        .select('id, bot_id, season_id, roi, pnl, win_rate, max_drawdown, trades_count, arena_score, captured_at')
-        .eq('bot_id', bot.id)
-        .order('season_id'),
-      supabase
-        .from('bot_equity_curve')
-        .select('timestamp, roi_pct, pnl_usd')
-        .eq('bot_id', bot.id)
-        .order('timestamp', { ascending: true })
-        .limit(365),
-    ])
+    // Fetch all season snapshots. (bot_equity_curve is unused by the detail page
+    // and has no rows — query dropped.) Columns match real bot_snapshots schema.
+    const { data: snapshots } = await supabase
+      .from('bot_snapshots')
+      .select(
+        'id, bot_id, season_id, roi, apy, tvl, revenue, total_volume, total_trades, unique_users, max_drawdown, arena_score, captured_at'
+      )
+      .eq('bot_id', bot.id)
+      .order('season_id')
 
-    return NextResponse.json({
-      bot,
-      snapshots: snapshots || [],
-      equity_curve: equityCurve || [],
-    }, {
-      headers: {
-        'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600',
+    return NextResponse.json(
+      {
+        bot,
+        snapshots: snapshots || [],
+        equity_curve: [],
       },
-    })
+      {
+        headers: {
+          'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=600',
+        },
+      }
+    )
   } catch (err: unknown) {
-    logger.error('Bot detail API error', { error: err instanceof Error ? err.message : String(err) })
+    logger.error('Bot detail API error', {
+      error: err instanceof Error ? err.message : String(err),
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
