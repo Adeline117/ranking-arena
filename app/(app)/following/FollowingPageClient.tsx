@@ -255,8 +255,12 @@ export default function FollowingPageClient() {
       if (!userId || fetchingRef.current) return
       fetchingRef.current = true
       try {
+        // /api/following 是 Bearer-only 鉴权（getAuthUser 只读 Authorization 头，
+        // 无 cookie 回退）—— 必须显式带上 auth 头，否则登录用户也 401、关注列表空。
+        const authHeaders = await getAuthHeadersAsync()
         const response = await fetch(
-          `/api/following?userId=${userId}&limit=${PAGE_SIZE}&offset=${offset}`
+          `/api/following?userId=${userId}&limit=${PAGE_SIZE}&offset=${offset}`,
+          { headers: authHeaders }
         )
         const data = await response.json()
 
@@ -283,7 +287,7 @@ export default function FollowingPageClient() {
         fetchingRef.current = false
       }
     },
-    [userId, showToast, t]
+    [userId, showToast, t, getAuthHeadersAsync]
   )
 
   const loadMore = useCallback(async () => {
