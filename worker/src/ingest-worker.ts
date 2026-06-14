@@ -25,6 +25,8 @@ import {
   ingestConnection,
   consumedRegions,
   regionQueueName,
+  regionFastQueueName,
+  FAST_LANE_ENABLED,
 } from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
@@ -40,6 +42,13 @@ import { startFailoverManager } from './ingest/failover'
 // WS so the Mac launches no local Chromium for them — so peak local browser
 // count stays well under 5. pm2 max_memory_restart raised to 1536M to match.
 const INGEST_CONCURRENCY = 5
+
+// Fast-lane pool (2026-06-13 slot-starvation root fix): light Tier-A
+// leaderboard crawls (board ≤ FAST_TIER_A_MAX_COUNT) run here, fully isolated
+// from the bulk pool's multi-hour giants (bybit_mt5 etc.). These crawls are
+// small (seconds-to-minutes) so a modest pool keeps all ~26 small boards fresh;
+// peak extra concurrent browsers stay low because each session is short-lived.
+const FAST_CONCURRENCY = 3
 
 async function route(job: Job): Promise<unknown> {
   switch (job.name) {
@@ -115,6 +124,33 @@ async function main(): Promise<void> {
     return w
   })
 
+  // Fast-lane workers: a separate pool per consumed region for light Tier-A
+  // crawls (siphoned by reconcileSchedulers). The bulk pool's hours-long
+  // crawls can never occupy these slots, so small user-facing leaderboards
+  // stay fresh regardless of giant-board backlog. Gated by INGEST_FAST_LANE so
+  // the lane only spins up once BOTH nodes are enabled together (see queues.ts).
+  const fastWorkers = !FAST_LANE_ENABLED
+    ? []
+    : regions.map((region) => {
+        const w = new Worker(regionFastQueueName(region), route, {
+          connection: ingestConnection(),
+          concurrency: FAST_CONCURRENCY,
+          lockDuration: 180_000,
+          stalledInterval: 300_000,
+          maxStalledCount: 2,
+        })
+        w.on('completed', (job) => {
+          console.log(`[ingest-worker] ✓ ${job.name} (${job.id}) [${region}/fast]`)
+        })
+        w.on('failed', (job, err) => {
+          console.error(
+            `[ingest-worker] ✗ ${job?.name} (${job?.id}) [${region}/fast]:`,
+            err.message
+          )
+        })
+        return w
+      })
+
   // Dedicated Tier-C worker: user-facing on-demand fetches get their own
   // slots so they never queue behind hours-long Tier-A/B bulk crawls
   // (the API route's polling window is 8s).
@@ -158,7 +194,8 @@ async function main(): Promise<void> {
   })
 
   console.log(
-    `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY})`
+    `[ingest-worker] ready (regions=${regions.join(',')}, concurrency=${INGEST_CONCURRENCY}` +
+      `, fast-lane=${FAST_LANE_ENABLED ? `on×${FAST_CONCURRENCY}` : 'off'})`
   )
 
   let shuttingDown = false
@@ -171,7 +208,7 @@ async function main(): Promise<void> {
     clearInterval(reconcileTimer)
     clearInterval(heartbeatTimer)
     await failover.stop()
-    await Promise.all(workers.map((w) => w.close()))
+    await Promise.all([...workers, ...fastWorkers].map((w) => w.close()))
     await tiercWorker?.close()
     const { closeIngestPool } = await import('@/lib/ingest/db')
     await closeIngestPool()

@@ -34,21 +34,76 @@ export function regionQueueName(region: string): string {
   return region === 'local' ? INGEST_QUEUE_NAME : `${INGEST_QUEUE_NAME}-${region}`
 }
 
+/**
+ * Fast-lane queue (2026-06-13 slot-starvation root fix). Light Tier-A
+ * leaderboard crawls (small boards, seconds-to-minutes) run on a SEPARATE
+ * worker pool from the bulk queue so a giant multi-hour crawl (bybit_mt5 ≈
+ * 29k traders / 2-3h, hyperliquid 10k, binance 9.6k) can NEVER monopolize
+ * every slot and starve the 26 small user-facing leaderboards (bitget_spot's
+ * neighbours htx/bitfinex/okx sat 14-24h stale behind bybit_mt5). Only
+ * Tier-A of small sources is siphoned here; heavy Tier-A + ALL Tier-B/D/
+ * series/derive stay on the bulk queue unchanged.
+ */
+export function regionFastQueueName(region: string): string {
+  return region === 'local' ? `${INGEST_QUEUE_NAME}-fast` : `${INGEST_QUEUE_NAME}-fast-${region}`
+}
+
+/**
+ * Tier-A sources with expected_count at/below this go to the fast lane.
+ * Above it (or NULL = unknown size, treat as heavy) stay on bulk. Tuned to
+ * the 2026-06-13 board sizes: splits ~26 light vs ~9 heavy (bybit_mt5 29k …
+ * bitunix 4k heavy; gate_cfd 2.7k and below light).
+ */
+export const FAST_TIER_A_MAX_COUNT = 3000
+
+/** A source's Tier-A is fast-lane eligible iff its board is known-small. */
+export function isFastTierA(expectedCount: number | null | undefined): boolean {
+  return (
+    typeof expectedCount === 'number' && expectedCount > 0 && expectedCount <= FAST_TIER_A_MAX_COUNT
+  )
+}
+
+/**
+ * Fast lane is OFF by default. The routing change is GLOBAL (both the Mac and
+ * the SG-VPS node run reconcileSchedulers over every source), so enabling it on
+ * one node while the other runs old code would make them fight over the same
+ * tiera:<slug> scheduler (one moves it to fast, the other re-adds it to bulk →
+ * double crawls + thrash). Gating on an env flag lets the code land inert, then
+ * be switched on BOTH nodes' .env together (INGEST_FAST_LANE=1) + restarted.
+ * Flipping it back off cleanly returns every Tier-A to the bulk queue (the
+ * reconcile cleanup removes the now-unwanted fast-lane schedulers).
+ */
+export const FAST_LANE_ENABLED = process.env.INGEST_FAST_LANE === '1'
+
 const regionQueues = new Map<string, Queue>()
+
+function buildQueue(name: string): Queue {
+  return new Queue(name, {
+    connection: ingestConnection(),
+    defaultJobOptions: {
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 30_000 },
+      removeOnComplete: { age: 24 * 3600, count: 500 },
+      removeOnFail: { age: 7 * 24 * 3600, count: 2000 },
+    },
+  })
+}
 
 export function getRegionQueue(region: string): Queue {
   const name = regionQueueName(region)
   let q = regionQueues.get(name)
   if (!q) {
-    q = new Queue(name, {
-      connection: ingestConnection(),
-      defaultJobOptions: {
-        attempts: 3,
-        backoff: { type: 'exponential', delay: 30_000 },
-        removeOnComplete: { age: 24 * 3600, count: 500 },
-        removeOnFail: { age: 7 * 24 * 3600, count: 2000 },
-      },
-    })
+    q = buildQueue(name)
+    regionQueues.set(name, q)
+  }
+  return q
+}
+
+export function getFastQueue(region: string): Queue {
+  const name = regionFastQueueName(region)
+  let q = regionQueues.get(name)
+  if (!q) {
+    q = buildQueue(name)
     regionQueues.set(name, q)
   }
   return q
