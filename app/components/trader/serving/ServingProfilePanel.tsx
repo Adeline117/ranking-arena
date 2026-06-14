@@ -214,7 +214,14 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
   const kinds: RecordKind[] = capability
     ? (Object.keys(KIND_TAB_I18N) as RecordKind[]).filter((k) => capability.surfaces[k])
     : []
+  // Auto-select the first available record tab so the table (positions /
+  // history, with its keyset "load more") renders immediately on open. A null
+  // default made the whole records area show an empty placeholder until the
+  // user happened to click a tab — read as "the data and paging are gone".
+  // Once the user clicks, `activeKind` takes over; until then fall back to
+  // kinds[0] (positions > history > orders > transfers > copiers by order).
   const [activeKind, setActiveKind] = useState<RecordKind | null>(null)
+  const effectiveKind: RecordKind | null = activeKind ?? kinds[0] ?? null
 
   const availability = capability
     ? {
@@ -303,19 +310,21 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
               <button
                 key={kind}
                 onClick={() => setActiveKind(kind)}
-                aria-pressed={activeKind === kind}
+                aria-pressed={effectiveKind === kind}
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   border: 'none',
                   background: 'transparent',
                   borderBottom:
-                    activeKind === kind
+                    effectiveKind === kind
                       ? '2px solid var(--color-accent-primary, #6366f1)'
                       : '2px solid transparent',
                   color:
-                    activeKind === kind ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                    effectiveKind === kind
+                      ? tokens.colors.text.primary
+                      : tokens.colors.text.secondary,
                   fontSize: 13,
-                  fontWeight: activeKind === kind ? 600 : 400,
+                  fontWeight: effectiveKind === kind ? 600 : 400,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                 }}
@@ -325,18 +334,18 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             ))}
           </Box>
 
-          {activeKind === 'copiers' ? (
+          {effectiveKind === 'copiers' ? (
             <CopiersPanel
               source={source}
               exchangeTraderId={exchangeTraderId}
               exchangeName={capability?.exchangeName}
             />
-          ) : activeKind ? (
+          ) : effectiveKind ? (
             <RecordKindPanel
-              key={activeKind}
+              key={effectiveKind}
               source={source}
               exchangeTraderId={exchangeTraderId}
-              kind={activeKind}
+              kind={effectiveKind}
               tf={tf}
               exchangeName={capability?.exchangeName}
             />
