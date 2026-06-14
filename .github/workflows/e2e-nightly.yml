@@ -29,8 +29,10 @@ jobs:
     timeout-minutes: 40
     # build（NEXT_PUBLIC_* 在 build 期 inline）与 npm start（运行时）都需要这些 env。
     # 优先 repo secrets（真实页面，E2E 才有意义）；缺则 dummy 兜底让 build 不卡。
+    # 注意：NODE_ENV 绝不放 job 级——否则 npm ci 带 production 会跳过 devDependencies
+    # （@tailwindcss/postcss、babel-plugin-react-compiler 等 → build 缺包失败）。
+    # 只在 build/start 步骤级设 NODE_ENV，与 ci.yml build job 一致。
     env:
-      NODE_ENV: production
       NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
       NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-build-anon-placeholder' }}
       SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
@@ -46,6 +48,8 @@ jobs:
 
       - name: Build
         run: npm run build
+        env:
+          NODE_ENV: production
 
       # device matrix: desktop=chromium, iPhone/iPad=webkit。缺 webkit 移动项目会静默跳过。
       - run: npx playwright install --with-deps chromium webkit
@@ -56,6 +60,7 @@ jobs:
         run: npm run test:e2e
         env:
           CI: true
+          NODE_ENV: production # npm start 服务端按生产模式跑（webServer 用 npm start）
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v6
