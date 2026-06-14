@@ -1,0 +1,76 @@
+name: E2E Nightly (main)
+
+# 为什么单开这个 workflow（2026-06 闭环）：
+# ci.yml 的 e2e job 在 main 上永远跑不完——concurrency: cancel-in-progress + 多会话
+# （最多 7 个 claude 会话）不停 push，长达 ~10-15min 的 E2E（92 spec、chromium+webkit）
+# 每次都被下一个 push 取消。结果 E2E 在 main 上「从未真正执行过一次」，是个幻影门。
+#
+# 解法：把 main 的 E2E 覆盖搬到独立 workflow，
+#   1. 独立 concurrency group（不被 main push 取消）→ 跑得完；
+#   2. schedule 每日跑 + workflow_dispatch 可随时手动触发拿干净结果；
+#   3. 提供真实运行时 env（secrets）→ npm start 服务真实页面，E2E 才有意义
+#      （ci.yml e2e job 只设 CI=true、没给 Supabase env，server 会 500）。
+# ci.yml 的 e2e job 保留不动——PR 分支没有 churn，那里 E2E 能跑完，是 PR 的门。
+
+on:
+  schedule:
+    - cron: '0 3 * * *' # 每日 03:00 UTC
+  workflow_dispatch: # 允许手动触发（拿即时干净结果）
+
+# 独立于 ci-${{ github.ref }}：main 的 push 不会取消本 run。
+concurrency:
+  group: e2e-nightly
+  cancel-in-progress: false
+
+jobs:
+  e2e:
+    name: E2E (full suite, real env)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    # build（NEXT_PUBLIC_* 在 build 期 inline）与 npm start（运行时）都需要这些 env。
+    # 优先 repo secrets（真实页面，E2E 才有意义）；缺则 dummy 兜底让 build 不卡。
+    env:
+      NODE_ENV: production
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-build-anon-placeholder' }}
+      SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'ci-build-service-placeholder' }}
+      CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-build-placeholder-cron-secret-0000000000' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+
+      - name: Build
+        run: npm run build
+
+      # device matrix: desktop=chromium, iPhone/iPad=webkit。缺 webkit 移动项目会静默跳过。
+      - run: npx playwright install --with-deps chromium webkit
+
+      # playwright.config webServer 在 CI 下跑 `npm start`（用上面 build 的 .next），
+      # 对 localhost:3000 跑全部 project（desktop + iPhone SE + iPhone 14 + iPad）。
+      - name: Run E2E (all projects)
+        run: npm run test:e2e
+        env:
+          CI: true
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: playwright-report-nightly
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+      - name: Upload screenshots on failure
+        uses: actions/upload-artifact@v6
+        if: failure()
+        with:
+          name: playwright-screenshots-nightly
+          path: test-results/**/*.png
+          retention-days: 14
