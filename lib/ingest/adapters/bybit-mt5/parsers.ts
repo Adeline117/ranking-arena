@@ -176,6 +176,13 @@ export function parseBybitMt5Profile(raw: unknown, ctx: ParseCtx): ParsedProfile
     if (info.providerUserId !== undefined) extras.provider_user_id = String(info.providerUserId)
     const totalAssets = e(info.totalAssetsE8, 8)
     if (totalAssets !== null) extras.total_assets = totalAssets
+    // P1: loss count (the win count already lands as winPositions), margin
+    // level, and the max-copier cap — all present in the income/info payloads.
+    if (lossCount !== null) extras.loss_trades = lossCount
+    const marginLevel = e(info.marginLevelE4, 4)
+    if (marginLevel !== null) extras.margin_level = marginLevel
+    if (info.followMaxUpperLimit !== undefined)
+      extras.copier_count_max = int(info.followMaxUpperLimit)
 
     stats.push({
       timeframe: tf as Timeframe,

@@ -90,6 +90,9 @@ describe('parseBybitMt5Profile', () => {
       provider_user_id: '525121896',
       total_assets: 0.86,
     })
+    // P1: loss count + max-copier cap captured (margin_level lands when present).
+    expect(typeof st.extras.loss_trades).toBe('number')
+    expect(typeof st.extras.copier_count_max).toBe('number')
     // lastTradedAtTimeE3 "0" → no last_traded_at key
     expect(st.extras.last_traded_at).toBeUndefined()
   })
