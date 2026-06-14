@@ -72,8 +72,17 @@ export function isFastTierA(expectedCount: number | null | undefined): boolean {
  * be switched on BOTH nodes' .env together (INGEST_FAST_LANE=1) + restarted.
  * Flipping it back off cleanly returns every Tier-A to the bulk queue (the
  * reconcile cleanup removes the now-unwanted fast-lane schedulers).
+ *
+ * MUST be a function, NOT a module-level const: ingest-worker.ts calls dotenv
+ * `config()` as a STATEMENT, but ESM hoists every `import` (including this
+ * module) above it — a const would read process.env before .env is loaded and
+ * latch `false` forever (observed: ready log showed fast-lane=off despite
+ * INGEST_FAST_LANE=1). Read lazily so callers inside main()/reconcile — which
+ * run after config() — see the real value.
  */
-export const FAST_LANE_ENABLED = process.env.INGEST_FAST_LANE === '1'
+export function fastLaneEnabled(): boolean {
+  return process.env.INGEST_FAST_LANE === '1'
+}
 
 const regionQueues = new Map<string, Queue>()
 

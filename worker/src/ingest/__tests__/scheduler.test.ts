@@ -47,7 +47,7 @@ jest.mock('../queues', () => ({
   regionFastQueueName: (r: string) =>
     r === 'local' ? 'arena-ingest-fast' : `arena-ingest-fast-${r}`,
   isFastTierA: (c: number | null | undefined) => typeof c === 'number' && c > 0 && c <= 3000,
-  FAST_LANE_ENABLED: true,
+  fastLaneEnabled: () => true,
 }))
 
 jest.mock('@/lib/ingest/sources', () => ({
