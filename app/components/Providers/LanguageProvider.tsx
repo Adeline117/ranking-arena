@@ -113,14 +113,53 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
 export function useLanguage() {
   const context = useContext(LanguageContext)
+
+  // Hydration-safe fallback for subtrees rendered OUTSIDE LanguageProvider.
+  // The homepage (`/`, `/rankings`) deliberately omits Providers for LCP
+  // (see app/layout.tsx), so RankingControls/useRankingFilters/RankingFooter
+  // land here. Previously the fallback called getLanguage() inline, which reads
+  // localStorage and returns the user's real language on the FIRST client render
+  // while the server rendered 'en' (server getLanguage() returns the module
+  // default) — a React #418 hydration mismatch on the highest-traffic pages.
+  //
+  // Fix: mirror the provider's own strategy — start at 'en' to match SSR, then
+  // swap to the saved language after mount. Hooks are called unconditionally
+  // (above the context branch) to satisfy the rules of hooks; when a provider IS
+  // present this state is computed but unused (negligible cost).
+  const [fallbackLanguage, setFallbackLanguage] = useState<Language>('en')
+  const [, setFallbackTxnVersion] = useState(() => getTranslationVersion())
+
+  useEffect(() => {
+    if (context) return // provider present — fallback unused, skip listeners
+
+    const unsub = onTranslationsReady(() => setFallbackTxnVersion((v) => v + 1))
+
+    const savedLanguage = getLanguage()
+    if (savedLanguage !== 'en') {
+      loadTranslations(savedLanguage).then(() => setFallbackLanguage(savedLanguage))
+    }
+
+    const handleLanguageChange = (e: CustomEvent<Language>) => {
+      if (e.detail !== 'en') {
+        loadTranslations(e.detail).then(() => setFallbackLanguage(e.detail))
+      } else {
+        setFallbackLanguage(e.detail)
+      }
+    }
+    window.addEventListener('languageChange', handleLanguageChange as EventListener)
+    return () => {
+      unsub()
+      window.removeEventListener('languageChange', handleLanguageChange as EventListener)
+    }
+  }, [context])
+
   if (!context) {
-    const defaultLanguage = getLanguage()
     return {
-      language: defaultLanguage,
+      language: fallbackLanguage,
       setLanguage: setLang,
       t: ((key: string): string => {
         const k = key as keyof typeof translations.en
-        return translations[defaultLanguage][k] ?? translations.en[k] ?? key
+        return translations[fallbackLanguage][k] ?? translations.en[k] ?? key
       }) as TranslationFunction,
     }
   }
