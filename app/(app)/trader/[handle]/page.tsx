@@ -381,7 +381,20 @@ export async function generateMetadata({
   // the product → 404. Done HERE in generateMetadata (before Suspense streaming)
   // so the response is a clean 404 without conflicting robots meta — same
   // rationale as the serving-null notFound above.
-  if (resolvedData && isRetiredSource(resolvedData.platform)) notFound()
+  //
+  // ROOT-CAUSE FIX (2026-06-15): the SAME exchange_trader_id can exist in legacy
+  // trader_sources under MULTIPLE sources — including a RETIRED one (e.g.
+  // okx_web3) alongside a LIVE serving one (okx_futures). The legacy resolver
+  // has no ORDER BY, so under a different query plan (e.g. a browser's concurrent
+  // requests vs a lone curl) it non-deterministically returns the retired row →
+  // this check 404'd a perfectly valid serving trader. So: only 404 a retired
+  // legacy platform if the id does NOT also resolve to a live serving source.
+  if (resolvedData && isRetiredSource(resolvedData.platform)) {
+    const servingFallback = servingMeta ?? (await cachedServingResolve(decoded))
+    if (!servingFallback || (await getDataMode(servingFallback.source)) !== 'serving') {
+      notFound()
+    }
+  }
 
   const name = resolvedData?.handle || servingMeta?.nickname || decoded
   const exchange = resolvedData
