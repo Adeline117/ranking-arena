@@ -51,12 +51,15 @@ export async function GET(req: NextRequest) {
         .order('started_at', { ascending: false })
         .limit(500),
 
-      // 2. Data freshness per platform (trader_latest = 1 row per key, latest by definition)
+      // 2. Data freshness per platform. Migrated off trader_latest (retiring) to
+      // leaderboard_ranks.computed_at — the canonical "when was this source last
+      // scored" signal (arena-fed). `source` aliases platform; one row per ranked
+      // trader, ordered newest-first so the first row per source is its freshness.
       supabase
-        .from('trader_latest')
-        .select('platform, updated_at')
-        .order('updated_at', { ascending: false })
-        .limit(200),
+        .from('leaderboard_ranks')
+        .select('source, computed_at')
+        .order('computed_at', { ascending: false })
+        .limit(2000),
 
       // 3. Leaderboard counts per season — estimated (admin observability
       // tile, approximate is fine). Exact counts on leaderboard_ranks
@@ -69,9 +72,9 @@ export async function GET(req: NextRequest) {
       ),
 
       // 4. Table sizes (estimated counts) — added after season queries
-      ...(
-        ['trader_sources', 'trader_latest', 'leaderboard_ranks', 'trader_daily_snapshots'] as const
-      ).map((table) => supabase.from(table).select('*', { count: 'estimated', head: true })),
+      ...(['trader_sources', 'leaderboard_ranks', 'trader_daily_snapshots'] as const).map((table) =>
+        supabase.from(table).select('*', { count: 'estimated', head: true })
+      ),
     ])
 
     // --- Aggregate pipeline stats ---
@@ -124,11 +127,11 @@ export async function GET(req: NextRequest) {
     // --- Aggregate data freshness per platform ---
     const platformFreshness: Record<string, { latestUpdate: string; ageHours: number }> = {}
     for (const row of freshnessRes.data || []) {
-      if (!row.updated_at) continue // updated_at 可空 —— 无时间戳无法算新鲜度,跳过
-      if (!platformFreshness[row.platform]) {
-        const ageMs = now - new Date(row.updated_at).getTime()
-        platformFreshness[row.platform] = {
-          latestUpdate: row.updated_at,
+      if (!row.computed_at) continue // 无时间戳无法算新鲜度,跳过
+      if (!platformFreshness[row.source]) {
+        const ageMs = now - new Date(row.computed_at).getTime()
+        platformFreshness[row.source] = {
+          latestUpdate: row.computed_at,
           ageHours: Math.round((ageMs / (1000 * 60 * 60)) * 10) / 10,
         }
       }
@@ -142,12 +145,7 @@ export async function GET(req: NextRequest) {
     }
 
     // --- Table sizes ---
-    const tableNames = [
-      'trader_sources',
-      'trader_latest',
-      'leaderboard_ranks',
-      'trader_daily_snapshots',
-    ] as const
+    const tableNames = ['trader_sources', 'leaderboard_ranks', 'trader_daily_snapshots'] as const
     const tableSizes: Record<string, number> = {}
     for (let i = 0; i < tableNames.length; i++) {
       tableSizes[tableNames[i]] = seasonResults[seasons.length + i]?.count ?? 0
