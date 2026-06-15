@@ -42,19 +42,21 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
     return { count: 0, reason: 'no subscribers' }
   }
 
-  // 2. Get top movers (biggest ROI this week from trader_latest)
+  // 2. Top movers (biggest 7D ROI this week). Migrated off retiring trader_latest
+  // → leaderboard_ranks (source↔platform, handle↔display_name, roi↔roi_pct).
   const { data: movers } = await supabase
-    .from('trader_latest')
-    .select('source_trader_id, platform, display_name, roi_pct, previous_roi_pct:roi_pct')
-    .gte('updated_at', weekAgoIso)
-    .not('roi_pct', 'is', null)
-    .order('roi_pct', { ascending: false })
+    .from('leaderboard_ranks')
+    .select('source_trader_id, source, handle, roi')
+    .eq('season_id', '7D')
+    .gte('computed_at', weekAgoIso)
+    .not('roi', 'is', null)
+    .order('roi', { ascending: false })
     .limit(10)
 
   const topMovers = (movers || []).map((m) => ({
-    name: m.display_name || m.source_trader_id,
-    change: `${(m.roi_pct ?? 0) > 0 ? '+' : ''}${(m.roi_pct ?? 0).toFixed(1)}% ROI`,
-    link: `/trader/${encodeURIComponent(m.display_name || m.source_trader_id)}?platform=${m.platform}`,
+    name: m.handle || m.source_trader_id,
+    change: `${(m.roi ?? 0) > 0 ? '+' : ''}${(m.roi ?? 0).toFixed(1)}% ROI`,
+    link: `/trader/${encodeURIComponent(m.handle || m.source_trader_id)}?platform=${m.source}`,
   }))
 
   // 3. New traders this week

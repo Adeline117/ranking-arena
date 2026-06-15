@@ -88,10 +88,12 @@ export const GET = withAdminAuth(
         .from('leaderboard_ranks')
         .select('source_trader_id', { count: 'estimated', head: true })
         .eq('season_id', '90D'),
+      // Migrated off retiring trader_latest → leaderboard_ranks (ranked traders
+      // scored in the last 24h, computed_at).
       supabase
-        .from('trader_latest')
-        .select('platform', { count: 'estimated', head: true })
-        .gte('updated_at', yesterday.toISOString()),
+        .from('leaderboard_ranks')
+        .select('source_trader_id', { count: 'estimated', head: true })
+        .gte('computed_at', yesterday.toISOString()),
     ])
 
     // Scraper health — use leaderboard_count_cache instead of full table scan

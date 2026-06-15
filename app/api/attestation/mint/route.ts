@@ -52,13 +52,15 @@ export async function POST(request: NextRequest) {
 
     const traderHandle = traderSource?.handle || verifiedTrader.trader_id
 
-    // Get latest arena score (trader_latest = 1 row per platform+trader+window, no ORDER/LIMIT needed)
+    // Latest 90D arena score. Migrated off retiring trader_latest →
+    // leaderboard_ranks, which is the AUTHORITATIVE arena_score store
+    // (trader_latest's arena_score was only a mirror of it).
     const { data: snapshot } = await supabase
-      .from('trader_latest')
-      .select('arena_score, roi_pct, pnl_usd')
-      .eq('trader_key', verifiedTrader.trader_id)
-      .eq('platform', verifiedTrader.source)
-      .eq('window', '90D')
+      .from('leaderboard_ranks')
+      .select('arena_score, roi_pct:roi, pnl_usd:pnl')
+      .eq('source_trader_id', verifiedTrader.trader_id)
+      .eq('source', verifiedTrader.source)
+      .eq('season_id', '90D')
       .maybeSingle()
 
     const arenaScore = snapshot?.arena_score ?? 0
