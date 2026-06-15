@@ -15,9 +15,9 @@ import type {
 import { SOURCE_TYPE_MAP, DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
 import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { logger } from '@/lib/logger'
-import { mapLeaderboardRow, mapV2Snapshot, normalizePeriod, getSourceAliases } from './mappers'
+import { mapLeaderboardRow, normalizePeriod, getSourceAliases } from './mappers'
 import { fetchSimilarTraders } from './similar'
-import { LR, V2, ENRICH } from '@/lib/types/schema-mapping'
+import { LR, ENRICH } from '@/lib/types/schema-mapping'
 import { SSR_HEAVY_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { type DataResult, success, failure } from '@/lib/types/result'
 
@@ -244,9 +244,9 @@ export async function getLeaderboard(
  * Get full trader detail for the trader profile page.
  * Used by: /trader/[handle], /api/traders/[handle]
  *
- * Data resolution uses a fallback chain:
- * 1. leaderboard_ranks (precomputed, has all periods)
- * 2. trader_latest (1 row per window, fallback)
+ * Per-period data comes from leaderboard_ranks (precomputed). The trader_latest
+ * fallback was removed (table retiring) — serving sources render via the arena
+ * read path; this legacy branch only serves shadow/legacy-mode sources.
  *
  * Enrichment data (equity curve, asset breakdown, positions, stats) comes from
  * dedicated tables that use v1 naming (source + source_trader_id).
@@ -266,10 +266,12 @@ export async function getTraderDetail(
   // so run them all in one Promise.all to save a sequential round trip (~100-200ms).
   // Each query carries AbortSignal so PostgREST requests are cancelled on timeout.
   const phase1Signal = AbortSignal.timeout(SSR_HEAVY_QUERY_TIMEOUT_MS)
-  const [lrResult, v2Result, sourceProfileResult, profileV2Result] = await withTimeout(
+  const [lrResult, sourceProfileResult, profileV2Result] = await withTimeout(
     Promise.all([
-      // leaderboard_ranks: all periods (precomputed, primary source)
-      // Uses v1 column names: source, source_trader_id, season_id
+      // leaderboard_ranks: all periods (precomputed). SOLE per-period source now
+      // — the trader_latest fallback was removed (table retiring). Serving sources
+      // render via the arena read path (page.tsx); this legacy branch only ever
+      // serves shadow/legacy-mode sources, whose ranked traders are in LR.
       safeQuery(() =>
         supabase
           .from('leaderboard_ranks')
@@ -283,18 +285,6 @@ export async function getTraderDetail(
           .eq(LR.source, platform)
           .eq(LR.source_trader_id, traderKey)
           .limit(5)
-          .abortSignal(phase1Signal)
-      ),
-      // trader_latest: all windows (fallback, 1 row per window — no ORDER/LIMIT needed)
-      // Uses v2 column names: platform, trader_key, window
-      safeQuery(() =>
-        supabase
-          .from('trader_latest')
-          .select(
-            `${V2.platform}, ${V2.trader_key}, ${V2.window}, ${V2.roi_pct}, ${V2.pnl_usd}, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, sortino_ratio, calmar_ratio, ${V2.arena_score}, updated_at`
-          )
-          .eq(V2.platform, platform)
-          .eq(V2.trader_key, traderKey)
           .abortSignal(phase1Signal)
       ),
       // Profile from trader_sources table
@@ -325,7 +315,6 @@ export async function getTraderDetail(
 
   // Extract data from DataResult wrappers (failures treated as empty/null for graceful degradation)
   const lrRows = (unwrap(lrResult) || []) as Record<string, unknown>[]
-  const v2Rows = (unwrap(v2Result) || []) as Record<string, unknown>[]
   const sourceProfile = unwrap(sourceProfileResult) as Record<string, unknown> | null | undefined
   const profileV2 = unwrap(profileV2Result) as Record<string, unknown> | null | undefined
 
@@ -337,18 +326,10 @@ export async function getTraderDetail(
   }
 
   for (const p of ['90D', '30D', '7D'] as TradingPeriod[]) {
-    // Try leaderboard_ranks first (season_id → period)
+    // leaderboard_ranks (season_id → period) — sole per-period source.
     const lrRow = lrRows.find((r) => normalizePeriod(r[LR.season_id] as string) === p)
     if (lrRow) {
-      const mapped = mapLeaderboardRow(lrRow)
-      periods[p] = mapped
-      continue
-    }
-
-    // Fallback: trader_snapshots_v2 (window → period)
-    const v2Row = v2Rows.find((r) => normalizePeriod(r[V2.window] as string) === p)
-    if (v2Row) {
-      periods[p] = mapV2Snapshot(v2Row, p)
+      periods[p] = mapLeaderboardRow(lrRow)
     }
   }
 
@@ -490,14 +471,14 @@ export async function getTraderDetail(
           .limit(100)
           .abortSignal(phase2Signal)
       ),
-      // Tracked since (earliest v2 snapshot)
+      // Tracked since — migrated off retiring trader_snapshots_v2 to
+      // trader_sources.created_at (when this trader identity was first recorded).
       safeQuery(() =>
         supabase
-          .from('trader_snapshots_v2')
+          .from('trader_sources')
           .select('created_at')
-          .eq(V2.platform, platform)
-          .eq(V2.trader_key, traderKey)
-          .order('created_at', { ascending: true })
+          .eq('source', platform)
+          .eq('source_trader_id', traderKey)
           .limit(1)
           .abortSignal(phase2Signal)
           .maybeSingle()
@@ -1075,24 +1056,18 @@ export async function resolveTrader(
       .select('platform, trader_key, display_name, avatar_url')
       .or(`trader_key.eq.${sanitizedForFilter},display_name.eq.${sanitizedForFilter}`)
 
-    let svQuery = supabase
-      .from('trader_latest')
-      .select('platform, trader_key')
-      .eq(V2.trader_key, decodedHandle)
-
     if (platformFilter) {
       lbQuery = lbQuery.eq(LR.source, platformFilter)
       profileQuery = profileQuery.eq('platform', platformFilter)
-      svQuery = svQuery.eq(V2.platform, platformFilter)
     }
 
-    const [lbResult, profileResult, svResult] = await Promise.all([
+    // Priority: leaderboard_ranks > trader_profiles_v2 (trader_latest tier removed
+    // — table retiring; trader_sources is the primary resolver above this block).
+    const [lbResult, profileResult] = await Promise.all([
       lbQuery.limit(1).maybeSingle(),
       profileQuery.limit(1).maybeSingle(),
-      svQuery.limit(1).maybeSingle(),
     ])
 
-    // Priority: leaderboard_ranks > trader_profiles_v2 > trader_snapshots_v2
     if (lbResult.data) {
       return {
         platform: lbResult.data[LR.source],
@@ -1108,15 +1083,6 @@ export async function resolveTrader(
         traderKey: profileResult.data.trader_key,
         handle: profileResult.data.display_name || null,
         avatarUrl: profileResult.data.avatar_url || null,
-      }
-    }
-
-    if (svResult.data) {
-      return {
-        platform: svResult.data.platform,
-        traderKey: svResult.data.trader_key,
-        handle: null,
-        avatarUrl: null,
       }
     }
   }
