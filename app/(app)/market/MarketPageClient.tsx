@@ -293,8 +293,10 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
   const [sectorFilter, setSectorFilter] = useState<string | null>(null)
   const isMobile = useIsMobile()
 
-  // Single shared fetch for /api/market/spot — data passed as props to all children
-  const { data: spotData, isLoading: spotLoading } = useMarketSpotData()
+  // Single shared fetch for /api/market/spot — data passed as props to all children.
+  // Seed with the SSR-delivered spot data so the hook doesn't refetch the same
+  // ~33KB/100-coin payload on mount (it was already in the document).
+  const { data: spotData, isLoading: spotLoading } = useMarketSpotData(initialSpotData)
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
