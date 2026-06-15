@@ -9,6 +9,7 @@ import TraderProfileClient, { type UnregisteredTraderData } from './TraderProfil
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { isDeadPlatform } from '@/lib/constants/exchanges'
+import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getFirstScreen } from '@/lib/data/serving/first-screen'
@@ -345,6 +346,13 @@ export async function generateMetadata({
     ResolveResult,
     typeof RESOLVE_UNAVAILABLE
   >
+
+  // Retired sources (spec-dropped, archived to arena_archive) are removed from
+  // the product → 404. Done HERE in generateMetadata (before Suspense streaming)
+  // so the response is a clean 404 without conflicting robots meta — same
+  // rationale as the serving-null notFound above.
+  if (resolvedData && isRetiredSource(resolvedData.platform)) notFound()
+
   const name = resolvedData?.handle || servingMeta?.nickname || decoded
   const exchange = resolvedData
     ? EXCHANGE_DISPLAY[resolvedData.platform] || resolvedData.platform || 'Crypto'
@@ -598,6 +606,10 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   // to inject <meta name="robots" content="noindex"/> for ALL pages,
   // even valid ones. generateMetadata runs before streaming starts.
   if (!resolved || resolved === RESOLVE_UNAVAILABLE) return null
+
+  // Retired source → generateMetadata already issued the 404; render nothing
+  // here (return null, NOT notFound(), to avoid the page-level noindex bug).
+  if (isRetiredSource(resolved.platform)) return null
 
   // Redirect claimed traders to canonical /u/ URL (avoids SEO duplicate content)
   if (userHandle) {

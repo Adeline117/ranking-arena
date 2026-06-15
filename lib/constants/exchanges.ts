@@ -95,6 +95,11 @@ export type TraderSource =
 // ALL_SOURCES – exhaustive list of every source the system can query
 // ---------------------------------------------------------------------------
 
+// NOTE: 12 spec-dropped sources were retired 2026-06-15 (archived to
+// arena_archive, detail pages 404 via lib/constants/retired-sources.ts) and
+// removed from this allowlist: aevo, bybit_spot, copin, dydx, etoro, gains,
+// jupiter_perps, okx_web3, polymarket, toobit, weex, woox. They remain in the
+// TraderSource union + EXCHANGE_DISPLAY so archived rows still type/render.
 export const ALL_SOURCES: TraderSource[] = [
   // CEX futures
   'binance_futures',
@@ -106,7 +111,6 @@ export const ALL_SOURCES: TraderSource[] = [
   'kucoin',
   'phemex',
   'htx_futures',
-  'weex',
   'bingx',
   'gateio',
   'xt',
@@ -114,32 +118,19 @@ export const ALL_SOURCES: TraderSource[] = [
   'blofin',
   // CEX spot
   'binance_spot',
-  'bybit_spot',
   'okx_spot',
   'bingx_spot',
   // CEX web3
   'binance_web3',
-  'okx_web3',
   // DEX / on-chain perpetuals
   'gmx',
-  'dydx',
   'hyperliquid',
-  'gains',
-  'jupiter_perps',
-  'aevo',
   'drift',
   'paradex',
   // New CEX
   'bitunix',
   'btcc',
   'bitfinex',
-  'toobit',
-  // Social trading
-  'etoro',
-  // New platforms (Wave 2)
-  'woox',
-  'polymarket',
-  'copin',
 ]
 
 // ---------------------------------------------------------------------------
