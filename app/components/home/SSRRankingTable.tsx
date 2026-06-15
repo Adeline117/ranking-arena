@@ -158,6 +158,8 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                   <img
                     src={avatarSrc(trader.avatar_url)}
                     alt=""
+                    width={44}
+                    height={44}
                     loading={rank <= 3 ? 'eager' : 'lazy'}
                     {...(rank === 1 ? { fetchPriority: 'high' as const } : {})}
                     style={{
