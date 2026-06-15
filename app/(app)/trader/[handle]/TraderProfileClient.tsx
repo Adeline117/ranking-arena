@@ -39,9 +39,26 @@ import { RankSparkline } from '@/app/components/ranking/RankSparkline'
 
 // Memoized tab components — each wraps its own subtree so SWR revalidations
 // on one tab don't cause reconciliation of the others.
-import OverviewTab from '@/app/components/trader/tabs/OverviewTab'
-import StatsTab from '@/app/components/trader/tabs/StatsTab'
-import PortfolioTab from '@/app/components/trader/tabs/PortfolioTab'
+//
+// Code-split: these render ONLY in the legacy (!isServing) branch, and even
+// there they live inside the ssr:false SwipeableView — so they never SSR.
+// Static imports shipped the entire legacy tab tree (Overview pulls
+// AdvancedMetricsCard + multiple charts, ~hundreds of KiB) into EVERY trader
+// page, including serving-mode pages (the majority, incl. the #1 trader) that
+// never render them — the dominant source of the page's unused-JS / high TTI.
+// dynamic() loads each tab's chunk only when it actually mounts.
+const OverviewTab = dynamic(() => import('@/app/components/trader/tabs/OverviewTab'), {
+  ssr: false,
+  loading: () => <RankingSkeleton />,
+})
+const StatsTab = dynamic(() => import('@/app/components/trader/tabs/StatsTab'), {
+  ssr: false,
+  loading: () => <RankingSkeleton />,
+})
+const PortfolioTab = dynamic(() => import('@/app/components/trader/tabs/PortfolioTab'), {
+  ssr: false,
+  loading: () => <RankingSkeleton />,
+})
 
 const PostFeed = dynamic(() => import('@/app/components/post/PostFeed'), {
   ssr: false,
