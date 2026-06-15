@@ -19,10 +19,6 @@
       "schedule": "0 9 * * 5"
     },
     {
-      "path": "/api/cron/ensure-partitions",
-      "schedule": "0 3 * * 0"
-    },
-    {
       "path": "/api/cron/daily-digest",
       "schedule": "2 0 * * *"
     },
@@ -69,10 +65,6 @@
     {
       "path": "/api/cron/fetch-market-data?type=prices",
       "schedule": "14 */4 * * *"
-    },
-    {
-      "path": "/api/cron/calculate-advanced-metrics",
-      "schedule": "50 5 * * *"
     },
     {
       "path": "/api/cron/aggregate-daily-snapshots",

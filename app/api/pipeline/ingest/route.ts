@@ -46,6 +46,22 @@ interface IngestBody {
 }
 
 export async function POST(request: NextRequest) {
+  // RETIRED 2026-06-15 (ARENA_DATA_SPEC endgame): the legacy VPS scraper ingest
+  // is redundant — the Mac Mini arena worker now covers all serving sources
+  // (writes arena.* + compat trader_latest under the same legacy-alias rows), so
+  // this path only kept trader_snapshots_v2 (a table being dropped) growing.
+  // Disabled by default; set LEGACY_VPS_INGEST_ENABLED=true to re-enable.
+  if (process.env.LEGACY_VPS_INGEST_ENABLED !== 'true') {
+    return NextResponse.json(
+      {
+        ok: false,
+        disabled: true,
+        reason: 'legacy VPS ingest retired; arena pipeline is canonical',
+      },
+      { status: 410 }
+    )
+  }
+
   // Auth: accept either VPS proxy key or CRON_SECRET (timing-safe)
   const proxyKey =
     request.headers.get('x-proxy-key') ||
