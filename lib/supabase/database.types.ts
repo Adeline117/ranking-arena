@@ -8288,6 +8288,7 @@ export type Database = {
         }
         Returns: Json
       }
+      arena_serving_sources: { Args: never; Returns: string[] }
       arena_source_capabilities: { Args: never; Returns: Json }
       arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }

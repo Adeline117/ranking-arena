@@ -7,7 +7,8 @@
  * cadence in the DB takes effect without a deploy.
  */
 
-import { getActiveSources } from '@/lib/ingest/sources'
+import { getActiveSources, getServingSourceNames } from '@/lib/ingest/sources'
+import { getConnection } from '../connection'
 import {
   fastLaneEnabled,
   getFastQueue,
@@ -213,4 +214,32 @@ export async function reconcileSchedulers(): Promise<void> {
     `[ingest-scheduler] reconciled: ${sources.length} active sources, ` +
       `${wanted.size} schedulers${revived ? `, revived ${revived} stuck` : ''}`
   )
+
+  await reconcileServingSources()
+}
+
+/**
+ * Mirror the DB serving set (arena.sources.serving_mode='serving') into the
+ * Redis `serving_sources` key the frontend reads. The DB is authoritative;
+ * this keeps the hot-path Redis mirror fresh so flipping serving_mode is the
+ * ONLY control surface — no hand-editing the Redis list (the past source of
+ * drift). Best-effort: a failure here must never abort the scheduler.
+ */
+export async function reconcileServingSources(): Promise<void> {
+  try {
+    const names = await getServingSourceNames()
+    if (names.length === 0) {
+      // Never blow away the list from an empty/transient read — the frontend
+      // would revert every trader to the empty legacy page.
+      console.warn('[ingest-scheduler] serving set empty; leaving Redis mirror untouched')
+      return
+    }
+    await getConnection().set('serving_sources', names.join(','))
+    console.log(`[ingest-scheduler] serving_sources mirror updated: ${names.length} names`)
+  } catch (err) {
+    console.error(
+      '[ingest-scheduler] serving_sources mirror failed (non-fatal): ' +
+        (err instanceof Error ? err.message : String(err))
+    )
+  }
 }

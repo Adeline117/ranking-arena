@@ -45,6 +45,28 @@ export async function getSourceBySlug(slug: string): Promise<SourceRowWithCadenc
   return rows[0]
 }
 
+/**
+ * The full set of source NAMES the frontend read-path treats as "serving"
+ * (ARENA_DATA_SPEC §2.4 serving_mode). A source is serving iff
+ * serving_mode='serving'; the frontend resolves traders by both the arena slug
+ * AND the legacy platform alias (meta.legacy_platform), so both are emitted.
+ *
+ * This is the DB-side twin of the public.arena_serving_sources() RPC — the
+ * worker scheduler mirrors this into the Redis `serving_sources` key each
+ * reconcile so the frontend hot path stays fast AND the list can never drift
+ * from the DB (no manual editing). Keep the two queries in lockstep.
+ */
+export async function getServingSourceNames(): Promise<string[]> {
+  const { rows } = await getIngestPool().query<{ name: string }>(
+    `SELECT slug AS name FROM arena.sources WHERE serving_mode = 'serving'
+     UNION
+     SELECT meta->>'legacy_platform' FROM arena.sources
+       WHERE serving_mode = 'serving' AND coalesce(meta->>'legacy_platform', '') <> ''
+     ORDER BY name`
+  )
+  return rows.map((r) => r.name)
+}
+
 /** Ranking TFs this source natively exposes (boards only ever use 7/30/90). */
 export function nativeRankingTimeframes(src: SourceRow): Array<7 | 30 | 90> {
   return src.timeframes_native.filter((tf): tf is 7 | 30 | 90 => tf === 7 || tf === 30 || tf === 90)
