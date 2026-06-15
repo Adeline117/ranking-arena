@@ -171,12 +171,37 @@ export interface ServingProfilePanelProps {
   capability: SourceCapability | null
 }
 
+/**
+ * Land on a timeframe the source actually exposes. Hardcoding 90D made
+ * sources without it (bots → only 30D; bitfinex/kucoin/lbank) open on a
+ * DISABLED tab — the active pill sat on a greyed period and the grid read as
+ * broken. Prefer 90D → 30D → 7D, then bot inception, then 90D as a last resort.
+ */
+function pickDefaultPeriod(capability: SourceCapability | null): {
+  period: Period
+  inception: boolean
+} {
+  if (!capability) return { period: '90D', inception: false }
+  const order: Array<{ p: Period; k: '7' | '30' | '90' }> = [
+    { p: '90D', k: '90' },
+    { p: '30D', k: '30' },
+    { p: '7D', k: '7' },
+  ]
+  for (const { p, k } of order) {
+    const a = capability.timeframes[k]
+    if (a === 'native' || a === 'derived') return { period: p, inception: false }
+  }
+  if (capability.inceptionTf) return { period: '90D', inception: true }
+  return { period: '90D', inception: false }
+}
+
 export default function ServingProfilePanel({ firstScreen, capability }: ServingProfilePanelProps) {
   const { t } = useLanguage()
   const { source, exchangeTraderId } = firstScreen
 
-  const [period, setPeriod] = useState<Period>('90D')
-  const [inceptionSelected, setInceptionSelected] = useState(false)
+  const initialPeriod = useMemo(() => pickDefaultPeriod(capability), [capability])
+  const [period, setPeriod] = useState<Period>(initialPeriod.period)
+  const [inceptionSelected, setInceptionSelected] = useState(initialPeriod.inception)
   const tf: ServingTimeframe = inceptionSelected
     ? 'inception'
     : (Number(period.replace('D', '')) as 7 | 30 | 90)
