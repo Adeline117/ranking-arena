@@ -23,7 +23,7 @@ import {
   generateBreadcrumbSchema,
   type TraderSchemaInput,
 } from '@/lib/seo/structured-data'
-import { SSR_QUERY_TIMEOUT_MS } from '@/lib/constants/timeouts'
+import { SSR_QUERY_TIMEOUT_MS, SERVING_RESOLVE_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { logger } from '@/lib/logger'
 
 // Derive display names from central config
@@ -160,14 +160,16 @@ const cachedServingResolveISR = unstable_cache(
 )
 
 // Sentinel for "the cached/replica path TIMED OUT" — distinct from a genuine
-// null (trader not found). ROOT-CAUSE FIX (2026-06-15): a transient timeout here
-// used to collapse to null → the body fell into legacy mode → notFound() → a
-// VALID serving trader got a route-cached "Trader Not Found" for 5 min. The
-// resolve RPC is ~0.1s; the 3s race is lost to unstable_cache / connection-pool
-// queuing under cron contention, NOT the query. So on timeout we retry ONCE
-// against the read replica directly (bypassing the contended cache layer),
-// which recovers virtually all transient failures. Genuine not-found still
-// returns null → a correct (and cacheable) 404.
+// null (trader not found). ROOT-CAUSE FIX (2026-06-15): a timeout here used to
+// collapse to null → the body fell into legacy mode → notFound() → a VALID
+// serving trader got a route-cached "Trader Not Found" for 5 min. Observed on
+// okx: curl (single request) resolved 10/10, but a real browser failed ~every
+// time — the page render competes with its OWN concurrent asset/prefetch
+// requests for a pooled connection, and acquisition (not the ~0.1s RPC) blew
+// the tight 3s budget. Two defenses: (1) a generous SERVING_RESOLVE_TIMEOUT_MS
+// ceiling so slow connection-acquisition still completes (a genuine not-found
+// returns fast — the ISR wrapper throws immediately on null), and (2) one
+// direct retry on timeout, bypassing the contended unstable_cache layer.
 const SERVING_RESOLVE_TIMEOUT = Symbol('serving-resolve-timeout')
 
 const cachedServingResolve = cache(async (handle: string, source?: string) => {
@@ -175,7 +177,7 @@ const cachedServingResolve = cache(async (handle: string, source?: string) => {
     const raced = await Promise.race([
       cachedServingResolveISR(handle, source),
       new Promise<typeof SERVING_RESOLVE_TIMEOUT>((resolve) =>
-        setTimeout(() => resolve(SERVING_RESOLVE_TIMEOUT), SSR_QUERY_TIMEOUT_MS)
+        setTimeout(() => resolve(SERVING_RESOLVE_TIMEOUT), SERVING_RESOLVE_TIMEOUT_MS)
       ),
     ])
     if (raced !== SERVING_RESOLVE_TIMEOUT) return raced
@@ -192,7 +194,7 @@ const cachedServingResolve = cache(async (handle: string, source?: string) => {
   try {
     return await Promise.race([
       resolveServingTrader(getReadReplica(), { handle, source }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SERVING_RESOLVE_TIMEOUT_MS)),
     ])
   } catch (err) {
     logger.error(
