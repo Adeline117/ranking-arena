@@ -97,9 +97,14 @@ function SearchContent() {
     router.replace(`/search?${params.toString()}`)
   }, [debouncedInputValue]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounce the query for SWR — prevents firing on every keystroke
-  const debouncedQuery = useDebounce(query.trim(), 300)
-  const debouncedPlatform = useDebounce(platformFilter, 300)
+  // `query` and `platformFilter` both come from the URL (searchParams). `query`
+  // only updates via the already-debounced router.replace above (line ~88), and
+  // `platformFilter` only changes on a platform-pill click (navigation). A second
+  // 300ms debounce here just stacked on top — adding ~300ms of dead latency to
+  // every keystroke and ~300ms lag to platform clicks for no throttling benefit.
+  // Use the URL values directly; the input→URL debounce already prevents storms.
+  const debouncedQuery = query.trim()
+  const debouncedPlatform = platformFilter
 
   // SWR key: null when no query (disables fetching)
   const searchKey = debouncedQuery
@@ -214,6 +219,12 @@ function SearchContent() {
   useEffect(() => {
     setSearchHistory(getSearchHistory())
 
+    // Trending pills render ONLY in the no-query empty state. Skip the fetch when
+    // the user arrives with a query (pills never show) so it doesn't compete with
+    // hydration on the already-TBT-heavy search page. Fires lazily once the empty
+    // state becomes reachable (query cleared).
+    if (query) return
+
     // 加载热门搜索数据
     const loadTrendingSearches = async () => {
       try {
@@ -239,7 +250,7 @@ function SearchContent() {
     }
 
     loadTrendingSearches()
-  }, [])
+  }, [query])
 
   const highlightText = useCallback((text: string, q: string): React.ReactNode => {
     if (!text || !q.trim()) return text
