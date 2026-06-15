@@ -13,6 +13,7 @@ import type {
   TraderPosition,
 } from './types'
 import { SOURCE_TYPE_MAP, DEAD_BLOCKED_PLATFORMS } from '@/lib/constants/exchanges'
+import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { logger } from '@/lib/logger'
 import { mapLeaderboardRow, mapV2Snapshot, normalizePeriod, getSourceAliases } from './mappers'
 import { fetchSimilarTraders } from './similar'
@@ -1017,9 +1018,17 @@ export async function resolveTrader(
 
     // Multiple traders may share the same handle (e.g., 鎏渊).
     // Pick the one with the highest arena_score in leaderboard to avoid resolving to a no-data entry.
-    const { data: candidates } = await query.limit(10)
-    let data = candidates?.[0] ?? null
-    if (candidates && candidates.length > 1) {
+    const { data: rawCandidates } = await query.limit(10)
+    // Never resolve to a RETIRED source. One exchange_trader_id can collide
+    // across sources (e.g. okx_web3 RETIRED + okx_futures live); this query has
+    // NO deterministic ORDER BY, so without filtering it would non-
+    // deterministically return the retired row → generateMetadata's
+    // isRetiredSource() check 404'd a valid serving trader (~1406 ids affected).
+    const candidates = (rawCandidates ?? []).filter(
+      (c: { source: string }) => !isRetiredSource(c.source)
+    )
+    let data = candidates[0] ?? null
+    if (candidates.length > 1) {
       // Check which candidate has leaderboard data
       const ids = candidates.map((c: { source_trader_id: string }) => c.source_trader_id)
       const { data: lbCheck } = await supabase
