@@ -92,6 +92,15 @@ export const METRIC_REGISTRY: readonly MetricDef[] = [
     tier: 'advanced',
     inverted: true,
   },
+
+  // On-chain / lifetime — DEX & perp-DEX sources (gmx/gtrade/okx_web3…) capture
+  // these instead of the CEX copy-trade fields. Same NULL-collapse.
+  { key: 'unrealized_pnl', i18nKey: 'metricUnrealizedPnl', format: 'money', tier: 'standard' },
+  { key: 'realized_pnl', i18nKey: 'metricRealizedPnl', format: 'money', tier: 'standard' },
+  { key: 'closed_count', i18nKey: 'metricClosedTrades', format: 'count', tier: 'standard' },
+  { key: 'lifetime_trades', i18nKey: 'metricLifetimeTrades', format: 'count', tier: 'advanced' },
+  { key: 'lifetime_volume', i18nKey: 'metricLifetimeVolume', format: 'money', tier: 'advanced' },
+  { key: 'lifetime_win_rate', i18nKey: 'metricLifetimeWinRate', format: 'pct', tier: 'advanced' },
 ] as const
 
 /**
@@ -136,6 +145,13 @@ export const EXTRAS_METRIC_ALIASES: Readonly<Record<string, readonly string[]>> 
   ],
   profit_days: ['profit_days', 'win_days'],
   loss_days: ['loss_days'],
+  // On-chain / lifetime
+  unrealized_pnl: ['unrealized_pnl'],
+  realized_pnl: ['realized_pnl', 'realized_pnl_usd', 'top_tokens_total_pnl'],
+  closed_count: ['closed_count', 'closed_positions'],
+  lifetime_trades: ['lifetime_trades', 'trade_count_lifetime'],
+  lifetime_volume: ['lifetime_volume', 'total_trade_volume'],
+  lifetime_win_rate: ['lifetime_win_rate'],
 } as const
 
 /**
