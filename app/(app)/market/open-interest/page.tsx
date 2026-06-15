@@ -19,7 +19,9 @@ export const metadata: Metadata = {
     url: `${BASE_URL}/market/open-interest`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Open Interest' }],
+    images: [
+      { url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Open Interest' },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
@@ -29,7 +31,11 @@ export const metadata: Metadata = {
   },
 }
 
-export const dynamic = 'force-dynamic' // Skip static generation, render at request time
+// ISR: open-interest data is request-independent (single RPC, no cookies/headers/
+// searchParams) and refreshes on a ~15-min cron, so it's an ideal cache candidate.
+// force-dynamic previously opted the route out of the Full Route Cache entirely,
+// making revalidate dead and forcing a Supabase RPC on EVERY visit. Removed so
+// revalidate actually takes effect and the DB hit leaves the hot path.
 export const revalidate = 900 // 15 minutes
 
 interface OpenInterestRow {
