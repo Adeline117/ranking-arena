@@ -96,9 +96,10 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
       },
       'pipeline_logs records_processed'
     ),
-    // Query trader_latest for true data freshness per platform (1 sample row per platform).
-    // Previously used leaderboard_ranks.computed_at which only updates on scoring runs,
-    // causing false "stale" alerts for platforms that fetch successfully but haven't been scored.
+    // get_platform_freshness() returns FETCH freshness per source from
+    // arena.leaderboard_snapshots.scraped_at (when last crawled) — not score
+    // freshness, which would false-alert sources that fetched but weren't scored.
+    // (Migrated off retiring trader_latest 2026-06-15; RPC keyed by legacy alias.)
     withDeadline(
       (supabase as any).rpc('get_platform_freshness') as unknown as PromiseLike<{
         data: Array<{ source: string; latest: string }> | null
@@ -113,7 +114,7 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
     ),
   ])
 
-  // Build platform → latest update map from trader_latest freshness
+  // Build platform → latest update map from get_platform_freshness (arena scraped_at)
   const pgQueryResult = lbLatestRes as { data: unknown[] | null; error: unknown }
   const platformLastUpdate = new Map<string, string>()
   const lbData = (pgQueryResult.data || []) as Array<{

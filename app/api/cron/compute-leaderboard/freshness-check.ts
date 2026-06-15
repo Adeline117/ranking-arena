@@ -55,12 +55,14 @@ export async function checkPlatformFreshness(
     // traderMap empty for this source — check DB directly to distinguish
     // "query failed" (retry later) from "actually stale" (really no data)
     try {
-      const { data: dbCheck } = await (supabase as any)
-        .from('trader_latest')
-        .select('updated_at')
-        .eq('platform', source)
-        .gte('updated_at', new Date(now - STALE_THRESHOLD_MS).toISOString())
-        .order('updated_at', { ascending: false })
+      // Migrated off retiring trader_latest → leaderboard_ranks.computed_at
+      // (source = legacy alias, same keyspace as SOURCES_WITH_DATA).
+      const { data: dbCheck } = await supabase
+        .from('leaderboard_ranks')
+        .select('computed_at')
+        .eq('source', source)
+        .gte('computed_at', new Date(now - STALE_THRESHOLD_MS).toISOString())
+        .order('computed_at', { ascending: false })
         .limit(1)
         .maybeSingle()
       if (dbCheck) {

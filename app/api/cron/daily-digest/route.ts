@@ -35,24 +35,25 @@ export const GET = withCron('daily-digest', async (_request: NextRequest, { supa
   const alertCount24h =
     logs?.filter((l) => l.status === 'error' || l.status === 'timeout').length || 0
 
-  // Platform freshness — query latest updated_at per platform from trader_latest
+  // Platform freshness — latest computed_at per source from leaderboard_ranks
+  // (migrated off retiring trader_latest; computed_at = canonical "last scored").
   const latestByPlatform = new Map<string, string>()
   const freshnessChecks = activePlatforms.map(async (platform) => {
     try {
       const { data } = await Promise.race([
         supabase
-          .from('trader_latest')
-          .select('updated_at')
-          .eq('platform', platform)
-          .order('updated_at', { ascending: false })
+          .from('leaderboard_ranks')
+          .select('computed_at')
+          .eq('source', platform)
+          .order('computed_at', { ascending: false })
           .limit(1)
           .maybeSingle(),
         new Promise<never>((_, reject) =>
           setTimeout(() => reject(new Error(`Freshness query timeout for ${platform}`)), 15_000)
         ),
       ])
-      if (data?.updated_at) {
-        latestByPlatform.set(platform, data.updated_at)
+      if (data?.computed_at) {
+        latestByPlatform.set(platform, data.computed_at)
       }
     } catch {
       // Individual platform timeout — skip it, will show as 999h
@@ -73,18 +74,19 @@ export const GET = withCron('daily-digest', async (_request: NextRequest, { supa
     }
   })
 
-  // Snapshot counts — traders updated in window (trader_latest has 1 row per key)
+  // Ranked-trader counts in window (migrated off retiring trader_latest →
+  // leaderboard_ranks; counts ranked traders scored in the window, computed_at).
   const { count: snapshotCount24h } = await supabase
-    .from('trader_latest')
+    .from('leaderboard_ranks')
     .select('*', { count: 'estimated', head: true })
-    .gte('updated_at', oneDayAgo)
+    .gte('computed_at', oneDayAgo)
 
   const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString()
   const { count: snapshotCountYesterday } = await supabase
-    .from('trader_latest')
+    .from('leaderboard_ranks')
     .select('*', { count: 'estimated', head: true })
-    .gte('updated_at', twoDaysAgo)
-    .lt('updated_at', oneDayAgo)
+    .gte('computed_at', twoDaysAgo)
+    .lt('computed_at', oneDayAgo)
 
   // Top errors
   const { data: errorLogs } = await supabase
