@@ -7,10 +7,11 @@
 
 ---
 
-## 健康分：92 / 100
+## 健康分：92 / 100 → 96 / 100（2026-06-15 #418 修复后）
 
-线上无页面崩溃、无 5xx、4 条旅程全绿且写操作已清理。扣分项为 1 个非致命水合
-不一致（已根因定位，留作专项）+ 若干测试夹具/工具噪声（已区分）。
+线上无页面崩溃、无 5xx、4 条旅程全绿且写操作已清理。原扣分项中的非致命水合
+不一致（#418）已于 2026-06-15 根因定位并修复验证（见下 §A），余为若干测试
+夹具/工具噪声（已区分）。
 
 ---
 
@@ -70,14 +71,21 @@ strategy_type/status` → 全 42703），`.single()` 报错 → 误返 404。`bo
 
 ## 待专项跟进（非致命，未贸然修）
 
-### A. React #418 水合文本不一致 — `/` 与 `/rankings` 〔P2〕
+### A. React #418 水合文本不一致 — `/` 与 `/rankings` 〔P2〕 ✅ 已修复（2026-06-15）
 
 - **性质**：非致命，React 客户端自动重生成该子树，用户最终看到正确内容。
-- **根因方向**：SSR i18n / 数据快照在共享基础设施层分叉（`LanguageProvider`
-  `useLanguage()` 无 context 兜底走 `getLanguage()` 读 localStorage；`HomeHeroSSR`/
-  `RankingControls` 渲染 `t()` 文案）。精确定位需 DOM 级 diff 拿到差异节点。
-- **为何不当场修**：改动落在最高流量页 + 全站共享 i18n，贸然改风险高，应作专项任务
-  （配 React DevTools / `data-` 属性 diff 精确定位后再改）。
+- **根因（已定位坐实）**：`app/layout.tsx` 为 LCP **故意不挂 Providers**（"Homepage
+  loads zero Provider JS"），homepage（`/`、`/rankings`）的 `RankingControls`/
+  `useRankingFilters`/`RankingFooter` 在 `LanguageProvider` **之外**渲染，
+  `useLanguage()` 命中**兜底分支**——旧实现内联 `getLanguage()` 读 localStorage，
+  首个客户端渲染返回用户真实语言，而服务端 `getLanguage()` 返回模块默认 `'en'`
+  → 文本节点不一致（错误码 `#418; args[]=text`）。`HomeHeroSSR`/`SSRRankingTable`
+  是 server component（`getServerTranslation` 读 cookie），本身不参与该 mismatch。
+- **修复**：让 `useLanguage()` 兜底复用 provider 自身策略——首渲 `'en'` 对齐 SSR，
+  挂载后切到保存语言；hooks 无条件前置以满足 rules-of-hooks。保留 homepage 零
+  Provider JS 的 LCP 优化。`commit de72f9c7a`
+- **验证**：`scripts/qa/verify-418-hydration.mjs`（`commit ea068ee63`）——修前线上
+  `/`+`/rankings`（lang=zh）各 1 个 `#418`，修后均 0；`post-deploy-check.sh` 5/5 绿。
 
 ### B. `/groups/apply` 移动端某 `_next/static/chunks/*.js` 500 〔P3〕
 
