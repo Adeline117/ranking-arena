@@ -28,6 +28,7 @@ import MetricGrid from './MetricGrid'
 import SignalChips from './SignalChips'
 import TraderMetaStrip from './TraderMetaStrip'
 import CoreCharts from './CoreCharts'
+import DrawdownModule from './DrawdownModule'
 import AssetPreference from './AssetPreference'
 import ModuleDegraded from './ModuleDegraded'
 import RecordsTable, { type RecordColumn } from './RecordsTable'
@@ -288,6 +289,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             currency={core.modules.currency}
           />
           <CoreCharts series={core.modules.series} timeframe={tf} />
+          <DrawdownModule series={core.modules.series} />
           <AssetPreference extras={core.modules.extras} />
           <ProvenanceFooter
             provenance={core.modules.provenance}
