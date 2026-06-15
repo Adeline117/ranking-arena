@@ -43,8 +43,11 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   // Start with 'en' to match SSR output — getLanguage() reads localStorage which is only
   // available after hydration. We update in useEffect once mounted.
   const [language, setLanguageState] = useState<Language>('en')
-  // Bump when English translations finish async loading — forces t() consumers to re-render
-  const [, setTxnVersion] = useState(() => getTranslationVersion())
+  // Bump when English translations finish async loading — forces t() consumers to re-render.
+  // The version value MUST feed the t/contextValue memo deps below, otherwise the bump
+  // re-renders the provider but produces an identical context reference and stale consumers
+  // (e.g. a static subtree like /rankings/bots) keep showing raw feature keys.
+  const [txnVersion, setTxnVersion] = useState(() => getTranslationVersion())
 
   useEffect(() => {
     // Re-render once when English translations finish loading (async import on client)
@@ -104,7 +107,9 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       }
       return value
     }
-  }, [language])
+    // txnVersion is intentionally in the deps: when the full async dictionary merges in,
+    // the version bumps and we must hand consumers a fresh t() so feature keys re-resolve.
+  }, [language, txnVersion])
 
   const contextValue = useMemo(() => ({ language, setLanguage, t }), [language, setLanguage, t])
 
