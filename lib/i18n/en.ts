@@ -3336,6 +3336,7 @@ const en = {
   turnover24h: '24h Turnover',
   fundingRate: 'Funding Rate',
   openInterest: 'Open Interest',
+  fundingRates: 'Funding Rates',
   predictedFunding: 'Predicted Funding',
   trending: 'Trending',
   newlyListed: 'New',

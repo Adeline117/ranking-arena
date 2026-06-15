@@ -3253,6 +3253,7 @@ const zh = {
   turnover24h: '24h成交额',
   fundingRate: '资金费率',
   openInterest: '未平仓量',
+  fundingRates: '资金费率',
   predictedFunding: '预测资金费率',
   trending: '热门',
   newlyListed: '新上线',
