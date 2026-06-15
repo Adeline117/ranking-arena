@@ -176,22 +176,33 @@ export interface ServingProfilePanelProps {
  * sources without it (bots → only 30D; bitfinex/kucoin/lbank) open on a
  * DISABLED tab — the active pill sat on a greyed period and the grid read as
  * broken. Prefer 90D → 30D → 7D, then bot inception, then 90D as a last resort.
+ *
+ * Capability can be null/incomplete: arena_source_capabilities is a ~10s RPC
+ * the page races against a 2s timeout, so under frequent deploys it often
+ * resolves to {}. When that happens we trust firstScreen.entries — the board
+ * timeframes we DO have — so e.g. a [30]-only bot still lands on 30D (warm)
+ * instead of defaulting to 90D (empty → perpetual "loading").
  */
-function pickDefaultPeriod(capability: SourceCapability | null): {
-  period: Period
-  inception: boolean
-} {
-  if (!capability) return { period: '90D', inception: false }
+function pickDefaultPeriod(
+  capability: SourceCapability | null,
+  entryTimeframes: number[]
+): { period: Period; inception: boolean } {
+  const entryTfs = new Set(entryTimeframes)
+  const isAvailable = (k: '7' | '30' | '90'): boolean => {
+    const a = capability?.timeframes?.[k]
+    if (a === 'native' || a === 'derived') return true
+    if (a === 'absent') return false
+    return entryTfs.has(Number(k)) // capability missing → trust board entries
+  }
   const order: Array<{ p: Period; k: '7' | '30' | '90' }> = [
     { p: '90D', k: '90' },
     { p: '30D', k: '30' },
     { p: '7D', k: '7' },
   ]
   for (const { p, k } of order) {
-    const a = capability.timeframes[k]
-    if (a === 'native' || a === 'derived') return { period: p, inception: false }
+    if (isAvailable(k)) return { period: p, inception: false }
   }
-  if (capability.inceptionTf) return { period: '90D', inception: true }
+  if (capability?.inceptionTf) return { period: '90D', inception: true }
   return { period: '90D', inception: false }
 }
 
@@ -199,7 +210,10 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
   const { t } = useLanguage()
   const { source, exchangeTraderId } = firstScreen
 
-  const initialPeriod = useMemo(() => pickDefaultPeriod(capability), [capability])
+  const initialPeriod = useMemo(
+    () => pickDefaultPeriod(capability, firstScreen.entries?.map((e) => e.timeframe) ?? []),
+    [capability, firstScreen.entries]
+  )
   const [period, setPeriod] = useState<Period>(initialPeriod.period)
   const [inceptionSelected, setInceptionSelected] = useState(initialPeriod.inception)
   const tf: ServingTimeframe = inceptionSelected
