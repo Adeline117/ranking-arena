@@ -32,6 +32,18 @@ export const SSR_QUERY_TIMEOUT_MS = 3_000
 export const SSR_HEAVY_QUERY_TIMEOUT_MS = 5_000
 
 /**
+ * Serving trader IDENTITY resolve (arena_resolve_trader). The RPC itself is
+ * ~0.1s; the slow part is acquiring a pooled connection when a page render
+ * competes with its own concurrent asset/prefetch requests (browser) or with
+ * cron contention. At the tight 3s budget this race was lost just often enough
+ * that a VALID serving trader resolved to null → legacy → notFound() → a
+ * route-cached "Trader Not Found". A genuine not-found still returns fast (the
+ * RPC returns null → the ISR wrapper throws immediately), so a longer ceiling
+ * only buys slow connection-acquisition more time without slowing real 404s.
+ */
+export const SERVING_RESOLVE_TIMEOUT_MS = 8_000
+
+/**
  * Race a Supabase query (PromiseLike) against a timeout that also aborts
  * the underlying HTTP request via AbortController.
  *
