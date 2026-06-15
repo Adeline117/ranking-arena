@@ -26,6 +26,7 @@ import { PeriodSelector, type Period } from '@/app/components/trader/performance
 import { promoteExtrasMetrics, EXTRAS_PROMOTABLE_KEYS } from '@/lib/constants/metric-registry'
 import MetricGrid from './MetricGrid'
 import SignalChips from './SignalChips'
+import TraderMetaStrip from './TraderMetaStrip'
 import CoreCharts from './CoreCharts'
 import AssetPreference from './AssetPreference'
 import ModuleDegraded from './ModuleDegraded'
@@ -270,6 +271,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             </Text>
           )}
           <SignalChips source={source} extras={core.modules.extras} />
+          <TraderMetaStrip extras={core.modules.extras} currency={core.modules.currency} />
           {isDormant && (
             <Text size="sm" color="tertiary">
               {t('traderDormantForPeriod')}
