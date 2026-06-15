@@ -100,6 +100,13 @@ export function PeriodSelector({
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
+        // Wrap on narrow viewports: at 375px the title + derived-timeframe badge +
+        // 7D/30D/90D toggle overflow this row, and the toggle's overflow:hidden
+        // parent silently clipped 90D off the right edge — making the core-path
+        // period switch unreachable on mobile. Wrapping drops the selector to its
+        // own full-width row so every period stays tappable.
+        flexWrap: 'wrap',
+        gap: tokens.spacing[2],
         marginBottom: tokens.spacing[5],
       }}
     >
