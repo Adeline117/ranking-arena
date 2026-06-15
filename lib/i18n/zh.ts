@@ -5752,6 +5752,7 @@ const zh = {
   metaLeadingDays: '带单天数',
   metaCopierCap: '跟单上限',
   metaMarginBalance: '保证金余额',
+  holdingDistribution: '持仓时长分布',
   colSymbol: '币对',
   colSide: '方向',
   colLeverage: '杠杆',

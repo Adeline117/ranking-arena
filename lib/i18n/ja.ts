@@ -5530,6 +5530,7 @@ const ja = {
   metaLeadingDays: 'リード日数',
   metaCopierCap: 'コピー上限',
   metaMarginBalance: '証拠金残高',
+  holdingDistribution: '保有時間分布',
   colSymbol: '銘柄',
   colSide: '方向',
   colLeverage: 'レバレッジ',

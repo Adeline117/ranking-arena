@@ -30,6 +30,7 @@ import TraderMetaStrip from './TraderMetaStrip'
 import CoreCharts from './CoreCharts'
 import DrawdownModule from './DrawdownModule'
 import AssetPreference from './AssetPreference'
+import HoldingDistribution from './HoldingDistribution'
 import ModuleDegraded from './ModuleDegraded'
 import RecordsTable, { type RecordColumn } from './RecordsTable'
 import CopierAggregatePanel from './CopierAggregatePanel'
@@ -291,6 +292,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
           <CoreCharts series={core.modules.series} timeframe={tf} />
           <DrawdownModule series={core.modules.series} />
           <AssetPreference extras={core.modules.extras} />
+          <HoldingDistribution extras={core.modules.extras} />
           <ProvenanceFooter
             provenance={core.modules.provenance}
             exchangeName={capability?.exchangeName}
