@@ -99,20 +99,12 @@
       "schedule": "6 4 * * *"
     },
     {
-      "path": "/api/cron/check-data-gaps",
-      "schedule": "52 6 * * *"
-    },
-    {
       "path": "/api/cron/data-reconciliation",
       "schedule": "0 4 * * *"
     },
     {
       "path": "/api/cron/retry-dead-letters",
       "schedule": "0 5 * * *"
-    },
-    {
-      "path": "/api/cron/monitor-data-coverage",
-      "schedule": "15 */6 * * *"
     },
     {
       "path": "/api/cron/weekly-report",

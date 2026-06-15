@@ -29,7 +29,9 @@ async function withDbTimeout<T>(thenable: PromiseLike<T>, label: string): Promis
   try {
     return await Promise.race([
       Promise.resolve(thenable),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error(`plog DB write timed out after 15s (${label})`)), 15_000)),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`plog DB write timed out after 15s (${label})`)), 15_000)
+      ),
     ])
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
@@ -37,11 +39,15 @@ async function withDbTimeout<T>(thenable: PromiseLike<T>, label: string): Promis
     // Fallback: send alert on DB write timeout so we don't lose visibility
     fireAndForget(
       sendRateLimitedAlert(
-        { title: `PipelineLogger DB timeout: ${label}`, message: `DB write timed out after 15s. Error: ${msg}`, level: 'warning' },
+        {
+          title: `PipelineLogger DB timeout: ${label}`,
+          message: `DB write timed out after 15s. Error: ${msg}`,
+          level: 'warning',
+        },
         'plog-db-timeout',
-        5 * 60 * 1000,
+        5 * 60 * 1000
       ),
-      'plog-timeout-alert',
+      'plog-timeout-alert'
     )
     return null
   }
@@ -55,7 +61,11 @@ export interface PipelineLogHandle {
   id: number
   success(recordsProcessed?: number, metadata?: Record<string, unknown>): Promise<void>
   error(err: unknown, metadata?: Record<string, unknown>): Promise<void>
-  partialSuccess(recordsProcessed: number, failedItems: string[], metadata?: Record<string, unknown>): Promise<void>
+  partialSuccess(
+    recordsProcessed: number,
+    failedItems: string[],
+    metadata?: Record<string, unknown>
+  ): Promise<void>
   timeout(metadata?: Record<string, unknown>): Promise<void>
 }
 
@@ -95,7 +105,6 @@ export class PipelineLogger {
 
     // Monitoring & health
     'verify-fetchers',
-    'check-data-gaps',
     'check-trader-alerts',
     'cleanup-stuck-logs',
     'cleanup-data',
@@ -135,14 +144,19 @@ export class PipelineLogger {
     return null
   }
 
-  static async start(jobName: string, metadata?: Record<string, unknown>): Promise<PipelineLogHandle> {
+  static async start(
+    jobName: string,
+    metadata?: Record<string, unknown>
+  ): Promise<PipelineLogHandle> {
     const client = getClient()
 
     // Ping healthchecks.io start signal for critical jobs
     const hcSlug = this.getHealthcheckSlug(jobName)
     if (hcSlug) {
       pingHealthcheck(hcSlug, 'start').catch((err) => {
-        logger.warn(`[PipelineLogger] Healthcheck start ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
+        logger.warn(
+          `[PipelineLogger] Healthcheck start ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`
+        )
       })
     }
 
@@ -165,11 +179,20 @@ export class PipelineLogger {
             const { getSharedRedis } = await import('@/lib/cache/redis-client')
             const redis = await getSharedRedis()
             if (redis) {
-              await redis.set(`plog:running:${jobName}`, JSON.stringify({
-                job_name: jobName, status: 'running', started_at: new Date().toISOString(), metadata,
-              }), { ex: 600 }) // 10min TTL
+              await redis.set(
+                `plog:running:${jobName}`,
+                JSON.stringify({
+                  job_name: jobName,
+                  status: 'running',
+                  started_at: new Date().toISOString(),
+                  metadata,
+                }),
+                { ex: 600 }
+              ) // 10min TTL
             }
-          } catch { /* Redis also unavailable, proceed silently */ }
+          } catch {
+            /* Redis also unavailable, proceed silently */
+          }
           await sendAlert({
             title: `PipelineLogger 启动失败: ${jobName}`,
             message: `无法插入 pipeline_logs: ${error?.message || 'unknown error'}\n任务仍会运行，但不会被记录。已写入 Redis 备份。`,
@@ -177,7 +200,7 @@ export class PipelineLogger {
             details: { jobName, error: error?.message || 'no data returned' },
           })
         })(),
-        'pipeline-logger:start-alert',
+        'pipeline-logger:start-alert'
       )
       return createNoOpHandle()
     }
@@ -197,28 +220,41 @@ export class PipelineLogger {
               status: 'success',
               ended_at: endedAt,
               records_processed: recordsProcessed,
-              ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
+              ...(meta
+                ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } }
+                : { metadata: { ...metadata, duration_ms: durationMs } }),
             })
             .eq('id', logId)
-            .then(r => r),
+            .then((r) => r),
           `${jobName}:success`
         )
         // Ping healthchecks.io success (fire-and-forget)
-        if (hcSlug) pingHealthcheck(hcSlug, 'success').catch((err) => {
-          logger.warn(`[PipelineLogger] Healthcheck success ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
-        })
+        if (hcSlug)
+          pingHealthcheck(hcSlug, 'success').catch((err) => {
+            logger.warn(
+              `[PipelineLogger] Healthcheck success ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`
+            )
+          })
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
-            id: logId, job_name: jobName, status: 'success',
-            started_at: new Date(startedAt).toISOString(), ended_at: endedAt,
-            duration_ms: durationMs, records_processed: recordsProcessed,
+            id: logId,
+            job_name: jobName,
+            status: 'success',
+            started_at: new Date(startedAt).toISOString(),
+            ended_at: endedAt,
+            duration_ms: durationMs,
+            records_processed: recordsProcessed,
             metadata: { ...metadata, ...meta, duration_ms: durationMs },
           }),
           'clickhouse-pipeline-log-success'
         )
       },
-      async partialSuccess(recordsProcessed = 0, failedItems: string[] = [], meta?: Record<string, unknown>) {
+      async partialSuccess(
+        recordsProcessed = 0,
+        failedItems: string[] = [],
+        meta?: Record<string, unknown>
+      ) {
         const durationMs = Date.now() - startedAt
         const endedAt = new Date().toISOString()
         await withDbTimeout(
@@ -228,36 +264,67 @@ export class PipelineLogger {
               status: 'partial_success',
               ended_at: endedAt,
               records_processed: recordsProcessed,
-              error_message: failedItems.length > 0 ? `${failedItems.length} items failed: ${failedItems.slice(0, 20).join(', ')}` : null,
-              metadata: { ...metadata, ...meta, duration_ms: durationMs, failed_items: failedItems.slice(0, 50) },
+              error_message:
+                failedItems.length > 0
+                  ? `${failedItems.length} items failed: ${failedItems.slice(0, 20).join(', ')}`
+                  : null,
+              metadata: {
+                ...metadata,
+                ...meta,
+                duration_ms: durationMs,
+                failed_items: failedItems.slice(0, 50),
+              },
             })
             .eq('id', logId)
-            .then(r => r),
+            .then((r) => r),
           `${jobName}:partial`
         )
         // Ping healthchecks.io success (partial is still considered alive)
-        if (hcSlug) pingHealthcheck(hcSlug, 'success').catch((err) => {
-          logger.warn(`[PipelineLogger] Healthcheck success ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
-        })
+        if (hcSlug)
+          pingHealthcheck(hcSlug, 'success').catch((err) => {
+            logger.warn(
+              `[PipelineLogger] Healthcheck success ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`
+            )
+          })
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
-            id: logId, job_name: jobName, status: 'partial_success',
-            started_at: new Date(startedAt).toISOString(), ended_at: endedAt,
-            duration_ms: durationMs, records_processed: recordsProcessed,
+            id: logId,
+            job_name: jobName,
+            status: 'partial_success',
+            started_at: new Date(startedAt).toISOString(),
+            ended_at: endedAt,
+            duration_ms: durationMs,
+            records_processed: recordsProcessed,
             error_message: failedItems.length > 0 ? `${failedItems.length} items failed` : null,
-            metadata: { ...metadata, ...meta, duration_ms: durationMs, failed_items: failedItems.slice(0, 50) },
+            metadata: {
+              ...metadata,
+              ...meta,
+              duration_ms: durationMs,
+              failed_items: failedItems.slice(0, 50),
+            },
           }),
           'clickhouse-pipeline-log-partial-success'
         )
         // Auto-alert on partial failure if there are failed items
         if (failedItems.length > 0) {
-          fireAndForget(sendRateLimitedAlert({
-            title: `Cron 部分失败: ${jobName}`,
-            message: `${failedItems.length} items failed: ${failedItems.slice(0, 5).join(', ')}`,
-            level: 'warning',
-            details: { job: jobName, failed_count: failedItems.length, duration_ms: durationMs },
-          }, `plog:partial:${jobName}`, 600_000), 'pipeline-logger:partial-alert')
+          fireAndForget(
+            sendRateLimitedAlert(
+              {
+                title: `Cron 部分失败: ${jobName}`,
+                message: `${failedItems.length} items failed: ${failedItems.slice(0, 5).join(', ')}`,
+                level: 'warning',
+                details: {
+                  job: jobName,
+                  failed_count: failedItems.length,
+                  duration_ms: durationMs,
+                },
+              },
+              `plog:partial:${jobName}`,
+              600_000
+            ),
+            'pipeline-logger:partial-alert'
+          )
         }
       },
       async error(err, meta) {
@@ -271,33 +338,49 @@ export class PipelineLogger {
               status: 'error',
               ended_at: endedAt,
               error_message: errorMessage.slice(0, 2000),
-              ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
+              ...(meta
+                ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } }
+                : { metadata: { ...metadata, duration_ms: durationMs } }),
             })
             .eq('id', logId)
-            .then(r => r),
+            .then((r) => r),
           `${jobName}:error`
         )
         // Ping healthchecks.io failure (fire-and-forget)
-        if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch((err) => {
-          logger.warn(`[PipelineLogger] Healthcheck fail ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
-        })
+        if (hcSlug)
+          pingHealthcheck(hcSlug, 'fail').catch((err) => {
+            logger.warn(
+              `[PipelineLogger] Healthcheck fail ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`
+            )
+          })
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
-            id: logId, job_name: jobName, status: 'error',
-            started_at: new Date(startedAt).toISOString(), ended_at: endedAt,
-            duration_ms: durationMs, error_message: errorMessage.slice(0, 2000),
+            id: logId,
+            job_name: jobName,
+            status: 'error',
+            started_at: new Date(startedAt).toISOString(),
+            ended_at: endedAt,
+            duration_ms: durationMs,
+            error_message: errorMessage.slice(0, 2000),
             metadata: { ...metadata, ...meta, duration_ms: durationMs },
           }),
           'clickhouse-pipeline-log-error'
         )
         // Auto-alert on error (fire-and-forget, rate-limited per job, 1h cooldown)
-        fireAndForget(sendRateLimitedAlert({
-          title: `Cron 失败: ${jobName}`,
-          message: errorMessage.slice(0, 500),
-          level: 'critical',
-          details: { job: jobName, duration_ms: durationMs },
-        }, `plog:error:${jobName}`, 3_600_000), 'pipeline-logger:error-alert')
+        fireAndForget(
+          sendRateLimitedAlert(
+            {
+              title: `Cron 失败: ${jobName}`,
+              message: errorMessage.slice(0, 500),
+              level: 'critical',
+              details: { job: jobName, duration_ms: durationMs },
+            },
+            `plog:error:${jobName}`,
+            3_600_000
+          ),
+          'pipeline-logger:error-alert'
+        )
       },
       async timeout(meta) {
         const durationMs = Date.now() - startedAt
@@ -308,33 +391,48 @@ export class PipelineLogger {
             .update({
               status: 'timeout',
               ended_at: endedAt,
-              ...(meta ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } } : { metadata: { ...metadata, duration_ms: durationMs } }),
+              ...(meta
+                ? { metadata: { ...metadata, ...meta, duration_ms: durationMs } }
+                : { metadata: { ...metadata, duration_ms: durationMs } }),
             })
             .eq('id', logId)
-            .then(r => r),
+            .then((r) => r),
           `${jobName}:timeout`
         )
         // Ping healthchecks.io failure on timeout (fire-and-forget)
-        if (hcSlug) pingHealthcheck(hcSlug, 'fail').catch((err) => {
-          logger.warn(`[PipelineLogger] Healthcheck fail ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`)
-        })
+        if (hcSlug)
+          pingHealthcheck(hcSlug, 'fail').catch((err) => {
+            logger.warn(
+              `[PipelineLogger] Healthcheck fail ping failed for ${hcSlug}: ${err instanceof Error ? err.message : String(err)}`
+            )
+          })
         // Dual-write to ClickHouse (fire-and-forget)
         fireAndForget(
           syncPipelineLog({
-            id: logId, job_name: jobName, status: 'timeout',
-            started_at: new Date(startedAt).toISOString(), ended_at: endedAt,
+            id: logId,
+            job_name: jobName,
+            status: 'timeout',
+            started_at: new Date(startedAt).toISOString(),
+            ended_at: endedAt,
             duration_ms: durationMs,
             metadata: { ...metadata, ...meta, duration_ms: durationMs },
           }),
           'clickhouse-pipeline-log-timeout'
         )
         // Auto-alert on timeout (fire-and-forget, rate-limited per job, 2h cooldown)
-        fireAndForget(sendRateLimitedAlert({
-          title: `Cron 超时: ${jobName}`,
-          message: `Job ${jobName} timed out after ${Math.round(durationMs / 1000)}s`,
-          level: 'warning',
-          details: { job: jobName, duration_ms: durationMs },
-        }, `plog:timeout:${jobName}`, 7_200_000), 'pipeline-logger:timeout-alert')
+        fireAndForget(
+          sendRateLimitedAlert(
+            {
+              title: `Cron 超时: ${jobName}`,
+              message: `Job ${jobName} timed out after ${Math.round(durationMs / 1000)}s`,
+              level: 'warning',
+              details: { job: jobName, duration_ms: durationMs },
+            },
+            `plog:timeout:${jobName}`,
+            7_200_000
+          ),
+          'pipeline-logger:timeout-alert'
+        )
       },
     }
   }
@@ -353,14 +451,16 @@ export class PipelineLogger {
    * WHERE clause, then DISTINCT ON in SQL. Server-side aggregation also
    * bypasses the PostgREST 1000-row cap. Returns ~100 rows in 1-3s.
    */
-  static async getJobStatuses(): Promise<Array<{
-    job_name: string
-    started_at: string
-    status: string
-    records_processed: number
-    error_message: string | null
-    health_status: string
-  }>> {
+  static async getJobStatuses(): Promise<
+    Array<{
+      job_name: string
+      started_at: string
+      status: string
+      records_processed: number
+      error_message: string | null
+      health_status: string
+    }>
+  > {
     const client = getClient()
     const { data, error } = await client.rpc('get_pipeline_job_statuses_recent')
 
@@ -368,14 +468,16 @@ export class PipelineLogger {
       logger.warn(`[PipelineLogger] Failed to get job statuses: ${error.message}`)
       return []
     }
-    return (data as Array<{
-      job_name: string
-      started_at: string
-      status: string
-      records_processed: number
-      error_message: string | null
-      health_status: string
-    }>) || []
+    return (
+      (data as Array<{
+        job_name: string
+        started_at: string
+        status: string
+        records_processed: number
+        error_message: string | null
+        health_status: string
+      }>) || []
+    )
   }
 
   /**
@@ -388,23 +490,8 @@ export class PipelineLogger {
    * Fix: use the new `get_pipeline_job_stats_recent()` RPC. Returns ~133 rows
    * in 3-5s. Same time bound + GROUP BY but isolated from view contention.
    */
-  static async getJobStats(): Promise<Array<{
-    job_name: string
-    total_runs: number
-    success_count: number
-    error_count: number
-    success_rate: number
-    avg_duration_ms: number
-    last_run_at: string
-  }>> {
-    const client = getClient()
-    const { data, error } = await client.rpc('get_pipeline_job_stats_recent')
-
-    if (error) {
-      logger.warn(`[PipelineLogger] Failed to get job stats: ${error.message}`)
-      return []
-    }
-    return (data as Array<{
+  static async getJobStats(): Promise<
+    Array<{
       job_name: string
       total_runs: number
       success_count: number
@@ -412,7 +499,26 @@ export class PipelineLogger {
       success_rate: number
       avg_duration_ms: number
       last_run_at: string
-    }>) || []
+    }>
+  > {
+    const client = getClient()
+    const { data, error } = await client.rpc('get_pipeline_job_stats_recent')
+
+    if (error) {
+      logger.warn(`[PipelineLogger] Failed to get job stats: ${error.message}`)
+      return []
+    }
+    return (
+      (data as Array<{
+        job_name: string
+        total_runs: number
+        success_count: number
+        error_count: number
+        success_rate: number
+        avg_duration_ms: number
+        last_run_at: string
+      }>) || []
+    )
   }
 
   /**
@@ -425,12 +531,17 @@ export class PipelineLogger {
    * old failures drop out of the alert payload. Callers can pass a custom
    * window if needed (e.g., daily report may want 24h).
    */
-  static async getRecentFailures(limit = 20, withinMinutes = 120): Promise<Array<{
-    job_name: string
-    started_at: string
-    error_message: string | null
-    metadata: Record<string, unknown>
-  }>> {
+  static async getRecentFailures(
+    limit = 20,
+    withinMinutes = 120
+  ): Promise<
+    Array<{
+      job_name: string
+      started_at: string
+      error_message: string | null
+      metadata: Record<string, unknown>
+    }>
+  > {
     const client = getClient()
     const cutoff = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString()
     const { data, error } = await client
@@ -485,7 +596,9 @@ function createNoOpHandle(): PipelineLogHandle {
       logger.error(`[PipelineLogger:no-op] error — ${msg}`)
     },
     async partialSuccess(recordsProcessed = 0, failedItems: string[] = []) {
-      logger.warn(`[PipelineLogger:no-op] partial_success — ${recordsProcessed} processed, ${failedItems.length} failed`)
+      logger.warn(
+        `[PipelineLogger:no-op] partial_success — ${recordsProcessed} processed, ${failedItems.length} failed`
+      )
     },
     async timeout() {
       logger.warn('[PipelineLogger:no-op] timeout')

@@ -45,7 +45,6 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   // Monitoring & health
   'verify-fetchers': 360,
   'check-data-freshness': 360,
-  'check-data-gaps': 480,
   'check-trader-alerts': 720,
   'cleanup-stuck-logs': 120,
   'cleanup-data': 1440,
@@ -71,7 +70,12 @@ const EXPECTED_INTERVALS: Record<string, number> = {
 export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
   const statuses = await PipelineLogger.getJobStatuses()
   const now = Date.now()
-  const stuckJobs: Array<{ job: string; lastSuccess: string; expectedMinutes: number; actualMinutes: number }> = []
+  const stuckJobs: Array<{
+    job: string
+    lastSuccess: string
+    expectedMinutes: number
+    actualMinutes: number
+  }> = []
 
   // Build a map of job_name -> last success time
   const lastSuccessMap = new Map<string, string>()
@@ -115,36 +119,57 @@ export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
 
   if (stuckJobs.length > 0) {
     const jobList = stuckJobs
-      .map(j => `\u2022 ${j.job}: last success ${j.actualMinutes === -1 ? 'NEVER' : `${j.actualMinutes}m ago`} (expected: every ${j.expectedMinutes}m)`)
+      .map(
+        (j) =>
+          `\u2022 ${j.job}: last success ${j.actualMinutes === -1 ? 'NEVER' : `${j.actualMinutes}m ago`} (expected: every ${j.expectedMinutes}m)`
+      )
       .join('\n')
 
-    const jobKey = stuckJobs.map(j => j.job).sort().join(',')
-    await sendRateLimitedAlert({
-      title: `Meta-Monitor: ${stuckJobs.length} cron jobs 异常`,
-      message: `以下 cron job 超过预期间隔未成功运行:\n\n${jobList}`,
-      level: stuckJobs.length >= 3 ? 'critical' : 'warning',
-      details: {
-        stuck_count: stuckJobs.length,
-        total_monitored: Object.keys(EXPECTED_INTERVALS).length,
+    const jobKey = stuckJobs
+      .map((j) => j.job)
+      .sort()
+      .join(',')
+    await sendRateLimitedAlert(
+      {
+        title: `Meta-Monitor: ${stuckJobs.length} cron jobs 异常`,
+        message: `以下 cron job 超过预期间隔未成功运行:\n\n${jobList}`,
+        level: stuckJobs.length >= 3 ? 'critical' : 'warning',
+        details: {
+          stuck_count: stuckJobs.length,
+          total_monitored: Object.keys(EXPECTED_INTERVALS).length,
+        },
       },
-    }, `meta-monitor:${jobKey}`, 3 * 60 * 60 * 1000)
+      `meta-monitor:${jobKey}`,
+      3 * 60 * 60 * 1000
+    )
   }
 
   // Check if historical data cleanup is complete
   let cleanupComplete = false
   try {
     const supabase = getSupabaseAdmin()
-    const { data: cleanupStatus } = await supabase.from('pipeline_logs').select('metadata').eq('job_name', 'cleanup-violations').order('started_at', { ascending: false }).limit(1).single()
+    const { data: cleanupStatus } = await supabase
+      .from('pipeline_logs')
+      .select('metadata')
+      .eq('job_name', 'cleanup-violations')
+      .order('started_at', { ascending: false })
+      .limit(1)
+      .single()
     if (cleanupStatus?.metadata && typeof cleanupStatus.metadata === 'object') {
       const meta = cleanupStatus.metadata as Record<string, unknown>
       if (meta.done === true || meta.fixed === 0) {
         cleanupComplete = true
-        await sendRateLimitedAlert({
-          title: '历史数据清理完成!',
-          message: '所有历史违规数据已清理完毕。请运行:\nbash scripts/post-cleanup-orchestrate.sh\n\n此脚本将: VALIDATE 约束 → 重算指标 → 重算 composite',
-          level: 'info',
-          details: { action: 'run post-cleanup-orchestrate.sh' },
-        }, 'cleanup-complete', 24 * 60 * 60 * 1000)
+        await sendRateLimitedAlert(
+          {
+            title: '历史数据清理完成!',
+            message:
+              '所有历史违规数据已清理完毕。请运行:\nbash scripts/post-cleanup-orchestrate.sh\n\n此脚本将: VALIDATE 约束 → 重算指标 → 重算 composite',
+            level: 'info',
+            details: { action: 'run post-cleanup-orchestrate.sh' },
+          },
+          'cleanup-complete',
+          24 * 60 * 60 * 1000
+        )
       }
     }
   } catch (err) {
@@ -155,7 +180,9 @@ export const GET = withCron('meta-monitor', async (_request: NextRequest) => {
     })
   }
 
-  logger.info(`[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck, cleanup=${cleanupComplete ? 'done' : 'running'}`)
+  logger.info(
+    `[meta-monitor] Checked ${Object.keys(EXPECTED_INTERVALS).length} jobs, ${stuckJobs.length} stuck, cleanup=${cleanupComplete ? 'done' : 'running'}`
+  )
 
   return {
     count: stuckJobs.length,
