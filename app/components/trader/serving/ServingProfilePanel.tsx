@@ -23,6 +23,7 @@ import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import { useBotHeader } from '@/lib/hooks/useBotHeader'
 import { useTraderRecords, useCopierAggregate } from '@/lib/hooks/useTraderRecords'
 import { PeriodSelector, type Period } from '@/app/components/trader/performance/PeriodSelector'
+import { promoteExtrasMetrics, EXTRAS_PROMOTABLE_KEYS } from '@/lib/constants/metric-registry'
 import MetricGrid from './MetricGrid'
 import SignalChips from './SignalChips'
 import CoreCharts from './CoreCharts'
@@ -182,20 +183,14 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
   const isBot = firstScreen.traderKind === 'bot'
   const { bot } = useBotHeader({ source, exchangeTraderId, enabled: isBot })
 
-  // 独家信号 (spec §12.2/§12.3): numeric extras the registry knows (nav —
-  // BitMart/Gate net asset value) are promoted into the stats grid; the
-  // qualitative ones (style labels, risk rating, last liquidation) render
-  // as SignalChips. Both NULL-collapse when the source has no signal.
+  // 独家信号 (spec §12.2/§12.3): numeric extras the registry knows (risk
+  // ratios like sortino/volatility/P-L-ratio, NAV, risk rating) are promoted
+  // into the stats grid via the declarative alias map — surfacing data the
+  // adapters already capture; the qualitative signals (style labels, last
+  // liquidation) render as SignalChips. Both NULL-collapse with no signal.
   const gridStats = useMemo<Record<string, number | string | null>>(() => {
     if (!core.modules) return {}
-    const merged = { ...core.modules.stats }
-    for (const key of ['nav', 'risk_rating'] as const) {
-      if (merged[key] !== undefined) continue
-      const raw = core.modules.extras[key]
-      const n = typeof raw === 'string' ? Number(raw) : raw
-      if (typeof n === 'number' && Number.isFinite(n)) merged[key] = n
-    }
-    return merged
+    return promoteExtrasMetrics(core.modules.stats, core.modules.extras)
   }, [core.modules])
 
   // Dormant trader (e.g. Bitget "*不活跃"): every core metric is 0 and the
@@ -286,8 +281,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
               ...(capability?.metrics ?? Object.keys(core.modules.stats)),
               // Extras-sourced metrics aren't in the capability RPC's
               // trader_stats column scan — allow them when present.
-              'nav',
-              'risk_rating',
+              ...EXTRAS_PROMOTABLE_KEYS,
             ]}
             currency={core.modules.currency}
           />
