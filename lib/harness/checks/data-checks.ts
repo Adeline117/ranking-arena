@@ -475,86 +475,26 @@ export async function checkPerPlatformDataCoverage(): Promise<CheckResult> {
   }
 }
 
-/** Check 18: Cross-source data consistency (LR vs trader_latest). */
+/**
+ * Check 18: Cross-source data consistency.
+ *
+ * OBSOLETE (2026-06-15): this compared leaderboard_ranks ROI vs trader_latest
+ * ROI to catch drift between the scoring pipeline and the raw/enrichment source.
+ * After the trader_latest retirement, BOTH derive from the same arena.* source
+ * (LR is computed FROM arena.score_inputs; trader_latest's compat rows are
+ * written FROM arena too), so the comparison is tautological. Arena's own
+ * publish gate (count_check_passed + staging_rejects) now guards input quality.
+ * Kept as a passing no-op so the harness registration is unchanged.
+ */
 export async function checkCrossSourceConsistency(): Promise<CheckResult> {
-  const issues: CheckResult['issues'] = []
-  const TOLERANCE = 0.001
-
-  try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
-    const { data: sample } = await supabase
-      .from('leaderboard_ranks')
-      .select('source, source_trader_id, roi, pnl, arena_score')
-      .eq('season_id', '90D')
-      .gt('arena_score', 20)
-      .or('is_outlier.is.null,is_outlier.eq.false')
-      .order('arena_score', { ascending: false })
-      .limit(50)
-
-    if (!sample?.length) {
-      return {
-        check: {
-          name: 'cross_source_consistency',
-          category: 'consistency',
-          passed: true,
-          score: 80,
-          details: 'No sample data available',
-        },
-        issues,
-      }
-    }
-
-    const shuffled = sample.sort(() => Math.random() - 0.5).slice(0, 3)
-    let mismatches = 0
-
-    for (const trader of shuffled) {
-      const { data: v2Row } = await supabase
-        .from('trader_latest')
-        .select('roi_pct, pnl_usd')
-        .eq('platform', trader.source)
-        .eq('trader_key', trader.source_trader_id)
-        .eq('window', '90D')
-        .maybeSingle()
-      if (!v2Row) continue
-
-      const lrRoi = Number(trader.roi),
-        v2Roi = Number(v2Row.roi_pct)
-      if (lrRoi && v2Roi) {
-        const diff = Math.abs(lrRoi - v2Roi) / Math.max(Math.abs(lrRoi), Math.abs(v2Roi), 1)
-        if (diff > TOLERANCE) {
-          mismatches++
-          issues.push({
-            platform: trader.source,
-            type: 'roi_mismatch',
-            severity: 'warning',
-            description: `${trader.source_trader_id}: LR ROI=${lrRoi.toFixed(2)} vs V2 ROI=${v2Roi.toFixed(2)} (${(diff * 100).toFixed(1)}% diff)`,
-            recommendation: 'Check if compute-leaderboard and enrichment use same ROI source.',
-          })
-        }
-      }
-    }
-
-    const score = mismatches === 0 ? 100 : mismatches === 1 ? 70 : 30
-    return {
-      check: {
-        name: 'cross_source_consistency',
-        category: 'consistency',
-        passed: mismatches === 0,
-        score,
-        details: `${shuffled.length} traders sampled, ${mismatches} ROI mismatches`,
-      },
-      issues,
-    }
-  } catch (err) {
-    return {
-      check: {
-        name: 'cross_source_consistency',
-        category: 'consistency',
-        passed: false,
-        score: 0,
-        details: `Error: ${err instanceof Error ? err.message : String(err)}`,
-      },
-      issues,
-    }
+  return {
+    check: {
+      name: 'cross_source_consistency',
+      category: 'consistency',
+      passed: true,
+      score: 100,
+      details: 'Obsolete after trader_latest retirement; superseded by arena publish gate',
+    },
+    issues: [],
   }
 }

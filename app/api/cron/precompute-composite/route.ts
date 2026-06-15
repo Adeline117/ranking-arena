@@ -105,16 +105,18 @@ export async function GET(request: NextRequest) {
         await client.query('BEGIN')
         await client.query(`SET LOCAL statement_timeout = '${WINDOW_QUERY_TIMEOUT_S}s'`)
 
-        // Use trader_latest (45K rows, PRIMARY) instead of trader_snapshots_v2 (10M+ archive).
-        // This was the root cause of consistent 300s timeouts since 2026-05-17.
+        // Migrated off retiring trader_latest → leaderboard_ranks (the scored
+        // top-N is exactly what this composite needs; season_id↔window,
+        // source↔platform, roi/pnl aliased, computed_at as as_of_ts).
         const result = await client.query<SnapshotRow>(
-          `SELECT platform, trader_key, updated_at AS as_of_ts, arena_score,
-                  roi_pct, pnl_usd, max_drawdown, win_rate,
+          `SELECT source AS platform, source_trader_id AS trader_key,
+                  computed_at AS as_of_ts, arena_score,
+                  roi AS roi_pct, pnl AS pnl_usd, max_drawdown, win_rate,
                   trades_count, followers
-           FROM trader_latest
-           WHERE "window" = $1
+           FROM leaderboard_ranks
+           WHERE season_id = $1
              AND arena_score IS NOT NULL
-             AND updated_at >= $2
+             AND computed_at >= $2
            ORDER BY arena_score DESC NULLS LAST
            LIMIT 2500`,
           [seasonId, freshnessThreshold]
