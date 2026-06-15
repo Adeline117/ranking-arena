@@ -5885,6 +5885,7 @@ const en = {
   metaLeadingDays: 'Days leading',
   metaCopierCap: 'Copier cap',
   metaMarginBalance: 'Margin balance',
+  holdingDistribution: 'Holding Duration',
   colSymbol: 'Symbol',
   colSide: 'Side',
   colLeverage: 'Leverage',

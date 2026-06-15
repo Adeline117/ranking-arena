@@ -5764,6 +5764,7 @@ const ko = {
   metaLeadingDays: '리딩 일수',
   metaCopierCap: '카피 상한',
   metaMarginBalance: '증거금 잔액',
+  holdingDistribution: '보유 기간 분포',
   colSymbol: '심볼',
   colSide: '방향',
   colLeverage: '레버리지',
