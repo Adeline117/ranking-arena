@@ -26,7 +26,6 @@ const EXPECTED_INTERVALS: Record<string, number> = {
   'aggregate-daily-snapshots': 1440, // daily
   'compute-derived-metrics': 1440,
   'precompute-composite': 240,
-  'calculate-advanced-metrics': 480,
   'backfill-data': 240,
 
   // Discovery & enrichment
