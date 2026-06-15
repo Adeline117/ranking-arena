@@ -3077,6 +3077,7 @@ const ja = {
   turnover24h: '24h取引高',
   fundingRate: 'ファンディングレート',
   openInterest: 'オープンインタレスト',
+  fundingRates: '資金調達率',
   predictedFunding: '予測ファンディング',
   trending: 'トレンド',
   newlyListed: '新規',

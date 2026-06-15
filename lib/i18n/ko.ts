@@ -3236,6 +3236,7 @@ const ko = {
   turnover24h: '24시간 거래대금',
   fundingRate: '펀딩비',
   openInterest: '미결제약정',
+  fundingRates: '펀딩 비율',
   predictedFunding: '예상 펀딩비',
   trending: '인기',
   newlyListed: '신규',
