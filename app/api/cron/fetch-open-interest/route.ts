@@ -25,6 +25,11 @@ interface ExchangeConfig {
   url: string
   symbols: string[]
   responseMapper: (data: Record<string, unknown>, symbol: string) => OpenInterestData | null
+  // OI endpoints on Binance/Bybit/Bitget return base-coin QUANTITY, not USD. For
+  // those, fetch a price and compute open_interest_usd = qty * price. OKX returns
+  // oiUsd directly, so it needs no priceUrl.
+  priceUrl?: (symbol: string) => string
+  priceParse?: (data: Record<string, unknown>) => number | null
 }
 
 interface OpenInterestData {
@@ -49,12 +54,16 @@ const EXCHANGES: ExchangeConfig[] = [
       return {
         platform: 'binance',
         symbol: (data.symbol as string) || symbol,
-        open_interest_usd:
-          parseFloat(data.openInterest as string) * parseFloat((data.price as string) || '0'),
+        // /fapi/v1/openInterest returns only contract qty (no price) — the old
+        // code multiplied by a non-existent data.price → always $0. USD is
+        // computed below via priceUrl (markPrice). Leave 0 here.
+        open_interest_usd: 0,
         open_interest_qty: parseFloat(data.openInterest as string),
         timestamp: new Date().toISOString(),
       }
     },
+    priceUrl: (symbol) => `https://fapi.binance.com/fapi/v1/premiumIndex?symbol=${symbol}`,
+    priceParse: (d) => parseFloat((d.markPrice as string) || '0') || null,
   },
   {
     name: 'bybit',
@@ -67,9 +76,17 @@ const EXCHANGES: ExchangeConfig[] = [
       return {
         platform: 'bybit',
         symbol: oi.symbol || symbol,
-        open_interest_usd: parseFloat(oi.openInterest),
+        // Bybit v5 openInterest is base-coin qty (NOT USD) — USD via priceUrl.
+        open_interest_usd: 0,
+        open_interest_qty: parseFloat(oi.openInterest),
         timestamp: new Date(parseInt(oi.timestamp)).toISOString(),
       }
+    },
+    priceUrl: (symbol) =>
+      `https://api.bybit.com/v5/market/tickers?category=linear&symbol=${symbol}`,
+    priceParse: (d) => {
+      const row = (d.result as { list?: Array<Record<string, string>> } | undefined)?.list?.[0]
+      return row ? parseFloat(row.lastPrice) || null : null
     },
   },
   {
@@ -83,7 +100,10 @@ const EXCHANGES: ExchangeConfig[] = [
       return {
         platform: 'okx',
         symbol: oi.instId || symbol,
-        open_interest_usd: parseFloat(oi.oiCcy), // Already in USD
+        // OKX returns oiUsd (true USD value) directly; oiCcy is the base-coin
+        // amount (the old code used oiCcy and mislabeled it "Already in USD").
+        open_interest_usd: parseFloat(oi.oiUsd),
+        open_interest_qty: parseFloat(oi.oiCcy),
         timestamp: new Date(parseInt(oi.ts)).toISOString(),
       }
     },
@@ -93,15 +113,26 @@ const EXCHANGES: ExchangeConfig[] = [
     url: 'https://api.bitget.com/api/v2/mix/market/open-interest',
     symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
     responseMapper: (data: Record<string, unknown>, symbol: string) => {
-      const d = data.data as Record<string, string> | undefined
-      if (!d || !d.openInterest) return null
+      // Actual shape: { data: { openInterestList: [{ symbol, size }] } }. The old
+      // code read data.data.openInterest (does not exist) → always returned null,
+      // so Bitget OI was never recorded at all.
+      const row = (data.data as { openInterestList?: Array<Record<string, string>> } | undefined)
+        ?.openInterestList?.[0]
+      if (!row || !row.size) return null
       return {
         platform: 'bitget',
-        symbol: d.symbol || symbol,
-        open_interest_usd: parseFloat(d.openInterestUsd || d.openInterest),
-        open_interest_qty: parseFloat(d.openInterest),
+        symbol: row.symbol || symbol,
+        // size is base-coin OI; USD computed via priceUrl (ticker lastPr).
+        open_interest_usd: 0,
+        open_interest_qty: parseFloat(row.size),
         timestamp: new Date().toISOString(),
       }
+    },
+    priceUrl: (symbol) =>
+      `https://api.bitget.com/api/v2/mix/market/ticker?symbol=${symbol}&productType=usdt-futures`,
+    priceParse: (d) => {
+      const row = (d.data as Array<Record<string, string>> | undefined)?.[0]
+      return row ? parseFloat(row.lastPr) || null : null
     },
   },
 ]
@@ -151,7 +182,32 @@ async function fetchOpenInterest(
     }
 
     const data = await response.json()
-    return exchange.responseMapper(data, symbol)
+    const oi = exchange.responseMapper(data, symbol)
+
+    // Base-coin exchanges (binance/bybit/bitget) report OI as a quantity, not USD.
+    // Fetch the exchange's price and compute open_interest_usd = qty * price. If the
+    // price fetch fails we keep usd=0 but still record the qty (no row is lost).
+    if (
+      oi &&
+      exchange.priceUrl &&
+      exchange.priceParse &&
+      (!oi.open_interest_usd || oi.open_interest_usd === 0) &&
+      oi.open_interest_qty
+    ) {
+      try {
+        const pxRes = await fetch(exchange.priceUrl(symbol), {
+          headers: { Accept: 'application/json', 'User-Agent': 'RankingArena/1.0' },
+        })
+        if (pxRes.ok) {
+          const price = exchange.priceParse(await pxRes.json())
+          if (price && price > 0) oi.open_interest_usd = oi.open_interest_qty * price
+        }
+      } catch {
+        // price fetch failed — leave usd at 0; qty is still recorded
+      }
+    }
+
+    return oi
   } catch (error) {
     logger.warn(
       `[oi] ${exchange.name} ${symbol}: ${error instanceof Error ? error.message : String(error)}`
