@@ -367,6 +367,21 @@ const enCore = {
   unknown: 'unknown',
   switchLanguage: 'Switch language',
   copiedToClipboard: 'Copied!',
+
+  // ── Ranking controls (homepage SSR shell — MUST stay in core) ───────
+  // RankingControls is SSR'd in app/page.tsx and renders these on first paint.
+  // If they live only in the async full en.ts, a warm server renders the full
+  // value while the client hydrates with core-only → text mismatch → React #418
+  // on every load. Keeping them in core makes SSR and hydration resolve identically.
+  rankingControlsOffline: 'You are offline. Rankings data is still visible but cannot be updated.',
+  rankingControlsDataAsOf: 'Data as of',
+  rankingControlsTakingLong: 'This is taking longer than expected.',
+  rankingControlsRetry: 'Retry',
+  rankingControlsPrev: 'Prev',
+  rankingControlsNext: 'Next',
+  rankingControlsLoading: 'Loading…',
+  rankingControlsShowingTop: 'Showing top {count} traders. Unlock all 34,000+ with Pro',
+  rankingControlsUpgrade: 'Upgrade →',
 } as const
 
 export default enCore
