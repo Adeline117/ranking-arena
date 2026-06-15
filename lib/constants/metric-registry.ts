@@ -66,6 +66,32 @@ export const METRIC_REGISTRY: readonly MetricDef[] = [
   },
   // NAV is a unit net value (BitMart "Latest NAV" starts at 1.0), not money.
   { key: 'nav', i18nKey: 'metricNav', format: 'ratio', tier: 'advanced' },
+
+  // Trade-quality / activity — captured in extras by many sources (okx/gate/
+  // coinex/bybit/xt/htx…) but previously unsurfaced. NULL-collapse as usual.
+  { key: 'total_roi', i18nKey: 'metricTotalRoi', format: 'pct', tier: 'advanced' },
+  { key: 'total_pnl', i18nKey: 'metricTotalPnl', format: 'money', tier: 'advanced' },
+  { key: 'largest_profit', i18nKey: 'metricLargestProfit', format: 'money', tier: 'advanced' },
+  {
+    key: 'largest_loss',
+    i18nKey: 'metricLargestLoss',
+    format: 'money',
+    tier: 'advanced',
+    inverted: true,
+  },
+  { key: 'avg_profit', i18nKey: 'metricAvgProfit', format: 'money', tier: 'advanced' },
+  { key: 'avg_loss', i18nKey: 'metricAvgLoss', format: 'money', tier: 'advanced', inverted: true },
+  { key: 'avg_pnl_per_trade', i18nKey: 'metricAvgPnlPerTrade', format: 'money', tier: 'advanced' },
+  { key: 'long_short_ratio', i18nKey: 'metricLongShortRatio', format: 'ratio', tier: 'advanced' },
+  { key: 'trades_per_week', i18nKey: 'metricTradesPerWeek', format: 'count', tier: 'standard' },
+  { key: 'profit_days', i18nKey: 'metricProfitDays', format: 'count', tier: 'advanced' },
+  {
+    key: 'loss_days',
+    i18nKey: 'metricLossDays',
+    format: 'count',
+    tier: 'advanced',
+    inverted: true,
+  },
 ] as const
 
 /**
@@ -91,6 +117,25 @@ export const EXTRAS_METRIC_ALIASES: Readonly<Record<string, readonly string[]>> 
   annualized_roi: ['annualized_roi'],
   nav: ['nav', 'net_asset_value', 'roi_net_value'],
   risk_rating: ['risk_rating'],
+  // Trade-quality / activity (categorical aliases like 'trade_frequency' are
+  // safe — promoteExtrasMetrics only promotes finite numbers, so string labels
+  // are ignored rather than mis-shown).
+  total_roi: ['total_roi', 'total_return_rate'],
+  total_pnl: ['total_pnl', 'total_profit_amount', 'cumulative_net_profit'],
+  largest_profit: ['largest_profit'],
+  largest_loss: ['largest_loss'],
+  avg_profit: ['avg_profit', 'average_profit'],
+  avg_loss: ['avg_loss', 'average_loss'],
+  avg_pnl_per_trade: ['avg_pnl_per_trade'],
+  long_short_ratio: ['long_short_ratio'],
+  trades_per_week: [
+    'trades_per_week',
+    'weekly_trades',
+    'trade_frequency_per_week',
+    'trade_frequency',
+  ],
+  profit_days: ['profit_days', 'win_days'],
+  loss_days: ['loss_days'],
 } as const
 
 /**
