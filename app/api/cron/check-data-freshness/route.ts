@@ -115,12 +115,13 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
   // 检查每个平台的数据新鲜度
   for (const platform of platforms) {
     try {
-      // 查询该平台最新的快照记录（trader_latest = 1 row per platform+trader+window）
+      // 平台最新评分时间。迁离退役的 trader_latest → leaderboard_ranks.computed_at
+      // （source 即 platform；compute 每小时跑，computed_at 即新鲜度信号）。
       const { data, error } = await supabase
-        .from('trader_latest')
-        .select('updated_at')
-        .eq('platform', platform)
-        .order('updated_at', { ascending: false })
+        .from('leaderboard_ranks')
+        .select('computed_at')
+        .eq('source', platform)
+        .order('computed_at', { ascending: false })
         .limit(1)
         .single()
 
@@ -128,13 +129,13 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         logger.dbError('query-platform-freshness', error, { platform })
       }
 
-      // 获取记录数量 — trader_latest is small (~45K rows), estimated still fine
+      // 该平台已排名交易员数（estimated）
       const { count } = await supabase
-        .from('trader_latest')
-        .select('platform', { count: 'estimated', head: true })
-        .eq('platform', platform)
+        .from('leaderboard_ranks')
+        .select('source', { count: 'estimated', head: true })
+        .eq('source', platform)
 
-      const lastUpdate = data?.updated_at || null
+      const lastUpdate = data?.computed_at || null
       let ageMs: number | null = null
       let ageHours: number | null = null
       let status: 'fresh' | 'stale' | 'critical' | 'unknown' = 'unknown'
