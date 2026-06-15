@@ -88,20 +88,28 @@ function CompareContent() {
     }
 
     const init = async () => {
-      try {
-        const subRes = await fetch('/api/subscription', {
-          headers: { Authorization: `Bearer ${accessToken}` },
+      // The subscription fetch only gates Pro UI; it has NO bearing on which
+      // traders to load (ids come from the URL). Running it before loadTraders
+      // serialized two independent round-trips and blocked the comparison data —
+      // the page's primary content — behind the subscription call. Run both
+      // concurrently so the comparison renders as soon as its own data is ready.
+      const subPromise = fetch('/api/subscription', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+        .then(async (subRes) => {
+          if (subRes.ok) {
+            const subData = await subRes.json()
+            const tier = subData.subscription?.tier || 'free'
+            setIsPro(BETA_PRO_FEATURES_FREE || tier === 'pro')
+          }
         })
-        if (subRes.ok) {
-          const subData = await subRes.json()
-          const tier = subData.subscription?.tier || 'free'
-          setIsPro(BETA_PRO_FEATURES_FREE || tier === 'pro')
-        }
+        .catch((err) => logger.error('Subscription fetch failed:', err))
 
-        const ids = searchParams.get('ids')
-        if (ids) {
-          await loadTraders(ids.split(','))
-        }
+      const ids = searchParams.get('ids')
+      const tradersPromise = ids ? loadTraders(ids.split(',')) : Promise.resolve()
+
+      try {
+        await Promise.all([subPromise, tradersPromise])
       } catch (err) {
         logger.error('Init failed:', err)
       } finally {
