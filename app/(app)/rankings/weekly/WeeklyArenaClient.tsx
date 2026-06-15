@@ -175,7 +175,18 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                           {(row.nickname ?? row.exchangeTraderId).slice(0, 1).toUpperCase()}
                         </span>
                       )}
-                      <Text size="sm" weight="bold">
+                      <Text
+                        size="sm"
+                        weight="bold"
+                        style={{
+                          display: 'inline-block',
+                          maxWidth: 200,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          verticalAlign: 'middle',
+                        }}
+                      >
                         {row.nickname ?? row.exchangeTraderId}
                       </Text>
                       {row.traderKind === 'bot' && (
