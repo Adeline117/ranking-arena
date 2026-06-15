@@ -35,6 +35,27 @@ describe('promoteExtrasMetrics', () => {
     expect(merged.pnl_ratio).toBe(2.2)
   })
 
+  it('promotes trade-quality extras (largest win/loss, long/short, trades/week)', () => {
+    const merged = promoteExtrasMetrics(
+      {},
+      {
+        largest_profit: 5000,
+        largest_loss: -1200,
+        long_short_ratio: 1.8,
+        weekly_trades: 42, // trades_per_week alias
+        trade_frequency: 'high', // categorical → ignored (not finite)
+        profit_days: 18,
+        total_roi: 305.5,
+      }
+    )
+    expect(merged.largest_profit).toBe(5000)
+    expect(merged.largest_loss).toBe(-1200)
+    expect(merged.long_short_ratio).toBe(1.8)
+    expect(merged.trades_per_week).toBe(42)
+    expect(merged.profit_days).toBe(18)
+    expect(merged.total_roi).toBe(305.5)
+  })
+
   it('every promotable key resolves to a real registry metric', () => {
     const stats = Object.fromEntries(EXTRAS_PROMOTABLE_KEYS.map((k) => [k, 1]))
     const defs = displayableMetrics(EXTRAS_PROMOTABLE_KEYS, stats)
