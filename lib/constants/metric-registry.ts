@@ -68,6 +68,59 @@ export const METRIC_REGISTRY: readonly MetricDef[] = [
   { key: 'nav', i18nKey: 'metricNav', format: 'ratio', tier: 'advanced' },
 ] as const
 
+/**
+ * Numeric metrics that live in `trader_stats.extras` under source-specific
+ * keys but map onto a registry metric. When the first-class stat column is
+ * NULL, the grid borrows the first finite alias value. This surfaces risk
+ * ratios adapters ALREADY capture (sortino, volatility, P/L ratio) that were
+ * previously invisible because the serving panel only promoted nav/risk_rating.
+ *
+ * registryKey → ordered extras aliases (first finite wins).
+ */
+export const EXTRAS_METRIC_ALIASES: Readonly<Record<string, readonly string[]>> = {
+  sortino: ['sortino'],
+  calmar: ['calmar'],
+  volatility: ['volatility', 'roe_volatility'],
+  pnl_ratio: [
+    'pnl_ratio',
+    'profit_to_loss_ratio',
+    'profit_loss_ratio',
+    'profit_and_loss_ratio',
+    'pl_ratio',
+  ],
+  annualized_roi: ['annualized_roi'],
+  nav: ['nav', 'net_asset_value', 'roi_net_value'],
+  risk_rating: ['risk_rating'],
+} as const
+
+/**
+ * Merge extras-sourced numeric metrics into a stats block under their registry
+ * keys, without clobbering a non-NULL first-class column. Pure: returns a new
+ * object. Non-finite / non-numeric aliases are ignored (NULL-collapse holds).
+ */
+export function promoteExtrasMetrics(
+  stats: Record<string, number | string | null>,
+  extras: Record<string, unknown>
+): Record<string, number | string | null> {
+  const merged = { ...stats }
+  for (const [registryKey, aliases] of Object.entries(EXTRAS_METRIC_ALIASES)) {
+    const current = merged[registryKey]
+    if (current !== undefined && current !== null) continue
+    for (const alias of aliases) {
+      const raw = extras[alias]
+      const n = typeof raw === 'string' ? Number(raw) : raw
+      if (typeof n === 'number' && Number.isFinite(n)) {
+        merged[registryKey] = n
+        break
+      }
+    }
+  }
+  return merged
+}
+
+/** Registry keys that may be sourced from extras — for capabilityMetrics. */
+export const EXTRAS_PROMOTABLE_KEYS = Object.keys(EXTRAS_METRIC_ALIASES)
+
 /** Metrics displayable for one trader: capability ∩ non-NULL values. */
 export function displayableMetrics(
   capabilityMetrics: string[],
