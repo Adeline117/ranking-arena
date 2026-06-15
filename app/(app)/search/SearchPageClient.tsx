@@ -1083,6 +1083,11 @@ function SearchContent() {
               gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))',
               gap: 16,
               marginTop: 16,
+              // Keep each section at its natural height. Default align-items:stretch
+              // made an empty "No Traders found" card stretch to match the tall Posts
+              // column, leaving a large dead grey panel (common, since trader search
+              // often returns 0 results).
+              alignItems: 'start',
             }}
           >
             {(activeTab === 'all' || activeTab === 'traders') &&
