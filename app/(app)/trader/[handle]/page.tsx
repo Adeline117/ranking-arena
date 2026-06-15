@@ -159,16 +159,44 @@ const cachedServingResolveISR = unstable_cache(
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
+// Sentinel for "the cached/replica path TIMED OUT" — distinct from a genuine
+// null (trader not found). ROOT-CAUSE FIX (2026-06-15): a transient timeout here
+// used to collapse to null → the body fell into legacy mode → notFound() → a
+// VALID serving trader got a route-cached "Trader Not Found" for 5 min. The
+// resolve RPC is ~0.1s; the 3s race is lost to unstable_cache / connection-pool
+// queuing under cron contention, NOT the query. So on timeout we retry ONCE
+// against the read replica directly (bypassing the contended cache layer),
+// which recovers virtually all transient failures. Genuine not-found still
+// returns null → a correct (and cacheable) 404.
+const SERVING_RESOLVE_TIMEOUT = Symbol('serving-resolve-timeout')
+
 const cachedServingResolve = cache(async (handle: string, source?: string) => {
   try {
-    return await Promise.race([
+    const raced = await Promise.race([
       cachedServingResolveISR(handle, source),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)),
+      new Promise<typeof SERVING_RESOLVE_TIMEOUT>((resolve) =>
+        setTimeout(() => resolve(SERVING_RESOLVE_TIMEOUT), SSR_QUERY_TIMEOUT_MS)
+      ),
     ])
+    if (raced !== SERVING_RESOLVE_TIMEOUT) return raced
   } catch (err) {
     if (err instanceof Error && err.message === 'TRADER_RESOLVE_NULL') return null
     logger.error(
       '[trader/page] resolveServingTrader failed:',
+      err instanceof Error ? err.message : err
+    )
+    return null
+  }
+
+  // Timed out: one direct retry, bypassing the (contended) unstable_cache layer.
+  try {
+    return await Promise.race([
+      resolveServingTrader(getReadReplica(), { handle, source }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_QUERY_TIMEOUT_MS)),
+    ])
+  } catch (err) {
+    logger.error(
+      '[trader/page] serving resolve retry failed:',
       err instanceof Error ? err.message : err
     )
     return null
