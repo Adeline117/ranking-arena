@@ -23,7 +23,10 @@ interface Props {
 /** Format a Date to "HH:MM" in the user's locale */
 function formatTime(date: Date): string {
   try {
-    return date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+    // Pin locale: this component is SSR'd in the homepage shell AND hydrates on
+    // the client. A runtime-default locale (undefined) formats differently on
+    // server vs browser → React #418 text-content hydration mismatch.
+    return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })
   } catch {
     const h = String(date.getHours()).padStart(2, '0')
     const m = String(date.getMinutes()).padStart(2, '0')
@@ -271,7 +274,7 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
           }}
         >
           <span style={{ flex: 1 }}>
-            {t('rankingControlsShowingTop').replace('{count}', totalCount.toLocaleString())}
+            {t('rankingControlsShowingTop').replace('{count}', totalCount.toLocaleString('en-US'))}
           </span>
           <span
             style={{
