@@ -169,7 +169,7 @@ describe('GET /api/cron/check-data-freshness', () => {
               order: jest.fn().mockReturnValue({
                 limit: jest.fn().mockReturnValue({
                   single: jest.fn().mockResolvedValue({
-                    data: { updated_at: recentTime },
+                    data: { computed_at: recentTime },
                     error: null,
                   }),
                 }),
@@ -211,7 +211,7 @@ describe('GET /api/cron/check-data-freshness', () => {
                     callIdx++
                     const time = callIdx === 1 ? staleTime : freshTime
                     return Promise.resolve({
-                      data: { updated_at: time },
+                      data: { computed_at: time },
                       error: null,
                     })
                   }),
