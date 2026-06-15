@@ -67,8 +67,17 @@ export default function ActivityFeedItem({
   const relativeTime = formatRelativeTime(activity.occurred_at)
   const sourceLabel = formatSourceLabel(activity.source)
 
-  // Trader handle link
-  const traderHref = activity.handle ? `/trader/${encodeURIComponent(activity.handle)}` : null
+  // Some trader handles are (masked) emails, e.g. "lo***@gmail.com". This feed is
+  // public/anonymous — never surface an email-shaped name as the display name.
+  const rawName = activity.handle ?? activity.source_trader_id
+  const displayName = isEmailLike(rawName) ? 'Anonymous trader' : rawName
+
+  // Trader handle link — suppress for email-shaped handles (would be a broken
+  // /trader/<email> link AND would leak the address in the URL).
+  const traderHref =
+    activity.handle && !isEmailLike(activity.handle)
+      ? `/trader/${encodeURIComponent(activity.handle)}`
+      : null
 
   // Share link
   const shareHref = `/feed/${activity.id}`
@@ -149,7 +158,7 @@ export default function ActivityFeedItem({
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
               }}
             >
-              {(activity.handle ?? '?')[0]?.toUpperCase()}
+              {(displayName ?? '?')[0]?.toUpperCase()}
             </span>
           </div>
         )}
@@ -177,19 +186,15 @@ export default function ActivityFeedItem({
               }}
               onClick={(e) => e.stopPropagation()}
             >
-              {activity.handle}
+              {displayName}
             </Link>
           ) : (
-            <span style={{ color, fontWeight: 700 }}>
-              {activity.handle ?? activity.source_trader_id}
-            </span>
+            <span style={{ color, fontWeight: 700 }}>{displayName}</span>
           )}{' '}
           <span style={{ color: tokens.colors.text.secondary }}>
-            {/* Strip the handle from the text since we render it separately with a link */}
-            {activity.activity_text.replace(
-              new RegExp(`^${escapeRegExp(activity.handle ?? activity.source_trader_id)}\\s*`),
-              ''
-            )}
+            {/* Strip the raw name from the text (it leads with it) so an email-shaped
+                handle is removed from the visible activity text, not just the label. */}
+            {activity.activity_text.replace(new RegExp(`^${escapeRegExp(rawName)}\\s*`), '')}
           </span>
         </p>
 
@@ -302,6 +307,12 @@ export default function ActivityFeedItem({
 
 function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/** True for (masked) email-shaped strings like "lo***@gmail.com" — requires a
+ *  local part, an @, and a dotted domain, so it won't match "@twitterhandle". */
+function isEmailLike(value: string | null | undefined): boolean {
+  return !!value && /\S+@\S+\.\S+/.test(value)
 }
 
 function formatMetric(value: number, label: string): string {
