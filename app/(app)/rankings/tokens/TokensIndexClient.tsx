@@ -52,7 +52,20 @@ const TOKEN_ICONS: Record<string, string> = {
 }
 
 // Featured tokens always displayed at top even if not in popular list
-const FEATURED_TOKENS = ['BTC', 'ETH', 'SOL', 'BNB', 'XRP', 'DOGE', 'ARB', 'OP', 'AVAX', 'LINK', 'UNI', 'ADA']
+const FEATURED_TOKENS = [
+  'BTC',
+  'ETH',
+  'SOL',
+  'BNB',
+  'XRP',
+  'DOGE',
+  'ARB',
+  'OP',
+  'AVAX',
+  'LINK',
+  'UNI',
+  'ADA',
+]
 
 function getTokenColor(token: string): string {
   const colors: Record<string, string> = {
@@ -93,23 +106,34 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
   const [search, setSearch] = useState('')
 
   useEffect(() => {
+    // SSR already provided fresh popular tokens (same 1h cache window). Skip the
+    // redundant client refetch — it re-runs the expensive token aggregation (which
+    // currently times out → 500 on cold cache) on every mount for no benefit. Only
+    // fetch as the fallback when SSR returned empty (its 4s timeout path).
+    if (initialTokens && initialTokens.length > 0) return
     const controller = new AbortController()
     fetch('/api/rankings/by-token?action=popular-tokens', { signal: controller.signal })
-      .then(r => {
+      .then((r) => {
         if (!r.ok) throw new Error(`popular-tokens: ${r.status}`)
         return r.json()
       })
-      .then(data => {
+      .then((data) => {
         if (data.tokens) setPopularTokens(data.tokens)
       })
-      .catch((err) => { if (err.name !== 'AbortError') { /* fire-and-forget: SSR data is the fallback */ } })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false) })
+      .catch((err) => {
+        if (err.name !== 'AbortError') {
+          /* fire-and-forget: SSR data is the fallback */
+        }
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) setLoading(false)
+      })
     return () => controller.abort()
-  }, [])
+  }, [initialTokens])
 
   // Merge featured tokens with popular tokens
   const allTokens = useMemo(() => {
-    const tokenMap = new Map(popularTokens.map(t => [t.token, t]))
+    const tokenMap = new Map(popularTokens.map((t) => [t.token, t]))
     const result: PopularToken[] = []
 
     // Add featured tokens first (with data if available)
@@ -133,14 +157,18 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
   const filtered = useMemo(() => {
     if (!search) return allTokens
     const q = search.toUpperCase()
-    return allTokens.filter(t => t.token.includes(q))
+    return allTokens.filter((t) => t.token.includes(q))
   }, [allTokens, search])
 
   return (
     <Box>
       {/* Header */}
       <Box style={{ marginBottom: 24 }}>
-        <Text size="2xl" weight="bold" style={{ color: tokens.colors.text.primary, marginBottom: 4 }}>
+        <Text
+          size="2xl"
+          weight="bold"
+          style={{ color: tokens.colors.text.primary, marginBottom: 4 }}
+        >
           {t('tokenRankingsTitle')}
         </Text>
         <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
@@ -167,14 +195,24 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
             outline: 'none',
             transition: `border-color ${tokens.transition.fast}`,
           }}
-          onFocus={(e) => { e.currentTarget.style.borderColor = tokens.colors.accent.primary }}
-          onBlur={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary }}
+          onFocus={(e) => {
+            e.currentTarget.style.borderColor = tokens.colors.accent.primary
+          }}
+          onBlur={(e) => {
+            e.currentTarget.style.borderColor = tokens.colors.border.primary
+          }}
         />
       </Box>
 
       {/* Token Grid */}
       {loading ? (
-        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+        <Box
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            gap: 16,
+          }}
+        >
           {Array.from({ length: 12 }).map((_, i) => (
             <Box
               key={i}
@@ -189,7 +227,13 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
           ))}
         </Box>
       ) : (
-        <Box style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 16 }}>
+        <Box
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))',
+            gap: 16,
+          }}
+        >
           {filtered.map((tk) => {
             const color = getTokenColor(tk.token)
             const icon = TOKEN_ICONS[tk.token] || tk.token.charAt(0)
@@ -248,7 +292,9 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
                         {tk.token}
                       </Text>
                       <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-                        {tk.trader_count > 0 ? `${tk.trader_count} ${t('tokenRankingsTraders')}` : t('tokenRankingsViewRankings')}
+                        {tk.trader_count > 0
+                          ? `${tk.trader_count} ${t('tokenRankingsTraders')}`
+                          : t('tokenRankingsViewRankings')}
                       </Text>
                     </Box>
                   </Box>
@@ -257,24 +303,35 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
                   {tk.trade_count > 0 && (
                     <Box style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
                       <Box>
-                        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>
+                        <Text
+                          size="xs"
+                          style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}
+                        >
                           {t('tokenRankingsTrades')}
                         </Text>
-                        <Text size="base" weight="bold" style={{ color: tokens.colors.text.primary }}>
+                        <Text
+                          size="base"
+                          weight="bold"
+                          style={{ color: tokens.colors.text.primary }}
+                        >
                           {tk.trade_count.toLocaleString('en-US')}
                         </Text>
                       </Box>
                       <Box>
-                        <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}>
+                        <Text
+                          size="xs"
+                          style={{ color: tokens.colors.text.tertiary, marginBottom: 2 }}
+                        >
                           {t('tokenRankingsTotalPnl')}
                         </Text>
                         <Text
                           size="base"
                           weight="bold"
                           style={{
-                            color: tk.total_pnl >= 0
-                              ? tokens.colors.accent.success
-                              : tokens.colors.accent.error,
+                            color:
+                              tk.total_pnl >= 0
+                                ? tokens.colors.accent.success
+                                : tokens.colors.accent.error,
                           }}
                         >
                           {formatPnl(tk.total_pnl)}
