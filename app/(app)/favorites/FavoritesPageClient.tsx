@@ -565,7 +565,7 @@ export default function FavoritesPageClient() {
                       </Text>
                     )}
                     <Text size="xs" color="tertiary">
-                      {t('itemCount').replace('{n}', String(folder.post_count))}
+                      {t('itemCount').replace('{n}', String(folder.post_count ?? 0))}
                     </Text>
                   </Box>
 
@@ -688,7 +688,7 @@ export default function FavoritesPageClient() {
                     </Text>
                   )}
                   <Text size="xs" color="tertiary">
-                    {t('itemCount').replace('{n}', String(folder.post_count))}
+                    {t('itemCount').replace('{n}', String(folder.post_count ?? 0))}
                     {folder.subscriber_count > 0 &&
                       ` · ${t('subscriberCount').replace('{n}', String(folder.subscriber_count))}`}
                     {folder.owner_handle && ` · @${folder.owner_handle}`}
