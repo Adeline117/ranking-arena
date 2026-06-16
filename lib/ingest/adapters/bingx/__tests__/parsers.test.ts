@@ -34,6 +34,11 @@ describe('parseBingxLeaderboardPage', () => {
     expect(first.headlinePnl).toBeCloseTo(126.27, 2)
     // winRate30d 1 → 100%
     expect(first.headlineWinRate).toBeCloseTo(100, 5)
+    // Board-backfill: per-TF mdd/sharpe + TF-independent AUM/copiers → trader_stats
+    expect(typeof first.headlineMdd).toBe('number')
+    expect(typeof first.headlineSharpe).toBe('number')
+    expect(typeof first.headlineAum).toBe('number')
+    expect(typeof first.headlineCopierCount).toBe('number')
     // apiIdentity routing fact on traderMeta (TF-independent)
     expect(first.traderMeta).toMatchObject({ bingx_api_identity: '1579905006518878200' })
     // per-TF risk rating stays in raw.rankStat (spec §11.12), not traderMeta
