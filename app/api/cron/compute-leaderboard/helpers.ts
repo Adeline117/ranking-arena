@@ -109,24 +109,25 @@ export async function deriveWinRateMDD(
     platformGroups.get(t.platform)!.push(t.trader_key)
   }
 
-  // Single batch fetch per platform (much fewer queries than per-trader)
+  // Single batch fetch per platform. Migrated off retiring trader_snapshots_v2
+  // → trader_daily_snapshots (daily roi history; already deduped per day).
   const allSnapshots: Array<{
     platform: string
     trader_key: string
-    roi_pct: number
-    created_at: string
+    roi: number
+    date: string
   }> = []
   await Promise.all(
     Array.from(platformGroups.entries()).map(async ([platform, traderKeys]) => {
       for (let i = 0; i < traderKeys.length; i += 500) {
         const chunk = traderKeys.slice(i, i + 500)
         const { data: snaps } = await supabase
-          .from('trader_snapshots_v2')
-          .select('platform, trader_key, roi_pct, created_at')
+          .from('trader_daily_snapshots')
+          .select('platform, trader_key, roi, date')
           .eq('platform', platform)
           .in('trader_key', chunk)
-          .not('roi_pct', 'is', null)
-          .order('created_at', { ascending: true })
+          .not('roi', 'is', null)
+          .order('date', { ascending: true })
           .limit(50000)
 
         if (snaps) allSnapshots.push(...(snaps as typeof allSnapshots))
@@ -135,7 +136,7 @@ export async function deriveWinRateMDD(
   )
 
   // Group snapshots by trader key
-  const snapshotsByTrader = new Map<string, Array<{ roi_pct: number; created_at: string }>>()
+  const snapshotsByTrader = new Map<string, Array<{ roi: number; date: string }>>()
   for (const snap of allSnapshots) {
     const key = `${snap.platform}:${snap.trader_key}`
     if (!snapshotsByTrader.has(key)) snapshotsByTrader.set(key, [])
@@ -158,8 +159,8 @@ export async function deriveWinRateMDD(
     // Deduplicate by day, keep latest per day
     const daily = new Map<string, number>()
     for (const snap of snapshots) {
-      const day = snap.created_at?.slice(0, 10)
-      if (day) daily.set(day, snap.roi_pct)
+      const day = snap.date?.slice(0, 10)
+      if (day) daily.set(day, snap.roi)
     }
     const rois = [...daily.entries()].sort((a, b) => a[0].localeCompare(b[0])).map((e) => e[1])
     if (rois.length < 2) continue
