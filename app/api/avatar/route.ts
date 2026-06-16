@@ -85,6 +85,32 @@ function safeImageContentType(upstream: string | null): string {
   return ALLOWED_IMAGE_TYPES.has(base) ? base : 'image/png'
 }
 
+// 1x1 transparent PNG. Decoded once at module load.
+const TRANSPARENT_PNG = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAABJRU5ErkJggg==',
+  'base64'
+)
+
+// Upstream CDN failure handler (429 rate-limit / 5xx / timeout / network).
+// Instead of passing the upstream error status through (which surfaces a broken
+// <img> + console error in the browser), return a 200 transparent PNG so the
+// client shows its own CSS fallback (gradient + initial). SHORT cache + SWR so
+// the real avatar is retried once the upstream recovers — never cached a year
+// like a successful fetch. This is the best long-term UX: no broken images, no
+// surfaced 429s, self-healing.
+function gracefulAvatarFallback(origin: string | null): NextResponse {
+  return new NextResponse(TRANSPARENT_PNG, {
+    status: 200,
+    headers: {
+      'Content-Type': 'image/png',
+      'X-Content-Type-Options': 'nosniff',
+      'Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+      'CDN-Cache-Control': 'public, max-age=300, stale-while-revalidate=3600',
+      'Access-Control-Allow-Origin': getCorsOrigin(origin),
+    },
+  })
+}
+
 export async function GET(request: NextRequest) {
   // NO rate limiting on avatar proxy. Rationale:
   // - Read-only, idempotent image proxy — no mutation, no abuse vector
@@ -327,7 +353,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (!response.ok) {
-      return new NextResponse('Failed to fetch image', { status: response.status })
+      // Upstream rate-limited (429) or errored — serve graceful fallback, not
+      // a broken image. Short cache so we retry once upstream recovers.
+      return gracefulAvatarFallback(request.headers.get('Origin'))
     }
 
     const contentType = safeImageContentType(response.headers.get('content-type'))
@@ -350,8 +378,8 @@ export async function GET(request: NextRequest) {
     // don't pollute 500 error dashboards.
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
-        // Upstream CDN timed out — this is not our fault
-        return new NextResponse('Upstream timeout', { status: 504 })
+        // Upstream CDN timed out — serve graceful fallback (short cache, retry later)
+        return gracefulAvatarFallback(request.headers.get('Origin'))
       }
       const msg = error.message.toLowerCase()
       if (
@@ -361,8 +389,8 @@ export async function GET(request: NextRequest) {
         msg.includes('network') ||
         msg.includes('fetch failed')
       ) {
-        // Upstream network error — return 502 Bad Gateway, not 500
-        return new NextResponse('Upstream error', { status: 502 })
+        // Upstream network error — serve graceful fallback (short cache, retry later)
+        return gracefulAvatarFallback(request.headers.get('Origin'))
       }
     }
     logger.error('Avatar proxy error:', error)
