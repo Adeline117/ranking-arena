@@ -3120,6 +3120,8 @@ const zh = {
   walletAddress: '钱包地址',
   tokenDistribution: '持仓分布',
   tokenDistributionEmpty: '暂无代币持仓数据',
+  tokenPnlDistribution: '代币盈亏分布',
+  topEarningTokens: '最赚钱代币',
   viewOnExplorer: '在浏览器查看',
   dexLeaderboard: 'DEX 排行榜',
 

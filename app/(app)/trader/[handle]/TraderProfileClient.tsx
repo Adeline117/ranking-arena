@@ -81,6 +81,10 @@ const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAc
 const TraderMetaStrip = dynamic(() => import('@/app/components/trader/serving/TraderMetaStrip'), {
   ssr: false,
 })
+// P4 §2.5d on-chain insights (token PnL distribution / top tokens / PnL calendar)
+const OnchainInsights = dynamic(() => import('@/app/components/trader/serving/OnchainInsights'), {
+  ssr: false,
+})
 // ExchangeLinksBar — static import (no client-only deps). Previously dynamic
 // with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
 // trader page load. Static import eliminates the flash + reduces chunk count.
@@ -774,16 +778,28 @@ export default function TraderProfileClient({
                   className="tab-pane-enter"
                 >
                   {visitedTabs.has('stats') ? (
-                    <StatsTab
-                      visited
-                      stats={effStats}
-                      traderHandle={effProfile?.handle || data.handle}
-                      assetBreakdown={effAssetBreakdown}
-                      equityCurve={effEquityCurve}
-                      positionHistory={effPositionHistory}
-                      isPro={isPro}
-                      onUnlock={handlePricingRedirect}
-                    />
+                    <Box
+                      style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}
+                    >
+                      {/* §2.5d on-chain insights — serving only; NULL-collapses
+                          when the source has no token/calendar extras. */}
+                      {useThreeTab && (
+                        <OnchainInsights
+                          extras={servingTab.metaExtras}
+                          currency={servingTab.currency}
+                        />
+                      )}
+                      <StatsTab
+                        visited
+                        stats={effStats}
+                        traderHandle={effProfile?.handle || data.handle}
+                        assetBreakdown={effAssetBreakdown}
+                        equityCurve={effEquityCurve}
+                        positionHistory={effPositionHistory}
+                        isPro={isPro}
+                        onUnlock={handlePricingRedirect}
+                      />
+                    </Box>
                   ) : null}
                 </Box>
 
