@@ -3202,6 +3202,8 @@ const en = {
   walletAddress: 'Wallet Address',
   tokenDistribution: 'Token Distribution',
   tokenDistributionEmpty: 'No token holdings data',
+  tokenPnlDistribution: 'Token PnL Distribution',
+  topEarningTokens: 'Top Earning Tokens',
   viewOnExplorer: 'View on Explorer',
   dexLeaderboard: 'DEX Leaderboard',
 

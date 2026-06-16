@@ -3102,6 +3102,8 @@ const ko = {
   walletAddress: '지갑 주소',
   tokenDistribution: '보유 분포',
   tokenDistributionEmpty: '토큰 보유 데이터가 없습니다',
+  tokenPnlDistribution: '토큰 손익 분포',
+  topEarningTokens: '최고 수익 토큰',
   viewOnExplorer: '탐색기에서 보기',
   dexLeaderboard: 'DEX 리더보드',
 

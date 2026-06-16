@@ -2948,6 +2948,8 @@ const ja = {
   walletAddress: 'ウォレットアドレス',
   tokenDistribution: 'トークン分布',
   tokenDistributionEmpty: 'トークン保有データなし',
+  tokenPnlDistribution: 'トークン損益分布',
+  topEarningTokens: '稼ぎ頭トークン',
   viewOnExplorer: 'エクスプローラーで表示',
   dexLeaderboard: 'DEXリーダーボード',
 
