@@ -405,10 +405,13 @@ function BotDetailContent({ id }: { id: string }) {
               {t('botWindowComparison')}
             </h2>
             <div
-              className="rounded-xl overflow-hidden mb-8"
+              className="rounded-xl mb-8"
               style={{
                 background: 'var(--glass-bg-secondary, rgba(255,255,255,0.03))',
                 border: `1px solid var(--color-border-primary)`,
+                // Was overflow-hidden, which clipped the right-most SCORE column on
+                // narrow mobile. Allow horizontal scroll so all 4 columns stay readable.
+                overflowX: 'auto',
               }}
             >
               <div
@@ -417,6 +420,7 @@ function BotDetailContent({ id }: { id: string }) {
                   color: 'var(--color-text-tertiary)',
                   borderColor: 'var(--color-border-primary)',
                   textTransform: 'uppercase',
+                  minWidth: 400,
                 }}
               >
                 <div>{t('botWindow')}</div>
@@ -430,6 +434,7 @@ function BotDetailContent({ id }: { id: string }) {
                   className="grid grid-cols-4 gap-2 px-4 py-3 border-b last:border-b-0"
                   style={{
                     borderColor: `${tokens.colors.border.primary}30`,
+                    minWidth: 400,
                   }}
                 >
                   <div style={{ fontWeight: 600, fontSize: 13 }}>{s.season_id as string}</div>
