@@ -11,14 +11,16 @@
 
 // Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
-
 
 // ---------------------------------------------------------------------------
 // Mocks (must be declared before any imports that reference them)
@@ -50,9 +52,30 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  apiLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  dataLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
   captureError: jest.fn(),
   captureMessage: jest.fn(),
   fireAndForget: jest.fn(),
@@ -259,8 +282,8 @@ describe.skip('GET /api/cron/compute-leaderboard', () => {
     for (const count of Object.values(body.stats.seasons) as number[]) {
       expect(count).toBeGreaterThan(0)
     }
-    // Should have called from('trader_snapshots_v2') for snapshot fetches (v1 removed)
-    expect(mockSupabaseFrom).toHaveBeenCalledWith('trader_snapshots_v2')
+    // Reads ranking inputs from arena (RPC) + writes leaderboard_ranks.
+    // (trader_snapshots_v2 retired 2026-06-15)
     expect(mockSupabaseFrom).toHaveBeenCalledWith('leaderboard_ranks')
   })
 

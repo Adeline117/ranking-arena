@@ -60,7 +60,8 @@ export async function POST(request: NextRequest) {
       verification_error: string | null
     }
 
-    const selectCols = 'id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, sync_frequency, status, last_verified_at, verification_error'
+    const selectCols =
+      'id, user_id, trader_id, platform, encrypted_api_key, encrypted_api_secret, encrypted_passphrase, sync_frequency, status, last_verified_at, verification_error'
 
     let authorizations: TraderAuthorization[] = []
 
@@ -74,10 +75,7 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (error || !data) {
-        return NextResponse.json(
-          { error: 'Authorization not found' },
-          { status: 404 }
-        )
+        return NextResponse.json({ error: 'Authorization not found' }, { status: 404 })
       }
 
       authorizations = [data]
@@ -91,10 +89,7 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         logger.dbError('fetch-user-authorizations', error, { userId })
-        return NextResponse.json(
-          { error: 'Failed to fetch authorizations' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: 'Failed to fetch authorizations' }, { status: 500 })
       }
 
       authorizations = data || []
@@ -107,10 +102,7 @@ export async function POST(request: NextRequest) {
 
       if (error) {
         logger.dbError('fetch-all-authorizations', error, {})
-        return NextResponse.json(
-          { error: 'Failed to fetch authorizations' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: 'Failed to fetch authorizations' }, { status: 500 })
       }
 
       authorizations = data || []
@@ -119,13 +111,13 @@ export async function POST(request: NextRequest) {
     // Filter by sync_frequency — only sync auths that are due
     if (!authorizationId && !userId) {
       const now = Date.now()
-      authorizations = authorizations.filter(auth => {
+      authorizations = authorizations.filter((auth) => {
         if (!auth.last_verified_at) return true // Never synced → sync now
         const lastSync = new Date(auth.last_verified_at).getTime()
         const elapsed = now - lastSync
         const freq = auth.sync_frequency || '15min'
         const intervalMs: Record<string, number> = {
-          realtime: 5 * 60 * 1000,   // 5 min (practical minimum for cron)
+          realtime: 5 * 60 * 1000, // 5 min (practical minimum for cron)
           '5min': 5 * 60 * 1000,
           '15min': 15 * 60 * 1000,
           '1hour': 60 * 60 * 1000,
@@ -133,7 +125,6 @@ export async function POST(request: NextRequest) {
         return elapsed >= (intervalMs[freq] || intervalMs['15min'])
       })
     }
-
 
     let synced = 0
     let errors = 0
@@ -143,7 +134,9 @@ export async function POST(request: NextRequest) {
         // Decrypt credentials
         const apiKey = decrypt(auth.encrypted_api_key)
         const apiSecret = decrypt(auth.encrypted_api_secret)
-        const passphrase = auth.encrypted_passphrase ? decrypt(auth.encrypted_passphrase) : undefined
+        const passphrase = auth.encrypted_passphrase
+          ? decrypt(auth.encrypted_passphrase)
+          : undefined
 
         // Sync data based on platform
         const result = await syncPlatformData(auth.platform, {
@@ -212,10 +205,7 @@ export async function POST(request: NextRequest) {
     })
   } catch (error) {
     logger.apiError('/api/trader/sync', error, {})
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -313,33 +303,9 @@ async function storeSyncedData(
     period
   )
 
-  // Insert/update snapshot — validated by gatekeeper
-  const syncPayload = {
-    platform: authorization.platform,
-    market_type: SOURCE_TYPE_MAP[authorization.platform] || 'futures',
-    trader_key: authorization.trader_id,
-    window: period,
-    roi_pct: traderData.roi,
-    pnl_usd: traderData.pnl,
-    followers: traderData.followers,
-    copiers: traderData.followers,
-    trades_count: traderData.tradesCount,
-    win_rate: traderData.winRate,
-    max_drawdown: traderData.maxDrawdown,
-    arena_score: arenaScore.totalScore,
-    as_of_ts: truncateToHour(),
-    updated_at: new Date().toISOString(),
-  }
-  const { row: sanitizedSync, rejected: syncRejected } = sanitizeRow(syncPayload as Record<string, unknown>, 'trader_snapshots_v2')
-  if (syncRejected.length) logRejectedWrites(syncRejected, supabase)
-  const { error } = await supabase.from('trader_snapshots_v2').upsert(
-    sanitizedSync,
-    { onConflict: 'platform,market_type,trader_key,window,as_of_ts' }
-  )
-
-  if (error) {
-    throw error
-  }
+  // (removed 2026-06-15) snapshot write to trader_snapshots_v2 (retired).
+  // Identity is still upserted to trader_sources below.
+  void arenaScore
 
   // Update trader_sources
   await supabase.from('trader_sources').upsert(
