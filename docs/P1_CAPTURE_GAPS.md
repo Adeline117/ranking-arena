@@ -98,3 +98,22 @@ v1/trader/search?pageId=&pageSize=&rankType=income&sort=accEarningRatio&order=de
   lastTradeTime/win&total positions/avgHoldTime…)写进 trader_stats 列/extras → bingx
   会变成最富的源之一。需扩 headline upsert 写 extras 或给 bingx 做 profile-pass。
 - 🛡️ **binance_web3 —— 仍是 202 反爬**,本轮未碰,是剩下唯一真"墙"。
+
+## 进度更新(2026-06-15 续2 — "两堵墙"都是红鲱鱼,全部攻下)
+
+- ✅ **binance_web3 —— "202 墙"是红鲱鱼**。202 只挡 per-address **profile 页**,而我们根本
+  不需要它:看板端点 `web3.binance.com/bapi/defi/v1/public/wallet-direct/market/
+leaderboard/query?chainId=56&period=&tag=ALL`(**纯 GET、无签名、可达**)每行就带
+  **完整 §2.5d 链上超集**:balance / realizedPnl(%) / winRate / totalVolume /
+  buy&sellVolume / avgBuyVolume / totalTradedTokens / totalTxCnt / topEarningTokens /
+  tokenDistribution / lastActivity / dailyPNL。roi/pnl/winrate 早已流;本轮补
+  aum(balance)+volume(totalVolume)+extras(avg_buy/total_traded_tokens/total_txns/
+  last_trade_time)+3 个链上 registry 指标。**DB 验证:tf7 = 318 traders 全部 aum/vol/
+  tokens/txns/avg_buy/last_trade 已填**(as_of 02:47)。
+- ✅ **bingx 富 extras —— 已验证**:tf7 = 2172 traders avg_profit/trades_per_week/
+  trading_days/last_trade + 2231 mdd/sharpe/aum/copier(as_of 02:44)。前面没填是
+  被我反复重启 worker 打断了抓取;让它跑完一次即落地。
+- 🎯 **结论:全部"thin"源都已补富并 DB 验证**(blofin×2 / bitfinex / bingx / binance_web3)。
+  **两堵"墙"(bingx 签名 / binance_web3 202)都是红鲱鱼**——adapter 早已解决签名
+  (harvest+replay)/ 根本不需要 202 的 profile 页。富数据一直在**看板**上。
+  剩余各源 tf30/90 随各自 cadence 抓取陆续补齐(代码已就位)。
