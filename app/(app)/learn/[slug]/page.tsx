@@ -168,7 +168,7 @@ export default async function LearnArticlePage({ params }: { params: Promise<{ s
           marginBottom: 24,
         }}
       >
-        \u2190 Back to Learn
+        ← Back to Learn
       </Link>
 
       {/* Defense-in-depth: content is static markdown from lib/data/learn-articles.ts,
