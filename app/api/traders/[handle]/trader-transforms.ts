@@ -50,66 +50,132 @@ export async function getTraderDetails(
     statsDetailResult,
     _trackedSinceResult,
     _v3ScoresResult,
-  ] = await withTimeout(Promise.all([
-    // Primary: leaderboard_ranks for all periods (replaces 3 separate v1 snapshot queries)
-    supabase.from('leaderboard_ranks')
-      .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, profitability_score, risk_control_score, execution_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, computed_at')
-      .eq('source', sourceType).eq('source_trader_id', traderId)
-      .limit(5),
-    // Placeholder for 7D (resolved from leaderboard_ranks result below)
-    Promise.resolve({ data: null }),
-    // Placeholder for 30D (resolved from leaderboard_ranks result below)
-    Promise.resolve({ data: null }),
-    // KEEP 'exact' — scoped via (trader_id) index, shown as "Arena
-    // Followers" badge on trader card; exact number matters to user.
-    supabase.from('trader_follows')
-      .select('id', { count: 'exact', head: true }).eq('trader_id', traderId),
-    supabase.from('user_profiles')
-      .select('id, bio').eq('handle', traderHandle).maybeSingle(),
-    safeQuery(() => supabase.from('trader_portfolio')
-      .select('symbol, direction, invested_pct, entry_price, pnl')
-      .in('source', getSourceAliases(sourceType)).eq('source_trader_id', traderId)
-      .order('captured_at', { ascending: false }).limit(50)),
-    safeQuery(() => supabase.from('trader_position_history')
-      .select('symbol, direction, position_type, margin_mode, open_time, close_time, entry_price, exit_price, max_position_size, closed_size, pnl_usd, pnl_pct, status')
-      .in('source', getSourceAliases(sourceType)).eq('source_trader_id', traderId)
-      .order('open_time', { ascending: false }).limit(100)),
-    supabase.from('posts')
-      .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
-      .eq('author_handle', traderHandle).order('created_at', { ascending: false }).limit(20),
-    safeQuery(() => supabase.from('trader_asset_breakdown')
-      .select('symbol, weight_pct, period').in('source', getSourceAliases(sourceType))
-      .eq('source_trader_id', traderId).eq('period', '90D')
-      .order('weight_pct', { ascending: false }).limit(20)),
-    safeQuery(() => supabase.from('trader_asset_breakdown')
-      .select('symbol, weight_pct, period').in('source', getSourceAliases(sourceType))
-      .eq('source_trader_id', traderId).eq('period', '30D')
-      .order('weight_pct', { ascending: false }).limit(20)),
-    safeQuery(() => supabase.from('trader_asset_breakdown')
-      .select('symbol, weight_pct, period').in('source', getSourceAliases(sourceType))
-      .eq('source_trader_id', traderId).eq('period', '7D')
-      .order('weight_pct', { ascending: false }).limit(20)),
-    safeQuery(() => supabase.from('trader_equity_curve')
-      .select('data_date, roi_pct, pnl_usd').in('source', getSourceAliases(sourceType))
-      .eq('source_trader_id', traderId).eq('period', '90D')
-      .order('data_date', { ascending: true }).limit(90)),
-    safeQuery(() => supabase.from('trader_equity_curve')
-      .select('data_date, roi_pct, pnl_usd').in('source', getSourceAliases(sourceType))
-      .eq('source_trader_id', traderId).eq('period', '30D')
-      .order('data_date', { ascending: true }).limit(30)),
-    safeQuery(() => supabase.from('trader_equity_curve')
-      .select('data_date, roi_pct, pnl_usd').in('source', getSourceAliases(sourceType))
-      .eq('source_trader_id', traderId).eq('period', '7D')
-      .order('data_date', { ascending: true }).limit(7)),
-    safeQuery(() => supabase.from('trader_stats_detail')
-      .select('sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, total_trades, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period')
-      .in('source', getSourceAliases(sourceType)).eq('source_trader_id', traderId)
-      .order('captured_at', { ascending: false }).limit(3)),
-    // trackedSince from leaderboard_ranks computed_at (placeholder, resolved below)
-    Promise.resolve({ data: null }),
-    // v3 scores from leaderboard_ranks (placeholder, resolved below)
-    Promise.resolve({ data: null }),
-  ]), 10000)
+  ] = await withTimeout(
+    Promise.all([
+      // Primary: leaderboard_ranks for all periods (replaces 3 separate v1 snapshot queries)
+      supabase
+        .from('leaderboard_ranks')
+        .select(
+          'season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, profitability_score, risk_control_score, execution_score, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, computed_at'
+        )
+        .eq('source', sourceType)
+        .eq('source_trader_id', traderId)
+        .limit(5),
+      // Placeholder for 7D (resolved from leaderboard_ranks result below)
+      Promise.resolve({ data: null }),
+      // Placeholder for 30D (resolved from leaderboard_ranks result below)
+      Promise.resolve({ data: null }),
+      // KEEP 'exact' — scoped via (trader_id) index, shown as "Arena
+      // Followers" badge on trader card; exact number matters to user.
+      supabase
+        .from('trader_follows')
+        .select('id', { count: 'exact', head: true })
+        .eq('trader_id', traderId),
+      supabase.from('user_profiles').select('id, bio').eq('handle', traderHandle).maybeSingle(),
+      safeQuery(() =>
+        supabase
+          .from('trader_portfolio')
+          .select('symbol, direction, invested_pct, entry_price, pnl')
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .order('captured_at', { ascending: false })
+          .limit(50)
+      ),
+      safeQuery(() =>
+        supabase
+          .from('trader_position_history')
+          .select(
+            'symbol, direction, position_type, margin_mode, open_time, close_time, entry_price, exit_price, max_position_size, closed_size, pnl_usd, pnl_pct, status'
+          )
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .order('open_time', { ascending: false })
+          .limit(100)
+      ),
+      supabase
+        .from('posts')
+        .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
+        .eq('author_handle', traderHandle)
+        .order('created_at', { ascending: false })
+        .limit(20),
+      safeQuery(() =>
+        supabase
+          .from('trader_asset_breakdown')
+          .select('symbol, weight_pct, period')
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .eq('period', '90D')
+          .order('weight_pct', { ascending: false })
+          .limit(20)
+      ),
+      safeQuery(() =>
+        supabase
+          .from('trader_asset_breakdown')
+          .select('symbol, weight_pct, period')
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .eq('period', '30D')
+          .order('weight_pct', { ascending: false })
+          .limit(20)
+      ),
+      safeQuery(() =>
+        supabase
+          .from('trader_asset_breakdown')
+          .select('symbol, weight_pct, period')
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .eq('period', '7D')
+          .order('weight_pct', { ascending: false })
+          .limit(20)
+      ),
+      safeQuery(() =>
+        supabase
+          .from('trader_equity_curve')
+          .select('data_date, roi_pct, pnl_usd')
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .eq('period', '90D')
+          .order('data_date', { ascending: true })
+          .limit(90)
+      ),
+      safeQuery(() =>
+        supabase
+          .from('trader_equity_curve')
+          .select('data_date, roi_pct, pnl_usd')
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .eq('period', '30D')
+          .order('data_date', { ascending: true })
+          .limit(30)
+      ),
+      safeQuery(() =>
+        supabase
+          .from('trader_equity_curve')
+          .select('data_date, roi_pct, pnl_usd')
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .eq('period', '7D')
+          .order('data_date', { ascending: true })
+          .limit(7)
+      ),
+      safeQuery(() =>
+        supabase
+          .from('trader_stats_detail')
+          .select(
+            'sharpe_ratio, copiers_pnl, copiers_count, winning_positions, total_positions, total_trades, avg_holding_time_hours, avg_profit, avg_loss, largest_win, largest_loss, aum, period'
+          )
+          .in('source', getSourceAliases(sourceType))
+          .eq('source_trader_id', traderId)
+          .order('captured_at', { ascending: false })
+          .limit(3)
+      ),
+      // trackedSince from leaderboard_ranks computed_at (placeholder, resolved below)
+      Promise.resolve({ data: null }),
+      // v3 scores from leaderboard_ranks (placeholder, resolved below)
+      Promise.resolve({ data: null }),
+    ]),
+    10000
+  )
 
   // Primary data source: leaderboard_ranks (snapshotResult now contains LR rows)
   const lrRows = (snapshotResult.data || []) as Array<Record<string, unknown>>
@@ -127,54 +193,18 @@ export async function getTraderDetails(
     sharpe_ratio: lr.sharpe_ratio as number | null,
   })
 
-  const lr90 = lrRows.find(r => r.season_id === '90D')
-  const lr30 = lrRows.find(r => r.season_id === '30D')
-  const lr7 = lrRows.find(r => r.season_id === '7D')
+  const lr90 = lrRows.find((r) => r.season_id === '90D')
+  const lr30 = lrRows.find((r) => r.season_id === '30D')
+  const lr7 = lrRows.find((r) => r.season_id === '7D')
   const lrBest = lr90 || lr30 || lr7 || lrRows[0]
 
-  let snapshot: SnapshotData | null = lrBest ? mapLR(lrBest) : null
-  let snapshot7d: SnapshotData | null = lr7 ? mapLR(lr7) : null
-  let snapshot30d: SnapshotData | null = lr30 ? mapLR(lr30) : null
+  const snapshot: SnapshotData | null = lrBest ? mapLR(lrBest) : null
+  const snapshot7d: SnapshotData | null = lr7 ? mapLR(lr7) : null
+  const snapshot30d: SnapshotData | null = lr30 ? mapLR(lr30) : null
 
-  // Fallback: trader_snapshots_v2 when leaderboard_ranks has no data
-  const isEmptySnapshot = !snapshot ||
-    ((snapshot.roi === 0 || snapshot.roi == null) &&
-     (snapshot.win_rate === 0 || snapshot.win_rate == null) &&
-     (snapshot.pnl == null || Math.abs(snapshot.pnl as number) < 0.01))
-  if (isEmptySnapshot) {
-    const { data: v2Rows } = await supabase
-      .from('trader_snapshots_v2')
-      .select('window, roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, followers, copiers, sharpe_ratio, arena_score, created_at')
-      .eq('platform', sourceType)
-      .eq('trader_key', traderId)
-      .order('created_at', { ascending: false })
-      .limit(3)
-
-    if (v2Rows && v2Rows.length > 0) {
-      const mapV2 = (row: Record<string, unknown>): SnapshotData => ({
-        roi: row.roi_pct as number | null,
-        pnl: row.pnl_usd as number | null,
-        win_rate: row.win_rate as number | null,
-        max_drawdown: row.max_drawdown as number | null,
-        trades_count: row.trades_count as number | null,
-        followers: row.followers as number | null,
-        arena_score: row.arena_score as number | null,
-        profitability_score: null,
-        risk_control_score: null,
-        execution_score: null,
-        sharpe_ratio: row.sharpe_ratio as number | null,
-      })
-
-      const v2_90 = v2Rows.find((r: Record<string, unknown>) => r.window === '90d' || r.window === '90D')
-      const v2_30 = v2Rows.find((r: Record<string, unknown>) => r.window === '30d' || r.window === '30D')
-      const v2_7 = v2Rows.find((r: Record<string, unknown>) => r.window === '7d' || r.window === '7D')
-      const best = v2_90 || v2_30 || v2_7 || v2Rows[0]
-
-      if (best) snapshot = mapV2(best)
-      if (v2_7) snapshot7d = mapV2(v2_7)
-      if (v2_30) snapshot30d = mapV2(v2_30)
-    }
-  }
+  // (removed 2026-06-15) trader_snapshots_v2 empty-LR fallback. v2 is retiring;
+  // serving sources render via the arena read path, and this legacy branch's
+  // ranked traders are all in leaderboard_ranks.
 
   const arenaFollowers = arenaFollowersResult.count || 0
   const userProfile = userProfileResult.data
@@ -191,55 +221,73 @@ export async function getTraderDetails(
   const equityCurve7d = (equityCurve7dResult || []) as EquityCurvePoint[]
 
   const statsDetailList = (statsDetailResult || []) as StatsDetailData[]
-  const statsDetail90d = statsDetailList.find(s => s.period === '90D') || statsDetailList[0]
-  const statsDetail30d = statsDetailList.find(s => s.period === '30D')
-  const statsDetail7d = statsDetailList.find(s => s.period === '7D')
+  const statsDetail90d = statsDetailList.find((s) => s.period === '90D') || statsDetailList[0]
+  const statsDetail30d = statsDetailList.find((s) => s.period === '30D')
+  const statsDetail7d = statsDetailList.find((s) => s.period === '7D')
 
   // trackedSince: use leaderboard_ranks computed_at as proxy
-  const trackedSince = lrBest?.computed_at as string | null ?? null
+  const trackedSince = (lrBest?.computed_at as string | null) ?? null
 
   // v3 scores: extract from leaderboard_ranks data (already fetched)
-  const v3Scores = lrBest ? {
-    profitability_score: lrBest.profitability_score as number | null,
-    risk_control_score: lrBest.risk_control_score as number | null,
-    execution_score: lrBest.execution_score as number | null,
-    arena_score_v3: null as number | null,
-    score_completeness: null as string | null,
-    score_penalty: null as number | null,
-  } : null
+  const v3Scores = lrBest
+    ? {
+        profitability_score: lrBest.profitability_score as number | null,
+        risk_control_score: lrBest.risk_control_score as number | null,
+        execution_score: lrBest.execution_score as number | null,
+        arena_score_v3: null as number | null,
+        score_completeness: null as string | null,
+        score_penalty: null as number | null,
+      }
+    : null
 
   // 获取相似交易员
   const similarTraders = await fetchSimilarTraders(
-    supabase, sourceType, traderId, traderHandle, snapshot
+    supabase,
+    sourceType,
+    traderId,
+    traderHandle,
+    snapshot
   )
 
   // 计算各时间段的 Arena Score
-  const score90d = snapshot?.roi != null && snapshot?.pnl != null
-    ? calculateArenaScore({
-        roi: snapshot.roi * 100,
-        pnl: snapshot.pnl,
-        maxDrawdown: snapshot.max_drawdown,
-        winRate: normalizeWinRate(snapshot.win_rate),
-      }, '90D')
-    : null
+  const score90d =
+    snapshot?.roi != null && snapshot?.pnl != null
+      ? calculateArenaScore(
+          {
+            roi: snapshot.roi * 100,
+            pnl: snapshot.pnl,
+            maxDrawdown: snapshot.max_drawdown,
+            winRate: normalizeWinRate(snapshot.win_rate),
+          },
+          '90D'
+        )
+      : null
 
-  const score30d = snapshot30d?.roi != null && snapshot30d?.pnl != null
-    ? calculateArenaScore({
-        roi: snapshot30d.roi * 100,
-        pnl: snapshot30d.pnl,
-        maxDrawdown: snapshot30d.max_drawdown,
-        winRate: normalizeWinRate(snapshot30d.win_rate),
-      }, '30D')
-    : null
+  const score30d =
+    snapshot30d?.roi != null && snapshot30d?.pnl != null
+      ? calculateArenaScore(
+          {
+            roi: snapshot30d.roi * 100,
+            pnl: snapshot30d.pnl,
+            maxDrawdown: snapshot30d.max_drawdown,
+            winRate: normalizeWinRate(snapshot30d.win_rate),
+          },
+          '30D'
+        )
+      : null
 
-  const score7d = snapshot7d?.roi != null && snapshot7d?.pnl != null
-    ? calculateArenaScore({
-        roi: snapshot7d.roi * 100,
-        pnl: snapshot7d.pnl,
-        maxDrawdown: snapshot7d.max_drawdown,
-        winRate: normalizeWinRate(snapshot7d.win_rate),
-      }, '7D')
-    : null
+  const score7d =
+    snapshot7d?.roi != null && snapshot7d?.pnl != null
+      ? calculateArenaScore(
+          {
+            roi: snapshot7d.roi * 100,
+            pnl: snapshot7d.pnl,
+            maxDrawdown: snapshot7d.max_drawdown,
+            winRate: normalizeWinRate(snapshot7d.win_rate),
+          },
+          '7D'
+        )
+      : null
 
   const overallScore = calculateOverallScore({
     score7d: score7d?.totalScore ?? null,
@@ -248,15 +296,34 @@ export async function getTraderDetails(
   })
 
   return buildTraderResponse({
-    traderHandle, traderId, sourceType, source,
-    snapshot, snapshot7d, snapshot30d,
-    arenaFollowers, userProfile,
-    portfolioData, positionHistoryData, posts,
-    assetBreakdown90d, assetBreakdown30d, assetBreakdown7d,
-    equityCurve90d, equityCurve30d, equityCurve7d,
-    statsDetail90d, statsDetail30d, statsDetail7d,
-    trackedSince, v3Scores, similarTraders,
-    score90d, score30d, score7d, overallScore,
+    traderHandle,
+    traderId,
+    sourceType,
+    source,
+    snapshot,
+    snapshot7d,
+    snapshot30d,
+    arenaFollowers,
+    userProfile,
+    portfolioData,
+    positionHistoryData,
+    posts,
+    assetBreakdown90d,
+    assetBreakdown30d,
+    assetBreakdown7d,
+    equityCurve90d,
+    equityCurve30d,
+    equityCurve7d,
+    statsDetail90d,
+    statsDetail30d,
+    statsDetail7d,
+    trackedSince,
+    v3Scores,
+    similarTraders,
+    score90d,
+    score30d,
+    score7d,
+    overallScore,
   })
 }
 
@@ -266,24 +333,34 @@ export async function getTraderDetailsFromSnapshots(
   traderId: string,
   sourceType: SourceType
 ) {
-  let snapshotQueryResults: unknown[] = [
-    { data: null },
-    { count: 0 }, { data: null },
-  ]
+  let snapshotQueryResults: unknown[] = [{ data: null }, { count: 0 }, { data: null }]
   try {
-    snapshotQueryResults = await withTimeout(Promise.all([
-      supabase.from('leaderboard_ranks')
-        .select('season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, computed_at')
-        .eq('source', sourceType).eq('source_trader_id', traderId)
-        .limit(5),
-      // KEEP 'exact' — same rationale as the selectSnapshotFields path
-      // above; per-trader follower count for the profile header badge.
-      supabase.from('trader_follows')
-        .select('id', { count: 'exact', head: true }).eq('trader_id', traderId),
-      supabase.from('trader_sources')
-        .select('avatar_url').eq('source', sourceType).eq('source_trader_id', traderId)
-        .limit(1).maybeSingle(),
-    ]), 8000)
+    snapshotQueryResults = await withTimeout(
+      Promise.all([
+        supabase
+          .from('leaderboard_ranks')
+          .select(
+            'season_id, roi, pnl, win_rate, max_drawdown, trades_count, followers, arena_score, computed_at'
+          )
+          .eq('source', sourceType)
+          .eq('source_trader_id', traderId)
+          .limit(5),
+        // KEEP 'exact' — same rationale as the selectSnapshotFields path
+        // above; per-trader follower count for the profile header badge.
+        supabase
+          .from('trader_follows')
+          .select('id', { count: 'exact', head: true })
+          .eq('trader_id', traderId),
+        supabase
+          .from('trader_sources')
+          .select('avatar_url')
+          .eq('source', sourceType)
+          .eq('source_trader_id', traderId)
+          .limit(1)
+          .maybeSingle(),
+      ]),
+      8000
+    )
   } catch {
     // Intentionally swallowed: parallel queries timed out (8s), use null defaults for all fields
   }
@@ -307,9 +384,9 @@ export async function getTraderDetailsFromSnapshots(
     execution_score: null,
   })
 
-  const lr90 = lrRows.find(r => r.season_id === '90D')
-  const lr30 = lrRows.find(r => r.season_id === '30D')
-  const lr7 = lrRows.find(r => r.season_id === '7D')
+  const lr90 = lrRows.find((r) => r.season_id === '90D')
+  const lr30 = lrRows.find((r) => r.season_id === '30D')
+  const lr7 = lrRows.find((r) => r.season_id === '7D')
   const lrBest = lr90 || lr30 || lr7 || lrRows[0]
 
   const snapshot = lrBest ? mapLR(lrBest) : null
@@ -319,32 +396,44 @@ export async function getTraderDetailsFromSnapshots(
   const trackedSince = (lrBest?.computed_at as string) || null
   const avatarUrl = avatarResult.data?.avatar_url || null
 
-  const score90d = snapshot?.roi != null && snapshot?.pnl != null
-    ? calculateArenaScore({
-        roi: snapshot.roi * 100,
-        pnl: snapshot.pnl,
-        maxDrawdown: snapshot.max_drawdown,
-        winRate: normalizeWinRate(snapshot.win_rate),
-      }, '90D')
-    : null
+  const score90d =
+    snapshot?.roi != null && snapshot?.pnl != null
+      ? calculateArenaScore(
+          {
+            roi: snapshot.roi * 100,
+            pnl: snapshot.pnl,
+            maxDrawdown: snapshot.max_drawdown,
+            winRate: normalizeWinRate(snapshot.win_rate),
+          },
+          '90D'
+        )
+      : null
 
-  const score30d = snapshot30d?.roi != null && snapshot30d?.pnl != null
-    ? calculateArenaScore({
-        roi: snapshot30d.roi * 100,
-        pnl: snapshot30d.pnl,
-        maxDrawdown: snapshot30d.max_drawdown,
-        winRate: normalizeWinRate(snapshot30d.win_rate),
-      }, '30D')
-    : null
+  const score30d =
+    snapshot30d?.roi != null && snapshot30d?.pnl != null
+      ? calculateArenaScore(
+          {
+            roi: snapshot30d.roi * 100,
+            pnl: snapshot30d.pnl,
+            maxDrawdown: snapshot30d.max_drawdown,
+            winRate: normalizeWinRate(snapshot30d.win_rate),
+          },
+          '30D'
+        )
+      : null
 
-  const score7d = snapshot7d?.roi != null && snapshot7d?.pnl != null
-    ? calculateArenaScore({
-        roi: snapshot7d.roi * 100,
-        pnl: snapshot7d.pnl,
-        maxDrawdown: snapshot7d.max_drawdown,
-        winRate: normalizeWinRate(snapshot7d.win_rate),
-      }, '7D')
-    : null
+  const score7d =
+    snapshot7d?.roi != null && snapshot7d?.pnl != null
+      ? calculateArenaScore(
+          {
+            roi: snapshot7d.roi * 100,
+            pnl: snapshot7d.pnl,
+            maxDrawdown: snapshot7d.max_drawdown,
+            winRate: normalizeWinRate(snapshot7d.win_rate),
+          },
+          '7D'
+        )
+      : null
 
   const overallScore = calculateOverallScore({
     score7d: score7d?.totalScore ?? null,
@@ -362,12 +451,27 @@ export async function getTraderDetailsFromSnapshots(
       isRegistered: false,
       source: sourceType,
     },
-    performance: buildPerformanceObj(snapshot, snapshot7d, snapshot30d, score90d, score30d, score7d, overallScore, null, null, null),
+    performance: buildPerformanceObj(
+      snapshot,
+      snapshot7d,
+      snapshot30d,
+      score90d,
+      score30d,
+      score7d,
+      overallScore,
+      null,
+      null,
+      null
+    ),
     stats: {
       additionalStats: {
         tradesCount: snapshot?.trades_count ?? undefined,
         activeSince: trackedSince
-          ? new Date(trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+          ? new Date(trackedSince).toLocaleDateString('zh-CN', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })
           : undefined,
         maxDrawdown: snapshot?.max_drawdown ?? undefined,
       },
@@ -396,17 +500,32 @@ async function fetchSimilarTraders(
   sourceType: SourceType,
   traderId: string,
   traderHandle: string,
-  snapshot: SnapshotData | null,
+  snapshot: SnapshotData | null
 ) {
-  type SimilarTrader = { handle: string; id: string; followers: number; avatar_url?: string; source: string; roi_90d?: number; arena_score?: number }
+  type SimilarTrader = {
+    handle: string
+    id: string
+    followers: number
+    avatar_url?: string
+    source: string
+    roi_90d?: number
+    arena_score?: number
+  }
   let similarTraders: SimilarTrader[] = []
 
   const processSimilarSnapshots = async (
-    similarSnapshots: Array<{ source_trader_id: string; roi: unknown; arena_score: unknown; followers: unknown }> | null,
+    similarSnapshots: Array<{
+      source_trader_id: string
+      roi: unknown
+      arena_score: unknown
+      followers: unknown
+    }> | null
   ) => {
     if (!similarSnapshots || similarSnapshots.length === 0) return
-    const dedupedSnapshots = [...new Map(similarSnapshots.map(s => [s.source_trader_id, s])).values()]
-    const similarIds = dedupedSnapshots.map(s => s.source_trader_id)
+    const dedupedSnapshots = [
+      ...new Map(similarSnapshots.map((s) => [s.source_trader_id, s])).values(),
+    ]
+    const similarIds = dedupedSnapshots.map((s) => s.source_trader_id)
     const { data: similarSources } = await supabase
       .from('trader_sources')
       .select('source_trader_id, handle, profile_url, avatar_url')
@@ -414,12 +533,17 @@ async function fetchSimilarTraders(
       .in('source_trader_id', similarIds)
 
     if (similarSources) {
-      const sourceMap = new Map(similarSources.map(s => [s.source_trader_id, s]))
+      const sourceMap = new Map(similarSources.map((s) => [s.source_trader_id, s]))
       const seenHandles = new Set<string>()
       similarTraders = dedupedSnapshots
-        .filter(snap => sourceMap.has(snap.source_trader_id))
-        .map(snap => {
-          const src = sourceMap.get(snap.source_trader_id) as { source_trader_id: string; handle: string | null; profile_url: string | null; avatar_url: string | null }
+        .filter((snap) => sourceMap.has(snap.source_trader_id))
+        .map((snap) => {
+          const src = sourceMap.get(snap.source_trader_id) as {
+            source_trader_id: string
+            handle: string | null
+            profile_url: string | null
+            avatar_url: string | null
+          }
           return {
             handle: src.handle || snap.source_trader_id,
             id: snap.source_trader_id,
@@ -427,10 +551,11 @@ async function fetchSimilarTraders(
             avatar_url: src.avatar_url || undefined,
             source: sourceType,
             roi_90d: snap.roi != null ? parseFloat(snap.roi as string) : undefined,
-            arena_score: snap.arena_score != null ? parseFloat(snap.arena_score as string) : undefined,
+            arena_score:
+              snap.arena_score != null ? parseFloat(snap.arena_score as string) : undefined,
           }
         })
-        .filter(t => {
+        .filter((t) => {
           const h = t.handle.toLowerCase()
           if (h === traderHandle.toLowerCase()) return false
           if (seenHandles.has(h)) return false
@@ -441,17 +566,22 @@ async function fetchSimilarTraders(
   }
 
   if (snapshot?.arena_score != null) {
-    const currentScore = typeof snapshot.arena_score === 'number' ? snapshot.arena_score : parseFloat(String(snapshot.arena_score))
+    const currentScore =
+      typeof snapshot.arena_score === 'number'
+        ? snapshot.arena_score
+        : parseFloat(String(snapshot.arena_score))
     const scoreRange = Math.max(currentScore * 0.25, 10)
     const { data } = await supabase
       .from('leaderboard_ranks')
       .select('source_trader_id, roi, arena_score, followers')
-      .eq('source', sourceType).eq('season_id', '90D')
+      .eq('source', sourceType)
+      .eq('season_id', '90D')
       .neq('source_trader_id', traderId)
       .not('arena_score', 'is', null)
       .gte('arena_score', currentScore - scoreRange)
       .lte('arena_score', currentScore + scoreRange)
-      .order('arena_score', { ascending: false }).limit(10)
+      .order('arena_score', { ascending: false })
+      .limit(10)
     await processSimilarSnapshots(data)
   } else if (snapshot?.roi !== null && snapshot?.roi !== undefined) {
     const currentRoi = snapshot.roi
@@ -459,18 +589,19 @@ async function fetchSimilarTraders(
     const { data } = await supabase
       .from('leaderboard_ranks')
       .select('source_trader_id, roi, arena_score, followers')
-      .eq('source', sourceType).eq('season_id', '90D')
+      .eq('source', sourceType)
+      .eq('season_id', '90D')
       .neq('source_trader_id', traderId)
       .gte('roi', currentRoi - roiRange)
       .lte('roi', currentRoi + roiRange)
-      .order('roi', { ascending: false }).limit(10)
+      .order('roi', { ascending: false })
+      .limit(10)
     await processSimilarSnapshots(data)
   }
 
   return similarTraders
 }
 
- 
 function buildPerformanceObj(
   snapshot: SnapshotData | null,
   snapshot7d: SnapshotData | null,
@@ -481,7 +612,7 @@ function buildPerformanceObj(
   overallScore: number | null,
   statsDetail90d: StatsDetailData | null | undefined,
   statsDetail30d: StatsDetailData | null | undefined,
-  statsDetail7d: StatsDetailData | null | undefined,
+  statsDetail7d: StatsDetailData | null | undefined
 ) {
   return {
     roi_90d: snapshot?.roi ?? 0,
@@ -530,12 +661,12 @@ function buildPerformanceObj(
     winning_positions_30d: statsDetail30d?.winning_positions ?? undefined,
     winning_positions_7d: statsDetail7d?.winning_positions ?? undefined,
     total_positions: statsDetail90d?.total_positions ?? statsDetail90d?.total_trades ?? undefined,
-    total_positions_30d: statsDetail30d?.total_positions ?? statsDetail30d?.total_trades ?? undefined,
+    total_positions_30d:
+      statsDetail30d?.total_positions ?? statsDetail30d?.total_trades ?? undefined,
     total_positions_7d: statsDetail7d?.total_positions ?? statsDetail7d?.total_trades ?? undefined,
   }
 }
 
- 
 function buildTraderResponse(p: {
   traderHandle: string
   traderId: string
@@ -548,7 +679,16 @@ function buildTraderResponse(p: {
   userProfile: { id: string; bio: string } | null
   portfolioData: PortfolioItem[]
   positionHistoryData: PositionHistoryItem[]
-  posts: Array<{ id: string; title?: string; content?: string; created_at: string; group_id?: string; like_count?: number; is_pinned?: boolean; groups?: { name?: string }[] }>
+  posts: Array<{
+    id: string
+    title?: string
+    content?: string
+    created_at: string
+    group_id?: string
+    like_count?: number
+    is_pinned?: boolean
+    groups?: { name?: string }[]
+  }>
   assetBreakdown90d: AssetBreakdownItem[]
   assetBreakdown30d: AssetBreakdownItem[]
   assetBreakdown7d: AssetBreakdownItem[]
@@ -559,17 +699,39 @@ function buildTraderResponse(p: {
   statsDetail30d: StatsDetailData | undefined
   statsDetail7d: StatsDetailData | undefined
   trackedSince: string | null
-  v3Scores: { profitability_score: number | null; risk_control_score: number | null; execution_score: number | null; arena_score_v3: number | null; score_completeness: string | null; score_penalty: number | null } | null
-  similarTraders: Array<{ handle: string; id: string; followers: number; avatar_url?: string; source: string; roi_90d?: number; arena_score?: number }>
+  v3Scores: {
+    profitability_score: number | null
+    risk_control_score: number | null
+    execution_score: number | null
+    arena_score_v3: number | null
+    score_completeness: string | null
+    score_penalty: number | null
+  } | null
+  similarTraders: Array<{
+    handle: string
+    id: string
+    followers: number
+    avatar_url?: string
+    source: string
+    roi_90d?: number
+    arena_score?: number
+  }>
   score90d: ReturnType<typeof calculateArenaScore> | null
   score30d: ReturnType<typeof calculateArenaScore> | null
   score7d: ReturnType<typeof calculateArenaScore> | null
   overallScore: number | null
 }) {
   const perf = buildPerformanceObj(
-    p.snapshot, p.snapshot7d, p.snapshot30d,
-    p.score90d, p.score30d, p.score7d, p.overallScore,
-    p.statsDetail90d ?? null, p.statsDetail30d ?? null, p.statsDetail7d ?? null,
+    p.snapshot,
+    p.snapshot7d,
+    p.snapshot30d,
+    p.score90d,
+    p.score30d,
+    p.score7d,
+    p.overallScore,
+    p.statsDetail90d ?? null,
+    p.statsDetail30d ?? null,
+    p.statsDetail7d ?? null
   )
 
   return {
@@ -590,11 +752,14 @@ function buildTraderResponse(p: {
     performance: {
       ...perf,
       // V3 三维度分数
-      profitability_score: p.v3Scores?.profitability_score ?? p.snapshot?.profitability_score ?? undefined,
-      risk_control_score: p.v3Scores?.risk_control_score ?? p.snapshot?.risk_control_score ?? undefined,
+      profitability_score:
+        p.v3Scores?.profitability_score ?? p.snapshot?.profitability_score ?? undefined,
+      risk_control_score:
+        p.v3Scores?.risk_control_score ?? p.snapshot?.risk_control_score ?? undefined,
       execution_score: p.v3Scores?.execution_score ?? p.snapshot?.execution_score ?? undefined,
       arena_score_v3: p.v3Scores?.arena_score_v3 ?? p.snapshot?.arena_score_v3 ?? undefined,
-      score_completeness: p.v3Scores?.score_completeness ?? p.snapshot?.score_completeness ?? undefined,
+      score_completeness:
+        p.v3Scores?.score_completeness ?? p.snapshot?.score_completeness ?? undefined,
       score_penalty: p.v3Scores?.score_penalty ?? p.snapshot?.score_penalty ?? undefined,
     },
     stats: {
@@ -606,7 +771,11 @@ function buildTraderResponse(p: {
         avgProfit: p.statsDetail90d?.avg_profit ?? undefined,
         avgLoss: p.statsDetail90d?.avg_loss ?? undefined,
         activeSince: p.trackedSince
-          ? new Date(p.trackedSince).toLocaleDateString('zh-CN', { year: 'numeric', month: 'short', day: 'numeric' })
+          ? new Date(p.trackedSince).toLocaleDateString('zh-CN', {
+              year: 'numeric',
+              month: 'short',
+              day: 'numeric',
+            })
           : undefined,
         maxDrawdown: p.snapshot?.max_drawdown ?? undefined,
       },
@@ -616,9 +785,10 @@ function buildTraderResponse(p: {
         avgLoss: p.statsDetail90d?.avg_loss ?? 0,
         profitableTradesPct: normalizeWinRate(p.snapshot?.win_rate ?? null) ?? 0,
         winningPositions: p.statsDetail90d?.winning_positions ?? undefined,
-        totalPositions: p.statsDetail90d?.total_positions ?? p.statsDetail90d?.total_trades ?? undefined,
+        totalPositions:
+          p.statsDetail90d?.total_positions ?? p.statsDetail90d?.total_trades ?? undefined,
       },
-      frequentlyTraded: p.assetBreakdown90d.map(item => ({
+      frequentlyTraded: p.assetBreakdown90d.map((item) => ({
         symbol: item.symbol,
         weightPct: item.weight_pct,
         count: 0,
@@ -628,14 +798,32 @@ function buildTraderResponse(p: {
       })),
     },
     assetBreakdown: {
-      '90D': p.assetBreakdown90d.map(item => ({ symbol: item.symbol, weightPct: item.weight_pct })),
-      '30D': p.assetBreakdown30d.map(item => ({ symbol: item.symbol, weightPct: item.weight_pct })),
-      '7D': p.assetBreakdown7d.map(item => ({ symbol: item.symbol, weightPct: item.weight_pct })),
+      '90D': p.assetBreakdown90d.map((item) => ({
+        symbol: item.symbol,
+        weightPct: item.weight_pct,
+      })),
+      '30D': p.assetBreakdown30d.map((item) => ({
+        symbol: item.symbol,
+        weightPct: item.weight_pct,
+      })),
+      '7D': p.assetBreakdown7d.map((item) => ({ symbol: item.symbol, weightPct: item.weight_pct })),
     },
     equityCurve: {
-      '90D': p.equityCurve90d.map(item => ({ date: item.data_date, roi: item.roi_pct ?? 0, pnl: item.pnl_usd ?? 0 })),
-      '30D': p.equityCurve30d.map(item => ({ date: item.data_date, roi: item.roi_pct ?? 0, pnl: item.pnl_usd ?? 0 })),
-      '7D': p.equityCurve7d.map(item => ({ date: item.data_date, roi: item.roi_pct ?? 0, pnl: item.pnl_usd ?? 0 })),
+      '90D': p.equityCurve90d.map((item) => ({
+        date: item.data_date,
+        roi: item.roi_pct ?? 0,
+        pnl: item.pnl_usd ?? 0,
+      })),
+      '30D': p.equityCurve30d.map((item) => ({
+        date: item.data_date,
+        roi: item.roi_pct ?? 0,
+        pnl: item.pnl_usd ?? 0,
+      })),
+      '7D': p.equityCurve7d.map((item) => ({
+        date: item.data_date,
+        roi: item.roi_pct ?? 0,
+        pnl: item.pnl_usd ?? 0,
+      })),
     },
     portfolio: p.portfolioData.map((item) => ({
       market: item.symbol || '',

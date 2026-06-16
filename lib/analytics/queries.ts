@@ -74,21 +74,26 @@ export async function getTraderHistory(
       )
       if (rows && rows.length > 0) return rows
     } catch (err) {
-      chLogger.warn('getTraderHistory ClickHouse fallback:', err instanceof Error ? err.message : String(err))
+      chLogger.warn(
+        'getTraderHistory ClickHouse fallback:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
   }
 
-  // Fallback: Supabase
+  // Fallback: Supabase. Migrated off retiring trader_snapshots_v2 →
+  // trader_daily_snapshots (daily roi/pnl series; arena_score/rank not stored
+  // there — left 0, same as the prior v2 fallback which had no rank).
   const supabase = getSupabaseAdmin() as SupabaseClient
-  const since = new Date(Date.now() - days * 86400_000).toISOString()
+  const sinceDate = new Date(Date.now() - days * 86400_000).toISOString().slice(0, 10)
 
   const { data, error } = await supabase
-    .from('trader_snapshots_v2')
-    .select('as_of_ts, roi_pct, pnl_usd, arena_score')
+    .from('trader_daily_snapshots')
+    .select('date, roi, pnl')
     .eq('platform', platform)
     .eq('trader_key', traderKey)
-    .gte('as_of_ts', since)
-    .order('as_of_ts', { ascending: true })
+    .gte('date', sinceDate)
+    .order('date', { ascending: true })
 
   if (error) {
     chLogger.warn('getTraderHistory Supabase error:', error.message)
@@ -96,11 +101,11 @@ export async function getTraderHistory(
   }
 
   return (data ?? []).map((row) => ({
-    captured_at: row.as_of_ts,
-    roi_pct: row.roi_pct ?? 0,
-    pnl_usd: row.pnl_usd ?? 0,
-    arena_score: row.arena_score ?? 0,
-    rank: 0, // Supabase v2 doesn't store rank in snapshots
+    captured_at: row.date,
+    roi_pct: row.roi ?? 0,
+    pnl_usd: row.pnl ?? 0,
+    arena_score: 0,
+    rank: 0,
   }))
 }
 
@@ -132,7 +137,10 @@ export async function getPipelineStats(days = 7): Promise<PipelineStat[]> {
       )
       if (rows && rows.length > 0) return rows
     } catch (err) {
-      chLogger.warn('getPipelineStats ClickHouse fallback:', err instanceof Error ? err.message : String(err))
+      chLogger.warn(
+        'getPipelineStats ClickHouse fallback:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
   }
 
@@ -206,17 +214,20 @@ export async function getTopMovers(
       )
       if (rows && rows.length > 0) return rows
     } catch (err) {
-      chLogger.warn('getTopMovers ClickHouse fallback:', err instanceof Error ? err.message : String(err))
+      chLogger.warn(
+        'getTopMovers ClickHouse fallback:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
   }
 
-  // Fallback: Supabase — limited to current snapshots only (no historical diff)
-  // Returns traders with highest current scores as a rough proxy
+  // Fallback: Supabase — current scores only (no historical diff), rough proxy.
+  // Migrated off retiring trader_snapshots_v2 → leaderboard_ranks (aliased).
   const supabase = getSupabaseAdmin() as SupabaseClient
   const { data, error } = await supabase
-    .from('trader_snapshots_v2')
-    .select('platform, trader_key, window, arena_score')
-    .eq('window', period)
+    .from('leaderboard_ranks')
+    .select('platform:source, trader_key:source_trader_id, window:season_id, arena_score')
+    .eq('season_id', period)
     .not('arena_score', 'is', null)
     .order('arena_score', { ascending: false })
     .limit(limit)

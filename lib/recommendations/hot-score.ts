@@ -48,9 +48,9 @@ export interface HotSignals {
 
 const WEIGHTS = {
   roiMomentum: 0.35,
-  followerGrowth: 0.20,
+  followerGrowth: 0.2,
   tradingFrequency: 0.15,
-  recency: 0.30,
+  recency: 0.3,
 }
 
 /** How many hours back to look for "recent" snapshots */
@@ -98,7 +98,9 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
   // 1. Fetch current leaderboard ranks (latest standings)
   const { data: ranks, error: ranksErr } = await supabase
     .from('leaderboard_ranks')
-    .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate, followers')
+    .select(
+      'source, source_trader_id, handle, avatar_url, arena_score, roi, pnl, win_rate, followers'
+    )
     .eq('season_id', '90D')
     .not('arena_score', 'is', null)
     .or('is_outlier.is.null,is_outlier.eq.false')
@@ -112,10 +114,11 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
 
   const typedRanks = ranks as unknown as RankRow[]
 
-  // 2. Fetch recent snapshots for momentum calculation
-  // Use trader_snapshots_v2 (the active data pipeline table) instead of legacy trader_snapshots
-  const cutoff = new Date(Date.now() - LOOKBACK_HOURS * 3600 * 1000).toISOString()
-  const traderIds = typedRanks.map(r => r.source_trader_id)
+  // 2. Fetch recent daily snapshots for momentum calculation.
+  // Migrated off retiring trader_snapshots_v2 → trader_daily_snapshots (daily
+  // roi trajectory; coarser than hourly but sufficient for momentum).
+  const cutoffDate = new Date(Date.now() - LOOKBACK_HOURS * 3600 * 1000).toISOString().slice(0, 10)
+  const traderIds = typedRanks.map((r) => r.source_trader_id)
 
   // Fetch in parallel batches to avoid oversized IN clause
   const batchSize = 100
@@ -125,25 +128,27 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
   for (let i = 0; i < traderIds.length; i += batchSize) {
     const batch = traderIds.slice(i, i + batchSize)
     batchPromises.push(
-      Promise.resolve(supabase
-        .from('trader_snapshots_v2')
-        .select('platform, trader_key, roi_pct, followers, trades_count, created_at')
-        .in('trader_key', batch)
-        .gte('created_at', cutoff)
-        .order('created_at', { ascending: true }))
-        .then(({ data: snaps }) => {
-          if (snaps) {
-            // Map v2 fields to SnapshotRow shape
-            allSnapshots.push(...(snaps as unknown as Array<Record<string, unknown>>).map(s => ({
+      Promise.resolve(
+        supabase
+          .from('trader_daily_snapshots')
+          .select('platform, trader_key, roi, followers, trades_count, date')
+          .in('trader_key', batch)
+          .gte('date', cutoffDate)
+          .order('date', { ascending: true })
+      ).then(({ data: snaps }) => {
+        if (snaps) {
+          allSnapshots.push(
+            ...(snaps as unknown as Array<Record<string, unknown>>).map((s) => ({
               source: String(s.platform || ''),
               source_trader_id: String(s.trader_key || ''),
-              roi: s.roi_pct != null ? Number(s.roi_pct) : null,
+              roi: s.roi != null ? Number(s.roi) : null,
               followers: s.followers != null ? Number(s.followers) : null,
               trades_count: s.trades_count != null ? Number(s.trades_count) : null,
-              captured_at: String(s.created_at || ''),
-            })))
-          }
-        })
+              captured_at: String(s.date || ''),
+            }))
+          )
+        }
+      })
     )
   }
   await Promise.all(batchPromises)
@@ -196,11 +201,7 @@ export async function computeHotTraders(limit = 50): Promise<HotTrader[]> {
 // Signal computation helpers
 // ---------------------------------------------------------------------------
 
-function computeSignals(
-  snapshots: SnapshotRow[],
-  rank: RankRow,
-  now: number,
-): HotSignals {
+function computeSignals(snapshots: SnapshotRow[], rank: RankRow, now: number): HotSignals {
   // -- ROI Momentum --
   let roiMomentum = 0
   if (snapshots.length >= 2) {
@@ -251,7 +252,7 @@ function computeSignals(
     const latestTime = new Date(snapshots[snapshots.length - 1].captured_at).getTime()
     const hoursAgo = (now - latestTime) / (3600 * 1000)
     // Exponential decay: half-life = 12 hours
-    recency = Math.exp(-0.693 * hoursAgo / 12)
+    recency = Math.exp((-0.693 * hoursAgo) / 12)
   }
 
   return {

@@ -82,16 +82,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // BATCH QUERY 2: Fetch ALL previous ranks in one query
+    // BATCH QUERY 2: previous ranks. Migrated off retiring trader_snapshots_v2 →
+    // rank_history (period='90D', snapshot_date; actively written by snapshot-ranks).
     const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0]
     const { data: prevRanks } = await supabase
-      .from('trader_snapshots_v2')
+      .from('rank_history')
       .select('platform, trader_key, rank')
       .in('platform', uniqueSources)
       .in('trader_key', watchedTraderIds)
-      .eq('window', '90D')
-      .gte('created_at', `${yesterday}T00:00:00Z`)
-      .order('created_at', { ascending: false })
+      .eq('period', '90D')
+      .gte('snapshot_date', yesterday)
+      .order('snapshot_date', { ascending: false })
 
     // Build prev rank lookup: keep only the latest row per (platform, trader_key)
     const prevRankMap = new Map<string, number>()
