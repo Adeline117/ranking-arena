@@ -126,6 +126,11 @@ export interface ParsedLeaderboardRow {
   headlineAum?: number | null
   headlineCopierCount?: number | null
   headlineVolume?: number | null
+  /** Board-derived extras for profile-less sources (bingx rankStat superset:
+   *  avg_profit / trades_per_week / trading_days / last_trade_time …). Merged
+   *  into trader_stats.extras by the publish headline upsert (board keys win,
+   *  existing profile extras preserved). Null/omitted → extras untouched. */
+  headlineExtras?: Record<string, unknown> | null
   /** Durable per-trader routing facts merged into arena.traders.meta —
    *  e.g. Bitget UTA portfolio_id, which profile endpoints are keyed by.
    *  Distinct from `raw` (entry-scoped, never queried for fetch routing). */
