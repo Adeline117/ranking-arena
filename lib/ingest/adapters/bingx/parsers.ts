@@ -128,12 +128,34 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
       headlineSharpe: num(rankStat[`sharpe${tf}d`]),
       headlineAum: parseDisplayPct(rankStat.equity),
       headlineCopierCount: int(parseDisplayPct(rankStat.strFollowerNum)),
+      // Rich rankStat superset → trader_stats.extras (surfaced by the metric
+      // registry / meta strip with no UI changes). TF-independent overall stats.
+      headlineExtras: bingxBoardExtras(rankStat),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: item,
     })
   }
   const total = int(((search as Dict)?.data as Dict | undefined)?.total)
   return { rows, reportedTotal: total }
+}
+
+/** Rich rankStat fields → trader_stats.extras (mapped to existing registry /
+ *  meta-strip keys, so they surface with zero UI change). Amount fields are
+ *  comma-formatted strings; lastTradeTime is already ISO. Returns null when
+ *  nothing parses so the publish upsert leaves extras untouched. */
+function bingxBoardExtras(rankStat: Dict): Record<string, unknown> | null {
+  const ext: Record<string, unknown> = {}
+  const avgProfit = parseDisplayPct(rankStat.avgProfitAmount)
+  if (avgProfit !== null) ext.avg_profit = avgProfit
+  const avgLoss = parseDisplayPct(rankStat.avgLossAmount)
+  if (avgLoss !== null) ext.avg_loss = avgLoss
+  const tpw = num(rankStat.weeklyTradeFrequency)
+  if (tpw !== null) ext.trades_per_week = tpw
+  const td = int(rankStat.tradeDays)
+  if (td !== null) ext.trading_days = td
+  const ltt = rankStat.lastTradeTime
+  if (typeof ltt === 'string' && !Number.isNaN(Date.parse(ltt))) ext.last_trade_time = ltt
+  return Object.keys(ext).length > 0 ? ext : null
 }
 
 /** All-period sharpe/mdd/risk extractor for the (future) profile pass — kept

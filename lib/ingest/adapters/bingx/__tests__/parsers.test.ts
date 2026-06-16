@@ -39,6 +39,9 @@ describe('parseBingxLeaderboardPage', () => {
     expect(typeof first.headlineSharpe).toBe('number')
     expect(typeof first.headlineAum).toBe('number')
     expect(typeof first.headlineCopierCount).toBe('number')
+    // Rich rankStat extras → trader_stats.extras (registry/meta-strip surfaced)
+    expect(first.headlineExtras && typeof first.headlineExtras).toBe('object')
+    expect(Object.keys(first.headlineExtras ?? {}).length).toBeGreaterThan(0)
     // apiIdentity routing fact on traderMeta (TF-independent)
     expect(first.traderMeta).toMatchObject({ bingx_api_identity: '1579905006518878200' })
     // per-TF risk rating stays in raw.rankStat (spec §11.12), not traderMeta
