@@ -24,13 +24,9 @@
  * Missing fields NULL-collapse (legacy components already tolerate undefined).
  */
 
-import type {
-  PortfolioItem,
-  TraderPerformance,
-  TraderProfile,
-  TraderStats,
-} from '@/lib/data/trader-types'
+import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
+import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 
 type Row = Record<string, unknown>
 type SeriesPoint = { ts: string; value: number }
@@ -157,28 +153,46 @@ export function servingStatsToPerformance(byTf: {
   tf7?: Record<string, number | string | null> | null
   tf30?: Record<string, number | string | null> | null
   tf90?: Record<string, number | string | null> | null
-}): TraderPerformance {
-  const perf: TraderPerformance = {}
+}): ExtendedPerformance {
+  const perf: ExtendedPerformance = {}
   const s7 = byTf.tf7
   const s30 = byTf.tf30
   const s90 = byTf.tf90
+  // Set only when present so a source that omits a metric NULL-collapses (renders
+  // '--') instead of a misleading 0 — matches the ServingProfilePanel MetricGrid.
+  const set = (v: unknown): number | undefined => {
+    if (v === null || v === undefined || v === '') return undefined
+    const n = Number(v)
+    return Number.isFinite(n) ? n : undefined
+  }
   if (s7) {
     perf.roi_7d = num(s7.roi)
     perf.pnl_7d = num(s7.pnl)
     perf.win_rate_7d = num(s7.win_rate)
     perf.max_drawdown_7d = num(s7.mdd)
+    perf.sharpe_ratio_7d = set(s7.sharpe)
+    perf.winning_positions_7d = set(s7.win_positions)
+    perf.total_positions_7d = set(s7.total_positions)
   }
   if (s30) {
     perf.roi_30d = num(s30.roi)
     perf.pnl_30d = num(s30.pnl)
     perf.win_rate_30d = num(s30.win_rate)
     perf.max_drawdown_30d = num(s30.mdd)
+    perf.sharpe_ratio_30d = set(s30.sharpe)
+    perf.winning_positions_30d = set(s30.win_positions)
+    perf.total_positions_30d = set(s30.total_positions)
   }
   if (s90) {
     perf.roi_90d = num(s90.roi)
     perf.pnl = num(s90.pnl)
     perf.win_rate = num(s90.win_rate)
     perf.max_drawdown = num(s90.mdd)
+    perf.sharpe_ratio = set(s90.sharpe)
+    perf.sortino_ratio = set(s90.sortino)
+    perf.calmar_ratio = set(s90.calmar)
+    perf.winning_positions = set(s90.win_positions)
+    perf.total_positions = set(s90.total_positions)
   }
   return perf
 }

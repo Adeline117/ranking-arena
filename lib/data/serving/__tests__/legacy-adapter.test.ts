@@ -81,6 +81,24 @@ describe('serving → legacy adapter', () => {
     expect(perf.max_drawdown).toBe(15)
   })
 
+  it('surfaces advanced metrics when present, NULL-collapses when absent', () => {
+    const perf = servingStatsToPerformance({
+      tf90: {
+        roi: 30,
+        pnl: 300,
+        win_rate: 70,
+        mdd: 15,
+        win_positions: 51,
+        total_positions: 139,
+        sharpe: null, // binance omits → must stay undefined, not 0
+      },
+    })
+    expect(perf.winning_positions).toBe(51)
+    expect(perf.total_positions).toBe(139)
+    expect(perf.sharpe_ratio).toBeUndefined() // null collapses, no misleading 0
+    expect(perf.sortino_ratio).toBeUndefined()
+  })
+
   it('NULL-collapses missing timeframes (only 90d present)', () => {
     const perf = servingStatsToPerformance({ tf90: { roi: 30, pnl: 300, win_rate: 70, mdd: 15 } })
     expect(perf.roi_90d).toBe(30)

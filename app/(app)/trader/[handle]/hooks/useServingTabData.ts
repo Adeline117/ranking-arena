@@ -27,17 +27,13 @@ import {
   type AssetBreakdownByTf,
 } from '@/lib/data/serving/legacy-adapter'
 import type { TraderFirstScreen, SourceCapability } from '@/lib/data/serving/types'
-import type {
-  PortfolioItem,
-  TraderPerformance,
-  TraderProfile,
-  TraderStats,
-} from '@/lib/data/trader-types'
+import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
+import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 
 export interface ServingTabData {
   traderProfile: TraderProfile
-  traderPerformance: TraderPerformance
+  traderPerformance: ExtendedPerformance
   traderEquityCurve: EquityCurveByTf
   traderAssetBreakdown: AssetBreakdownByTf
   traderStats: TraderStats
