@@ -26,11 +26,11 @@
 
 import type {
   PortfolioItem,
-  PositionHistoryItem,
   TraderPerformance,
   TraderProfile,
   TraderStats,
 } from '@/lib/data/trader-types'
+import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 
 type Row = Record<string, unknown>
 type SeriesPoint = { ts: string; value: number }
@@ -87,8 +87,11 @@ export function positionsToPortfolio(rows: Row[]): PortfolioItem[] {
   })
 }
 
-/** Serving `position_history` records → legacy PositionHistoryItem (closed). */
-export function historyToPositionHistory(rows: Row[]): PositionHistoryItem[] {
+/** Serving `position_history` records → legacy PositionHistoryEntry (closed),
+ *  the shape the StatsTab + PortfolioTab history tables consume. Fields the
+ *  serving record doesn't carry (positionType / marginMode / maxPositionSize)
+ *  NULL-collapse to sane defaults (the tables tolerate empty strings / 0). */
+export function historyToPositionHistory(rows: Row[]): PositionHistoryEntry[] {
   return rows.map((r) => {
     const entry = num(r.entry_price ?? r.entryPrice)
     const exit = num(r.exit_price ?? r.exitPrice)
@@ -106,11 +109,17 @@ export function historyToPositionHistory(rows: Row[]): PositionHistoryItem[] {
     return {
       symbol: str(r.symbol),
       direction: toDirection(r.side ?? r.direction),
-      entryPrice: entry,
-      exitPrice: exit,
-      pnlPct,
+      positionType: str(r.position_type ?? r.contract_type) || 'perpetual',
+      marginMode: str(r.margin_mode),
       openTime: str(r.opened_at ?? r.openTime),
       closeTime: str(r.closed_at ?? r.closeTime),
+      entryPrice: entry,
+      exitPrice: exit,
+      maxPositionSize: num(r.max_position_size ?? r.size ?? r.closed_size),
+      closedSize: size,
+      pnlUsd: realizedPnl,
+      pnlPct,
+      status: str(r.status) || 'closed',
     }
   })
 }
