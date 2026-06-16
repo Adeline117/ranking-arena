@@ -44,6 +44,22 @@ function str(v: unknown): string | null {
 
 // ── Leaderboard ──
 
+/** On-chain board fields → trader_stats.extras (registry/meta-strip surfaced):
+ *  avg buy size, tokens traded, total transactions, last activity. lastActivity
+ *  is an epoch-ms number → ISO for the last_trade_time meta chip. */
+function web3BoardExtras(item: Dict): Record<string, unknown> | null {
+  const ext: Record<string, unknown> = {}
+  const avgBuy = num(item.avgBuyVolume)
+  if (avgBuy !== null) ext.avg_buy = avgBuy
+  const tokens = num(item.totalTradedTokens)
+  if (tokens !== null) ext.total_traded_tokens = Math.round(tokens)
+  const txns = num(item.totalTxCnt)
+  if (txns !== null) ext.total_txns = Math.round(txns)
+  const ms = num(item.lastActivity)
+  if (ms !== null && ms > 0) ext.last_trade_time = new Date(ms).toISOString()
+  return Object.keys(ext).length > 0 ? ext : null
+}
+
 export function parseBinanceWeb3LeaderboardPage(
   raw: unknown,
   _ctx: ParseCtx
@@ -78,6 +94,12 @@ export function parseBinanceWeb3LeaderboardPage(
       headlineRoi: pct(item.realizedPnlPercent),
       headlinePnl: num(item.realizedPnl),
       headlineWinRate: pct(item.winRate),
+      // Board IS the stats substrate (profile page is 202-gated and unneeded —
+      // the board row carries the full §2.5d on-chain superset). Backfill AUM
+      // (wallet balance), volume + on-chain extras into trader_stats.
+      headlineAum: num(item.balance),
+      headlineVolume: num(item.totalVolume),
+      headlineExtras: web3BoardExtras(item),
       // durable routing/identity facts only when present (spec traderMeta)
       traderMeta:
         isKol || twitter

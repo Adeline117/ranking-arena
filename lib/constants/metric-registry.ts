@@ -101,6 +101,11 @@ export const METRIC_REGISTRY: readonly MetricDef[] = [
   { key: 'lifetime_trades', i18nKey: 'metricLifetimeTrades', format: 'count', tier: 'advanced' },
   { key: 'lifetime_volume', i18nKey: 'metricLifetimeVolume', format: 'money', tier: 'advanced' },
   { key: 'lifetime_win_rate', i18nKey: 'metricLifetimeWinRate', format: 'pct', tier: 'advanced' },
+
+  // On-chain wallet activity (binance_web3 / okx_web3 board carries these).
+  { key: 'avg_buy', i18nKey: 'metricAvgBuy', format: 'money', tier: 'advanced' },
+  { key: 'total_traded_tokens', i18nKey: 'metricTradedTokens', format: 'count', tier: 'advanced' },
+  { key: 'total_txns', i18nKey: 'metricTotalTxns', format: 'count', tier: 'advanced' },
 ] as const
 
 /**
@@ -152,6 +157,10 @@ export const EXTRAS_METRIC_ALIASES: Readonly<Record<string, readonly string[]>> 
   lifetime_trades: ['lifetime_trades', 'trade_count_lifetime'],
   lifetime_volume: ['lifetime_volume', 'total_trade_volume'],
   lifetime_win_rate: ['lifetime_win_rate'],
+  // On-chain wallet activity
+  avg_buy: ['avg_buy', 'avg_buy_volume', 'avg_cost_buy'],
+  total_traded_tokens: ['total_traded_tokens'],
+  total_txns: ['total_txns', 'total_tx_count'],
 } as const
 
 /**
