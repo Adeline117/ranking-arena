@@ -35,7 +35,26 @@ export const GET = withAuth(
         throw error
       }
 
-      return success({ folders: folders || [] })
+      // Attach per-folder item counts. The folder row has no count column, so the
+      // client previously rendered "undefined items". Tally the user's bookmarks by
+      // folder_id in one lightweight query (folder_id only); null-folder bookmarks
+      // belong to the default folder.
+      const list = (folders || []) as Array<{ id: string; is_default?: boolean }>
+      const countByFolder: Record<string, number> = {}
+      if (list.length > 0) {
+        const { data: marks } = await supabase
+          .from('post_bookmarks')
+          .select('folder_id')
+          .eq('user_id', user.id)
+        const defaultId = list.find((f) => f.is_default)?.id
+        for (const m of (marks || []) as Array<{ folder_id: string | null }>) {
+          const fid = m.folder_id || defaultId
+          if (fid) countByFolder[fid] = (countByFolder[fid] || 0) + 1
+        }
+      }
+      return success({
+        folders: list.map((f) => ({ ...f, post_count: countByFolder[f.id] ?? 0 })),
+      })
     } catch (error: unknown) {
       return handleError(error, 'bookmark-folders GET')
     }
