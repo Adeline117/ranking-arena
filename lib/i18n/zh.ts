@@ -3259,6 +3259,7 @@ const zh = {
   alpha: 'Alpha',
   edited: '已编辑',
   manageLinkedAccounts: '管理关联账户 →',
+  defaultFolderName: '默认收藏夹',
   predictedFunding: '预测资金费率',
   trending: '热门',
   newlyListed: '新上线',
