@@ -143,23 +143,13 @@ export class PipelineStorage {
     )
     if (rejected.length) logRejectedWrites(rejected, supabase)
 
-    if (validSnapshots.length === 0) return { count: 0 }
-
-    // Upsert only validated rows
-    const { error, count } = await supabase.from('trader_snapshots_v2').upsert(validSnapshots, {
-      onConflict: 'platform,market_type,trader_key,window,as_of_ts',
-      ignoreDuplicates: false,
-      count: 'exact',
-    })
-
-    if (error) {
-      log.error('upsertSnapshots error', {
-        error: error instanceof Error ? error.message : String(error),
-      })
-      throw error
-    }
-
-    return { count: count ?? validSnapshots.length }
+    // (no-op 2026-06-15) upsertSnapshots wrote trader_snapshots_v2 (retired).
+    // This private method has no callers; kept as a stub to avoid touching the
+    // class shape. void validation outputs so they stay referenced.
+    void validSnapshots
+    void rejected
+    void supabase
+    return { count: 0 }
   }
 
   /**
