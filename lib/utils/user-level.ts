@@ -24,11 +24,46 @@ export interface LevelInfo {
 }
 
 export const LEVELS: LevelDefinition[] = [
-  { level: 1, name: '磷虾', nameEn: 'Krill', minExp: 0, color: 'gray', colorHex: 'var(--color-text-tertiary)' },
-  { level: 2, name: '沙丁鱼', nameEn: 'Sardine', minExp: 500, color: 'blue', colorHex: 'var(--color-score-profitability)' },
-  { level: 3, name: '海豚', nameEn: 'Dolphin', minExp: 2000, color: 'green', colorHex: 'var(--color-accent-success)' },
-  { level: 4, name: '鲨鱼', nameEn: 'Shark', minExp: 10000, color: 'purple', colorHex: 'var(--color-chart-violet)' },
-  { level: 5, name: '虎鲸', nameEn: 'Orca', minExp: 50000, color: 'gold', colorHex: 'var(--color-accent-warning)' },
+  {
+    level: 1,
+    name: '磷虾',
+    nameEn: 'Krill',
+    minExp: 0,
+    color: 'gray',
+    colorHex: 'var(--color-text-tertiary)',
+  },
+  {
+    level: 2,
+    name: '沙丁鱼',
+    nameEn: 'Sardine',
+    minExp: 500,
+    color: 'blue',
+    colorHex: 'var(--color-score-profitability)',
+  },
+  {
+    level: 3,
+    name: '海豚',
+    nameEn: 'Dolphin',
+    minExp: 2000,
+    color: 'green',
+    colorHex: 'var(--color-accent-success)',
+  },
+  {
+    level: 4,
+    name: '鲨鱼',
+    nameEn: 'Shark',
+    minExp: 10000,
+    color: 'purple',
+    colorHex: 'var(--color-chart-violet)',
+  },
+  {
+    level: 5,
+    name: '虎鲸',
+    nameEn: 'Orca',
+    minExp: 50000,
+    color: 'gold',
+    colorHex: 'var(--color-accent-warning)',
+  },
 ]
 
 export function getLevelInfo(exp: number): LevelInfo {
@@ -96,5 +131,11 @@ export function getExpForAction(action: string, dailyEarned: number): number {
 
 /** Get localized label for an EXP action key */
 export function getExpActionLabel(key: string, t: (k: string) => string): string {
-  return t(`expAction_${key}`) || key
+  // Action keys arrive snake_case (e.g. "login", "read_checkin") but the i18n
+  // dictionaries define camelCase keys (expActionLogin, expActionReadCheckin).
+  // The old `expAction_${key}` lookup never matched → the raw key leaked to the
+  // user on /user-center. Convert snake_case → PascalCase before lookup.
+  const camel = key.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+  const dictKey = `expAction${camel.charAt(0).toUpperCase()}${camel.slice(1)}`
+  return t(dictKey) || key
 }
