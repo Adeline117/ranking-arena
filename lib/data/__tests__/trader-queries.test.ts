@@ -176,12 +176,13 @@ describe('getTraderPerformance', () => {
       source_trader_id: 'TRADER1',
     })
 
-    // Simulate trader_latest returning data (query ends with .in(), not .limit())
+    // Migrated to leaderboard_ranks: rows keyed by season_id with roi/pnl aliased
+    // from roi_pct/pnl_usd (query ends with .in('season_id', ...), not .limit()).
     mockChain.in.mockResolvedValue({
       data: [
-        { window: '90D', roi_pct: 125.5, pnl_usd: 50000, win_rate: 68.5, max_drawdown: -12 },
-        { window: '30D', roi_pct: 45.2, pnl_usd: 20000, win_rate: 72.0, max_drawdown: -8 },
-        { window: '7D', roi_pct: 10.3, pnl_usd: 5000, win_rate: 80.0, max_drawdown: -3 },
+        { season_id: '90D', roi: 125.5, pnl: 50000, win_rate: 68.5, max_drawdown: -12 },
+        { season_id: '30D', roi: 45.2, pnl: 20000, win_rate: 72.0, max_drawdown: -8 },
+        { season_id: '7D', roi: 10.3, pnl: 5000, win_rate: 80.0, max_drawdown: -3 },
       ],
       error: null,
     })
