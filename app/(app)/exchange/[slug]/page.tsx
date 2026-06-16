@@ -134,9 +134,10 @@ export async function generateMetadata({
   const topTrader = data?.topTraders?.[0]
 
   const title = `${displayName} Top Traders & Rankings | Arena`
-  const description = traderCount > 0
-    ? `Explore ${traderCount.toLocaleString()} ranked ${displayName} traders on Arena. ${topTrader ? `Top trader: ${topTrader.handle}${topTrader.roi != null ? ` (${topTrader.roi >= 0 ? '+' : ''}${topTrader.roi.toFixed(1)}% ROI)` : ''}.` : ''} Compare Arena Scores, ROI, PnL, and risk metrics.`
-    : `View ${displayName} crypto trader rankings on Arena. Compare performance, Arena Scores, ROI, and PnL across top traders.`
+  const description =
+    traderCount > 0
+      ? `Explore ${traderCount.toLocaleString()} ranked ${displayName} traders on Arena. ${topTrader ? `Top trader: ${topTrader.handle}${topTrader.roi != null ? ` (${topTrader.roi >= 0 ? '+' : ''}${topTrader.roi.toFixed(1)}% ROI)` : ''}.` : ''} Compare Arena Scores, ROI, PnL, and risk metrics.`
+      : `View ${displayName} crypto trader rankings on Arena. Compare performance, Arena Scores, ROI, and PnL across top traders.`
 
   const ogImageUrl = `${BASE_URL}/api/og/exchange?exchange=${encodeURIComponent(sourceKey)}`
   const canonicalUrl = `${BASE_URL}/exchange/${slug}`
@@ -151,7 +152,12 @@ export async function generateMetadata({
       siteName: 'Arena',
       type: 'website',
       images: [
-        { url: ogImageUrl, width: 1200, height: 630, alt: `${displayName} trader rankings on Arena` },
+        {
+          url: ogImageUrl,
+          width: 1200,
+          height: 630,
+          alt: `${displayName} trader rankings on Arena`,
+        },
       ],
     },
     twitter: {
@@ -220,7 +226,11 @@ export default async function ExchangeLandingPage({
   ])
 
   const sourceTypeLabel =
-    data.sourceType === 'futures' ? 'Futures' : data.sourceType === 'spot' ? 'Spot' : 'DeFi / On-Chain'
+    data.sourceType === 'futures'
+      ? 'Futures'
+      : data.sourceType === 'spot'
+        ? 'Spot'
+        : 'DeFi / On-Chain'
 
   return (
     <>
@@ -229,63 +239,173 @@ export default async function ExchangeLandingPage({
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 16px' }}>
         {/* Header */}
         <div style={{ marginBottom: 32 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 800, margin: '0 0 8px', color: 'var(--text-primary, #fff)' }}>
-            {data.displayName} Top Traders &amp; Rankings
+          <h1
+            style={{
+              fontSize: 28,
+              fontWeight: 800,
+              margin: '0 0 8px',
+              color: 'var(--text-primary, #fff)',
+            }}
+          >
+            {`${data.displayName} Top Traders & Rankings`}
           </h1>
-          <p style={{ fontSize: 15, color: 'var(--text-secondary, rgba(255,255,255,0.6))', margin: 0, lineHeight: 1.5 }}>
-            {data.traderCount.toLocaleString()} ranked traders on {data.displayName} ({sourceTypeLabel}).
-            Updated every 5 minutes.
+          <p
+            style={{
+              fontSize: 15,
+              color: 'var(--text-secondary, rgba(255,255,255,0.6))',
+              margin: 0,
+              lineHeight: 1.5,
+            }}
+          >
+            {data.traderCount.toLocaleString()} ranked traders on {data.displayName} (
+            {sourceTypeLabel}). Updated every 5 minutes.
           </p>
         </div>
 
         {/* Top traders table */}
         {data.topTraders.length > 0 && (
           <div style={{ marginBottom: 32 }}>
-            <h2 style={{ fontSize: 18, fontWeight: 700, margin: '0 0 16px', color: 'var(--text-primary, #fff)' }}>
+            <h2
+              style={{
+                fontSize: 18,
+                fontWeight: 700,
+                margin: '0 0 16px',
+                color: 'var(--text-primary, #fff)',
+              }}
+            >
               Top 10 Traders by Arena Score
             </h2>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-                    <th style={{ textAlign: 'left', padding: '10px 12px', color: 'var(--text-secondary, rgba(255,255,255,0.5))', fontWeight: 600, fontSize: 12, letterSpacing: '0.5px' }}>RANK</th>
-                    <th style={{ textAlign: 'left', padding: '10px 12px', color: 'var(--text-secondary, rgba(255,255,255,0.5))', fontWeight: 600, fontSize: 12, letterSpacing: '0.5px' }}>TRADER</th>
-                    <th style={{ textAlign: 'right', padding: '10px 12px', color: 'var(--text-secondary, rgba(255,255,255,0.5))', fontWeight: 600, fontSize: 12, letterSpacing: '0.5px' }}>ARENA SCORE</th>
-                    <th style={{ textAlign: 'right', padding: '10px 12px', color: 'var(--text-secondary, rgba(255,255,255,0.5))', fontWeight: 600, fontSize: 12, letterSpacing: '0.5px' }}>ROI (90D)</th>
-                    <th style={{ textAlign: 'right', padding: '10px 12px', color: 'var(--text-secondary, rgba(255,255,255,0.5))', fontWeight: 600, fontSize: 12, letterSpacing: '0.5px' }}>PNL</th>
+                    <th
+                      style={{
+                        textAlign: 'left',
+                        padding: '10px 12px',
+                        color: 'var(--text-secondary, rgba(255,255,255,0.5))',
+                        fontWeight: 600,
+                        fontSize: 12,
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      RANK
+                    </th>
+                    <th
+                      style={{
+                        textAlign: 'left',
+                        padding: '10px 12px',
+                        color: 'var(--text-secondary, rgba(255,255,255,0.5))',
+                        fontWeight: 600,
+                        fontSize: 12,
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      TRADER
+                    </th>
+                    <th
+                      style={{
+                        textAlign: 'right',
+                        padding: '10px 12px',
+                        color: 'var(--text-secondary, rgba(255,255,255,0.5))',
+                        fontWeight: 600,
+                        fontSize: 12,
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      ARENA SCORE
+                    </th>
+                    <th
+                      style={{
+                        textAlign: 'right',
+                        padding: '10px 12px',
+                        color: 'var(--text-secondary, rgba(255,255,255,0.5))',
+                        fontWeight: 600,
+                        fontSize: 12,
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      ROI (90D)
+                    </th>
+                    <th
+                      style={{
+                        textAlign: 'right',
+                        padding: '10px 12px',
+                        color: 'var(--text-secondary, rgba(255,255,255,0.5))',
+                        fontWeight: 600,
+                        fontSize: 12,
+                        letterSpacing: '0.5px',
+                      }}
+                    >
+                      PNL
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {data.topTraders.map((trader) => (
-                    <tr key={trader.handle} style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-                      <td style={{ padding: '12px', color: 'var(--text-secondary, rgba(255,255,255,0.6))', fontWeight: 600 }}>
+                    <tr
+                      key={trader.handle}
+                      style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
+                    >
+                      <td
+                        style={{
+                          padding: '12px',
+                          color: 'var(--text-secondary, rgba(255,255,255,0.6))',
+                          fontWeight: 600,
+                        }}
+                      >
                         #{trader.rank}
                       </td>
                       <td style={{ padding: '12px' }}>
                         <a
                           href={`/trader/${encodeURIComponent(trader.handle)}`}
-                          style={{ color: 'var(--text-primary, #fff)', fontWeight: 600, textDecoration: 'none' }}
+                          style={{
+                            color: 'var(--text-primary, #fff)',
+                            fontWeight: 600,
+                            textDecoration: 'none',
+                          }}
                         >
                           {trader.handle}
                         </a>
                       </td>
-                      <td style={{ padding: '12px', textAlign: 'right', color: '#D4AF37', fontWeight: 700 }}>
+                      <td
+                        style={{
+                          padding: '12px',
+                          textAlign: 'right',
+                          color: '#D4AF37',
+                          fontWeight: 700,
+                        }}
+                      >
                         {trader.arena_score != null ? Math.round(trader.arena_score) : '--'}
                       </td>
-                      <td style={{
-                        padding: '12px',
-                        textAlign: 'right',
-                        fontWeight: 600,
-                        color: trader.roi != null ? (trader.roi >= 0 ? '#2FE57D' : '#FF5555') : 'var(--text-secondary, rgba(255,255,255,0.5))',
-                      }}>
+                      <td
+                        style={{
+                          padding: '12px',
+                          textAlign: 'right',
+                          fontWeight: 600,
+                          color:
+                            trader.roi != null
+                              ? trader.roi >= 0
+                                ? '#2FE57D'
+                                : '#FF5555'
+                              : 'var(--text-secondary, rgba(255,255,255,0.5))',
+                        }}
+                      >
                         {trader.roi != null ? formatRoi(trader.roi) : '--'}
                       </td>
-                      <td style={{
-                        padding: '12px',
-                        textAlign: 'right',
-                        fontWeight: 600,
-                        color: trader.pnl != null ? (trader.pnl >= 0 ? '#2FE57D' : '#FF5555') : 'var(--text-secondary, rgba(255,255,255,0.5))',
-                      }}>
+                      <td
+                        style={{
+                          padding: '12px',
+                          textAlign: 'right',
+                          fontWeight: 600,
+                          color:
+                            trader.pnl != null
+                              ? trader.pnl >= 0
+                                ? '#2FE57D'
+                                : '#FF5555'
+                              : 'var(--text-secondary, rgba(255,255,255,0.5))',
+                        }}
+                      >
                         {trader.pnl != null ? formatPnl(trader.pnl) : '--'}
                       </td>
                     </tr>
@@ -316,11 +436,31 @@ export default async function ExchangeLandingPage({
         </div>
 
         {/* SEO content block */}
-        <div style={{ marginTop: 32, padding: '24px 0', borderTop: '1px solid rgba(255,255,255,0.08)' }}>
-          <h2 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 12px', color: 'var(--text-primary, #fff)' }}>
+        <div
+          style={{
+            marginTop: 32,
+            padding: '24px 0',
+            borderTop: '1px solid rgba(255,255,255,0.08)',
+          }}
+        >
+          <h2
+            style={{
+              fontSize: 16,
+              fontWeight: 700,
+              margin: '0 0 12px',
+              color: 'var(--text-primary, #fff)',
+            }}
+          >
             About {data.displayName} Trader Rankings
           </h2>
-          <p style={{ fontSize: 14, lineHeight: 1.7, color: 'var(--text-secondary, rgba(255,255,255,0.6))', margin: 0 }}>
+          <p
+            style={{
+              fontSize: 14,
+              lineHeight: 1.7,
+              color: 'var(--text-secondary, rgba(255,255,255,0.6))',
+              margin: 0,
+            }}
+          >
             Arena tracks {data.traderCount.toLocaleString()} active traders on {data.displayName},
             ranking them by Arena Score — a composite metric combining ROI, PnL, risk management,
             and consistency across 7-day, 30-day, and 90-day periods. {data.displayName} is a{' '}
