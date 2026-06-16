@@ -71,6 +71,12 @@ const METRIC_LABELS = [
   'Trades/Week',
   'Profit Days',
   'Loss Days',
+  'Unrealized PnL',
+  'Realized PnL',
+  'Closed Trades',
+  'Lifetime Trades',
+  'Lifetime Volume',
+  'Lifetime Win Rate',
 ]
 
 async function audit(ctx, [src, id]) {
