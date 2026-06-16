@@ -157,6 +157,15 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   if (!adapter.capabilities.profile) return empty
 
   const batch = Math.max(1, Number(src.meta.series_backfill_batch ?? DEFAULT_BATCH))
+  // Wall-clock budget (root fix 2026-06-16): series backfill is the LOWEST
+  // priority tier (9) but its per-job work (batch × 3 TF profile crawls) ran
+  // 20-40 min and monopolized all main-pool slots — BullMQ priority can't
+  // preempt an in-flight job, so core Tier-A/D starved behind it (1027-job
+  // wedge). Bounding the job to a deadline makes it ALWAYS yield its slot
+  // quickly; the cursor advances by the traders actually attempted, so the next
+  // iteration resumes seamlessly. This caps slot-hold structurally regardless
+  // of batch/board size. Tunable via meta; default 180s.
+  const deadlineMs = Math.max(30_000, Number(src.meta.series_backfill_deadline_ms ?? 180_000))
   const total = await bandSize(src.id, src.deep_profile_topn, backfillTopN)
   if (total === 0) return empty
 
@@ -164,19 +173,30 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   if (offset >= total) offset = 0 // wrap to refresh from the band top
 
   const traders = await getBandTraders(src.id, src.deep_profile_topn, backfillTopN, offset, batch)
-  const nextOffset = offset + traders.length >= total ? 0 : offset + traders.length
 
   const timeframes = profileTimeframes(src)
   const session = await openSession(src)
+  const startedAt = Date.now()
+  let attempted = 0
   const result: TierBSeriesResult = {
     ...empty,
     cursorFrom: offset,
-    cursorTo: nextOffset,
+    cursorTo: offset,
     bandSize: total,
   }
 
   try {
     for (const trader of traders) {
+      // Yield the slot once the budget is spent (but always make ≥1 trader of
+      // progress so the cursor never stalls). The next iteration continues from
+      // the advanced cursor.
+      if (attempted > 0 && Date.now() - startedAt > deadlineMs) {
+        console.log(
+          `[tier-b-series] ${src.slug}: budget ${deadlineMs}ms hit after ${attempted}/${traders.length} traders — yielding slot`
+        )
+        break
+      }
+      attempted += 1
       let traderOk = false
       for (const timeframe of timeframes) {
         try {
@@ -233,12 +253,15 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
     await session.close()
   }
 
-  // Advance the sweep cursor only after the batch completes — a crashed run
-  // re-attempts the same band slice (idempotent upserts make that safe).
+  // Advance the cursor by traders ACTUALLY attempted this run (may be < batch
+  // when the wall-clock budget cut the run short) — a crashed run re-attempts
+  // the same slice (idempotent upserts make that safe). Wrap at band end.
+  const nextOffset = offset + attempted >= total ? 0 : offset + attempted
+  result.cursorTo = nextOffset
   await writeCursor(src.id, nextOffset)
 
   console.log(
-    `[tier-b-series] ${src.slug}: ${result.tradersCrawled}/${traders.length} traders ` +
+    `[tier-b-series] ${src.slug}: ${result.tradersCrawled}/${attempted} traders ` +
       `(band ${src.deep_profile_topn + 1}-${backfillTopN}, ${total} total, ` +
       `offset ${offset}→${nextOffset}), ${result.seriesWritten} series pts, ` +
       `${result.rejects} rejects, ${result.errors} errors`
