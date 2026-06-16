@@ -3242,6 +3242,7 @@ const ko = {
   alpha: '알파',
   edited: '편집됨',
   manageLinkedAccounts: '연결된 계정 관리 →',
+  defaultFolderName: '기본 폴더',
   predictedFunding: '예상 펀딩비',
   trending: '인기',
   newlyListed: '신규',

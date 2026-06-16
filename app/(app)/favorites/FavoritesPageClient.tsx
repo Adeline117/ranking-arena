@@ -501,7 +501,9 @@ export default function FavoritesPageClient() {
                   >
                     {!folder.avatar_url && (
                       <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
-                        {folder.name.charAt(0).toUpperCase()}
+                        {(folder.is_default ? t('defaultFolderName') : folder.name)
+                          .charAt(0)
+                          .toUpperCase()}
                       </Text>
                     )}
                   </Box>
@@ -518,7 +520,7 @@ export default function FavoritesPageClient() {
                       }}
                     >
                       <Text size="base" weight="bold">
-                        {folder.name}
+                        {folder.is_default ? t('defaultFolderName') : folder.name}
                       </Text>
                       {folder.is_default && (
                         <span

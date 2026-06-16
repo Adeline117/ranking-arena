@@ -3342,6 +3342,7 @@ const en = {
   alpha: 'Alpha',
   edited: 'edited',
   manageLinkedAccounts: 'Manage linked accounts →',
+  defaultFolderName: 'Default Folder',
   predictedFunding: 'Predicted Funding',
   trending: 'Trending',
   newlyListed: 'New',

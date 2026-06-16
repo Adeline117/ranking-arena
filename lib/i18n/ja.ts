@@ -3083,6 +3083,7 @@ const ja = {
   alpha: 'アルファ',
   edited: '編集済み',
   manageLinkedAccounts: '連携アカウントを管理 →',
+  defaultFolderName: 'デフォルトフォルダ',
   predictedFunding: '予測ファンディング',
   trending: 'トレンド',
   newlyListed: '新規',
