@@ -84,6 +84,14 @@ export function parseBlofinLeaderboardPage(
       headlineRoi: pct(item.roi),
       headlinePnl: num(item.pnl),
       headlineWinRate: null, // not exposed on the board row
+      // Blofin has NO per-uid profile endpoint, so the board IS the stats
+      // substrate (spec §0): carry mdd/sharpe/aum/copier_count straight into
+      // trader_stats via the publish headline upsert. mdd is a decimal
+      // fraction (×100); followers = current copier count.
+      headlineMdd: pct(item.mdd),
+      headlineSharpe: num(item.sharpe_ratio),
+      headlineAum: num(item.aum),
+      headlineCopierCount: int(item.followers),
       raw: item,
     })
   }
