@@ -33,17 +33,14 @@ interface RouteParams {
   }>
 }
 
-export async function GET(
-  request: NextRequest,
-  { params }: RouteParams
-) {
+export async function GET(request: NextRequest, { params }: RouteParams) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
 
   const { platform, trader_key: traderId } = await params
   const { searchParams } = new URL(request.url)
   const requestedPeriod = searchParams.get('period') as TimePeriod | null
-  
+
   // 尝试从缓存获取
   const cacheKey = requestedPeriod || 'all'
   const cached = await getCachedTraderHistory<{ history: Record<TimePeriod, HistoryDataPoint[]> }>(
@@ -51,7 +48,7 @@ export async function GET(
     traderId,
     cacheKey
   )
-  
+
   if (cached) {
     return NextResponse.json(cached, {
       headers: {
@@ -60,10 +57,10 @@ export async function GET(
       },
     })
   }
-  
+
   try {
     const supabase = getSupabaseAdmin()
-    
+
     // 计算时间范围
     const now = new Date()
     const periods: Record<TimePeriod, Date> = {
@@ -71,16 +68,16 @@ export async function GET(
       '30D': new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
       '90D': new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000),
     }
-    
-    // 获取历史快照数据 from trader_snapshots_v2
-    // Limit to 365 rows — after daily aggregation we only need ~90 data points
+
+    // 历史日快照。迁离退役的 trader_snapshots_v2 → trader_daily_snapshots（已按日，
+    // arena_score 不在此表 → null；rank 用 rank-history 端点）。
     const queryPromise = supabase
-      .from('trader_snapshots_v2')
-      .select('created_at, roi_pct, pnl_usd, arena_score, win_rate, max_drawdown')
+      .from('trader_daily_snapshots')
+      .select('date, roi, pnl, win_rate, max_drawdown')
       .eq('platform', platform)
       .eq('trader_key', traderId)
-      .gte('created_at', periods['90D'].toISOString())
-      .order('created_at', { ascending: true })
+      .gte('date', periods['90D'].toISOString().slice(0, 10))
+      .order('date', { ascending: true })
       .limit(365)
 
     // 5-second timeout to prevent runaway queries
@@ -89,29 +86,25 @@ export async function GET(
     )
 
     const { data: snapshots, error } = await Promise.race([queryPromise, timeoutPromise])
-    
+
     if (error) {
       logger.error('Failed to fetch trader history:', error)
-      return NextResponse.json(
-        { error: 'Failed to fetch history' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to fetch history' }, { status: 500 })
     }
-    
+
     // 按时间段分组数据
     const historyByPeriod: Record<TimePeriod, HistoryDataPoint[]> = {
       '7D': [],
       '30D': [],
       '90D': [],
     }
-    
+
     if (snapshots && snapshots.length > 0) {
       // 按日期聚合（每天取最后一条）
-      const dailySnapshots = new Map<string, typeof snapshots[0]>()
-      
+      const dailySnapshots = new Map<string, (typeof snapshots)[0]>()
+
       for (const snapshot of snapshots) {
-        const date = new Date(snapshot.created_at).toISOString().split('T')[0]
-        dailySnapshots.set(date, snapshot)
+        dailySnapshots.set(snapshot.date, snapshot)
       }
 
       // 转换为数组并排序
@@ -119,18 +112,18 @@ export async function GET(
         .sort(([a], [b]) => a.localeCompare(b))
         .map(([date, snapshot]) => ({
           date,
-          roi: snapshot.roi_pct !== null ? Number(snapshot.roi_pct) : 0,
-          pnl: snapshot.pnl_usd !== null ? Number(snapshot.pnl_usd) : null,
-          rank: null, // trader_snapshots_v2 does not store rank; use rank_history endpoint instead
-          arenaScore: snapshot.arena_score !== null ? Number(snapshot.arena_score) : null,
+          roi: snapshot.roi !== null ? Number(snapshot.roi) : 0,
+          pnl: snapshot.pnl !== null ? Number(snapshot.pnl) : null,
+          rank: null, // use rank-history endpoint for rank
+          arenaScore: null, // not stored in trader_daily_snapshots
           winRate: snapshot.win_rate !== null ? Number(snapshot.win_rate) : null,
           maxDrawdown: snapshot.max_drawdown !== null ? Number(snapshot.max_drawdown) : null,
         }))
-      
+
       // 分配到各时间段
       for (const dataPoint of sortedDailyData) {
         const pointDate = new Date(dataPoint.date)
-        
+
         if (pointDate >= periods['7D']) {
           historyByPeriod['7D'].push(dataPoint)
         }
@@ -140,7 +133,7 @@ export async function GET(
         historyByPeriod['90D'].push(dataPoint)
       }
     }
-    
+
     // 如果数据不足，生成模拟数据点（用于演示）
     // 在生产环境中可以移除这部分
     for (const period of ['7D', '30D', '90D'] as TimePeriod[]) {
@@ -148,12 +141,12 @@ export async function GET(
         const days = period === '7D' ? 7 : period === '30D' ? 30 : 90
         const baseRoi = historyByPeriod[period][0]?.roi || Math.random() * 50 - 10
         const mockData: HistoryDataPoint[] = []
-        
+
         for (let i = 0; i < days; i++) {
           const date = new Date(now.getTime() - (days - i - 1) * 24 * 60 * 60 * 1000)
           const variation = (Math.random() - 0.5) * 5
           const cumulativeVariation = (i / days) * (Math.random() * 20 - 5)
-          
+
           mockData.push({
             date: date.toISOString().split('T')[0],
             roi: baseRoi + cumulativeVariation + variation,
@@ -164,19 +157,19 @@ export async function GET(
             maxDrawdown: null,
           })
         }
-        
+
         // 只在没有真实数据时使用模拟数据
         if (historyByPeriod[period].length === 0) {
           historyByPeriod[period] = mockData
         }
       }
     }
-    
+
     const result = { history: historyByPeriod }
-    
+
     // 缓存结果
     await cacheTraderHistory(platform, traderId, cacheKey, result)
-    
+
     return NextResponse.json(result, {
       headers: {
         'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
@@ -185,9 +178,6 @@ export async function GET(
     })
   } catch (error) {
     logger.error('Trader history API error:', error)
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
