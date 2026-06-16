@@ -15,7 +15,7 @@ function TipSuccessContent() {
   useEffect(() => {
     // 5秒后自动跳转到首页
     const timer = setInterval(() => {
-      setCountdown(prev => {
+      setCountdown((prev) => {
         if (prev <= 1) {
           clearInterval(timer)
           router.push('/')
@@ -29,11 +29,17 @@ function TipSuccessContent() {
   }, [router])
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--color-bg-primary)' }}>
+    <div
+      className="min-h-screen flex items-center justify-center px-4"
+      style={{ background: 'var(--color-bg-primary)' }}
+    >
       <div className="text-center max-w-md">
         {/* 成功图标 */}
         <div className="mb-6 flex justify-center">
-          <div className="w-20 h-20 rounded-full flex items-center justify-center" style={{ background: 'var(--color-accent-success-20)' }}>
+          <div
+            className="w-20 h-20 rounded-full flex items-center justify-center"
+            style={{ background: 'var(--color-accent-success-20)' }}
+          >
             <svg
               className="w-10 h-10"
               style={{ color: 'var(--color-accent-success)' }}
@@ -55,11 +61,13 @@ function TipSuccessContent() {
           {t('tipSuccess')}
         </h1>
 
-        <p className="mb-6" style={{ color: 'var(--color-text-secondary)' }}>
+        <p className="mb-6" style={{ color: 'var(--color-text-secondary)', marginBottom: 24 }}>
           {t('tipSuccessMessage')}
         </p>
 
-        <div className="space-y-3">
+        {/* Explicit inline spacing — this page's Tailwind spacing utilities were
+            collapsing, leaving the button overlapping the text. */}
+        <div className="space-y-3" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           <Link
             href="/"
             className="block w-full rounded-lg py-3 text-sm font-medium transition-colors"
@@ -85,11 +93,18 @@ function TipSuccessContent() {
 
 export default function TipSuccessPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg-primary)' }}>
-        <div className="text-center" style={{ color: 'var(--color-text-secondary)' }}>Loading...</div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div
+          className="min-h-screen flex items-center justify-center"
+          style={{ background: 'var(--color-bg-primary)' }}
+        >
+          <div className="text-center" style={{ color: 'var(--color-text-secondary)' }}>
+            Loading...
+          </div>
+        </div>
+      }
+    >
       <TipSuccessContent />
     </Suspense>
   )
