@@ -114,6 +114,17 @@ export interface ParsedLeaderboardRow {
   headlineRoi: number | null
   headlinePnl: number | null
   headlineWinRate: number | null
+  /** Board-level stat columns for PROFILE-LESS sources whose board IS the
+   *  stats substrate (e.g. blofin: no per-uid profile endpoint, but the board
+   *  carries mdd/sharpe/aum/followers). Populate ONLY when the board is the
+   *  authoritative source — the publish headline upsert writes these with
+   *  COALESCE(EXCLUDED, existing) so leaving them null/undefined never clobbers
+   *  a richer profile crawl on sources that have one. (spec §0 "单段榜→主页回填"
+   *  inverse: for profile-less sources the board backfills the stats.) */
+  headlineMdd?: number | null
+  headlineSharpe?: number | null
+  headlineAum?: number | null
+  headlineCopierCount?: number | null
   /** Durable per-trader routing facts merged into arena.traders.meta —
    *  e.g. Bitget UTA portfolio_id, which profile endpoints are keyed by.
    *  Distinct from `raw` (entry-scoped, never queried for fetch routing). */

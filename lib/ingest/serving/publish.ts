@@ -207,19 +207,29 @@ export async function publishLeaderboardSnapshot(
 
       // Headline stats (Tier A guarantee: profile first screen renders with
       // zero on-demand fetching, spec §2.3-A).
+      // mdd/sharpe/aum/copier_count: board-level stats for PROFILE-LESS sources
+      // (blofin). Parsers that DON'T set them send null, and the
+      // COALESCE(EXCLUDED, existing) keeps any richer profile-crawl value — so
+      // this never clobbers profile sources, but backfills profile-less ones.
       await client.query(
-        `INSERT INTO arena.trader_stats (trader_id, timeframe, as_of, currency, roi, pnl, win_rate)
-         SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate
+        `INSERT INTO arena.trader_stats
+           (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count)
+         SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate, r.mdd, r.sharpe, r.aum, r.copier_count
            FROM jsonb_to_recordset($4::jsonb) AS r(
-             exchange_trader_id text, roi numeric, pnl numeric, win_rate numeric)
+             exchange_trader_id text, roi numeric, pnl numeric, win_rate numeric,
+             mdd numeric, sharpe numeric, aum numeric, copier_count integer)
            JOIN arena.traders t
              ON t.source_id = $5 AND t.exchange_trader_id = r.exchange_trader_id
          ON CONFLICT (trader_id, timeframe) DO UPDATE SET
-           as_of    = EXCLUDED.as_of,
-           currency = EXCLUDED.currency,
-           roi      = COALESCE(EXCLUDED.roi, arena.trader_stats.roi),
-           pnl      = COALESCE(EXCLUDED.pnl, arena.trader_stats.pnl),
-           win_rate = COALESCE(EXCLUDED.win_rate, arena.trader_stats.win_rate)`,
+           as_of        = EXCLUDED.as_of,
+           currency     = EXCLUDED.currency,
+           roi          = COALESCE(EXCLUDED.roi, arena.trader_stats.roi),
+           pnl          = COALESCE(EXCLUDED.pnl, arena.trader_stats.pnl),
+           win_rate     = COALESCE(EXCLUDED.win_rate, arena.trader_stats.win_rate),
+           mdd          = COALESCE(EXCLUDED.mdd, arena.trader_stats.mdd),
+           sharpe       = COALESCE(EXCLUDED.sharpe, arena.trader_stats.sharpe),
+           aum          = COALESCE(EXCLUDED.aum, arena.trader_stats.aum),
+           copier_count = COALESCE(EXCLUDED.copier_count, arena.trader_stats.copier_count)`,
         [
           timeframe,
           scrapedAt,
@@ -230,6 +240,10 @@ export async function publishLeaderboardSnapshot(
               roi: r.headlineRoi,
               pnl: r.headlinePnl,
               win_rate: r.headlineWinRate,
+              mdd: r.headlineMdd ?? null,
+              sharpe: r.headlineSharpe ?? null,
+              aum: r.headlineAum ?? null,
+              copier_count: r.headlineCopierCount ?? null,
             }))
           ),
           src.id,

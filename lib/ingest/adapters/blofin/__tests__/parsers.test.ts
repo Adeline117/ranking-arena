@@ -29,6 +29,12 @@ describe('parseBlofinLeaderboardPage', () => {
     expect(first.headlineRoi).toBeCloseTo(455.83, 1)
     expect(first.headlinePnl).toBeCloseTo(29.63, 2)
     expect(first.headlineWinRate).toBeNull()
+    // Board-level stats backfilled into trader_stats (no profile endpoint):
+    // mdd (decimal ×100), sharpe, aum, copier_count all promoted off the board.
+    expect(typeof first.headlineMdd).toBe('number')
+    expect(typeof first.headlineSharpe).toBe('number')
+    expect(typeof first.headlineAum).toBe('number')
+    expect(typeof first.headlineCopierCount).toBe('number')
     // deep per-TF stats + chart preserved in raw
     expect(first.raw).toMatchObject({ sharpe_ratio: expect.anything(), aum: expect.anything() })
     expect(Array.isArray((first.raw as { chart_data?: { roi?: unknown[] } }).chart_data?.roi)).toBe(
