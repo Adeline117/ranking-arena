@@ -131,19 +131,14 @@ export async function GET() {
   let freshness: { status: 'pass' | 'fail' | 'skip'; latency?: number; message?: string }
   try {
     const t1 = Date.now()
-    // Race the DB query against an 8s timeout — matches withTimeout() cap for
-    // consistent cold-start tolerance. Previous 5s cap flipped on cold boots
-    // where Supabase client init + query could take 3-5s.
+    // Data-flowing signal: latest arena.leaderboard_snapshots time (canonical;
+    // migrated off retiring trader_latest 2026-06-15). The unified ingest worker
+    // writes arena; arena_latest_snapshot_at is the single source of truth. RPC
+    // is service_role-only. Raced against an 8s timeout for cold-start tolerance.
     const result = await Promise.race([
       getSupabaseAdmin()
-        .from('trader_latest')
-        .select('updated_at')
-        // Any recently updated trader proves data pipeline is flowing
-        // (BullMQ worker writes here, not to pipeline_logs)
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-        .then((r) => r),
+        .rpc('arena_latest_snapshot_at' as never)
+        .then((r) => r as { data: string | null; error: { message: string } | null }),
       new Promise<{ data: null; error: { message: string } }>((resolve) =>
         setTimeout(
           () => resolve({ data: null, error: { message: 'Freshness query timed out (8s)' } }),
@@ -152,27 +147,14 @@ export async function GET() {
       ),
     ])
     const latency = Date.now() - t1
-    // Dual signal (2026-06-12): the unified ingest pipeline writes
-    // arena.leaderboard_snapshots; serving-only sources (USDx/USDC) never
-    // touch trader_latest, so OR the two — data is flowing if EITHER is
-    // fresh. RPC is service_role-only.
     let newestMs: number | null = null
-    if (!result.error && result.data?.updated_at) {
-      newestMs = new Date(result.data.updated_at).getTime()
-    }
-    try {
-      const { data: arenaAt } = await getSupabaseAdmin().rpc('arena_latest_snapshot_at' as never)
-      if (arenaAt) {
-        const arenaMs = new Date(arenaAt as string).getTime()
-        newestMs = newestMs === null ? arenaMs : Math.max(newestMs, arenaMs)
-      }
-    } catch {
-      // arena signal unavailable — fall back to trader_latest alone
+    if (!result.error && result.data) {
+      newestMs = new Date(result.data as string).getTime()
     }
     if (newestMs === null) {
       freshness = {
         status: 'fail',
-        message: result.error?.message ?? 'No pipeline data found (trader_latest + arena)',
+        message: result.error?.message ?? 'No pipeline data found (arena)',
         latency,
       }
     } else {
