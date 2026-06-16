@@ -19,10 +19,10 @@ import { logger } from '@/lib/logger'
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderAlertThresholds {
-  roi7dChange: number   // 7D ROI 变化阈值（绝对值百分比），默认 20
-  roi30dChange: number  // 30D ROI 变化阈值（绝对值百分比），默认 50
-  scoreChange: number   // Arena Score 变化阈值（绝对值分数），默认 15
-  rankChange: number    // 排名变化阈值（位数），默认 10
+  roi7dChange: number // 7D ROI 变化阈值（绝对值百分比），默认 20
+  roi30dChange: number // 30D ROI 变化阈值（绝对值百分比），默认 50
+  scoreChange: number // Arena Score 变化阈值（绝对值分数），默认 15
+  rankChange: number // 排名变化阈值（位数），默认 10
 }
 
 export interface SnapshotComparison {
@@ -109,17 +109,16 @@ function formatAlertTitle(
   return titles[alertType]?.[language] || titles[alertType]?.zh || '异动提醒'
 }
 
-function formatAlertMessage(
-  alert: DetectedAlert,
-  language: 'zh' | 'en' = 'zh'
-): string {
+function formatAlertMessage(alert: DetectedAlert, language: 'zh' | 'en' = 'zh'): string {
   const handle = alert.traderHandle || alert.traderId
-  const oldStr = alert.alertType === 'score_change'
-    ? alert.oldValue.toFixed(1)
-    : `${alert.oldValue >= 0 ? '+' : ''}${alert.oldValue.toFixed(2)}%`
-  const newStr = alert.alertType === 'score_change'
-    ? alert.newValue.toFixed(1)
-    : `${alert.newValue >= 0 ? '+' : ''}${alert.newValue.toFixed(2)}%`
+  const oldStr =
+    alert.alertType === 'score_change'
+      ? alert.oldValue.toFixed(1)
+      : `${alert.oldValue >= 0 ? '+' : ''}${alert.oldValue.toFixed(2)}%`
+  const newStr =
+    alert.alertType === 'score_change'
+      ? alert.newValue.toFixed(1)
+      : `${alert.newValue >= 0 ? '+' : ''}${alert.newValue.toFixed(2)}%`
 
   if (language === 'en') {
     switch (alert.alertType) {
@@ -165,10 +164,7 @@ export function detectAlerts(
   const alerts: DetectedAlert[] = []
 
   // 7D ROI 变动检测
-  if (
-    comparison.currentRoi7d !== null &&
-    comparison.prevRoi7d !== null
-  ) {
+  if (comparison.currentRoi7d !== null && comparison.prevRoi7d !== null) {
     const change = comparison.currentRoi7d - comparison.prevRoi7d
     if (Math.abs(change) >= thresholds.roi7dChange) {
       for (const userId of userIds) {
@@ -188,10 +184,7 @@ export function detectAlerts(
   }
 
   // 30D ROI 变动检测
-  if (
-    comparison.currentRoi30d !== null &&
-    comparison.prevRoi30d !== null
-  ) {
+  if (comparison.currentRoi30d !== null && comparison.prevRoi30d !== null) {
     const change = comparison.currentRoi30d - comparison.prevRoi30d
     if (Math.abs(change) >= thresholds.roi30dChange) {
       for (const userId of userIds) {
@@ -211,10 +204,7 @@ export function detectAlerts(
   }
 
   // 排名变动检测
-  if (
-    comparison.currentRank !== null &&
-    comparison.prevRank !== null
-  ) {
+  if (comparison.currentRank !== null && comparison.prevRank !== null) {
     const change = comparison.currentRank - comparison.prevRank // positive = dropped, negative = improved
     if (Math.abs(change) >= thresholds.rankChange) {
       for (const userId of userIds) {
@@ -234,10 +224,7 @@ export function detectAlerts(
   }
 
   // Arena Score 变动检测
-  if (
-    comparison.currentArenaScore !== null &&
-    comparison.prevArenaScore !== null
-  ) {
+  if (comparison.currentArenaScore !== null && comparison.prevArenaScore !== null) {
     const change = comparison.currentArenaScore - comparison.prevArenaScore
     if (Math.abs(change) >= thresholds.scoreChange) {
       for (const userId of userIds) {
@@ -298,19 +285,15 @@ export async function saveAlertsAsNotifications(
   const BATCH_SIZE = 50
   for (let i = 0; i < dedupedNotifications.length; i += BATCH_SIZE) {
     const batch = dedupedNotifications.slice(i, i + BATCH_SIZE)
-    const { error } = await supabase
-      .from('notifications')
-      .upsert(batch, {
-        onConflict: 'user_id,reference_id',
-        ignoreDuplicates: true,
-      })
+    const { error } = await supabase.from('notifications').upsert(batch, {
+      onConflict: 'user_id,reference_id',
+      ignoreDuplicates: true,
+    })
 
     if (error) {
       // 如果 upsert 因缺少 unique constraint 而失败，退回到普通 insert
       logger.warn('[TraderAlerts] upsert 失败，退回 insert:', error.message)
-      const { error: insertError } = await supabase
-        .from('notifications')
-        .insert(batch)
+      const { error: insertError } = await supabase.from('notifications').insert(batch)
       if (insertError) {
         logger.error('[TraderAlerts] 批量插入失败:', insertError)
         errors += batch.length
@@ -420,7 +403,10 @@ export async function runTraderAlertDetection(
       const existing = currentStateMap.get(r.source_trader_id) || {
         source: r.source,
         handle: r.handle || r.source_trader_id,
-        roi7d: null, roi30d: null, arenaScore: null, rank: null,
+        roi7d: null,
+        roi30d: null,
+        arenaScore: null,
+        rank: null,
       }
       existing.source = r.source
       if (r.handle) existing.handle = r.handle
@@ -434,24 +420,30 @@ export async function runTraderAlertDetection(
     }
   }
 
-  // 3. Get previous snapshots from trader_snapshots_v2 for comparison
+  // 3. Previous state for comparison. Migrated off retiring trader_snapshots_v2
+  // → rank_history (period/rank/arena_score/snapshot_date; actively written by
+  // snapshot-ranks). rank_history has no roi, so roi-delta alerts gracefully
+  // degrade — the primary rank/arena-score move alerts are preserved.
   const twoWeeksAgo = new Date()
   twoWeeksAgo.setDate(twoWeeksAgo.getDate() - 14)
+  const twoWeeksAgoDate = twoWeeksAgo.toISOString().split('T')[0]
 
   const { data: prevSnapshots, error: snapshotError } = await supabase
-    .from('trader_snapshots_v2')
-    .select('trader_key, platform, roi_pct, arena_score, rank, window, created_at')
+    .from('rank_history')
+    .select('trader_key, platform, arena_score, rank, period, snapshot_date')
     .in('trader_key', traderIds)
-    .gte('created_at', twoWeeksAgo.toISOString())
-    .order('created_at', { ascending: false })
+    .eq('period', '90D')
+    .gte('snapshot_date', twoWeeksAgoDate)
+    .order('snapshot_date', { ascending: false })
     .limit(10000)
 
   if (snapshotError) {
-    logger.error('[TraderAlerts] 获取 trader_snapshots_v2 失败:', snapshotError)
+    logger.error('[TraderAlerts] 获取 rank_history 失败:', snapshotError)
     return { tradersChecked: 0, alertsDetected: 0, notificationsSaved: 0, errors: 1 }
   }
 
-  // Build previous state: for each trader, get second-most-recent entry per window
+  // Build previous state: for each trader, the second-most-recent 90D snapshot
+  // (skip today's = current, take the prior day = previous).
   interface PrevState {
     roi7d: number | null
     roi30d: number | null
@@ -459,26 +451,19 @@ export async function runTraderAlertDetection(
     rank: number | null
   }
   const prevStateMap = new Map<string, PrevState>()
-  // Track seen counts per trader+window to skip the first (current) and take second (previous)
   const seenCounts = new Map<string, number>()
   if (prevSnapshots) {
     for (const snap of prevSnapshots) {
-      const countKey = `${snap.trader_key}:${snap.window}`
-      const count = (seenCounts.get(countKey) || 0) + 1
-      seenCounts.set(countKey, count)
+      const count = (seenCounts.get(snap.trader_key) || 0) + 1
+      seenCounts.set(snap.trader_key, count)
       // Skip the latest (count=1), use the second entry (count=2)
       if (count !== 2) continue
-
-      const existing = prevStateMap.get(snap.trader_key) || {
-        roi7d: null, roi30d: null, arenaScore: null, rank: null,
-      }
-      if (snap.window === '7D') existing.roi7d = snap.roi_pct
-      if (snap.window === '30D') existing.roi30d = snap.roi_pct
-      if (snap.window === '90D') {
-        existing.arenaScore = snap.arena_score
-        existing.rank = snap.rank
-      }
-      prevStateMap.set(snap.trader_key, existing)
+      prevStateMap.set(snap.trader_key, {
+        roi7d: null,
+        roi30d: null,
+        arenaScore: snap.arena_score,
+        rank: snap.rank,
+      })
     }
   }
 
@@ -511,7 +496,6 @@ export async function runTraderAlertDetection(
 
   // 5. 写入通知
   const { inserted, errors } = await saveAlertsAsNotifications(supabase, allAlerts)
-
 
   return {
     tradersChecked: traderIds.length,
