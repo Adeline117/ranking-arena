@@ -164,10 +164,10 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
         if (status === 'fresh' && typeof count === 'number') {
           try {
             const { count: recentCount } = await supabase
-              .from('trader_latest')
-              .select('platform', { count: 'estimated', head: true })
-              .eq('platform', platform)
-              .gte('updated_at', new Date(now - staleThreshold).toISOString())
+              .from('leaderboard_ranks')
+              .select('source', { count: 'estimated', head: true })
+              .eq('source', platform)
+              .gte('computed_at', new Date(now - staleThreshold).toISOString())
             if (typeof recentCount === 'number' && recentCount < 5) {
               status = 'stale'
               stalePlatforms.push(platform)
