@@ -2034,6 +2034,16 @@ button:focus-visible,
     margin-bottom: 14px;
   }
 }
+/* The mobile bottom nav is display:none at >=768px (verified: visible <=767px,
+   hidden >=768px). --mobile-nav-height was a constant 60px everywhere, so on
+   desktop the 7 floating elements that clear the nav (cookie banner, FAB,
+   FeedbackWidget, ScrollToTop, CompareFloatingBar, GuestSignupPrompt) plus the
+   layout spacer were offset 60px into / below content. Zero it on desktop. */
+@media (min-width: 768px) {
+  :root {
+    --mobile-nav-height: 0px;
+  }
+}
 @media (min-width: 768px) {
   .post-feed-masonry {
     columns: 2;
