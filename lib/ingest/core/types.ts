@@ -125,6 +125,7 @@ export interface ParsedLeaderboardRow {
   headlineSharpe?: number | null
   headlineAum?: number | null
   headlineCopierCount?: number | null
+  headlineVolume?: number | null
   /** Durable per-trader routing facts merged into arena.traders.meta —
    *  e.g. Bitget UTA portfolio_id, which profile endpoints are keyed by.
    *  Distinct from `raw` (entry-scoped, never queried for fetch routing). */

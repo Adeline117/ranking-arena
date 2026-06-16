@@ -107,6 +107,10 @@ export function parseBitfinexLeaderboardPage(raw: unknown, _ctx: ParseCtx): Pars
       headlineRoi: null, // the API exposes absolute USD values only
       headlinePnl: num(row[BFX_VALUE]),
       headlineWinRate: null,
+      // Bitfinex has no per-uid profile endpoint (Tier-A-only) — the board IS
+      // the stats substrate. The `vol` rankings board (joined per username)
+      // carries traded volume → flow it into trader_stats.volume.
+      headlineVolume: typeof joined.vol === 'number' ? joined.vol : null,
       traderMeta: null,
       raw: {
         row, // verbatim API array (mts/rank/value + unmapped indexes)

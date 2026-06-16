@@ -213,11 +213,11 @@ export async function publishLeaderboardSnapshot(
       // this never clobbers profile sources, but backfills profile-less ones.
       await client.query(
         `INSERT INTO arena.trader_stats
-           (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count)
-         SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate, r.mdd, r.sharpe, r.aum, r.copier_count
+           (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count, volume)
+         SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate, r.mdd, r.sharpe, r.aum, r.copier_count, r.volume
            FROM jsonb_to_recordset($4::jsonb) AS r(
              exchange_trader_id text, roi numeric, pnl numeric, win_rate numeric,
-             mdd numeric, sharpe numeric, aum numeric, copier_count integer)
+             mdd numeric, sharpe numeric, aum numeric, copier_count integer, volume numeric)
            JOIN arena.traders t
              ON t.source_id = $5 AND t.exchange_trader_id = r.exchange_trader_id
          ON CONFLICT (trader_id, timeframe) DO UPDATE SET
@@ -229,7 +229,8 @@ export async function publishLeaderboardSnapshot(
            mdd          = COALESCE(EXCLUDED.mdd, arena.trader_stats.mdd),
            sharpe       = COALESCE(EXCLUDED.sharpe, arena.trader_stats.sharpe),
            aum          = COALESCE(EXCLUDED.aum, arena.trader_stats.aum),
-           copier_count = COALESCE(EXCLUDED.copier_count, arena.trader_stats.copier_count)`,
+           copier_count = COALESCE(EXCLUDED.copier_count, arena.trader_stats.copier_count),
+           volume       = COALESCE(EXCLUDED.volume, arena.trader_stats.volume)`,
         [
           timeframe,
           scrapedAt,
@@ -244,6 +245,7 @@ export async function publishLeaderboardSnapshot(
               sharpe: r.headlineSharpe ?? null,
               aum: r.headlineAum ?? null,
               copier_count: r.headlineCopierCount ?? null,
+              volume: r.headlineVolume ?? null,
             }))
           ),
           src.id,
