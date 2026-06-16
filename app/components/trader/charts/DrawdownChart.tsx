@@ -61,12 +61,18 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
     )
   }
 
-  // Compute drawdown series
-  let peak = -Infinity
+  // Compute drawdown from the cumulative-EQUITY curve. p.roi is cumulative ROI %
+  // (e.g. 80 = +80%), so the equity multiple is 1 + roi/100 — drawdown must be
+  // measured against equity, not the raw ROI %, or a peak near 0 blows the ratio
+  // up. Drawdown is bounded to [-100%, 0] by definition (you can't lose more than
+  // 100% of peak equity); the clamp also tames upstream ROI outliers (leveraged /
+  // notional quirks can deliver roi < -100%, which previously rendered as -800%+).
+  let peakEquity = -Infinity
   const drawdowns = equityCurve.map((p) => {
-    peak = Math.max(peak, p.roi)
-    const dd = peak > 0 ? ((p.roi - peak) / peak) * 100 : 0
-    return { date: p.date, drawdown: Math.min(dd, 0) }
+    const equity = 1 + p.roi / 100
+    peakEquity = Math.max(peakEquity, equity)
+    const dd = peakEquity > 0 ? ((equity - peakEquity) / peakEquity) * 100 : 0
+    return { date: p.date, drawdown: Math.max(Math.min(dd, 0), -100) }
   })
 
   const minDrawdown = Math.min(...drawdowns.map((d) => d.drawdown), 0)
