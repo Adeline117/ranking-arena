@@ -21,63 +21,9 @@ const logger = createLogger('compute-leaderboard:post')
 
 type SupabaseAdmin = SupabaseClient
 
-/**
- * Sync sub-scores + advanced metrics: leaderboard_ranks → trader_snapshots_v2.
- *
- * Fills orphan v2 columns (return_score / drawdown_score / stability_score = 0,
- * sortino_ratio / calmar_ratio historically sparse). Processes up to 1000 most
- * recent v2 rows missing return_score per invocation.
- */
-export async function syncSubscoresToV2(supabase: SupabaseAdmin): Promise<void> {
-  try {
-    const { data: lrRows } = await supabase
-      .from('leaderboard_ranks')
-      .select(
-        'source, source_trader_id, season_id, profitability_score, risk_control_score, execution_score, sortino_ratio, calmar_ratio',
-      )
-      .not('profitability_score', 'is', null)
-      .limit(1000)
-    if (!lrRows?.length) return
-
-    const scoreMap = new Map<string, (typeof lrRows)[0]>()
-    for (const r of lrRows) scoreMap.set(`${r.source}:${r.source_trader_id}:${r.season_id}`, r)
-
-    const cutoff = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
-    const { data: v2Rows } = await supabase
-      .from('trader_snapshots_v2')
-      .select('id, platform, trader_key, window')
-      .is('return_score', null)
-      .not('arena_score', 'is', null)
-      .gte('created_at', cutoff)
-      .limit(1000)
-    if (!v2Rows?.length) return
-
-    const updates: Array<Record<string, unknown>> = []
-    for (const row of v2Rows) {
-      const lr = scoreMap.get(`${row.platform}:${row.trader_key}:${row.window}`)
-      if (lr?.profitability_score != null) {
-        updates.push({
-          id: row.id,
-          return_score: Number(lr.profitability_score),
-          drawdown_score: lr.risk_control_score != null ? Number(lr.risk_control_score) : null,
-          stability_score: lr.execution_score != null ? Number(lr.execution_score) : null,
-          sortino_ratio: lr.sortino_ratio != null ? Number(lr.sortino_ratio) : null,
-          calmar_ratio: lr.calmar_ratio != null ? Number(lr.calmar_ratio) : null,
-        })
-      }
-    }
-
-    let synced = 0
-    for (let i = 0; i < updates.length; i += 100) {
-      const chunk = updates.slice(i, i + 100)
-      const { error } = await supabase.from('trader_snapshots_v2').upsert(chunk, { onConflict: 'id' })
-      if (!error) synced += chunk.length
-    }
-    if (synced > 0) logger.info(`Synced sub-scores to v2: ${synced}/${v2Rows.length} rows`)
-  } catch (e) {
-    logger.warn('Sub-score sync to v2 failed (non-critical):', e)
-  }
-}
+// (removed 2026-06-15) syncSubscoresToV2 — wrote sub-scores back into
+// trader_snapshots_v2 (retiring). Uncalled since the route stopped invoking it;
+// leaderboard_ranks is the canonical sub-score store.
 
 /** Warm the SSR homepage cache (home-initial-traders:90D). */
 export async function warmupSsrHomepageCache(): Promise<void> {
@@ -89,7 +35,7 @@ export async function warmupSsrHomepageCache(): Promise<void> {
 /** Sync Redis sorted sets for near-real-time rankings across all seasons. */
 export async function syncRedisSortedSet(
   supabase: SupabaseAdmin,
-  seasons: readonly string[],
+  seasons: readonly string[]
 ): Promise<void> {
   const { syncSortedSetFromLeaderboard } = await import('@/lib/realtime/ranking-store')
   for (const season of seasons) {
@@ -126,7 +72,7 @@ export async function revalidateRankingPages(): Promise<void> {
  */
 export async function warmupLeaderboardCache(
   supabase: SupabaseAdmin,
-  seasons: readonly string[],
+  seasons: readonly string[]
 ): Promise<void> {
   const { tieredSet } = await import('@/lib/cache/redis-layer')
   const defaultLimit = 50
@@ -137,7 +83,7 @@ export async function warmupLeaderboardCache(
       const { data, error } = await supabase
         .from('leaderboard_ranks')
         .select(
-          'source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, copiers, trades_count, sharpe_ratio, trader_type, source_type, season_id',
+          'source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, copiers, trades_count, sharpe_ratio, trader_type, source_type, season_id'
         )
         .eq('season_id', season)
         .not('arena_score', 'is', null)
@@ -149,6 +95,6 @@ export async function warmupLeaderboardCache(
 
       await tieredSet(key, data, 'warm', ['rankings', `season:${season}`])
       logger.info(`[warmup] Cached ${data.length} rows → ${key}`)
-    }),
+    })
   )
 }
