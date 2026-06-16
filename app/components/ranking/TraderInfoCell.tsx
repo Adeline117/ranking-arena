@@ -62,6 +62,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
         traderId={trader.id}
         displayName={displayName}
         avatarUrl={trader.avatar_url}
+        avatarMirrorUrl={trader.avatar_url_mirror}
         rank={rank}
         size={36}
       />

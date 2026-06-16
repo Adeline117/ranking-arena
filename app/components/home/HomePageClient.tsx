@@ -49,6 +49,7 @@ export default function HomePageClient({
         followers: t.followers,
         source: t.source,
         avatar_url: t.avatar_url,
+        avatar_url_mirror: t.avatar_url_mirror,
         arena_score: t.arena_score,
         score_confidence: t.score_confidence,
         rank: idx + 1,

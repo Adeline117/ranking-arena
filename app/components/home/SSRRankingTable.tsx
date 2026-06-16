@@ -154,9 +154,9 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                   position: 'relative',
                 }}
               >
-                {trader.avatar_url ? (
+                {trader.avatar_url_mirror || trader.avatar_url ? (
                   <img
-                    src={avatarSrc(trader.avatar_url)}
+                    src={avatarSrc(trader.avatar_url_mirror || trader.avatar_url)}
                     alt=""
                     width={44}
                     height={44}

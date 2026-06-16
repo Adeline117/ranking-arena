@@ -213,6 +213,7 @@ export const TraderCard = memo(function TraderCard({
             traderId={trader.id}
             displayName={displayName}
             avatarUrl={trader.avatar_url}
+            avatarMirrorUrl={trader.avatar_url_mirror}
             rank={rank}
             size={44}
           />

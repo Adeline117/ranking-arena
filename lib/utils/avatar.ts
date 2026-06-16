@@ -210,6 +210,8 @@ export interface AvatarProps {
   userId: string
   name?: string | null
   avatarUrl?: string | null
+  /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatarUrl for traders. */
+  avatarMirrorUrl?: string | null
   size?: number
   className?: string
   style?: React.CSSProperties

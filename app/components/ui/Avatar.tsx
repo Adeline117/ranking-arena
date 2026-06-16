@@ -17,9 +17,13 @@ function resolveAvatarUrl(
   isTrader: boolean,
   avatarUrl: string | null | undefined,
   userId: string,
-  name?: string | null
+  name?: string | null,
+  avatarMirrorUrl?: string | null
 ): string | null {
   if (isTrader) {
+    // Prefer our own CDN mirror (direct-load supabase URL, no proxy, no 429).
+    const mirror = avatarMirrorUrl?.trim()
+    if (mirror) return mirror
     const resolved = getTraderAvatarUrl(avatarUrl)
     if (resolved) return resolved
     // No generated avatars (dicebear/blockie) — always gradient + initial letter
@@ -34,6 +38,7 @@ export default function Avatar({
   userId,
   name,
   avatarUrl,
+  avatarMirrorUrl,
   size = 40,
   className,
   style,
@@ -45,7 +50,7 @@ export default function Avatar({
   const initial = getAvatarInitial(name || userId)
   const backgroundGradient = getAvatarGradient(userId)
 
-  const finalAvatarUrl = resolveAvatarUrl(isTrader, avatarUrl, userId, name)
+  const finalAvatarUrl = resolveAvatarUrl(isTrader, avatarUrl, userId, name, avatarMirrorUrl)
   // Data URIs (blockie/identicon SVGs) bypass Next.js Image Optimization — they're already tiny.
   // All other images go through /_next/image for resize + webp conversion (749KB → ~5KB).
   const _isDataUri = !!finalAvatarUrl?.startsWith('data:')

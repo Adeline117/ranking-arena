@@ -313,6 +313,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           followers: t.followers != null ? Number(t.followers) : null,
           source: t.source as string,
           avatar_url: t.avatar_url as string | null,
+          avatar_url_mirror: (t.avatar_url_mirror as string | null) ?? null,
           arena_score: t.arena_score != null ? Number(t.arena_score) : null,
           rank: t.rank as number,
           profitability_score: t.profitability_score ?? null,

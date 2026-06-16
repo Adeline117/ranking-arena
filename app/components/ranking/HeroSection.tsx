@@ -23,17 +23,36 @@ function CopyButton({ text }: { text: string }) {
       aria-label={copied ? 'Copied' : 'Copy trader ID'}
       title={t('copy')}
       style={{
-        background: 'none', border: 'none', cursor: 'pointer',
-        padding: 2, display: 'inline-flex', alignItems: 'center',
-        opacity: 0.6, color: copied ? tokens.colors.accent.success : 'inherit',
+        background: 'none',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 2,
+        display: 'inline-flex',
+        alignItems: 'center',
+        opacity: 0.6,
+        color: copied ? tokens.colors.accent.success : 'inherit',
       }}
     >
       {copied ? (
-        <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3">
+        <svg
+          width={10}
+          height={10}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+        >
           <path d="M20 6L9 17l-5-5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
       ) : (
-        <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <svg
+          width={10}
+          height={10}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+        >
           <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
           <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
         </svg>
@@ -42,15 +61,20 @@ function CopyButton({ text }: { text: string }) {
   )
 }
 
-const MEDAL_COLORS = [tokens.colors.medal.gold, tokens.colors.medal.silver, tokens.colors.medal.bronze]
+const MEDAL_COLORS = [
+  tokens.colors.medal.gold,
+  tokens.colors.medal.silver,
+  tokens.colors.medal.bronze,
+]
 
 function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
   const handle = trader.handle || trader.id
-  const displayName = trader.display_name || formatDisplayName(trader.handle || trader.id, trader.source)
+  const displayName =
+    trader.display_name || formatDisplayName(trader.handle || trader.id, trader.source)
   const isAddress = handle.startsWith('0x') && handle.length > 20
   const roi = trader.roi ?? 0
   const roiColor = roi >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
-  const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ""}`
+  const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
   const medalColor = MEDAL_COLORS[rank - 1] || tokens.colors.text.tertiary
 
   return (
@@ -77,26 +101,38 @@ function TopTraderCard({ trader, rank }: { trader: Trader; rank: number }) {
             traderId={trader.id}
             displayName={displayName}
             avatarUrl={trader.avatar_url}
+            avatarMirrorUrl={trader.avatar_url_mirror}
             rank={rank}
             size={32}
           />
         </div>
 
         {/* Name */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 2, maxWidth: '100%', minWidth: 0 }}>
-          <span className="hero-card-name" style={{
-            fontSize: 12, fontWeight: 700,
-            color: tokens.colors.text.primary,
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            maxWidth: 140,
-          }}>
+        <div
+          style={{ display: 'flex', alignItems: 'center', gap: 2, maxWidth: '100%', minWidth: 0 }}
+        >
+          <span
+            className="hero-card-name"
+            style={{
+              fontSize: 12,
+              fontWeight: 700,
+              color: tokens.colors.text.primary,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: 140,
+            }}
+          >
             {displayName}
           </span>
           {isAddress && <CopyButton text={handle} />}
         </div>
 
         {/* ROI */}
-        <span className="hero-card-roi" style={{ fontSize: 16, fontWeight: 900, color: roiColor, lineHeight: 1 }}>
+        <span
+          className="hero-card-roi"
+          style={{ fontSize: 16, fontWeight: 900, color: roiColor, lineHeight: 1 }}
+        >
           {formatROI(roi)}
         </span>
       </div>

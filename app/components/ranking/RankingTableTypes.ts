@@ -66,6 +66,8 @@ export interface Trader {
   followers: number
   source?: string
   avatar_url?: string | null
+  /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
+  avatar_url_mirror?: string | null
   arena_score?: number
   /** Pre-computed rank from leaderboard_ranks DB table */
   rank?: number | null
