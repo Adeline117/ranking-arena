@@ -76,6 +76,11 @@ const LinkedAccountTabs = dynamic(() => import('@/app/components/trader/LinkedAc
   ssr: false,
   loading: () => <div style={{ minHeight: 48 }} />,
 })
+// P4 §2.3 lead-meta strip — same component the ServingProfilePanel uses, so the
+// three-tab Overview surfaces copier-cap / margin-balance / last-trade etc.
+const TraderMetaStrip = dynamic(() => import('@/app/components/trader/serving/TraderMetaStrip'), {
+  ssr: false,
+})
 // ExchangeLinksBar — static import (no client-only deps). Previously dynamic
 // with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
 // trader page load. Static import eliminates the flash + reduces chunk count.
@@ -716,6 +721,16 @@ export default function TraderProfileClient({
                   style={{ minHeight: 200 }}
                   className="tab-pane-enter"
                 >
+                  {/* §2.3 lead-meta strip — serving only; NULL-collapses to
+                      null when no meta fields resolve (legacy renders nothing). */}
+                  {useThreeTab && (
+                    <Box style={{ marginBottom: tokens.spacing[3] }}>
+                      <TraderMetaStrip
+                        extras={servingTab.metaExtras}
+                        currency={servingTab.currency}
+                      />
+                    </Box>
+                  )}
                   <OverviewTab
                     data={data}
                     traderProfile={effProfile}

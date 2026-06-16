@@ -26,7 +26,7 @@ import {
   type EquityCurveByTf,
   type AssetBreakdownByTf,
 } from '@/lib/data/serving/legacy-adapter'
-import type { TraderFirstScreen, SourceCapability } from '@/lib/data/serving/types'
+import type { TraderFirstScreen, SourceCapability, ServingCurrency } from '@/lib/data/serving/types'
 import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
@@ -39,6 +39,10 @@ export interface ServingTabData {
   traderStats: TraderStats
   traderPortfolio: PortfolioItem[]
   traderPositionHistory: PositionHistoryEntry[]
+  /** 90d core extras + currency for the §2.3 lead-meta strip (TraderMetaStrip):
+   *  last-trade / copier-cap / margin-balance etc. NULL-collapses when absent. */
+  metaExtras: Record<string, unknown>
+  currency: ServingCurrency
   loading: boolean
 }
 
@@ -116,6 +120,8 @@ export function useServingTabData(
       traderStats: servingToStats(m90?.stats ?? null, m90?.extras ?? null),
       traderPortfolio: positionsToPortfolio(posRows ?? []),
       traderPositionHistory: historyToPositionHistory(histRows ?? []),
+      metaExtras: m90?.extras ?? {},
+      currency: m90?.currency ?? 'USD',
       loading: c7.isLoading || c30.isLoading || c90.isLoading,
     }
   }, [
