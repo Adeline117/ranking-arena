@@ -46,15 +46,20 @@ async function injectAuth(page: import('@playwright/test').Page) {
     // Also set the base64 encoded chunks (Supabase uses chunked cookies)
     {
       name: `sb-${SB_PROJECT_REF}-auth-token.0`,
-      value: Buffer.from(
-        JSON.stringify({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-          token_type: 'bearer',
-          expires_in: 3600,
-          expires_at: Math.floor(Date.now() / 1000) + 3600,
-        })
-      ).toString('base64'),
+      // @supabase/ssr decodes the chunk as stringFromBase64URL(value.slice('base64-'.length)),
+      // so the value MUST start with the 'base64-' prefix AND be base64url (not standard
+      // base64). The old value had neither, so the cookie never decoded.
+      value:
+        'base64-' +
+        Buffer.from(
+          JSON.stringify({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+            token_type: 'bearer',
+            expires_in: 3600,
+            expires_at: Math.floor(Date.now() / 1000) + 3600,
+          })
+        ).toString('base64url'),
       domain: 'localhost',
       path: '/',
     },
