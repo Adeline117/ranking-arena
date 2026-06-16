@@ -143,17 +143,10 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         console.log(`[tier-a] ${src.slug} ${timeframe}d bots upserted: ${bots.written}`)
       }
 
-      // Cutover shadow/serving: keep the legacy downstream chain alive
-      // (Arena Score → leaderboard_ranks → Redis → Meilisearch).
-      if (src.serving_mode !== 'legacy') {
-        const { compatWriteTraderLatest } =
-          await import('@/lib/ingest/serving/compat-trader-latest')
-        const compat = await compatWriteTraderLatest(src, timeframe)
-        console.log(
-          `[tier-a] ${src.slug} ${timeframe}d compat→trader_latest: ` +
-            (compat.skipped ?? `${compat.written} rows`)
-        )
-      }
+      // (compat→trader_latest write removed 2026-06-15) The score chain now runs
+      // on arena directly (compute-leaderboard reads arena_score_inputs, not
+      // trader_latest), so the compat bridge is orphaned and trader_latest is
+      // being dropped. publish() above already wrote arena.* — the canonical source.
 
       results.push({
         timeframe,
