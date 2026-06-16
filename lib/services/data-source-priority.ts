@@ -245,15 +245,15 @@ async function getEnrichmentData(
   platform: string,
   traderKey: string
 ): Promise<TraderDataWithSource | null> {
-  // trader_latest = 1 row per (platform, trader_key, window), no ORDER/LIMIT needed
+  // Migrated off retiring trader_latest → leaderboard_ranks 90D (source/season_id).
   const { data, error } = await supabase
-    .from('trader_latest')
+    .from('leaderboard_ranks')
     .select(
-      'roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, updated_at'
+      'roi, pnl, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at'
     )
-    .eq('platform', platform)
-    .eq('trader_key', traderKey)
-    .eq('window', '90D')
+    .eq('source', platform)
+    .eq('source_trader_id', traderKey)
+    .eq('season_id', '90D')
     .maybeSingle()
 
   if (error || !data) {
@@ -264,15 +264,15 @@ async function getEnrichmentData(
     data: {
       platform,
       traderKey,
-      roi: data.roi_pct,
-      pnl: data.pnl_usd,
+      roi: data.roi,
+      pnl: data.pnl,
       winRate: data.win_rate,
       maxDrawdown: data.max_drawdown,
       tradesCount: data.trades_count,
       sharpeRatio: data.sharpe_ratio,
       followers: data.followers,
       arenaScore: data.arena_score,
-      updatedAt: data.updated_at,
+      updatedAt: data.computed_at,
     },
     source: DataSourcePriority.ENRICHMENT,
     sourceLabel: 'enrichment',
@@ -287,30 +287,30 @@ async function getHistoricalData(
   platform: string,
   traderKey: string
 ): Promise<TraderDataWithSource> {
-  // Last resort: grab any snapshot we have (trader_latest has 1 row per window)
+  // Last resort. Migrated off retiring trader_latest → leaderboard_ranks 90D.
   const { data } = await supabase
-    .from('trader_latest')
+    .from('leaderboard_ranks')
     .select(
-      'roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, updated_at'
+      'roi, pnl, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at'
     )
-    .eq('platform', platform)
-    .eq('trader_key', traderKey)
-    .eq('window', '90D')
+    .eq('source', platform)
+    .eq('source_trader_id', traderKey)
+    .eq('season_id', '90D')
     .maybeSingle()
 
   return {
     data: {
       platform,
       traderKey,
-      roi: data?.roi_pct ?? null,
-      pnl: data?.pnl_usd ?? null,
+      roi: data?.roi ?? null,
+      pnl: data?.pnl ?? null,
       winRate: data?.win_rate ?? null,
       maxDrawdown: data?.max_drawdown ?? null,
       tradesCount: data?.trades_count ?? null,
       sharpeRatio: data?.sharpe_ratio ?? null,
       followers: data?.followers ?? null,
       arenaScore: data?.arena_score ?? null,
-      updatedAt: data?.updated_at ?? null,
+      updatedAt: data?.computed_at ?? null,
     },
     source: DataSourcePriority.HISTORICAL,
     sourceLabel: 'historical',
