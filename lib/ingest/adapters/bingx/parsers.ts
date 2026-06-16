@@ -120,6 +120,14 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
       headlineRoi: parseDisplayPct(rankStat[RATE_KEY[tf]]),
       headlinePnl: num(rankStat[CUM_PNL_KEY[tf]]),
       headlineWinRate: pct(rankStat[WIN_KEY[tf]]),
+      // Board IS the stats substrate (profile pass deferred) — the rankStat row
+      // carries the full superset. Backfill the per-TF risk/size columns into
+      // trader_stats (publish headline upsert), matching the blofin pattern:
+      // mdd/sharpe are per-TF; equity (AUM) + follower count are TF-independent.
+      headlineMdd: pct(rankStat[`maxDrawDown${tf}d`]),
+      headlineSharpe: num(rankStat[`sharpe${tf}d`]),
+      headlineAum: parseDisplayPct(rankStat.equity),
+      headlineCopierCount: int(parseDisplayPct(rankStat.strFollowerNum)),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: item,
     })
