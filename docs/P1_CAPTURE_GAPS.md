@@ -79,3 +79,22 @@ live harvest 必须在有实时浏览器 + 过反爬/地理封锁的环境(Mac M
 里做 —— 从开发环境盲写这些 SPA/签名/反爬端点的 parser 等于猜响应 shape。所以
 **下一步是在 worker 上跑 harvest 探针拿真实响应**,再据此实现 parser(本仓库可写探针
 脚本与 parser 骨架,但 fixture 必须实测产出)。
+
+## 进度更新(2026-06-15 续 — bingx 也是看板回填,不是签名墙)
+
+- ✅ **bitfinex vol→volume —— 已验证**(DB:tf7=77/tf30=145 traders 已填 volume,as_of 02:12 新鲜)。
+- ✅ **bingx —— 实测推翻"签名墙"判断**:adapter **不是 stub**,早已"harvest 一条签名
+  请求 + replayPaged 重放"(签名已解决),抓 roi/pnl/win_rate。本轮 live-harvest 确认
+  trader-list 端点 = 点 "Smart Ranking" tab → `api-app.qq-os.com/api/copy-trade-facade/
+v1/trader/search?pageId=&pageSize=&rankType=income&sort=accEarningRatio&order=desc`。
+  其 `rankStat` 是**近乎全超集**:equity / strFollowerNum / maxFollowerNum /
+  maxDrawDown{7,30,90}d / sharpe{7,30,90}d / winRate{tf}d / cumulativeProfitLoss{tf}d /
+  totalEarnings / followerEarning / totalTransactions / profit/lossPositionCount /
+  avgProfit / avgLoss / avgProfitRate / avgLossRate / pnlRate / avgHoldTime /
+  weeklyTradeFrequency / tradeDays / lastTradeTime / latest30DaysMedianLeverTimes …
+  已用 blofin 看板回填补 **mdd/sharpe/aum/copier_count**(commit 已推、worker 已加载、
+  crawl 进行中——2076×3 harvest+replay 慢,~10min+)。
+  **后续(高价值)**:把上面 rankStat 富字段(avgProfit/tradeDays/weeklyTradeFrequency/
+  lastTradeTime/win&total positions/avgHoldTime…)写进 trader_stats 列/extras → bingx
+  会变成最富的源之一。需扩 headline upsert 写 extras 或给 bingx 做 profile-pass。
+- 🛡️ **binance_web3 —— 仍是 202 反爬**,本轮未碰,是剩下唯一真"墙"。
