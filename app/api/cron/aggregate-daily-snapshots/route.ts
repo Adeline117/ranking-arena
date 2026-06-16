@@ -156,15 +156,17 @@ async function aggregateForDate(
     await Promise.all(
       distinctPlatforms.map(async (platform) => {
         try {
+          // Migrated off retiring trader_latest → leaderboard_ranks (aliased so
+          // the downstream mapping keys are unchanged; ranked traders per source).
           const { data: platformData, error: platformError } = await (readDb as any)
-            .from('trader_latest')
+            .from('leaderboard_ranks')
             .select(
-              'platform, trader_key, window, roi_pct, pnl_usd, win_rate, max_drawdown, followers, trades_count, updated_at'
+              'platform:source, trader_key:source_trader_id, roi_pct:roi, pnl_usd:pnl, win_rate, max_drawdown, followers, trades_count, updated_at:computed_at'
             )
-            .eq('platform', platform)
-            .eq('window', '90D')
-            .gte('updated_at', recentCutoffStr)
-            .order('updated_at', { ascending: false })
+            .eq('source', platform)
+            .eq('season_id', '90D')
+            .gte('computed_at', recentCutoffStr)
+            .order('computed_at', { ascending: false })
             .limit(PER_PLATFORM_LIMIT)
 
           if (platformError || !platformData) {
