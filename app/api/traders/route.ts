@@ -21,6 +21,7 @@ import { safeParseInt } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
+import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 
 const logger = createLogger('traders-api')
 
@@ -296,6 +297,10 @@ async function fetchFromLeaderboard(
     // Trim back to requested limit (we fetched 2x to compensate for filter losses)
     dedupedTraders = dedupedTraders.slice(0, limit)
   }
+
+  // Prefer our own CDN avatar mirror over the exchange-CDN proxy (no 429 cold-burst).
+  // Fail-open + cached (getOrSetWithLock ttl 300) → one indexed RPC per cache fill.
+  dedupedTraders = await attachAvatarMirrors(supabase, dedupedTraders)
 
   // Next cursor
   const lastTrader = dedupedTraders[dedupedTraders.length - 1]

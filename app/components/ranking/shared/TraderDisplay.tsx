@@ -130,16 +130,20 @@ export function TraderAvatar({
   traderId,
   displayName,
   avatarUrl,
+  avatarMirrorUrl,
   rank,
   size = 36,
 }: {
   traderId: string
   displayName: string
   avatarUrl?: string | null
+  avatarMirrorUrl?: string | null
   rank: number
   size?: number
 }) {
-  const proxyAvatarUrl = getTraderAvatarUrl(avatarUrl)
+  // Prefer our own CDN mirror (direct-load supabase URL, no proxy, no 429);
+  // else fall back to the origin proxy (keeps generated-avatar filtering).
+  const proxyAvatarUrl = avatarMirrorUrl?.trim() || getTraderAvatarUrl(avatarUrl)
   // For DEX wallet addresses without avatar, generate a blockie
   const blockieSrc =
     !proxyAvatarUrl && isWalletAddress(traderId) ? generateBlockieSvg(traderId, size * 2) : null

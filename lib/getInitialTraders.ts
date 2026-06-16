@@ -11,6 +11,7 @@ import type { ScoreConfidence } from '@/lib/utils/arena-score'
 import type { UnifiedTrader } from '@/lib/types/unified-trader'
 import { getLeaderboard } from '@/lib/data/unified'
 import { mapLeaderboardRow } from '@/lib/data/trader/mappers'
+import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { logger, fireAndForget } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import * as cache from '@/lib/cache'
@@ -27,6 +28,8 @@ export interface InitialTrader {
   source: string
   source_type: 'futures' | 'spot' | 'web3'
   avatar_url: string | null
+  /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
+  avatar_url_mirror?: string | null
   arena_score: number
   score_confidence: ScoreConfidence
 }
@@ -62,6 +65,7 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader {
     source: displayPlatform,
     source_type: (t.sourceType as 'futures' | 'spot' | 'web3') || 'futures',
     avatar_url: t.avatarUrl,
+    avatar_url_mirror: null, // enriched post-fetch via attachAvatarMirrors
     arena_score: t.arenaScore ?? 0,
     score_confidence: 'full', // leaderboard_ranks only includes confident scores
   }
@@ -200,8 +204,12 @@ export async function fetchLeaderboardFromDB(
     ])
 
     clearTimeout(timer)
+    // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
+    // Fail-open: missing mirrors leave avatar_url untouched (origin proxy still works).
+    const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders)
     return {
       ...tradersResult,
+      traders: enrichedTraders,
       totalCount: counts.all,
       categoryCounts: counts,
     }
