@@ -18,7 +18,6 @@ import { logger } from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import { refreshComputedMetrics } from '@/lib/cron/metrics-backfill'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 
@@ -372,42 +371,13 @@ export async function GET(request: NextRequest) {
     }
 
     // ── Metrics refresh (with timeout to prevent hang) ────────────
-    // Only run if we have at least 60s left in the time budget
-    let metricsResult = null
-    const metricsTimeRemaining = Math.max(0, TIME_BUDGET_MS - elapsed())
-    if (metricsTimeRemaining >= 60_000) {
-      try {
-        const metricsTimeout = Math.min(metricsTimeRemaining, 90_000) // cap at 90s
-        metricsResult = await Promise.race([
-          refreshComputedMetrics(supabase),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () =>
-                reject(
-                  new Error(`Metrics refresh timed out after ${Math.round(metricsTimeout / 1000)}s`)
-                ),
-              metricsTimeout
-            )
-          ),
-        ])
-        logger.info(
-          `[cleanup-data] Metrics refresh: sharpe=${metricsResult.sharpeUpdated}, wr=${metricsResult.winRateUpdated}, mdd=${metricsResult.maxDrawdownUpdated}, score=${metricsResult.arenaScoreUpdated}`
-        )
-      } catch (err) {
-        logger.warn(`[cleanup-data] Metrics refresh failed: ${err}`)
-        stepErrors.push(`metrics_refresh: ${err instanceof Error ? err.message : String(err)}`)
-      }
-    } else {
-      skippedSteps.push('metrics_refresh')
-      logger.warn(
-        `[cleanup-data] Skipping metrics refresh — only ${Math.round(metricsTimeRemaining / 1000)}s left in time budget`
-      )
-    }
+    // (removed 2026-06-15) refreshComputedMetrics — backfilled null metrics in
+    // trader_snapshots_v2 (retiring). Metrics now come from the arena pipeline.
 
     // ── ANALYZE on large tables (with per-table timeout) ─────────
     // Run ANALYZE periodically to keep planner stats fresh on growing tables
     if (hasTimeBudget()) {
-      for (const table of ['trader_snapshots_v2', 'trader_daily_snapshots']) {
+      for (const table of ['trader_daily_snapshots']) {
         if (!hasTimeBudget()) {
           skippedSteps.push(`analyze_${table}`)
           break
@@ -515,7 +485,6 @@ export async function GET(request: NextRequest) {
       stripeEventsCleaned,
       liquidationsCleaned,
       pipelineStateCleaned,
-      metricsRefresh: metricsResult,
       skippedSteps: skippedSteps.length > 0 ? skippedSteps : undefined,
       stepErrors: hasErrors ? stepErrors : undefined,
       note: 'trader snapshots/daily/positions are NEVER deleted (long-term archival)',

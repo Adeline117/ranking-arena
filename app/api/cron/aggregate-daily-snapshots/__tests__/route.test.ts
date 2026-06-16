@@ -11,12 +11,15 @@
 
 // Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
 
 const mockRpc = jest.fn()
@@ -48,18 +51,14 @@ jest.mock('@/lib/services/pipeline-logger', () => ({
 }))
 
 jest.mock('@/lib/pipeline/validate-before-write', () => ({
-  validateBeforeWrite: jest.fn((records: Record<string, unknown>[]) => ({ valid: records, rejected: [] })),
+  validateBeforeWrite: jest.fn((records: Record<string, unknown>[]) => ({
+    valid: records,
+    rejected: [],
+  })),
   logRejectedWrites: jest.fn(),
 }))
 
-jest.mock('@/lib/cron/metrics-backfill', () => ({
-  refreshComputedMetrics: jest.fn().mockResolvedValue({
-    sharpeUpdated: 0,
-    winRateUpdated: 0,
-    maxDrawdownUpdated: 0,
-    arenaScoreUpdated: 0,
-  }),
-}))
+// (removed 2026-06-15) metrics-backfill mock — module deleted (v2 retirement).
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
@@ -128,8 +127,26 @@ describe('POST /api/cron/aggregate-daily-snapshots', () => {
 
   it('aggregates snapshots via RPC and upserts daily records', async () => {
     const snapshots = [
-      { source: 'binance_futures', source_trader_id: 't1', roi: 50, pnl: 1000, win_rate: 0.6, max_drawdown: -10, followers: 100, trades_count: 20 },
-      { source: 'bybit', source_trader_id: 't2', roi: 30, pnl: 500, win_rate: 0.5, max_drawdown: -15, followers: 50, trades_count: 10 },
+      {
+        source: 'binance_futures',
+        source_trader_id: 't1',
+        roi: 50,
+        pnl: 1000,
+        win_rate: 0.6,
+        max_drawdown: -10,
+        followers: 100,
+        trades_count: 20,
+      },
+      {
+        source: 'bybit',
+        source_trader_id: 't2',
+        roi: 30,
+        pnl: 500,
+        win_rate: 0.5,
+        max_drawdown: -15,
+        followers: 50,
+        trades_count: 10,
+      },
     ]
 
     // First RPC: get_latest_snapshots_for_date → returns snapshots
