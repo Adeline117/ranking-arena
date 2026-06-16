@@ -46,6 +46,33 @@
 4. blofin/bingx 优先(只是延后,未试过);binance_web3 需先解 202 挑战(第 4 种思路);
    bitfinex 做 hist→持仓反推。
 
+## 进度(2026-06-15 实战)
+
+- ✅ **blofin_futures + blofin_spot —— 已做并 end-to-end 验证**。live-harvest 看板
+  `uapi/v1/copy/v2/trader/list`(无签名、worker 可达):每行带 roi/pnl/mdd/aum/
+  sharpe_ratio/followers + roi 曲线。根因:publish headline upsert 只写 roi/pnl/
+  win_rate。修复:`ParsedLeaderboardRow` 加 `headlineMdd/Sharpe/Aum/CopierCount/
+Volume` + upsert 用 `COALESCE(EXCLUDED, existing)`(profile 源发 null 不被覆盖),
+  blofin parser 回填。**验证**:重启 ingest worker(tsx 不热重载,必须重启)→ 强制
+  Tier-A → DB:blofin_futures 1664×3 全部 mdd/sharpe/aum/copier 已填、spot 63-88 已填
+  → 前端 witness:Crypto Vikings 显 Max Drawdown/Sharpe/AUM/Copiers + 回撤图。
+- ✅ **bitfinex —— vol→volume 已做**(同 profile-less 看板回填模式,纯 HTTP 公开 API
+  已抓 vol 看板)。随下次 worker 重启 + 抓取生效。
+- ⏳ **bingx —— 签名 API,需逆向**。数据 API = `api-app.qq-os.com/api/...`,头里
+  `appid=30004 / mainappid=10009 / timestamp / device_id(随机uuid) / sign(HMAC hex)
+/ app_version=5.4.6 / traceid`。sign 由前端 JS 按 (参数+timestamp+device_id+密钥)
+  算。两条路:(a) 从 JS bundle 提取 sign 算法;(b) 浏览器内驱动 SPA 让其自签 + 抓
+  trader-list 响应(本轮还没定位到 trader-list 端点,只见 config/coin/permission)。
+- 🛡️ **binance_web3 —— 202 反爬**(3 次尝试已耗尽),需新思路。
+
+**通用模式(已验证)**:profile-less 的"看板即数据源"交易所 → 在 parser 把 board 行的
+富字段塞进 `headline*` → publish headline upsert 用 COALESCE 写 trader_stats →
+serving 富面板零改自动展示。**运维**:worker 用 `tsx`(不热重载)→ 改 lib 后必须
+`pm2 restart arena-ingest-worker`;强制重抓 = 往 `arena-ingest-fast`(轻量源)/
+`arena-ingest`(重型源)队列 `q.add('tiera:leaderboard', {sourceSlug}, {jobId 无冒号})`
+(job NAME 是 `tiera:leaderboard`,slug 在 data —— 用 `tiera:<slug>` 当 name 会报
+"unknown job")。
+
 ## 阻塞说明(诚实)
 
 live harvest 必须在有实时浏览器 + 过反爬/地理封锁的环境(Mac Mini worker / SG VPS)
