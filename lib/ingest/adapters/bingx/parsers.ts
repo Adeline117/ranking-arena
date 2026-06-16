@@ -128,6 +128,8 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
       headlineSharpe: num(rankStat[`sharpe${tf}d`]),
       headlineAum: parseDisplayPct(rankStat.equity),
       headlineCopierCount: int(parseDisplayPct(rankStat.strFollowerNum)),
+      headlineWinPositions: int(rankStat.profitablePositionCount),
+      headlineTotalPositions: int(rankStat.totalPositionCount),
       // Rich rankStat superset → trader_stats.extras (surfaced by the metric
       // registry / meta strip with no UI changes). TF-independent overall stats.
       headlineExtras: bingxBoardExtras(rankStat),

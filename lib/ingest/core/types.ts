@@ -126,6 +126,8 @@ export interface ParsedLeaderboardRow {
   headlineAum?: number | null
   headlineCopierCount?: number | null
   headlineVolume?: number | null
+  headlineWinPositions?: number | null
+  headlineTotalPositions?: number | null
   /** Board-derived extras for profile-less sources (bingx rankStat superset:
    *  avg_profit / trades_per_week / trading_days / last_trade_time …). Merged
    *  into trader_stats.extras by the publish headline upsert (board keys win,

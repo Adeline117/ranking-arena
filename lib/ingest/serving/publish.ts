@@ -213,29 +213,33 @@ export async function publishLeaderboardSnapshot(
       // this never clobbers profile sources, but backfills profile-less ones.
       await client.query(
         `INSERT INTO arena.trader_stats
-           (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count, volume, extras)
+           (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count, volume,
+            win_positions, total_positions, extras)
          SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate, r.mdd, r.sharpe, r.aum, r.copier_count, r.volume,
-                COALESCE(r.extras, '{}'::jsonb)
+                r.win_positions, r.total_positions, COALESCE(r.extras, '{}'::jsonb)
            FROM jsonb_to_recordset($4::jsonb) AS r(
              exchange_trader_id text, roi numeric, pnl numeric, win_rate numeric,
-             mdd numeric, sharpe numeric, aum numeric, copier_count integer, volume numeric, extras jsonb)
+             mdd numeric, sharpe numeric, aum numeric, copier_count integer, volume numeric,
+             win_positions integer, total_positions integer, extras jsonb)
            JOIN arena.traders t
              ON t.source_id = $5 AND t.exchange_trader_id = r.exchange_trader_id
          ON CONFLICT (trader_id, timeframe) DO UPDATE SET
-           as_of        = EXCLUDED.as_of,
-           currency     = EXCLUDED.currency,
-           roi          = COALESCE(EXCLUDED.roi, arena.trader_stats.roi),
-           pnl          = COALESCE(EXCLUDED.pnl, arena.trader_stats.pnl),
-           win_rate     = COALESCE(EXCLUDED.win_rate, arena.trader_stats.win_rate),
-           mdd          = COALESCE(EXCLUDED.mdd, arena.trader_stats.mdd),
-           sharpe       = COALESCE(EXCLUDED.sharpe, arena.trader_stats.sharpe),
-           aum          = COALESCE(EXCLUDED.aum, arena.trader_stats.aum),
-           copier_count = COALESCE(EXCLUDED.copier_count, arena.trader_stats.copier_count),
-           volume       = COALESCE(EXCLUDED.volume, arena.trader_stats.volume),
+           as_of           = EXCLUDED.as_of,
+           currency        = EXCLUDED.currency,
+           roi             = COALESCE(EXCLUDED.roi, arena.trader_stats.roi),
+           pnl             = COALESCE(EXCLUDED.pnl, arena.trader_stats.pnl),
+           win_rate        = COALESCE(EXCLUDED.win_rate, arena.trader_stats.win_rate),
+           mdd             = COALESCE(EXCLUDED.mdd, arena.trader_stats.mdd),
+           sharpe          = COALESCE(EXCLUDED.sharpe, arena.trader_stats.sharpe),
+           aum             = COALESCE(EXCLUDED.aum, arena.trader_stats.aum),
+           copier_count    = COALESCE(EXCLUDED.copier_count, arena.trader_stats.copier_count),
+           volume          = COALESCE(EXCLUDED.volume, arena.trader_stats.volume),
+           win_positions   = COALESCE(EXCLUDED.win_positions, arena.trader_stats.win_positions),
+           total_positions = COALESCE(EXCLUDED.total_positions, arena.trader_stats.total_positions),
            -- Board extras merge INTO existing (profile extras preserved, board
            -- keys win); empty board extras = no-op so profile sources untouched.
-           extras       = CASE WHEN EXCLUDED.extras = '{}'::jsonb THEN arena.trader_stats.extras
-                               ELSE COALESCE(arena.trader_stats.extras, '{}'::jsonb) || EXCLUDED.extras END`,
+           extras          = CASE WHEN EXCLUDED.extras = '{}'::jsonb THEN arena.trader_stats.extras
+                                  ELSE COALESCE(arena.trader_stats.extras, '{}'::jsonb) || EXCLUDED.extras END`,
         [
           timeframe,
           scrapedAt,
@@ -251,6 +255,8 @@ export async function publishLeaderboardSnapshot(
               aum: r.headlineAum ?? null,
               copier_count: r.headlineCopierCount ?? null,
               volume: r.headlineVolume ?? null,
+              win_positions: r.headlineWinPositions ?? null,
+              total_positions: r.headlineTotalPositions ?? null,
               extras: r.headlineExtras ?? null,
             }))
           ),
