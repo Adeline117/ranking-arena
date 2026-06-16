@@ -29,9 +29,35 @@ import type {
   PositionHistoryItem,
   TraderPerformance,
   TraderProfile,
+  TraderStats,
 } from '@/lib/data/trader-types'
 
 type Row = Record<string, unknown>
+type SeriesPoint = { ts: string; value: number }
+type Series = Record<string, SeriesPoint[]>
+type Stats = Record<string, number | string | null>
+
+/** Per-timeframe {date, roi, pnl} shape the legacy Stats/Overview tabs consume
+ *  (EquityCurveData) and the per-tf asset weights (AssetBreakdownData). */
+export interface TfChartPoint {
+  date: string
+  roi: number
+  pnl: number
+}
+export interface EquityCurveByTf {
+  '7D': TfChartPoint[]
+  '30D': TfChartPoint[]
+  '90D': TfChartPoint[]
+}
+export interface AssetWeight {
+  symbol: string
+  weightPct: number
+}
+export interface AssetBreakdownByTf {
+  '7D': AssetWeight[]
+  '30D': AssetWeight[]
+  '90D': AssetWeight[]
+}
 
 const num = (v: unknown): number => {
   const n = typeof v === 'string' ? Number(v) : (v as number)
@@ -146,4 +172,91 @@ export function servingStatsToPerformance(byTf: {
     perf.max_drawdown = num(s90.mdd)
   }
   return perf
+}
+
+/** Merge a serving module's roi + pnl series into [{date, roi, pnl}] (legacy
+ *  EquityCurve point), de-duped by day and sorted — same logic as CoreCharts. */
+function mergeRoiPnl(series: Series | undefined): TfChartPoint[] {
+  if (!series) return []
+  const roi = series.roi ?? series.roi_trading ?? []
+  const pnl = series.pnl ?? series.cumulative_pnl ?? series.pnl_trading ?? []
+  const byDate = new Map<string, TfChartPoint>()
+  for (const p of roi) {
+    const date = p.ts.slice(0, 10)
+    byDate.set(date, { date, roi: p.value, pnl: byDate.get(date)?.pnl ?? 0 })
+  }
+  for (const p of pnl) {
+    const date = p.ts.slice(0, 10)
+    const row = byDate.get(date) ?? { date, roi: 0, pnl: 0 }
+    row.pnl = p.value
+    byDate.set(date, row)
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
+}
+
+/** Per-timeframe serving series → legacy EquityCurveData ({7D,30D,90D}). */
+export function servingSeriesToEquityCurve(byTf: {
+  tf7?: Series | null
+  tf30?: Series | null
+  tf90?: Series | null
+}): EquityCurveByTf {
+  return {
+    '7D': mergeRoiPnl(byTf.tf7 ?? undefined),
+    '30D': mergeRoiPnl(byTf.tf30 ?? undefined),
+    '90D': mergeRoiPnl(byTf.tf90 ?? undefined),
+  }
+}
+
+/** extras.trading_preferences.assets → [{symbol, weightPct}]. */
+function extrasToAssets(extras: Row | null | undefined): AssetWeight[] {
+  const tp = (extras?.trading_preferences ?? null) as { assets?: unknown } | null
+  const raw = Array.isArray(tp?.assets) ? (tp!.assets as Row[]) : []
+  return raw
+    .filter((a) => typeof a.asset === 'string' && Number.isFinite(Number(a.volume)))
+    .map((a) => ({ symbol: String(a.asset), weightPct: Number(a.volume) }))
+}
+
+/** Per-timeframe serving extras → legacy AssetBreakdownData. */
+export function servingToAssetBreakdown(byTf: {
+  tf7?: Row | null
+  tf30?: Row | null
+  tf90?: Row | null
+}): AssetBreakdownByTf {
+  return {
+    '7D': extrasToAssets(byTf.tf7),
+    '30D': extrasToAssets(byTf.tf30),
+    '90D': extrasToAssets(byTf.tf90),
+  }
+}
+
+/** 90d serving stats + extras → legacy TraderStats (trade-quality block +
+ *  additionalStats). Missing fields NULL-collapse (tabs tolerate undefined). */
+export function servingToStats(stats: Stats | null, extras: Row | null): TraderStats {
+  const e = extras ?? {}
+  const out: TraderStats = {}
+  const avgProfit = num(e.avg_profit ?? e.avgProfit)
+  const avgLoss = num(e.avg_loss ?? e.avgLoss)
+  const winPos = num(stats?.win_positions)
+  const totalPos = num(stats?.total_positions)
+  if (avgProfit || avgLoss || totalPos) {
+    out.trading = {
+      totalTrades12M: totalPos,
+      avgProfit,
+      avgLoss,
+      profitableTradesPct: totalPos ? (winPos / totalPos) * 100 : 0,
+    }
+  }
+  const tradesPerWeek = num(e.trades_per_week ?? e.weekly_trades)
+  const sharpe = num(stats?.sharpe)
+  const mdd = num(stats?.mdd)
+  const volume = num(stats?.volume)
+  out.additionalStats = {
+    tradesPerWeek: tradesPerWeek || undefined,
+    avgHoldingTime: typeof e.avg_holding_time === 'string' ? e.avg_holding_time : undefined,
+    riskScore: num(e.risk_rating) || undefined,
+    volume90d: volume || undefined,
+    maxDrawdown: mdd || undefined,
+    sharpeRatio: sharpe || undefined,
+  }
+  return out
 }
