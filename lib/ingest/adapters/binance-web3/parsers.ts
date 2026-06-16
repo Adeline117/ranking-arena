@@ -44,9 +44,58 @@ function str(v: unknown): string | null {
 
 // ── Leaderboard ──
 
+/** §2.5d token distribution — the four "by PnL%" buckets the board carries as
+ *  a flat count object. Normalized to clean keys (UI labels them); omitted when
+ *  the board didn't ship the object. */
+function tokenDistribution(item: Dict): Record<string, number> | null {
+  const td = item.tokenDistribution as Dict | undefined
+  if (!td || typeof td !== 'object') return null
+  const out: Record<string, number> = {}
+  const map: Record<string, string> = {
+    gt500Cnt: 'gt_500', // >500%
+    between0And500Cnt: 'p0_500', // 0~500%
+    between0AndNegative50Cnt: 'n50_0', // -50%~0
+    ltNegative50Cnt: 'lt_n50', // <-50%
+  }
+  for (const [src, dst] of Object.entries(map)) {
+    const n = num(td[src])
+    if (n !== null) out[dst] = Math.round(n)
+  }
+  return Object.keys(out).length > 0 ? out : null
+}
+
+/** §2.5d top earning tokens → normalized [{symbol, address, logo, profit_pct,
+ *  realized_pnl}]. profitRate is a decimal fraction → percent. Capped at 10. */
+function topEarningTokens(item: Dict): Array<Record<string, unknown>> | null {
+  const list = Array.isArray(item.topEarningTokens) ? (item.topEarningTokens as Dict[]) : []
+  const out = list.slice(0, 10).map((tk) => ({
+    symbol: str(tk.tokenSymbol),
+    address: str(tk.tokenAddress),
+    logo: str(tk.tokenUrl),
+    profit_pct: pct(tk.profitRate),
+    realized_pnl: num(tk.realizedPnl),
+  }))
+  return out.length > 0 ? out : null
+}
+
+/** §2.5d PnL calendar — dailyPNL [{dt, realizedPnl}] → [{date, pnl}], sorted. */
+function pnlCalendar(item: Dict): Array<{ date: string; pnl: number }> | null {
+  const list = Array.isArray(item.dailyPNL) ? (item.dailyPNL as Dict[]) : []
+  const out: Array<{ date: string; pnl: number }> = []
+  for (const p of list) {
+    const date = str(p.dt)
+    const pnl = num(p.realizedPnl)
+    if (date !== null && pnl !== null) out.push({ date, pnl })
+  }
+  out.sort((a, b) => a.date.localeCompare(b.date))
+  return out.length > 0 ? out : null
+}
+
 /** On-chain board fields → trader_stats.extras (registry/meta-strip surfaced):
- *  avg buy size, tokens traded, total transactions, last activity. lastActivity
- *  is an epoch-ms number → ISO for the last_trade_time meta chip. */
+ *  avg buy size, tokens traded, total transactions, buy/sell split, last
+ *  activity, plus the §2.5d structured blocks (token distribution / top earning
+ *  tokens / PnL calendar) which only the board carries — binance_web3 has no
+ *  profile tier (202-gated), so extras is the sole channel for them. */
 function web3BoardExtras(item: Dict): Record<string, unknown> | null {
   const ext: Record<string, unknown> = {}
   const avgBuy = num(item.avgBuyVolume)
@@ -55,8 +104,23 @@ function web3BoardExtras(item: Dict): Record<string, unknown> | null {
   if (tokens !== null) ext.total_traded_tokens = Math.round(tokens)
   const txns = num(item.totalTxCnt)
   if (txns !== null) ext.total_txns = Math.round(txns)
+  const buyTx = num(item.buyTxCnt)
+  if (buyTx !== null) ext.buy_txns = Math.round(buyTx)
+  const sellTx = num(item.sellTxCnt)
+  if (sellTx !== null) ext.sell_txns = Math.round(sellTx)
+  const buyVol = num(item.buyVolume)
+  if (buyVol !== null) ext.buy_volume = buyVol
+  const sellVol = num(item.sellVolume)
+  if (sellVol !== null) ext.sell_volume = sellVol
   const ms = num(item.lastActivity)
   if (ms !== null && ms > 0) ext.last_trade_time = new Date(ms).toISOString()
+  // §2.5d structured blocks (NULL-collapse — only set when the board shipped them)
+  const td = tokenDistribution(item)
+  if (td) ext.token_distribution = td
+  const tokensTop = topEarningTokens(item)
+  if (tokensTop) ext.top_earning_tokens = tokensTop
+  const cal = pnlCalendar(item)
+  if (cal) ext.pnl_calendar = cal
   return Object.keys(ext).length > 0 ? ext : null
 }
 

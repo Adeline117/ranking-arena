@@ -79,6 +79,29 @@ describe('parseBinanceWeb3LeaderboardPage', () => {
     expect(raw.balance).toBe('0.011937466524736082')
   })
 
+  it('promotes §2.5d structured blocks into headlineExtras', () => {
+    const page = parseBinanceWeb3LeaderboardPage(payload, ctx)
+    const ext = page.rows[0].headlineExtras as Record<string, unknown>
+    // token distribution → clean keys, counts preserved
+    expect(ext.token_distribution).toMatchObject({ gt_500: 0, p0_500: 9, n50_0: 10, lt_n50: 0 })
+    // PnL calendar → [{date, pnl}] sorted, length matches dailyPNL
+    const cal = ext.pnl_calendar as Array<{ date: string; pnl: number }>
+    expect(Array.isArray(cal)).toBe(true)
+    expect(cal.length).toBe(7)
+    expect(typeof cal[0].date).toBe('string')
+    expect(typeof cal[0].pnl).toBe('number')
+    expect([...cal].sort((a, b) => a.date.localeCompare(b.date))).toEqual(cal) // sorted
+    // top earning tokens → normalized, profitRate fraction → percent
+    const top = ext.top_earning_tokens as Array<Record<string, unknown>>
+    expect(Array.isArray(top)).toBe(true)
+    expect(top.length).toBe(3)
+    expect(typeof top[0].symbol).toBe('string')
+    expect(typeof top[0].profit_pct).toBe('number')
+    // buy/sell granularity surfaced
+    expect(typeof ext.buy_txns).toBe('number')
+    expect(typeof ext.sell_txns).toBe('number')
+  })
+
   it('skips rows without a 0x identity; empty payload yields no rows', () => {
     const board = (payload.board ?? {}) as { data?: { data?: unknown[] } }
     const doctored = {
