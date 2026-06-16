@@ -3,6 +3,9 @@ import {
   historyToPositionHistory,
   servingToTraderProfile,
   servingStatsToPerformance,
+  servingSeriesToEquityCurve,
+  servingToAssetBreakdown,
+  servingToStats,
 } from '../legacy-adapter'
 
 describe('serving → legacy adapter', () => {
@@ -83,5 +86,59 @@ describe('serving → legacy adapter', () => {
     expect(perf.roi_90d).toBe(30)
     expect(perf.roi_7d).toBeUndefined()
     expect(perf.roi_30d).toBeUndefined()
+  })
+
+  it('merges roi+pnl series into per-TF EquityCurveData by day', () => {
+    const ec = servingSeriesToEquityCurve({
+      tf90: {
+        roi: [
+          { ts: '2026-06-01T00:00:00Z', value: 5 },
+          { ts: '2026-06-02T00:00:00Z', value: 8 },
+        ],
+        pnl: [{ ts: '2026-06-02T00:00:00Z', value: 120 }],
+      },
+    })
+    expect(ec['90D']).toEqual([
+      { date: '2026-06-01', roi: 5, pnl: 0 },
+      { date: '2026-06-02', roi: 8, pnl: 120 },
+    ])
+    expect(ec['7D']).toEqual([]) // missing TF collapses to empty
+  })
+
+  it('maps trading_preferences → per-TF AssetBreakdownData', () => {
+    const ab = servingToAssetBreakdown({
+      tf90: {
+        trading_preferences: {
+          assets: [
+            { asset: 'BTC', volume: 60 },
+            { asset: 'ETH', volume: 40 },
+          ],
+        },
+      },
+    })
+    expect(ab['90D']).toEqual([
+      { symbol: 'BTC', weightPct: 60 },
+      { symbol: 'ETH', weightPct: 40 },
+    ])
+    expect(ab['7D']).toEqual([])
+  })
+
+  it('maps serving stats+extras → legacy TraderStats', () => {
+    const s = servingToStats(
+      { win_positions: 70, total_positions: 100, sharpe: 2.1, mdd: 12, volume: 5000 },
+      { avg_profit: 30, avg_loss: -10, trades_per_week: 15 }
+    )
+    expect(s.trading).toMatchObject({
+      totalTrades12M: 100,
+      avgProfit: 30,
+      avgLoss: -10,
+      profitableTradesPct: 70,
+    })
+    expect(s.additionalStats).toMatchObject({
+      tradesPerWeek: 15,
+      sharpeRatio: 2.1,
+      maxDrawdown: 12,
+      volume90d: 5000,
+    })
   })
 })
