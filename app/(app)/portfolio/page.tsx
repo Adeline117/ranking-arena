@@ -78,11 +78,11 @@ export default function PortfolioPage() {
           })
           .catch(() => {
             /* Intentionally swallowed: session token fetch non-critical */
-          }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+          })
       })
       .catch(() => {
         /* Intentionally swallowed: auth check non-critical for portfolio page */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [router])
 
   const fetchHeaders = useCallback((): Record<string, string> => {
@@ -280,7 +280,9 @@ const styles: Record<string, React.CSSProperties> = {
   page: {
     minHeight: '100vh',
     backgroundColor: 'var(--color-bg-primary)',
-    paddingTop: '60px',
+    // Was 60px, which stacked with the container's 24px top padding (~84px gap
+    // before the H1). Other (app) pages rely on the container padding alone.
+    paddingTop: '0',
     paddingBottom: '80px',
   },
   container: {
