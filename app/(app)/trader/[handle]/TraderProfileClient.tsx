@@ -360,15 +360,17 @@ export default function TraderProfileClient({
     [traderData?.similarTraders]
   )
 
-  // P4 three-tab unification (spec §4): feed the serving data through the
-  // legacy-adapter so a serving source renders the SAME Overview/Stats/Portfolio
-  // tabs as legacy, instead of the trimmed ServingProfilePanel. Behind a flag
-  // (env default-off + ?threetab=1 override) until browse-verified, then it
-  // becomes the default and ServingProfilePanel retires. The hook is called
-  // unconditionally (hooks rule); `enabled` gates every fetch off otherwise.
+  // P4 three-tab unification (spec §4): every serving source renders the SAME
+  // Overview/Stats/Portfolio tabs as legacy (fed via legacy-adapter), instead of
+  // the trimmed ServingProfilePanel. Now the DEFAULT for serving — browse-verified
+  // across CEX full-surface / board-backfill / onchain (§2.5d). Escape hatch:
+  // ?threetab=0 or NEXT_PUBLIC_SERVING_THREE_TAB=0 falls back to the panel (kept
+  // for instant rollback until the panel code is retired). The hook is called
+  // unconditionally (hooks rule); `enabled` gates every fetch off for legacy.
   const useThreeTab =
     isServing &&
-    (process.env.NEXT_PUBLIC_SERVING_THREE_TAB === '1' || searchParams.get('threetab') === '1')
+    searchParams.get('threetab') !== '0' &&
+    process.env.NEXT_PUBLIC_SERVING_THREE_TAB !== '0'
   const servingTab = useServingTabData(
     {
       source: data.source,
