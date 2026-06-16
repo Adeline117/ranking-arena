@@ -50,15 +50,18 @@ export async function GET(
       return NextResponse.json({ error: 'Trader not found' }, { status: 404 })
     }
 
-    // 获取历史快照数据（按时间升序）from trader_snapshots_v2
-    const { data: snapshots, error } = await supabase
-      .from('trader_snapshots_v2')
-      .select('roi_pct, created_at')
+    // 历史日快照（按时间升序）。迁离退役的 trader_snapshots_v2 → trader_daily_snapshots。
+    const { data: snapshots, error } = (await supabase
+      .from('trader_daily_snapshots')
+      .select('roi, date')
       .eq('trader_key', resolved.traderKey)
       .eq('platform', resolved.platform)
-      .not('roi_pct', 'is', null)
-      .order('created_at', { ascending: true })
-      .limit(1000) as { data: SnapshotRow[] | null; error: { message: string } | null }
+      .not('roi', 'is', null)
+      .order('date', { ascending: true })
+      .limit(1000)) as {
+      data: Array<{ roi: number | null; date: string }> | null
+      error: { message: string } | null
+    }
 
     if (error) {
       return NextResponse.json({ error: 'Failed to fetch data' }, { status: 500 })
@@ -68,8 +71,8 @@ export async function GET(
       return NextResponse.json({ error: 'No snapshot data available' }, { status: 404 })
     }
 
-    const timestamps = snapshots.map(s => s.created_at)
-    const roiValues = snapshots.map(s => s.roi_pct!)
+    const timestamps = snapshots.map((s) => s.date)
+    const roiValues = snapshots.map((s) => s.roi!)
 
     const results = computeIndicators(timestamps, roiValues)
 
@@ -80,7 +83,9 @@ export async function GET(
     response.headers.set('Cache-Control', 'public, s-maxage=300, stale-while-revalidate=600')
     return response
   } catch (err) {
-    logger.error('GET /api/traders/[handle]/indicators failed', { error: err instanceof Error ? err.message : String(err) })
+    logger.error('GET /api/traders/[handle]/indicators failed', {
+      error: err instanceof Error ? err.message : String(err),
+    })
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
