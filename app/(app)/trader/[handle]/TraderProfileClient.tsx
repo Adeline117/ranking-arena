@@ -110,6 +110,7 @@ export interface UnregisteredTraderData {
 import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
+import { useServingTabData } from './hooks/useServingTabData'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
 
@@ -353,6 +354,35 @@ export default function TraderProfileClient({
     () => traderData?.similarTraders ?? [],
     [traderData?.similarTraders]
   )
+
+  // P4 three-tab unification (spec §4): feed the serving data through the
+  // legacy-adapter so a serving source renders the SAME Overview/Stats/Portfolio
+  // tabs as legacy, instead of the trimmed ServingProfilePanel. Behind a flag
+  // (env default-off + ?threetab=1 override) until browse-verified, then it
+  // becomes the default and ServingProfilePanel retires. The hook is called
+  // unconditionally (hooks rule); `enabled` gates every fetch off otherwise.
+  const useThreeTab =
+    isServing &&
+    (process.env.NEXT_PUBLIC_SERVING_THREE_TAB === '1' || searchParams.get('threetab') === '1')
+  const servingTab = useServingTabData(
+    {
+      source: data.source,
+      exchangeTraderId: data.source_trader_id,
+      nickname: servingFirstScreen?.nickname ?? data.handle ?? null,
+      avatarSrc: servingFirstScreen?.avatarSrc ?? null,
+      entries: servingFirstScreen?.entries,
+    },
+    servingCapability ?? null,
+    useThreeTab
+  )
+  // Effective tab props: serving-derived under the flag, legacy otherwise.
+  const effProfile = useThreeTab ? servingTab.traderProfile : traderProfile
+  const effPerformance = useThreeTab ? servingTab.traderPerformance : traderPerformance
+  const effStats = useThreeTab ? servingTab.traderStats : traderStats
+  const effPortfolio = useThreeTab ? servingTab.traderPortfolio : traderPortfolio
+  const effPositionHistory = useThreeTab ? servingTab.traderPositionHistory : traderPositionHistory
+  const effEquityCurve = useThreeTab ? servingTab.traderEquityCurve : traderEquityCurve
+  const effAssetBreakdown = useThreeTab ? servingTab.traderAssetBreakdown : traderAssetBreakdown
 
   // Loading state: only when SWR is loading AND no server fallback
   const isInitialLoading = traderLoading && !serverTraderData
@@ -635,15 +665,15 @@ export default function TraderProfileClient({
 
         {/* Serving mode (spec §2.4): the body below the header reads from
             arena.* via /core + /records — legacy tabs are not rendered. */}
-        {isServing && servingFirstScreen && (
+        {isServing && !useThreeTab && servingFirstScreen && (
           <ServingProfilePanel
             firstScreen={servingFirstScreen}
             capability={servingCapability ?? null}
           />
         )}
 
-        {/* Tabs */}
-        {!isServing && (
+        {/* Tabs — legacy sources always; serving sources under the P4 flag */}
+        {(!isServing || useThreeTab) && (
           <TraderTabs
             activeTab={activeTab}
             onTabChange={handleTabChange}
@@ -665,7 +695,7 @@ export default function TraderProfileClient({
         />
 
         {/* Tab Content — dims while loading account switch */}
-        {!isServing && (
+        {(!isServing || useThreeTab) && (
           <div
             style={{
               opacity: traderLoading && !isPrimaryAccount ? 0.5 : 1,
@@ -688,10 +718,10 @@ export default function TraderProfileClient({
                 >
                   <OverviewTab
                     data={data}
-                    traderProfile={traderProfile}
-                    traderPerformance={traderPerformance}
+                    traderProfile={effProfile}
+                    traderPerformance={effPerformance}
                     traderEquityCurve={
-                      traderEquityCurve as
+                      effEquityCurve as
                         | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
                         | undefined
                     }
@@ -729,11 +759,11 @@ export default function TraderProfileClient({
                   {visitedTabs.has('stats') ? (
                     <StatsTab
                       visited
-                      stats={traderStats}
-                      traderHandle={traderProfile?.handle || data.handle}
-                      assetBreakdown={traderAssetBreakdown}
-                      equityCurve={traderEquityCurve}
-                      positionHistory={traderPositionHistory}
+                      stats={effStats}
+                      traderHandle={effProfile?.handle || data.handle}
+                      assetBreakdown={effAssetBreakdown}
+                      equityCurve={effEquityCurve}
+                      positionHistory={effPositionHistory}
                       isPro={isPro}
                       onUnlock={handlePricingRedirect}
                     />
@@ -751,8 +781,8 @@ export default function TraderProfileClient({
                   {visitedTabs.has('portfolio') ? (
                     <PortfolioTab
                       visited
-                      portfolio={traderPortfolio}
-                      positionHistory={traderPositionHistory}
+                      portfolio={effPortfolio}
+                      positionHistory={effPositionHistory}
                       source={data.source}
                       isPro={isPro}
                       onUnlock={handlePricingRedirect}

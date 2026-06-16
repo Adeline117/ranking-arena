@@ -29,11 +29,11 @@ import {
 import type { TraderFirstScreen, SourceCapability } from '@/lib/data/serving/types'
 import type {
   PortfolioItem,
-  PositionHistoryItem,
   TraderPerformance,
   TraderProfile,
   TraderStats,
 } from '@/lib/data/trader-types'
+import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 
 export interface ServingTabData {
   traderProfile: TraderProfile
@@ -42,7 +42,7 @@ export interface ServingTabData {
   traderAssetBreakdown: AssetBreakdownByTf
   traderStats: TraderStats
   traderPortfolio: PortfolioItem[]
-  traderPositionHistory: PositionHistoryItem[]
+  traderPositionHistory: PositionHistoryEntry[]
   loading: boolean
 }
 
