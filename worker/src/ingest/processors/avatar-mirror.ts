@@ -3,7 +3,9 @@
  * fetch the bytes, store in our Supabase Storage (`trader-avatars`, public),
  * serve from our CDN. Origin URLs hotlink-block and expire. Refresh weekly.
  *
- * Runs daily; each run handles up to BATCH unmirrored + stale traders.
+ * Runs every 2h (scheduler.ts); each run handles up to BATCH unmirrored + stale
+ * traders, ordered by last_seen_at DESC so the active/homepage-visible set is
+ * mirrored first. 150ms CDN-friendly pacing → BATCH=1500 is ~3.75min/run.
  */
 
 import { createHash } from 'node:crypto'
@@ -12,7 +14,11 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getIngestPool } from '@/lib/ingest/db'
 
 const BUCKET = 'trader-avatars'
-const BATCH = 500
+// 3x throughput (was 500) to close the initial backfill faster: only ~13% of
+// origin avatars are mirrored, and the homepage now prefers mirrors. Keeps the
+// 150ms friendly pacing toward exchange CDNs (the throttle that avoids 429s),
+// so a full run is ~3.75min — fine for a 2-hourly maintenance job.
+const BATCH = 1500
 const REFRESH_DAYS = 7
 const MAX_BYTES = 2 * 1024 * 1024
 
