@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
@@ -175,7 +175,7 @@ export default function TraderHeader({
       })
       .catch(() => {
         /* Intentionally swallowed: auth check non-critical for trader header */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [externalUserId])
 
   // Prefer claimed user avatar over exchange avatar
@@ -190,7 +190,9 @@ export default function TraderHeader({
 
   const containerBackground = hasCover
     ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${coverUrl}) center/cover no-repeat`
-    : `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`
+    : // alpha() via color-mix — string-concatenating hex alpha onto a CSS var
+      // (`var(--x)F8`) produces invalid CSS and silently drops the gradient.
+      `linear-gradient(135deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 91)} 100%)`
 
   // Build subtitle parts for the second line
   const subtitleParts: string[] = []
@@ -367,7 +369,7 @@ export default function TraderHeader({
                 <Text
                   size="xs"
                   style={{
-                    color: hasCover ? 'rgba(255,255,255,0.7)' : tokens.colors.text.tertiary,
+                    color: hasCover ? alpha(tokens.colors.white, 70) : tokens.colors.text.tertiary,
                     fontSize: tokens.typography.fontSize.xs,
                     lineHeight: 1.3,
                     // #34: Brief scale animation when follower count changes
