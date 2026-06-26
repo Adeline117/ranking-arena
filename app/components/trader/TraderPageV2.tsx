@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { formatROI, formatPnL, formatNumber } from '@/lib/utils/format'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderDetailV2 } from '@/lib/hooks/useTraderDetailV2'
@@ -104,7 +104,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
                   <span
                     className="px-2 py-0.5 rounded text-xs font-medium"
                     style={{
-                      backgroundColor: tokens.colors.accent.brand + '15',
+                      backgroundColor: colorAlpha(tokens.colors.accent.brand, 8),
                       color: tokens.colors.accent.brand,
                     }}
                   >
@@ -365,7 +365,7 @@ function SnapshotCard({
             <span
               className="text-xs font-bold px-2 py-0.5 rounded"
               style={{
-                backgroundColor: tokens.colors.accent.success + '20',
+                backgroundColor: colorAlpha(tokens.colors.accent.success, 13),
                 color: tokens.colors.accent.success,
               }}
             >
@@ -376,7 +376,7 @@ function SnapshotCard({
             <span
               className="text-xs font-bold px-2 py-0.5 rounded"
               style={{
-                backgroundColor: tokens.colors.accent.brand + '20',
+                backgroundColor: colorAlpha(tokens.colors.accent.brand, 13),
                 color: tokens.colors.accent.brand,
               }}
             >

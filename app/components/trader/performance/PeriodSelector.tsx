@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
@@ -260,9 +260,9 @@ export function PeriodSelector({
               alignItems: 'center',
               gap: tokens.spacing[1],
               padding: '4px 8px',
-              background: tokens.colors.accent.warning + '15',
+              background: alpha(tokens.colors.accent.warning, 8),
               borderRadius: tokens.radius.md,
-              border: '1px solid ' + tokens.colors.accent.warning + '30',
+              border: '1px solid ' + alpha(tokens.colors.accent.warning, 19),
             }}
             title={(() => {
               const note = DATA_SOURCE_NOTES[source.toLowerCase()]

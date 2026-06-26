@@ -9,7 +9,7 @@
 import React from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '@/app/components/base'
@@ -470,10 +470,10 @@ const OverviewTab = React.memo(function OverviewTab({
                   cursor: 'pointer',
                 }}
                 onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                  e.currentTarget.style.borderColor = tokens.colors.accent.primary + '60'
+                  e.currentTarget.style.borderColor = colorAlpha(tokens.colors.accent.primary, 38)
                 }}
                 onMouseLeave={(e: React.MouseEvent<HTMLDivElement>) => {
-                  e.currentTarget.style.borderColor = tokens.colors.border.primary + '60'
+                  e.currentTarget.style.borderColor = colorAlpha(tokens.colors.border.primary, 38)
                 }}
               >
                 <Box

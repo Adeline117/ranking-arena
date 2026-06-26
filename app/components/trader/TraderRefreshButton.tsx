@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface TraderRefreshButtonProps {
@@ -71,9 +71,9 @@ export default function TraderRefreshButton({
         style={{
           backgroundColor: showSpinner
             ? tokens.colors.bg.secondary
-            : tokens.colors.accent.brand + '15',
+            : colorAlpha(tokens.colors.accent.brand, 8),
           color: showSpinner ? tokens.colors.text.secondary : tokens.colors.accent.brand,
-          border: `1px solid ${showSpinner ? tokens.colors.border.primary : tokens.colors.accent.brand + '30'}`,
+          border: `1px solid ${showSpinner ? tokens.colors.border.primary : colorAlpha(tokens.colors.accent.brand, 19)}`,
         }}
       >
         {showSpinner ? (

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
@@ -314,7 +314,7 @@ export default function AggregatedStats({
             background: showComparison
               ? `${alpha(tokens.colors.accent.primary, 8)}`
               : 'transparent',
-            border: `1px solid ${showComparison ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}`,
+            border: `1px solid ${showComparison ? colorAlpha(tokens.colors.accent.primary, 25) : tokens.colors.border.primary}`,
             cursor: 'pointer',
             transition: 'all 0.2s',
             color: tokens.colors.accent.primary,

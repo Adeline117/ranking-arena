@@ -42,9 +42,9 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
               ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.success, 3)} 0%, ${alpha(tokens.colors.accent.success, 1)} 100%)`
               : roi != null
                 ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.error, 3)} 0%, ${alpha(tokens.colors.accent.error, 1)} 100%)`
-                : tokens.colors.bg.tertiary + '40',
+                : alpha(tokens.colors.bg.tertiary, 25),
           borderRadius: tokens.radius.lg,
-          border: `1px solid ${roi != null && roi >= 0 ? tokens.colors.accent.success + '20' : roi != null ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
+          border: `1px solid ${roi != null && roi >= 0 ? alpha(tokens.colors.accent.success, 13) : roi != null ? alpha(tokens.colors.accent.error, 13) : tokens.colors.border.primary}`,
           position: 'relative',
           overflow: 'hidden',
         }}
@@ -118,9 +118,9 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
               ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.success, 3)} 0%, ${alpha(tokens.colors.accent.success, 1)} 100%)`
               : pnl != null
                 ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.error, 3)} 0%, ${alpha(tokens.colors.accent.error, 1)} 100%)`
-                : tokens.colors.bg.tertiary + '40',
+                : alpha(tokens.colors.bg.tertiary, 25),
           borderRadius: tokens.radius.lg,
-          border: `1px solid ${pnl != null && pnl >= 0 ? tokens.colors.accent.success + '20' : pnl != null ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
+          border: `1px solid ${pnl != null && pnl >= 0 ? alpha(tokens.colors.accent.success, 13) : pnl != null ? alpha(tokens.colors.accent.error, 13) : tokens.colors.border.primary}`,
         }}
       >
         <Text

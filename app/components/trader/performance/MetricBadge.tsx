@@ -1,4 +1,4 @@
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 
 export interface MetricBadgeProps {
@@ -46,23 +46,32 @@ export function MetricBadge({
         padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
         background: bgColor,
         borderRadius: tokens.radius.full,
-        border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : negative ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
+        border: `1px solid ${highlight ? alpha(tokens.colors.accent.success, 19) : negative ? alpha(tokens.colors.accent.error, 13) : tokens.colors.border.primary}`,
         cursor: tooltip ? 'help' : undefined,
         transition: 'border-color 0.2s ease, background 0.2s ease',
       }}
       title={tooltip}
     >
-      <Text style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary, fontWeight: 500, whiteSpace: 'nowrap' }}>
+      <Text
+        style={{
+          fontSize: tokens.typography.fontSize.xs,
+          color: tokens.colors.text.tertiary,
+          fontWeight: 500,
+          whiteSpace: 'nowrap',
+        }}
+      >
         {label}
       </Text>
-      <Text style={{
-        fontSize: tokens.typography.fontSize.sm,
-        color,
-        fontWeight: 700,
-        fontFamily: tokens.typography.fontFamily.mono.join(', '),
-        letterSpacing: '-0.02em',
-        whiteSpace: 'nowrap',
-      }}>
+      <Text
+        style={{
+          fontSize: tokens.typography.fontSize.sm,
+          color,
+          fontWeight: 700,
+          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+          letterSpacing: '-0.02em',
+          whiteSpace: 'nowrap',
+        }}
+      >
         {isNA ? '--' : value}
       </Text>
     </Box>

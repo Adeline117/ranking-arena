@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
@@ -100,9 +100,11 @@ export default function ExchangeLinksBar({
     >
       {entries.map(({ acc, url, name, isCopyTrade, referral, isActive }) => {
         const activeBorder = isActive
-          ? tokens.colors.accent.primary + '80'
+          ? colorAlpha(tokens.colors.accent.primary, 50)
           : tokens.colors.border.primary
-        const activeBg = isActive ? tokens.colors.accent.primary + '10' : tokens.colors.bg.secondary
+        const activeBg = isActive
+          ? colorAlpha(tokens.colors.accent.primary, 6)
+          : tokens.colors.bg.secondary
 
         return (
           <Box
@@ -138,8 +140,8 @@ export default function ExchangeLinksBar({
                 })
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = tokens.colors.accent.primary + '80'
-                e.currentTarget.style.background = tokens.colors.accent.primary + '10'
+                e.currentTarget.style.borderColor = colorAlpha(tokens.colors.accent.primary, 50)
+                e.currentTarget.style.background = colorAlpha(tokens.colors.accent.primary, 6)
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = activeBorder

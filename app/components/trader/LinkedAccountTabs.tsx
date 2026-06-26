@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { queryClient } from '@/app/components/Providers'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { formatROI } from '@/lib/utils/format'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
@@ -106,7 +106,7 @@ export default function LinkedAccountTabs({
     padding: '10px 14px',
     minHeight: 44,
     borderRadius: tokens.radius.md,
-    border: `1px solid ${isActive ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
+    border: `1px solid ${isActive ? colorAlpha(tokens.colors.accent.primary, 38) : tokens.colors.border.primary}`,
     background: isActive ? `${alpha(tokens.colors.accent.primary, 8)}` : tokens.colors.bg.secondary,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
