@@ -14,6 +14,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useBotRankings, type BotEntry, type BotRankingsResponse } from '@/lib/hooks/useBotRankings'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import DataStateWrapper from '@/app/components/ui/DataStateWrapper'
+import PageHeader from '@/app/components/ui/PageHeader'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
 import { Box } from '@/app/components/base'
@@ -364,41 +365,23 @@ function BotsContent({ initialBots }: BotsClientProps) {
     >
       <div className="feed-main-content max-w-5xl mx-auto px-4 py-6" style={{ paddingBottom: 80 }}>
         {/* Header */}
-        <div
-          className="flex items-center justify-between"
-          style={{ marginBottom: tokens.spacing[4] }}
-        >
-          <div>
-            <h1
-              style={{
-                fontSize: tokens.typography.fontSize['2xl'],
-                fontWeight: tokens.typography.fontWeight.black,
-                letterSpacing: '-0.3px',
-              }}
-            >
-              {t('botsTitle')}
-            </h1>
-            <p
+        <PageHeader
+          title={t('botsTitle')}
+          subtitle={t('botsSubtitle')}
+          compact
+          actions={
+            <Link
+              href="/rankings"
               style={{
                 fontSize: tokens.typography.fontSize.sm,
-                color: 'var(--color-text-tertiary)',
-                marginTop: 4,
+                color: 'var(--color-accent-brand)',
+                textDecoration: 'none',
               }}
             >
-              {t('botsSubtitle')}
-            </p>
-          </div>
-          <Link
-            href="/rankings"
-            style={{
-              fontSize: tokens.typography.fontSize.sm,
-              color: 'var(--color-accent-brand)',
-              textDecoration: 'none',
-            }}
-          >
-            {t('botsBackToTraders')}
-          </Link>
-        </div>
+              {t('botsBackToTraders')}
+            </Link>
+          }
+        />
 
         {/* Time window */}
         <div className="flex flex-wrap gap-2 mb-4">

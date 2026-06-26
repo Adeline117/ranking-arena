@@ -8,6 +8,7 @@
 
 import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -92,21 +93,11 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
           marginBottom: tokens.spacing[4],
         }}
       >
-        <Box>
-          <h1
-            style={{
-              fontSize: tokens.typography.fontSize.xl,
-              fontWeight: 800,
-              color: 'var(--color-text-primary)',
-              margin: 0,
-            }}
-          >
-            {t('exchangeRankingsTitle')}
-          </h1>
-          <Text size="sm" color="secondary" style={{ marginTop: tokens.spacing[1] }}>
-            {t('exchangeRankingsSubtitle')}
-          </Text>
-        </Box>
+        <PageHeader
+          title={t('exchangeRankingsTitle')}
+          subtitle={t('exchangeRankingsSubtitle')}
+          style={{ marginBottom: 0 }}
+        />
 
         <Box style={{ display: 'flex', gap: tokens.spacing[1] }} role="tablist">
           {TIMEFRAMES.map((option) => (

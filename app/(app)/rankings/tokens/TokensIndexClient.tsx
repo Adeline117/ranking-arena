@@ -3,6 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Box, Text } from '@/app/components/base'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -163,18 +164,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
   return (
     <Box>
       {/* Header */}
-      <Box style={{ marginBottom: 24 }}>
-        <Text
-          size="2xl"
-          weight="bold"
-          style={{ color: tokens.colors.text.primary, marginBottom: 4 }}
-        >
-          {t('tokenRankingsTitle')}
-        </Text>
-        <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-          {t('tokenRankingsSubtitle')}
-        </Text>
-      </Box>
+      <PageHeader title={t('tokenRankingsTitle')} subtitle={t('tokenRankingsSubtitle')} />
 
       {/* Search */}
       <Box style={{ marginBottom: 20 }}>
