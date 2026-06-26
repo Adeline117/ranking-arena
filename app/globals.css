@@ -3931,3 +3931,25 @@ td[data-numeric],
    - box-shadow → none (purely decorative)
    No critical text-color or layout-affecting properties use color-mix(),
    so graceful degradation is acceptable for all current usages. */
+
+/* ============================================
+   Beta banner — compact on mobile
+   Desktop shows the full sentence; small screens show terser copy with a
+   smaller font + tighter padding so the banner doesn't push content far down.
+   ============================================ */
+.beta-banner .beta-short {
+  display: none;
+}
+@media (max-width: 480px) {
+  .beta-banner {
+    padding: 7px 38px 7px 12px !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+  .beta-banner .beta-full {
+    display: none;
+  }
+  .beta-banner .beta-short {
+    display: inline;
+  }
+}
