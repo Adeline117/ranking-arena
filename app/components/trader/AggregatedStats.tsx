@@ -113,40 +113,53 @@ export default function AggregatedStats({
           </Text>
         </Box>
 
-        {/* Best ROI */}
-        <Box
-          style={{
-            background: `${alpha(tokens.colors.accent.primary, 3)}`,
-            borderRadius: tokens.radius.lg,
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            border: `1px solid ${alpha(tokens.colors.accent.primary, 13)}`,
-          }}
-        >
-          <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
-            {t('traderBestRoi')}
-          </Text>
-          {bestRoi ? (
-            <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Text
-                size="lg"
-                weight="black"
-                style={{
-                  color:
-                    bestRoi.value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
-                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                  letterSpacing: '-0.02em',
-                }}
-              >
-                {formatROI(bestRoi.value)}
+        {/* Best ROI — frame follows the value's sign (success/error) so the card
+            shows one signal accent instead of a purple frame fighting a green/red
+            number. */}
+        {(() => {
+          const roiColor = bestRoi
+            ? bestRoi.value >= 0
+              ? tokens.colors.accent.success
+              : tokens.colors.accent.error
+            : tokens.colors.border.primary
+          return (
+            <Box
+              style={{
+                background: `${alpha(roiColor, 3)}`,
+                borderRadius: tokens.radius.lg,
+                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                border: `1px solid ${alpha(roiColor, 13)}`,
+              }}
+            >
+              <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
+                {t('traderBestRoi')}
               </Text>
-              <ExchangeLogo exchange={bestRoi.platform} size={14} />
+              {bestRoi ? (
+                <Box style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Text
+                    size="lg"
+                    weight="black"
+                    style={{
+                      color:
+                        bestRoi.value >= 0
+                          ? tokens.colors.accent.success
+                          : tokens.colors.accent.error,
+                      fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                      letterSpacing: '-0.02em',
+                    }}
+                  >
+                    {formatROI(bestRoi.value)}
+                  </Text>
+                  <ExchangeLogo exchange={bestRoi.platform} size={14} />
+                </Box>
+              ) : (
+                <Text size="lg" weight="black" style={{ color: tokens.colors.text.tertiary }}>
+                  --
+                </Text>
+              )}
             </Box>
-          ) : (
-            <Text size="lg" weight="black" style={{ color: tokens.colors.text.tertiary }}>
-              --
-            </Text>
-          )}
-        </Box>
+          )
+        })()}
 
         {/* Weighted Score with tooltip */}
         <Box

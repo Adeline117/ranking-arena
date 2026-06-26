@@ -71,12 +71,14 @@ export function ScoreBreakdownSection({
           flexWrap: 'wrap',
         }}
       >
+        {/* Decorative section icon — kept neutral so the score badges are the
+            single signal accent on this header (one accent per surface). */}
         <svg
           width="16"
           height="16"
           viewBox="0 0 24 24"
           fill="none"
-          stroke={tokens.colors.accent.warning}
+          stroke={tokens.colors.text.tertiary}
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
