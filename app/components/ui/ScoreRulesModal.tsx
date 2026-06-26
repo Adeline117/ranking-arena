@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { t } from '@/lib/i18n'
 import { Text } from '../base'
@@ -346,7 +346,7 @@ function FormulaBox({ children, small = false }: { children: React.ReactNode; sm
     <div
       style={{
         background: 'var(--color-accent-primary-10)',
-        border: `1px solid ${tokens.colors.accent.primary}30`,
+        border: `1px solid ${alpha(tokens.colors.accent.primary, 19)}`,
         borderRadius: tokens.radius.lg,
         padding: small ? '10px 14px' : '14px 18px',
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
@@ -367,8 +367,8 @@ function ScoreBadge({ label, value, color }: { label: string; value: string; col
         display: 'flex',
         alignItems: 'center',
         gap: 6,
-        background: `${color}15`,
-        border: `1px solid ${color}30`,
+        background: alpha(color, 8),
+        border: `1px solid ${alpha(color, 19)}`,
         borderRadius: tokens.radius.md,
         padding: '4px 10px',
         fontSize: 12,

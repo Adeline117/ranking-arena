@@ -11,7 +11,7 @@ import React, {
 } from 'react'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useTableKeyboardNav } from '@/lib/hooks/useTableKeyboardNav'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import EmptyState from '../ui/EmptyState'
 import { Box, Text } from '../base'
@@ -895,7 +895,7 @@ function RankingTableInner(props: {
           <Box
             style={{
               padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-              background: `${tokens.colors.accent.primary}10`,
+              background: alpha(tokens.colors.accent.primary, 6),
               borderBottom: `1px solid ${tokens.colors.border.primary}`,
               fontSize: tokens.typography.fontSize.sm,
               color: tokens.colors.text.secondary,
@@ -964,8 +964,8 @@ function RankingTableInner(props: {
                   className="retry-btn"
                   style={{
                     padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
-                    background: `${tokens.colors.accent.primary}20`,
-                    border: `1px solid ${tokens.colors.accent.primary}40`,
+                    background: alpha(tokens.colors.accent.primary, 13),
+                    border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
                     borderRadius: tokens.radius.md,
                     color: tokens.colors.accent.primary,
                     cursor: 'pointer',

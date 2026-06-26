@@ -1,7 +1,7 @@
 import React, { memo, useCallback, useState } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
@@ -236,8 +236,8 @@ export const TraderCard = memo(function TraderCard({
               <Box
                 className="source-tag"
                 style={{
-                  background: `${sourceInfo.typeColor}15`,
-                  border: `1px solid ${sourceInfo.typeColor}30`,
+                  background: alpha(sourceInfo.typeColor, 8),
+                  border: `1px solid ${alpha(sourceInfo.typeColor, 19)}`,
                 }}
               >
                 <Text
