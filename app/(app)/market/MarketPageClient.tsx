@@ -8,6 +8,7 @@ import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
+import PageHeader from '@/app/components/ui/PageHeader'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import ErrorState from '@/app/components/ui/ErrorState'
 import { supabase } from '@/lib/supabase/client'
@@ -338,47 +339,51 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
         overflowX: 'hidden',
       }}
     >
-      <h1 className="sr-only">Crypto Market Overview</h1>
-
-      {/* Quick links to sub-pages */}
+      {/* Compact page header — gives the page identity without pushing the
+          dense market data down; the sub-page links live in the actions slot. */}
       <div
         style={{
-          display: 'flex',
-          gap: 8,
-          padding: '8px 20px 0',
           maxWidth: 1400,
           margin: '0 auto',
-          justifyContent: 'flex-end',
+          padding: `${tokens.spacing[2]} ${tokens.spacing[6]} 0`,
         }}
       >
-        <Link
-          href="/market/funding-rates"
-          style={{
-            fontSize: 13,
-            color: tokens.colors.text.secondary,
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: tokens.radius.sm,
-            background: tokens.colors.bg.secondary,
-            fontWeight: 600,
-          }}
-        >
-          {t('fundingRates') || 'Funding Rates'}
-        </Link>
-        <Link
-          href="/market/open-interest"
-          style={{
-            fontSize: 13,
-            color: tokens.colors.text.secondary,
-            textDecoration: 'none',
-            padding: '4px 10px',
-            borderRadius: tokens.radius.sm,
-            background: tokens.colors.bg.secondary,
-            fontWeight: 600,
-          }}
-        >
-          {t('openInterest') || 'Open Interest'}
-        </Link>
+        <PageHeader
+          title={t('market')}
+          compact
+          actions={
+            <div style={{ display: 'flex', gap: 8 }}>
+              <Link
+                href="/market/funding-rates"
+                style={{
+                  fontSize: 13,
+                  color: tokens.colors.text.secondary,
+                  textDecoration: 'none',
+                  padding: '4px 10px',
+                  borderRadius: tokens.radius.sm,
+                  background: tokens.colors.bg.secondary,
+                  fontWeight: 600,
+                }}
+              >
+                {t('fundingRates') || 'Funding Rates'}
+              </Link>
+              <Link
+                href="/market/open-interest"
+                style={{
+                  fontSize: 13,
+                  color: tokens.colors.text.secondary,
+                  textDecoration: 'none',
+                  padding: '4px 10px',
+                  borderRadius: tokens.radius.sm,
+                  background: tokens.colors.bg.secondary,
+                  fontWeight: 600,
+                }}
+              >
+                {t('openInterest') || 'Open Interest'}
+              </Link>
+            </div>
+          }
+        />
       </div>
 
       {/* L0: Scrolling Price Ticker */}
