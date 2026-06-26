@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box } from '../../base'
 import ProGate from '../../ui/ProGate'
 import type { TraderStats } from '@/lib/data/trader'
@@ -151,9 +151,9 @@ export default function StatsPage({
           className="glass-card"
           style={{
             padding: tokens.spacing[5],
-            background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+            background: `linear-gradient(145deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 94)} 100%)`,
             borderRadius: tokens.radius.xl,
-            border: `1px solid ${tokens.colors.border.primary}60`,
+            border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
             marginTop: tokens.spacing[6],
           }}
         >

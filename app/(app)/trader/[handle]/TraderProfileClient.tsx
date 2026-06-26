@@ -14,7 +14,7 @@ import { useQuery } from '@tanstack/react-query'
 import { STALE_STANDARD, STALE_RELAXED } from '@/lib/hooks/cache-presets'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { fetcher } from '@/lib/hooks/fetchers'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -514,7 +514,7 @@ export default function TraderProfileClient({
       className="trader-page-container"
       style={{
         minHeight: '100vh',
-        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${colorAlpha(tokens.colors.bg.secondary, 19)} 100%)`,
         color: tokens.colors.text.primary,
         overflowX: 'hidden',
       }}

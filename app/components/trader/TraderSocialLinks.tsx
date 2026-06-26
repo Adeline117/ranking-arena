@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box } from '../base'
 
 export interface SocialLinks {
@@ -17,12 +17,12 @@ const socialLinkStyle: React.CSSProperties = {
   gap: 4,
   padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
   borderRadius: tokens.radius.md,
-  background: `${tokens.colors.bg.tertiary}80`,
+  background: `${alpha(tokens.colors.bg.tertiary, 50)}`,
   color: tokens.colors.text.secondary,
   fontSize: tokens.typography.fontSize.xs,
   textDecoration: 'none',
   transition: `all ${tokens.transition.base}`,
-  border: `1px solid ${tokens.colors.border.primary}40`,
+  border: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
 }
 
 function SocialLink({
@@ -45,7 +45,13 @@ function SocialLink({
 
   if (href) {
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer" title={title} style={socialLinkStyle}>
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        title={title}
+        style={socialLinkStyle}
+      >
         {content}
       </a>
     )
@@ -66,7 +72,7 @@ export interface TraderSocialLinksProps {
  * Renders a row of social link chips (Twitter, Telegram, Discord, GitHub, Website).
  */
 export function TraderSocialLinksSection({ socialLinks }: TraderSocialLinksProps) {
-  if (!Object.values(socialLinks).some(v => v)) return null
+  if (!Object.values(socialLinks).some((v) => v)) return null
 
   return (
     <Box
@@ -99,7 +105,11 @@ export function TraderSocialLinksSection({ socialLinks }: TraderSocialLinksProps
       {socialLinks.discord && (
         <SocialLink
           icon="DC"
-          text={socialLinks.discord.length > 12 ? socialLinks.discord.slice(0, 12) + '...' : socialLinks.discord}
+          text={
+            socialLinks.discord.length > 12
+              ? socialLinks.discord.slice(0, 12) + '...'
+              : socialLinks.discord
+          }
           title={socialLinks.discord}
         />
       )}
@@ -113,7 +123,11 @@ export function TraderSocialLinksSection({ socialLinks }: TraderSocialLinksProps
       )}
       {socialLinks.website && (
         <SocialLink
-          href={socialLinks.website.startsWith('http') ? socialLinks.website : `https://${socialLinks.website}`}
+          href={
+            socialLinks.website.startsWith('http')
+              ? socialLinks.website
+              : `https://${socialLinks.website}`
+          }
           icon="W"
           text={socialLinks.website.replace(/^https?:\/\//, '').slice(0, 20)}
           title={socialLinks.website}

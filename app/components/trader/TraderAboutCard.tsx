@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '../base'
 import TraderFollowButton from '../ui/TraderFollowButton'
@@ -53,9 +53,14 @@ export default function TraderAboutCard({
 
   useEffect(() => {
     setMounted(true)
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-    }).catch(() => { /* Intentionally swallowed: auth check non-critical for about card */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setUserId(data.user?.id ?? null)
+      })
+      .catch(() => {
+        /* Intentionally swallowed: auth check non-critical for about card */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   const handleFollowersClick = () => {
@@ -69,11 +74,11 @@ export default function TraderAboutCard({
     <Box
       className="about-card glass-card"
       style={{
-        background: `linear-gradient(165deg, ${tokens.colors.bg.secondary}F0 0%, ${tokens.colors.bg.primary}E8 100%)`,
+        background: `linear-gradient(165deg, ${alpha(tokens.colors.bg.secondary, 94)} 0%, ${alpha(tokens.colors.bg.primary, 91)} 100%)`,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
         borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}60`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
         padding: tokens.spacing[6],
         boxShadow: `0 8px 32px var(--color-overlay-light), inset 0 1px 0 var(--glass-bg-light)`,
         transition: `all ${tokens.transition.smooth}`,
@@ -84,11 +89,13 @@ export default function TraderAboutCard({
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.transform = 'translateY(-4px)'
-        e.currentTarget.style.boxShadow = '0 20px 48px var(--color-overlay-light), inset 0 1px 0 var(--glass-bg-light)'
+        e.currentTarget.style.boxShadow =
+          '0 20px 48px var(--color-overlay-light), inset 0 1px 0 var(--glass-bg-light)'
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.transform = 'translateY(0)'
-        e.currentTarget.style.boxShadow = '0 8px 32px var(--color-overlay-light), inset 0 1px 0 var(--glass-bg-light)'
+        e.currentTarget.style.boxShadow =
+          '0 8px 32px var(--color-overlay-light), inset 0 1px 0 var(--glass-bg-light)'
       }}
     >
       {/* Decorative background */}
@@ -99,7 +106,7 @@ export default function TraderAboutCard({
           right: -60,
           width: 180,
           height: 180,
-          background: `radial-gradient(circle, ${tokens.colors.accent.primary}15 0%, transparent 70%)`,
+          background: `radial-gradient(circle, ${alpha(tokens.colors.accent.primary, 8)} 0%, transparent 70%)`,
           pointerEvents: 'none',
         }}
       />
@@ -168,7 +175,14 @@ export default function TraderAboutCard({
       {/* Action buttons -- only on other profiles */}
       <Box style={{ position: 'relative', zIndex: 1 }}>
         {!isOwnProfile && traderId && userId ? (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
+          <Box
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.spacing[2],
+              marginBottom: tokens.spacing[5],
+            }}
+          >
             {isRegistered ? (
               <>
                 <UserFollowButton
@@ -177,22 +191,17 @@ export default function TraderAboutCard({
                   fullWidth
                   size="lg"
                   onFollowChange={(isFollowing) => {
-                    setFollowersCount(prev => isFollowing ? prev + 1 : prev - 1)
+                    setFollowersCount((prev) => (isFollowing ? prev + 1 : prev - 1))
                   }}
                 />
-                <MessageButton
-                  targetUserId={traderId}
-                  currentUserId={userId}
-                  fullWidth
-                  size="md"
-                />
+                <MessageButton targetUserId={traderId} currentUserId={userId} fullWidth size="md" />
               </>
             ) : (
               <TraderFollowButton
                 traderId={traderId}
                 userId={userId}
                 onFollowChange={(isFollowing) => {
-                  setFollowersCount(prev => isFollowing ? prev + 1 : prev - 1)
+                  setFollowersCount((prev) => (isFollowing ? prev + 1 : prev - 1))
                 }}
               />
             )}
@@ -204,7 +213,7 @@ export default function TraderAboutCard({
       <Box
         style={{
           paddingTop: tokens.spacing[5],
-          borderTop: `1px solid ${tokens.colors.border.primary}40`,
+          borderTop: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
           display: 'grid',
           gridTemplateColumns: 'repeat(2, 1fr)',
           gap: tokens.spacing[3],

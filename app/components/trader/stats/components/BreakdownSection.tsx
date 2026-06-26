@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -18,11 +18,7 @@ interface BreakdownSectionProps {
   delay: number
 }
 
-export function BreakdownSection({
-  assetBreakdown,
-  fallbackData,
-  delay,
-}: BreakdownSectionProps) {
+export function BreakdownSection({ assetBreakdown, fallbackData, delay }: BreakdownSectionProps) {
   const { t } = useLanguage()
   const [period, setPeriod] = useState<'7D' | '30D' | '90D'>('90D')
   const [mounted, setMounted] = useState(false)
@@ -36,11 +32,11 @@ export function BreakdownSection({
   const currentData = assetBreakdown?.[period] || fallbackData
 
   // 没有数据时，检查所有周期是否都为空
-  const allPeriodsEmpty = !assetBreakdown || (
-    (!assetBreakdown['90D'] || assetBreakdown['90D'].length === 0) &&
-    (!assetBreakdown['30D'] || assetBreakdown['30D'].length === 0) &&
-    (!assetBreakdown['7D'] || assetBreakdown['7D'].length === 0)
-  )
+  const allPeriodsEmpty =
+    !assetBreakdown ||
+    ((!assetBreakdown['90D'] || assetBreakdown['90D'].length === 0) &&
+      (!assetBreakdown['30D'] || assetBreakdown['30D'].length === 0) &&
+      (!assetBreakdown['7D'] || assetBreakdown['7D'].length === 0))
 
   if (allPeriodsEmpty && fallbackData.length === 0) {
     return null
@@ -56,9 +52,9 @@ export function BreakdownSection({
     <Box
       className="stats-card glass-card"
       style={{
-        background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+        background: `linear-gradient(145deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 94)} 100%)`,
         borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}60`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
         padding: tokens.spacing[6],
         boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
         opacity: mounted ? 1 : 0,
@@ -66,9 +62,18 @@ export function BreakdownSection({
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1)',
       }}
     >
-      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[5] }}>
+      <Box
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: tokens.spacing[5],
+        }}
+      >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="lg" weight="black">{t('assetBreakdown')}</Text>
+          <Text size="lg" weight="black">
+            {t('assetBreakdown')}
+          </Text>
         </Box>
         <PeriodSelector value={period} onChange={setPeriod} t={t} />
       </Box>
@@ -106,11 +111,14 @@ export function BreakdownSection({
       </Box>
 
       {/* Asset List */}
-      <Box className="asset-grid trading-grid" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: tokens.spacing[3],
-      }}>
+      <Box
+        className="asset-grid trading-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: tokens.spacing[3],
+        }}
+      >
         {currentData.slice(0, 12).map((item, idx) => (
           <Box
             key={idx}
@@ -120,7 +128,8 @@ export function BreakdownSection({
               gap: tokens.spacing[2],
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.lg,
-              background: hoveredIndex === idx ? `${getColorForIndex(idx)}15` : 'transparent',
+              background:
+                hoveredIndex === idx ? `${alpha(getColorForIndex(idx), 8)}` : 'transparent',
               transition: `all ${tokens.transition.base}`,
               cursor: 'default',
             }}
@@ -134,11 +143,13 @@ export function BreakdownSection({
                 borderRadius: tokens.radius.sm,
                 background: getColorForIndex(idx),
                 flexShrink: 0,
-                boxShadow: `0 2px 4px ${getColorForIndex(idx)}40`,
+                boxShadow: `0 2px 4px ${alpha(getColorForIndex(idx), 25)}`,
               }}
             />
             <CryptoIcon symbol={item.symbol} size={16} />
-            <Text size="sm" weight="bold" style={{ flex: 1, color: tokens.colors.text.primary }}>{item.symbol}</Text>
+            <Text size="sm" weight="bold" style={{ flex: 1, color: tokens.colors.text.primary }}>
+              {item.symbol}
+            </Text>
             <Text
               size="sm"
               style={{
@@ -163,7 +174,7 @@ export function BreakdownSection({
 function PeriodSelector({
   value,
   onChange,
-  t: _t
+  t: _t,
 }: {
   value: '7D' | '30D' | '90D'
   onChange: (v: '7D' | '30D' | '90D') => void
@@ -190,7 +201,8 @@ function PeriodSelector({
             background: value === p ? tokens.colors.bg.primary : 'transparent',
             color: value === p ? tokens.colors.text.primary : tokens.colors.text.tertiary,
             fontSize: tokens.typography.fontSize.xs,
-            fontWeight: value === p ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+            fontWeight:
+              value === p ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
             cursor: 'pointer',
             transition: `all ${tokens.transition.base}`,
             fontFamily: tokens.typography.fontFamily.sans.join(', '),

@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
@@ -54,17 +54,21 @@ export default function PositionHistoryView({
   return (
     <Box>
       {/* Sort Controls */}
-      <Box style={{
-        display: 'flex',
-        justifyContent: 'flex-end',
-        alignItems: 'center',
-        gap: tokens.spacing[2],
-        marginBottom: tokens.spacing[4],
-        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-        background: tokens.colors.bg.tertiary,
-        borderRadius: tokens.radius.lg,
-      }}>
-        <Text size="xs" color="tertiary">{t('sortBy')}</Text>
+      <Box
+        style={{
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          marginBottom: tokens.spacing[4],
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          background: tokens.colors.bg.tertiary,
+          borderRadius: tokens.radius.lg,
+        }}
+      >
+        <Text size="xs" color="tertiary">
+          {t('sortBy')}
+        </Text>
         <select
           value={sortBy}
           onChange={(e) => onSortByChange(e.target.value as 'openTime' | 'closeTime' | 'pnl')}
@@ -100,10 +104,21 @@ export default function PositionHistoryView({
             gap: 4,
           }}
         >
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            {sortOrder === 'desc'
-              ? <path d="M12 5v14M5 12l7 7 7-7" />
-              : <path d="M12 19V5M5 12l7-7 7 7" />}
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            {sortOrder === 'desc' ? (
+              <path d="M12 5v14M5 12l7 7 7-7" />
+            ) : (
+              <path d="M12 19V5M5 12l7-7 7 7" />
+            )}
           </svg>
           {sortOrder === 'desc' ? t('descending') : t('ascending')}
         </button>
@@ -137,11 +152,34 @@ export default function PositionHistoryView({
                   <th style={{ ...thStyle, textAlign: 'left' }}>{t('direction')}</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>{t('entryPrice')}</th>
                   <th style={{ ...thStyle, textAlign: 'right' }}>{t('exitPrice')}</th>
-                  <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer', color: sortBy === 'pnl' ? tokens.colors.accent.primary : undefined }} onClick={() => { onSortByChange('pnl'); if (sortBy === 'pnl') onSortOrderToggle() }}>
+                  <th
+                    style={{
+                      ...thStyle,
+                      textAlign: 'right',
+                      cursor: 'pointer',
+                      color: sortBy === 'pnl' ? tokens.colors.accent.primary : undefined,
+                    }}
+                    onClick={() => {
+                      onSortByChange('pnl')
+                      if (sortBy === 'pnl') onSortOrderToggle()
+                    }}
+                  >
                     {t('pnl')} {sortBy === 'pnl' && (sortOrder === 'desc' ? '\u2193' : '\u2191')}
                   </th>
-                  <th style={{ ...thStyle, textAlign: 'right', cursor: 'pointer', color: sortBy === 'closeTime' ? tokens.colors.accent.primary : undefined }} onClick={() => { onSortByChange('closeTime'); if (sortBy === 'closeTime') onSortOrderToggle() }}>
-                    {t('closeTime')} {sortBy === 'closeTime' && (sortOrder === 'desc' ? '\u2193' : '\u2191')}
+                  <th
+                    style={{
+                      ...thStyle,
+                      textAlign: 'right',
+                      cursor: 'pointer',
+                      color: sortBy === 'closeTime' ? tokens.colors.accent.primary : undefined,
+                    }}
+                    onClick={() => {
+                      onSortByChange('closeTime')
+                      if (sortBy === 'closeTime') onSortOrderToggle()
+                    }}
+                  >
+                    {t('closeTime')}{' '}
+                    {sortBy === 'closeTime' && (sortOrder === 'desc' ? '\u2193' : '\u2191')}
                   </th>
                 </tr>
               </thead>
@@ -151,14 +189,19 @@ export default function PositionHistoryView({
                     key={idx}
                     className="portfolio-row"
                     style={{
-                      background: hoveredRow === 100 + idx ? `${tokens.colors.accent.primary}05` : 'transparent',
+                      background:
+                        hoveredRow === 100 + idx
+                          ? `${alpha(tokens.colors.accent.primary, 2)}`
+                          : 'transparent',
                       transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                     }}
                     onMouseEnter={() => onHoverRow(100 + idx)}
                     onMouseLeave={() => onHoverRow(null)}
                   >
                     <td style={{ padding: tokens.spacing[4] }}>
-                      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                      <Box
+                        style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}
+                      >
                         <CryptoIcon symbol={item.symbol} size={20} />
                         <Text size="sm" weight="bold" style={{ color: tokens.colors.text.primary }}>
                           {item.symbol}
@@ -166,27 +209,50 @@ export default function PositionHistoryView({
                       </Box>
                     </td>
                     <td style={{ padding: tokens.spacing[4] }}>
-                      <Box style={{
-                        display: 'inline-flex',
-                        padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                        borderRadius: tokens.radius.full,
-                        background: item.direction === 'long' ? `${tokens.colors.accent.success}15` : `${tokens.colors.accent.error}15`,
-                      }}>
-                        <Text size="xs" style={{
-                          color: item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error,
-                          fontWeight: tokens.typography.fontWeight.bold,
-                        }}>
+                      <Box
+                        style={{
+                          display: 'inline-flex',
+                          padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                          borderRadius: tokens.radius.full,
+                          background:
+                            item.direction === 'long'
+                              ? `${alpha(tokens.colors.accent.success, 8)}`
+                              : `${alpha(tokens.colors.accent.error, 8)}`,
+                        }}
+                      >
+                        <Text
+                          size="xs"
+                          style={{
+                            color:
+                              item.direction === 'long'
+                                ? tokens.colors.accent.success
+                                : tokens.colors.accent.error,
+                            fontWeight: tokens.typography.fontWeight.bold,
+                          }}
+                        >
                           {item.direction === 'long' ? t('long') : t('short')}
                         </Text>
                       </Box>
                     </td>
                     <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
-                      <Text size="sm" style={{ color: tokens.colors.text.secondary, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+                      <Text
+                        size="sm"
+                        style={{
+                          color: tokens.colors.text.secondary,
+                          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        }}
+                      >
                         {formatPrice(item.entryPrice)}
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
-                      <Text size="sm" style={{ color: tokens.colors.text.secondary, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+                      <Text
+                        size="sm"
+                        style={{
+                          color: tokens.colors.text.secondary,
+                          fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                        }}
+                      >
                         {formatPrice(item.exitPrice)}
                       </Text>
                     </td>
@@ -195,11 +261,15 @@ export default function PositionHistoryView({
                         size="sm"
                         weight="bold"
                         style={{
-                          color: item.pnlPct >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                          color:
+                            item.pnlPct >= 0
+                              ? tokens.colors.accent.success
+                              : tokens.colors.accent.error,
                           fontFamily: tokens.typography.fontFamily.mono.join(', '),
                         }}
                       >
-                        {(item.pnlPct ?? 0) >= 0 ? '+' : ''}{(item.pnlPct ?? 0).toFixed(2)}%
+                        {(item.pnlPct ?? 0) >= 0 ? '+' : ''}
+                        {(item.pnlPct ?? 0).toFixed(2)}%
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>

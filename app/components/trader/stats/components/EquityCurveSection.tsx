@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import {
@@ -78,9 +78,9 @@ export function EquityCurveSection({
       (!equityCurve['7D'] || equityCurve['7D'].length === 0))
 
   const cardStyle = {
-    background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+    background: `linear-gradient(145deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 94)} 100%)`,
     borderRadius: tokens.radius.xl,
-    border: `1px solid ${tokens.colors.border.primary}60`,
+    border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
     padding: tokens.spacing[6],
     boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
     opacity: mounted ? 1 : 0,
@@ -280,7 +280,7 @@ export function EquityCurveSection({
             alignItems: 'center',
             justifyContent: 'center',
             gap: tokens.spacing[3],
-            background: `${tokens.colors.bg.tertiary}40`,
+            background: `${alpha(tokens.colors.bg.tertiary, 25)}`,
             borderRadius: tokens.radius.xl,
             padding: tokens.spacing[6],
           }}
@@ -340,7 +340,7 @@ export function EquityCurveSection({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: `${tokens.colors.bg.tertiary}40`,
+            background: `${alpha(tokens.colors.bg.tertiary, 25)}`,
             borderRadius: tokens.radius.xl,
           }}
         >

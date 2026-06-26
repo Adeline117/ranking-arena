@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
@@ -56,7 +56,16 @@ export default function AggregatedStats({
     >
       {/* Header */}
       <Box style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.primary} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={tokens.colors.accent.primary}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
           <circle cx="8.5" cy="7" r="4" />
           <line x1="20" y1="8" x2="20" y2="14" />
@@ -82,10 +91,10 @@ export default function AggregatedStats({
         {/* Combined PnL */}
         <Box
           style={{
-            background: `${combinedPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error}08`,
+            background: `${alpha(combinedPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error, 3)}`,
             borderRadius: tokens.radius.lg,
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            border: `1px solid ${combinedPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error}20`,
+            border: `1px solid ${alpha(combinedPnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error, 13)}`,
           }}
         >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
@@ -107,10 +116,10 @@ export default function AggregatedStats({
         {/* Best ROI */}
         <Box
           style={{
-            background: `${tokens.colors.accent.primary}08`,
+            background: `${alpha(tokens.colors.accent.primary, 3)}`,
             borderRadius: tokens.radius.lg,
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            border: `1px solid ${tokens.colors.accent.primary}20`,
+            border: `1px solid ${alpha(tokens.colors.accent.primary, 13)}`,
           }}
         >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginBottom: 4 }}>
@@ -122,7 +131,8 @@ export default function AggregatedStats({
                 size="lg"
                 weight="black"
                 style={{
-                  color: bestRoi.value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
+                  color:
+                    bestRoi.value >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error,
                   fontFamily: tokens.typography.fontFamily.mono.join(', '),
                   letterSpacing: '-0.02em',
                 }}
@@ -132,17 +142,19 @@ export default function AggregatedStats({
               <ExchangeLogo exchange={bestRoi.platform} size={14} />
             </Box>
           ) : (
-            <Text size="lg" weight="black" style={{ color: tokens.colors.text.tertiary }}>--</Text>
+            <Text size="lg" weight="black" style={{ color: tokens.colors.text.tertiary }}>
+              --
+            </Text>
           )}
         </Box>
 
         {/* Weighted Score with tooltip */}
         <Box
           style={{
-            background: `${getScoreColor(weightedScore)}08`,
+            background: `${alpha(getScoreColor(weightedScore), 3)}`,
             borderRadius: tokens.radius.lg,
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            border: `1px solid ${getScoreColor(weightedScore)}20`,
+            border: `1px solid ${alpha(getScoreColor(weightedScore), 13)}`,
             position: 'relative',
           }}
         >
@@ -155,12 +167,26 @@ export default function AggregatedStats({
               onMouseEnter={() => setShowScoreTooltip(true)}
               onMouseLeave={() => setShowScoreTooltip(false)}
               style={{
-                background: 'none', border: 'none', cursor: 'pointer', padding: 0,
-                display: 'inline-flex', alignItems: 'center', color: tokens.colors.text.tertiary,
+                background: 'none',
+                border: 'none',
+                cursor: 'pointer',
+                padding: 0,
+                display: 'inline-flex',
+                alignItems: 'center',
+                color: tokens.colors.text.tertiary,
               }}
               aria-label="Score info"
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <circle cx="12" cy="12" r="10" />
                 <path d="M12 16v-4" />
                 <path d="M12 8h.01" />
@@ -222,18 +248,36 @@ export default function AggregatedStats({
               style={{ display: 'flex', alignItems: 'center', gap: 8 }}
             >
               <ExchangeLogo exchange={account.platform} size={16} />
-              <Text size="xs" style={{ color: tokens.colors.text.secondary, width: 80, flexShrink: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              <Text
+                size="xs"
+                style={{
+                  color: tokens.colors.text.secondary,
+                  width: 80,
+                  flexShrink: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {label}
               </Text>
-              <Box style={{ flex: 1, height: 6, borderRadius: 3, background: `${tokens.colors.text.tertiary}10`, overflow: 'hidden' }}>
+              <Box
+                style={{
+                  flex: 1,
+                  height: 6,
+                  borderRadius: 3,
+                  background: `${alpha(tokens.colors.text.tertiary, 6)}`,
+                  overflow: 'hidden',
+                }}
+              >
                 <Box
                   style={{
                     height: '100%',
                     width: `${barWidth}%`,
                     borderRadius: 3,
                     background: isPositive
-                      ? `linear-gradient(90deg, ${tokens.colors.accent.success}80, ${tokens.colors.accent.success})`
-                      : `linear-gradient(90deg, ${tokens.colors.accent.error}80, ${tokens.colors.accent.error})`,
+                      ? `linear-gradient(90deg, ${alpha(tokens.colors.accent.success, 50)}, ${tokens.colors.accent.success})`
+                      : `linear-gradient(90deg, ${alpha(tokens.colors.accent.error, 50)}, ${tokens.colors.accent.error})`,
                     transition: 'width 0.5s ease',
                   }}
                 />
@@ -261,19 +305,52 @@ export default function AggregatedStats({
         <button
           onClick={() => setShowComparison(!showComparison)}
           style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-            padding: '8px 16px', borderRadius: tokens.radius.md,
-            background: showComparison ? `${tokens.colors.accent.primary}15` : 'transparent',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 6,
+            padding: '8px 16px',
+            borderRadius: tokens.radius.md,
+            background: showComparison
+              ? `${alpha(tokens.colors.accent.primary, 8)}`
+              : 'transparent',
             border: `1px solid ${showComparison ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}`,
-            cursor: 'pointer', transition: 'all 0.2s',
-            color: tokens.colors.accent.primary, fontSize: 13, fontWeight: 600,
+            cursor: 'pointer',
+            transition: 'all 0.2s',
+            color: tokens.colors.accent.primary,
+            fontSize: 13,
+            fontWeight: 600,
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="18" y1="20" x2="18" y2="10" /><line x1="12" y1="20" x2="12" y2="4" /><line x1="6" y1="20" x2="6" y2="14" />
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <line x1="18" y1="20" x2="18" y2="10" />
+            <line x1="12" y1="20" x2="12" y2="4" />
+            <line x1="6" y1="20" x2="6" y2="14" />
           </svg>
           {t('traderCompareAccounts')}
-          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ transform: showComparison ? 'rotate(180deg)' : undefined, transition: 'transform 0.2s' }}>
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{
+              transform: showComparison ? 'rotate(180deg)' : undefined,
+              transition: 'transform 0.2s',
+            }}
+          >
             <polyline points="6 9 12 15 18 9" />
           </svg>
         </button>
@@ -289,20 +366,47 @@ export default function AggregatedStats({
             border: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13, minWidth: accounts.length > 2 ? 500 : undefined }}>
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              fontSize: 13,
+              minWidth: accounts.length > 2 ? 500 : undefined,
+            }}
+          >
             <thead>
               <tr style={{ background: tokens.colors.bg.tertiary }}>
-                <th style={{ padding: '8px 12px', textAlign: 'left', color: tokens.colors.text.tertiary, fontWeight: 500, fontSize: 12 }}>
+                <th
+                  style={{
+                    padding: '8px 12px',
+                    textAlign: 'left',
+                    color: tokens.colors.text.tertiary,
+                    fontWeight: 500,
+                    fontSize: 12,
+                  }}
+                >
                   {t('traderMetric') || 'Metric'}
                 </th>
-                {accounts.map(acc => (
-                  <th key={`${acc.platform}:${acc.traderKey}`} style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}>
-                    <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
+                {accounts.map((acc) => (
+                  <th
+                    key={`${acc.platform}:${acc.traderKey}`}
+                    style={{ padding: '8px 12px', textAlign: 'right', whiteSpace: 'nowrap' }}
+                  >
+                    <Box
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'flex-end',
+                        gap: 4,
+                      }}
+                    >
                       <ExchangeLogo exchange={acc.platform} size={14} />
                       <Text size="xs" weight="bold" style={{ color: tokens.colors.text.primary }}>
                         {acc.label || EXCHANGE_NAMES[acc.platform] || acc.platform}
                       </Text>
-                      {acc.isPrimary && <span style={{ color: tokens.colors.accent.warning, fontSize: 10 }}>★</span>}
+                      {acc.isPrimary && (
+                        <span style={{ color: tokens.colors.accent.warning, fontSize: 10 }}>★</span>
+                      )}
                     </Box>
                   </th>
                 ))}
@@ -310,15 +414,45 @@ export default function AggregatedStats({
             </thead>
             <tbody>
               {/* ROI */}
-              <ComparisonRow label="ROI" accounts={accounts} getValue={a => a.roi} format={v => formatROI(v)} higherIsBetter />
+              <ComparisonRow
+                label="ROI"
+                accounts={accounts}
+                getValue={(a) => a.roi}
+                format={(v) => formatROI(v)}
+                higherIsBetter
+              />
               {/* PnL */}
-              <ComparisonRow label="PnL" accounts={accounts} getValue={a => a.pnl} format={v => formatPnL(v)} higherIsBetter />
+              <ComparisonRow
+                label="PnL"
+                accounts={accounts}
+                getValue={(a) => a.pnl}
+                format={(v) => formatPnL(v)}
+                higherIsBetter
+              />
               {/* Arena Score */}
-              <ComparisonRow label="Arena Score" accounts={accounts} getValue={a => a.arenaScore} format={v => v.toFixed(0)} higherIsBetter />
+              <ComparisonRow
+                label="Arena Score"
+                accounts={accounts}
+                getValue={(a) => a.arenaScore}
+                format={(v) => v.toFixed(0)}
+                higherIsBetter
+              />
               {/* Win Rate */}
-              <ComparisonRow label={t('winRate') || 'Win Rate'} accounts={accounts} getValue={a => a.winRate ?? null} format={v => `${v.toFixed(1)}%`} higherIsBetter />
+              <ComparisonRow
+                label={t('winRate') || 'Win Rate'}
+                accounts={accounts}
+                getValue={(a) => a.winRate ?? null}
+                format={(v) => `${v.toFixed(1)}%`}
+                higherIsBetter
+              />
               {/* Max Drawdown */}
-              <ComparisonRow label={t('maxDrawdown') || 'Max DD'} accounts={accounts} getValue={a => a.maxDrawdown ?? null} format={v => `${v.toFixed(1)}%`} higherIsBetter={false} />
+              <ComparisonRow
+                label={t('maxDrawdown') || 'Max DD'}
+                accounts={accounts}
+                getValue={(a) => a.maxDrawdown ?? null}
+                format={(v) => `${v.toFixed(1)}%`}
+                higherIsBetter={false}
+              />
             </tbody>
           </table>
           <style>{`.comparison-table-scroll::-webkit-scrollbar { display: none; }`}</style>
@@ -350,22 +484,28 @@ function ComparisonRow({
   format: (v: number) => string
   higherIsBetter: boolean
 }) {
-  const values = accounts.map(a => getValue(a) ?? null)
+  const values = accounts.map((a) => getValue(a) ?? null)
   const validValues = values.filter((v): v is number => v !== null)
-  const bestValue = validValues.length > 0
-    ? (higherIsBetter ? Math.max(...validValues) : Math.min(...validValues))
-    : null
+  const bestValue =
+    validValues.length > 0
+      ? higherIsBetter
+        ? Math.max(...validValues)
+        : Math.min(...validValues)
+      : null
 
   return (
-    <tr style={{ borderTop: `1px solid ${tokens.colors.border.primary}40` }}>
-      <td style={{ padding: '8px 12px', color: tokens.colors.text.tertiary, fontSize: 12 }}>{label}</td>
+    <tr style={{ borderTop: `1px solid ${alpha(tokens.colors.border.primary, 25)}` }}>
+      <td style={{ padding: '8px 12px', color: tokens.colors.text.tertiary, fontSize: 12 }}>
+        {label}
+      </td>
       {values.map((v, i) => {
         const isBest = v !== null && bestValue !== null && v === bestValue && validValues.length > 1
-        const color = v === null
-          ? tokens.colors.text.tertiary
-          : v >= 0
-            ? tokens.colors.accent.success
-            : tokens.colors.accent.error
+        const color =
+          v === null
+            ? tokens.colors.text.tertiary
+            : v >= 0
+              ? tokens.colors.accent.success
+              : tokens.colors.accent.error
         return (
           <td
             key={i}
@@ -376,7 +516,7 @@ function ComparisonRow({
               fontWeight: isBest ? 700 : 500,
               color: isBest ? tokens.colors.accent.success : color,
               fontSize: 13,
-              background: isBest ? `${tokens.colors.accent.success}08` : undefined,
+              background: isBest ? `${alpha(tokens.colors.accent.success, 3)}` : undefined,
             }}
           >
             {v !== null ? format(v) : '—'}

@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
@@ -43,7 +43,7 @@ export function TraderAnimatedAvatar({
         overflow: 'hidden',
         flexShrink: 0,
         boxShadow: isHovered
-          ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${tokens.colors.accent.primary}20`
+          ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${alpha(tokens.colors.accent.primary, 13)}`
           : tokens.shadow.lg,
         transition: `all ${tokens.transition.smooth}`,
         position: 'relative',
@@ -59,7 +59,7 @@ export function TraderAnimatedAvatar({
           position: 'absolute',
           inset: -4,
           borderRadius: tokens.radius.full,
-          background: `conic-gradient(from 0deg, ${tokens.colors.accent.primary}00, ${tokens.colors.accent.primary}40, ${tokens.colors.accent.primary}00)`,
+          background: `conic-gradient(from 0deg, ${alpha(tokens.colors.accent.primary, 0)}, ${alpha(tokens.colors.accent.primary, 25)}, ${alpha(tokens.colors.accent.primary, 0)})`,
           opacity: isHovered ? 0.6 : 0,
           transition: 'opacity 0.4s ease',
         }}

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useState, useEffect } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { NULL_DISPLAY } from '@/lib/utils/format'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -98,7 +98,7 @@ export default function AdvancedMetricsCard({
     return (
       <Box
         style={{
-          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
+          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${alpha(tokens.colors.bg.primary, 56)} 100%)`,
           borderRadius: tokens.radius.xl,
           border: `1px solid ${tokens.colors.border.primary}`,
           padding: tokens.spacing[5],
@@ -127,7 +127,7 @@ export default function AdvancedMetricsCard({
     <div
       ref={cardRef}
       style={{
-        background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
+        background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${alpha(tokens.colors.bg.primary, 56)} 100%)`,
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}`,
         padding: tokens.spacing[5],
@@ -304,9 +304,9 @@ export default function AdvancedMetricsCard({
           style={{
             marginBottom: tokens.spacing[3],
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            background: `${tokens.colors.bg.tertiary}80`,
+            background: `${alpha(tokens.colors.bg.tertiary, 50)}`,
             borderRadius: tokens.radius.md,
-            border: `1px solid ${tokens.colors.border.primary}40`,
+            border: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
           }}
         >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, lineHeight: 1.5 }}>
@@ -323,7 +323,7 @@ export default function AdvancedMetricsCard({
           flexWrap: 'wrap',
           gap: tokens.spacing[2],
           paddingTop: tokens.spacing[3],
-          borderTop: `1px solid ${tokens.colors.border.primary}40`,
+          borderTop: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
           opacity: hasAnyData ? 1 : 0.5,
         }}
       >
@@ -440,16 +440,16 @@ export default function AdvancedMetricsCard({
             gridTemplateColumns: '1fr 1fr',
             gap: tokens.spacing[3],
             paddingTop: tokens.spacing[3],
-            borderTop: `1px solid ${tokens.colors.border.primary}40`,
+            borderTop: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
           }}
         >
           {largestWin != null && (
             <Box
               style={{
                 padding: tokens.spacing[3],
-                background: `${tokens.colors.accent.success}08`,
+                background: `${alpha(tokens.colors.accent.success, 3)}`,
                 borderRadius: tokens.radius.lg,
-                border: `1px solid ${tokens.colors.accent.success}15`,
+                border: `1px solid ${alpha(tokens.colors.accent.success, 8)}`,
               }}
             >
               <Text
@@ -485,9 +485,9 @@ export default function AdvancedMetricsCard({
             <Box
               style={{
                 padding: tokens.spacing[3],
-                background: `${tokens.colors.accent.error}08`,
+                background: `${alpha(tokens.colors.accent.error, 3)}`,
                 borderRadius: tokens.radius.lg,
-                border: `1px solid ${tokens.colors.accent.error}15`,
+                border: `1px solid ${alpha(tokens.colors.accent.error, 8)}`,
               }}
             >
               <Text
@@ -549,7 +549,7 @@ function MetricCard({
         padding: tokens.spacing[3],
         background: tokens.colors.bg.tertiary + '60',
         borderRadius: tokens.radius.lg,
-        border: `1px solid ${isNA ? tokens.colors.border.primary : color}20`,
+        border: `1px solid ${alpha(isNA ? tokens.colors.border.primary : color, 13)}`,
         cursor: tooltip ? 'help' : undefined,
       }}
       title={tooltip}

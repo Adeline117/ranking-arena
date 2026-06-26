@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface EquityPoint {
@@ -73,7 +73,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
         padding: tokens.spacing[5],
         background: tokens.colors.bg.secondary,
         borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}60`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
       }}
     >
       <div

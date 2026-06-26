@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box } from '../base'
 import type { TraderPerformance } from '@/lib/data/trader'
 import { PeriodSelector } from './performance/PeriodSelector'
@@ -227,7 +227,7 @@ export default function OverviewPerformanceCard({
       <Box
         className="performance-card glass-card"
         style={{
-          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
+          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${colorAlpha(tokens.colors.bg.primary, 56)} 100%)`,
           borderRadius: tokens.radius.xl,
           border: `1px solid ${tokens.colors.border.primary}`,
           overflow: 'hidden',
