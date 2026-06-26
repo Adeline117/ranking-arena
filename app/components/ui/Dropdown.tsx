@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useRef, useEffect, useCallback, useId } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useKeyboardNavigation } from '@/lib/hooks/useKeyboardNavigation'
 
 /* ── Module-level style constants ──
@@ -417,7 +417,7 @@ export function Dropdown<T = string>({
                     background: isActive
                       ? tokens.colors.bg.hover
                       : isSelected
-                        ? `${tokens.colors.accent.brand}15`
+                        ? alpha(tokens.colors.accent.brand, 8)
                         : 'transparent',
                     fontWeight: isSelected
                       ? tokens.typography.fontWeight.semibold

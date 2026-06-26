@@ -1,5 +1,5 @@
 import React from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
 import { Box } from '../base'
 
@@ -282,7 +282,7 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
           alignItems: 'center',
           gap: tokens.spacing[2],
           padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-          borderBottom: `1px solid ${tokens.colors.border.primary}30`,
+          borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 19)}`,
         }}
       >
         <Skeleton width="20px" height="12px" variant="rounded" animation="pulse" />
@@ -335,7 +335,7 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
               gap: tokens.spacing[2],
               padding: `10px ${tokens.spacing[4]}`,
               minHeight: 56,
-              borderBottom: `1px solid ${tokens.colors.border.primary}15`,
+              borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 8)}`,
               animationDelay: `${i * 50}ms`,
             }}
           >
@@ -383,7 +383,7 @@ export function RankingSkeleton({ rows = 10 }: { rows?: number } = {}) {
             style={{
               display: 'none',
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              borderBottom: `1px solid ${tokens.colors.border.primary}15`,
+              borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 8)}`,
               gap: tokens.spacing[3],
               alignItems: 'center',
               animationDelay: `${i * 50}ms`,
