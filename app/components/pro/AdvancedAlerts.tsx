@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { ProLabel } from '../premium/PremiumGate'
@@ -330,7 +330,7 @@ export default function AdvancedAlerts({
                 background: condition.isActive ? tokens.glass.bg.light : tokens.colors.bg.tertiary,
                 border: `1px solid ${
                   condition.isActive
-                    ? tokens.colors.accent.primary + '30'
+                    ? colorAlpha(tokens.colors.accent.primary, 19)
                     : tokens.colors.border.primary
                 }`,
                 opacity: condition.isActive ? 1 : 0.6,

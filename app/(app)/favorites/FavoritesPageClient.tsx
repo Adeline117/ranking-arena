@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
@@ -540,7 +540,7 @@ export default function FavoritesPageClient() {
                           style={{
                             fontSize: 10,
                             padding: '2px 6px',
-                            background: tokens.colors.accent.success + '20',
+                            background: alpha(tokens.colors.accent.success, 13),
                             color: tokens.colors.accent.success,
                             borderRadius: tokens.radius.sm,
                           }}
@@ -676,7 +676,7 @@ export default function FavoritesPageClient() {
                       style={{
                         fontSize: 10,
                         padding: '2px 6px',
-                        background: tokens.colors.accent.warning + '20',
+                        background: alpha(tokens.colors.accent.warning, 13),
                         color: tokens.colors.accent.warning,
                         borderRadius: tokens.radius.sm,
                       }}

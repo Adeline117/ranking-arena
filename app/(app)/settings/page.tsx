@@ -4,7 +4,7 @@ import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered in root layout.tsx — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
 import dynamic from 'next/dynamic'
@@ -326,7 +326,7 @@ function SettingsContent() {
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                   minHeight: 44,
                   borderRadius: tokens.radius.full,
-                  border: `1px solid ${activeSection === sectionId ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
+                  border: `1px solid ${activeSection === sectionId ? colorAlpha(tokens.colors.accent.primary, 38) : tokens.colors.border.primary}`,
                   background:
                     activeSection === sectionId
                       ? `${alpha(tokens.colors.accent.primary, 8)}`

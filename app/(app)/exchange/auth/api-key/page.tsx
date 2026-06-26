@@ -4,7 +4,7 @@ import PasswordInput from '@/app/components/ui/PasswordInput'
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -533,7 +533,7 @@ function ApiKeyAuthContent() {
                         width: 28,
                         height: 28,
                         borderRadius: '50%',
-                        background: tokens.colors.accent.success + '30',
+                        background: colorAlpha(tokens.colors.accent.success, 19),
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',

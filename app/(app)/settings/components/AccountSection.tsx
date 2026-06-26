@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
@@ -15,7 +15,10 @@ interface AccountSectionProps {
   onDeleteAccount: () => void
 }
 
-export const AccountSection = React.memo(function AccountSection({ onLogout, onDeleteAccount }: AccountSectionProps) {
+export const AccountSection = React.memo(function AccountSection({
+  onLogout,
+  onDeleteAccount,
+}: AccountSectionProps) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const [exporting, setExporting] = useState(false)
@@ -24,7 +27,9 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
     if (exporting) return
     setExporting(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session?.access_token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
@@ -71,15 +76,14 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
         {/* Data Export */}
         <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
-            <Text size="sm" weight="medium">{t('exportData')}</Text>
-            <Text size="xs" color="tertiary">{t('exportDataDesc')}</Text>
+            <Text size="sm" weight="medium">
+              {t('exportData')}
+            </Text>
+            <Text size="xs" color="tertiary">
+              {t('exportDataDesc')}
+            </Text>
           </Box>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={handleExportData}
-            disabled={exporting}
-          >
+          <Button variant="secondary" size="sm" onClick={handleExportData} disabled={exporting}>
             {exporting ? t('exporting') : t('exportData')}
           </Button>
         </Box>
@@ -88,10 +92,21 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
 
         {/* Multi-Account Section */}
         <Box>
-          <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[2] }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: tokens.spacing[2],
+            }}
+          >
             <Box>
-              <Text size="sm" weight="medium">{t('linkedAccountsTitle')}</Text>
-              <Text size="xs" color="tertiary">{t('linkedAccountsDesc')}</Text>
+              <Text size="sm" weight="medium">
+                {t('linkedAccountsTitle')}
+              </Text>
+              <Text size="xs" color="tertiary">
+                {t('linkedAccountsDesc')}
+              </Text>
             </Box>
           </Box>
           <MultiAccountSection />
@@ -102,14 +117,21 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
         {/* Logout */}
         <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
-            <Text size="sm" weight="medium">{t('logout')}</Text>
-            <Text size="xs" color="tertiary">{t('logoutDesc')}</Text>
+            <Text size="sm" weight="medium">
+              {t('logout')}
+            </Text>
+            <Text size="xs" color="tertiary">
+              {t('logoutDesc')}
+            </Text>
           </Box>
           <Button
             variant="secondary"
             size="sm"
             onClick={onLogout}
-            style={{ color: tokens.colors.accent.error, borderColor: tokens.colors.accent.error + '40' }}
+            style={{
+              color: tokens.colors.accent.error,
+              borderColor: alpha(tokens.colors.accent.error, 25),
+            }}
           >
             {t('logout')}
           </Button>
@@ -120,14 +142,21 @@ export const AccountSection = React.memo(function AccountSection({ onLogout, onD
         {/* Account Deletion */}
         <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Box>
-            <Text size="sm" weight="medium" style={{ color: tokens.colors.accent.error }}>{t('deleteAccount')}</Text>
-            <Text size="xs" color="tertiary">{t('deleteAccountDesc2')}</Text>
+            <Text size="sm" weight="medium" style={{ color: tokens.colors.accent.error }}>
+              {t('deleteAccount')}
+            </Text>
+            <Text size="xs" color="tertiary">
+              {t('deleteAccountDesc2')}
+            </Text>
           </Box>
           <Button
             variant="secondary"
             size="sm"
             onClick={onDeleteAccount}
-            style={{ color: tokens.colors.accent.error, borderColor: tokens.colors.accent.error + '40' }}
+            style={{
+              color: tokens.colors.accent.error,
+              borderColor: alpha(tokens.colors.accent.error, 25),
+            }}
           >
             {t('deleteAccount')}
           </Button>

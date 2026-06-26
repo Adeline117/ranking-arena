@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -37,7 +37,7 @@ export function MultiAccountSection() {
             background: account.isActive
               ? `${alpha(tokens.colors.accent.primary, 6)}`
               : 'transparent',
-            border: `1px solid ${account.isActive ? tokens.colors.accent.primary + '30' : tokens.colors.border.primary}`,
+            border: `1px solid ${account.isActive ? colorAlpha(tokens.colors.accent.primary, 19) : tokens.colors.border.primary}`,
           }}
         >
           <Box
@@ -45,7 +45,7 @@ export function MultiAccountSection() {
               width: 24,
               height: 24,
               borderRadius: '50%',
-              background: tokens.colors.accent.primary + '20',
+              background: colorAlpha(tokens.colors.accent.primary, 13),
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
