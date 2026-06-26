@@ -9,7 +9,7 @@ import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
 import { getLocaleFromLanguage } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import Card from '@/app/components/ui/Card'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -893,7 +893,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
               cursor: 'pointer',
               background:
                 activeTab === 'activity'
-                  ? `${tokens.colors.accent?.primary || tokens.colors.accent.brand}20`
+                  ? `${alpha(tokens.colors.accent?.primary || tokens.colors.accent.brand, 13)}`
                   : 'transparent',
               color:
                 activeTab === 'activity'

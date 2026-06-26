@@ -13,7 +13,7 @@
 
 import { useEffect, useState, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../ui/icons'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -322,7 +322,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               borderRadius: tokens.radius.md,
               background:
                 post.user_reaction === 'up'
-                  ? `${tokens.colors.accent.success}20`
+                  ? `${alpha(tokens.colors.accent.success, 13)}`
                   : tokens.colors.bg.tertiary,
               color:
                 post.user_reaction === 'up'
@@ -348,7 +348,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
               borderRadius: tokens.radius.md,
               background:
                 post.user_reaction === 'down'
-                  ? `${tokens.colors.accent.error}20`
+                  ? `${alpha(tokens.colors.accent.error, 13)}`
                   : tokens.colors.bg.tertiary,
               color:
                 post.user_reaction === 'down'

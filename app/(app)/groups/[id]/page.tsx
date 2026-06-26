@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -853,7 +853,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
                   alignItems: 'center',
                   justifyContent: 'center',
                   textDecoration: 'none',
-                  boxShadow: `0 4px 16px ${tokens.colors.accent?.primary || tokens.colors.accent.brand}50`,
+                  boxShadow: `0 4px 16px ${alpha(tokens.colors.accent?.primary || tokens.colors.accent.brand, 31)}`,
                   zIndex: tokens.zIndex.sticky,
                   transition: `all ${tokens.transition.base}`,
                 }}

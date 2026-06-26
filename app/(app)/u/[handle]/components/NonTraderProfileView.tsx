@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text } from '@/app/components/base'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -80,7 +80,7 @@ export default function NonTraderProfileView({
       className="user-profile-page"
       style={{
         minHeight: '100vh',
-        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${alpha(tokens.colors.bg.secondary, 19)} 100%)`,
         color: tokens.colors.text.primary,
       }}
     >

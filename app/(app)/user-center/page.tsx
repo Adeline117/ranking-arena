@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import LevelBadge from '@/app/components/user/LevelBadge'
 import { EXP_ACTIONS, getLevelInfo, type LevelInfo } from '@/lib/utils/user-level'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text, Button } from '@/app/components/base'
@@ -218,7 +218,7 @@ function UserCenterPage() {
               width: 64,
               height: 64,
               borderRadius: tokens.radius.full,
-              background: `${tokens.colors.accent.primary}15`,
+              background: `${alpha(tokens.colors.accent.primary, 8)}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -413,11 +413,11 @@ function UserCenterPage() {
                 borderRadius: tokens.radius.xl,
                 border:
                   activeTab === tab.key
-                    ? `1px solid ${tokens.colors.accent.primary}60`
+                    ? `1px solid ${alpha(tokens.colors.accent.primary, 38)}`
                     : tokens.glass.border.light,
                 background:
                   activeTab === tab.key
-                    ? `${tokens.colors.accent.primary}15`
+                    ? `${alpha(tokens.colors.accent.primary, 8)}`
                     : tokens.glass.bg.secondary,
                 backdropFilter: tokens.glass.blur.xs,
                 WebkitBackdropFilter: tokens.glass.blur.xs,

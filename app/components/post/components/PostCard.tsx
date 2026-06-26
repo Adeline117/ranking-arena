@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon, CommentIcon } from '../../ui/icons'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { renderContentWithLinks, ARENA_PURPLE, truncateText } from '@/lib/utils/content'
@@ -127,7 +127,7 @@ export const PostCard = memo(function PostCard({
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = tokens.glass.bg.medium
-          e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}30`
+          e.currentTarget.style.borderColor = `${alpha(tokens.colors.accent.primary, 19)}`
           e.currentTarget.style.boxShadow = tokens.shadow.sm
         }}
         onMouseLeave={(e) => {
@@ -238,7 +238,7 @@ export const PostCard = memo(function PostCard({
         e.currentTarget.style.background = tokens.glass.bg.tertiary
         e.currentTarget.style.transform = 'translateY(-2px)'
         e.currentTarget.style.boxShadow = tokens.shadow.md
-        e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}25`
+        e.currentTarget.style.borderColor = `${alpha(tokens.colors.accent.primary, 15)}`
       }}
       onMouseLeave={(e) => {
         e.currentTarget.style.background = tokens.glass.bg.secondary
@@ -428,7 +428,7 @@ export const PostCard = memo(function PostCard({
                 style={{
                   flex: 1,
                   padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                  background: isSelected ? `${pollColor(choice)}30` : 'transparent',
+                  background: isSelected ? `${alpha(pollColor(choice), 19)}` : 'transparent',
                   border: `1px solid ${isSelected ? pollColor(choice) : tokens.colors.border.primary}`,
                   borderRadius: tokens.radius.sm,
                   color: pollColor(choice),

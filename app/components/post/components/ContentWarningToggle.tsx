@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
 interface ContentWarningToggleProps {
@@ -20,13 +20,15 @@ export function ContentWarningToggle({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-      <label style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: tokens.spacing[3],
-        cursor: 'pointer',
-        userSelect: 'none',
-      }}>
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[3],
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+      >
         <div
           onClick={() => onToggle(!isSensitive)}
           style={{
@@ -40,30 +42,36 @@ export function ContentWarningToggle({
             transition: 'background 0.2s, border-color 0.2s',
           }}
         >
-          <div style={{
-            width: 16,
-            height: 16,
-            borderRadius: '50%',
-            background: 'white',
-            position: 'absolute',
-            top: 1,
-            left: isSensitive ? 17 : 1,
-            transition: 'left 0.2s',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-          }} />
+          <div
+            style={{
+              width: 16,
+              height: 16,
+              borderRadius: '50%',
+              background: 'white',
+              position: 'absolute',
+              top: 1,
+              left: isSensitive ? 17 : 1,
+              transition: 'left 0.2s',
+              boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+            }}
+          />
         </div>
         <div>
-          <div style={{
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: 600,
-            color: tokens.colors.text.primary,
-          }}>
+          <div
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              color: tokens.colors.text.primary,
+            }}
+          >
             {t('markSensitive')}
           </div>
-          <div style={{
-            fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.text.tertiary,
-          }}>
+          <div
+            style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: tokens.colors.text.tertiary,
+            }}
+          >
             {t('contentWarning')}
           </div>
         </div>
@@ -80,8 +88,8 @@ export function ContentWarningToggle({
             width: '100%',
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
             borderRadius: tokens.radius.md,
-            border: `1px solid ${tokens.colors.accent.warning}40`,
-            background: `${tokens.colors.accent.warning}10`,
+            border: `1px solid ${alpha(tokens.colors.accent.warning, 25)}`,
+            background: `${alpha(tokens.colors.accent.warning, 6)}`,
             color: tokens.colors.text.primary,
             fontSize: tokens.typography.fontSize.sm,
             outline: 'none',

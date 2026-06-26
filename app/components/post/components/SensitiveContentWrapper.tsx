@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../../Providers/LanguageProvider'
 
 interface SensitiveContentWrapperProps {
@@ -9,7 +9,10 @@ interface SensitiveContentWrapperProps {
   children: React.ReactNode
 }
 
-export function SensitiveContentWrapper({ contentWarning, children }: SensitiveContentWrapperProps) {
+export function SensitiveContentWrapper({
+  contentWarning,
+  children,
+}: SensitiveContentWrapperProps) {
   const { t } = useLanguage()
   const [revealed, setRevealed] = useState(false)
 
@@ -51,11 +54,13 @@ export function SensitiveContentWrapper({ contentWarning, children }: SensitiveC
       }}
     >
       {/* Blurred content */}
-      <div style={{
-        filter: 'blur(8px)',
-        userSelect: 'none',
-        pointerEvents: 'none',
-      }}>
+      <div
+        style={{
+          filter: 'blur(8px)',
+          userSelect: 'none',
+          pointerEvents: 'none',
+        }}
+      >
         {children}
       </div>
 
@@ -69,27 +74,31 @@ export function SensitiveContentWrapper({ contentWarning, children }: SensitiveC
           alignItems: 'center',
           justifyContent: 'center',
           gap: tokens.spacing[2],
-          background: `${tokens.colors.bg.primary}80`,
+          background: `${alpha(tokens.colors.bg.primary, 50)}`,
           backdropFilter: 'blur(2px)',
         }}
       >
         <svg width="20" height="20" viewBox="0 0 24 24" fill={tokens.colors.accent.warning}>
           <path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z" />
         </svg>
-        <span style={{
-          fontSize: tokens.typography.fontSize.xs,
-          fontWeight: 600,
-          color: tokens.colors.accent.warning,
-        }}>
+        <span
+          style={{
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: 600,
+            color: tokens.colors.accent.warning,
+          }}
+        >
           {t('sensitiveContent')}
         </span>
         {contentWarning && (
-          <span style={{
-            fontSize: tokens.typography.fontSize.xs,
-            color: tokens.colors.text.tertiary,
-            textAlign: 'center',
-            maxWidth: 200,
-          }}>
+          <span
+            style={{
+              fontSize: tokens.typography.fontSize.xs,
+              color: tokens.colors.text.tertiary,
+              textAlign: 'center',
+              maxWidth: 200,
+            }}
+          >
             {contentWarning}
           </span>
         )}

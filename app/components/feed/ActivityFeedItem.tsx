@@ -12,7 +12,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { ACTIVITY_META } from '@/lib/types/activities'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import ActivityIcon from './ActivityIcon'
@@ -99,7 +99,7 @@ export default function ActivityFeedItem({
         alignItems: 'flex-start',
         gap: tokens.spacing[3],
         padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-        background: hovered ? `${color}08` : 'transparent',
+        background: hovered ? `${alpha(color, 3)}` : 'transparent',
         borderLeft: `3px solid ${hovered ? color : 'transparent'}`,
         transition: `all ${tokens.transition.base}`,
         cursor: 'default',
@@ -112,8 +112,8 @@ export default function ActivityFeedItem({
           width: 28,
           height: 28,
           borderRadius: tokens.radius.md,
-          background: `${color}18`,
-          border: `1px solid ${color}30`,
+          background: `${alpha(color, 9)}`,
+          border: `1px solid ${alpha(color, 19)}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -143,8 +143,8 @@ export default function ActivityFeedItem({
               width: 32,
               height: 32,
               borderRadius: '50%',
-              background: `linear-gradient(135deg, ${color}40, ${color}20)`,
-              border: `1px solid ${color}40`,
+              background: `linear-gradient(135deg, ${alpha(color, 25)}, ${alpha(color, 13)})`,
+              border: `1px solid ${alpha(color, 25)}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -217,7 +217,7 @@ export default function ActivityFeedItem({
               background: tokens.colors.bg.tertiary,
               padding: '1px 6px',
               borderRadius: tokens.radius.full,
-              border: `1px solid ${tokens.colors.border.primary}40`,
+              border: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
               letterSpacing: '0.02em',
               textTransform: 'uppercase',
@@ -232,7 +232,7 @@ export default function ActivityFeedItem({
               fontSize: 11,
               fontWeight: 600,
               color,
-              background: `${color}12`,
+              background: `${alpha(color, 7)}`,
               padding: '1px 6px',
               borderRadius: tokens.radius.full,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
@@ -283,7 +283,7 @@ export default function ActivityFeedItem({
             title="Copy share link"
             style={{
               background: 'none',
-              border: `1px solid ${tokens.colors.border.primary}60`,
+              border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
               borderRadius: tokens.radius.sm,
               padding: '2px 6px',
               cursor: 'pointer',

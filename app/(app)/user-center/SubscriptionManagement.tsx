@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import type { MembershipInfo } from './membership-config'
@@ -102,7 +102,7 @@ export default function SubscriptionManagement({
             style={{
               padding: '10px 20px',
               background: 'transparent',
-              border: `1px solid ${tokens.colors.accent.error}40`,
+              border: `1px solid ${alpha(tokens.colors.accent.error, 25)}`,
               borderRadius: tokens.radius.lg,
               color: tokens.colors.accent.error,
               fontWeight: 600,
@@ -118,8 +118,8 @@ export default function SubscriptionManagement({
             style={{
               width: '100%',
               padding: 16,
-              background: `${tokens.colors.accent.error}08`,
-              border: `1px solid ${tokens.colors.accent.error}30`,
+              background: `${alpha(tokens.colors.accent.error, 3)}`,
+              border: `1px solid ${alpha(tokens.colors.accent.error, 19)}`,
               borderRadius: tokens.radius.lg,
               display: 'flex',
               flexDirection: 'column',
@@ -199,8 +199,8 @@ export default function SubscriptionManagement({
           <div
             style={{
               padding: '10px 20px',
-              background: `${tokens.colors.accent.warning}15`,
-              border: `1px solid ${tokens.colors.accent.warning}40`,
+              background: `${alpha(tokens.colors.accent.warning, 8)}`,
+              border: `1px solid ${alpha(tokens.colors.accent.warning, 25)}`,
               borderRadius: tokens.radius.lg,
               color: tokens.colors.accent.warning,
               fontWeight: 600,

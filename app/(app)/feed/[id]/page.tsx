@@ -13,7 +13,7 @@ import Image from 'next/image'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
@@ -144,9 +144,9 @@ export default async function ActivitySharePage({ params }: PageProps) {
           style={{
             background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary} 100%)`,
             borderRadius: tokens.radius.xl,
-            border: `1px solid ${color}30`,
+            border: `1px solid ${alpha(color, 19)}`,
             padding: tokens.spacing[6],
-            boxShadow: `0 4px 32px ${color}10`,
+            boxShadow: `0 4px 32px ${alpha(color, 6)}`,
           }}
         >
           {/* Type badge */}
@@ -157,8 +157,8 @@ export default async function ActivitySharePage({ params }: PageProps) {
               gap: 6,
               padding: '4px 10px',
               borderRadius: tokens.radius.full,
-              background: `${color}18`,
-              border: `1px solid ${color}30`,
+              background: `${alpha(color, 9)}`,
+              border: `1px solid ${alpha(color, 19)}`,
               marginBottom: tokens.spacing[4],
             }}
           >
@@ -194,7 +194,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
                 style={{
                   borderRadius: '50%',
                   objectFit: 'cover',
-                  border: `2px solid ${color}40`,
+                  border: `2px solid ${alpha(color, 25)}`,
                 }}
                 unoptimized
               />
@@ -204,8 +204,8 @@ export default async function ActivitySharePage({ params }: PageProps) {
                   width: 48,
                   height: 48,
                   borderRadius: '50%',
-                  background: `linear-gradient(135deg, ${color}40, ${color}20)`,
-                  border: `2px solid ${color}40`,
+                  background: `linear-gradient(135deg, ${alpha(color, 25)}, ${alpha(color, 13)})`,
+                  border: `2px solid ${alpha(color, 25)}`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
@@ -279,9 +279,9 @@ export default async function ActivitySharePage({ params }: PageProps) {
               style={{
                 marginTop: tokens.spacing[4],
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                background: `${color}10`,
+                background: `${alpha(color, 6)}`,
                 borderRadius: tokens.radius.lg,
-                border: `1px solid ${color}20`,
+                border: `1px solid ${alpha(color, 13)}`,
                 display: 'inline-block',
               }}
             >

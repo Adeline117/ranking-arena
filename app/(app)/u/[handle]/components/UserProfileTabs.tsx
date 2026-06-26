@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -33,9 +33,9 @@ export default function UserProfileTabs({ activeTab, onTabChange }: UserProfileT
         paddingBottom: tokens.spacing[3],
         overflowX: 'auto',
         scrollbarWidth: 'none',
-        background: `linear-gradient(to bottom, ${tokens.colors.bg.secondary}40 0%, transparent 100%)`,
+        background: `linear-gradient(to bottom, ${alpha(tokens.colors.bg.secondary, 25)} 0%, transparent 100%)`,
         borderRadius: `0 0 ${tokens.radius.xl} ${tokens.radius.xl}`,
-        border: `1px solid ${tokens.colors.border.primary}50`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 31)}`,
         borderTop: 'none',
       }}
     >
@@ -51,10 +51,10 @@ export default function UserProfileTabs({ activeTab, onTabChange }: UserProfileT
             tabIndex={isActive ? 0 : -1}
             style={{
               background: isActive
-                ? `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.primary}08)`
+                ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.primary, 8)}, ${alpha(tokens.colors.accent.primary, 3)})`
                 : 'transparent',
               border: isActive
-                ? `1px solid ${tokens.colors.accent.primary}30`
+                ? `1px solid ${alpha(tokens.colors.accent.primary, 19)}`
                 : '1px solid transparent',
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
               minHeight: 44,
@@ -70,7 +70,7 @@ export default function UserProfileTabs({ activeTab, onTabChange }: UserProfileT
             }}
             onMouseEnter={(e) => {
               if (!isActive) {
-                e.currentTarget.style.background = `${tokens.colors.bg.tertiary}80`
+                e.currentTarget.style.background = `${alpha(tokens.colors.bg.tertiary, 50)}`
                 e.currentTarget.style.transform = 'translateY(-2px)'
               }
             }}

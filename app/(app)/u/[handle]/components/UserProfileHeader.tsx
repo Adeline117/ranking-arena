@@ -5,7 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
@@ -51,7 +51,7 @@ export default function UserProfileHeader({
   const hasCover = Boolean(profile.cover_url)
   const containerBackground = hasCover
     ? `linear-gradient(to bottom, var(--color-overlay-subtle) 0%, var(--color-backdrop) 100%), url(${profile.cover_url}) center/cover no-repeat`
-    : `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}E8 100%)`
+    : `linear-gradient(135deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 91)} 100%)`
   const textColor = hasCover ? tokens.colors.white : tokens.colors.text.primary
   const secondaryTextColor = hasCover ? 'var(--glass-bg-medium)' : tokens.colors.text.secondary
   const textShadow = hasCover ? '0 1px 4px var(--color-overlay-dark)' : undefined
@@ -68,7 +68,7 @@ export default function UserProfileHeader({
         paddingBottom: tokens.spacing[3],
         background: containerBackground,
         borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
-        border: `1px solid ${tokens.colors.border.primary}50`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 31)}`,
         borderBottom: 'none',
         boxShadow: '0 8px 32px var(--color-overlay-subtle), inset 0 1px 0 var(--overlay-hover)',
         position: 'relative',
@@ -94,7 +94,7 @@ export default function UserProfileHeader({
               left: -100,
               width: 300,
               height: 300,
-              background: `radial-gradient(circle, ${tokens.colors.accent.primary}08 0%, transparent 70%)`,
+              background: `radial-gradient(circle, ${alpha(tokens.colors.accent.primary, 3)} 0%, transparent 70%)`,
             }}
           />
           <Box
@@ -104,7 +104,7 @@ export default function UserProfileHeader({
               right: -80,
               width: 200,
               height: 200,
-              background: `radial-gradient(circle, ${tokens.colors.accent.brand}06 0%, transparent 70%)`,
+              background: `radial-gradient(circle, ${alpha(tokens.colors.accent.brand, 2)} 0%, transparent 70%)`,
             }}
           />
         </Box>
@@ -141,7 +141,7 @@ export default function UserProfileHeader({
               overflow: 'hidden',
               position: 'relative',
               boxShadow: avatarHovered
-                ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${tokens.colors.accent.primary}20`
+                ? `0 8px 32px var(--color-accent-primary-40), 0 0 0 4px ${alpha(tokens.colors.accent.primary, 13)}`
                 : '0 4px 16px var(--color-overlay-light)',
               transition: 'all 0.4s cubic-bezier(0.4, 0, 0.2, 1)',
               transform: avatarHovered ? 'scale(1.08)' : 'scale(1)',
@@ -223,7 +223,7 @@ export default function UserProfileHeader({
                   height: 22,
                   background: `linear-gradient(135deg, ${tokens.colors.accent.success}, var(--color-accent-success))`,
                   borderRadius: tokens.radius.full,
-                  boxShadow: `0 2px 8px ${tokens.colors.accent.success}40`,
+                  boxShadow: `0 2px 8px ${alpha(tokens.colors.accent.success, 25)}`,
                 }}
                 title={t('verifiedTrader') || t('verifiedUser')}
               >
@@ -418,8 +418,8 @@ export default function UserProfileHeader({
               fontSize: tokens.typography.fontSize.sm,
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.lg,
-              background: `${tokens.colors.accent.primary}15`,
-              border: `1px solid ${tokens.colors.accent.primary}40`,
+              background: `${alpha(tokens.colors.accent.primary, 8)}`,
+              border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -467,8 +467,8 @@ export default function UserProfileHeader({
               fontSize: tokens.typography.fontSize.sm,
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.lg,
-              background: `${tokens.colors.accent.primary}15`,
-              border: `1px solid ${tokens.colors.accent.primary}40`,
+              background: `${alpha(tokens.colors.accent.primary, 8)}`,
+              border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',

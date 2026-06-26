@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import Image from 'next/image'
 import { localizedLabel } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import type { UnifiedSearchResult } from '@/app/api/search/route'
@@ -102,7 +102,7 @@ export function SearchResultGroup({
             width: 20,
             height: 20,
             borderRadius: tokens.radius.sm,
-            background: `${config.color}20`,
+            background: `${alpha(config.color, 13)}`,
             color: config.color,
             display: 'flex',
             alignItems: 'center',
@@ -188,7 +188,7 @@ export function SearchResultGroup({
                   width: 28,
                   height: 28,
                   borderRadius: tokens.radius.full,
-                  background: `${config.color}15`,
+                  background: `${alpha(config.color, 8)}`,
                   color: config.color,
                   display: 'flex',
                   alignItems: 'center',

@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
 import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { type PostWithUserState } from '@/lib/types'
 import { useToast } from '../ui/Toast'
@@ -583,8 +583,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 marginTop: tokens.spacing[1],
                 padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.md,
-                background: `${tokens.colors.accent.primary}18`,
-                border: `1px solid ${tokens.colors.accent.primary}40`,
+                background: `${alpha(tokens.colors.accent.primary, 9)}`,
+                border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
                 color: tokens.colors.accent.primary,
                 textDecoration: 'none',
                 fontSize: tokens.typography.fontSize.sm,
@@ -662,8 +662,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             width: '100%',
             padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
             marginBottom: tokens.spacing[2],
-            background: `${tokens.colors.accent.primary}15`,
-            border: `1px solid ${tokens.colors.accent.primary}40`,
+            background: `${alpha(tokens.colors.accent.primary, 8)}`,
+            border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
             borderRadius: tokens.radius.md,
             color: tokens.colors.accent.primary,
             fontSize: tokens.typography.fontSize.sm,

@@ -9,7 +9,7 @@ const ProUpsellModal = dynamic(
   () => import('@/app/components/ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
   { ssr: false }
 )
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
@@ -116,7 +116,7 @@ export default function TraderProfileView({
       className="trader-page-container"
       style={{
         minHeight: '100vh',
-        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${alpha(tokens.colors.bg.secondary, 19)} 100%)`,
         color: tokens.colors.text.primary,
       }}
     >
@@ -389,8 +389,8 @@ function TraderOverviewTab({
                   <Box
                     style={{
                       padding: `${tokens.spacing[3]} ${tokens.spacing[6]}`,
-                      background: `${tokens.colors.accent.primary}20`,
-                      border: `1px solid ${tokens.colors.accent.primary}50`,
+                      background: `${alpha(tokens.colors.accent.primary, 13)}`,
+                      border: `1px solid ${alpha(tokens.colors.accent.primary, 31)}`,
                       borderRadius: tokens.radius.lg,
                       cursor: 'pointer',
                       textAlign: 'center',
