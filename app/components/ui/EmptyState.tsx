@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 
 type EmptyStateProps = {
@@ -12,15 +12,21 @@ type EmptyStateProps = {
   variant?: 'default' | 'compact' | 'card'
 }
 
-export default function EmptyState({ icon, title, description, action, variant = 'default' }: EmptyStateProps) {
+export default function EmptyState({
+  icon,
+  title,
+  description,
+  action,
+  variant = 'default',
+}: EmptyStateProps) {
   const isCard = variant === 'card'
   const isCompact = variant === 'compact'
-  
+
   return (
     <Box
       className={isCard ? 'glass-card card-enter' : 'card-enter'}
       style={{
-        padding: isCompact 
+        padding: isCompact
           ? `${tokens.spacing[8]} ${tokens.spacing[4]}`
           : `${tokens.spacing[16]} ${tokens.spacing[6]}`,
         textAlign: 'center',
@@ -31,9 +37,9 @@ export default function EmptyState({ icon, title, description, action, variant =
     >
       {/* Icon with gradient background */}
       {icon && (
-        <Box 
-          style={{ 
-            marginBottom: tokens.spacing[4], 
+        <Box
+          style={{
+            marginBottom: tokens.spacing[4],
             display: 'flex',
             justifyContent: 'center',
           }}
@@ -44,28 +50,30 @@ export default function EmptyState({ icon, title, description, action, variant =
               height: isCompact ? 56 : 72,
               borderRadius: tokens.radius.full,
               background: tokens.gradient.primarySubtle,
-              border: `1px solid ${tokens.colors.accent.primary}20`,
+              border: `1px solid ${alpha(tokens.colors.accent.primary, 13)}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              fontSize: isCompact ? tokens.typography.fontSize['2xl'] : tokens.typography.fontSize['3xl'],
+              fontSize: isCompact
+                ? tokens.typography.fontSize['2xl']
+                : tokens.typography.fontSize['3xl'],
             }}
           >
             {icon}
           </Box>
         </Box>
       )}
-      
+
       {/* Title */}
-      <Text 
-        size={isCompact ? 'sm' : 'md'} 
-        weight="black" 
-        color="primary" 
+      <Text
+        size={isCompact ? 'sm' : 'md'}
+        weight="black"
+        color="primary"
         style={{ marginBottom: tokens.spacing[2] }}
       >
         {title}
       </Text>
-      
+
       {/* Description */}
       {description && (
         <Text
@@ -82,16 +90,23 @@ export default function EmptyState({ icon, title, description, action, variant =
           {description}
         </Text>
       )}
-      
+
       {/* Action */}
       {action && (
         <Box style={{ marginTop: tokens.spacing[4] }}>
-          {typeof action === 'object' && action !== null && 'label' in action && 'onClick' in action ? (
-            <Button variant="secondary" size="sm" onClick={(action as { label: string; onClick: () => void }).onClick}>
+          {typeof action === 'object' &&
+          action !== null &&
+          'label' in action &&
+          'onClick' in action ? (
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={(action as { label: string; onClick: () => void }).onClick}
+            >
               {(action as { label: string; onClick: () => void }).label}
             </Button>
           ) : (
-            action as React.ReactNode
+            (action as React.ReactNode)
           )}
         </Box>
       )}
