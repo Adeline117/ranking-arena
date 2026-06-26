@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 
@@ -198,11 +198,26 @@ export default function SchedulerMetrics({ data }: SchedulerMetricsProps) {
               border: `1px solid ${tokens.colors.border.primary}`,
             }}
           >
-            <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[2] }}>
+            <Box
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginBottom: tokens.spacing[2],
+              }}
+            >
               <Text size="sm" color="secondary">
                 Overdue Traders
               </Text>
-              <Text size="sm" weight="bold" style={{ color: (dataFreshness?.overdueTraders ?? 0) > 0 ? 'var(--color-medal-gold)' : 'var(--color-chart-green)' }}>
+              <Text
+                size="sm"
+                weight="bold"
+                style={{
+                  color:
+                    (dataFreshness?.overdueTraders ?? 0) > 0
+                      ? 'var(--color-medal-gold)'
+                      : 'var(--color-chart-green)',
+                }}
+              >
                 {dataFreshness?.overdueTraders || 0}
               </Text>
             </Box>
@@ -240,7 +255,7 @@ function TierCard({
     <Box
       style={{
         padding: tokens.spacing[3],
-        background: `${color}15`,
+        background: `${alpha(color, 8)}`,
         borderRadius: tokens.radius.md,
         border: `1px solid ${color}`,
       }}

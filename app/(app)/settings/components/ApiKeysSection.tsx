@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useCallback, useEffect, useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useApiCheckout } from '@/lib/hooks/useApiCheckout'
@@ -441,7 +441,7 @@ function ApiTierBanner({
             style={{
               padding: '2px 8px',
               borderRadius: tokens.radius.sm,
-              background: `${tier.color}20`,
+              background: `${alpha(tier.color, 13)}`,
               color: tier.color,
               fontSize: 12,
               fontWeight: 700,

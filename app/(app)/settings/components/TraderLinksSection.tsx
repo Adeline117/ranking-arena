@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/app/components/ui/Toast'
@@ -298,7 +298,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
             width: 56,
             height: 56,
             borderRadius: tokens.radius.full,
-            background: `${tokens.colors.accent.primary}10`,
+            background: `${alpha(tokens.colors.accent.primary, 6)}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -357,8 +357,8 @@ export function TraderLinksSection({ userId }: { userId: string }) {
             gap: tokens.spacing[4],
             padding: tokens.spacing[3],
             borderRadius: tokens.radius.lg,
-            background: `${tokens.colors.accent.primary}08`,
-            border: `1px solid ${tokens.colors.accent.primary}15`,
+            background: `${alpha(tokens.colors.accent.primary, 3)}`,
+            border: `1px solid ${alpha(tokens.colors.accent.primary, 8)}`,
             flexWrap: 'wrap',
           }}
         >
@@ -447,7 +447,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                       style={{
                         padding: `1px ${tokens.spacing[2]}`,
                         borderRadius: tokens.radius.sm,
-                        background: `${tokens.colors.accent.primary}20`,
+                        background: `${alpha(tokens.colors.accent.primary, 13)}`,
                         color: tokens.colors.accent.primary,
                         fontSize: tokens.typography.fontSize.xs,
                         fontWeight: 700,
@@ -642,7 +642,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                 style={{
                   padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                   borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.accent.error}30`,
+                  border: `1px solid ${alpha(tokens.colors.accent.error, 19)}`,
                   background: 'transparent',
                   color: tokens.colors.accent.error,
                   fontSize: tokens.typography.fontSize.xs,

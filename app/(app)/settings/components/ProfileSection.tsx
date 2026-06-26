@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -53,7 +53,14 @@ export const ProfileSection = React.memo(function ProfileSection({
   return (
     <SectionCard id="profile" title={t('profileSection')} description={t('profileDescription')}>
       {/* Avatar */}
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[4], marginBottom: tokens.spacing[5] }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[4],
+          marginBottom: tokens.spacing[5],
+        }}
+      >
         {userId ? (
           <Avatar
             userId={userId}
@@ -108,7 +115,11 @@ export const ProfileSection = React.memo(function ProfileSection({
           >
             {t('changeAvatar')}
           </label>
-          <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1], display: 'block' }}>
+          <Text
+            size="xs"
+            color="tertiary"
+            style={{ marginTop: tokens.spacing[1], display: 'block' }}
+          >
             {t('avatarFormatHint')}
           </Text>
         </Box>
@@ -124,9 +135,10 @@ export const ProfileSection = React.memo(function ProfileSection({
             width: '100%',
             height: 120,
             borderRadius: tokens.radius.lg,
-            background: (coverPreviewUrl || coverUrl)
-              ? `url(${coverPreviewUrl || coverUrl}) center/cover no-repeat`
-              : `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.bg.secondary} 100%)`,
+            background:
+              coverPreviewUrl || coverUrl
+                ? `url(${coverPreviewUrl || coverUrl}) center/cover no-repeat`
+                : `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.bg.secondary} 100%)`,
             border: `1px solid ${tokens.colors.border.primary}`,
             display: 'flex',
             alignItems: 'center',
@@ -135,7 +147,9 @@ export const ProfileSection = React.memo(function ProfileSection({
           }}
         >
           {!coverPreviewUrl && !coverUrl && (
-            <Text size="sm" color="tertiary">{t('noCoverImage')}</Text>
+            <Text size="sm" color="tertiary">
+              {t('noCoverImage')}
+            </Text>
           )}
         </Box>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
@@ -168,7 +182,7 @@ export const ProfileSection = React.memo(function ProfileSection({
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.accent.error}40`,
+                border: `1px solid ${alpha(tokens.colors.accent.error, 25)}`,
                 background: 'transparent',
                 color: tokens.colors.accent.error,
                 cursor: 'pointer',
@@ -217,7 +231,9 @@ export const ProfileSection = React.memo(function ProfileSection({
           aria-label={t('username')}
           style={getInputStyle(touchedHandle && !handleValidation.valid)}
         />
-        <Box style={{ display: 'flex', justifyContent: 'space-between', marginTop: tokens.spacing[1] }}>
+        <Box
+          style={{ display: 'flex', justifyContent: 'space-between', marginTop: tokens.spacing[1] }}
+        >
           <Box>
             {touchedHandle && handle && !handleValidation.valid && (
               <Text size="xs" style={{ color: tokens.colors.accent.error }}>
@@ -229,16 +245,24 @@ export const ProfileSection = React.memo(function ProfileSection({
                 {t('checking')}
               </Text>
             )}
-            {touchedHandle && handle && handleValidation.valid && !checkingHandle && handleAvailable === true && (
-              <Text size="xs" style={{ color: tokens.colors.accent.success }}>
-                {t('usernameAvailable')}
-              </Text>
-            )}
-            {touchedHandle && handle && handleValidation.valid && !checkingHandle && handleAvailable === false && (
-              <Text size="xs" style={{ color: tokens.colors.accent.error }}>
-                {t('usernameTaken')}
-              </Text>
-            )}
+            {touchedHandle &&
+              handle &&
+              handleValidation.valid &&
+              !checkingHandle &&
+              handleAvailable === true && (
+                <Text size="xs" style={{ color: tokens.colors.accent.success }}>
+                  {t('usernameAvailable')}
+                </Text>
+              )}
+            {touchedHandle &&
+              handle &&
+              handleValidation.valid &&
+              !checkingHandle &&
+              handleAvailable === false && (
+                <Text size="xs" style={{ color: tokens.colors.accent.error }}>
+                  {t('usernameTaken')}
+                </Text>
+              )}
           </Box>
           <Text size="xs" color="tertiary">
             {handle.length}/{MAX_HANDLE_LENGTH}
@@ -267,9 +291,10 @@ export const ProfileSection = React.memo(function ProfileSection({
           <Text
             size="xs"
             style={{
-              color: bio.length > MAX_BIO_LENGTH * 0.9
-                ? tokens.colors.accent.warning
-                : tokens.colors.text.tertiary
+              color:
+                bio.length > MAX_BIO_LENGTH * 0.9
+                  ? tokens.colors.accent.warning
+                  : tokens.colors.text.tertiary,
             }}
           >
             {bio.length}/{MAX_BIO_LENGTH}

@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 
@@ -31,7 +31,9 @@ export default function HealthScoreCard({ health, timestamp: _timestamp }: Healt
         }}
       >
         {/* Circular progress */}
-        <Box style={{ position: 'relative', width: 120, height: 120, marginBottom: tokens.spacing[4] }}>
+        <Box
+          style={{ position: 'relative', width: 120, height: 120, marginBottom: tokens.spacing[4] }}
+        >
           <svg width="120" height="120" style={{ transform: 'rotate(-90deg)' }}>
             {/* Background circle */}
             <circle
@@ -82,7 +84,7 @@ export default function HealthScoreCard({ health, timestamp: _timestamp }: Healt
           style={{
             padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
             borderRadius: tokens.radius.full,
-            background: `${health.color}20`,
+            background: `${alpha(health.color, 13)}`,
             border: `1px solid ${health.color}`,
             marginBottom: tokens.spacing[2],
           }}

@@ -4,7 +4,7 @@ import PasswordInput from '@/app/components/ui/PasswordInput'
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -237,7 +237,7 @@ function ApiKeyAuthContent() {
       })
       .catch(() => {
         /* Intentionally swallowed: auth check non-critical for api-key page */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [router])
 
   useEffect(() => {
@@ -503,8 +503,8 @@ function ApiKeyAuthContent() {
                   style={{
                     padding: tokens.spacing[3],
                     borderRadius: tokens.radius.lg,
-                    background: `${tokens.colors.accent.primary}15`,
-                    border: `1px solid ${tokens.colors.accent.primary}30`,
+                    background: `${alpha(tokens.colors.accent.primary, 8)}`,
+                    border: `1px solid ${alpha(tokens.colors.accent.primary, 19)}`,
                   }}
                 >
                   <Text size="sm" color="secondary">
@@ -520,8 +520,8 @@ function ApiKeyAuthContent() {
                   style={{
                     padding: tokens.spacing[4],
                     borderRadius: tokens.radius.xl,
-                    background: `${tokens.colors.accent.success}15`,
-                    border: `1px solid ${tokens.colors.accent.success}40`,
+                    background: `${alpha(tokens.colors.accent.success, 8)}`,
+                    border: `1px solid ${alpha(tokens.colors.accent.success, 25)}`,
                     marginBottom: tokens.spacing[4],
                   }}
                 >
@@ -586,8 +586,8 @@ function ApiKeyAuthContent() {
                       style={{
                         padding: tokens.spacing[3],
                         borderRadius: tokens.radius.md,
-                        background: `${tokens.colors.accent.error}20`,
-                        border: `1px solid ${tokens.colors.accent.error}40`,
+                        background: `${alpha(tokens.colors.accent.error, 13)}`,
+                        border: `1px solid ${alpha(tokens.colors.accent.error, 25)}`,
                         marginBottom: tokens.spacing[4],
                       }}
                     >

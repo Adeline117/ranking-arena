@@ -9,7 +9,7 @@ import { localizedLabel, NULL_DISPLAY } from '@/lib/utils/format'
 import { use } from 'react'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useBotDetail } from '@/lib/hooks/useBotRankings'
 // MobileBottomNav is rendered by root layout — do not duplicate here
@@ -433,7 +433,7 @@ function BotDetailContent({ id }: { id: string }) {
                   key={s.season_id as string}
                   className="grid grid-cols-4 gap-2 px-4 py-3 border-b last:border-b-0"
                   style={{
-                    borderColor: `${tokens.colors.border.primary}30`,
+                    borderColor: `${alpha(tokens.colors.border.primary, 19)}`,
                     minWidth: 400,
                   }}
                 >

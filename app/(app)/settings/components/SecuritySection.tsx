@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -69,15 +69,30 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
   const { t } = useLanguage()
   const { showToast } = useToast()
   const newPasswordValidation = validatePassword(props.newPassword, t)
-  const confirmPasswordValidation = validatePasswordMatch(props.newPassword, props.confirmNewPassword, t)
+  const confirmPasswordValidation = validatePasswordMatch(
+    props.newPassword,
+    props.confirmNewPassword,
+    t
+  )
   const newEmailValidation = validateEmail(props.newEmail, t)
 
   return (
     <SectionCard id="security" title={t('securitySection')} description={t('twoFADesc')}>
       {/* Current Email Display */}
-      <Box style={{ marginBottom: tokens.spacing[5], padding: tokens.spacing[3], borderRadius: tokens.radius.md, background: tokens.colors.bg.primary }}>
-        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>{t('currentLoginEmail')}</Text>
-        <Text size="sm" weight="bold">{props.email}</Text>
+      <Box
+        style={{
+          marginBottom: tokens.spacing[5],
+          padding: tokens.spacing[3],
+          borderRadius: tokens.radius.md,
+          background: tokens.colors.bg.primary,
+        }}
+      >
+        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+          {t('currentLoginEmail')}
+        </Text>
+        <Text size="sm" weight="bold">
+          {props.email}
+        </Text>
       </Box>
 
       {/* Change Email */}
@@ -93,7 +108,10 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
             onBlur={() => props.markTouched('newEmail')}
             placeholder={t('enterNewEmail')}
             autoComplete="email"
-            style={{ ...getInputStyle(props.touchedFields.newEmail && !newEmailValidation.valid), flex: 1 }}
+            style={{
+              ...getInputStyle(props.touchedFields.newEmail && !newEmailValidation.valid),
+              flex: 1,
+            }}
           />
           <Button
             variant="secondary"
@@ -104,7 +122,10 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
           </Button>
         </Box>
         {props.touchedFields.newEmail && props.newEmail && !newEmailValidation.valid && (
-          <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
+          <Text
+            size="xs"
+            style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}
+          >
             {newEmailValidation.message}
           </Text>
         )}
@@ -128,8 +149,14 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.md,
               border: `1px solid ${props.passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-              background: props.passwordResetMode === 'password' ? `${tokens.colors.accent.primary}15` : 'transparent',
-              color: props.passwordResetMode === 'password' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+              background:
+                props.passwordResetMode === 'password'
+                  ? `${alpha(tokens.colors.accent.primary, 8)}`
+                  : 'transparent',
+              color:
+                props.passwordResetMode === 'password'
+                  ? tokens.colors.accent.primary
+                  : tokens.colors.text.secondary,
               fontSize: tokens.typography.fontSize.sm,
               cursor: 'pointer',
               transition: `all ${tokens.transition.base}`,
@@ -144,8 +171,14 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.md,
               border: `1px solid ${props.passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-              background: props.passwordResetMode === 'code' ? `${tokens.colors.accent.primary}15` : 'transparent',
-              color: props.passwordResetMode === 'code' ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+              background:
+                props.passwordResetMode === 'code'
+                  ? `${alpha(tokens.colors.accent.primary, 8)}`
+                  : 'transparent',
+              color:
+                props.passwordResetMode === 'code'
+                  ? tokens.colors.accent.primary
+                  : tokens.colors.text.secondary,
               fontSize: tokens.typography.fontSize.sm,
               cursor: 'pointer',
               transition: `all ${tokens.transition.base}`,
@@ -158,7 +191,6 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
         {props.passwordResetMode === 'password' ? (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
             <PasswordInput
-              
               value={props.currentPassword}
               onChange={(e) => props.setCurrentPassword(e.target.value)}
               placeholder={t('currentPasswordPlaceholder')}
@@ -167,46 +199,69 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
             />
             <Box>
               <PasswordInput
-                
                 value={props.newPassword}
                 onChange={(e) => props.setNewPassword(e.target.value)}
                 onBlur={() => props.markTouched('newPassword')}
                 placeholder={t('newPasswordPlaceholder')}
                 autoComplete="new-password"
-                style={getInputStyle(props.touchedFields.newPassword && !newPasswordValidation.valid)}
+                style={getInputStyle(
+                  props.touchedFields.newPassword && !newPasswordValidation.valid
+                )}
               />
-              {props.touchedFields.newPassword && props.newPassword && !newPasswordValidation.valid && (
-                <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
-                  {newPasswordValidation.message}
-                </Text>
-              )}
+              {props.touchedFields.newPassword &&
+                props.newPassword &&
+                !newPasswordValidation.valid && (
+                  <Text
+                    size="xs"
+                    style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}
+                  >
+                    {newPasswordValidation.message}
+                  </Text>
+                )}
             </Box>
             <Box>
               <PasswordInput
-                
                 value={props.confirmNewPassword}
                 onChange={(e) => props.setConfirmNewPassword(e.target.value)}
                 onBlur={() => props.markTouched('confirmPassword')}
                 placeholder={t('confirmPasswordPlaceholder')}
                 autoComplete="new-password"
-                style={getInputStyle(props.touchedFields.confirmPassword && !confirmPasswordValidation.valid)}
+                style={getInputStyle(
+                  props.touchedFields.confirmPassword && !confirmPasswordValidation.valid
+                )}
               />
-              {props.touchedFields.confirmPassword && props.confirmNewPassword && !confirmPasswordValidation.valid && (
-                <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
-                  {confirmPasswordValidation.message}
-                </Text>
-              )}
-              {props.touchedFields.confirmPassword && props.confirmNewPassword && confirmPasswordValidation.valid && (
-                <Text size="xs" style={{ color: tokens.colors.accent.success, marginTop: tokens.spacing[1] }}>
-                  {t('passwordMatch')}
-                </Text>
-              )}
+              {props.touchedFields.confirmPassword &&
+                props.confirmNewPassword &&
+                !confirmPasswordValidation.valid && (
+                  <Text
+                    size="xs"
+                    style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}
+                  >
+                    {confirmPasswordValidation.message}
+                  </Text>
+                )}
+              {props.touchedFields.confirmPassword &&
+                props.confirmNewPassword &&
+                confirmPasswordValidation.valid && (
+                  <Text
+                    size="xs"
+                    style={{ color: tokens.colors.accent.success, marginTop: tokens.spacing[1] }}
+                  >
+                    {t('passwordMatch')}
+                  </Text>
+                )}
             </Box>
             <Box style={{ display: 'flex', justifyContent: 'flex-end' }}>
               <Button
                 variant="secondary"
                 onClick={props.onChangePassword}
-                disabled={props.savingPassword || !props.currentPassword || !props.newPassword || !newPasswordValidation.valid || !confirmPasswordValidation.valid}
+                disabled={
+                  props.savingPassword ||
+                  !props.currentPassword ||
+                  !props.newPassword ||
+                  !newPasswordValidation.valid ||
+                  !confirmPasswordValidation.valid
+                }
               >
                 {props.savingPassword ? t('changingPassword') : t('changePassword')}
               </Button>
@@ -215,7 +270,8 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
             <Text size="sm" color="secondary">
-              {t('resetLinkWillSendTo')}{props.email}
+              {t('resetLinkWillSendTo')}
+              {props.email}
             </Text>
             <Text size="xs" color="tertiary">
               {t('resetLinkNote')}
@@ -240,8 +296,8 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 style={{
                   padding: tokens.spacing[3],
                   borderRadius: tokens.radius.md,
-                  background: `${tokens.colors.accent.success}10`,
-                  border: `1px solid ${tokens.colors.accent.success}30`,
+                  background: `${alpha(tokens.colors.accent.success, 6)}`,
+                  border: `1px solid ${alpha(tokens.colors.accent.success, 19)}`,
                 }}
               >
                 <Text size="sm" style={{ color: tokens.colors.accent.success }}>
@@ -254,21 +310,36 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
       </Box>
 
       {/* 2FA Section */}
-      <Box style={{ marginTop: tokens.spacing[6], paddingTop: tokens.spacing[6], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+      <Box
+        style={{
+          marginTop: tokens.spacing[6],
+          paddingTop: tokens.spacing[6],
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
+        }}
+      >
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            marginBottom: tokens.spacing[3],
+          }}
+        >
           <Text size="sm" weight="bold">
             {t('twoFactorAuthTitle')}
           </Text>
           {props.twoFAEnabled && (
-            <span style={{
-              padding: `2px ${tokens.spacing[2]}`,
-              borderRadius: tokens.radius.sm,
-              background: `${tokens.colors.accent.success}15`,
-              border: `1px solid ${tokens.colors.accent.success}30`,
-              color: tokens.colors.accent.success,
-              fontSize: tokens.typography.fontSize.xs,
-              fontWeight: Number(tokens.typography.fontWeight.bold),
-            }}>
+            <span
+              style={{
+                padding: `2px ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.sm,
+                background: `${alpha(tokens.colors.accent.success, 8)}`,
+                border: `1px solid ${alpha(tokens.colors.accent.success, 19)}`,
+                color: tokens.colors.accent.success,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: Number(tokens.typography.fontWeight.bold),
+              }}
+            >
               {t('twoFAStatusEnabled')}
             </span>
           )}
@@ -279,7 +350,12 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
             <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
               {t('twoFAEnableDesc')}
             </Text>
-            <Button variant="secondary" size="sm" onClick={props.onSetup2FA} disabled={props.twoFALoading}>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={props.onSetup2FA}
+              disabled={props.twoFALoading}
+            >
               {props.twoFALoading ? t('loading') : t('enable2FAButton')}
             </Button>
           </Box>
@@ -290,14 +366,22 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
             <Text size="xs" color="secondary" style={{ lineHeight: 1.6 }}>
               {t('scanQRCodeDesc')}
             </Text>
-            <Box style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: tokens.spacing[3] }}>
+            <Box
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+              }}
+            >
               <Image
                 src={props.twoFASetupData.qrCodeDataUrl}
                 alt="2FA QR Code"
                 width={180}
                 height={180}
                 style={{
-                  width: 180, height: 180,
+                  width: 180,
+                  height: 180,
                   borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   background: tokens.colors.white,
@@ -305,19 +389,25 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 }}
                 unoptimized
               />
-              <Box style={{
-                padding: tokens.spacing[3],
-                borderRadius: tokens.radius.md,
-                background: tokens.colors.bg.primary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                textAlign: 'center',
-                width: '100%',
-                maxWidth: 320,
-              }}>
+              <Box
+                style={{
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.bg.primary,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  textAlign: 'center',
+                  width: '100%',
+                  maxWidth: 320,
+                }}
+              >
                 <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
                   {t('manualEntryKey')}
                 </Text>
-                <Text size="sm" weight="bold" style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                <Text
+                  size="sm"
+                  weight="bold"
+                  style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                >
                   {props.twoFASetupData.secret}
                 </Text>
               </Box>
@@ -330,7 +420,9 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 <input
                   type="text"
                   value={props.twoFACode}
-                  onChange={(e) => props.setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                  onChange={(e) =>
+                    props.setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                  }
                   placeholder="000000"
                   maxLength={6}
                   inputMode="numeric"
@@ -358,38 +450,59 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
         )}
 
         {props.backupCodes.length > 0 && (
-          <Box style={{
-            marginTop: tokens.spacing[4],
-            padding: tokens.spacing[4],
-            borderRadius: tokens.radius.md,
-            background: `${tokens.colors.accent.warning}08`,
-            border: `1px solid ${tokens.colors.accent.warning}30`,
-          }}>
-            <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2], color: tokens.colors.accent.warning }}>
+          <Box
+            style={{
+              marginTop: tokens.spacing[4],
+              padding: tokens.spacing[4],
+              borderRadius: tokens.radius.md,
+              background: `${alpha(tokens.colors.accent.warning, 3)}`,
+              border: `1px solid ${alpha(tokens.colors.accent.warning, 19)}`,
+            }}
+          >
+            <Text
+              size="sm"
+              weight="bold"
+              style={{ marginBottom: tokens.spacing[2], color: tokens.colors.accent.warning }}
+            >
               {t('backupRecoveryCodes')}
             </Text>
-            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3], lineHeight: 1.6 }}>
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ marginBottom: tokens.spacing[3], lineHeight: 1.6 }}
+            >
               {t('backupCodesNote')}
             </Text>
-            <Box style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(2, 1fr)',
-              gap: tokens.spacing[2],
-              padding: tokens.spacing[3],
-              borderRadius: tokens.radius.md,
-              background: tokens.colors.bg.primary,
-              fontFamily: tokens.typography.fontFamily.mono.join(', '),
-              userSelect: 'all',
-            }}>
+            <Box
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: tokens.spacing[2],
+                padding: tokens.spacing[3],
+                borderRadius: tokens.radius.md,
+                background: tokens.colors.bg.primary,
+                fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                userSelect: 'all',
+              }}
+            >
               {props.backupCodes.map((code, index) => (
-                <Text key={index} size="sm" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), textAlign: 'center', letterSpacing: '0.05em' }}>
+                <Text
+                  key={index}
+                  size="sm"
+                  style={{
+                    fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                    textAlign: 'center',
+                    letterSpacing: '0.05em',
+                  }}
+                >
                   {code}
                 </Text>
               ))}
             </Box>
             <button
               onClick={() => {
-                navigator.clipboard.writeText(props.backupCodes.join('\n'))
+                navigator.clipboard
+                  .writeText(props.backupCodes.join('\n'))
                   .then(() => showToast(t('copiedToClipboard'), 'success'))
                   .catch(() => showToast(t('copyFailed'), 'error'))
               }}
@@ -397,7 +510,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 marginTop: tokens.spacing[2],
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.accent.warning}40`,
+                border: `1px solid ${alpha(tokens.colors.accent.warning, 25)}`,
                 background: 'transparent',
                 color: tokens.colors.accent.warning,
                 fontSize: tokens.typography.fontSize.xs,
@@ -408,7 +521,16 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 gap: tokens.spacing[1],
               }}
             >
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
                 <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
               </svg>
@@ -423,7 +545,10 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               variant="secondary"
               size="sm"
               onClick={() => props.setShowDisable2FA(true)}
-              style={{ color: tokens.colors.accent.error, borderColor: tokens.colors.accent.error + '40' }}
+              style={{
+                color: tokens.colors.accent.error,
+                borderColor: tokens.colors.accent.error + '40',
+              }}
             >
               {t('disable2FAButton')}
             </Button>
@@ -431,19 +556,20 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
         )}
 
         {props.showDisable2FA && (
-          <Box style={{
-            marginTop: tokens.spacing[3],
-            padding: tokens.spacing[4],
-            borderRadius: tokens.radius.md,
-            background: tokens.colors.bg.primary,
-            border: `1px solid ${tokens.colors.accent.error}30`,
-          }}>
+          <Box
+            style={{
+              marginTop: tokens.spacing[3],
+              padding: tokens.spacing[4],
+              borderRadius: tokens.radius.md,
+              background: tokens.colors.bg.primary,
+              border: `1px solid ${alpha(tokens.colors.accent.error, 19)}`,
+            }}
+          >
             <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
               {t('enterPasswordToDisable')}
             </Text>
             <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
               <PasswordInput
-                
                 value={props.disablePassword}
                 onChange={(e) => props.setDisablePassword(e.target.value)}
                 placeholder={t('enterCurrentPasswordPlaceholder')}
@@ -455,14 +581,20 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 size="sm"
                 onClick={props.onDisable2FA}
                 disabled={props.twoFALoading || !props.disablePassword}
-                style={{ color: tokens.colors.accent.error, borderColor: tokens.colors.accent.error + '40' }}
+                style={{
+                  color: tokens.colors.accent.error,
+                  borderColor: tokens.colors.accent.error + '40',
+                }}
               >
                 {props.twoFALoading ? t('processingText') : t('confirmDisableButton')}
               </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => { props.setShowDisable2FA(false); props.setDisablePassword('') }}
+                onClick={() => {
+                  props.setShowDisable2FA(false)
+                  props.setDisablePassword('')
+                }}
               >
                 {t('cancel')}
               </Button>
@@ -472,7 +604,13 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
       </Box>
 
       {/* Active Sessions */}
-      <Box style={{ marginTop: tokens.spacing[6], paddingTop: tokens.spacing[6], borderTop: `1px solid ${tokens.colors.border.primary}` }}>
+      <Box
+        style={{
+          marginTop: tokens.spacing[6],
+          paddingTop: tokens.spacing[6],
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
+        }}
+      >
         <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
           {t('activeSessionsTitle')}
         </Text>
@@ -481,9 +619,13 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
         </Text>
 
         {props.loadingSessions ? (
-          <Text size="sm" color="tertiary">{t('loading')}</Text>
+          <Text size="sm" color="tertiary">
+            {t('loading')}
+          </Text>
         ) : props.sessions.length === 0 ? (
-          <Text size="sm" color="tertiary">{t('noSessionInfo')}</Text>
+          <Text size="sm" color="tertiary">
+            {t('noSessionInfo')}
+          </Text>
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
             {props.sessions.map((session) => (
@@ -506,24 +648,30 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                       {session.deviceInfo?.os ? ` - ${session.deviceInfo.os}` : ''}
                     </Text>
                     {session.isCurrent && (
-                      <span style={{
-                        padding: `1px ${tokens.spacing[2]}`,
-                        borderRadius: tokens.radius.sm,
-                        background: `${tokens.colors.accent.success}15`,
-                        color: tokens.colors.accent.success,
-                        fontSize: tokens.typography.fontSize.xs,
-                        fontWeight: Number(tokens.typography.fontWeight.bold),
-                      }}>
+                      <span
+                        style={{
+                          padding: `1px ${tokens.spacing[2]}`,
+                          borderRadius: tokens.radius.sm,
+                          background: `${alpha(tokens.colors.accent.success, 8)}`,
+                          color: tokens.colors.accent.success,
+                          fontSize: tokens.typography.fontSize.xs,
+                          fontWeight: Number(tokens.typography.fontWeight.bold),
+                        }}
+                      >
                         {t('currentSessionLabel')}
                       </span>
                     )}
                   </Box>
                   <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
                     {session.ipAddress && (
-                      <Text size="xs" color="tertiary">IP: {session.ipAddress}</Text>
+                      <Text size="xs" color="tertiary">
+                        IP: {session.ipAddress}
+                      </Text>
                     )}
                     {session.lastActiveAt && (
-                      <Text size="xs" color="tertiary">{formatTimeAgo(session.lastActiveAt)}</Text>
+                      <Text size="xs" color="tertiary">
+                        {formatTimeAgo(session.lastActiveAt)}
+                      </Text>
                     )}
                   </Box>
                 </Box>
@@ -532,7 +680,10 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                     variant="ghost"
                     size="sm"
                     onClick={() => props.onRevokeSession(session.id)}
-                    style={{ color: tokens.colors.accent.error, fontSize: tokens.typography.fontSize.xs }}
+                    style={{
+                      color: tokens.colors.accent.error,
+                      fontSize: tokens.typography.fontSize.xs,
+                    }}
                   >
                     {t('revokeSession')}
                   </Button>
@@ -540,13 +691,22 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               </Box>
             ))}
 
-            {props.sessions.filter(s => !s.isCurrent).length > 0 && (
-              <Box style={{ display: 'flex', justifyContent: 'flex-end', marginTop: tokens.spacing[2] }}>
+            {props.sessions.filter((s) => !s.isCurrent).length > 0 && (
+              <Box
+                style={{
+                  display: 'flex',
+                  justifyContent: 'flex-end',
+                  marginTop: tokens.spacing[2],
+                }}
+              >
                 <Button
                   variant="secondary"
                   size="sm"
                   onClick={props.onRevokeAllSessions}
-                  style={{ color: tokens.colors.accent.error, borderColor: tokens.colors.accent.error + '40' }}
+                  style={{
+                    color: tokens.colors.accent.error,
+                    borderColor: tokens.colors.accent.error + '40',
+                  }}
                 >
                   {t('logoutOtherDevicesButton')}
                 </Button>

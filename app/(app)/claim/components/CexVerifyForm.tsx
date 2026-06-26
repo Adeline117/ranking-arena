@@ -2,7 +2,7 @@
 import PasswordInput from '@/app/components/ui/PasswordInput'
 
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '@/app/components/base'
@@ -129,7 +129,7 @@ export function CexVerifyForm({
         style={{
           padding: tokens.spacing[3],
           backgroundColor: tokens.colors.accent.primary + '15',
-          border: `1px solid ${tokens.colors.accent.primary}40`,
+          border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
           borderRadius: tokens.radius.md,
           marginBottom: tokens.spacing[4],
         }}
@@ -231,7 +231,7 @@ export function CexVerifyForm({
         style={{
           padding: tokens.spacing[3],
           backgroundColor: tokens.colors.accent.warning + '15',
-          border: `1px solid ${tokens.colors.accent.warning}40`,
+          border: `1px solid ${alpha(tokens.colors.accent.warning, 25)}`,
           borderRadius: tokens.radius.md,
           marginBottom: tokens.spacing[4],
         }}

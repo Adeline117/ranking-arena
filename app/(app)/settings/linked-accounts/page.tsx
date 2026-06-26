@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -101,7 +101,7 @@ function LinkedAccountsContent() {
               width: 64,
               height: 64,
               borderRadius: tokens.radius.full,
-              background: `${tokens.colors.accent.primary}15`,
+              background: `${alpha(tokens.colors.accent.primary, 8)}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

@@ -2,7 +2,7 @@
 import PasswordInput from '@/app/components/ui/PasswordInput'
 
 import React from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -44,7 +44,7 @@ export function DeleteAccountModal({
           borderRadius: tokens.radius.xl,
           padding: tokens.spacing[6],
           width: 'min(420px, calc(100vw - 32px))',
-          border: `1px solid ${tokens.colors.accent.error}40`,
+          border: `1px solid ${alpha(tokens.colors.accent.error, 25)}`,
         }}
       >
         <Text
@@ -63,8 +63,8 @@ export function DeleteAccountModal({
               marginTop: tokens.spacing[3],
               padding: tokens.spacing[3],
               borderRadius: tokens.radius.md,
-              background: `${tokens.colors.accent.warning}10`,
-              border: `1px solid ${tokens.colors.accent.warning}30`,
+              background: `${alpha(tokens.colors.accent.warning, 6)}`,
+              border: `1px solid ${alpha(tokens.colors.accent.warning, 19)}`,
             }}
           >
             <Text size="xs" style={{ color: tokens.colors.accent.warning, lineHeight: 1.6 }}>
@@ -76,8 +76,8 @@ export function DeleteAccountModal({
               marginTop: tokens.spacing[2],
               padding: tokens.spacing[3],
               borderRadius: tokens.radius.md,
-              background: `${tokens.colors.accent.primary}08`,
-              border: `1px solid ${tokens.colors.accent.primary}20`,
+              background: `${alpha(tokens.colors.accent.primary, 3)}`,
+              border: `1px solid ${alpha(tokens.colors.accent.primary, 13)}`,
             }}
           >
             <Text size="xs" style={{ color: tokens.colors.accent.primary, lineHeight: 1.6 }}>

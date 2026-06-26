@@ -3,7 +3,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { getSafeProfileUrl } from '@/lib/utils/profile-navigation'
@@ -100,7 +100,7 @@ export default function MessageBubble({
     if (msg.content) {
       navigator.clipboard.writeText(msg.content).catch(() => {
         /* clipboard write may fail in some browsers */
-      }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+      })
     }
   }, [msg.content])
 
@@ -180,7 +180,7 @@ export default function MessageBubble({
             color: isMine ? 'var(--color-on-accent)' : tokens.colors.text.primary,
             border: isMine
               ? msg._status === 'failed'
-                ? `1px solid ${tokens.colors.accent.error}99`
+                ? `1px solid ${alpha(tokens.colors.accent.error, 60)}`
                 : 'none'
               : `1px solid ${tokens.colors.border.primary}`,
             boxShadow: isMine

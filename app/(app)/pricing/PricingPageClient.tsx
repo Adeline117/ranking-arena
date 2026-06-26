@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import Link from 'next/link'
 // MobileBottomNav is rendered by root layout — do not duplicate here
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { trackEvent } from '@/lib/analytics/track'
@@ -444,7 +444,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               display: 'flex',
               flexDirection: 'column',
               transform: 'scale(1.03)',
-              boxShadow: `0 20px 40px -15px rgba(139, 111, 168, 0.2), 0 0 0 1px ${tokens.colors.accent.brand}20`,
+              boxShadow: `0 20px 40px -15px rgba(139, 111, 168, 0.2), 0 0 0 1px ${alpha(tokens.colors.accent.brand, 13)}`,
             }}
           >
             {/* Badge */}
