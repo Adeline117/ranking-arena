@@ -1,6 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { ARTICLES } from './articles'
+import PageHeader from '@/app/components/ui/PageHeader'
 
 export const revalidate = 3600
 
@@ -19,29 +20,13 @@ export default function LearnPage() {
         padding: '40px 20px 80px',
       }}
     >
-      <h1
-        style={{
-          fontSize: 28,
-          fontWeight: 700,
-          color: 'var(--color-text-primary, #fff)',
-          marginBottom: 8,
-        }}
-      >
-        Learn
-      </h1>
-      <p
-        style={{
-          fontSize: 15,
-          color: 'var(--color-text-secondary, #aaa)',
-          marginBottom: 32,
-          lineHeight: 1.6,
-        }}
-      >
-        Understand how Arena works, how we rank traders, and how to read the metrics.
-      </p>
+      <PageHeader
+        title="Learn"
+        subtitle="Understand how Arena works, how we rank traders, and how to read the metrics."
+      />
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-        {ARTICLES.map(article => (
+        {ARTICLES.map((article) => (
           <Link
             key={article.slug}
             href={`/learn/${article.slug}`}

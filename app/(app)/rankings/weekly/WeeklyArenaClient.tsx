@@ -9,6 +9,7 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -80,21 +81,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
 
   return (
     <Box>
-      <Box style={{ marginBottom: tokens.spacing[4] }}>
-        <h1
-          style={{
-            fontSize: tokens.typography.fontSize.xl,
-            fontWeight: 800,
-            color: 'var(--color-text-primary)',
-            margin: 0,
-          }}
-        >
-          {t('weeklyArenaTitle')}
-        </h1>
-        <Text size="sm" color="secondary" style={{ marginTop: tokens.spacing[1] }}>
-          {t('weeklyArenaSubtitle')}
-        </Text>
-      </Box>
+      <PageHeader title={t('weeklyArenaTitle')} subtitle={t('weeklyArenaSubtitle')} compact />
 
       {rows.length === 0 ? (
         <Box
