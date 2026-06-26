@@ -17,7 +17,11 @@ export default function FoundingMemberBanner() {
   const [dismissed, setDismissed] = useState(false)
 
   useEffect(() => {
-    try { if (localStorage.getItem(DISMISS_KEY)) setDismissed(true) } catch { /* localStorage unavailable */ }
+    try {
+      if (localStorage.getItem(DISMISS_KEY)) setDismissed(true)
+    } catch {
+      /* localStorage unavailable */
+    }
   }, [])
 
   if (dismissed) return null
@@ -31,6 +35,7 @@ export default function FoundingMemberBanner() {
       style={{
         display: 'flex',
         alignItems: 'center',
+        flexWrap: 'wrap',
         gap: 6,
         padding: `4px ${tokens.spacing[3]}`,
         borderRadius: tokens.radius.md,
@@ -42,13 +47,20 @@ export default function FoundingMemberBanner() {
       }}
     >
       {/* Star icon instead of emoji */}
-      <span style={{ color: 'var(--color-founding-accent)', fontWeight: 900, fontSize: 14, letterSpacing: 0.5 }}>
+      <span
+        style={{
+          color: 'var(--color-founding-accent)',
+          fontWeight: 900,
+          fontSize: 14,
+          letterSpacing: 0.5,
+        }}
+      >
         ★
       </span>
-      <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>
-        {text}
-      </span>
-      <span style={{ color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.xs }}>
+      <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>{text}</span>
+      <span
+        style={{ color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.xs }}
+      >
         {t('foundingMemberFirst200')}
       </span>
       <Link
@@ -65,13 +77,24 @@ export default function FoundingMemberBanner() {
           whiteSpace: 'nowrap',
           transition: 'opacity 0.15s ease',
         }}
-        onMouseEnter={(e) => { e.currentTarget.style.opacity = '0.85' }}
-        onMouseLeave={(e) => { e.currentTarget.style.opacity = '1' }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.opacity = '0.85'
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.opacity = '1'
+        }}
       >
         {cta}
       </Link>
       <button
-        onClick={() => { setDismissed(true); try { localStorage.setItem(DISMISS_KEY, '1') } catch { /* ignore */ } }}
+        onClick={() => {
+          setDismissed(true)
+          try {
+            localStorage.setItem(DISMISS_KEY, '1')
+          } catch {
+            /* ignore */
+          }
+        }}
         aria-label="Dismiss"
         style={{
           marginLeft: 'auto',
