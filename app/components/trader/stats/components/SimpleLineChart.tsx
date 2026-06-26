@@ -4,6 +4,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { formatROI } from '@/lib/utils/format'
 
 /**
  * Fill date gaps in time-series data with linearly interpolated values.
@@ -217,6 +218,17 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
   // Check if baseline is within view (mixed positive/negative data)
   const hasBaseline = minValue < 0 && maxValue > 0
 
+  // Always-on label pinned to the final data point ("label on the data") so the
+  // current value reads without hovering. Clamp vertical position off the edges.
+  const lastVal = values[values.length - 1]
+  const lastYPct = range === 0 ? 50 : height - ((lastVal - minValue) / range) * height
+  const lastLabelTop = Math.max(7, Math.min(93, lastYPct))
+  const lastLabelColor = hasBaseline
+    ? lastVal >= 0
+      ? tokens.colors.accent.success
+      : tokens.colors.accent.error
+    : color
+
   const locale =
     language === 'zh'
       ? 'zh-CN'
@@ -227,7 +239,7 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
           : 'en-US'
 
   const formatTooltipValue = (val: number) => {
-    if (dataKey === 'roi') return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
+    if (dataKey === 'roi') return formatROI(val)
     const abs = Math.abs(val)
     const sign = val >= 0 ? '+' : '-'
     if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`
@@ -493,6 +505,38 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
               )
             })()}
         </svg>
+
+        {/* Always-on final-value label, pinned to the last data point. Hidden
+            while hovering so it doesn't fight the hover tooltip. */}
+        {hoverIndex === null && (
+          <Box
+            style={{
+              position: 'absolute',
+              right: 4,
+              top: `${lastLabelTop}%`,
+              transform: 'translateY(-50%)',
+              background: alpha(lastLabelColor, 12),
+              border: `1px solid ${alpha(lastLabelColor, 28)}`,
+              borderRadius: tokens.radius.sm,
+              padding: '1px 6px',
+              pointerEvents: 'none',
+              zIndex: 5,
+            }}
+          >
+            <Text
+              size="xs"
+              weight="bold"
+              style={{
+                color: lastLabelColor,
+                fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                letterSpacing: '-0.02em',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
+              {formatTooltipValue(lastVal)}
+            </Text>
+          </Box>
+        )}
 
         {/* Tooltip with edge detection */}
         {hoverData && tooltipStyle && (
