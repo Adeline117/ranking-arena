@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TradingStyle } from '@/lib/utils/trading-style'
@@ -199,7 +199,7 @@ export default function TradingStyleBadge({
             gap: 2,
             marginLeft: 2,
             padding: '2px 6px',
-            background: tokens.colors.bg.primary + '80',
+            background: colorAlpha(tokens.colors.bg.primary, 50),
             borderRadius: tokens.radius.full,
           }}
         >
@@ -289,7 +289,7 @@ export function TradingStyleCard({
       <Box
         style={{
           padding: tokens.spacing[4],
-          background: tokens.colors.bg.tertiary + '40',
+          background: colorAlpha(tokens.colors.bg.tertiary, 25),
           borderRadius: tokens.radius.lg,
           border: `1px solid ${tokens.colors.border.primary}`,
           textAlign: 'center',
@@ -357,7 +357,7 @@ export function TradingStyleCard({
                 key={asset}
                 style={{
                   padding: '4px 8px',
-                  background: tokens.colors.bg.primary + '80',
+                  background: colorAlpha(tokens.colors.bg.primary, 50),
                   borderRadius: tokens.radius.md,
                   border: `1px solid ${tokens.colors.border.primary}`,
                 }}

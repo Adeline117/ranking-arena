@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import {
   getAvatarGradient,
@@ -230,7 +230,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                   hoveredIndex === index
                     ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.primary, 6)}, ${tokens.colors.bg.tertiary})`
                     : tokens.colors.bg.primary,
-                border: `1px solid ${alpha(hoveredIndex === index ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary, 19)}`,
+                border: `1px solid ${alpha(hoveredIndex === index ? colorAlpha(tokens.colors.accent.primary, 25) : tokens.colors.border.primary, 19)}`,
                 cursor: 'pointer',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 transform: hoveredIndex === index ? 'translateX(4px)' : 'translateX(0)',

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { t as i18nT } from '@/lib/i18n'
 import { NULL_DISPLAY } from '@/lib/utils/format'
 import { Box, Text } from '@/app/components/base'
@@ -225,7 +225,7 @@ function MiniKpi({
           : tokens.colors.bg.primary,
         padding: tokens.spacing[4],
         borderRadius: tokens.radius.xl,
-        border: `1px solid ${isHovered ? tokens.colors.accent.primary + '30' : tokens.colors.border.primary}`,
+        border: `1px solid ${isHovered ? colorAlpha(tokens.colors.accent.primary, 19) : tokens.colors.border.primary}`,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         transform: isHovered ? 'translateY(-2px)' : 'translateY(0)',
         cursor: 'default',

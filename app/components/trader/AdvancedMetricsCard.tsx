@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useState, useEffect } from 'react'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { NULL_DISPLAY } from '@/lib/utils/format'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -547,7 +547,7 @@ function MetricCard({
     <Box
       style={{
         padding: tokens.spacing[3],
-        background: tokens.colors.bg.tertiary + '60',
+        background: colorAlpha(tokens.colors.bg.tertiary, 38),
         borderRadius: tokens.radius.lg,
         border: `1px solid ${alpha(isNA ? tokens.colors.border.primary : color, 13)}`,
         cursor: tooltip ? 'help' : undefined,
@@ -620,7 +620,7 @@ function SecondaryBadge({
         padding: `6px 10px`,
         background: tokens.colors.bg.tertiary,
         borderRadius: tokens.radius.full,
-        border: `1px solid ${highlight ? tokens.colors.accent.success + '30' : negative ? tokens.colors.accent.error + '20' : tokens.colors.border.primary}`,
+        border: `1px solid ${highlight ? colorAlpha(tokens.colors.accent.success, 19) : negative ? colorAlpha(tokens.colors.accent.error, 13) : tokens.colors.border.primary}`,
       }}
     >
       {icon && (

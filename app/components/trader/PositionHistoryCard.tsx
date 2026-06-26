@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, memo } from 'react'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 import { NULL_DISPLAY } from '@/lib/utils/format'
@@ -30,7 +30,7 @@ const PositionHistoryCard = memo(function PositionHistoryCard({
         background: isHovered
           ? `linear-gradient(135deg, ${alpha(tokens.colors.bg.primary, 94)}, ${alpha(tokens.colors.bg.secondary, 88)})`
           : tokens.colors.bg.primary,
-        border: `1px solid ${isHovered ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}`,
+        border: `1px solid ${isHovered ? colorAlpha(tokens.colors.accent.primary, 25) : tokens.colors.border.primary}`,
         borderRadius: tokens.radius.xl,
         padding: tokens.spacing[5],
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',

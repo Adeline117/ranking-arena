@@ -221,7 +221,7 @@ export default function MarketCorrelationCard({
         <Box
           style={{
             padding: tokens.spacing[3],
-            background: tokens.colors.bg.tertiary + '60',
+            background: colorAlpha(tokens.colors.bg.tertiary, 38),
             borderRadius: tokens.radius.lg,
             border: `1px solid ${tokens.colors.border.primary}`,
             textAlign: 'center',
@@ -269,7 +269,7 @@ export default function MarketCorrelationCard({
         <Box
           style={{
             padding: tokens.spacing[3],
-            background: tokens.colors.bg.tertiary + '60',
+            background: colorAlpha(tokens.colors.bg.tertiary, 38),
             borderRadius: tokens.radius.lg,
             border: `1px solid ${tokens.colors.border.primary}`,
             textAlign: 'center',
@@ -320,9 +320,9 @@ export default function MarketCorrelationCard({
             background:
               correlation.alpha !== null && correlation.alpha > 0
                 ? `${colorAlpha(tokens.colors.accent.success, 6)}`
-                : tokens.colors.bg.tertiary + '60',
+                : colorAlpha(tokens.colors.bg.tertiary, 38),
             borderRadius: tokens.radius.lg,
-            border: `1px solid ${correlation.alpha !== null && correlation.alpha > 0 ? tokens.colors.accent.success + '30' : tokens.colors.border.primary}`,
+            border: `1px solid ${correlation.alpha !== null && correlation.alpha > 0 ? colorAlpha(tokens.colors.accent.success, 19) : tokens.colors.border.primary}`,
             textAlign: 'center',
           }}
         >
