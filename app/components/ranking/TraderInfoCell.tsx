@@ -2,7 +2,7 @@
 
 import React, { memo } from 'react'
 import { localizedLabel } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { t as i18nT } from '@/lib/i18n'
@@ -108,8 +108,8 @@ export const TraderInfoCell = memo(function TraderInfoCell({
             role="img"
             aria-label={`Platform type: ${sourceInfo.type}`}
             style={{
-              background: `${sourceInfo.typeColor}15`,
-              border: `1px solid ${sourceInfo.typeColor}30`,
+              background: alpha(sourceInfo.typeColor, 8),
+              border: `1px solid ${alpha(sourceInfo.typeColor, 19)}`,
             }}
           >
             <Text
