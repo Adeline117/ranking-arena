@@ -5,10 +5,10 @@ import { getScoreColor } from '@/lib/utils/score-colors'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface ScoreRadarProps {
-  profitability: number | null  // 0-60 (returnScore)
-  riskControl: number | null    // 0-40 (pnlScore)
-  execution: number | null      // V3 removed, typically null
-  arenaScore: number     // 0-100, for color
+  profitability: number | null // 0-60 (returnScore)
+  riskControl: number | null // 0-40 (pnlScore)
+  execution: number | null // V3 removed, typically null
+  arenaScore: number // 0-100, for color
   size?: number
 }
 
@@ -38,7 +38,7 @@ export const ScoreRadar = memo(function ScoreRadar({
 
   // Three axes at 120 degree intervals, starting from top
   // Top: 收益能力, Bottom-left: 风险控制, Bottom-right: 执行质量
-  const angles = [-Math.PI / 2, -Math.PI / 2 + (2 * Math.PI / 3), -Math.PI / 2 + (4 * Math.PI / 3)]
+  const angles = [-Math.PI / 2, -Math.PI / 2 + (2 * Math.PI) / 3, -Math.PI / 2 + (4 * Math.PI) / 3]
 
   const getPoint = (angle: number, ratio: number) => ({
     x: cx + r * ratio * Math.cos(angle),
@@ -47,13 +47,13 @@ export const ScoreRadar = memo(function ScoreRadar({
 
   // Background grid lines
   const gridLevels = [0.33, 0.66, 1.0]
-  const gridPaths = gridLevels.map(level => {
-    const pts = angles.map(a => getPoint(a, level))
+  const gridPaths = gridLevels.map((level) => {
+    const pts = angles.map((a) => getPoint(a, level))
     return `M${pts[0].x},${pts[0].y} L${pts[1].x},${pts[1].y} L${pts[2].x},${pts[2].y} Z`
   })
 
   // Axis lines
-  const axisLines = angles.map(a => {
+  const axisLines = angles.map((a) => {
     const end = getPoint(a, 1)
     return `M${cx},${cy} L${end.x},${end.y}`
   })
@@ -65,24 +65,55 @@ export const ScoreRadar = memo(function ScoreRadar({
 
   const color = getScoreColor(arenaScore)
   const labelFontSize = Math.max(size * 0.08, 9)
+  // Raw per-axis scores for on-data value labels (skip deprecated execution=0).
+  const rawValues = [pVal, rVal, eVal]
+  const valueFontSize = Math.max(size * 0.062, 8)
 
   // Label positions (slightly outside the triangle)
   const labelOffset = r + 14
   const labels = [
     { text: t('scoreRadarProfit'), x: cx, y: cy - labelOffset },
-    { text: t('scoreRadarRisk'), x: cx + labelOffset * Math.cos(angles[1]) - 4, y: cy + labelOffset * Math.sin(angles[1]) + 4 },
-    { text: t('scoreRadarExec'), x: cx + labelOffset * Math.cos(angles[2]) + 4, y: cy + labelOffset * Math.sin(angles[2]) + 4 },
+    {
+      text: t('scoreRadarRisk'),
+      x: cx + labelOffset * Math.cos(angles[1]) - 4,
+      y: cy + labelOffset * Math.sin(angles[1]) + 4,
+    },
+    {
+      text: t('scoreRadarExec'),
+      x: cx + labelOffset * Math.cos(angles[2]) + 4,
+      y: cy + labelOffset * Math.sin(angles[2]) + 4,
+    },
   ]
 
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`Score radar: ${t('scoreRadarProfit')} ${profitability}/35, ${t('scoreRadarRisk')} ${riskControl}/40, ${t('scoreRadarExec')} ${execution}/25`} style={{ overflow: 'visible' }}>
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      role="img"
+      aria-label={`Score radar: ${t('scoreRadarProfit')} ${profitability}/35, ${t('scoreRadarRisk')} ${riskControl}/40, ${t('scoreRadarExec')} ${execution}/25`}
+      style={{ overflow: 'visible' }}
+    >
       {/* Grid */}
       {gridPaths.map((d, i) => (
-        <path key={i} d={d} fill="none" stroke="var(--color-border-secondary)" strokeWidth={0.5} opacity={0.5} />
+        <path
+          key={i}
+          d={d}
+          fill="none"
+          stroke="var(--color-border-secondary)"
+          strokeWidth={0.5}
+          opacity={0.5}
+        />
       ))}
       {/* Axes */}
       {axisLines.map((d, i) => (
-        <path key={`axis-${i}`} d={d} stroke="var(--color-border-secondary)" strokeWidth={0.5} opacity={0.4} />
+        <path
+          key={`axis-${i}`}
+          d={d}
+          stroke="var(--color-border-secondary)"
+          strokeWidth={0.5}
+          opacity={0.4}
+        />
       ))}
       {/* Data fill */}
       <path d={dataPath} fill={color} fillOpacity={0.2} stroke={color} strokeWidth={1.5} />
@@ -90,6 +121,25 @@ export const ScoreRadar = memo(function ScoreRadar({
       {dataPoints.map((pt, i) => (
         <circle key={`pt-${i}`} cx={pt.x} cy={pt.y} r={2.5} fill={color} />
       ))}
+      {/* On-data value labels — score read directly off each axis dot. Nudged
+          radially outward so they clear the filled polygon. */}
+      {dataPoints.map((pt, i) =>
+        rawValues[i] > 0 ? (
+          <text
+            key={`val-${i}`}
+            x={pt.x + Math.cos(angles[i]) * 8}
+            y={pt.y + Math.sin(angles[i]) * 8}
+            textAnchor="middle"
+            dominantBaseline="middle"
+            fill={color}
+            fontSize={valueFontSize}
+            fontWeight={700}
+            style={{ fontVariantNumeric: 'tabular-nums' }}
+          >
+            {Math.round(rawValues[i])}
+          </text>
+        ) : null
+      )}
       {/* Labels */}
       {labels.map((l, i) => (
         <text
