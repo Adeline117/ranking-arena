@@ -1,6 +1,7 @@
 'use client'
 
 import type { PersonalityType } from '../../components/types'
+import { alpha } from '@/lib/design-tokens'
 
 interface StyleAnalysisProps {
   type: PersonalityType
@@ -44,7 +45,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
           borderRadius: 100,
           background: type.gradient,
           alignSelf: 'flex-start',
-          boxShadow: `0 4px 16px ${type.color}30, 0 0 0 1px ${type.color}18`,
+          boxShadow: `0 4px 16px ${alpha(type.color, 19)}, 0 0 0 1px ${alpha(type.color, 9)}`,
         }}
       >
         <span
@@ -89,7 +90,7 @@ export default function StyleAnalysis({ type, tr }: StyleAnalysisProps) {
                     borderRadius: 6,
                     background: isActive ? type.color : 'var(--color-border-secondary)',
                     boxShadow: isActive
-                      ? `0 0 8px ${type.color}50, 0 2px 4px ${type.color}30`
+                      ? `0 0 8px ${alpha(type.color, 31)}, 0 2px 4px ${alpha(type.color, 19)}`
                       : 'none',
                     transition: 'background 0.4s ease, box-shadow 0.4s ease',
                   }}

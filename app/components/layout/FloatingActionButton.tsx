@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 import { features } from '@/lib/features'
@@ -200,17 +200,17 @@ export default function FloatingActionButton() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: `0 4px 16px ${tokens.colors.accent.primary}50`,
+          boxShadow: `0 4px 16px ${alpha(tokens.colors.accent.primary, 31)}`,
           transition: `all ${tokens.transition.base}`,
           transform: menuOpen ? 'rotate(45deg)' : 'rotate(0deg)',
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.transform = menuOpen ? 'rotate(45deg) scale(1.1)' : 'scale(1.1)'
-          e.currentTarget.style.boxShadow = `0 6px 24px ${tokens.colors.accent.primary}70`
+          e.currentTarget.style.boxShadow = `0 6px 24px ${alpha(tokens.colors.accent.primary, 44)}`
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.transform = menuOpen ? 'rotate(45deg)' : 'rotate(0deg)'
-          e.currentTarget.style.boxShadow = `0 4px 16px ${tokens.colors.accent.primary}50`
+          e.currentTarget.style.boxShadow = `0 4px 16px ${alpha(tokens.colors.accent.primary, 31)}`
         }}
       >
         <svg

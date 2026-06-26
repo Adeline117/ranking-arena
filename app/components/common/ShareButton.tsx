@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 
@@ -217,7 +217,7 @@ export default function ShareButton({
         }}
         onMouseEnter={(e) => {
           e.currentTarget.style.background = tokens.colors.bg.secondary
-          e.currentTarget.style.borderColor = `${tokens.colors.accent.primary}40`
+          e.currentTarget.style.borderColor = `${alpha(tokens.colors.accent.primary, 25)}`
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.background = bg

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
@@ -285,7 +285,9 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                       padding: '10px 8px',
                       borderRadius: tokens.radius.md,
                       border: 'none',
-                      background: isSelected ? `${tokens.colors.accent.brand}15` : 'transparent',
+                      background: isSelected
+                        ? `${alpha(tokens.colors.accent.brand, 8)}`
+                        : 'transparent',
                       cursor: 'pointer',
                       textAlign: 'left',
                       minHeight: 44,

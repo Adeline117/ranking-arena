@@ -3,6 +3,7 @@
 import Image from 'next/image'
 import Link from 'next/link'
 import type { PersonalityType, RecommendedTrader } from '../../components/types'
+import { alpha } from '@/lib/design-tokens'
 
 interface RecommendedTradersProps {
   type: PersonalityType
@@ -60,7 +61,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
               fontSize: 13,
               fontWeight: 700,
               textDecoration: 'none',
-              boxShadow: `0 4px 16px ${type.color}30`,
+              boxShadow: `0 4px 16px ${alpha(type.color, 19)}`,
               transition: 'transform 0.2s, box-shadow 0.2s',
             }}
           >
@@ -90,9 +91,9 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = `${type.color}40`
+                e.currentTarget.style.borderColor = `${alpha(type.color, 25)}`
                 e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = `0 4px 16px ${type.color}12`
+                e.currentTarget.style.boxShadow = `0 4px 16px ${alpha(type.color, 7)}`
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = 'var(--glass-border-light)'
@@ -116,7 +117,7 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                     width: '100%',
                     height: '100%',
                     borderRadius: 10,
-                    background: `${type.color}15`,
+                    background: `${alpha(type.color, 8)}`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

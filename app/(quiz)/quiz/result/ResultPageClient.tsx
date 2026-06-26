@@ -13,6 +13,7 @@ import TypeBreakdown from './components/TypeBreakdown'
 import RecommendedTraders from './components/RecommendedTraders'
 import ShareActions from './components/ShareActions'
 import '../quiz.css'
+import { alpha } from '@/lib/design-tokens'
 
 interface ResultPageClientProps {
   typeId: PersonalityTypeId
@@ -96,7 +97,7 @@ export default function ResultPageClient({
       className="quiz-result-page"
       style={
         {
-          '--quiz-type-color-15': `${pType.color}26`,
+          '--quiz-type-color-15': `${alpha(pType.color, 15)}`,
         } as React.CSSProperties
       }
     >

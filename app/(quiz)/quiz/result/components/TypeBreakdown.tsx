@@ -1,6 +1,7 @@
 'use client'
 
 import { PERSONALITY_TYPES } from '../../components/quiz-data'
+import { alpha } from '@/lib/design-tokens'
 
 interface TypeBreakdownProps {
   allTypePercents: Record<string, number>
@@ -115,7 +116,7 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
                   style={{
                     flex: 1,
                     height: 1,
-                    background: `${group.accentColor}25`,
+                    background: `${alpha(group.accentColor, 15)}`,
                   }}
                 />
               </div>
@@ -139,8 +140,10 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
                         gap: 'clamp(8px, 2vw, 12px)',
                         padding: isPrimary ? '8px 10px' : '4px 6px',
                         borderRadius: isPrimary ? 10 : 6,
-                        background: isPrimary ? `${type.color}1A` : 'transparent',
-                        border: isPrimary ? `1px solid ${type.color}25` : '1px solid transparent',
+                        background: isPrimary ? `${alpha(type.color, 10)}` : 'transparent',
+                        border: isPrimary
+                          ? `1px solid ${alpha(type.color, 15)}`
+                          : '1px solid transparent',
                         transition: 'background 0.3s, border-color 0.3s',
                       }}
                     >
@@ -166,7 +169,9 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
                           flex: 1,
                           height: isPrimary ? 12 : 6,
                           borderRadius: isPrimary ? 6 : 3,
-                          background: isPrimary ? `${type.color}10` : 'var(--color-bg-tertiary)',
+                          background: isPrimary
+                            ? `${alpha(type.color, 6)}`
+                            : 'var(--color-bg-tertiary)',
                           overflow: 'hidden',
                           transition: 'height 0.3s',
                         }}
@@ -177,9 +182,9 @@ export default function TypeBreakdown({ allTypePercents, primaryTypeId, tr }: Ty
                             width: `${percent}%`,
                             height: '100%',
                             borderRadius: 'inherit',
-                            background: isPrimary ? type.gradient : `${type.color}4D`,
+                            background: isPrimary ? type.gradient : `${alpha(type.color, 30)}`,
                             transition: 'width 1s cubic-bezier(0.16, 1, 0.3, 1)',
-                            boxShadow: isPrimary ? `0 0 8px ${type.color}40` : 'none',
+                            boxShadow: isPrimary ? `0 0 8px ${alpha(type.color, 25)}` : 'none',
                           }}
                         />
                       </div>

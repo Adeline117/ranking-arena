@@ -9,7 +9,7 @@
 
 import { useAccount, useChainId, useSwitchChain } from 'wagmi'
 import { useState, useEffect, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { CHAIN_CONFIGS, CHAIN_IDS, type SupportedChainId } from '@/lib/web3/multi-chain'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -21,13 +21,20 @@ interface ChainIndicatorProps {
 
 const CHAIN_ICONS: Record<number, { color: string; bg: string }> = {
   [CHAIN_IDS.BASE]: { color: 'var(--color-chart-indigo)', bg: 'var(--color-accent-primary-10)' },
-  [CHAIN_IDS.BASE_SEPOLIA]: { color: 'var(--color-chart-indigo)', bg: 'var(--color-accent-primary-10)' },
+  [CHAIN_IDS.BASE_SEPOLIA]: {
+    color: 'var(--color-chart-indigo)',
+    bg: 'var(--color-accent-primary-10)',
+  },
   [CHAIN_IDS.ARBITRUM]: { color: 'var(--color-chart-blue)', bg: 'var(--color-accent-primary-10)' },
   [CHAIN_IDS.OPTIMISM]: { color: 'var(--color-accent-error)', bg: 'var(--color-accent-error-10)' },
   [CHAIN_IDS.POLYGON]: { color: 'var(--color-chart-violet)', bg: 'var(--color-accent-primary-10)' },
 }
 
-export function ChainIndicator({ size = 'sm', showName = true, className = '' }: ChainIndicatorProps) {
+export function ChainIndicator({
+  size = 'sm',
+  showName = true,
+  className = '',
+}: ChainIndicatorProps) {
   const { isConnected } = useAccount()
   const chainId = useChainId()
   const { switchChain, isPending } = useSwitchChain()
@@ -50,7 +57,10 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
 
   const chainConfig = CHAIN_CONFIGS[chainId as SupportedChainId]
   const isSupported = chainConfig?.isSupported ?? false
-  const chainStyle = CHAIN_ICONS[chainId] || { color: 'var(--color-text-tertiary)', bg: 'var(--color-overlay-subtle)' }
+  const chainStyle = CHAIN_ICONS[chainId] || {
+    color: 'var(--color-text-tertiary)',
+    bg: 'var(--color-overlay-subtle)',
+  }
 
   const sizes = {
     sm: { dot: 8, text: 11, px: 8, py: 4, icon: 12 },
@@ -59,7 +69,8 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
   const s = sizes[size]
 
   const handleSwitchToBase = () => {
-    const targetChain = process.env.NODE_ENV === 'production' ? CHAIN_IDS.BASE : CHAIN_IDS.BASE_SEPOLIA
+    const targetChain =
+      process.env.NODE_ENV === 'production' ? CHAIN_IDS.BASE : CHAIN_IDS.BASE_SEPOLIA
     switchChain?.({ chainId: targetChain })
   }
 
@@ -116,7 +127,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
           padding: `${s.py}px ${s.px}px`,
           borderRadius: tokens.radius.md,
           background: chainStyle.bg,
-          border: `1px solid ${chainStyle.color}30`,
+          border: `1px solid ${alpha(chainStyle.color, 19)}`,
           cursor: 'pointer',
           transition: `all ${tokens.transition.base}`,
         }}
@@ -133,12 +144,7 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
         />
 
         {/* Chain icon (Base logo) */}
-        <svg
-          width={s.icon}
-          height={s.icon}
-          viewBox="0 0 24 24"
-          fill={chainStyle.color}
-        >
+        <svg width={s.icon} height={s.icon} viewBox="0 0 24 24" fill={chainStyle.color}>
           <circle cx="12" cy="12" r="10" fill={chainStyle.color} />
           <path
             d="M12 6C8.68629 6 6 8.68629 6 12C6 15.3137 8.68629 18 12 18C13.5 18 14.8 17.4 15.8 16.5L12 12V6Z"
@@ -199,16 +205,31 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
               overflow: 'hidden',
             }}
           >
-            <div style={{ padding: '8px 12px', borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-              <span style={{ fontSize: 11, color: tokens.colors.text.tertiary, fontWeight: 600, textTransform: 'uppercase' }}>
+            <div
+              style={{
+                padding: '8px 12px',
+                borderBottom: `1px solid ${tokens.colors.border.primary}`,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 11,
+                  color: tokens.colors.text.tertiary,
+                  fontWeight: 600,
+                  textTransform: 'uppercase',
+                }}
+              >
                 {t('selectNetwork')}
               </span>
             </div>
 
             {Object.values(CHAIN_CONFIGS)
-              .filter(c => c.isSupported || c.id === chainId)
-              .map(chain => {
-                const style = CHAIN_ICONS[chain.id] || { color: 'var(--color-text-tertiary)', bg: 'var(--color-overlay-subtle)' }
+              .filter((c) => c.isSupported || c.id === chainId)
+              .map((chain) => {
+                const style = CHAIN_ICONS[chain.id] || {
+                  color: 'var(--color-text-tertiary)',
+                  bg: 'var(--color-overlay-subtle)',
+                }
                 const isActive = chain.id === chainId
 
                 return (
@@ -242,16 +263,34 @@ export function ChainIndicator({ size = 'sm', showName = true, className = '' }:
                         border: isActive ? 'none' : `2px solid ${tokens.colors.border.primary}`,
                       }}
                     />
-                    <span style={{ fontSize: 13, fontWeight: isActive ? 600 : 400, color: tokens.colors.text.primary }}>
+                    <span
+                      style={{
+                        fontSize: 13,
+                        fontWeight: isActive ? 600 : 400,
+                        color: tokens.colors.text.primary,
+                      }}
+                    >
                       {chain.name}
                     </span>
                     {chain.isTestnet && (
-                      <span style={{ fontSize: 10, color: tokens.colors.text.tertiary, marginLeft: 'auto' }}>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: tokens.colors.text.tertiary,
+                          marginLeft: 'auto',
+                        }}
+                      >
                         Testnet
                       </span>
                     )}
                     {!chain.isSupported && (
-                      <span style={{ fontSize: 10, color: tokens.colors.accent.warning, marginLeft: 'auto' }}>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          color: tokens.colors.accent.warning,
+                          marginLeft: 'auto',
+                        }}
+                      >
                         Soon
                       </span>
                     )}

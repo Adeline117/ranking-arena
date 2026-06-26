@@ -10,7 +10,7 @@ import {
   useEffect,
   useRef,
 } from 'react'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { t } from '@/lib/i18n'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 
@@ -404,7 +404,7 @@ export function DialogProvider({ children }: { children: ReactNode }) {
                     <span
                       className="spinner-sm"
                       style={{
-                        borderColor: `${tokens.colors.white}4d`,
+                        borderColor: `${colorAlpha(tokens.colors.white, 30)}`,
                         borderTopColor: tokens.colors.white,
                       }}
                     />

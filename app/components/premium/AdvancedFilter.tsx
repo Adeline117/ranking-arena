@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import ProGate from '../ui/ProGate'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -147,7 +147,9 @@ export default function AdvancedFilter({
           justifyContent: 'space-between',
           padding: tokens.spacing[4],
           cursor: 'pointer',
-          background: hasActiveFilters ? `${tokens.colors.accent.primary}10` : 'transparent',
+          background: hasActiveFilters
+            ? `${alpha(tokens.colors.accent.primary, 6)}`
+            : 'transparent',
           transition: 'background 0.2s',
         }}
       >

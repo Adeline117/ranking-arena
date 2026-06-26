@@ -5,6 +5,7 @@ import Image from 'next/image'
 import type { PersonalityType } from '../../components/types'
 import { TYPE_TEXT_COLOR } from '../../components/quiz-data'
 import { QuizIcon } from './QuizIcon'
+import { alpha } from '@/lib/design-tokens'
 
 // Types that have dedicated character illustrations
 const TYPES_WITH_ART = new Set([
@@ -122,9 +123,9 @@ export default function PersonalityCard({
         {
           // CSS custom properties for type-specific theming
           '--quiz-type-color': type.color,
-          '--quiz-type-color-08': `${type.color}14`,
-          '--quiz-type-color-15': `${type.color}26`,
-          '--quiz-type-color-25': `${type.color}40`,
+          '--quiz-type-color-08': `${alpha(type.color, 8)}`,
+          '--quiz-type-color-15': `${alpha(type.color, 15)}`,
+          '--quiz-type-color-25': `${alpha(type.color, 25)}`,
           '--quiz-type-gradient': type.gradient,
         } as React.CSSProperties
       }
@@ -135,10 +136,10 @@ export default function PersonalityCard({
           {[
             type.color,
             'var(--color-brand)',
-            `${type.color}CC`,
+            `${alpha(type.color, 80)}`,
             '#FFD700',
             'var(--color-brand-deep)',
-            `${type.color}99`,
+            `${alpha(type.color, 60)}`,
             '#FFFFFF',
             type.color,
             '#FFD700',
@@ -176,7 +177,7 @@ export default function PersonalityCard({
         <div
           className="quiz-hero-icon"
           style={{
-            background: `${type.color}10`,
+            background: `${alpha(type.color, 6)}`,
             width: 'clamp(64px, 18vw, 80px)',
             height: 'clamp(64px, 18vw, 80px)',
             borderRadius: 'clamp(14px, 3vw, 20px)',
@@ -184,7 +185,7 @@ export default function PersonalityCard({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: `0 12px 32px ${type.color}15`,
+            boxShadow: `0 12px 32px ${alpha(type.color, 8)}`,
           }}
         >
           <QuizIcon name={type.icon} color={type.color} size={34} />
@@ -201,10 +202,10 @@ export default function PersonalityCard({
             padding: 'clamp(5px, 1.2vw, 7px) clamp(12px, 3vw, 18px)',
             borderRadius: 'clamp(16px, 4vw, 20px)',
             background: `rgba(${hexToRgb(type.color)}, 0.06)`,
-            border: `1px solid ${type.color}35`,
+            border: `1px solid ${alpha(type.color, 21)}`,
             letterSpacing: '0.06em',
             textTransform: 'uppercase' as const,
-            boxShadow: `0 0 20px ${type.color}15, 0 0 40px ${type.color}08`,
+            boxShadow: `0 0 20px ${alpha(type.color, 8)}, 0 0 40px ${alpha(type.color, 3)}`,
             display: 'inline-flex',
             alignItems: 'center',
             gap: 'clamp(5px, 1.2vw, 7px)',
@@ -215,7 +216,7 @@ export default function PersonalityCard({
             style={{
               fontSize: 'clamp(10px, 2.5vw, 12px)',
               fontWeight: 800,
-              filter: `drop-shadow(0 0 4px ${type.color}80)`,
+              filter: `drop-shadow(0 0 4px ${alpha(type.color, 50)})`,
             }}
           >
             {rarity.symbol}
@@ -225,7 +226,7 @@ export default function PersonalityCard({
             style={{
               width: 1,
               height: 12,
-              background: `${type.color}40`,
+              background: `${alpha(type.color, 25)}`,
               flexShrink: 0,
             }}
           />
@@ -246,7 +247,7 @@ export default function PersonalityCard({
           textAlign: 'center',
           letterSpacing: '-0.03em',
           lineHeight: 1.05,
-          textShadow: `0 0 40px ${type.color}20`,
+          textShadow: `0 0 40px ${alpha(type.color, 13)}`,
           animation: 'quizTextReveal 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.3s both',
         }}
       >
@@ -275,7 +276,7 @@ export default function PersonalityCard({
             fontVariantNumeric: 'tabular-nums',
             letterSpacing: '-0.02em',
             lineHeight: 1,
-            textShadow: `0 0 24px ${type.color}40`,
+            textShadow: `0 0 24px ${alpha(type.color, 25)}`,
           }}
         >
           {animatedMatch}%
@@ -314,7 +315,7 @@ export default function PersonalityCard({
               background: type.gradient,
               transition: 'width 1.2s cubic-bezier(0.16, 1, 0.3, 1)',
               position: 'relative',
-              boxShadow: `0 0 16px ${type.color}50, 0 0 32px ${type.color}25, inset 0 1px 0 rgba(255,255,255,0.2)`,
+              boxShadow: `0 0 16px ${alpha(type.color, 31)}, 0 0 32px ${alpha(type.color, 15)}, inset 0 1px 0 rgba(255,255,255,0.2)`,
             }}
           >
             {/* Inner glow pulse */}
@@ -368,7 +369,7 @@ export default function PersonalityCard({
           padding: 'clamp(6px, 1.5vw, 8px) clamp(14px, 3.5vw, 20px)',
           borderRadius: 'clamp(18px, 4.5vw, 24px)',
           background: `rgba(${hexToRgb(type.color)}, 0.06)`,
-          border: `1px solid ${type.color}22`,
+          border: `1px solid ${alpha(type.color, 13)}`,
           fontSize: 'clamp(12px, 3vw, 13px)',
           fontWeight: 600,
           color: 'var(--color-text-secondary)',
@@ -378,7 +379,9 @@ export default function PersonalityCard({
           gap: 'clamp(4px, 1vw, 6px)',
         }}
       >
-        <span style={{ color: `${type.color}CC`, fontWeight: 700 }}>{tr('quizShadowType')}</span>
+        <span style={{ color: `${alpha(type.color, 80)}`, fontWeight: 700 }}>
+          {tr('quizShadowType')}
+        </span>
         <span style={{ color: typeColor, fontWeight: 700 }}>{secondaryTypeLabel}</span>
       </span>
     </div>

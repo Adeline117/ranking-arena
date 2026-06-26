@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react'
 import type { PersonalityType } from '../../components/types'
+import { alpha } from '@/lib/design-tokens'
 
 interface ShareActionsProps {
   type: PersonalityType
@@ -369,9 +370,9 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
           onClick={handleChallengeFriend}
           aria-label="Challenge a friend"
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = `${type.color}10`
+            e.currentTarget.style.background = `${alpha(type.color, 6)}`
             e.currentTarget.style.transform = 'translateY(-1px)'
-            e.currentTarget.style.boxShadow = `0 4px 14px ${type.color}18`
+            e.currentTarget.style.boxShadow = `0 4px 14px ${alpha(type.color, 9)}`
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.background = 'transparent'
@@ -382,7 +383,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
           onMouseUp={removeActive}
           style={{
             ...tertiaryBtn,
-            border: `1px solid ${type.color}40`,
+            border: `1px solid ${alpha(type.color, 25)}`,
             color: type.color,
             fontWeight: 600,
           }}

@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { ProLabel } from '../premium/PremiumGate'
@@ -352,7 +352,7 @@ export default function AdvancedAlerts({
                       height: 32,
                       borderRadius: tokens.radius.md,
                       background: condition.isActive
-                        ? `${tokens.colors.accent.primary}20`
+                        ? `${alpha(tokens.colors.accent.primary, 13)}`
                         : tokens.colors.bg.secondary,
                       display: 'flex',
                       alignItems: 'center',
@@ -464,7 +464,7 @@ export default function AdvancedAlerts({
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.color = tokens.colors.accent.error
-                      e.currentTarget.style.background = `${tokens.colors.accent.error}15`
+                      e.currentTarget.style.background = `${alpha(tokens.colors.accent.error, 8)}`
                     }}
                     onMouseLeave={(e) => {
                       e.currentTarget.style.color = tokens.colors.text.tertiary
@@ -502,7 +502,7 @@ export default function AdvancedAlerts({
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.lg,
             background: tokens.glass.bg.light,
-            border: `1px solid ${tokens.colors.accent.primary}30`,
+            border: `1px solid ${alpha(tokens.colors.accent.primary, 19)}`,
           }}
         >
           <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
@@ -532,7 +532,7 @@ export default function AdvancedAlerts({
                     }`,
                     background:
                       newCondition.type === type.type
-                        ? `${tokens.colors.accent.primary}20`
+                        ? `${alpha(tokens.colors.accent.primary, 13)}`
                         : 'transparent',
                     color:
                       newCondition.type === type.type
@@ -628,7 +628,9 @@ export default function AdvancedAlerts({
                       border: `1px solid ${
                         isSelected ? tokens.colors.accent.primary : tokens.colors.border.primary
                       }`,
-                      background: isSelected ? `${tokens.colors.accent.primary}20` : 'transparent',
+                      background: isSelected
+                        ? `${alpha(tokens.colors.accent.primary, 13)}`
+                        : 'transparent',
                       color: isSelected
                         ? tokens.colors.accent.primary
                         : tokens.colors.text.secondary,
@@ -702,7 +704,7 @@ export default function AdvancedAlerts({
           onMouseEnter={(e) => {
             e.currentTarget.style.borderColor = tokens.colors.accent.primary
             e.currentTarget.style.color = tokens.colors.accent.primary
-            e.currentTarget.style.background = `${tokens.colors.accent.primary}10`
+            e.currentTarget.style.background = `${alpha(tokens.colors.accent.primary, 6)}`
           }}
           onMouseLeave={(e) => {
             e.currentTarget.style.borderColor = tokens.colors.border.primary

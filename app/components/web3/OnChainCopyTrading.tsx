@@ -14,7 +14,7 @@
  */
 
 import { useAccount } from 'wagmi'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -90,10 +90,22 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
 
   // Features to show in coming soon
   const upcomingFeatures = [
-    { icon: '1', label: t('subscribeToTrader') || 'Subscribe to Trader', desc: 'Auto-copy trades with custom allocation' },
+    {
+      icon: '1',
+      label: t('subscribeToTrader') || 'Subscribe to Trader',
+      desc: 'Auto-copy trades with custom allocation',
+    },
     { icon: '2', label: t('stopLoss') || 'Stop Loss', desc: 'Set automatic stop-loss protection' },
-    { icon: '3', label: t('leverage') || 'Leverage', desc: 'Control maximum leverage per position' },
-    { icon: '4', label: t('totalPnl') || 'Total PnL', desc: 'Track realized and unrealized profits' },
+    {
+      icon: '3',
+      label: t('leverage') || 'Leverage',
+      desc: 'Control maximum leverage per position',
+    },
+    {
+      icon: '4',
+      label: t('totalPnl') || 'Total PnL',
+      desc: 'Track realized and unrealized profits',
+    },
   ]
 
   return (
@@ -102,7 +114,7 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
       style={{
         padding: tokens.spacing[5],
         borderRadius: tokens.radius.xl,
-        background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.tertiary}E8 100%)`,
+        background: `linear-gradient(135deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.tertiary, 91)} 100%)`,
         border: `1px solid ${tokens.colors.border.primary}`,
         position: 'relative',
         overflow: 'hidden',
@@ -116,20 +128,27 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
           right: -50,
           width: 150,
           height: 150,
-          background: `radial-gradient(circle, ${tokens.colors.accent.primary}15 0%, transparent 70%)`,
+          background: `radial-gradient(circle, ${alpha(tokens.colors.accent.primary, 8)} 0%, transparent 70%)`,
           pointerEvents: 'none',
         }}
       />
 
       {/* Header */}
-      <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: tokens.spacing[4],
+        }}
+      >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
           <Box
             style={{
               width: 40,
               height: 40,
               borderRadius: tokens.radius.lg,
-              background: `linear-gradient(135deg, ${tokens.colors.accent.primary}20 0%, ${tokens.colors.accent.brand}15 100%)`,
+              background: `linear-gradient(135deg, ${alpha(tokens.colors.accent.primary, 13)} 0%, ${alpha(tokens.colors.accent.brand, 8)} 100%)`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -143,7 +162,8 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
               {t('onChainCopyTrading') || 'On-Chain Copy Trading'}
             </Text>
             <Text size="xs" color="tertiary">
-              {t('onChainCopyTradingDesc') || 'Automatically copy trading strategies via smart contracts'}
+              {t('onChainCopyTradingDesc') ||
+                'Automatically copy trading strategies via smart contracts'}
             </Text>
           </Box>
         </Box>
@@ -158,7 +178,7 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
             padding: tokens.spacing[5],
             borderRadius: tokens.radius.lg,
             background: `linear-gradient(135deg, var(--color-accent-primary-08) 0%, var(--color-accent-primary-08) 100%)`,
-            border: `1px dashed ${tokens.colors.accent.primary}40`,
+            border: `1px dashed ${alpha(tokens.colors.accent.primary, 25)}`,
             textAlign: 'center',
           }}
         >
@@ -180,8 +200,13 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
             </Text>
           </Box>
 
-          <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[5], lineHeight: 1.6 }}>
-            {t('onChainCopyTradingComingSoonDesc') || 'On-chain copy trading is under development. Stay tuned!'}
+          <Text
+            size="sm"
+            color="secondary"
+            style={{ marginBottom: tokens.spacing[5], lineHeight: 1.6 }}
+          >
+            {t('onChainCopyTradingComingSoonDesc') ||
+              'On-chain copy trading is under development. Stay tuned!'}
           </Text>
 
           {/* Feature Preview */}
@@ -203,13 +228,20 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
                   border: `1px solid ${tokens.colors.border.primary}`,
                 }}
               >
-                <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: 4 }}>
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[2],
+                    marginBottom: 4,
+                  }}
+                >
                   <Box
                     style={{
                       width: 20,
                       height: 20,
                       borderRadius: tokens.radius.full,
-                      background: `${tokens.colors.accent.primary}20`,
+                      background: `${alpha(tokens.colors.accent.primary, 13)}`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -239,7 +271,7 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
               marginTop: tokens.spacing[4],
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
               borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.accent.primary}40`,
+              border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
               background: 'transparent',
               color: tokens.colors.accent.primary,
               fontWeight: 600,
