@@ -9,7 +9,7 @@
 import React from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '@/app/components/base'
@@ -247,7 +247,7 @@ const OverviewTab = React.memo(function OverviewTab({
                 padding: tokens.spacing[5],
                 background: tokens.colors.bg.secondary,
                 borderRadius: tokens.radius.xl,
-                border: `1px solid ${tokens.colors.border.primary}60`,
+                border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
               }}
             >
               <Text
@@ -299,7 +299,7 @@ const OverviewTab = React.memo(function OverviewTab({
                 padding: tokens.spacing[5],
                 background: tokens.colors.bg.secondary,
                 borderRadius: tokens.radius.xl,
-                border: `1px solid ${tokens.colors.border.primary}60`,
+                border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
               }}
             >
               <Text
@@ -367,7 +367,7 @@ const OverviewTab = React.memo(function OverviewTab({
               padding: tokens.spacing[5],
               background: tokens.colors.bg.secondary,
               borderRadius: tokens.radius.xl,
-              border: `1px solid ${tokens.colors.border.primary}60`,
+              border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
             }}
           >
             <Text
@@ -465,7 +465,7 @@ const OverviewTab = React.memo(function OverviewTab({
                   padding: tokens.spacing[5],
                   background: tokens.colors.bg.secondary,
                   borderRadius: tokens.radius.xl,
-                  border: `1px solid ${tokens.colors.border.primary}60`,
+                  border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
                   transition: 'all 0.2s',
                   cursor: 'pointer',
                 }}

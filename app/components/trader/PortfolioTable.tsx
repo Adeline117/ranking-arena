@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import ProGate from '../ui/ProGate'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -79,9 +79,9 @@ export default function PortfolioTable({
       <Box
         className="portfolio-table glass-card"
         style={{
-          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+          background: `linear-gradient(145deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 94)} 100%)`,
           borderRadius: tokens.radius.xl,
-          border: `1px solid ${tokens.colors.border.primary}60`,
+          border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
           padding: `${tokens.spacing[8]} ${tokens.spacing[6]}`,
           textAlign: 'center',
           display: 'flex',
@@ -145,9 +145,9 @@ export default function PortfolioTable({
       <Box
         className="portfolio-table glass-card"
         style={{
-          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+          background: `linear-gradient(145deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 94)} 100%)`,
           borderRadius: tokens.radius.xl,
-          border: `1px solid ${tokens.colors.border.primary}60`,
+          border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
           overflow: 'hidden',
           boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
           opacity: mounted ? 1 : 0,

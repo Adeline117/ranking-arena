@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import ClaimTraderButton from './ClaimTraderButton'
 import { supabase } from '@/lib/supabase/client'
@@ -30,13 +30,15 @@ function cleanContent(text: string, maxLength = 140): string {
 }
 
 function getFeedItemHref(item: TraderFeedItem): string {
-  const postId = item.type === 'repost' && item.original_post_id
-    ? item.original_post_id
-    : item.id
+  const postId = item.type === 'repost' && item.original_post_id ? item.original_post_id : item.id
   return item.groupId ? `/groups/${item.groupId}` : `/posts/${postId}`
 }
 
-function formatRelativeTime(dateString: string, language: string, t: (key: string) => string): string {
+function formatRelativeTime(
+  dateString: string,
+  language: string,
+  t: (key: string) => string
+): string {
   const date = new Date(dateString)
   const now = new Date()
   const diff = now.getTime() - date.getTime()
@@ -46,31 +48,47 @@ function formatRelativeTime(dateString: string, language: string, t: (key: strin
   if (hours < 1) return t('justNow')
   if (hours < 24) return t('hoursAgoShort').replace('{n}', String(hours))
   if (days < 7) return t('daysAgoShort').replace('{n}', String(days))
-  return date.toLocaleDateString(getLocaleFromLanguage(language), { month: 'short', day: 'numeric' })
+  return date.toLocaleDateString(getLocaleFromLanguage(language), {
+    month: 'short',
+    day: 'numeric',
+  })
 }
 
-export default function TraderFeed({ items, title, showPostButton = false, onPostClick, isRegistered, traderId, traderHandle, source }: TraderFeedProps) {
+export default function TraderFeed({
+  items,
+  title,
+  showPostButton = false,
+  onPostClick,
+  isRegistered,
+  traderId,
+  traderHandle,
+  source,
+}: TraderFeedProps) {
   const [sortType, setSortType] = useState<SortType>('all')
   const [hoveredId, setHoveredId] = useState<string | null>(null)
   const [userId, setUserId] = useState<string | null>(null)
   const { t, language } = useLanguage()
 
   useEffect(() => {
-     
-    supabase.auth.getUser().then(({ data }) => {
-      setUserId(data.user?.id ?? null)
-    }).catch(() => { /* Auth check non-critical for trader feed */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+    supabase.auth
+      .getUser()
+      .then(({ data }) => {
+        setUserId(data.user?.id ?? null)
+      })
+      .catch(() => {
+        /* Auth check non-critical for trader feed */
+      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
   }, [])
 
   const sortedItems = useMemo(() => {
     let sorted: TraderFeedItem[]
-    
+
     if (sortType === 'top') {
       sorted = [...items].sort((a, b) => (b.like_count || 0) - (a.like_count || 0))
     } else {
       sorted = [...items].sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())
     }
-    
+
     return sorted.sort((a, b) => {
       if (a.is_pinned && !b.is_pinned) return -1
       if (!a.is_pinned && b.is_pinned) return 1
@@ -82,9 +100,9 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
     <Box
       className="feed-card glass-card"
       style={{
-        background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+        background: `linear-gradient(145deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 94)} 100%)`,
         borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}60`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
         overflow: 'hidden',
         boxShadow: `0 4px 24px var(--color-overlay-subtle)`,
       }}
@@ -96,7 +114,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
           alignItems: 'center',
           justifyContent: 'space-between',
           padding: tokens.spacing[5],
-          borderBottom: `1px solid ${tokens.colors.border.primary}40`,
+          borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
           background: `linear-gradient(180deg, ${tokens.colors.bg.secondary} 0%, transparent 100%)`,
         }}
       >
@@ -106,7 +124,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
           </Text>
           <Box
             style={{
-              background: `${tokens.colors.accent.primary}20`,
+              background: `${alpha(tokens.colors.accent.primary, 13)}`,
               padding: `2px ${tokens.spacing[2]}`,
               borderRadius: tokens.radius.full,
             }}
@@ -116,7 +134,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
             </Text>
           </Box>
         </Box>
-        
+
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           {/* Sort Buttons */}
           <Box
@@ -137,9 +155,13 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                   borderRadius: tokens.radius.sm,
                   border: 'none',
                   background: sortType === type ? tokens.colors.bg.primary : 'transparent',
-                  color: sortType === type ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+                  color:
+                    sortType === type ? tokens.colors.text.primary : tokens.colors.text.tertiary,
                   fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: sortType === type ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.normal,
+                  fontWeight:
+                    sortType === type
+                      ? tokens.typography.fontWeight.bold
+                      : tokens.typography.fontWeight.normal,
                   cursor: 'pointer',
                   transition: `all ${tokens.transition.base}`,
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
@@ -150,7 +172,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
               </button>
             ))}
           </Box>
-          
+
           {/* Post Button */}
           {showPostButton && onPostClick && (
             <button
@@ -166,7 +188,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                 fontWeight: tokens.typography.fontWeight.black,
                 cursor: 'pointer',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                boxShadow: `0 4px 12px ${tokens.colors.accent.brand}40`,
+                boxShadow: `0 4px 12px ${alpha(tokens.colors.accent.brand, 25)}`,
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
                 display: 'flex',
                 alignItems: 'center',
@@ -174,11 +196,11 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.transform = 'translateY(-2px)'
-                e.currentTarget.style.boxShadow = `0 6px 20px ${tokens.colors.accent.brand}50`
+                e.currentTarget.style.boxShadow = `0 6px 20px ${alpha(tokens.colors.accent.brand, 31)}`
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.transform = 'translateY(0)'
-                e.currentTarget.style.boxShadow = `0 4px 12px ${tokens.colors.accent.brand}40`
+                e.currentTarget.style.boxShadow = `0 4px 12px ${alpha(tokens.colors.accent.brand, 25)}`
               }}
             >
               {t('newPost')}
@@ -199,7 +221,17 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
             gap: tokens.spacing[3],
           }}
         >
-          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" style={{ opacity: 0.5 }}>
+          <svg
+            width="40"
+            height="40"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.text.tertiary}
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ opacity: 0.5 }}
+          >
             <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
             <circle cx="12" cy="7" r="4" />
             <line x1="12" y1="11" x2="12" y2="17" />
@@ -267,14 +299,21 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                 className="feed-item"
                 style={{
                   padding: tokens.spacing[5],
-                  background: hoveredId === item.id ? `${tokens.colors.accent.primary}05` : 'transparent',
-                  borderBottom: idx < sortedItems.length - 1 ? `1px solid ${tokens.colors.border.primary}30` : 'none',
+                  background:
+                    hoveredId === item.id
+                      ? `${alpha(tokens.colors.accent.primary, 2)}`
+                      : 'transparent',
+                  borderBottom:
+                    idx < sortedItems.length - 1
+                      ? `1px solid ${alpha(tokens.colors.border.primary, 19)}`
+                      : 'none',
                   cursor: 'pointer',
                   transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
                   transform: hoveredId === item.id ? 'translateX(6px)' : 'translateX(0)',
-                  borderLeft: hoveredId === item.id 
-                    ? `3px solid ${tokens.colors.accent.primary}` 
-                    : '3px solid transparent',
+                  borderLeft:
+                    hoveredId === item.id
+                      ? `3px solid ${tokens.colors.accent.primary}`
+                      : '3px solid transparent',
                 }}
               >
                 {/* Repost Badge */}
@@ -286,7 +325,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       gap: tokens.spacing[1],
                       marginBottom: tokens.spacing[2],
                       padding: `2px ${tokens.spacing[2]}`,
-                      background: `${tokens.colors.accent.primary}10`,
+                      background: `${alpha(tokens.colors.accent.primary, 6)}`,
                       borderRadius: tokens.radius.full,
                     }}
                   >
@@ -295,23 +334,27 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       <Link
                         href={`/u/${encodeURIComponent(item.original_author_handle || '')}`}
                         onClick={(e) => e.stopPropagation()}
-                        style={{ color: tokens.colors.accent.primary, textDecoration: 'none', fontWeight: 600 }}
+                        style={{
+                          color: tokens.colors.accent.primary,
+                          textDecoration: 'none',
+                          fontWeight: 600,
+                        }}
                       >
                         @{item.original_author_handle}
                       </Link>
                     </Text>
                   </Box>
                 )}
-                
+
                 {/* Repost Comment */}
                 {item.type === 'repost' && item.repost_comment && (
                   <Box
                     style={{
                       marginBottom: tokens.spacing[3],
                       padding: tokens.spacing[3],
-                      background: `linear-gradient(135deg, ${tokens.colors.bg.secondary}80, ${tokens.colors.bg.tertiary}40)`,
+                      background: `linear-gradient(135deg, ${alpha(tokens.colors.bg.secondary, 50)}, ${alpha(tokens.colors.bg.tertiary, 25)})`,
                       borderRadius: tokens.radius.lg,
-                      borderLeft: `3px solid ${tokens.colors.accent.primary}60`,
+                      borderLeft: `3px solid ${alpha(tokens.colors.accent.primary, 38)}`,
                     }}
                   >
                     <Text size="sm" color="secondary" style={{ fontStyle: 'italic' }}>
@@ -330,7 +373,15 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                     gap: tokens.spacing[3],
                   }}
                 >
-                  <Box style={{ flex: 1, display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
+                  <Box
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[2],
+                      flexWrap: 'wrap',
+                    }}
+                  >
                     {/* Pinned Badge */}
                     {item.is_pinned && (
                       <Box
@@ -339,12 +390,16 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                           alignItems: 'center',
                           gap: 4,
                           padding: `2px ${tokens.spacing[2]}`,
-                          background: `linear-gradient(135deg, ${tokens.colors.accent.warning}20, ${tokens.colors.accent.warning}10)`,
+                          background: `linear-gradient(135deg, ${alpha(tokens.colors.accent.warning, 13)}, ${alpha(tokens.colors.accent.warning, 6)})`,
                           borderRadius: tokens.radius.full,
-                          border: `1px solid ${tokens.colors.accent.warning}30`,
+                          border: `1px solid ${alpha(tokens.colors.accent.warning, 19)}`,
                         }}
                       >
-                        <Text size="xs" weight="bold" style={{ color: tokens.colors.accent.warning }}>
+                        <Text
+                          size="xs"
+                          weight="bold"
+                          style={{ color: tokens.colors.accent.warning }}
+                        >
                           {t('pinnedLabel')}
                         </Text>
                       </Box>
@@ -360,8 +415,15 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       {item.title}
                     </Text>
                   </Box>
-                  
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], flexShrink: 0 }}>
+
+                  <Box
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[2],
+                      flexShrink: 0,
+                    }}
+                  >
                     {item.like_count !== undefined && item.like_count > 0 && (
                       <Box
                         style={{
@@ -369,11 +431,15 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                           alignItems: 'center',
                           gap: 4,
                           padding: `2px ${tokens.spacing[2]}`,
-                          background: `${tokens.colors.accent.error}10`,
+                          background: `${alpha(tokens.colors.accent.error, 6)}`,
                           borderRadius: tokens.radius.full,
                         }}
                       >
-                        <Text size="xs" weight="medium" style={{ color: tokens.colors.accent.error }}>
+                        <Text
+                          size="xs"
+                          weight="medium"
+                          style={{ color: tokens.colors.accent.error }}
+                        >
                           {item.like_count}
                         </Text>
                       </Box>
@@ -383,7 +449,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                     </Text>
                   </Box>
                 </Box>
-                
+
                 {/* Content Preview */}
                 {item.content && (
                   <Text
@@ -400,7 +466,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                     {cleanContent(item.content)}
                   </Text>
                 )}
-                
+
                 {/* Group Link */}
                 {item.groupId && item.groupName && (
                   <Link
@@ -412,7 +478,7 @@ export default function TraderFeed({ items, title, showPostButton = false, onPos
                       gap: 4,
                       marginTop: tokens.spacing[3],
                       padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                      background: `${tokens.colors.accent.primary}08`,
+                      background: `${alpha(tokens.colors.accent.primary, 3)}`,
                       borderRadius: tokens.radius.md,
                       textDecoration: 'none',
                       transition: `all ${tokens.transition.base}`,

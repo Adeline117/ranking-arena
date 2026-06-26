@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useState, useEffect, useLayoutEffect, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 
@@ -133,7 +133,7 @@ export default function TraderTabs({
           paddingBottom: tokens.spacing[2],
           overflowX: 'auto',
           scrollbarWidth: 'none',
-          borderBottom: `1px solid ${tokens.colors.border.primary}40`,
+          borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
         }}
       >
         {/* Sliding indicator */}
@@ -188,11 +188,11 @@ export default function TraderTabs({
               style={{
                 background:
                   activeTab === tab.key
-                    ? `linear-gradient(135deg, ${tokens.colors.accent.primary}15, ${tokens.colors.accent.primary}08)`
+                    ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.primary, 8)}, ${alpha(tokens.colors.accent.primary, 3)})`
                     : 'transparent',
                 border:
                   activeTab === tab.key
-                    ? `1px solid ${tokens.colors.accent.primary}30`
+                    ? `1px solid ${alpha(tokens.colors.accent.primary, 19)}`
                     : '1px solid transparent',
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                 minHeight: 44,
@@ -206,7 +206,7 @@ export default function TraderTabs({
               }}
               onMouseEnter={(e) => {
                 if (activeTab !== tab.key) {
-                  e.currentTarget.style.background = `${tokens.colors.bg.tertiary}80`
+                  e.currentTarget.style.background = `${alpha(tokens.colors.bg.tertiary, 50)}`
                   e.currentTarget.style.transform = 'translateY(-2px)'
                 }
               }}
@@ -235,8 +235,8 @@ export default function TraderTabs({
                   style={{
                     padding: '1px 6px',
                     borderRadius: tokens.radius.sm,
-                    background: `linear-gradient(135deg, ${tokens.colors.accent.primary}25, ${tokens.colors.accent.brand}15)`,
-                    border: `1px solid ${tokens.colors.accent.primary}30`,
+                    background: `linear-gradient(135deg, ${alpha(tokens.colors.accent.primary, 15)}, ${alpha(tokens.colors.accent.brand, 8)})`,
+                    border: `1px solid ${alpha(tokens.colors.accent.primary, 19)}`,
                   }}
                 >
                   <Text

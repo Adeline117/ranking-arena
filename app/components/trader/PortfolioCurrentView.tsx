@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { Box, Text } from '../base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
@@ -53,11 +53,17 @@ export default function PortfolioCurrentView({
               className="portfolio-row"
               style={{
                 cursor: 'pointer',
-                background: hoveredRow === idx
-                  ? `${tokens.colors.accent.primary}08`
-                  : (selectedMarket === item.market ? tokens.colors.bg.tertiary : 'transparent'),
+                background:
+                  hoveredRow === idx
+                    ? `${alpha(tokens.colors.accent.primary, 3)}`
+                    : selectedMarket === item.market
+                      ? tokens.colors.bg.tertiary
+                      : 'transparent',
                 transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-                borderLeft: hoveredRow === idx ? `3px solid ${tokens.colors.accent.primary}` : '3px solid transparent',
+                borderLeft:
+                  hoveredRow === idx
+                    ? `3px solid ${tokens.colors.accent.primary}`
+                    : '3px solid transparent',
               }}
               onClick={() => onSelectMarket(selectedMarket === item.market ? null : item.market)}
               onMouseEnter={() => onHoverRow(idx)}
@@ -72,25 +78,41 @@ export default function PortfolioCurrentView({
                 </Box>
               </td>
               <td style={{ padding: tokens.spacing[4] }}>
-                <Box style={{
-                  display: 'inline-flex',
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                  borderRadius: tokens.radius.full,
-                  background: item.direction === 'long'
-                    ? `linear-gradient(135deg, ${tokens.colors.accent.success}20, ${tokens.colors.accent.success}10)`
-                    : `linear-gradient(135deg, ${tokens.colors.accent.error}20, ${tokens.colors.accent.error}10)`,
-                  border: `1px solid ${item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error}30`,
-                }}>
-                  <Text size="xs" style={{
-                    color: item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                  }}>
+                <Box
+                  style={{
+                    display: 'inline-flex',
+                    padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.full,
+                    background:
+                      item.direction === 'long'
+                        ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.success, 13)}, ${alpha(tokens.colors.accent.success, 6)})`
+                        : `linear-gradient(135deg, ${alpha(tokens.colors.accent.error, 13)}, ${alpha(tokens.colors.accent.error, 6)})`,
+                    border: `1px solid ${alpha(item.direction === 'long' ? tokens.colors.accent.success : tokens.colors.accent.error, 19)}`,
+                  }}
+                >
+                  <Text
+                    size="xs"
+                    style={{
+                      color:
+                        item.direction === 'long'
+                          ? tokens.colors.accent.success
+                          : tokens.colors.accent.error,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                    }}
+                  >
                     {item.direction === 'long' ? t('long') : t('short')}
                   </Text>
                 </Box>
               </td>
               <td style={{ padding: tokens.spacing[4], textAlign: 'right' }}>
-                <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: tokens.spacing[2] }}>
+                <Box
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: tokens.spacing[2],
+                  }}
+                >
                   <Box
                     style={{
                       width: 60,
@@ -110,7 +132,15 @@ export default function PortfolioCurrentView({
                       }}
                     />
                   </Box>
-                  <Text size="sm" weight="bold" style={{ color: tokens.colors.text.secondary, minWidth: 40, textAlign: 'right' }}>
+                  <Text
+                    size="sm"
+                    weight="bold"
+                    style={{
+                      color: tokens.colors.text.secondary,
+                      minWidth: 40,
+                      textAlign: 'right',
+                    }}
+                  >
                     {Number.isFinite(item.invested) ? item.invested.toFixed(1) : '—'}%
                   </Text>
                 </Box>
@@ -120,11 +150,17 @@ export default function PortfolioCurrentView({
                   size="sm"
                   weight="black"
                   style={{
-                    color: Number.isFinite(item.pnl) ? (item.pnl >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : tokens.colors.text.tertiary,
+                    color: Number.isFinite(item.pnl)
+                      ? item.pnl >= 0
+                        ? tokens.colors.accent.success
+                        : tokens.colors.accent.error
+                      : tokens.colors.text.tertiary,
                     fontFamily: tokens.typography.fontFamily.mono.join(', '),
                   }}
                 >
-                  {Number.isFinite(item.pnl) ? `${item.pnl >= 0 ? '+' : ''}${item.pnl.toFixed(2)}%` : '—'}
+                  {Number.isFinite(item.pnl)
+                    ? `${item.pnl >= 0 ? '+' : ''}${item.pnl.toFixed(2)}%`
+                    : '—'}
                 </Text>
               </td>
             </tr>

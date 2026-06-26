@@ -9,7 +9,7 @@
  * (and onchain rows crawled before the extras landed) show nothing.
  */
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatMoney } from '@/lib/utils/money'
@@ -38,7 +38,7 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
         padding: tokens.spacing[5],
         background: tokens.colors.bg.secondary,
         borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}60`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
       }}
     >
       <Text

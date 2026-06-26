@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
 import { ScoreRadar } from '@/app/components/ranking/ScoreRadar'
@@ -40,7 +40,13 @@ export function ScoreBreakdownSection({
 }: ScoreBreakdownSectionProps) {
   const { t } = useLanguage()
 
-  const hasScores = periodArenaScore != null || periodReturnScore != null || periodDrawdownScore != null || periodStabilityScore != null || arenaScoreV3 != null || performance.profitability_score != null
+  const hasScores =
+    periodArenaScore != null ||
+    periodReturnScore != null ||
+    periodDrawdownScore != null ||
+    periodStabilityScore != null ||
+    arenaScoreV3 != null ||
+    performance.profitability_score != null
 
   if (!hasScores) return null
 
@@ -49,15 +55,32 @@ export function ScoreBreakdownSection({
       style={{
         marginTop: tokens.spacing[5],
         paddingTop: tokens.spacing[5],
-        borderTop: `1px solid ${tokens.colors.border.primary}40`,
+        borderTop: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
         opacity: isVisible ? 1 : 0,
         transform: isVisible ? 'translateY(0)' : 'translateY(10px)',
         transition: 'all 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.4s',
         overflow: 'hidden',
       }}
     >
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[4], flexWrap: 'wrap' }}>
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.accent.warning} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          marginBottom: tokens.spacing[4],
+          flexWrap: 'wrap',
+        }}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke={tokens.colors.accent.warning}
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
         </svg>
         <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary }}>
@@ -80,7 +103,17 @@ export function ScoreBreakdownSection({
           }}
           className="score-tooltip-trigger"
         >
-          <Text size="xs" style={{ color: tokens.colors.text.tertiary, fontSize: 11, fontWeight: 700, lineHeight: 1 }}>?</Text>
+          <Text
+            size="xs"
+            style={{
+              color: tokens.colors.text.tertiary,
+              fontSize: 11,
+              fontWeight: 700,
+              lineHeight: 1,
+            }}
+          >
+            ?
+          </Text>
           <Box
             className="score-tooltip-content"
             style={{
@@ -100,7 +133,11 @@ export function ScoreBreakdownSection({
               pointerEvents: 'none',
             }}
           >
-            <Text size="xs" weight="bold" style={{ color: tokens.colors.text.secondary, marginBottom: 4, display: 'block' }}>
+            <Text
+              size="xs"
+              weight="bold"
+              style={{ color: tokens.colors.text.secondary, marginBottom: 4, display: 'block' }}
+            >
               {t('scoreGuide')}
             </Text>
             <Text size="xs" color="tertiary" style={{ lineHeight: 1.6 }}>
@@ -120,7 +157,15 @@ export function ScoreBreakdownSection({
           `}</style>
         </Box>
         {/* Arena Score 总分 */}
-        <Box className="score-badges-row" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        <Box
+          className="score-badges-row"
+          style={{
+            marginLeft: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+          }}
+        >
           {arenaScoreV3 != null && (
             <Box
               style={{
@@ -128,12 +173,14 @@ export function ScoreBreakdownSection({
                 alignItems: 'center',
                 gap: tokens.spacing[1],
                 padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                background: `${tokens.colors.accent.success}15`,
+                background: `${alpha(tokens.colors.accent.success, 8)}`,
                 borderRadius: tokens.radius.full,
-                border: `1px solid ${tokens.colors.accent.success}30`,
+                border: `1px solid ${alpha(tokens.colors.accent.success, 19)}`,
               }}
             >
-              <Text size="xs" color="secondary" weight="bold">V3</Text>
+              <Text size="xs" color="secondary" weight="bold">
+                V3
+              </Text>
               <Text
                 size="sm"
                 weight="black"
@@ -153,13 +200,17 @@ export function ScoreBreakdownSection({
                 alignItems: 'center',
                 gap: tokens.spacing[2],
                 padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
-                background: `${arenaScoreColor(periodArenaScore)}15`,
+                background: `${alpha(arenaScoreColor(periodArenaScore), 8)}`,
                 borderRadius: tokens.radius.full,
-                border: `1px solid ${arenaScoreColor(periodArenaScore)}30`,
+                border: `1px solid ${alpha(arenaScoreColor(periodArenaScore), 19)}`,
               }}
             >
-              <Text className="score-label-full" size="xs" color="secondary" weight="bold">Arena Score</Text>
-              <Text className="score-label-short" size="xs" color="secondary" weight="bold">Score</Text>
+              <Text className="score-label-full" size="xs" color="secondary" weight="bold">
+                Arena Score
+              </Text>
+              <Text className="score-label-short" size="xs" color="secondary" weight="bold">
+                Score
+              </Text>
               <Text
                 size="sm"
                 weight="black"
@@ -192,16 +243,28 @@ export function ScoreBreakdownSection({
             .replace('{total}', totalTraders.toLocaleString('en-US'))
             .replace('{platform}', platformName)}
           {' · '}
-          {t('traderRankTop').replace('{pct}', (rank / totalTraders * 100).toFixed(1))}
+          {t('traderRankTop').replace('{pct}', ((rank / totalTraders) * 100).toFixed(1))}
         </Text>
       )}
 
       {/* 分数条 + 雷达图 */}
       <Box
         className="score-breakdown-layout"
-        style={{ display: 'flex', gap: tokens.spacing[5], alignItems: 'flex-start', flexWrap: 'wrap' }}
+        style={{
+          display: 'flex',
+          gap: tokens.spacing[5],
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+        }}
       >
-        <Box style={{ flex: '1 1 200px', display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+        <Box
+          style={{
+            flex: '1 1 200px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: tokens.spacing[3],
+          }}
+        >
           <ScoreBar
             label={t('returnScore')}
             score={periodReturnScore ?? null}
@@ -218,11 +281,18 @@ export function ScoreBreakdownSection({
           />
         </Box>
         {/* 雷达图：优先使用V3三维度分数，回退到4维映射 */}
-        <Box style={{ flex: '0 0 auto', display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        <Box
+          style={{
+            flex: '0 0 auto',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+          }}
+        >
           <CompactErrorBoundary>
             <ScoreRadar
-              profitability={performance.profitability_score ?? (periodReturnScore ?? 0)}
-              riskControl={performance.risk_control_score ?? (periodPnlScore ?? 0)}
+              profitability={performance.profitability_score ?? periodReturnScore ?? 0}
+              riskControl={performance.risk_control_score ?? periodPnlScore ?? 0}
               execution={null}
               arenaScore={performance.arena_score_v3 ?? periodArenaScore ?? 0}
               size={130}
@@ -240,30 +310,46 @@ export function ScoreBreakdownSection({
             alignItems: 'center',
             gap: tokens.spacing[2],
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-            background: performance.score_confidence === 'minimal'
-              ? `${tokens.colors.accent.error}10`
-              : `${tokens.colors.accent.warning}10`,
+            background:
+              performance.score_confidence === 'minimal'
+                ? `${alpha(tokens.colors.accent.error, 6)}`
+                : `${alpha(tokens.colors.accent.warning, 6)}`,
             borderRadius: tokens.radius.md,
-            border: `1px solid ${performance.score_confidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning}25`,
+            border: `1px solid ${alpha(performance.score_confidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning, 15)}`,
             maxWidth: '100%',
             boxSizing: 'border-box',
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none"
-            stroke={performance.score_confidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning}
-            strokeWidth="2" strokeLinecap="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={
+              performance.score_confidence === 'minimal'
+                ? tokens.colors.accent.error
+                : tokens.colors.accent.warning
+            }
+            strokeWidth="2"
+            strokeLinecap="round"
+          >
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <Text size="xs" style={{
-            color: performance.score_confidence === 'minimal' ? tokens.colors.accent.error : tokens.colors.accent.warning,
-            fontWeight: 500,
-          }}>
+          <Text
+            size="xs"
+            style={{
+              color:
+                performance.score_confidence === 'minimal'
+                  ? tokens.colors.accent.error
+                  : tokens.colors.accent.warning,
+              fontWeight: 500,
+            }}
+          >
             {performance.score_confidence === 'minimal'
               ? t('confidenceMinimal')
-              : t('confidencePartial')
-            }
+              : t('confidencePartial')}
           </Text>
         </Box>
       )}

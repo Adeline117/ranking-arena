@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
@@ -188,8 +188,8 @@ export default function ExchangeLinksBar({
                   gap: 4,
                   padding: '6px 10px',
                   borderRadius: tokens.radius.md,
-                  background: `${referral.color}15`,
-                  border: `1px solid ${referral.color}35`,
+                  background: `${alpha(referral.color, 8)}`,
+                  border: `1px solid ${alpha(referral.color, 21)}`,
                   fontSize: 12,
                   fontWeight: 700,
                   color: referral.color,

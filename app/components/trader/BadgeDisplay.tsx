@@ -8,7 +8,7 @@
 
 import { useState, useEffect, type ReactNode } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import type { EarnedBadge } from '@/lib/badges'
 import { apiFetch } from '@/lib/utils/api-fetch'
 
@@ -54,12 +54,8 @@ const BADGE_ICONS: Record<string, ReactNode> = {
       <circle cx="12" cy="12" r="2" />
     </>
   ),
-  'trending-up': (
-    <path d="M23 6l-9.5 9.5-5-5L1 18m22-12h-6m6 0v6" />
-  ),
-  shield: (
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-  ),
+  'trending-up': <path d="M23 6l-9.5 9.5-5-5L1 18m22-12h-6m6 0v6" />,
+  shield: <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />,
   rocket: (
     <>
       <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
@@ -112,7 +108,9 @@ export function BadgeDisplay({
 
     async function fetchBadges() {
       try {
-        const data = await apiFetch<{ badges?: EarnedBadge[] }>(`/api/traders/${encodeURIComponent(traderHandle)}/badges`)
+        const data = await apiFetch<{ badges?: EarnedBadge[] }>(
+          `/api/traders/${encodeURIComponent(traderHandle)}/badges`
+        )
         if (!alive) return
         setBadges(data.badges || [])
       } catch {
@@ -123,7 +121,9 @@ export function BadgeDisplay({
     }
 
     fetchBadges()
-    return () => { alive = false }
+    return () => {
+      alive = false
+    }
   }, [traderHandle])
 
   if (loading || badges.length === 0) return null
@@ -148,8 +148,8 @@ export function BadgeDisplay({
               ${RARITY_GLOW[badge.rarity]}
             `}
             style={{
-              backgroundColor: `${badge.color}15`,
-              borderColor: `${badge.color}40`,
+              backgroundColor: `${alpha(badge.color, 8)}`,
+              borderColor: `${alpha(badge.color, 25)}`,
             }}
           >
             <svg
@@ -192,10 +192,13 @@ export function BadgeDisplay({
               <div className="font-semibold mb-0.5" style={{ color: badge.color }}>
                 {badge.name[language as 'en' | 'zh'] || badge.name.en}
               </div>
-              <div style={{ color: "var(--color-text-secondary)" }}>
+              <div style={{ color: 'var(--color-text-secondary)' }}>
                 {badge.description[language as 'en' | 'zh'] || badge.description.en}
               </div>
-              <div className="text-[10px] mt-1 capitalize" style={{ color: "var(--color-text-tertiary)" }}>
+              <div
+                className="text-[10px] mt-1 capitalize"
+                style={{ color: 'var(--color-text-tertiary)' }}
+              >
                 {badge.rarity}
               </div>
             </div>
@@ -204,7 +207,9 @@ export function BadgeDisplay({
       ))}
 
       {remaining > 0 && (
-        <span className={`${s.text}`} style={{ color: 'var(--color-text-tertiary)' }}>+{remaining}</span>
+        <span className={`${s.text}`} style={{ color: 'var(--color-text-tertiary)' }}>
+          +{remaining}
+        </span>
       )}
     </div>
   )

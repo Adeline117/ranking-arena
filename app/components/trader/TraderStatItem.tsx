@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 
 export interface TraderStatItemProps {
@@ -14,12 +14,7 @@ export interface TraderStatItemProps {
 /**
  * A single stat display (e.g. "Followers: 1,234") with hover feedback.
  */
-export function TraderStatItem({
-  label,
-  value,
-  onClick,
-  clickable,
-}: TraderStatItemProps) {
+export function TraderStatItem({ label, value, onClick, clickable }: TraderStatItemProps) {
   const [isHovered, setIsHovered] = useState(false)
 
   return (
@@ -29,7 +24,8 @@ export function TraderStatItem({
         cursor: clickable ? 'pointer' : 'default',
         padding: tokens.spacing[3],
         borderRadius: tokens.radius.lg,
-        background: isHovered && clickable ? `${tokens.colors.accent.primary}10` : 'transparent',
+        background:
+          isHovered && clickable ? `${alpha(tokens.colors.accent.primary, 6)}` : 'transparent',
         transition: `all ${tokens.transition.slow}`,
         transform: isHovered && clickable ? 'scale(1.02)' : 'scale(1)',
         textAlign: 'center',

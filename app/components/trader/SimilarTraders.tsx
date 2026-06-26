@@ -3,7 +3,7 @@
 import { useState, useCallback, useMemo, memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import {
   getAvatarGradient,
@@ -61,7 +61,9 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
         placeItems: 'center',
         overflow: 'hidden',
         flexShrink: 0,
-        boxShadow: isHovered ? `0 4px 12px ${tokens.colors.accent.primary}30` : tokens.shadow.sm,
+        boxShadow: isHovered
+          ? `0 4px 12px ${alpha(tokens.colors.accent.primary, 19)}`
+          : tokens.shadow.sm,
         transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
         position: 'relative',
         transform: isHovered ? 'scale(1.1)' : 'scale(1)',
@@ -162,11 +164,11 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
     <Box
       className="similar-traders glass-card"
       style={{
-        background: `linear-gradient(165deg, ${tokens.colors.bg.secondary}F0 0%, ${tokens.colors.bg.primary}E8 100%)`,
+        background: `linear-gradient(165deg, ${alpha(tokens.colors.bg.secondary, 94)} 0%, ${alpha(tokens.colors.bg.primary, 91)} 100%)`,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
         borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}60`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
         padding: tokens.spacing[5],
         boxShadow: `0 4px 20px var(--color-overlay-subtle)`,
         animation: 'fadeInUp 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards',
@@ -180,7 +182,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
           gap: tokens.spacing[2],
           marginBottom: tokens.spacing[4],
           paddingBottom: tokens.spacing[3],
-          borderBottom: `1px solid ${tokens.colors.border.primary}40`,
+          borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
         }}
       >
         <Text
@@ -195,7 +197,7 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
         <Box
           style={{
             marginLeft: 'auto',
-            background: `${tokens.colors.accent.primary}15`,
+            background: `${alpha(tokens.colors.accent.primary, 8)}`,
             padding: `2px ${tokens.spacing[2]}`,
             borderRadius: tokens.radius.full,
           }}
@@ -226,9 +228,9 @@ function SimilarTradersInner({ traders }: SimilarTradersProps) {
                 borderRadius: tokens.radius.lg,
                 background:
                   hoveredIndex === index
-                    ? `linear-gradient(135deg, ${tokens.colors.accent.primary}10, ${tokens.colors.bg.tertiary})`
+                    ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.primary, 6)}, ${tokens.colors.bg.tertiary})`
                     : tokens.colors.bg.primary,
-                border: `1px solid ${hoveredIndex === index ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}30`,
+                border: `1px solid ${alpha(hoveredIndex === index ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary, 19)}`,
                 cursor: 'pointer',
                 transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
                 transform: hoveredIndex === index ? 'translateX(4px)' : 'translateX(0)',

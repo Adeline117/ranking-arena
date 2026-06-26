@@ -8,7 +8,7 @@
  * the main file makes the conditional rendering tree easier to read.
  */
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
@@ -24,16 +24,18 @@ interface TraderStaleBannerProps {
 export function TraderStaleBanner({ show, t }: TraderStaleBannerProps) {
   if (!show) return null
   return (
-    <Box style={{
-      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-      marginBottom: tokens.spacing[3],
-      background: `${tokens.colors.accent.warning}12`,
-      border: `1px solid ${tokens.colors.accent.warning}30`,
-      borderRadius: tokens.radius.md,
-      display: 'flex',
-      alignItems: 'center',
-      gap: tokens.spacing[2],
-    }}>
+    <Box
+      style={{
+        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+        marginBottom: tokens.spacing[3],
+        background: `${alpha(tokens.colors.accent.warning, 7)}`,
+        border: `1px solid ${alpha(tokens.colors.accent.warning, 19)}`,
+        borderRadius: tokens.radius.md,
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[2],
+      }}
+    >
       <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
         {t('dataOutdatedBanner') || 'Data may be outdated. Refresh to get the latest.'}
       </Text>
@@ -55,18 +57,21 @@ export function TraderPlatformDeadBanner({ show, source, t }: TraderPlatformDead
   if (!show) return null
   const exchangeName = EXCHANGE_NAMES[source] || source
   return (
-    <Box style={{
-      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-      marginBottom: tokens.spacing[3],
-      background: `${tokens.colors.accent.error}10`,
-      border: `1px solid ${tokens.colors.accent.error}25`,
-      borderRadius: tokens.radius.md,
-      display: 'flex',
-      alignItems: 'center',
-      gap: tokens.spacing[2],
-    }}>
+    <Box
+      style={{
+        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+        marginBottom: tokens.spacing[3],
+        background: `${alpha(tokens.colors.accent.error, 6)}`,
+        border: `1px solid ${alpha(tokens.colors.accent.error, 15)}`,
+        borderRadius: tokens.radius.md,
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[2],
+      }}
+    >
       <Text size="sm" style={{ color: tokens.colors.accent.error }}>
-        {t('platformDataUnavailable') || `Data for ${exchangeName} is temporarily unavailable. Historical data shown below may be outdated.`}
+        {t('platformDataUnavailable') ||
+          `Data for ${exchangeName} is temporarily unavailable. Historical data shown below may be outdated.`}
       </Text>
     </Box>
   )

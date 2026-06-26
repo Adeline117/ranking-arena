@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -9,7 +9,9 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
  * Fill date gaps in time-series data with linearly interpolated values.
  * Prevents misleading visual jumps when days are missing.
  */
-function fillDateGaps(data: Array<{ date: string; roi: number; pnl: number }>): Array<{ date: string; roi: number; pnl: number }> {
+function fillDateGaps(
+  data: Array<{ date: string; roi: number; pnl: number }>
+): Array<{ date: string; roi: number; pnl: number }> {
   if (data.length < 2) return data
   const filled: Array<{ date: string; roi: number; pnl: number }> = []
   for (let i = 0; i < data.length; i++) {
@@ -44,11 +46,7 @@ interface SimpleLineChartProps {
   period: string
 }
 
-export function SimpleLineChart({
-  data,
-  dataKey,
-  period,
-}: SimpleLineChartProps) {
+export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps) {
   const { language } = useLanguage()
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
   const [tooltipPos, setTooltipPos] = useState<{ x: number; y: number } | null>(null)
@@ -69,54 +67,69 @@ export function SimpleLineChart({
   const dragStartX = useRef<number | null>(null)
   const dragStartOffset = useRef(0)
 
-  const handleDragStart = useCallback((clientX: number) => {
-    if (zoomLevel <= 1) return
-    dragStartX.current = clientX
-    dragStartOffset.current = zoomOffset
-  }, [zoomLevel, zoomOffset])
+  const handleDragStart = useCallback(
+    (clientX: number) => {
+      if (zoomLevel <= 1) return
+      dragStartX.current = clientX
+      dragStartOffset.current = zoomOffset
+    },
+    [zoomLevel, zoomOffset]
+  )
 
-  const handleDragMove = useCallback((clientX: number) => {
-    if (dragStartX.current === null || !chartRef.current || zoomLevel <= 1) return
-    const rect = chartRef.current.getBoundingClientRect()
-    const deltaPixels = clientX - dragStartX.current
-    const deltaPct = deltaPixels / rect.width
-    // Convert pixel delta to data-point offset
-    const windowSize = Math.max(4, Math.ceil(data.length / zoomLevel))
-    const deltaPoints = Math.round(deltaPct * windowSize)
-    const maxOff = Math.max(0, data.length - windowSize)
-    setZoomOffset(Math.max(0, Math.min(maxOff, dragStartOffset.current + deltaPoints)))
-  }, [zoomLevel, data.length])
+  const handleDragMove = useCallback(
+    (clientX: number) => {
+      if (dragStartX.current === null || !chartRef.current || zoomLevel <= 1) return
+      const rect = chartRef.current.getBoundingClientRect()
+      const deltaPixels = clientX - dragStartX.current
+      const deltaPct = deltaPixels / rect.width
+      // Convert pixel delta to data-point offset
+      const windowSize = Math.max(4, Math.ceil(data.length / zoomLevel))
+      const deltaPoints = Math.round(deltaPct * windowSize)
+      const maxOff = Math.max(0, data.length - windowSize)
+      setZoomOffset(Math.max(0, Math.min(maxOff, dragStartOffset.current + deltaPoints)))
+    },
+    [zoomLevel, data.length]
+  )
 
   const handleDragEnd = useCallback(() => {
     dragStartX.current = null
   }, [])
 
   // Mouse drag handlers
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (zoomLevel <= 1) return
-    handleDragStart(e.clientX)
-  }, [zoomLevel, handleDragStart])
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      if (zoomLevel <= 1) return
+      handleDragStart(e.clientX)
+    },
+    [zoomLevel, handleDragStart]
+  )
 
   // Touch handlers for mobile
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (zoomLevel <= 1 || e.touches.length !== 1) return
-    handleDragStart(e.touches[0].clientX)
-  }, [zoomLevel, handleDragStart])
+  const handleTouchStart = useCallback(
+    (e: React.TouchEvent) => {
+      if (zoomLevel <= 1 || e.touches.length !== 1) return
+      handleDragStart(e.touches[0].clientX)
+    },
+    [zoomLevel, handleDragStart]
+  )
 
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (dragStartX.current === null || e.touches.length !== 1) return
-    e.preventDefault()
-    handleDragMove(e.touches[0].clientX)
-    // Also update hover
-    if (chartRef.current) {
-      const rect = chartRef.current.getBoundingClientRect()
-      const relX = e.touches[0].clientX - rect.left
-      const pct = relX / rect.width
-      const idx = Math.round(pct * (data.length - 1))
-      setHoverIndex(Math.max(0, Math.min(data.length - 1, idx)))
-      setTooltipPos({ x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top })
-    }
-  }, [handleDragMove, data.length])
+  const handleTouchMove = useCallback(
+    (e: React.TouchEvent) => {
+      if (dragStartX.current === null || e.touches.length !== 1) return
+      e.preventDefault()
+      handleDragMove(e.touches[0].clientX)
+      // Also update hover
+      if (chartRef.current) {
+        const rect = chartRef.current.getBoundingClientRect()
+        const relX = e.touches[0].clientX - rect.left
+        const pct = relX / rect.width
+        const idx = Math.round(pct * (data.length - 1))
+        setHoverIndex(Math.max(0, Math.min(data.length - 1, idx)))
+        setTooltipPos({ x: e.touches[0].clientX - rect.left, y: e.touches[0].clientY - rect.top })
+      }
+    },
+    [handleDragMove, data.length]
+  )
 
   const handleTouchEnd = useCallback(() => {
     handleDragEnd()
@@ -125,17 +138,24 @@ export function SimpleLineChart({
   }, [handleDragEnd])
 
   // Wheel to zoom
-  const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (Math.abs(e.deltaY) < 5) return
-    e.preventDefault()
-    if (e.deltaY < 0) {
-      // Scroll up = zoom in
-      setZoomLevel(prev => Math.min(prev * 2, Math.floor(data.length / 4)))
-    } else {
-      // Scroll down = zoom out
-      setZoomLevel(prev => { const next = Math.max(1, prev / 2); if (next === 1) setZoomOffset(0); return next })
-    }
-  }, [data.length])
+  const handleWheel = useCallback(
+    (e: React.WheelEvent) => {
+      if (Math.abs(e.deltaY) < 5) return
+      e.preventDefault()
+      if (e.deltaY < 0) {
+        // Scroll up = zoom in
+        setZoomLevel((prev) => Math.min(prev * 2, Math.floor(data.length / 4)))
+      } else {
+        // Scroll down = zoom out
+        setZoomLevel((prev) => {
+          const next = Math.max(1, prev / 2)
+          if (next === 1) setZoomOffset(0)
+          return next
+        })
+      }
+    },
+    [data.length]
+  )
 
   // Global mouse up to end drag
   useEffect(() => {
@@ -145,7 +165,10 @@ export function SimpleLineChart({
   }, [handleDragEnd])
 
   // Reset zoom when data/period changes
-  useEffect(() => { setZoomLevel(1); setZoomOffset(0) }, [data, period])
+  useEffect(() => {
+    setZoomLevel(1)
+    setZoomOffset(0)
+  }, [data, period])
 
   if (data.length === 0) {
     return null
@@ -154,7 +177,7 @@ export function SimpleLineChart({
   // Fill date gaps with zero entries to prevent misleading visual jumps
   const gapFilled = fillDateGaps(data)
   // Filter out data points with null/NaN values defensively (API types say number, but runtime may differ)
-  const allValidData = gapFilled.filter(d => d[dataKey] != null && !isNaN(d[dataKey] as number))
+  const allValidData = gapFilled.filter((d) => d[dataKey] != null && !isNaN(d[dataKey] as number))
   if (allValidData.length === 0) return null
 
   // Apply zoom: show a window of data points
@@ -165,7 +188,7 @@ export function SimpleLineChart({
   const endIdx = startIdx + windowSize
   const validData = allValidData.slice(startIdx, endIdx)
 
-  const values = validData.map(d => d[dataKey] as number)
+  const values = validData.map((d) => d[dataKey] as number)
   const maxValue = Math.max(...values)
   const minValue = Math.min(...values)
   // Guard against Infinity/-Infinity
@@ -177,14 +200,15 @@ export function SimpleLineChart({
   const denominator = validData.length > 1 ? validData.length - 1 : 1
   const points = validData.map((d, i) => {
     const x = (i / denominator) * width
-    const y = height - ((d[dataKey] as number - minValue) / range) * height
+    const y = height - (((d[dataKey] as number) - minValue) / range) * height
     return `${x},${y}`
   })
   const pathD = `M ${points.join(' L ')}`
 
   // Baseline series: baseline is 0 for both ROI and PnL
   const baselineValue = 0
-  const baselineY = range === 0 ? height / 2 : height - ((baselineValue - minValue) / range) * height
+  const baselineY =
+    range === 0 ? height / 2 : height - ((baselineValue - minValue) / range) * height
   const clampedBaselineY = Math.max(0, Math.min(height, baselineY))
 
   const isPositive = values[values.length - 1] >= values[0]
@@ -193,7 +217,14 @@ export function SimpleLineChart({
   // Check if baseline is within view (mixed positive/negative data)
   const hasBaseline = minValue < 0 && maxValue > 0
 
-  const locale = language === 'zh' ? 'zh-CN' : language === 'ja' ? 'ja-JP' : language === 'ko' ? 'ko-KR' : 'en-US'
+  const locale =
+    language === 'zh'
+      ? 'zh-CN'
+      : language === 'ja'
+        ? 'ja-JP'
+        : language === 'ko'
+          ? 'ko-KR'
+          : 'en-US'
 
   const formatTooltipValue = (val: number) => {
     if (dataKey === 'roi') return `${val >= 0 ? '+' : ''}${val.toFixed(2)}%`
@@ -228,36 +259,57 @@ export function SimpleLineChart({
     const tw = 120
     let tLeft = tooltipPos.x
     let tTransform = 'translateX(-50%)'
-    if (tLeft < tw / 2) { tLeft = 0; tTransform = 'translateX(0)' }
-    else if (tLeft > cw - tw / 2) { tLeft = cw; tTransform = 'translateX(-100%)' }
+    if (tLeft < tw / 2) {
+      tLeft = 0
+      tTransform = 'translateX(0)'
+    } else if (tLeft > cw - tw / 2) {
+      tLeft = cw
+      tTransform = 'translateX(-100%)'
+    }
     const tTop = tooltipPos.y < 70 ? tooltipPos.y + 20 : tooltipPos.y - 60
     return { left: tLeft, top: tTop, transform: tTransform }
   })()
 
   return (
-    <Box style={{
-      height: '100%',
-      background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}40 100%)`,
-      borderRadius: tokens.radius.xl,
-      padding: tokens.spacing[4],
-      position: 'relative',
-      border: `1px solid ${tokens.colors.border.primary}40`,
-    }}>
+    <Box
+      style={{
+        height: '100%',
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${alpha(tokens.colors.bg.secondary, 25)} 100%)`,
+        borderRadius: tokens.radius.xl,
+        padding: tokens.spacing[4],
+        position: 'relative',
+        border: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
+      }}
+    >
       {/* Y-axis Labels */}
-      <Box style={{
-        position: 'absolute',
-        left: tokens.spacing[3],
-        top: tokens.spacing[4],
-        bottom: tokens.spacing[8],
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-      }}>
-        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}>
-          {dataKey === 'roi' ? `${maxValue.toFixed(Math.abs(maxValue) < 10 ? 1 : 0)}%` : formatAxisLabel(maxValue)}
+      <Box
+        style={{
+          position: 'absolute',
+          left: tokens.spacing[3],
+          top: tokens.spacing[4],
+          bottom: tokens.spacing[8],
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'space-between',
+        }}
+      >
+        <Text
+          size="xs"
+          color="tertiary"
+          style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}
+        >
+          {dataKey === 'roi'
+            ? `${maxValue.toFixed(Math.abs(maxValue) < 10 ? 1 : 0)}%`
+            : formatAxisLabel(maxValue)}
         </Text>
-        <Text size="xs" color="tertiary" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}>
-          {dataKey === 'roi' ? `${minValue.toFixed(Math.abs(minValue) < 10 ? 1 : 0)}%` : formatAxisLabel(minValue)}
+        <Text
+          size="xs"
+          color="tertiary"
+          style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}
+        >
+          {dataKey === 'roi'
+            ? `${minValue.toFixed(Math.abs(minValue) < 10 ? 1 : 0)}%`
+            : formatAxisLabel(minValue)}
         </Text>
       </Box>
 
@@ -268,11 +320,22 @@ export function SimpleLineChart({
           marginLeft: 55,
           height: 'calc(100% - 32px)',
           position: 'relative',
-          cursor: zoomLevel > 1 && dragStartX.current !== null ? 'grabbing' : zoomLevel > 1 ? 'grab' : 'crosshair',
+          cursor:
+            zoomLevel > 1 && dragStartX.current !== null
+              ? 'grabbing'
+              : zoomLevel > 1
+                ? 'grab'
+                : 'crosshair',
           touchAction: zoomLevel > 1 ? 'none' : 'auto',
         }}
-        onMouseMove={(e: React.MouseEvent<HTMLDivElement>) => { if (dragStartX.current !== null) handleDragMove(e.clientX); else handleMouseMove(e) }}
-        onMouseLeave={() => { handleDragEnd(); handleMouseLeave() }}
+        onMouseMove={(e: React.MouseEvent<HTMLDivElement>) => {
+          if (dragStartX.current !== null) handleDragMove(e.clientX)
+          else handleMouseMove(e)
+        }}
+        onMouseLeave={() => {
+          handleDragEnd()
+          handleMouseLeave()
+        }}
         onMouseDown={handleMouseDown}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -285,14 +348,26 @@ export function SimpleLineChart({
           style={{ width: '100%', height: '100%' }}
         >
           {/* Grid */}
-          {[0, 25, 50, 75, 100].map(y => (
-            <line key={y} x1="0" y1={y} x2="100" y2={y} stroke={tokens.colors.border.primary} strokeWidth="0.3" strokeDasharray="2,2" />
+          {[0, 25, 50, 75, 100].map((y) => (
+            <line
+              key={y}
+              x1="0"
+              y1={y}
+              x2="100"
+              y2={y}
+              stroke={tokens.colors.border.primary}
+              strokeWidth="0.3"
+              strokeDasharray="2,2"
+            />
           ))}
 
           {/* Baseline zero line (when data crosses zero) */}
           {hasBaseline && (
             <line
-              x1="0" y1={clampedBaselineY} x2="100" y2={clampedBaselineY}
+              x1="0"
+              y1={clampedBaselineY}
+              x2="100"
+              y2={clampedBaselineY}
               stroke={tokens.colors.text.tertiary}
               strokeWidth="0.5"
               strokeDasharray="2,2"
@@ -395,15 +470,28 @@ export function SimpleLineChart({
           )}
 
           {/* Hover dot -- color matches whether point is above or below baseline */}
-          {hoverIndex !== null && (() => {
-            const cx = (hoverIndex / denominator) * width
-            const val = validData[hoverIndex][dataKey] as number
-            const cy = height - ((val - minValue) / range) * height
-            const dotColor = hasBaseline
-              ? (val >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error)
-              : color
-            return <circle cx={cx} cy={cy} r="4" fill={dotColor} stroke={tokens.colors.bg.primary} strokeWidth="2" vectorEffect="non-scaling-stroke" />
-          })()}
+          {hoverIndex !== null &&
+            (() => {
+              const cx = (hoverIndex / denominator) * width
+              const val = validData[hoverIndex][dataKey] as number
+              const cy = height - ((val - minValue) / range) * height
+              const dotColor = hasBaseline
+                ? val >= 0
+                  ? tokens.colors.accent.success
+                  : tokens.colors.accent.error
+                : color
+              return (
+                <circle
+                  cx={cx}
+                  cy={cy}
+                  r="4"
+                  fill={dotColor}
+                  stroke={tokens.colors.bg.primary}
+                  strokeWidth="2"
+                  vectorEffect="non-scaling-stroke"
+                />
+              )
+            })()}
         </svg>
 
         {/* Tooltip with edge detection */}
@@ -425,19 +513,50 @@ export function SimpleLineChart({
             }}
           >
             <Text size="xs" color="tertiary" style={{ marginBottom: 2, display: 'block' }}>
-              {new Date(hoverData.date).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+              {new Date(hoverData.date).toLocaleDateString(locale, {
+                month: 'short',
+                day: 'numeric',
+              })}
             </Text>
-            <Text size="sm" weight="bold" style={{ color: hasBaseline ? (hoverData[dataKey] >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error) : color, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+            <Text
+              size="sm"
+              weight="bold"
+              style={{
+                color: hasBaseline
+                  ? hoverData[dataKey] >= 0
+                    ? tokens.colors.accent.success
+                    : tokens.colors.accent.error
+                  : color,
+                fontFamily: tokens.typography.fontFamily.mono.join(', '),
+              }}
+            >
               {formatTooltipValue(hoverData[dataKey])}
             </Text>
             {dataKey === 'roi' && hoverData.pnl != null && !isNaN(hoverData.pnl) && (
-              <Text size="xs" color="tertiary" style={{ display: 'block', marginTop: 2, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+              <Text
+                size="xs"
+                color="tertiary"
+                style={{
+                  display: 'block',
+                  marginTop: 2,
+                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                }}
+              >
                 PnL: {formatTooltipValue(hoverData.pnl)}
               </Text>
             )}
             {dataKey === 'pnl' && hoverData.roi != null && !isNaN(hoverData.roi) && (
-              <Text size="xs" color="tertiary" style={{ display: 'block', marginTop: 2, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
-                ROI: {hoverData.roi >= 0 ? '+' : ''}{hoverData.roi.toFixed(2)}%
+              <Text
+                size="xs"
+                color="tertiary"
+                style={{
+                  display: 'block',
+                  marginTop: 2,
+                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                }}
+              >
+                ROI: {hoverData.roi >= 0 ? '+' : ''}
+                {hoverData.roi.toFixed(2)}%
               </Text>
             )}
           </Box>
@@ -446,62 +565,104 @@ export function SimpleLineChart({
 
       {/* Zoom controls */}
       {allValidData.length > 8 && (
-        <Box style={{
-          position: 'absolute',
-          top: tokens.spacing[3],
-          right: tokens.spacing[3],
-          display: 'flex',
-          gap: 2,
-          background: `${tokens.colors.bg.primary}E0`,
-          borderRadius: tokens.radius.md,
-          border: `1px solid ${tokens.colors.border.primary}40`,
-          padding: 2,
-          zIndex: 5,
-        }}>
+        <Box
+          style={{
+            position: 'absolute',
+            top: tokens.spacing[3],
+            right: tokens.spacing[3],
+            display: 'flex',
+            gap: 2,
+            background: `${alpha(tokens.colors.bg.primary, 88)}`,
+            borderRadius: tokens.radius.md,
+            border: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
+            padding: 2,
+            zIndex: 5,
+          }}
+        >
           <button
-            onClick={() => setZoomLevel(prev => Math.min(prev * 2, Math.floor(allValidData.length / 4)))}
+            onClick={() =>
+              setZoomLevel((prev) => Math.min(prev * 2, Math.floor(allValidData.length / 4)))
+            }
             disabled={zoomLevel >= Math.floor(allValidData.length / 4)}
             aria-label="Zoom in"
             style={{
-              width: 24, height: 24, border: 'none', borderRadius: tokens.radius.sm,
-              background: 'transparent', color: tokens.colors.text.secondary,
+              width: 24,
+              height: 24,
+              border: 'none',
+              borderRadius: tokens.radius.sm,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
               cursor: zoomLevel >= Math.floor(allValidData.length / 4) ? 'not-allowed' : 'pointer',
               opacity: zoomLevel >= Math.floor(allValidData.length / 4) ? 0.3 : 1,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              fontWeight: 700,
             }}
-          >+</button>
+          >
+            +
+          </button>
           <button
-            onClick={() => { setZoomLevel(prev => Math.max(1, prev / 2)); setZoomOffset(0) }}
+            onClick={() => {
+              setZoomLevel((prev) => Math.max(1, prev / 2))
+              setZoomOffset(0)
+            }}
             disabled={zoomLevel <= 1}
             aria-label="Zoom out"
             style={{
-              width: 24, height: 24, border: 'none', borderRadius: tokens.radius.sm,
-              background: 'transparent', color: tokens.colors.text.secondary,
+              width: 24,
+              height: 24,
+              border: 'none',
+              borderRadius: tokens.radius.sm,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
               cursor: zoomLevel <= 1 ? 'not-allowed' : 'pointer',
               opacity: zoomLevel <= 1 ? 0.3 : 1,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 14,
+              fontWeight: 700,
             }}
-          >-</button>
+          >
+            -
+          </button>
         </Box>
       )}
 
       {/* X-axis Labels */}
-      <Box style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        marginLeft: 55,
-        marginTop: tokens.spacing[2],
-      }}>
+      <Box
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          marginLeft: 55,
+          marginTop: tokens.spacing[2],
+        }}
+      >
         <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
-          {validData[0]?.date ? new Date(validData[0].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) : ''}
+          {validData[0]?.date
+            ? new Date(validData[0].date).toLocaleDateString(locale, {
+                month: 'numeric',
+                day: 'numeric',
+              })
+            : ''}
         </Text>
         {validData.length > 4 && (
           <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
-            {new Date(validData[Math.floor(validData.length / 2)].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' })}
+            {new Date(validData[Math.floor(validData.length / 2)].date).toLocaleDateString(locale, {
+              month: 'numeric',
+              day: 'numeric',
+            })}
           </Text>
         )}
         <Text size="xs" color="tertiary" style={{ fontSize: 11 }}>
-          {validData[validData.length - 1]?.date ? new Date(validData[validData.length - 1].date).toLocaleDateString(locale, { month: 'numeric', day: 'numeric' }) : ''}
+          {validData[validData.length - 1]?.date
+            ? new Date(validData[validData.length - 1].date).toLocaleDateString(locale, {
+                month: 'numeric',
+                day: 'numeric',
+              })
+            : ''}
         </Text>
       </Box>
     </Box>

@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from 'react'
 import { queryClient } from '@/app/components/Providers'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { formatROI } from '@/lib/utils/format'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { Box, Text } from '@/app/components/base'
@@ -107,7 +107,7 @@ export default function LinkedAccountTabs({
     minHeight: 44,
     borderRadius: tokens.radius.md,
     border: `1px solid ${isActive ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
-    background: isActive ? `${tokens.colors.accent.primary}15` : tokens.colors.bg.secondary,
+    background: isActive ? `${alpha(tokens.colors.accent.primary, 8)}` : tokens.colors.bg.secondary,
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     whiteSpace: 'nowrap' as const,
@@ -157,7 +157,7 @@ export default function LinkedAccountTabs({
               size="xs"
               style={{
                 color: tokens.colors.text.tertiary,
-                background: `${tokens.colors.text.tertiary}15`,
+                background: `${alpha(tokens.colors.text.tertiary, 8)}`,
                 padding: '1px 6px',
                 borderRadius: 10,
                 fontSize: 10,
@@ -209,7 +209,9 @@ export default function LinkedAccountTabs({
                 padding: '10px 16px',
                 width: '100%',
                 background:
-                  activeAccount === 'all' ? `${tokens.colors.accent.primary}10` : 'transparent',
+                  activeAccount === 'all'
+                    ? `${alpha(tokens.colors.accent.primary, 6)}`
+                    : 'transparent',
                 border: 'none',
                 cursor: 'pointer',
               }}
@@ -267,10 +269,12 @@ export default function LinkedAccountTabs({
                     gap: 8,
                     padding: '10px 16px',
                     width: '100%',
-                    background: isActive ? `${tokens.colors.accent.primary}10` : 'transparent',
+                    background: isActive
+                      ? `${alpha(tokens.colors.accent.primary, 6)}`
+                      : 'transparent',
                     border: 'none',
                     cursor: 'pointer',
-                    borderTop: `1px solid ${tokens.colors.border.primary}40`,
+                    borderTop: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
                   }}
                   onClick={() => {
                     onAccountChange(key)
@@ -377,7 +381,7 @@ export default function LinkedAccountTabs({
           style={{
             color: tokens.colors.text.tertiary,
             fontSize: 10,
-            background: `${tokens.colors.text.tertiary}15`,
+            background: `${alpha(tokens.colors.text.tertiary, 8)}`,
             padding: '1px 6px',
             borderRadius: 10,
           }}

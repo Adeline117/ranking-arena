@@ -1,7 +1,7 @@
 'use client'
 
 import React, { useRef, useState, useEffect } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import type { TraderMarketCorrelation, MarketCondition } from '@/lib/types/unified-trader'
@@ -141,7 +141,7 @@ export default function MarketCorrelationCard({
     return (
       <Box
         style={{
-          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
+          background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${colorAlpha(tokens.colors.bg.primary, 56)} 100%)`,
           borderRadius: tokens.radius.xl,
           border: `1px solid ${tokens.colors.border.primary}`,
           padding: tokens.spacing[5],
@@ -173,7 +173,7 @@ export default function MarketCorrelationCard({
     <div
       ref={cardRef}
       style={{
-        background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${tokens.colors.bg.primary}90 100%)`,
+        background: `linear-gradient(145deg, ${tokens.colors.bg.secondary} 0%, ${colorAlpha(tokens.colors.bg.primary, 56)} 100%)`,
         borderRadius: tokens.radius.xl,
         border: `1px solid ${tokens.colors.border.primary}`,
         padding: tokens.spacing[5],
@@ -319,7 +319,7 @@ export default function MarketCorrelationCard({
             padding: tokens.spacing[3],
             background:
               correlation.alpha !== null && correlation.alpha > 0
-                ? `${tokens.colors.accent.success}10`
+                ? `${colorAlpha(tokens.colors.accent.success, 6)}`
                 : tokens.colors.bg.tertiary + '60',
             borderRadius: tokens.radius.lg,
             border: `1px solid ${correlation.alpha !== null && correlation.alpha > 0 ? tokens.colors.accent.success + '30' : tokens.colors.border.primary}`,
@@ -369,7 +369,7 @@ export default function MarketCorrelationCard({
         <Box
           style={{
             paddingTop: tokens.spacing[3],
-            borderTop: `1px solid ${tokens.colors.border.primary}40`,
+            borderTop: `1px solid ${colorAlpha(tokens.colors.border.primary, 25)}`,
           }}
         >
           <Text

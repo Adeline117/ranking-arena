@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 
@@ -41,12 +41,23 @@ export function PositionHistorySection({ positionHistory, t }: PositionHistorySe
 
   return (
     <Box style={{ marginBottom: tokens.spacing[6] }}>
-      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[4] }}>
+      <Box
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: tokens.spacing[4],
+        }}
+      >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="lg" weight="black">{t('positionHistory')}</Text>
+          <Text size="lg" weight="black">
+            {t('positionHistory')}
+          </Text>
         </Box>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="xs" color="tertiary">{t('sortBy')}</Text>
+          <Text size="xs" color="tertiary">
+            {t('sortBy')}
+          </Text>
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as 'openTime' | 'closeTime')}
@@ -93,7 +104,9 @@ export function PositionHistorySection({ positionHistory, t }: PositionHistorySe
             textAlign: 'center',
           }}
         >
-          {expanded ? t('positionCollapse') : `${t('positionExpandAll')} (${sortedHistory.length} ${t('positionCount')})`}
+          {expanded
+            ? t('positionCollapse')
+            : `${t('positionExpandAll')} (${sortedHistory.length} ${t('positionCount')})`}
         </button>
       )}
     </Box>
@@ -101,7 +114,13 @@ export function PositionHistorySection({ positionHistory, t }: PositionHistorySe
 }
 
 // Position History Card
-function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t: (key: string) => string }) {
+function PositionHistoryCard({
+  position,
+  t,
+}: {
+  position: PositionHistoryItem
+  t: (key: string) => string
+}) {
   const isLong = position.direction === 'long'
   const isProfit = position.pnlUsd >= 0
 
@@ -118,7 +137,9 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
 
   const formatPrice = (price: number) => {
     if (!price) return '--'
-    return price >= 1 ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : price.toFixed(4)
+    return price >= 1
+      ? price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+      : price.toFixed(4)
   }
 
   return (
@@ -132,31 +153,51 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
       }}
     >
       {/* Header */}
-      <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          marginBottom: tokens.spacing[3],
+        }}
+      >
         <CryptoIcon symbol={position.symbol} size={28} />
 
-        <Text size="base" weight="black" style={{ color: tokens.colors.text.primary }}>{position.symbol}</Text>
+        <Text size="base" weight="black" style={{ color: tokens.colors.text.primary }}>
+          {position.symbol}
+        </Text>
 
         <Box style={{ display: 'flex', gap: tokens.spacing[1], marginLeft: 'auto' }}>
-          <Box style={{
-            padding: `2px 8px`,
-            borderRadius: tokens.radius.full,
-            background: tokens.colors.bg.tertiary,
-          }}>
+          <Box
+            style={{
+              padding: `2px 8px`,
+              borderRadius: tokens.radius.full,
+              background: tokens.colors.bg.tertiary,
+            }}
+          >
             <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-              {position.positionType === 'perpetual' ? t('positionPerpetual') : t('positionDelivery')}
+              {position.positionType === 'perpetual'
+                ? t('positionPerpetual')
+                : t('positionDelivery')}
             </Text>
           </Box>
-          <Box style={{
-            padding: `2px 10px`,
-            borderRadius: tokens.radius.full,
-            background: isLong ? `${tokens.colors.accent.success}15` : `${tokens.colors.accent.error}15`,
-            border: `1px solid ${isLong ? tokens.colors.accent.success : tokens.colors.accent.error}30`,
-          }}>
-            <Text size="xs" style={{
-              color: isLong ? tokens.colors.accent.success : tokens.colors.accent.error,
-              fontWeight: 600,
-            }}>
+          <Box
+            style={{
+              padding: `2px 10px`,
+              borderRadius: tokens.radius.full,
+              background: isLong
+                ? `${alpha(tokens.colors.accent.success, 8)}`
+                : `${alpha(tokens.colors.accent.error, 8)}`,
+              border: `1px solid ${alpha(isLong ? tokens.colors.accent.success : tokens.colors.accent.error, 19)}`,
+            }}
+          >
+            <Text
+              size="xs"
+              style={{
+                color: isLong ? tokens.colors.accent.success : tokens.colors.accent.error,
+                fontWeight: 600,
+              }}
+            >
               {isLong ? t('positionLong') : t('positionShort')}
             </Text>
           </Box>
@@ -164,31 +205,56 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
       </Box>
 
       {/* Data Grid */}
-      <Box className="trading-stats-grid trading-grid" style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: tokens.spacing[4],
-      }}>
+      <Box
+        className="trading-stats-grid trading-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: tokens.spacing[4],
+        }}
+      >
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>{t('positionOpen')}</Text>
-          <Text size="sm" weight="bold" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>
+            {t('positionOpen')}
+          </Text>
+          <Text
+            size="sm"
+            weight="bold"
+            style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}
+          >
             {formatTime(position.openTime)}
           </Text>
         </Box>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>{t('positionOpenPrice')}</Text>
-          <Text size="sm" weight="bold" style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>
+            {t('positionOpenPrice')}
+          </Text>
+          <Text
+            size="sm"
+            weight="bold"
+            style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}
+          >
             ${formatPrice(position.entryPrice)}
           </Text>
         </Box>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>{t('positionClosePrice')}</Text>
-          <Text size="sm" style={{ color: tokens.colors.text.secondary, fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
+          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>
+            {t('positionClosePrice')}
+          </Text>
+          <Text
+            size="sm"
+            style={{
+              color: tokens.colors.text.secondary,
+              fontFamily: tokens.typography.fontFamily.mono.join(', '),
+            }}
+          >
             ${formatPrice(position.exitPrice)}
           </Text>
         </Box>
         <Box>
-          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>{t('positionPnl')}</Text>
+          <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>
+            {t('positionPnl')}
+          </Text>
           <Text
             size="sm"
             weight="black"
@@ -197,7 +263,11 @@ function PositionHistoryCard({ position, t }: { position: PositionHistoryItem; t
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
             }}
           >
-            {isProfit ? '+' : '-'}${Math.abs(position.pnlUsd ?? 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {isProfit ? '+' : '-'}$
+            {Math.abs(position.pnlUsd ?? 0).toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </Text>
         </Box>
       </Box>

@@ -9,7 +9,7 @@
  */
 
 import { useState, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 
@@ -26,7 +26,16 @@ interface ShareRankCardButtonsProps {
 
 function CopyIcon() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
       <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
     </svg>
@@ -35,7 +44,16 @@ function CopyIcon() {
 
 function CheckIconSmall() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <polyline points="20 6 9 17 4 12" />
     </svg>
   )
@@ -43,18 +61,30 @@ function CheckIconSmall() {
 
 function XIcon() {
   return (
-    <svg width="13" height="13" viewBox="0 0 1200 1227" fill="currentColor" style={{ flexShrink: 0 }}>
+    <svg
+      width="13"
+      height="13"
+      viewBox="0 0 1200 1227"
+      fill="currentColor"
+      style={{ flexShrink: 0 }}
+    >
       <path d="M714.163 519.284L1160.89 0H1055.03L667.137 450.887L357.328 0H0L468.492 681.821L0 1226.37H105.866L515.491 750.218L842.672 1226.37H1200L714.137 519.284H714.163ZM569.165 687.828L521.697 619.934L144.011 79.6944H306.615L611.412 515.685L658.88 583.579L1055.08 1150.3H892.476L569.165 687.854V687.828Z" />
     </svg>
   )
 }
 
 const PLATFORM_LABELS: Record<string, string> = {
-  binance_futures: 'Binance', binance_spot: 'Binance Spot',
-  bybit: 'Bybit', bitget_futures: 'Bitget',
-  okx: 'OKX', okx_futures: 'OKX',
-  hyperliquid: 'Hyperliquid', gmx: 'GMX',
-  mexc: 'MEXC', gateio: 'Gate.io', dydx: 'dYdX',
+  binance_futures: 'Binance',
+  binance_spot: 'Binance Spot',
+  bybit: 'Bybit',
+  bitget_futures: 'Bitget',
+  okx: 'OKX',
+  okx_futures: 'OKX',
+  hyperliquid: 'Hyperliquid',
+  gmx: 'GMX',
+  mexc: 'MEXC',
+  gateio: 'Gate.io',
+  dydx: 'dYdX',
 }
 
 function formatRoiShort(roi: number): string {
@@ -79,9 +109,7 @@ export default function ShareRankCardButtons({
   const { showToast } = useToast()
 
   const buildShareUrl = useCallback(() => {
-    const base = typeof window !== 'undefined'
-      ? window.location.origin
-      : 'https://www.arenafi.org'
+    const base = typeof window !== 'undefined' ? window.location.origin : 'https://www.arenafi.org'
 
     const params = new URLSearchParams()
     if (platform) params.set('platform', platform)
@@ -115,13 +143,19 @@ export default function ShareRankCardButtons({
       lines.push(`${name} on Arena${platformLabel ? ` | ${platformLabel}` : ''}`)
     }
     if (roi != null) {
-      lines.push(`${formatRoiShort(roi)} ROI${arenaScore != null ? ` | Score: ${Math.round(arenaScore)}` : ''}`)
+      lines.push(
+        `${formatRoiShort(roi)} ROI${arenaScore != null ? ` | Score: ${Math.round(arenaScore)}` : ''}`
+      )
     }
     lines.push('')
     lines.push(url)
 
     const text = encodeURIComponent(lines.join('\n'))
-    window.open(`https://x.com/intent/post?text=${text}`, '_blank', 'noopener,noreferrer,width=600,height=500')
+    window.open(
+      `https://x.com/intent/post?text=${text}`,
+      '_blank',
+      'noopener,noreferrer,width=600,height=500'
+    )
   }, [buildShareUrl, handle, displayName, platform, rank, roi, arenaScore])
 
   const btnBase: React.CSSProperties = {
@@ -149,24 +183,20 @@ export default function ShareRankCardButtons({
         style={{
           ...btnBase,
           color: copied ? tokens.colors.accent.success : tokens.colors.text.secondary,
-          borderColor: copied ? `${tokens.colors.accent.success}40` : tokens.colors.border.primary,
+          borderColor: copied
+            ? `${alpha(tokens.colors.accent.success, 25)}`
+            : tokens.colors.border.primary,
         }}
       >
         {copied ? <CheckIconSmall /> : <CopyIcon />}
         <span className="hide-below-sm">
-          {copied ? (t('copied') || 'Copied!') : (t('copyShareLink') || 'Copy Link')}
+          {copied ? t('copied') || 'Copied!' : t('copyShareLink') || 'Copy Link'}
         </span>
       </button>
 
-      <button
-        onClick={shareOnX}
-        title={t('shareOnX') || 'Share on X'}
-        style={btnBase}
-      >
+      <button onClick={shareOnX} title={t('shareOnX') || 'Share on X'} style={btnBase}>
         <XIcon />
-        <span className="hide-below-sm">
-          {t('shareOnX') || 'Share on X'}
-        </span>
+        <span className="hide-below-sm">{t('shareOnX') || 'Share on X'}</span>
       </button>
 
       <button
@@ -175,14 +205,21 @@ export default function ShareRankCardButtons({
         className="print-hide"
         style={btnBase}
       >
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          width="14"
+          height="14"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <polyline points="6 9 6 2 18 2 18 9" />
           <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
           <rect x="6" y="14" width="12" height="8" />
         </svg>
-        <span className="hide-below-sm">
-          {t('printOrPdf') || 'Print / PDF'}
-        </span>
+        <span className="hide-below-sm">{t('printOrPdf') || 'Print / PDF'}</span>
       </button>
     </div>
   )
