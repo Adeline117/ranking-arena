@@ -12,14 +12,14 @@ import { BASE_URL } from '@/lib/constants/urls'
 import type { Period } from '@/lib/utils/arena-score'
 
 export const metadata: Metadata = {
-  title: 'Arena — Crypto Trader Rankings & Community',
+  title: 'Arena | Crypto Trader Rankings & Community',
   description:
     'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
   alternates: {
     canonical: BASE_URL,
   },
   openGraph: {
-    title: 'Arena — Crypto Trader Rankings & Community',
+    title: 'Arena | Crypto Trader Rankings & Community',
     description:
       'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
     url: BASE_URL,
@@ -36,7 +36,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Arena — Crypto Trader Rankings & Community',
+    title: 'Arena | Crypto Trader Rankings & Community',
     description:
       'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
     images: [`${BASE_URL}/api/og/homepage`],
