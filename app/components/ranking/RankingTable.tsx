@@ -11,7 +11,7 @@ import React, {
 } from 'react'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useTableKeyboardNav } from '@/lib/hooks/useTableKeyboardNav'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
 import EmptyState from '../ui/EmptyState'
 import { Box, Text } from '../base'
@@ -1072,8 +1072,8 @@ function RankingTableInner(props: {
                         fontSize: tokens.typography.fontSize.sm,
                         fontWeight: tokens.typography.fontWeight.semibold,
                         color: tokens.colors.accent.primary,
-                        background: `${tokens.colors.accent.primary}10`,
-                        border: `1px solid ${tokens.colors.accent.primary}30`,
+                        background: `${colorAlpha(tokens.colors.accent.primary, 6)}`,
+                        border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 19)}`,
                         cursor: 'pointer',
                         transition: `all ${tokens.transition.fast}`,
                         width: '100%',
@@ -1099,8 +1099,8 @@ function RankingTableInner(props: {
                       fontSize: tokens.typography.fontSize.sm,
                       fontWeight: tokens.typography.fontWeight.bold,
                       color: tokens.colors.accent.primary,
-                      background: `${tokens.colors.accent.primary}15`,
-                      border: `1px solid ${tokens.colors.accent.primary}40`,
+                      background: `${colorAlpha(tokens.colors.accent.primary, 8)}`,
+                      border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 25)}`,
                       cursor: 'pointer',
                       transition: `all ${tokens.transition.fast}`,
                     }}
@@ -1179,8 +1179,8 @@ function RankingTableInner(props: {
                       style={{
                         margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                         padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-                        background: `${tokens.colors.accent.brand}15`,
-                        border: `1px solid ${tokens.colors.accent.primary}40`,
+                        background: `${colorAlpha(tokens.colors.accent.brand, 8)}`,
+                        border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 25)}`,
                         borderRadius: tokens.radius.lg,
                         textAlign: 'center',
                         cursor: 'pointer',

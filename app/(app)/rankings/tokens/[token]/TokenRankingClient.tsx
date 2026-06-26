@@ -3,9 +3,14 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
-import { getAvatarGradient, getAvatarInitial, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
+import {
+  getAvatarGradient,
+  getAvatarInitial,
+  isWalletAddress,
+  generateBlockieSvg,
+} from '@/lib/utils/avatar'
 import { formatPnL, NULL_DISPLAY } from '@/lib/utils/format'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -155,7 +160,9 @@ export default function TokenRankingClient({ token }: { token: string }) {
   const pathname = usePathname()
   const searchParams = useSearchParams()
   const urlPeriod = (searchParams.get('period')?.toUpperCase() || '90D') as Period
-  const validPeriod = (['7D', '30D', '90D'] as const).includes(urlPeriod) ? urlPeriod : ('90D' as Period)
+  const validPeriod = (['7D', '30D', '90D'] as const).includes(urlPeriod)
+    ? urlPeriod
+    : ('90D' as Period)
 
   const urlPage = Math.max(0, parseInt(searchParams.get('page') || '0', 10) || 0)
   const [period, setPeriod] = useState<Period>(validPeriod)
@@ -165,17 +172,22 @@ export default function TokenRankingClient({ token }: { token: string }) {
   const [page, setPageRaw] = useState(urlPage)
   const PAGE_SIZE = 50
 
-  const setPage = useCallback((p: number | ((prev: number) => number)) => {
-    setPageRaw(prev => {
-      const next = typeof p === 'function' ? p(prev) : p
-      // Sync page to URL
-      const params = new URLSearchParams(searchParams.toString())
-      if (next > 0) params.set('page', String(next))
-      else params.delete('page')
-      router.replace(`${pathname}${params.size ? '?' + params.toString() : ''}`, { scroll: false })
-      return next
-    })
-  }, [searchParams, router, pathname])
+  const setPage = useCallback(
+    (p: number | ((prev: number) => number)) => {
+      setPageRaw((prev) => {
+        const next = typeof p === 'function' ? p(prev) : p
+        // Sync page to URL
+        const params = new URLSearchParams(searchParams.toString())
+        if (next > 0) params.set('page', String(next))
+        else params.delete('page')
+        router.replace(`${pathname}${params.size ? '?' + params.toString() : ''}`, {
+          scroll: false,
+        })
+        return next
+      })
+    },
+    [searchParams, router, pathname]
+  )
   const abortRef = useRef<AbortController | null>(null)
 
   const tokenColor = TOKEN_COLORS[token] || tokens.colors.accent.primary
@@ -245,8 +257,8 @@ export default function TokenRankingClient({ token }: { token: string }) {
               width: 48,
               height: 48,
               borderRadius: '50%',
-              background: `${tokenColor}20`,
-              border: `2px solid ${tokenColor}40`,
+              background: `${alpha(tokenColor, 13)}`,
+              border: `2px solid ${alpha(tokenColor, 25)}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -284,7 +296,7 @@ export default function TokenRankingClient({ token }: { token: string }) {
             style={{
               width: 24,
               height: 24,
-              border: `2px solid ${tokens.colors.accent.brand}30`,
+              border: `2px solid ${alpha(tokens.colors.accent.brand, 19)}`,
               borderTopColor: tokens.colors.accent.brand,
               borderRadius: '50%',
               animation: 'spin 0.8s linear infinite',
@@ -613,7 +625,14 @@ export default function TokenRankingClient({ token }: { token: string }) {
       {!loading && traders.length === 0 && (
         <EmptyState
           icon={
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+            >
               <circle cx="11" cy="11" r="8" />
               <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
             </svg>

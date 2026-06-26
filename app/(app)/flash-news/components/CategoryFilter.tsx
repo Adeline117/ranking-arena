@@ -1,7 +1,7 @@
 'use client'
 
 import { localizedLabel } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
 
 interface CategoryOption {
@@ -17,9 +17,21 @@ interface CategoryFilterProps {
   language: string
 }
 
-export default function CategoryFilter({ categories, selectedCategory, onCategoryChange, language }: CategoryFilterProps) {
+export default function CategoryFilter({
+  categories,
+  selectedCategory,
+  onCategoryChange,
+  language,
+}: CategoryFilterProps) {
   return (
-    <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
+    <Box
+      style={{
+        marginBottom: tokens.spacing[4],
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: tokens.spacing[2],
+      }}
+    >
       {categories.map((cat) => {
         const isActive = selectedCategory === cat.key
         return (
@@ -32,7 +44,9 @@ export default function CategoryFilter({ categories, selectedCategory, onCategor
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
               borderRadius: tokens.radius.lg,
               fontSize: tokens.typography.fontSize.sm,
-              fontWeight: isActive ? tokens.typography.fontWeight.bold : tokens.typography.fontWeight.medium,
+              fontWeight: isActive
+                ? tokens.typography.fontWeight.bold
+                : tokens.typography.fontWeight.medium,
               background: isActive ? tokens.gradient.primary : tokens.glass.bg.light,
               backdropFilter: isActive ? 'none' : tokens.glass.blur.sm,
               WebkitBackdropFilter: isActive ? 'none' : tokens.glass.blur.sm,
@@ -40,7 +54,9 @@ export default function CategoryFilter({ categories, selectedCategory, onCategor
               border: isActive ? 'none' : tokens.glass.border.light,
               cursor: 'pointer',
               transition: `all ${tokens.transition.base}`,
-              boxShadow: isActive ? `0 4px 12px ${tokens.colors.accent.primary}40` : 'none',
+              boxShadow: isActive
+                ? `0 4px 12px ${alpha(tokens.colors.accent.primary, 25)}`
+                : 'none',
               outline: 'none',
             }}
           >

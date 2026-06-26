@@ -9,7 +9,7 @@ import { useState, useMemo, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter, usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { Suspense } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useBotRankings, type BotEntry, type BotRankingsResponse } from '@/lib/hooks/useBotRankings'
 // MobileBottomNav is rendered by root layout — do not duplicate here
@@ -174,7 +174,7 @@ function BotRow({ bot }: { bot: BotEntry }) {
       className="grid gap-2 px-4 items-center border-b last:border-b-0 ranking-row-hover"
       style={{
         gridTemplateColumns: '40px 1fr 80px 70px 70px 70px 64px',
-        borderColor: `${tokens.colors.border.primary}30`,
+        borderColor: `${alpha(tokens.colors.border.primary, 19)}`,
         textDecoration: 'none',
         transition: `all ${tokens.transition.base}`,
         minHeight: 56,
