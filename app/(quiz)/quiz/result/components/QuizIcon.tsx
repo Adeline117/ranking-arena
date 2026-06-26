@@ -1,5 +1,6 @@
+'use client'
+
 import { alpha } from '@/lib/design-tokens'
-;('use client')
 
 /**
  * SVG icons for quiz personality types (no emoji).
