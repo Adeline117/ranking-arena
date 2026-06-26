@@ -407,8 +407,10 @@ html.theme-transition #main-content {
     rgba(111, 78, 150, 0.04) 100%
   );
 
-  /* Background colors — softer than pure white for reduced glare */
-  --color-bg-primary: #fafafe;
+  /* Background colors. Page is pure white so cards (bg-secondary) + their layered
+     shadow visibly lift off it — the old #fafafe page was ~2% off the #f4f4f8 cards,
+     which read as muddy/flat (cards didn't separate). Text stays AA on white. */
+  --color-bg-primary: #ffffff;
   --color-bg-secondary: #f4f4f8;
   --color-bg-tertiary: #eeeef2;
   --color-bg-hover: #e5e5eb;
