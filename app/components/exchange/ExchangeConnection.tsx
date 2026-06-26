@@ -5,7 +5,7 @@ import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
 import { Box, Text, Button } from '@/app/components/base'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import type { ExchangeConnection } from '@/lib/exchange'
 import ExchangeLogo from '../ui/ExchangeLogo'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -244,9 +244,9 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
                       borderRadius: tokens.radius.sm,
                       background:
                         connection.last_sync_status === 'success'
-                          ? `${tokens.colors.accent.success}15`
+                          ? alpha(tokens.colors.accent.success, 8)
                           : connection.last_sync_status === 'error'
-                            ? `${tokens.colors.accent.error}15`
+                            ? alpha(tokens.colors.accent.error, 8)
                             : tokens.colors.bg.tertiary,
                       fontSize: tokens.typography.fontSize.xs,
                       color:

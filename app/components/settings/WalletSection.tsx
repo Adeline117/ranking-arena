@@ -14,7 +14,7 @@ import { ConnectButton } from '@rainbow-me/rainbowkit'
 import { useSiweAuth } from '@/lib/web3/useSiweAuth'
 import { useWallet } from '@/lib/web3/useWallet'
 import { usePremium } from '@/lib/premium/hooks'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ChainIndicator } from '@/app/components/web3/ChainIndicator'
@@ -146,7 +146,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
               style={{
                 padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.accent.error}30`,
+                border: `1px solid ${alpha(tokens.colors.accent.error, 19)}`,
                 background: 'transparent',
                 color: tokens.colors.accent.error,
                 fontSize: tokens.typography.fontSize.xs,

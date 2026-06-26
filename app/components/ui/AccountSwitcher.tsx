@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
@@ -53,7 +53,7 @@ function AccountRow({
         gap: tokens.spacing[2],
         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
         borderRadius: tokens.radius.md,
-        background: isActive ? `${tokens.colors.accent.primary}10` : 'transparent',
+        background: isActive ? alpha(tokens.colors.accent.primary, 6) : 'transparent',
         cursor: onClick ? (disabled ? 'wait' : 'pointer') : undefined,
         opacity: disabled && !isSwitching ? 0.5 : 1,
         transition: `all ${tokens.transition.base}`,
@@ -81,11 +81,23 @@ function AccountRow({
         )}
       </Box>
       {isActive && (
-        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" style={{ color: tokens.colors.accent.success }}>
+        <svg
+          width={14}
+          height={14}
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="3"
+          style={{ color: tokens.colors.accent.success }}
+        >
           <path d="M20 6L9 17l-5-5" />
         </svg>
       )}
-      {isSwitching && <Text size="xs" color="tertiary">{switchingLabel}</Text>}
+      {isSwitching && (
+        <Text size="xs" color="tertiary">
+          {switchingLabel}
+        </Text>
+      )}
     </Box>
   )
 }
@@ -93,30 +105,43 @@ function AccountRow({
 export default function AccountSwitcher({ onClose }: AccountSwitcherProps): React.ReactElement {
   const router = useRouter()
   const { t } = useLanguage()
-  const { accounts, activeAccount, inactiveAccounts, isPro, switchAccount, removeAccount, signOutAll, addCurrentAccount } = useMultiAccount()
+  const {
+    accounts,
+    activeAccount,
+    inactiveAccounts,
+    isPro,
+    switchAccount,
+    removeAccount,
+    signOutAll,
+    addCurrentAccount,
+  } = useMultiAccount()
   const [switchingId, setSwitchingId] = useState<string | null>(null)
   const [signingOut, setSigningOut] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const handleSwitch = useCallback(async (userId: string) => {
-    setSwitchingId(userId)
-    setError(null)
-    const result = await switchAccount(userId)
-    setSwitchingId(null)
+  const handleSwitch = useCallback(
+    async (userId: string) => {
+      setSwitchingId(userId)
+      setError(null)
+      const result = await switchAccount(userId)
+      setSwitchingId(null)
 
-    if (!result.success) {
-      const errorMessage = result.error === 'session_expired' ? t('sessionExpired') : t('switchFailed')
-      setError(errorMessage)
-      if (result.error === 'session_expired') {
-        removeAccount(userId)
+      if (!result.success) {
+        const errorMessage =
+          result.error === 'session_expired' ? t('sessionExpired') : t('switchFailed')
+        setError(errorMessage)
+        if (result.error === 'session_expired') {
+          removeAccount(userId)
+        }
+        return
       }
-      return
-    }
 
-    onClose?.()
-    // 完整刷新页面以确保session正确切换
-    window.location.reload()
-  }, [switchAccount, removeAccount, onClose, t])
+      onClose?.()
+      // 完整刷新页面以确保session正确切换
+      window.location.reload()
+    },
+    [switchAccount, removeAccount, onClose, t]
+  )
 
   const handleAddAccount = useCallback(async () => {
     onClose?.()
@@ -130,20 +155,23 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps): Reac
     router.push('/login?addAccount=true')
   }, [isPro, onClose, router, addCurrentAccount])
 
-  const handleSignOutAll = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation()
-    if (signingOut) return
-    setSigningOut(true)
-    try {
-      await signOutAll()
-      onClose?.()
-      router.push('/')
-    } catch (err) {
-      logger.error('Sign out failed:', err)
-    } finally {
-      setSigningOut(false)
-    }
-  }, [signingOut, signOutAll, onClose, router])
+  const handleSignOutAll = useCallback(
+    async (e: React.MouseEvent) => {
+      e.stopPropagation()
+      if (signingOut) return
+      setSigningOut(true)
+      try {
+        await signOutAll()
+        onClose?.()
+        router.push('/')
+      } catch (err) {
+        logger.error('Sign out failed:', err)
+      } finally {
+        setSigningOut(false)
+      }
+    },
+    [signingOut, signOutAll, onClose, router]
+  )
 
   return (
     <Box style={{ padding: `${tokens.spacing[1]} 0` }}>
@@ -172,12 +200,24 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps): Reac
       ))}
 
       {error && (
-        <Text size="xs" style={{ color: tokens.colors.accent.error, padding: `${tokens.spacing[1]} ${tokens.spacing[3]}` }}>
+        <Text
+          size="xs"
+          style={{
+            color: tokens.colors.accent.error,
+            padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
+          }}
+        >
           {error}
         </Text>
       )}
 
-      <Box style={{ height: 1, background: tokens.colors.border.primary, margin: `${tokens.spacing[2]} 0` }} />
+      <Box
+        style={{
+          height: 1,
+          background: tokens.colors.border.primary,
+          margin: `${tokens.spacing[2]} 0`,
+        }}
+      />
 
       <MenuRow onClick={handleAddAccount}>
         <Box
@@ -195,7 +235,9 @@ export default function AccountSwitcher({ onClose }: AccountSwitcherProps): Reac
         >
           +
         </Box>
-        <Text size="sm" color="secondary">{t('addAccount')}</Text>
+        <Text size="sm" color="secondary">
+          {t('addAccount')}
+        </Text>
         {!isPro && <ProBadge />}
       </MenuRow>
 
