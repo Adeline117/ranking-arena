@@ -30,7 +30,7 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: 'Arena — All Rankings in Crypto',
+    default: 'Arena | All Rankings in Crypto',
     template: '%s | Arena',
   },
   description:
