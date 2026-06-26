@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getErrorMessage, isRetryableError } from '@/lib/utils/error-handling'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
@@ -23,9 +23,9 @@ interface DataStateWrapperProps<T = unknown> {
   emptyMessage?: string
   emptyActions?: EmptyAction[]
   onRetry?: () => void
-  
+
   // 新增的增强属性
-  loading?: boolean  // 备用的加载状态名
+  loading?: boolean // 备用的加载状态名
   data?: T
   customIsEmpty?: (data: T) => boolean
   loadingType?: 'card' | 'list' | 'table' | 'trader' | 'ranking' | 'text'
@@ -50,7 +50,7 @@ export default function DataStateWrapper({
   emptyMessage,
   emptyActions,
   onRetry,
-  
+
   // 新增属性
   loading,
   data,
@@ -63,22 +63,22 @@ export default function DataStateWrapper({
   emptyComponent,
 }: DataStateWrapperProps) {
   const { t } = useLanguage()
-  
+
   // 兼容旧 API：合并新旧加载状态
   const isLoading = legacyIsLoading ?? loading ?? false
   const error = legacyError
-  
+
   // 计算是否为空状态
   const isEmpty = React.useMemo(() => {
     if (legacyIsEmpty !== undefined) return legacyIsEmpty
     if (customIsEmpty && data !== undefined) return customIsEmpty(data)
-    
+
     // 默认空判断逻辑
     if (data === null || data === undefined) return true
     if (Array.isArray(data)) return data.length === 0
     if (typeof data === 'object') return Object.keys(data).length === 0
     if (typeof data === 'string') return data.trim().length === 0
-    
+
     return false
   }, [legacyIsEmpty, data, customIsEmpty])
 
@@ -89,7 +89,7 @@ export default function DataStateWrapper({
 
   if (isLoading) {
     if (loadingComponent) return <div style={containerStyle}>{loadingComponent}</div>
-    
+
     // 使用新的 LoadingSkeleton 组件
     return (
       <div style={containerStyle}>
@@ -100,18 +100,25 @@ export default function DataStateWrapper({
 
   if (error) {
     if (errorComponent) return <div style={containerStyle}>{errorComponent}</div>
-    
+
     const errorMsg = getErrorMessage(error)
     const canRetry = onRetry && showRetry && isRetryableError(error)
-    
+
     return (
       <div style={containerStyle} className="flex items-center justify-center py-12">
         <div className="flex flex-col items-center gap-3 text-center max-w-sm">
           <div
             className="w-12 h-12 rounded-full flex items-center justify-center"
-            style={{ backgroundColor: `${tokens.colors.accent.error}15` }}
+            style={{ backgroundColor: alpha(tokens.colors.accent.error, 8) }}
           >
-            <svg className="h-6 w-6" style={{ color: tokens.colors.accent.error }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              className="h-6 w-6"
+              style={{ color: tokens.colors.accent.error }}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -132,7 +139,7 @@ export default function DataStateWrapper({
 
   if (isEmpty) {
     if (emptyComponent) return <div style={containerStyle}>{emptyComponent}</div>
-    
+
     return (
       <div style={containerStyle} className="flex items-center justify-center py-12">
         <div className="flex flex-col items-center gap-3 text-center max-w-sm">
@@ -140,8 +147,19 @@ export default function DataStateWrapper({
             className="w-12 h-12 rounded-full flex items-center justify-center"
             style={{ backgroundColor: tokens.colors.bg.secondary }}
           >
-            <svg className="h-6 w-6" style={{ color: tokens.colors.text.tertiary }} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+            <svg
+              className="h-6 w-6"
+              style={{ color: tokens.colors.text.tertiary }}
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"
+              />
             </svg>
           </div>
           <p className="text-sm" style={{ color: tokens.colors.text.secondary }}>
@@ -166,5 +184,9 @@ export default function DataStateWrapper({
     )
   }
 
-  return <div style={containerStyle} className="content-appear">{children}</div>
+  return (
+    <div style={containerStyle} className="content-appear">
+      {children}
+    </div>
+  )
 }

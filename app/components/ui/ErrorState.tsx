@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '../base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -12,7 +12,12 @@ type ErrorStateProps = {
   variant?: 'default' | 'compact'
 }
 
-export default function ErrorState({ title, description, retry, variant = 'default' }: ErrorStateProps) {
+export default function ErrorState({
+  title,
+  description,
+  retry,
+  variant = 'default',
+}: ErrorStateProps) {
   const { t } = useLanguage()
   const isCompact = variant === 'compact'
   const displayTitle = title || t('somethingWentWrong')
@@ -43,7 +48,7 @@ export default function ErrorState({ title, description, retry, variant = 'defau
             height: isCompact ? 56 : 72,
             borderRadius: tokens.radius.full,
             background: tokens.gradient.errorSubtle,
-            border: `1px solid ${tokens.colors.accent.error}20`,
+            border: `1px solid ${alpha(tokens.colors.accent.error, 13)}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

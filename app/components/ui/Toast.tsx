@@ -10,7 +10,7 @@ import {
   useEffect,
   useRef,
 } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { setGlobalToast } from '@/lib/hooks/useApiMutation'
 import { t } from '@/lib/i18n'
 
@@ -74,7 +74,7 @@ const getToastConfig = (type: ToastType) => {
     case 'success':
       return {
         gradient: tokens.gradient.successSubtle,
-        borderColor: `${tokens.colors.accent.success}50`,
+        borderColor: alpha(tokens.colors.accent.success, 31),
         iconBg: tokens.gradient.success,
         textColor: tokens.colors.accent.success,
         icon: 'OK',
@@ -83,7 +83,7 @@ const getToastConfig = (type: ToastType) => {
     case 'error':
       return {
         gradient: tokens.gradient.errorSubtle,
-        borderColor: `${tokens.colors.accent.error}50`,
+        borderColor: alpha(tokens.colors.accent.error, 31),
         iconBg: tokens.gradient.error,
         textColor: tokens.colors.accent.error,
         icon: 'X',
@@ -92,7 +92,7 @@ const getToastConfig = (type: ToastType) => {
     case 'warning':
       return {
         gradient: tokens.gradient.warningSubtle,
-        borderColor: `${tokens.colors.accent.warning}50`,
+        borderColor: alpha(tokens.colors.accent.warning, 31),
         iconBg: tokens.gradient.warning,
         textColor: tokens.colors.accent.warning,
         icon: '!',
@@ -102,7 +102,7 @@ const getToastConfig = (type: ToastType) => {
     default:
       return {
         gradient: tokens.gradient.primarySubtle,
-        borderColor: `${tokens.colors.accent.primary}50`,
+        borderColor: alpha(tokens.colors.accent.primary, 31),
         iconBg: tokens.gradient.primary,
         textColor: tokens.colors.accent.primary,
         icon: 'i',
@@ -212,7 +212,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
-            boxShadow: `0 4px 12px ${config.textColor}40`,
+            boxShadow: `0 4px 12px ${alpha(config.textColor, 25)}`,
           }}
         >
           <span
@@ -267,8 +267,8 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             }}
             className="btn-press"
             style={{
-              background: `${config.textColor}18`,
-              border: `1px solid ${config.textColor}40`,
+              background: alpha(config.textColor, 9),
+              border: `1px solid ${alpha(config.textColor, 25)}`,
               color: config.textColor,
               cursor: 'pointer',
               padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
@@ -326,7 +326,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
             top: 0,
             bottom: 0,
             width: '100%',
-            background: `linear-gradient(90deg, ${config.progressColor}, ${config.progressColor}80)`,
+            background: `linear-gradient(90deg, ${config.progressColor}, ${alpha(config.progressColor, 50)})`,
             animation: `toastProgress ${toast.duration}ms linear forwards`,
             borderRadius: '0 2px 2px 0',
           }}
