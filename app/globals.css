@@ -3952,4 +3952,9 @@ td[data-numeric],
   .beta-banner .beta-short {
     display: inline;
   }
+  /* Founding-member banner: drop the secondary "first 200 only" line on mobile
+     so the banner stays a single compact row. */
+  .founding-member-banner .fm-sub {
+    display: none;
+  }
 }

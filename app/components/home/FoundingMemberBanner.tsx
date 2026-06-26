@@ -59,6 +59,7 @@ export default function FoundingMemberBanner() {
       </span>
       <span style={{ color: 'var(--color-text-secondary)', fontWeight: 500 }}>{text}</span>
       <span
+        className="fm-sub"
         style={{ color: 'var(--color-text-tertiary)', fontSize: tokens.typography.fontSize.xs }}
       >
         {t('foundingMemberFirst200')}
