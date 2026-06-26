@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
@@ -142,7 +142,7 @@ function SortButton({
         cursor: 'pointer',
         fontSize: tokens.typography.fontSize.xs,
         fontWeight: active ? 600 : 400,
-        background: active ? tokens.colors.accent.brand + '20' : 'transparent',
+        background: active ? alpha(tokens.colors.accent.brand, 13) : 'transparent',
         color: active ? tokens.colors.accent.brand : tokens.colors.text.secondary,
         transition: `all ${tokens.transition.base}`,
       }}
@@ -739,7 +739,7 @@ export default function FollowingPageClient() {
                             background:
                               item.type === 'trader'
                                 ? getSourceColor(item.source || 'binance') + '20'
-                                : tokens.colors.accent.brand + '20',
+                                : alpha(tokens.colors.accent.brand, 13),
                             color:
                               item.type === 'trader'
                                 ? getSourceColor(item.source || 'binance')
@@ -821,7 +821,7 @@ export default function FollowingPageClient() {
                               flexDirection: 'column',
                               alignItems: 'center',
                               padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                              background: tokens.colors.accent.brand + '10',
+                              background: alpha(tokens.colors.accent.brand, 6),
                               borderRadius: tokens.radius.md,
                               minWidth: 50,
                             }}

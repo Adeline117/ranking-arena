@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/app/components/ui/Toast'
@@ -412,7 +412,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
               padding: tokens.spacing[4],
               borderRadius: tokens.radius.lg,
               background: tokens.colors.bg.primary,
-              border: `1px solid ${trader.is_primary ? tokens.colors.accent.primary + '40' : tokens.colors.border.primary}`,
+              border: `1px solid ${trader.is_primary ? colorAlpha(tokens.colors.accent.primary, 25) : tokens.colors.border.primary}`,
               transition: `all ${tokens.transition.base}`,
             }}
           >

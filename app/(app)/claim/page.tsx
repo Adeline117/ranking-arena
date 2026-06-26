@@ -13,7 +13,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
 // MobileBottomNav is rendered by root layout — do not duplicate here
@@ -272,7 +272,7 @@ export default function ClaimPage() {
                 width: 80,
                 height: 80,
                 borderRadius: '50%',
-                backgroundColor: tokens.colors.accent.success + '20',
+                backgroundColor: alpha(tokens.colors.accent.success, 13),
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

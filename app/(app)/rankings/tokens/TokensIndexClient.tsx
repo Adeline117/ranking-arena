@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Box, Text } from '@/app/components/base'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface PopularToken {
@@ -257,7 +257,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
                     gap: 12,
                   }}
                   onMouseEnter={(e: React.MouseEvent<HTMLDivElement>) => {
-                    e.currentTarget.style.borderColor = color + '60'
+                    e.currentTarget.style.borderColor = colorAlpha(color, 38)
                     e.currentTarget.style.transform = 'translateY(-2px)'
                     e.currentTarget.style.boxShadow = tokens.shadow.md
                   }}

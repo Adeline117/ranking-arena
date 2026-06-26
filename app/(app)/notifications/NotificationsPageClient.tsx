@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
@@ -686,9 +686,11 @@ export default function NotificationsPageClient() {
                               width: 20,
                               height: 20,
                               borderRadius: '50%',
-                              background:
-                                (NOTIFICATION_TYPE_CONFIG[n.type]?.color ||
-                                  tokens.colors.bg.tertiary) + '30',
+                              background: alpha(
+                                NOTIFICATION_TYPE_CONFIG[n.type]?.color ||
+                                  tokens.colors.bg.tertiary,
+                                19
+                              ),
                               border: `1.5px solid ${tokens.colors.bg.primary}`,
                               display: 'flex',
                               alignItems: 'center',
@@ -727,9 +729,12 @@ export default function NotificationsPageClient() {
                           justifyContent: 'center',
                           background:
                             n.type === 'trader_alert'
-                              ? severityColors[severity] + '15'
-                              : (NOTIFICATION_TYPE_CONFIG[n.type]?.color ||
-                                  tokens.colors.bg.tertiary) + '15',
+                              ? alpha(severityColors[severity], 8)
+                              : alpha(
+                                  NOTIFICATION_TYPE_CONFIG[n.type]?.color ||
+                                    tokens.colors.bg.tertiary,
+                                  8
+                                ),
                           fontSize: 14,
                         }}
                       >
@@ -904,7 +909,7 @@ function FilterTab({
         cursor: 'pointer',
         fontSize: tokens.typography.fontSize.xs,
         fontWeight: active ? 600 : 400,
-        background: active ? tokens.colors.accent.brand + '20' : tokens.colors.bg.secondary,
+        background: active ? alpha(tokens.colors.accent.brand, 13) : tokens.colors.bg.secondary,
         color: active ? tokens.colors.accent.brand : tokens.colors.text.secondary,
         transition: `all ${tokens.transition.base}`,
         minHeight: 36,
@@ -914,7 +919,7 @@ function FilterTab({
       <span
         style={{
           fontSize: 10,
-          background: active ? tokens.colors.accent.brand + '30' : tokens.colors.bg.tertiary,
+          background: active ? alpha(tokens.colors.accent.brand, 19) : tokens.colors.bg.tertiary,
           borderRadius: 10,
           padding: '1px 6px',
           minWidth: 18,

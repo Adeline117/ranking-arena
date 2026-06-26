@@ -13,7 +13,7 @@ import TypeBreakdown from './components/TypeBreakdown'
 import RecommendedTraders from './components/RecommendedTraders'
 import ShareActions from './components/ShareActions'
 import '../quiz.css'
-import { alpha } from '@/lib/design-tokens'
+import { alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 
 interface ResultPageClientProps {
   typeId: PersonalityTypeId
@@ -194,8 +194,8 @@ export default function ResultPageClient({
                   style={{
                     padding: '6px 14px',
                     borderRadius: 20,
-                    background: ct.color + '18',
-                    border: '1px solid ' + ct.color + '30',
+                    background: colorAlpha(ct.color, 9),
+                    border: '1px solid ' + colorAlpha(ct.color, 19),
                     fontSize: 13,
                     color: ct.color,
                     fontWeight: 600,

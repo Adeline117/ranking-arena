@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import {
   getAvatarGradient,
@@ -140,7 +140,7 @@ function PeriodSelector({
             border: 'none',
             fontSize: 13,
             fontWeight: period === p ? 700 : 500,
-            background: period === p ? tokens.colors.accent.brand + '20' : 'transparent',
+            background: period === p ? colorAlpha(tokens.colors.accent.brand, 13) : 'transparent',
             color: period === p ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
             cursor: loading ? 'wait' : 'pointer',
             opacity: loading ? 0.6 : 1,

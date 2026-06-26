@@ -2,7 +2,7 @@
 
 import React from 'react'
 import Image from 'next/image'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -547,7 +547,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
               onClick={() => props.setShowDisable2FA(true)}
               style={{
                 color: tokens.colors.accent.error,
-                borderColor: tokens.colors.accent.error + '40',
+                borderColor: colorAlpha(tokens.colors.accent.error, 25),
               }}
             >
               {t('disable2FAButton')}
@@ -583,7 +583,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 disabled={props.twoFALoading || !props.disablePassword}
                 style={{
                   color: tokens.colors.accent.error,
-                  borderColor: tokens.colors.accent.error + '40',
+                  borderColor: colorAlpha(tokens.colors.accent.error, 25),
                 }}
               >
                 {props.twoFALoading ? t('processingText') : t('confirmDisableButton')}
@@ -638,7 +638,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                   padding: tokens.spacing[3],
                   borderRadius: tokens.radius.md,
                   background: tokens.colors.bg.primary,
-                  border: `1px solid ${session.isCurrent ? tokens.colors.accent.success + '40' : tokens.colors.border.primary}`,
+                  border: `1px solid ${session.isCurrent ? colorAlpha(tokens.colors.accent.success, 25) : tokens.colors.border.primary}`,
                 }}
               >
                 <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
@@ -705,7 +705,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                   onClick={props.onRevokeAllSessions}
                   style={{
                     color: tokens.colors.accent.error,
-                    borderColor: tokens.colors.accent.error + '40',
+                    borderColor: colorAlpha(tokens.colors.accent.error, 25),
                   }}
                 >
                   {t('logoutOtherDevicesButton')}

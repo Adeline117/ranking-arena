@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { RoiDisplay } from './components'
@@ -51,48 +51,59 @@ export default function FollowingListItem({
       {/* 信息区域 */}
       <Box style={{ flex: 1, minWidth: 0 }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text size="sm" weight="semibold" style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-          }}>
+          <Text
+            size="sm"
+            weight="semibold"
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {item.handle}
           </Text>
           {/* 类型标签 */}
-          <span style={{
-            fontSize: 10,
-            padding: '2px 6px',
-            borderRadius: tokens.radius.sm,
-            background: item.type === 'trader'
-              ? getSourceColor(item.source || 'binance') + '20'
-              : tokens.colors.accent.brand + '20',
-            color: item.type === 'trader'
-              ? getSourceColor(item.source || 'binance')
-              : tokens.colors.accent.brand,
-            fontWeight: 500,
-          }}>
+          <span
+            style={{
+              fontSize: 10,
+              padding: '2px 6px',
+              borderRadius: tokens.radius.sm,
+              background:
+                item.type === 'trader'
+                  ? getSourceColor(item.source || 'binance') + '20'
+                  : alpha(tokens.colors.accent.brand, 13),
+              color:
+                item.type === 'trader'
+                  ? getSourceColor(item.source || 'binance')
+                  : tokens.colors.accent.brand,
+              fontWeight: 500,
+            }}
+          >
             {item.type === 'trader'
               ? getSourceDisplayName(item.source || 'binance', language)
-              : (language === 'en' ? 'User' : '用户')}
+              : language === 'en'
+                ? 'User'
+                : '用户'}
           </span>
         </Box>
 
         {/* 交易员：ROI + Arena Score 行 */}
         {item.type === 'trader' ? (
-          <Box style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[3],
-            marginTop: 4,
-            flexWrap: 'wrap',
-          }}>
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[3],
+              marginTop: 4,
+              flexWrap: 'wrap',
+            }}
+          >
             <RoiDisplay value={item.roi} label="ROI" />
-            {item.roi_7d !== undefined && (
-              <RoiDisplay value={item.roi_7d} label="7D" />
-            )}
+            {item.roi_7d !== undefined && <RoiDisplay value={item.roi_7d} label="7D" />}
             {item.arena_score !== undefined && item.arena_score > 0 && (
               <Text size="xs" color="tertiary">
-                Score: <span style={{ color: tokens.colors.accent.brand, fontWeight: 500 }}>
+                Score:{' '}
+                <span style={{ color: tokens.colors.accent.brand, fontWeight: 500 }}>
                   {item.arena_score.toFixed(1)}
                 </span>
               </Text>
@@ -109,35 +120,45 @@ export default function FollowingListItem({
             )}
           </Box>
         ) : item.bio ? (
-          <Text size="xs" color="tertiary" style={{
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            marginTop: 4,
-          }}>
+          <Text
+            size="xs"
+            color="tertiary"
+            style={{
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              marginTop: 4,
+            }}
+          >
             {item.bio}
           </Text>
         ) : null}
       </Box>
 
       {/* 右侧：Arena Score + 取消关注 + 箭头 */}
-      <Box style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: tokens.spacing[2],
-        flexShrink: 0,
-      }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          flexShrink: 0,
+        }}
+      >
         {item.type === 'trader' && item.arena_score !== undefined && item.arena_score > 0 && (
-          <Box style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-            background: tokens.colors.accent.brand + '10',
-            borderRadius: tokens.radius.md,
-            minWidth: 50,
-          }}>
-            <Text size="xs" color="tertiary" style={{ fontSize: 10, lineHeight: 1 }}>Score</Text>
+          <Box
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+              background: alpha(tokens.colors.accent.brand, 6),
+              borderRadius: tokens.radius.md,
+              minWidth: 50,
+            }}
+          >
+            <Text size="xs" color="tertiary" style={{ fontSize: 10, lineHeight: 1 }}>
+              Score
+            </Text>
             <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.brand }}>
               {item.arena_score.toFixed(0)}
             </Text>
@@ -161,13 +182,19 @@ export default function FollowingListItem({
           }}
           className="hover-unfollow"
         >
-          {unfollowingId === item.id
-            ? t('removing')
-            : t('unfollow')
-          }
+          {unfollowingId === item.id ? t('removing') : t('unfollow')}
         </button>
         <Box style={{ color: tokens.colors.text.tertiary }}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
         </Box>
