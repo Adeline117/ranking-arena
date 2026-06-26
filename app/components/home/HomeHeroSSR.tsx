@@ -47,15 +47,15 @@ export default async function HomeHeroSSR({
   return (
     <section
       style={{
-        padding: `${tokens.spacing[8]} ${tokens.spacing[6]} ${tokens.spacing[6]}`,
-        marginBottom: tokens.spacing[4],
+        padding: `${tokens.spacing[10]} ${tokens.spacing[8]} ${tokens.spacing[8]}`,
+        marginBottom: tokens.spacing[5],
         background:
           'linear-gradient(145deg, var(--color-bg-secondary) 0%, var(--color-bg-primary) 100%)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))',
         position: 'relative',
         overflow: 'hidden',
-        minHeight: 120,
+        minHeight: 200,
         contain: 'layout style',
       }}
     >
@@ -90,23 +90,23 @@ export default async function HomeHeroSSR({
           {/* LCP element: this headline is the largest above-fold text in the SSR HTML */}
           <h1
             style={{
-              fontSize: 'clamp(20px, 2.8vw, 28px)',
-              fontWeight: tokens.typography.fontWeight.bold,
+              fontSize: 'clamp(30px, 4.6vw, 48px)',
+              fontWeight: tokens.typography.fontWeight.black,
               color: 'var(--color-text-primary)',
-              marginBottom: tokens.spacing[2],
-              lineHeight: 1.2,
-              letterSpacing: '-0.02em',
+              marginBottom: tokens.spacing[3],
+              lineHeight: 1.08,
+              letterSpacing: '-0.03em',
             }}
           >
             {headline}
           </h1>
           <p
             style={{
-              fontSize: '0.875rem',
-              color: 'var(--color-text-tertiary, rgba(255,255,255,0.55))',
+              fontSize: '1.0625rem',
+              color: 'var(--color-text-secondary)',
               lineHeight: 1.6,
               margin: 0,
-              maxWidth: 500,
+              maxWidth: 540,
             }}
           >
             {subtitle}
@@ -125,12 +125,12 @@ export default async function HomeHeroSSR({
             <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
               <div
                 style={{
-                  fontSize: '1.5rem',
-                  fontWeight: tokens.typography.fontWeight.bold,
+                  fontSize: '2rem',
+                  fontWeight: tokens.typography.fontWeight.black,
                   color: 'var(--color-text-primary)',
                   fontVariantNumeric: 'tabular-nums',
-                  lineHeight: 1.2,
-                  minHeight: '1.2em',
+                  lineHeight: 1.1,
+                  minHeight: '1.1em',
                   letterSpacing: '-0.02em',
                 }}
               >

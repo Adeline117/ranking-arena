@@ -38,15 +38,15 @@ export default function HomeHero({
   return (
     <section
       style={{
-        padding: `${tokens.spacing[8]} ${tokens.spacing[6]} ${tokens.spacing[6]}`,
-        marginBottom: tokens.spacing[4],
+        padding: `${tokens.spacing[10]} ${tokens.spacing[8]} ${tokens.spacing[8]}`,
+        marginBottom: tokens.spacing[5],
         background:
           'linear-gradient(145deg, var(--color-bg-secondary) 0%, var(--color-bg-primary) 100%)',
         borderRadius: tokens.radius.xl,
         border: '1px solid var(--color-border-primary)',
         position: 'relative',
         overflow: 'hidden',
-        minHeight: 120,
+        minHeight: 200,
         contain: 'layout style',
       }}
     >
@@ -79,12 +79,12 @@ export default function HomeHero({
         <div style={{ flex: '1 1 400px', minWidth: 0 }}>
           <h1
             style={{
-              fontSize: 'clamp(20px, 2.8vw, 28px)',
-              fontWeight: tokens.typography.fontWeight.bold,
+              fontSize: 'clamp(30px, 4.6vw, 48px)',
+              fontWeight: tokens.typography.fontWeight.black,
               color: 'var(--color-text-primary)',
-              marginBottom: tokens.spacing[2],
-              lineHeight: tokens.typography.lineHeight.tight,
-              letterSpacing: '-0.02em',
+              marginBottom: tokens.spacing[3],
+              lineHeight: 1.08,
+              letterSpacing: '-0.03em',
             }}
           >
             {t('heroHeadline' as Parameters<typeof t>[0])}
@@ -92,11 +92,11 @@ export default function HomeHero({
 
           <p
             style={{
-              fontSize: tokens.typography.fontSize.sm,
-              color: 'var(--color-text-tertiary)',
-              lineHeight: tokens.typography.lineHeight.normal,
+              fontSize: '1.0625rem',
+              color: 'var(--color-text-secondary)',
+              lineHeight: 1.6,
               margin: 0,
-              maxWidth: 500,
+              maxWidth: 540,
             }}
           >
             {subtitle}
@@ -137,12 +137,12 @@ export default function HomeHero({
             <div key={stat.label} style={{ textAlign: 'center', minWidth: 56 }}>
               <div
                 style={{
-                  fontSize: tokens.typography.fontSize['2xl'],
-                  fontWeight: tokens.typography.fontWeight.bold,
+                  fontSize: '2rem',
+                  fontWeight: tokens.typography.fontWeight.black,
                   color: 'var(--color-text-primary)',
                   fontVariantNumeric: 'tabular-nums',
-                  lineHeight: 1.2,
-                  minHeight: '1.2em',
+                  lineHeight: 1.1,
+                  minHeight: '1.1em',
                   letterSpacing: '-0.02em',
                 }}
               >
