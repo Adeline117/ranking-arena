@@ -555,8 +555,8 @@ function SearchContent() {
         {/* Inline search input — users can refine without scrolling to nav bar */}
         <div style={{ position: 'relative', marginBottom: 16 }}>
           <svg
-            width="18"
-            height="18"
+            width="22"
+            height="22"
             viewBox="0 0 24 24"
             fill="none"
             stroke={tokens.colors.text.tertiary}
@@ -564,7 +564,7 @@ function SearchContent() {
             strokeLinecap="round"
             style={{
               position: 'absolute',
-              left: 14,
+              left: 18,
               top: '50%',
               transform: 'translateY(-50%)',
               pointerEvents: 'none',
@@ -582,23 +582,25 @@ function SearchContent() {
             enterKeyHint="search"
             style={{
               width: '100%',
-              padding: '12px 14px 12px 44px',
-              fontSize: '16px', // >= 16px prevents iOS Safari auto-zoom
+              padding: '16px 18px 16px 54px',
+              fontSize: '17px', // >= 16px prevents iOS Safari auto-zoom
               fontWeight: 500,
               color: tokens.colors.text.primary,
               background: tokens.colors.bg.secondary,
               border: `1px solid ${tokens.colors.border.primary}`,
-              borderRadius: tokens.radius.lg,
+              borderRadius: tokens.radius.xl,
               outline: 'none',
+              boxShadow: '0 1px 2px var(--color-overlay-subtle)',
               boxSizing: 'border-box',
+              transition: 'border-color 0.15s ease, box-shadow 0.15s ease',
             }}
             onFocus={(e) => {
               e.currentTarget.style.borderColor = tokens.colors.accent.primary
-              e.currentTarget.style.boxShadow = `0 0 0 2px ${alpha(tokens.colors.accent.primary, 13)}`
+              e.currentTarget.style.boxShadow = `0 0 0 3px ${alpha(tokens.colors.accent.primary, 18)}`
             }}
             onBlur={(e) => {
               e.currentTarget.style.borderColor = tokens.colors.border.primary
-              e.currentTarget.style.boxShadow = 'none'
+              e.currentTarget.style.boxShadow = '0 1px 2px var(--color-overlay-subtle)'
             }}
           />
           {inputValue && (
