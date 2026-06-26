@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
@@ -324,7 +324,7 @@ export default function GroupHeader({
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.color = tokens.colors.text.primary
-                e.currentTarget.style.background = `${tokens.colors.text.tertiary}15`
+                e.currentTarget.style.background = `${alpha(tokens.colors.text.tertiary, 8)}`
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.color = tokens.colors.text.tertiary

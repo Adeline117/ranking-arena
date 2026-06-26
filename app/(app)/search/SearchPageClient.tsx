@@ -9,7 +9,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import ErrorState from '@/app/components/ui/ErrorState'
 import EmptyState from '@/app/components/ui/EmptyState'
 import type { UnifiedSearchResponse } from '@/app/api/search/route'
@@ -560,7 +560,7 @@ function SearchContent() {
             }}
             onFocus={(e) => {
               e.currentTarget.style.borderColor = tokens.colors.accent.primary
-              e.currentTarget.style.boxShadow = `0 0 0 2px ${tokens.colors.accent.primary}20`
+              e.currentTarget.style.boxShadow = `0 0 0 2px ${alpha(tokens.colors.accent.primary, 13)}`
             }}
             onBlur={(e) => {
               e.currentTarget.style.borderColor = tokens.colors.border.primary
@@ -578,7 +578,7 @@ function SearchContent() {
                 right: 12,
                 top: '50%',
                 transform: 'translateY(-50%)',
-                background: `${tokens.colors.text.tertiary}20`,
+                background: `${alpha(tokens.colors.text.tertiary, 13)}`,
                 border: 'none',
                 borderRadius: tokens.radius.full,
                 width: 22,

@@ -2,7 +2,7 @@
 
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box } from '@/app/components/base'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { DynamicFollowListModal as FollowListModal } from '@/app/components/ui/Dynamic'
 
 import { features } from '@/lib/features'
@@ -107,7 +107,7 @@ export default function UserProfileClient({
       className="user-profile-page"
       style={{
         minHeight: '100vh',
-        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${tokens.colors.bg.secondary}30 100%)`,
+        background: `linear-gradient(180deg, ${tokens.colors.bg.primary} 0%, ${alpha(tokens.colors.bg.secondary, 19)} 100%)`,
         color: tokens.colors.text.primary,
       }}
     >

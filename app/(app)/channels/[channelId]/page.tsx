@@ -4,7 +4,7 @@ import { useEffect, useState, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
@@ -757,8 +757,8 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                   padding: '10px',
                   marginTop: 16,
                   borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.accent.error}33`,
-                  background: `${tokens.colors.accent.error}11`,
+                  border: `1px solid ${alpha(tokens.colors.accent.error, 20)}`,
+                  background: `${alpha(tokens.colors.accent.error, 7)}`,
                   color: tokens.colors.accent.error,
                   fontWeight: 600,
                   fontSize: 13,

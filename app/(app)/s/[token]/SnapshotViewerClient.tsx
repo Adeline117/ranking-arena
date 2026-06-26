@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
@@ -229,7 +229,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
               width: 64,
               height: 64,
               borderRadius: tokens.radius.full,
-              background: `${tokens.colors.accent.warning}20`,
+              background: `${alpha(tokens.colors.accent.warning, 13)}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -362,8 +362,8 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
             padding: tokens.spacing[4],
             marginBottom: tokens.spacing[4],
             borderRadius: tokens.radius.lg,
-            background: `${tokens.colors.accent.warning}10`,
-            border: `1px solid ${tokens.colors.accent.warning}30`,
+            background: `${alpha(tokens.colors.accent.warning, 6)}`,
+            border: `1px solid ${alpha(tokens.colors.accent.warning, 19)}`,
           }}
         >
           <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
@@ -566,9 +566,9 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
                         borderRadius: tokens.radius.md,
                         background:
                           trader.arenaScore >= 60
-                            ? `${tokens.colors.accent.success}20`
+                            ? `${alpha(tokens.colors.accent.success, 13)}`
                             : trader.arenaScore >= 40
-                              ? `${tokens.colors.accent.warning}20`
+                              ? `${alpha(tokens.colors.accent.warning, 13)}`
                               : tokens.glass.bg.light,
                         minWidth: 46,
                         textAlign: 'center',

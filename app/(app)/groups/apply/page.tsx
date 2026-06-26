@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -911,9 +911,9 @@ export default function ApplyGroupPage() {
                 <Box
                   style={{
                     padding: tokens.spacing[3],
-                    background: `${tokens.colors.accent.error}15`,
+                    background: `${alpha(tokens.colors.accent.error, 8)}`,
                     borderRadius: tokens.radius.lg,
-                    border: `1px solid ${tokens.colors.accent.error}30`,
+                    border: `1px solid ${alpha(tokens.colors.accent.error, 19)}`,
                   }}
                 >
                   <Text size="sm" style={{ color: tokens.colors.accent.error }}>

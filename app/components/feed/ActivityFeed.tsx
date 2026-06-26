@@ -13,7 +13,7 @@
 import { useState, useMemo } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { STALE_RELAXED } from '@/lib/hooks/cache-presets'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
@@ -162,9 +162,9 @@ export default function ActivityFeed({
   return (
     <div
       style={{
-        background: `linear-gradient(145deg, ${tokens.colors.bg.secondary}F8 0%, ${tokens.colors.bg.primary}F0 100%)`,
+        background: `linear-gradient(145deg, ${alpha(tokens.colors.bg.secondary, 97)} 0%, ${alpha(tokens.colors.bg.primary, 94)} 100%)`,
         borderRadius: tokens.radius.xl,
-        border: `1px solid ${tokens.colors.border.primary}60`,
+        border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
         overflow: 'hidden',
       }}
     >
@@ -172,7 +172,7 @@ export default function ActivityFeed({
       <div
         style={{
           padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-          borderBottom: `1px solid ${tokens.colors.border.primary}40`,
+          borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -241,7 +241,7 @@ export default function ActivityFeed({
             display: 'flex',
             gap: 4,
             padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            borderBottom: `1px solid ${tokens.colors.border.primary}30`,
+            borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 19)}`,
             overflowX: 'auto',
           }}
         >
@@ -262,7 +262,7 @@ export default function ActivityFeed({
           display: 'flex',
           gap: 4,
           padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-          borderBottom: `1px solid ${tokens.colors.border.primary}20`,
+          borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 13)}`,
           overflowX: 'auto',
         }}
       >
@@ -298,7 +298,7 @@ export default function ActivityFeed({
               style={{
                 borderBottom:
                   idx < visibleActivities.length - 1
-                    ? `1px solid ${tokens.colors.border.primary}20`
+                    ? `1px solid ${alpha(tokens.colors.border.primary, 13)}`
                     : 'none',
               }}
             >
@@ -312,7 +312,7 @@ export default function ActivityFeed({
           <div
             style={{
               padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-              borderTop: `1px solid ${tokens.colors.border.primary}20`,
+              borderTop: `1px solid ${alpha(tokens.colors.border.primary, 13)}`,
               textAlign: 'center',
             }}
           >
@@ -322,7 +322,7 @@ export default function ActivityFeed({
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
                 borderRadius: tokens.radius.lg,
-                border: `1px solid ${tokens.colors.border.primary}60`,
+                border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
                 background: loading ? tokens.colors.bg.tertiary : tokens.colors.bg.secondary,
                 color: loading ? tokens.colors.text.tertiary : tokens.colors.text.primary,
                 fontSize: tokens.typography.fontSize.sm,
@@ -394,7 +394,7 @@ function FilterChip({ label, active, onClick, small = false }: FilterChipProps) 
         borderRadius: tokens.radius.full,
         border: active
           ? '1px solid var(--color-accent-primary)'
-          : `1px solid ${tokens.colors.border.primary}40`,
+          : `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
         background: active ? 'var(--color-accent-primary)20' : 'transparent',
         color: active ? 'var(--color-accent-primary)' : tokens.colors.text.tertiary,
         fontSize: small ? 11 : tokens.typography.fontSize.xs,

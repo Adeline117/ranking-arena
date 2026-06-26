@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
@@ -188,7 +188,8 @@ export default function GroupPostList(props: GroupPostListProps) {
               padding: tokens.spacing[2],
               borderRadius: tokens.radius.md,
               border: 'none',
-              background: viewMode === 'list' ? `${tokens.colors.accent.primary}20` : 'transparent',
+              background:
+                viewMode === 'list' ? `${alpha(tokens.colors.accent.primary, 13)}` : 'transparent',
               color:
                 viewMode === 'list' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
               cursor: 'pointer',
@@ -221,7 +222,9 @@ export default function GroupPostList(props: GroupPostListProps) {
               borderRadius: tokens.radius.md,
               border: 'none',
               background:
-                viewMode === 'masonry' ? `${tokens.colors.accent.primary}20` : 'transparent',
+                viewMode === 'masonry'
+                  ? `${alpha(tokens.colors.accent.primary, 13)}`
+                  : 'transparent',
               color:
                 viewMode === 'masonry' ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
               cursor: 'pointer',
