@@ -154,6 +154,28 @@ style={{ color: 'var(--color-brand)' }}
 style={{ color: tokens.colors.accent.brand }}
 ```
 
+### NEVER concatenate hex alpha onto a token color (invalid CSS, silently dropped)
+
+`tokens.colors.*` resolve to CSS variables, so appending a hex alpha produces
+`var(--color-accent-error)15` — invalid CSS the browser **drops entirely**, so the
+background / border / shadow silently disappears. Use the `alpha()` helper
+(`color-mix`), which is valid for both CSS-variable and literal-hex inputs.
+
+```tsx
+// BAD — `var(--color-accent-error)15` is invalid → no background renders
+style={{ background: `${tokens.colors.accent.error}15` }}
+style={{ border: `1px solid ${sourceInfo.typeColor}30` }}
+
+// GOOD — alpha() → color-mix(in srgb, var(--x) 8%, transparent)
+import { tokens, alpha } from '@/lib/design-tokens'
+style={{ background: alpha(tokens.colors.accent.error, 8) }}
+style={{ border: `1px solid ${alpha(sourceInfo.typeColor, 19)}` }}
+```
+
+Note: inside `var(--x, <fallback>)` the concatenated fallback is dead (never used
+when `--x` is defined) and OG-image routes render via Satori (no `color-mix`) — leave
+those literal. Everywhere else in `app/`, prefer `alpha()`.
+
 ---
 
 # Design Language v2 — Evolution Principles
