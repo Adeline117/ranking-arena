@@ -5,6 +5,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { localizedLabel } from '@/lib/utils/format'
 import { useLanguage } from '../Providers/LanguageProvider'
 import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
@@ -87,33 +88,30 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
         color: tokens.colors.text.primary,
       }}
     >
-      <h1 className="sr-only">{t('groups')}</h1>
-      <Box
-        style={{
-          display: 'flex',
-          justifyContent: 'flex-end',
-          padding: `0 ${tokens.spacing[4]} ${tokens.spacing[3]}`,
-          maxWidth: 1200,
-          margin: '0 auto',
-        }}
-      >
-        <Link
-          href="/groups/apply"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-            borderRadius: tokens.radius.md,
-            background: tokens.colors.accent.primary,
-            color: '#000',
-            fontSize: tokens.typography.fontSize.sm,
-            fontWeight: tokens.typography.fontWeight.semibold,
-            textDecoration: 'none',
-          }}
-        >
-          + {t('createGroup')}
-        </Link>
+      <Box style={{ maxWidth: 1200, margin: '0 auto', padding: `0 ${tokens.spacing[4]}` }}>
+        <PageHeader
+          title={t('groups')}
+          compact
+          actions={
+            <Link
+              href="/groups/apply"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.md,
+                background: tokens.colors.accent.primary,
+                color: 'var(--color-on-accent)',
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.semibold,
+                textDecoration: 'none',
+              }}
+            >
+              + {t('createGroup')}
+            </Link>
+          }
+        />
       </Box>
       <ThreeColumnLayout
         leftSidebar={
