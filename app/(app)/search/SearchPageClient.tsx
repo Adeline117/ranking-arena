@@ -16,6 +16,7 @@ import type { UnifiedSearchResponse } from '@/app/api/search/route'
 import { features } from '@/lib/features'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { useDebounce } from '@/lib/hooks/useDebounce'
+import { getScoreColor } from '@/lib/utils/score-colors'
 
 interface SearchResult {
   type: 'group' | 'post' | 'trader'
@@ -23,6 +24,9 @@ interface SearchResult {
   title: string
   subtitle?: string
   meta?: string
+  /** Structured metrics (trader results) for sign/tier-colored subtitle. */
+  roi?: number | null
+  score?: number | null
 }
 
 const SECTION_LIMIT = 5
@@ -153,6 +157,8 @@ function SearchContent() {
       id: tr.href.replace('/trader/', ''),
       title: tr.title,
       subtitle: tr.subtitle || undefined,
+      roi: typeof tr.meta?.roi === 'number' ? tr.meta.roi : null,
+      score: typeof tr.meta?.arena_score === 'number' ? tr.meta.arena_score : null,
     }))
 
     const platforms = [
@@ -464,7 +470,35 @@ function SearchContent() {
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {result.subtitle}
+                  {result.type === 'trader' && (result.roi != null || result.score != null)
+                    ? // Color ROI (by sign) + Score (by tier) within the subtitle; the
+                      // exchange/rank parts stay neutral. Format: "exchange · #rank · ROI · Score".
+                      result.subtitle.split(' · ').map((part, i, arr) => {
+                        const isRoi = result.roi != null && /%$/.test(part) && /[+-]/.test(part)
+                        const isScore = result.score != null && /^score/i.test(part)
+                        const c = isRoi
+                          ? result.roi! >= 0
+                            ? 'var(--color-accent-success)'
+                            : 'var(--color-accent-error)'
+                          : isScore
+                            ? getScoreColor(result.score!)
+                            : undefined
+                        return (
+                          <span key={i}>
+                            <span
+                              style={
+                                c
+                                  ? { color: c, fontWeight: tokens.typography.fontWeight.bold }
+                                  : undefined
+                              }
+                            >
+                              {part}
+                            </span>
+                            {i < arr.length - 1 ? ' · ' : ''}
+                          </span>
+                        )
+                      })
+                    : result.subtitle}
                 </div>
               )}
             </div>
