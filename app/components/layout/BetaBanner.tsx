@@ -19,6 +19,7 @@ export default function BetaBanner() {
     <>
       <div
         id="beta-banner"
+        className="beta-banner"
         style={{
           background: 'linear-gradient(90deg, #f59e0b, #ef4444)',
           color: 'white',
@@ -30,7 +31,11 @@ export default function BetaBanner() {
           zIndex: 1 /* flows in document — no longer overlaps sticky header */,
         }}
       >
-        Arena is in closed beta — data is being updated and some features are under development.
+        {/* Terser copy on mobile (toggled via CSS) to cut the banner's height. */}
+        <span className="beta-full">
+          Arena is in closed beta — data is being updated and some features are under development.
+        </span>
+        <span className="beta-short">Closed beta — data updating, features in progress.</span>
         <button
           id="beta-banner-dismiss"
           aria-label="Dismiss"
