@@ -1,6 +1,7 @@
 'use client'
 
 import type { PersonalityType } from '../../components/types'
+import { alpha } from '@/lib/design-tokens'
 
 interface MasterSectionProps {
   type: PersonalityType
@@ -106,9 +107,9 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
         style={{
           padding: '16px 18px',
           borderRadius: 12,
-          background: `${type.color}0F`,
+          background: `${alpha(type.color, 6)}`,
           borderLeft: `4px solid ${type.color}`,
-          boxShadow: `0 2px 8px ${type.color}0A, 0 1px 3px rgba(0,0,0,0.12)`,
+          boxShadow: `0 2px 8px ${alpha(type.color, 4)}, 0 1px 3px rgba(0,0,0,0.12)`,
         }}
       >
         <p
@@ -145,7 +146,7 @@ export default function MasterSection({ type, tr }: MasterSectionProps) {
           color: 'var(--color-text-secondary)',
           fontSize: 'clamp(14px, 3.5vw, 15px)',
           lineHeight: 1.7,
-          background: `${type.color}08`,
+          background: `${alpha(type.color, 3)}`,
           borderRadius: '0 10px 10px 0',
           position: 'relative',
         }}

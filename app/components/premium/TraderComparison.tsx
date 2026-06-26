@@ -3,9 +3,15 @@
 import React, { useState, useRef } from 'react'
 import Link from 'next/link'
 import dynamic from 'next/dynamic'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
-import { getAvatarGradient, getAvatarInitial, getTraderAvatarUrl, isWalletAddress, generateBlockieSvg } from '@/lib/utils/avatar'
+import {
+  getAvatarGradient,
+  getAvatarInitial,
+  getTraderAvatarUrl,
+  isWalletAddress,
+  generateBlockieSvg,
+} from '@/lib/utils/avatar'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
@@ -100,21 +106,25 @@ const _SIGNED_METRIC_KEYS = new Set(['roi', 'roi_7d', 'roi_30d', 'pnl'])
 
 function getSourceLabels(t: (key: string) => string): Record<string, string> {
   return {
-    'binance_futures': `Binance ${t('categoryFutures')}`,
-    'binance_spot': `Binance ${t('categorySpot')}`,
-    'binance_web3': `Binance ${t('categoryWeb3')}`,
-    'bybit': `Bybit ${t('categoryFutures')}`,
-    'bitget_futures': `Bitget ${t('categoryFutures')}`,
-    'bitget_spot': `Bitget ${t('categorySpot')}`,
-    'mexc': `MEXC ${t('categoryFutures')}`,
-    'coinex': `CoinEx ${t('categoryFutures')}`,
-    'okx_web3': `OKX ${t('categoryWeb3')}`,
-    'kucoin': `KuCoin ${t('categoryFutures')}`,
-    'gmx': `GMX ${t('categoryWeb3')}`,
+    binance_futures: `Binance ${t('categoryFutures')}`,
+    binance_spot: `Binance ${t('categorySpot')}`,
+    binance_web3: `Binance ${t('categoryWeb3')}`,
+    bybit: `Bybit ${t('categoryFutures')}`,
+    bitget_futures: `Bitget ${t('categoryFutures')}`,
+    bitget_spot: `Bitget ${t('categorySpot')}`,
+    mexc: `MEXC ${t('categoryFutures')}`,
+    coinex: `CoinEx ${t('categoryFutures')}`,
+    okx_web3: `OKX ${t('categoryWeb3')}`,
+    kucoin: `KuCoin ${t('categoryFutures')}`,
+    gmx: `GMX ${t('categoryWeb3')}`,
   }
 }
 
-export default function TraderComparison({ traders, onRemove, showRemoveButton = true }: TraderComparisonProps) {
+export default function TraderComparison({
+  traders,
+  onRemove,
+  showRemoveButton = true,
+}: TraderComparisonProps) {
   const { t } = useLanguage()
   const sourceLabels = getSourceLabels(t)
   const [activeTab, setActiveTab] = useState<TabKey>('metrics')
@@ -131,7 +141,9 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
           border: `1px solid ${tokens.colors.border.primary}`,
         }}
       >
-        <Text size="lg" color="tertiary">{t('compareEmptyTitle')}</Text>
+        <Text size="lg" color="tertiary">
+          {t('compareEmptyTitle')}
+        </Text>
         <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
           {t('compareEmptyDesc')}
         </Text>
@@ -141,27 +153,98 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
 
   // Metrics rows - bilingual
   const metrics = [
-    { key: 'arena_score', label: t('compareArenaScore'), format: (v: number) => formatRatio(v, 1), higherBetter: true },
-    { key: 'roi', label: t('compareROI90D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`, higherBetter: true, isPercent: true },
-    { key: 'roi_30d', label: t('compareROI30D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`, higherBetter: true, isPercent: true },
-    { key: 'roi_7d', label: t('compareROI7D'), format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`, higherBetter: true, isPercent: true },
+    {
+      key: 'arena_score',
+      label: t('compareArenaScore'),
+      format: (v: number) => formatRatio(v, 1),
+      higherBetter: true,
+    },
+    {
+      key: 'roi',
+      label: t('compareROI90D'),
+      format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`,
+      higherBetter: true,
+      isPercent: true,
+    },
+    {
+      key: 'roi_30d',
+      label: t('compareROI30D'),
+      format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`,
+      higherBetter: true,
+      isPercent: true,
+    },
+    {
+      key: 'roi_7d',
+      label: t('compareROI7D'),
+      format: (v: number) => `${v >= 0 ? '+' : ''}${formatRatio(v)}%`,
+      higherBetter: true,
+      isPercent: true,
+    },
     { key: 'pnl', label: t('comparePnL'), format: formatPnL, higherBetter: true },
-    { key: 'win_rate', label: t('compareWinRate'), format: (v: number) => `${formatRatio(v, 1)}%`, higherBetter: true },
-    { key: 'max_drawdown', label: t('compareMDD'), format: (v: number) => `-${formatRatio(Math.abs(v))}%`, higherBetter: false, isNegative: true },
-    { key: 'trades_count', label: t('compareTrades'), format: (v: number) => v?.toString() || '—', higherBetter: true },
-    { key: 'return_score', label: t('compareReturnScore'), format: (v: number) => formatRatio(v, 1), higherBetter: true },
-    { key: 'drawdown_score', label: t('compareDrawdownScore'), format: (v: number) => formatRatio(v, 1), higherBetter: true },
-    { key: 'stability_score', label: t('compareStabilityScore'), format: (v: number) => formatRatio(v, 1), higherBetter: true },
-    { key: 'followers', label: t('compareFollowers'), format: (v: number) => v?.toString() || '0', higherBetter: true },
+    {
+      key: 'win_rate',
+      label: t('compareWinRate'),
+      format: (v: number) => `${formatRatio(v, 1)}%`,
+      higherBetter: true,
+    },
+    {
+      key: 'max_drawdown',
+      label: t('compareMDD'),
+      format: (v: number) => `-${formatRatio(Math.abs(v))}%`,
+      higherBetter: false,
+      isNegative: true,
+    },
+    {
+      key: 'trades_count',
+      label: t('compareTrades'),
+      format: (v: number) => v?.toString() || '—',
+      higherBetter: true,
+    },
+    {
+      key: 'return_score',
+      label: t('compareReturnScore'),
+      format: (v: number) => formatRatio(v, 1),
+      higherBetter: true,
+    },
+    {
+      key: 'drawdown_score',
+      label: t('compareDrawdownScore'),
+      format: (v: number) => formatRatio(v, 1),
+      higherBetter: true,
+    },
+    {
+      key: 'stability_score',
+      label: t('compareStabilityScore'),
+      format: (v: number) => formatRatio(v, 1),
+      higherBetter: true,
+    },
+    {
+      key: 'followers',
+      label: t('compareFollowers'),
+      format: (v: number) => v?.toString() || '0',
+      higherBetter: true,
+    },
   ]
 
   // Radar chart data
   const radarData = [
-    { label: t('compareReturnScore'), values: traders.map(tr => Math.min((tr.return_score ?? 0), 100)) },
-    { label: t('compareDrawdownScore'), values: traders.map(tr => Math.min((tr.drawdown_score ?? 0), 100)) },
-    { label: t('compareStabilityScore'), values: traders.map(tr => Math.min((tr.stability_score ?? 0), 100)) },
-    { label: t('compareWinRate'), values: traders.map(tr => Math.min((tr.win_rate ?? 0), 100)) },
-    { label: t('compareArenaScore'), values: traders.map(tr => Math.min((tr.arena_score ?? 0), 100)) },
+    {
+      label: t('compareReturnScore'),
+      values: traders.map((tr) => Math.min(tr.return_score ?? 0, 100)),
+    },
+    {
+      label: t('compareDrawdownScore'),
+      values: traders.map((tr) => Math.min(tr.drawdown_score ?? 0, 100)),
+    },
+    {
+      label: t('compareStabilityScore'),
+      values: traders.map((tr) => Math.min(tr.stability_score ?? 0, 100)),
+    },
+    { label: t('compareWinRate'), values: traders.map((tr) => Math.min(tr.win_rate ?? 0, 100)) },
+    {
+      label: t('compareArenaScore'),
+      values: traders.map((tr) => Math.min(tr.arena_score ?? 0, 100)),
+    },
   ]
 
   // Equity curve data
@@ -215,12 +298,10 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 borderRadius: tokens.radius.lg,
                 border: 'none',
-                background: activeTab === tab.key
-                  ? tokens.colors.accent.primary
-                  : tokens.colors.bg.secondary,
-                color: activeTab === tab.key
-                  ? 'var(--color-on-accent)'
-                  : tokens.colors.text.secondary,
+                background:
+                  activeTab === tab.key ? tokens.colors.accent.primary : tokens.colors.bg.secondary,
+                color:
+                  activeTab === tab.key ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: activeTab === tab.key ? 700 : 500,
                 cursor: 'pointer',
@@ -232,10 +313,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
           ))}
         </Box>
 
-        <ShareCompareButton
-          traderIds={traders.map(t => t.id)}
-          comparisonRef={comparisonRef}
-        />
+        <ShareCompareButton traderIds={traders.map((t) => t.id)} comparisonRef={comparisonRef} />
       </Box>
 
       <Box
@@ -273,7 +351,8 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
               }}
             >
               {showRemoveButton && onRemove && (
-                <button aria-label="Close"
+                <button
+                  aria-label="Close"
                   onClick={() => onRemove(trader.id)}
                   style={{
                     position: 'absolute',
@@ -293,8 +372,8 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                     justifyContent: 'center',
                     transition: 'transform 0.2s',
                   }}
-                  onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
-                  onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+                  onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1)')}
+                  onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                 >
                   ×
                 </button>
@@ -330,8 +409,16 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                           width={48}
                           height={48}
                           loading="lazy"
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', position: 'absolute', inset: 0 }}
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            position: 'absolute',
+                            inset: 0,
+                          }}
+                          onError={(e) => {
+                            ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+                          }}
                         />
                       ) : isWalletAddress(trader.id) ? (
                         <img
@@ -339,17 +426,25 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                           alt={trader.handle || trader.id}
                           width={56}
                           height={56}
-                          style={{ width: '100%', height: '100%', objectFit: 'cover', imageRendering: 'pixelated', position: 'absolute', inset: 0 }}
+                          style={{
+                            width: '100%',
+                            height: '100%',
+                            objectFit: 'cover',
+                            imageRendering: 'pixelated',
+                            position: 'absolute',
+                            inset: 0,
+                          }}
                         />
-                      ) : (
-                        null
-                      )}
+                      ) : null}
                     </Box>
                   )
                 })()}
               </Link>
 
-              <Link href={`/trader/${encodeURIComponent(trader.id)}`} style={{ textDecoration: 'none' }}>
+              <Link
+                href={`/trader/${encodeURIComponent(trader.id)}`}
+                style={{ textDecoration: 'none' }}
+              >
                 <Text
                   size="sm"
                   weight="bold"
@@ -367,13 +462,22 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
               </Link>
 
               {(trader.is_bot || trader.source === 'web3_bot') && (
-                <span style={{
-                  padding: '0px 5px', borderRadius: 4, fontSize: 10, fontWeight: 600,
-                  color: 'var(--color-brand)', background: 'var(--color-brand-muted)',
-                  border: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
-                  lineHeight: 1.4, display: 'inline-flex', alignItems: 'center', gap: 2,
-                  marginTop: 2,
-                }}>
+                <span
+                  style={{
+                    padding: '0px 5px',
+                    borderRadius: 4,
+                    fontSize: 10,
+                    fontWeight: 600,
+                    color: 'var(--color-brand)',
+                    background: 'var(--color-brand-muted)',
+                    border: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
+                    lineHeight: 1.4,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    marginTop: 2,
+                  }}
+                >
                   <span style={{ fontSize: 8 }}>{'⚡'}</span>Bot
                 </span>
               )}
@@ -389,7 +493,9 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
         {activeTab === 'metrics' && (
           <>
             {metrics.map((metric, metricIdx) => {
-              const values = traders.map(tr => (tr as unknown as Record<string, unknown>)[metric.key] as number | undefined)
+              const values = traders.map(
+                (tr) => (tr as unknown as Record<string, unknown>)[metric.key] as number | undefined
+              )
               const bestIdx = getBestIndex(values, metric.higherBetter)
 
               return (
@@ -401,8 +507,14 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                     gap: tokens.spacing[2],
                     padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
                     minWidth: traders.length > 2 ? `${140 + traders.length * 120}px` : undefined,
-                    borderBottom: metricIdx < metrics.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
-                    background: metricIdx % 2 === 0 ? 'transparent' : `${tokens.colors.bg.tertiary}50`,
+                    borderBottom:
+                      metricIdx < metrics.length - 1
+                        ? `1px solid ${tokens.colors.border.primary}`
+                        : 'none',
+                    background:
+                      metricIdx % 2 === 0
+                        ? 'transparent'
+                        : `${alpha(tokens.colors.bg.tertiary, 31)}`,
                   }}
                 >
                   <Text size="sm" weight="semibold" color="secondary">
@@ -410,13 +522,16 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                   </Text>
 
                   {traders.map((trader, traderIdx) => {
-                    const value = (trader as unknown as Record<string, unknown>)[metric.key] as number | undefined
+                    const value = (trader as unknown as Record<string, unknown>)[metric.key] as
+                      | number
+                      | undefined
                     const isBest = traderIdx === bestIdx && value != null && isFinite(value)
-                    const color = metric.isPercent || metric.isNegative
-                      ? getValueColor(value, metric.higherBetter)
-                      : isBest
-                        ? tokens.colors.accent.success
-                        : tokens.colors.text.primary
+                    const color =
+                      metric.isPercent || metric.isNegative
+                        ? getValueColor(value, metric.higherBetter)
+                        : isBest
+                          ? tokens.colors.accent.success
+                          : tokens.colors.text.primary
 
                     return (
                       <Box key={trader.id} style={{ textAlign: 'center', position: 'relative' }}>
@@ -427,10 +542,17 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
                         >
                           {value != null ? metric.format(value) : '—'}
                           {isBest && (
-                            <span style={{
-                              position: 'absolute', top: -2, right: -16,
-                              fontSize: 10, color: tokens.colors.accent.success,
-                            }}>👑</span>
+                            <span
+                              style={{
+                                position: 'absolute',
+                                top: -2,
+                                right: -16,
+                                fontSize: 10,
+                                color: tokens.colors.accent.success,
+                              }}
+                            >
+                              👑
+                            </span>
                           )}
                         </Text>
                       </Box>
@@ -446,7 +568,7 @@ export default function TraderComparison({ traders, onRemove, showRemoveButton =
           <Box style={{ padding: tokens.spacing[6], display: 'flex', justifyContent: 'center' }}>
             <RadarChart
               data={radarData}
-              traderNames={traders.map(tr => tr.handle || tr.id.slice(0, 10))}
+              traderNames={traders.map((tr) => tr.handle || tr.id.slice(0, 10))}
               colors={CHART_COLORS}
               size={340}
             />

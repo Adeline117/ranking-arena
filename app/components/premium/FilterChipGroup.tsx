@@ -1,7 +1,7 @@
 'use client'
 
 import React, { memo } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 
 export interface FilterChipGroupProps {
@@ -31,7 +31,7 @@ export const FilterChipGroup = memo(function FilterChipGroup({
         {label}
       </Text>
       <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
-        {items.map(item => {
+        {items.map((item) => {
           const isSelected = selected.includes(item.value)
           return (
             <button
@@ -43,11 +43,23 @@ export const FilterChipGroup = memo(function FilterChipGroup({
                   : `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: compact ? tokens.radius.sm : tokens.radius.md,
                 border: `1px solid ${isSelected ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-                background: isSelected ? `${tokens.colors.accent.primary}${compact ? '15' : '20'}` : 'transparent',
-                color: isSelected ? tokens.colors.accent.primary : compact ? tokens.colors.text.tertiary : tokens.colors.text.secondary,
+                background: isSelected
+                  ? `${tokens.colors.accent.primary}${compact ? '15' : '20'}`
+                  : 'transparent',
+                color: isSelected
+                  ? tokens.colors.accent.primary
+                  : compact
+                    ? tokens.colors.text.tertiary
+                    : tokens.colors.text.secondary,
                 cursor: 'pointer',
                 fontSize: compact ? tokens.typography.fontSize.xs : tokens.typography.fontSize.sm,
-                fontWeight: isSelected ? (compact ? undefined : tokens.typography.fontWeight.bold) : (compact ? undefined : tokens.typography.fontWeight.normal),
+                fontWeight: isSelected
+                  ? compact
+                    ? undefined
+                    : tokens.typography.fontWeight.bold
+                  : compact
+                    ? undefined
+                    : tokens.typography.fontWeight.normal,
                 transition: 'all 0.2s',
                 ...(compact ? {} : { minWidth: 36 }),
               }}
@@ -83,7 +95,7 @@ export const GradeChipGroup = memo(function GradeChipGroup({
         {label}
       </Text>
       <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
-        {['S', 'A', 'B', 'C', 'D'].map(g => {
+        {['S', 'A', 'B', 'C', 'D'].map((g) => {
           const isSelected = selectedGrade === g
           return (
             <button
@@ -93,7 +105,9 @@ export const GradeChipGroup = memo(function GradeChipGroup({
                 padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
                 border: `1px solid ${isSelected ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
-                background: isSelected ? `${tokens.colors.accent.primary}20` : 'transparent',
+                background: isSelected
+                  ? `${alpha(tokens.colors.accent.primary, 13)}`
+                  : 'transparent',
                 color: isSelected ? tokens.colors.accent.primary : tokens.colors.text.secondary,
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
