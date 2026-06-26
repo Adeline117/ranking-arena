@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
 import { Box, Text } from '@/app/components/base'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface PopularToken {
@@ -274,8 +274,8 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
                         width: 40,
                         height: 40,
                         borderRadius: '50%',
-                        background: `${color}20`,
-                        border: `1px solid ${color}40`,
+                        background: `${alpha(color, 13)}`,
+                        border: `1px solid ${alpha(color, 25)}`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',

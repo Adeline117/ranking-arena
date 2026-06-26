@@ -6,7 +6,7 @@ import { useState, useEffect, Suspense } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import nextDynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { Box, Text } from '@/app/components/base'
 
@@ -241,8 +241,8 @@ function CompareContent() {
         style={{
           position: 'fixed',
           inset: 0,
-          background: `radial-gradient(ellipse at 20% 20%, ${tokens.colors.accent.primary}08 0%, transparent 50%),
-                       radial-gradient(ellipse at 80% 80%, ${tokens.colors.accent.brand}06 0%, transparent 50%)`,
+          background: `radial-gradient(ellipse at 20% 20%, ${alpha(tokens.colors.accent.primary, 3)} 0%, transparent 50%),
+                       radial-gradient(ellipse at 80% 80%, ${alpha(tokens.colors.accent.brand, 2)} 0%, transparent 50%)`,
           pointerEvents: 'none',
           zIndex: 0,
         }}
@@ -313,9 +313,9 @@ function CompareContent() {
           <Box
             style={{
               padding: tokens.spacing[4],
-              background: `${tokens.colors.accent.error}15`,
+              background: `${alpha(tokens.colors.accent.error, 8)}`,
               borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.accent.error}30`,
+              border: `1px solid ${alpha(tokens.colors.accent.error, 19)}`,
               marginBottom: tokens.spacing[4],
             }}
           >

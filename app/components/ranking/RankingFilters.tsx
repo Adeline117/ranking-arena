@@ -3,7 +3,7 @@
 import { localizedLabel } from '@/lib/utils/format'
 import React, { useRef, useEffect } from 'react'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { Box, Text } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
@@ -393,11 +393,11 @@ export function RankingFilters({
                   minHeight: 36,
                   border:
                     traderTypeFilter === opt.value
-                      ? `1px solid ${tokens.colors.accent.primary}80`
+                      ? `1px solid ${colorAlpha(tokens.colors.accent.primary, 50)}`
                       : `1px solid transparent`,
                   background:
                     traderTypeFilter === opt.value
-                      ? `${tokens.colors.accent.primary}15`
+                      ? `${colorAlpha(tokens.colors.accent.primary, 8)}`
                       : 'transparent',
                   color:
                     traderTypeFilter === opt.value
@@ -570,7 +570,7 @@ export function RankingFilters({
                     fontSize: tokens.typography.fontSize.xs,
                     color: tokens.colors.accent.primary,
                     background: 'transparent',
-                    border: `1px solid ${tokens.colors.accent.primary}40`,
+                    border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 25)}`,
                     borderRadius: tokens.radius.sm,
                     cursor: 'pointer',
                     width: '100%',
@@ -703,7 +703,7 @@ export function RankingFilters({
                 fontWeight: tokens.typography.fontWeight.semibold,
                 color: tokens.colors.accent.error,
                 background: 'transparent',
-                border: `1px solid ${tokens.colors.accent.error}40`,
+                border: `1px solid ${colorAlpha(tokens.colors.accent.error, 25)}`,
                 borderRadius: tokens.radius.sm,
                 cursor: 'pointer',
               }}

@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { CommentIcon, ThumbsUpIcon } from '@/app/components/ui/icons'
@@ -191,7 +191,7 @@ export function PostCard({
                 marginLeft: 6,
                 padding: '1px 6px',
                 borderRadius: tokens.radius.sm,
-                background: `${'var(--color-text-tertiary)'}15`,
+                background: `${alpha('var(--color-text-tertiary)', 8)}`,
                 color: 'var(--color-text-tertiary)',
                 verticalAlign: 'middle',
               }}

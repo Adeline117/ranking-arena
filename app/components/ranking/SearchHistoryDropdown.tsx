@@ -1,21 +1,35 @@
 'use client'
 
 import React, { useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 // ── Icons ──────────────────────────────────────────────────────────────────
 
 const ClockIcon = ({ size = 12 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <circle cx="12" cy="12" r="10" />
     <polyline points="12 6 12 12 16 14" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 )
 
 const CloseSmallIcon = ({ size = 12 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <line x1="18" y1="6" x2="6" y2="18" strokeLinecap="round" />
     <line x1="6" y1="6" x2="18" y2="18" strokeLinecap="round" />
   </svg>
@@ -47,16 +61,22 @@ export function SearchHistoryDropdown({
 }: SearchHistoryDropdownProps) {
   const { t } = useLanguage()
 
-  const handleItemMouseEnter = useCallback((idx: number, e: React.MouseEvent<HTMLDivElement>) => {
-    setActiveIndex(idx)
-    e.currentTarget.style.background = `${tokens.colors.accent.primary}15`
-  }, [setActiveIndex])
+  const handleItemMouseEnter = useCallback(
+    (idx: number, e: React.MouseEvent<HTMLDivElement>) => {
+      setActiveIndex(idx)
+      e.currentTarget.style.background = `${alpha(tokens.colors.accent.primary, 8)}`
+    },
+    [setActiveIndex]
+  )
 
-  const handleItemMouseLeave = useCallback((idx: number, e: React.MouseEvent<HTMLDivElement>) => {
-    if (idx !== activeIndex) {
-      e.currentTarget.style.background = 'transparent'
-    }
-  }, [activeIndex])
+  const handleItemMouseLeave = useCallback(
+    (idx: number, e: React.MouseEvent<HTMLDivElement>) => {
+      if (idx !== activeIndex) {
+        e.currentTarget.style.background = 'transparent'
+      }
+    },
+    [activeIndex]
+  )
 
   return (
     <div
@@ -109,8 +129,12 @@ export function SearchHistoryDropdown({
             opacity: 0.7,
             transition: `opacity ${tokens.transition.fast}`,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.opacity = '1' }}
-          onMouseLeave={(e) => { e.currentTarget.style.opacity = '0.7' }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.opacity = '1'
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.opacity = '0.7'
+          }}
         >
           {t('clearAll')}
         </button>
@@ -133,8 +157,10 @@ export function SearchHistoryDropdown({
               gap: tokens.spacing[2],
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
               cursor: 'pointer',
-              background: isActive ? `${tokens.colors.accent.primary}15` : 'transparent',
-              borderLeft: isActive ? `2px solid ${tokens.colors.accent.primary}` : '2px solid transparent',
+              background: isActive ? `${alpha(tokens.colors.accent.primary, 8)}` : 'transparent',
+              borderLeft: isActive
+                ? `2px solid ${tokens.colors.accent.primary}`
+                : '2px solid transparent',
               transition: `background ${tokens.transition.fast}, border-color ${tokens.transition.fast}`,
             }}
             onMouseEnter={(e) => handleItemMouseEnter(idx, e)}

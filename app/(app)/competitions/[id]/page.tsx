@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -181,7 +181,7 @@ function Podium({
                 style={{
                   width: 100,
                   height,
-                  background: `linear-gradient(180deg, ${medalColors[origIdx]}33 0%, ${medalColors[origIdx]}11 100%)`,
+                  background: `linear-gradient(180deg, ${alpha(medalColors[origIdx], 20)} 0%, ${alpha(medalColors[origIdx], 7)} 100%)`,
                   borderTop: `3px solid ${medalColors[origIdx]}`,
                   borderRadius: `${tokens.radius.md} ${tokens.radius.md} 0 0`,
                   display: 'flex',
@@ -329,7 +329,7 @@ function StandingsTable({
                         idx < sorted.length - 1
                           ? `1px solid ${tokens.colors.border.primary}`
                           : undefined,
-                      background: isTop3 ? `${medalColor}08` : undefined,
+                      background: isTop3 && medalColor ? alpha(medalColor, 3) : undefined,
                     }}
                   >
                     <td

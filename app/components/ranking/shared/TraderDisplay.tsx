@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect, useMemo, memo } from 'react'
 import { createPortal } from 'react-dom'
 import Image from 'next/image'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { RankingBadge } from '../../ui/icons'
 import { Box, Text } from '../../base'
 import {
@@ -330,7 +330,7 @@ export function ArenaScoreBadge({
     : isLegendary
       ? { animation: 'score-legendary-glow 3s ease-in-out infinite' }
       : score >= 80
-        ? { boxShadow: `0 0 6px ${tokens.colors.accent.primary}25` }
+        ? { boxShadow: `0 0 6px ${alpha(tokens.colors.accent.primary, 15)}` }
         : {}
 
   const legendaryBg = isElite

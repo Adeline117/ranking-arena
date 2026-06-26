@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { STALE_RELAXED } from '@/lib/hooks/cache-presets'
-import { tokens, newsCategories, newsImportance } from '@/lib/design-tokens'
+import { tokens, newsCategories, newsImportance, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -197,7 +197,7 @@ export default function NewsFlash() {
                         fontSize: tokens.typography.fontSize.xs,
                         fontWeight: tokens.typography.fontWeight.semibold,
                         color: catConfig.color,
-                        background: `${catConfig.color}15`,
+                        background: `${alpha(catConfig.color, 8)}`,
                         padding: `1px ${tokens.spacing[1.5]}`,
                         borderRadius: tokens.radius.sm,
                         lineHeight: '16px',

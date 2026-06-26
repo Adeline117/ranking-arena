@@ -1,10 +1,15 @@
 'use client'
 
 import React, { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { getSearchHistory, addToHistory, removeFromHistory, clearAllHistory } from './useSearchHistory'
+import {
+  getSearchHistory,
+  addToHistory,
+  removeFromHistory,
+  clearAllHistory,
+} from './useSearchHistory'
 import { SearchHistoryDropdown } from './SearchHistoryDropdown'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -19,7 +24,14 @@ export interface RankingSearchProps {
 // ── Icons ──────────────────────────────────────────────────────────────────
 
 const SearchIcon = ({ size = 14 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+  >
     <circle cx="11" cy="11" r="8" />
     <path d="m21 21-4.3-4.3" strokeLinecap="round" />
   </svg>
@@ -27,7 +39,12 @@ const SearchIcon = ({ size = 14 }: { size?: number }) => (
 
 // ── Component ──────────────────────────────────────────────────────────────
 
-function RankingSearchInner({ value, onChange, resultCount, language: _language }: RankingSearchProps) {
+function RankingSearchInner({
+  value,
+  onChange,
+  resultCount,
+  language: _language,
+}: RankingSearchProps) {
   const { t } = useLanguage()
   const [history, setHistory] = useState<string[]>([])
   const [showDropdown, setShowDropdown] = useState(false)
@@ -77,7 +94,7 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
       setShowDropdown(true)
       setActiveIndex(-1)
     },
-    [onChange],
+    [onChange]
   )
 
   const selectHistory = useCallback(
@@ -88,27 +105,21 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
       setHistory(addToHistory(item))
       inputRef.current?.blur()
     },
-    [onChange],
+    [onChange]
   )
 
-  const handleRemoveHistory = useCallback(
-    (e: React.MouseEvent, item: string) => {
-      e.stopPropagation()
-      e.preventDefault()
-      setHistory(removeFromHistory(item))
-    },
-    [],
-  )
+  const handleRemoveHistory = useCallback((e: React.MouseEvent, item: string) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setHistory(removeFromHistory(item))
+  }, [])
 
-  const handleClearAll = useCallback(
-    (e: React.MouseEvent) => {
-      e.stopPropagation()
-      e.preventDefault()
-      setHistory(clearAllHistory())
-      setShowDropdown(false)
-    },
-    [],
-  )
+  const handleClearAll = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation()
+    e.preventDefault()
+    setHistory(clearAllHistory())
+    setShowDropdown(false)
+  }, [])
 
   const handleClearInput = useCallback(() => {
     onChange('')
@@ -169,7 +180,7 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
           break
       }
     },
-    [isHistoryVisible, history, activeIndex, value, onChange, selectHistory, commitSearch],
+    [isHistoryVisible, history, activeIndex, value, onChange, selectHistory, commitSearch]
   )
 
   const hasValue = !!value
@@ -200,7 +211,9 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
           aria-expanded={isHistoryVisible}
           aria-haspopup="listbox"
           aria-autocomplete="list"
-          aria-activedescendant={activeIndex >= 0 ? `search-history-item-${activeIndex}` : undefined}
+          aria-activedescendant={
+            activeIndex >= 0 ? `search-history-item-${activeIndex}` : undefined
+          }
           role="combobox"
           aria-controls="search-results-listbox"
           autoComplete="off"
@@ -240,8 +253,12 @@ function RankingSearchInner({ value, onChange, resultCount, language: _language 
               borderRadius: tokens.radius.sm,
               transition: `color ${tokens.transition.fast}`,
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.color = tokens.colors.text.primary }}
-            onMouseLeave={(e) => { e.currentTarget.style.color = tokens.colors.text.tertiary }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.color = tokens.colors.text.primary
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.color = tokens.colors.text.tertiary
+            }}
           >
             ×
           </button>
@@ -296,7 +313,7 @@ export function HighlightedName({ text, query }: { text: string; query: string }
       {before}
       <mark
         style={{
-          background: `${tokens.colors.accent.primary}30`,
+          background: `${alpha(tokens.colors.accent.primary, 19)}`,
           color: tokens.colors.accent.primary,
           borderRadius: '2px',
           padding: '0 1px',
