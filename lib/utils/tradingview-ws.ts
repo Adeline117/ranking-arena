@@ -95,7 +95,9 @@ interface TVClient {
 
 interface TVModule {
   Client: new () => TVClient
-  getTA(symbol: string): Promise<Record<string, { All?: number; MA?: number; Other?: number }> | null>
+  getTA(
+    symbol: string
+  ): Promise<Record<string, { All?: number; MA?: number; Other?: number }> | null>
 }
 
 // ============================================
@@ -121,16 +123,16 @@ interface TradingViewClientWrapper {
 // Technical Analysis via Scanner API (HTTP)
 // ============================================
 
-async function fetchTechnicalAnalysis(
-  symbols: string[]
-): Promise<Map<string, TechnicalAnalysis>> {
+async function fetchTechnicalAnalysis(symbols: string[]): Promise<Map<string, TechnicalAnalysis>> {
   const result = new Map<string, TechnicalAnalysis>()
 
   try {
-    // Use variable to prevent Turbopack static analysis
-    const pkg = '@mathieuc/' + 'tradingview'
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const TradingView = require(pkg) as TVModule
+    // Optional dep — load via globalThis.require so Turbopack can't statically
+    // resolve it and fail the production build (the plain require(pkg) here was
+    // the build-breaker; matches createTVClient() below). Absent at runtime →
+    // degrade gracefully with an empty TA map.
+    const TradingView = globalThis.require?.('@mathieuc/' + 'tradingview') as TVModule | undefined
+    if (!TradingView) return result
 
     for (const sym of symbols) {
       const mapping = SYMBOL_MAP[sym]
@@ -183,7 +185,9 @@ function createTVClient(): TradingViewClientWrapper {
   let TradingView: TVModule | undefined
   try {
     TradingView = globalThis.require?.('@mathieuc/' + 'tradingview') as TVModule | undefined
-  } catch (_err) { /* optional dep */ }
+  } catch (_err) {
+    /* optional dep */
+  }
 
   const wrapper: TradingViewClientWrapper = {
     prices: new Map(),
@@ -297,16 +301,11 @@ const BASE_RECONNECT_DELAY_MS = 5000
 function scheduleReconnect() {
   if (reconnectTimer) return
   if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-    logger.error(
-      `Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, giving up`
-    )
+    logger.error(`Max reconnect attempts (${MAX_RECONNECT_ATTEMPTS}) reached, giving up`)
     return
   }
 
-  const delay = Math.min(
-    BASE_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts),
-    60000
-  )
+  const delay = Math.min(BASE_RECONNECT_DELAY_MS * Math.pow(2, reconnectAttempts), 60000)
   reconnectAttempts++
 
   logger.info(`Scheduling reconnect in ${delay}ms (attempt ${reconnectAttempts})`)
