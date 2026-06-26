@@ -4,7 +4,7 @@ import React, { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered in root layout.tsx — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
 import dynamic from 'next/dynamic'
@@ -133,7 +133,7 @@ function SettingsContent() {
               width: 64,
               height: 64,
               borderRadius: tokens.radius.full,
-              background: `${tokens.colors.accent.primary}15`,
+              background: `${alpha(tokens.colors.accent.primary, 8)}`,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -329,7 +329,7 @@ function SettingsContent() {
                   border: `1px solid ${activeSection === sectionId ? tokens.colors.accent.primary + '60' : tokens.colors.border.primary}`,
                   background:
                     activeSection === sectionId
-                      ? `${tokens.colors.accent.primary}15`
+                      ? `${alpha(tokens.colors.accent.primary, 8)}`
                       : tokens.colors.bg.secondary,
                   color:
                     activeSection === sectionId
@@ -551,7 +551,7 @@ function SettingsContent() {
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.xl,
                 background: tokens.colors.bg.secondary,
-                border: `1px solid ${tokens.colors.accent.warning}40`,
+                border: `1px solid ${alpha(tokens.colors.accent.warning, 25)}`,
                 boxShadow: tokens.shadow.lg,
                 display: 'flex',
                 alignItems: 'center',

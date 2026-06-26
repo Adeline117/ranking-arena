@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -28,13 +28,10 @@ export default function StepGuide({ selectedExchange, onChangeExchange }: StepGu
         }}
       >
         <ExchangeLogo exchange={selectedExchange} size={32} />
-        <Text size="xl" weight="bold">{config.name}</Text>
-        <Button
-          variant="text"
-          size="sm"
-          onClick={onChangeExchange}
-          style={{ marginLeft: 'auto' }}
-        >
+        <Text size="xl" weight="bold">
+          {config.name}
+        </Text>
+        <Button variant="text" size="sm" onClick={onChangeExchange} style={{ marginLeft: 'auto' }}>
           {t('changeExchange')}
         </Button>
       </Box>
@@ -47,7 +44,14 @@ export default function StepGuide({ selectedExchange, onChangeExchange }: StepGu
         border="primary"
         style={{ marginBottom: tokens.spacing[4] }}
       >
-        <Box style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: tokens.spacing[4] }}>
+        <Box
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginBottom: tokens.spacing[4],
+          }}
+        >
           <Text size="lg" weight="bold">
             {t('operationStepsLabel')}
           </Text>
@@ -106,8 +110,8 @@ export default function StepGuide({ selectedExchange, onChangeExchange }: StepGu
         style={{
           padding: tokens.spacing[3],
           borderRadius: tokens.radius.lg,
-          background: `${tokens.colors.accent.primary}15`,
-          border: `1px solid ${tokens.colors.accent.primary}30`,
+          background: `${alpha(tokens.colors.accent.primary, 8)}`,
+          border: `1px solid ${alpha(tokens.colors.accent.primary, 19)}`,
         }}
       >
         <Text size="sm" color="secondary">

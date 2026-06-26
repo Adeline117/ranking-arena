@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 
@@ -56,8 +56,10 @@ export default function SystemMetrics({ data }: SystemMetricsProps) {
   }
 
   const getChangeIndicator = (today: number, yesterday: number) => {
-    if (today > yesterday) return { text: `+${today - yesterday}`, color: tokens.colors.accent.success }
-    if (today < yesterday) return { text: `${today - yesterday}`, color: tokens.colors.accent.error }
+    if (today > yesterday)
+      return { text: `+${today - yesterday}`, color: tokens.colors.accent.success }
+    if (today < yesterday)
+      return { text: `${today - yesterday}`, color: tokens.colors.accent.error }
     return { text: '0', color: tokens.colors.text.tertiary }
   }
 
@@ -88,7 +90,9 @@ export default function SystemMetrics({ data }: SystemMetricsProps) {
               <MetricCard
                 title="Banned"
                 value={data.users.banned}
-                color={data.users.banned > 0 ? tokens.colors.accent.error : tokens.colors.text.secondary}
+                color={
+                  data.users.banned > 0 ? tokens.colors.accent.error : tokens.colors.text.secondary
+                }
               />
             </Box>
           </Box>
@@ -112,13 +116,23 @@ export default function SystemMetrics({ data }: SystemMetricsProps) {
                 title="New Posts Today"
                 value={data.content.posts.newToday}
                 subtitle={`${getChangeIndicator(data.content.posts.newToday, data.content.posts.newYesterday).text} vs yesterday`}
-                color={getChangeIndicator(data.content.posts.newToday, data.content.posts.newYesterday).color}
+                color={
+                  getChangeIndicator(data.content.posts.newToday, data.content.posts.newYesterday)
+                    .color
+                }
               />
-              <MetricCard title="Total Comments" value={data.content.comments.total.toLocaleString()} />
+              <MetricCard
+                title="Total Comments"
+                value={data.content.comments.total.toLocaleString()}
+              />
               <MetricCard
                 title="New Comments Today"
                 value={data.content.comments.newToday}
-                color={data.content.comments.newToday > 0 ? tokens.colors.accent.success : tokens.colors.text.secondary}
+                color={
+                  data.content.comments.newToday > 0
+                    ? tokens.colors.accent.success
+                    : tokens.colors.text.secondary
+                }
               />
             </Box>
           </Box>
@@ -140,7 +154,11 @@ export default function SystemMetrics({ data }: SystemMetricsProps) {
               <MetricCard
                 title="Pending Reports"
                 value={data.moderation.reports.pending}
-                color={data.moderation.reports.pending > 0 ? tokens.colors.accent.warning : tokens.colors.accent.success}
+                color={
+                  data.moderation.reports.pending > 0
+                    ? tokens.colors.accent.warning
+                    : tokens.colors.accent.success
+                }
               />
               <MetricCard title="Reports This Week" value={data.moderation.reports.thisWeek} />
               <MetricCard title="Total Groups" value={data.moderation.groups.total} />
@@ -246,12 +264,19 @@ function HealthCard({
     <Box
       style={{
         padding: tokens.spacing[3],
-        background: `${color}15`,
+        background: `${alpha(color, 8)}`,
         borderRadius: tokens.radius.md,
         border: `1px solid ${color}`,
       }}
     >
-      <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: tokens.spacing[1] }}>
+      <Box
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          marginBottom: tokens.spacing[1],
+        }}
+      >
         <Text size="xs" color="tertiary">
           {title}
         </Text>

@@ -6,7 +6,7 @@
  */
 
 import { useEffect, useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -301,7 +301,7 @@ export default function DataHealthPage() {
               .map((p) => (
                 <tr
                   key={p.source}
-                  style={{ borderBottom: `1px solid ${tokens.colors.border.primary}30` }}
+                  style={{ borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 19)}` }}
                 >
                   <td style={{ padding: '10px 12px', fontWeight: 500 }}>
                     {EXCHANGE_NAMES[p.source] || p.source}

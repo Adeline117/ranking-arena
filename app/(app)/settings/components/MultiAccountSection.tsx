@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useMultiAccount } from '@/lib/hooks/useMultiAccount'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -34,7 +34,9 @@ export function MultiAccountSection() {
             gap: tokens.spacing[2],
             padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
             borderRadius: tokens.radius.md,
-            background: account.isActive ? `${tokens.colors.accent.primary}10` : 'transparent',
+            background: account.isActive
+              ? `${alpha(tokens.colors.accent.primary, 6)}`
+              : 'transparent',
             border: `1px solid ${account.isActive ? tokens.colors.accent.primary + '30' : tokens.colors.border.primary}`,
           }}
         >

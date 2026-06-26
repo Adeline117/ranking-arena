@@ -3,7 +3,7 @@
 import { useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useToast } from '@/app/components/ui/Toast'
@@ -42,7 +42,7 @@ function ExchangeAuthContent() {
       })
       .catch(() => {
         /* Intentionally swallowed: auth check non-critical for exchange auth page */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [router])
 
   const handleOAuth = async (exchange: string) => {
@@ -114,7 +114,7 @@ function ExchangeAuthContent() {
             style={{
               padding: tokens.spacing[4],
               borderRadius: tokens.radius.md,
-              background: `${tokens.colors.accent.error}20`,
+              background: `${alpha(tokens.colors.accent.error, 13)}`,
               border: `1px solid ${tokens.colors.accent.error}`,
               marginBottom: tokens.spacing[4],
             }}

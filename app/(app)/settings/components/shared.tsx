@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 
 export function ToggleSwitch({
@@ -80,7 +80,7 @@ export function SectionCard({
         WebkitBackdropFilter: tokens.glass.blur.md,
         border:
           variant === 'danger'
-            ? `1px solid ${tokens.colors.accent.error}30`
+            ? `1px solid ${alpha(tokens.colors.accent.error, 19)}`
             : tokens.glass.border.light,
         boxShadow: variant === 'danger' ? tokens.shadow.glowError : tokens.shadow.md,
         transition: `all ${tokens.transition.base}`,
@@ -159,7 +159,8 @@ export function RadioOption<T extends string>({
         borderRadius: tokens.radius.md,
         cursor: 'pointer',
         transition: 'background 0.15s ease',
-        background: currentValue === value ? `${tokens.colors.accent.primary}08` : 'transparent',
+        background:
+          currentValue === value ? `${alpha(tokens.colors.accent.primary, 3)}` : 'transparent',
       }}
     >
       <input

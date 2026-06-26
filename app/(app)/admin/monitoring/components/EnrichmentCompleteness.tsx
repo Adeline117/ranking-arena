@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useEffect, useState } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 
@@ -204,7 +204,7 @@ export default function EnrichmentCompleteness({ accessToken }: { accessToken: s
               {enrichment_stats.map((s) => (
                 <tr
                   key={s.platform}
-                  style={{ borderBottom: `1px solid ${tokens.colors.border.primary}22` }}
+                  style={{ borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 13)}` }}
                 >
                   <td style={{ padding: '4px 8px', fontWeight: 600 }}>{s.platform}</td>
                   <td style={{ padding: '4px 8px', textAlign: 'right' }}>

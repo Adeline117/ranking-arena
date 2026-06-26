@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 
@@ -191,19 +191,29 @@ export default function AnomalyMetrics({ data }: AnomalyMetricsProps) {
               </Box>
             ) : (
               recentAnomalies.map((anomaly) => {
-                const severityColor = SEVERITY_COLORS[anomaly.severity as keyof typeof SEVERITY_COLORS] || tokens.colors.text.secondary
+                const severityColor =
+                  SEVERITY_COLORS[anomaly.severity as keyof typeof SEVERITY_COLORS] ||
+                  tokens.colors.text.secondary
                 return (
                   <Box
                     key={anomaly.id}
                     style={{
                       padding: tokens.spacing[3],
-                      background: `${severityColor}10`,
+                      background: `${alpha(severityColor, 6)}`,
                       borderRadius: tokens.radius.md,
                       border: `1px solid ${severityColor}`,
                     }}
                   >
-                    <Box style={{ display: 'flex', justifyContent: 'space-between', marginBottom: tokens.spacing[1] }}>
-                      <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
+                    <Box
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        marginBottom: tokens.spacing[1],
+                      }}
+                    >
+                      <Box
+                        style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}
+                      >
                         <Text size="sm" weight="bold" style={{ color: severityColor }}>
                           {anomaly.severity.toUpperCase()}
                         </Text>
@@ -254,7 +264,7 @@ function SeverityBox({ label, count, color }: { label: string; count: number; co
     <Box
       style={{
         padding: tokens.spacing[3],
-        background: `${color}15`,
+        background: `${alpha(color, 8)}`,
         borderRadius: tokens.radius.md,
         border: `1px solid ${color}`,
       }}
