@@ -4,6 +4,7 @@ import { createClient } from '@supabase/supabase-js'
 import { EXCHANGE_CONFIG, resolveExchangeSlug } from '@/lib/constants/exchanges'
 import { BASE_URL } from '@/lib/constants/urls'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
+import PageHeader from '@/app/components/ui/PageHeader'
 import {
   generateExchangeCollectionPageSchema,
   generateBreadcrumbSchema,
@@ -238,29 +239,10 @@ export default async function ExchangeLandingPage({
       <JsonLd data={breadcrumbJsonLd} />
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 16px' }}>
         {/* Header */}
-        <div style={{ marginBottom: 32 }}>
-          <h1
-            style={{
-              fontSize: 28,
-              fontWeight: 800,
-              margin: '0 0 8px',
-              color: 'var(--text-primary, #fff)',
-            }}
-          >
-            {`${data.displayName} Top Traders & Rankings`}
-          </h1>
-          <p
-            style={{
-              fontSize: 15,
-              color: 'var(--text-secondary, rgba(255,255,255,0.6))',
-              margin: 0,
-              lineHeight: 1.5,
-            }}
-          >
-            {data.traderCount.toLocaleString()} ranked traders on {data.displayName} (
-            {sourceTypeLabel}). Updated every 5 minutes.
-          </p>
-        </div>
+        <PageHeader
+          title={`${data.displayName} Top Traders & Rankings`}
+          subtitle={`${data.traderCount.toLocaleString()} ranked traders on ${data.displayName} (${sourceTypeLabel}). Updated every 5 minutes.`}
+        />
 
         {/* Top traders table */}
         {data.topTraders.length > 0 && (

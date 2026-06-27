@@ -9,6 +9,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { TraderLinksSection } from '../components/TraderLinksSection'
 import { logger } from '@/lib/logger'
 
@@ -166,14 +167,7 @@ function LinkedAccountsContent() {
           paddingBottom: 100,
         }}
       >
-        <Box style={{ marginBottom: tokens.spacing[6] }}>
-          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[1] }}>
-            {t('linkedAccounts')}
-          </Text>
-          <Text size="sm" color="tertiary" style={{ lineHeight: 1.6 }}>
-            {t('myTraderAccountsDesc')}
-          </Text>
-        </Box>
+        <PageHeader title={t('linkedAccounts')} subtitle={t('myTraderAccountsDesc')} compact />
 
         <Box
           style={{
