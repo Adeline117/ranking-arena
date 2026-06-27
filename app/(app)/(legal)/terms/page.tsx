@@ -12,8 +12,10 @@ const containerStyle: React.CSSProperties = {
 }
 
 const h1Style: React.CSSProperties = {
-  fontSize: 32,
-  fontWeight: 700,
+  fontSize: 'clamp(28px, 3.5vw, 40px)',
+  fontWeight: 900,
+  letterSpacing: '-0.02em',
+  lineHeight: 1.15,
   marginBottom: 8,
 }
 

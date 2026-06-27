@@ -10,8 +10,12 @@ export default function DisclaimerPageClient() {
     <div className="min-h-screen bg-[var(--color-bg-primary)] py-16 px-4">
       <div className="max-w-3xl mx-auto">
         <h1
-          className="text-2xl font-black text-[var(--color-text-primary)] mb-8"
-          style={{ letterSpacing: '-0.3px' }}
+          className="font-black text-[var(--color-text-primary)] mb-8"
+          style={{
+            fontSize: 'clamp(28px, 3.5vw, 40px)',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.15,
+          }}
         >
           {t('disclaimerTitle')}
         </h1>
