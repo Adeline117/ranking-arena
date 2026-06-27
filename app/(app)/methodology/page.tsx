@@ -49,8 +49,10 @@ const containerStyle: React.CSSProperties = {
 }
 
 const h1Style: React.CSSProperties = {
-  fontSize: 32,
-  fontWeight: 700,
+  fontSize: 'clamp(28px, 3.5vw, 40px)',
+  fontWeight: 900,
+  letterSpacing: '-0.02em',
+  lineHeight: 1.15,
   marginBottom: 8,
 }
 
@@ -136,7 +138,8 @@ export default function MethodologyPage() {
       {/* ======================= ENGLISH ======================= */}
       <h1 style={h1Style}>Methodology</h1>
       <p style={subtitleStyle}>
-        How Arena ranks crypto traders across 25+ exchanges &mdash; transparent, data-driven, updated every 30 minutes
+        How Arena ranks crypto traders across 25+ exchanges &mdash; transparent, data-driven,
+        updated every 30 minutes
       </p>
 
       {/* Data Sources */}
@@ -144,23 +147,22 @@ export default function MethodologyPage() {
         <h2 style={h2Style}>Data Sources</h2>
         <div style={bodyStyle}>
           <p>
-            Arena aggregates publicly available trading data from <strong>25+ centralized
-            and decentralized exchanges</strong>, including:
+            Arena aggregates publicly available trading data from{' '}
+            <strong>25+ centralized and decentralized exchanges</strong>, including:
           </p>
           <ul style={listStyle}>
             <li style={liStyle}>
-              <strong>CEX:</strong> Binance Futures, Binance Spot, Bybit, OKX, Bitget,
-              MEXC, HTX, Gate.io, CoinEx, BingX, BTCC, Bitfinex, Bitunix, eToro, and more
+              <strong>CEX:</strong> Binance Futures, Binance Spot, Bybit, OKX, Bitget, MEXC, HTX,
+              Gate.io, CoinEx, BingX, BTCC, Bitfinex, Bitunix, eToro, and more
             </li>
             <li style={liStyle}>
-              <strong>DEX:</strong> Hyperliquid, GMX, dYdX, Vertex, Drift, Aevo, Gains
-              Network, Kwenta, and more
+              <strong>DEX:</strong> Hyperliquid, GMX, dYdX, Vertex, Drift, Aevo, Gains Network,
+              Kwenta, and more
             </li>
           </ul>
           <p style={{ marginTop: 12 }}>
-            Data is collected via official exchange APIs and, for geo-restricted or
-            WAF-protected exchanges, through VPS-based scrapers deployed in multiple
-            regions (Singapore, Japan).
+            Data is collected via official exchange APIs and, for geo-restricted or WAF-protected
+            exchanges, through VPS-based scrapers deployed in multiple regions (Singapore, Japan).
           </p>
         </div>
       </section>
@@ -178,11 +180,12 @@ export default function MethodologyPage() {
                 <strong>DEX data:</strong> Refreshed every <code style={codeStyle}>4 hours</code>
               </li>
               <li style={liStyle}>
-                <strong>Leaderboard:</strong> Recomputed every <code style={codeStyle}>30 minutes</code>
+                <strong>Leaderboard:</strong> Recomputed every{' '}
+                <code style={codeStyle}>30 minutes</code>
               </li>
               <li style={liStyle}>
-                <strong>Stale threshold:</strong> Data older than 48 hours (CEX) or 72 hours
-                (DEX) is excluded from composite score computation
+                <strong>Stale threshold:</strong> Data older than 48 hours (CEX) or 72 hours (DEX)
+                is excluded from composite score computation
               </li>
             </ul>
           </div>
@@ -194,31 +197,42 @@ export default function MethodologyPage() {
         <h2 style={h2Style}>Arena Score Algorithm (0-100)</h2>
         <div style={bodyStyle}>
           <p>
-            The Arena Score is a composite rating designed to measure <strong>risk-adjusted
-            performance</strong> across exchanges. It consists of two primary components:
+            The Arena Score is a composite rating designed to measure{' '}
+            <strong>risk-adjusted performance</strong> across exchanges. It consists of two primary
+            components:
           </p>
 
           <div style={formulaBoxStyle}>
-            <div><strong>Return Score (0-60 points)</strong></div>
-            <div>ReturnScore = 60 &times; tanh(coefficient &times; ROI)<sup>exponent</sup></div>
+            <div>
+              <strong>Return Score (0-60 points)</strong>
+            </div>
+            <div>
+              ReturnScore = 60 &times; tanh(coefficient &times; ROI)<sup>exponent</sup>
+            </div>
             <br />
-            <div><strong>PnL Score (0-40 points)</strong></div>
+            <div>
+              <strong>PnL Score (0-40 points)</strong>
+            </div>
             <div>PnlScore = 40 &times; tanh(coefficient &times; ln(1 + PnL / base))</div>
             <br />
-            <div><strong>Final Score</strong></div>
-            <div>ArenaScore = (ReturnScore + PnlScore) &times; confidenceMultiplier &times; trustWeight</div>
+            <div>
+              <strong>Final Score</strong>
+            </div>
+            <div>
+              ArenaScore = (ReturnScore + PnlScore) &times; confidenceMultiplier &times; trustWeight
+            </div>
           </div>
 
           <p style={{ marginTop: 16 }}>
-            The <code style={codeStyle}>tanh</code> (hyperbolic tangent) normalization
-            creates diminishing returns for extreme values, preventing a single outlier
-            trade from dominating rankings. Coefficients and exponents vary by time period
-            to appropriately weight short vs. long-term performance.
+            The <code style={codeStyle}>tanh</code> (hyperbolic tangent) normalization creates
+            diminishing returns for extreme values, preventing a single outlier trade from
+            dominating rankings. Coefficients and exponents vary by time period to appropriately
+            weight short vs. long-term performance.
           </p>
 
           <p style={{ marginTop: 12 }}>
-            <strong>Confidence multiplier</strong> accounts for data completeness &mdash;
-            traders missing key metrics (win rate, max drawdown) receive a penalty (0.80-0.92x).
+            <strong>Confidence multiplier</strong> accounts for data completeness &mdash; traders
+            missing key metrics (win rate, max drawdown) receive a penalty (0.80-0.92x).
           </p>
         </div>
       </section>
@@ -228,8 +242,8 @@ export default function MethodologyPage() {
         <h2 style={h2Style}>Time Windows &amp; Composite Score</h2>
         <div style={bodyStyle}>
           <p>
-            Rankings are computed across three time windows. The overall composite score
-            heavily weights long-term consistency:
+            Rankings are computed across three time windows. The overall composite score heavily
+            weights long-term consistency:
           </p>
           <div style={badgeRowStyle}>
             <WeightBadge period="90D" weight="70%" />
@@ -237,8 +251,8 @@ export default function MethodologyPage() {
             <WeightBadge period="7D" weight="5%" />
           </div>
           <p style={{ marginTop: 16 }}>
-            This weighting rewards traders who maintain strong, consistent performance
-            over months rather than those with short-term spikes.
+            This weighting rewards traders who maintain strong, consistent performance over months
+            rather than those with short-term spikes.
           </p>
         </div>
       </section>
@@ -247,24 +261,17 @@ export default function MethodologyPage() {
       <section style={sectionStyle}>
         <h2 style={h2Style}>Cross-Exchange Normalization</h2>
         <div style={bodyStyle}>
-          <p>
-            Different exchanges report ROI and PnL in different ways:
-          </p>
+          <p>Different exchanges report ROI and PnL in different ways:</p>
           <ul style={listStyle}>
             <li style={liStyle}>
-              Some report the trader&apos;s own PnL, others report followers&apos;
-              copy-trading PnL
+              Some report the trader&apos;s own PnL, others report followers&apos; copy-trading PnL
             </li>
-            <li style={liStyle}>
-              ROI may be expressed as a ratio (0.25) or percentage (25%)
-            </li>
-            <li style={liStyle}>
-              Some exchanges include unrealized PnL, others only realized
-            </li>
+            <li style={liStyle}>ROI may be expressed as a ratio (0.25) or percentage (25%)</li>
+            <li style={liStyle}>Some exchanges include unrealized PnL, others only realized</li>
           </ul>
           <p style={{ marginTop: 12 }}>
-            Arena normalizes all values to a consistent format (ROI as percentage, PnL
-            in USD) during data ingestion. A per-exchange <code style={codeStyle}>trustWeight</code> factor
+            Arena normalizes all values to a consistent format (ROI as percentage, PnL in USD)
+            during data ingestion. A per-exchange <code style={codeStyle}>trustWeight</code> factor
             adjusts for data quality and reporting standards.
           </p>
         </div>
@@ -276,24 +283,24 @@ export default function MethodologyPage() {
         <div style={bodyStyle}>
           <ul style={listStyle}>
             <li style={liStyle}>
-              <strong>Tanh normalization:</strong> Caps extreme ROI values &mdash; 10,000%
-              ROI scores only marginally higher than 1,000%
+              <strong>Tanh normalization:</strong> Caps extreme ROI values &mdash; 10,000% ROI
+              scores only marginally higher than 1,000%
             </li>
             <li style={liStyle}>
-              <strong>Outlier detection:</strong> Statistical checks flag abnormal jumps
-              in ROI or PnL between snapshots
+              <strong>Outlier detection:</strong> Statistical checks flag abnormal jumps in ROI or
+              PnL between snapshots
             </li>
             <li style={liStyle}>
-              <strong>Minimum requirements:</strong> Traders must meet minimum trade count
-              and data availability thresholds
+              <strong>Minimum requirements:</strong> Traders must meet minimum trade count and data
+              availability thresholds
             </li>
             <li style={liStyle}>
-              <strong>Server-side computation:</strong> Scores are computed on our servers
-              and cannot be self-reported
+              <strong>Server-side computation:</strong> Scores are computed on our servers and
+              cannot be self-reported
             </li>
             <li style={liStyle}>
-              <strong>Data freshness filter:</strong> Only data within the freshness
-              threshold contributes to rankings
+              <strong>Data freshness filter:</strong> Only data within the freshness threshold
+              contributes to rankings
             </li>
           </ul>
         </div>
@@ -333,10 +340,10 @@ export default function MethodologyPage() {
               Q: Why does my favorite trader have a lower score than expected?
             </p>
             <p style={{ margin: 0 }}>
-              A: Arena Score weighs long-term consistency (90D = 70%). A trader with
-              spectacular short-term gains but inconsistent history may score lower than
-              a steady performer. Data completeness also affects scores &mdash; missing
-              metrics result in a confidence penalty.
+              A: Arena Score weighs long-term consistency (90D = 70%). A trader with spectacular
+              short-term gains but inconsistent history may score lower than a steady performer.
+              Data completeness also affects scores &mdash; missing metrics result in a confidence
+              penalty.
             </p>
           </div>
           <div style={faqStyle}>
@@ -344,8 +351,8 @@ export default function MethodologyPage() {
               Q: How often are rankings updated?
             </p>
             <p style={{ margin: 0 }}>
-              A: Raw data is fetched every 3-6 hours. The leaderboard is recomputed every
-              30 minutes using the latest available data.
+              A: Raw data is fetched every 3-6 hours. The leaderboard is recomputed every 30 minutes
+              using the latest available data.
             </p>
           </div>
           <div style={faqStyle}>
@@ -353,9 +360,9 @@ export default function MethodologyPage() {
               Q: Can I compare traders across different exchanges?
             </p>
             <p style={{ margin: 0 }}>
-              A: Yes, that is the primary purpose of Arena Score. However, for the most
-              accurate comparison, we recommend also checking the per-exchange rankings,
-              as data reporting standards vary between platforms.
+              A: Yes, that is the primary purpose of Arena Score. However, for the most accurate
+              comparison, we recommend also checking the per-exchange rankings, as data reporting
+              standards vary between platforms.
             </p>
           </div>
           <div style={faqStyle}>
@@ -363,9 +370,9 @@ export default function MethodologyPage() {
               Q: Why is a trader I follow on an exchange not appearing on Arena?
             </p>
             <p style={{ margin: 0 }}>
-              A: We fetch the top-ranked traders from each exchange. If a trader is not in
-              the exchange&apos;s public leaderboard or has insufficient data, they may not
-              appear. We currently track 34,000+ traders across all platforms.
+              A: We fetch the top-ranked traders from each exchange. If a trader is not in the
+              exchange&apos;s public leaderboard or has insufficient data, they may not appear. We
+              currently track 34,000+ traders across all platforms.
             </p>
           </div>
           <div style={faqStyle}>
@@ -373,9 +380,9 @@ export default function MethodologyPage() {
               Q: Is Arena Score the same as ROI?
             </p>
             <p style={{ margin: 0 }}>
-              A: No. Arena Score is a composite metric that combines ROI, absolute PnL,
-              and data quality factors. A trader with moderate ROI but large consistent
-              profits may score higher than one with extremely high ROI but tiny PnL.
+              A: No. Arena Score is a composite metric that combines ROI, absolute PnL, and data
+              quality factors. A trader with moderate ROI but large consistent profits may score
+              higher than one with extremely high ROI but tiny PnL.
             </p>
           </div>
           <div style={faqStyle}>
@@ -383,9 +390,9 @@ export default function MethodologyPage() {
               Q: Does Arena provide trading signals or advice?
             </p>
             <p style={{ margin: 0 }}>
-              A: No. Arena is a data platform. We rank traders based on historical
-              performance data. We do not provide financial advice, trading signals, or
-              recommendations. Always do your own research.
+              A: No. Arena is a data platform. We rank traders based on historical performance data.
+              We do not provide financial advice, trading signals, or recommendations. Always do
+              your own research.
             </p>
           </div>
         </div>
@@ -409,14 +416,18 @@ export default function MethodologyPage() {
           </p>
           <ul style={listStyle}>
             <li style={liStyle}>
-              <strong>CEX：</strong>Binance Futures、Binance Spot、Bybit、OKX、Bitget、MEXC、HTX、Gate.io、CoinEx、BingX、BTCC、Bitfinex、Bitunix、eToro 等
+              <strong>CEX：</strong>Binance Futures、Binance
+              Spot、Bybit、OKX、Bitget、MEXC、HTX、Gate.io、CoinEx、BingX、BTCC、Bitfinex、Bitunix、eToro
+              等
             </li>
             <li style={liStyle}>
-              <strong>DEX：</strong>Hyperliquid、GMX、dYdX、Vertex、Drift、Aevo、Gains Network、Kwenta 等
+              <strong>DEX：</strong>Hyperliquid、GMX、dYdX、Vertex、Drift、Aevo、Gains
+              Network、Kwenta 等
             </li>
           </ul>
           <p style={{ marginTop: 12 }}>
-            数据通过官方交易所 API 收集，对于有地理限制或 WAF 保护的交易所，则通过部署在多个地区（新加坡、日本）的 VPS 爬虫收集。
+            数据通过官方交易所 API 收集，对于有地理限制或 WAF
+            保护的交易所，则通过部署在多个地区（新加坡、日本）的 VPS 爬虫收集。
           </p>
         </div>
       </section>
@@ -437,7 +448,8 @@ export default function MethodologyPage() {
                 <strong>排行榜：</strong>每 <code style={codeStyle}>30 分钟</code> 重新计算
               </li>
               <li style={liStyle}>
-                <strong>过期阈值：</strong>超过 48 小时（CEX）或 72 小时（DEX）的数据将被排除在综合评分计算之外
+                <strong>过期阈值：</strong>超过 48 小时（CEX）或 72
+                小时（DEX）的数据将被排除在综合评分计算之外
               </li>
             </ul>
           </div>
@@ -449,26 +461,39 @@ export default function MethodologyPage() {
         <h2 style={h2Style}>Arena Score 算法 (0-100)</h2>
         <div style={bodyStyle}>
           <p>
-            Arena Score 是一个综合评分，旨在衡量跨交易所的<strong>风险调整绩效</strong>。它由两个主要部分组成：
+            Arena Score 是一个综合评分，旨在衡量跨交易所的<strong>风险调整绩效</strong>
+            。它由两个主要部分组成：
           </p>
 
           <div style={formulaBoxStyle}>
-            <div><strong>回报得分 (0-60 分)</strong></div>
-            <div>ReturnScore = 60 &times; tanh(coefficient &times; ROI)<sup>exponent</sup></div>
+            <div>
+              <strong>回报得分 (0-60 分)</strong>
+            </div>
+            <div>
+              ReturnScore = 60 &times; tanh(coefficient &times; ROI)<sup>exponent</sup>
+            </div>
             <br />
-            <div><strong>盈亏得分 (0-40 分)</strong></div>
+            <div>
+              <strong>盈亏得分 (0-40 分)</strong>
+            </div>
             <div>PnlScore = 40 &times; tanh(coefficient &times; ln(1 + PnL / base))</div>
             <br />
-            <div><strong>最终得分</strong></div>
-            <div>ArenaScore = (ReturnScore + PnlScore) &times; confidenceMultiplier &times; trustWeight</div>
+            <div>
+              <strong>最终得分</strong>
+            </div>
+            <div>
+              ArenaScore = (ReturnScore + PnlScore) &times; confidenceMultiplier &times; trustWeight
+            </div>
           </div>
 
           <p style={{ marginTop: 16 }}>
-            <code style={codeStyle}>tanh</code>（双曲正切）归一化为极端值创造递减收益，防止单笔异常交易主导排名。系数和指数因时间周期而异，以适当权衡短期与长期绩效。
+            <code style={codeStyle}>tanh</code>
+            （双曲正切）归一化为极端值创造递减收益，防止单笔异常交易主导排名。系数和指数因时间周期而异，以适当权衡短期与长期绩效。
           </p>
 
           <p style={{ marginTop: 12 }}>
-            <strong>置信度乘数</strong>考虑数据完整性 — 缺少关键指标（胜率、最大回撤）的交易者将受到惩罚（0.80-0.92 倍）。
+            <strong>置信度乘数</strong>考虑数据完整性 —
+            缺少关键指标（胜率、最大回撤）的交易者将受到惩罚（0.80-0.92 倍）。
           </p>
         </div>
       </section>
@@ -500,7 +525,8 @@ export default function MethodologyPage() {
             <li style={liStyle}>有些交易所包含未实现 PnL，有些仅包含已实现 PnL</li>
           </ul>
           <p style={{ marginTop: 12 }}>
-            Arena 在数据摄入期间将所有值归一化为一致格式（ROI 为百分比，PnL 为美元）。每个交易所的 <code style={codeStyle}>trustWeight</code> 因子根据数据质量和报告标准进行调整。
+            Arena 在数据摄入期间将所有值归一化为一致格式（ROI 为百分比，PnL 为美元）。每个交易所的{' '}
+            <code style={codeStyle}>trustWeight</code> 因子根据数据质量和报告标准进行调整。
           </p>
         </div>
       </section>
@@ -553,7 +579,9 @@ export default function MethodologyPage() {
               问：为什么我关注的交易者评分比预期低？
             </p>
             <p style={{ margin: 0 }}>
-              答：Arena Score 侧重长期一致性（90D = 70%）。短期表现出色但历史不稳定的交易者可能得分低于稳定表现的交易者。数据完整性也会影响评分 — 缺少指标会导致置信度惩罚。
+              答：Arena Score 侧重长期一致性（90D =
+              70%）。短期表现出色但历史不稳定的交易者可能得分低于稳定表现的交易者。数据完整性也会影响评分
+              — 缺少指标会导致置信度惩罚。
             </p>
           </div>
           <div style={faqStyle}>
@@ -569,7 +597,8 @@ export default function MethodologyPage() {
               问：可以比较不同交易所的交易者吗？
             </p>
             <p style={{ margin: 0 }}>
-              答：可以，这正是 Arena Score 的主要目的。但为了最准确的比较，我们建议同时查看各交易所的排名，因为数据报告标准因平台而异。
+              答：可以，这正是 Arena Score
+              的主要目的。但为了最准确的比较，我们建议同时查看各交易所的排名，因为数据报告标准因平台而异。
             </p>
           </div>
           <div style={faqStyle}>
@@ -577,7 +606,8 @@ export default function MethodologyPage() {
               问：为什么我在某交易所关注的交易者没有出现在 Arena 上？
             </p>
             <p style={{ margin: 0 }}>
-              答：我们从每个交易所获取排名靠前的交易者。如果交易者不在交易所的公开排行榜中或数据不足，可能不会出现。我们目前跟踪所有平台的 34,000 多名交易者。
+              答：我们从每个交易所获取排名靠前的交易者。如果交易者不在交易所的公开排行榜中或数据不足，可能不会出现。我们目前跟踪所有平台的
+              34,000 多名交易者。
             </p>
           </div>
           <div style={faqStyle}>
@@ -585,7 +615,8 @@ export default function MethodologyPage() {
               问：Arena Score 和 ROI 一样吗？
             </p>
             <p style={{ margin: 0 }}>
-              答：不一样。Arena Score 是结合 ROI、绝对 PnL 和数据质量因素的综合指标。ROI 适中但利润大且稳定的交易者可能得分高于 ROI 极高但 PnL 很小的交易者。
+              答：不一样。Arena Score 是结合 ROI、绝对 PnL 和数据质量因素的综合指标。ROI
+              适中但利润大且稳定的交易者可能得分高于 ROI 极高但 PnL 很小的交易者。
             </p>
           </div>
           <div style={faqStyle}>
@@ -593,7 +624,8 @@ export default function MethodologyPage() {
               问：Arena 提供交易信号或建议吗？
             </p>
             <p style={{ margin: 0 }}>
-              答：不提供。Arena 是一个数据平台。我们根据历史绩效数据对交易者进行排名。我们不提供财务建议、交易信号或推荐。请始终进行自己的研究。
+              答：不提供。Arena
+              是一个数据平台。我们根据历史绩效数据对交易者进行排名。我们不提供财务建议、交易信号或推荐。请始终进行自己的研究。
             </p>
           </div>
         </div>
@@ -638,8 +670,7 @@ function WeightBadge({ period, weight }: { period: string; weight: string }) {
         color: 'var(--color-text-primary)',
       }}
     >
-      {period}{' '}
-      <span style={{ color: 'var(--color-accent-primary)' }}>{weight}</span>
+      {period} <span style={{ color: 'var(--color-accent-primary)' }}>{weight}</span>
     </div>
   )
 }
