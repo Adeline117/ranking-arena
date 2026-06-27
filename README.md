@@ -204,7 +204,7 @@ Each trader profile includes:
 
 **Three-Tier Proxy Strategy.** WAF-protected exchanges (Bybit, Bitget, BingX, MEXC, XT, Toobit) route through VPS Playwright scrapers first. Geo-blocked exchanges (Binance in some regions) use Cloudflare Worker proxy as fallback. OKX uses direct API (v5 public endpoints are not WAF-blocked). The proxy chain is transparent to connector code via `fetchViaVPS()`.
 
-**Two-Table Snapshot Architecture.** `trader_snapshots_v2` is the sole write table for connector output. `leaderboard_ranks` is the precomputed read table for rankings, rebuilt every 30 minutes by `compute-leaderboard`. This separation keeps writes fast and reads indexed.
+**Snapshot Architecture.** The arena ingest worker writes scraped data to the partitioned **`arena.*` schema** (`arena.trader_stats`, `arena.leaderboard_entries`, etc.); `trader_snapshots_v2` was dropped 2026-06-16. `compute-leaderboard` derives `public.leaderboard_ranks` (+ `lr_7d/30d/90d`) as the precomputed read tables for rankings. This separation keeps writes fast and reads indexed. See `docs/ARENA_REBUILD_SPEC.md`.
 
 **Two-Phase Enrichment.** Data ingestion happens in two phases: (1) `batch-fetch-traders` discovers and upserts basic trader data (ROI, PnL, win rate) across all exchanges via 16 batch groups, (2) `batch-enrich` adds equity curves, position history, stats detail, and derived metrics (Sharpe, Sortino, Calmar) for top traders per platform across 26 enrichment modules.
 
@@ -356,9 +356,9 @@ Core tables (all with Row Level Security enabled):
 | Table                     | Purpose                                                                  |
 | ------------------------- | ------------------------------------------------------------------------ |
 | `leaderboard_ranks`       | Precomputed ranked leaderboard (primary read path, rebuilt every 30 min) |
-| `trader_snapshots_v2`     | Point-in-time performance data — sole write table for connectors         |
-| `traders`                 | Trader identity registry, keyed by `(platform, trader_key)`              |
-| `trader_profiles_v2`      | Enriched profile data (bio, avatar, display name)                        |
+| `arena.trader_stats`      | Point-in-time performance per (trader, timeframe) — primary write table  |
+| `arena.traders`           | Trader identity registry, keyed by `(source_id, exchange_trader_id)`     |
+| `trader_sources`          | Trader source identities (legacy serving + enrichment)                   |
 | `trader_equity_curve`     | Historical equity curve data points per period                           |
 | `trader_position_history` | Past trading positions with PnL                                          |
 | `trader_stats_detail`     | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period  |
