@@ -48,8 +48,10 @@ export default function DmcaPageClient() {
         >
           <h1
             style={{
-              fontSize: tokens.typography.fontSize['2xl'],
+              fontSize: 'clamp(28px, 3.5vw, 40px)',
               fontWeight: tokens.typography.fontWeight.black,
+              letterSpacing: '-0.02em',
+              lineHeight: 1.15,
               color: 'var(--color-text-primary)',
               marginBottom: tokens.spacing[2],
             }}
