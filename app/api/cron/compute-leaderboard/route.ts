@@ -627,14 +627,13 @@ async function computeSeason(
   // Used by detectTraderType as ground-truth Layer 1 (eth_getCode).
   const contractAddresses = new Set<string>()
   try {
-    // is_contract is a new column — cast to bypass stale generated types
-    const { data: contracts } = await (supabase
+    // is_contract: ground-truth contract flag on trader_sources (now in generated types).
+    const { data: contracts } = await supabase
       .from('trader_sources')
       .select('source_trader_id')
-      .eq('is_contract' as any, true) as any)
+      .eq('is_contract', true)
     if (contracts) {
-      for (const c of contracts as Array<{ source_trader_id: string }>)
-        contractAddresses.add(c.source_trader_id)
+      for (const c of contracts) contractAddresses.add(c.source_trader_id)
     }
     if (contractAddresses.size > 0) {
       logger.info(`[${season}] Loaded ${contractAddresses.size} known contract addresses`)
