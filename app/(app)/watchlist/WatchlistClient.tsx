@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { formatPnL } from '@/lib/utils/format'
@@ -174,12 +175,7 @@ export default function WatchlistClient() {
       }}
     >
       <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 16px 60px' }}>
-        <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0 }}>{t('watchlistTitle')}</h1>
-          <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginTop: 6 }}>
-            {t('watchlistSubtitle')}
-          </p>
-        </div>
+        <PageHeader title={t('watchlistTitle')} subtitle={t('watchlistSubtitle')} compact />
         {isAuthenticated === false && (
           <EmptyState
             variant="card"

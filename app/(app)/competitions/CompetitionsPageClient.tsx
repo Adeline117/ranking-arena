@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Link from 'next/link'
 
@@ -106,23 +107,17 @@ export default function CompetitionsPageClient() {
         }}
       >
         {/* Header */}
-        <Box
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: tokens.spacing[6],
-          }}
-        >
-          <Text as="h1" style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 700 }}>
-            {t('compPageTitle')}
-          </Text>
-          <Link href="/competitions/create" style={{ textDecoration: 'none' }}>
-            <Button variant="primary" size="sm">
-              {t('compCreateBtn')}
-            </Button>
-          </Link>
-        </Box>
+        <PageHeader
+          title={t('compPageTitle')}
+          compact
+          actions={
+            <Link href="/competitions/create" style={{ textDecoration: 'none' }}>
+              <Button variant="primary" size="sm">
+                {t('compCreateBtn')}
+              </Button>
+            </Link>
+          }
+        />
 
         {/* Tabs */}
         <Box
