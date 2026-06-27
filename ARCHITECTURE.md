@@ -1,6 +1,23 @@
 # Arena Data Architecture (March 2026)
 
-## Data Flow
+> ⚠️ **LEGACY (pre-2026-06).** This document describes the original `lib/connectors`
+>
+> - `trader_snapshots_v2` pipeline, which has been replaced by the arena ingest
+>   worker (`lib/ingest/adapters/`, BullMQ tier queues) writing to the partitioned
+>   **`arena.*` schema**. `trader_latest` and `trader_snapshots_v2` were dropped
+>   2026-06-16. For the current design see `docs/ARENA_REBUILD_SPEC.md`. Kept for
+>   historical reference; the connector-framework sections below are superseded.
+
+## Data Flow (current — arena pipeline)
+
+```
+Exchange web/APIs → arena ingest worker (lib/ingest/adapters/, tier A/B/C/D queues)
+  → arena.leaderboard_snapshots / leaderboard_entries / trader_stats / positions_* (partitioned)
+  → compute-leaderboard cron → public.leaderboard_ranks + lr_7d/30d/90d (serving)
+  → Redis cache (Upstash) → Frontend (Next.js RSC + React Query)
+```
+
+## Data Flow (legacy — superseded)
 
 ```
 Exchange APIs → Connector Framework (lib/connectors/platforms/)
@@ -14,16 +31,17 @@ Exchange APIs → Connector Framework (lib/connectors/platforms/)
 
 ## Connector Framework
 
-| Component | Location |
-|-----------|----------|
-| Base class | `lib/connectors/base.ts` (BaseConnector) |
-| 24 active connectors | `lib/connectors/platforms/*.ts` |
-| DB write adapter | `lib/connectors/connector-db-adapter.ts` |
-| Registry | `lib/connectors/registry.ts` (ConnectorRegistry) |
-| Runner | `lib/connectors/connector-runner.ts` |
-| Types | `lib/types/leaderboard.ts` + `lib/connectors/types.ts` |
+| Component            | Location                                               |
+| -------------------- | ------------------------------------------------------ |
+| Base class           | `lib/connectors/base.ts` (BaseConnector)               |
+| 24 active connectors | `lib/connectors/platforms/*.ts`                        |
+| DB write adapter     | `lib/connectors/connector-db-adapter.ts`               |
+| Registry             | `lib/connectors/registry.ts` (ConnectorRegistry)       |
+| Runner               | `lib/connectors/connector-runner.ts`                   |
+| Types                | `lib/types/leaderboard.ts` + `lib/connectors/types.ts` |
 
 ### Connector Interface
+
 ```typescript
 interface PlatformConnector {
   discoverLeaderboard(window, limit?, offset?): Promise<DiscoverResult>
@@ -35,6 +53,7 @@ interface PlatformConnector {
 ```
 
 ### Built-in Features
+
 - 30s timeout per request
 - 3× exponential backoff retry (2s base)
 - 429 rate limit handling (Retry-After header)
@@ -44,20 +63,20 @@ interface PlatformConnector {
 
 ## Cron Schedule (vercel.json)
 
-| Group | Schedule | Platforms |
-|-------|----------|-----------|
-| A | Every 3h | binance_futures, binance_spot |
-| A2 | Every 3h | bitget_futures, okx_futures |
-| B | Every 4h | hyperliquid, gmx, jupiter_perps |
-| C | Every 4h | okx_web3, aevo, xt |
-| D1 | Every 6h | gains, htx_futures |
-| D2 | Every 6h | dydx |
-| E | Every 6h | coinex, binance_web3, bitfinex |
-| F | Every 6h | mexc, bingx |
-| G1 | Every 6h | drift, bitunix |
-| G2 | Every 6h | web3_bot, toobit |
-| H | Every 6h | gateio, btcc |
-| I | Every 6h | etoro |
+| Group | Schedule | Platforms                       |
+| ----- | -------- | ------------------------------- |
+| A     | Every 3h | binance_futures, binance_spot   |
+| A2    | Every 3h | bitget_futures, okx_futures     |
+| B     | Every 4h | hyperliquid, gmx, jupiter_perps |
+| C     | Every 4h | okx_web3, aevo, xt              |
+| D1    | Every 6h | gains, htx_futures              |
+| D2    | Every 6h | dydx                            |
+| E     | Every 6h | coinex, binance_web3, bitfinex  |
+| F     | Every 6h | mexc, bingx                     |
+| G1    | Every 6h | drift, bitunix                  |
+| G2    | Every 6h | web3_bot, toobit                |
+| H     | Every 6h | gateio, btcc                    |
+| I     | Every 6h | etoro                           |
 
 Other crons: enrichment (4h), leaderboard (30min), composite (2h), daily digest (UTC 00:00).
 
@@ -85,7 +104,7 @@ bitget_spot, mux, synthetix, paradex, kwenta, blofin, okx_spot, bitmart, whitebi
 
 ## Deprecated Code
 
-| Directory | Contents |
-|-----------|----------|
-| `lib/cron/fetchers/_deprecated/` | 39 old Inline Fetcher scripts |
-| `lib/connectors/_deprecated/` | 17 old BaseConnectorLegacy implementations |
+| Directory                        | Contents                                   |
+| -------------------------------- | ------------------------------------------ |
+| `lib/cron/fetchers/_deprecated/` | 39 old Inline Fetcher scripts              |
+| `lib/connectors/_deprecated/`    | 17 old BaseConnectorLegacy implementations |

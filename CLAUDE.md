@@ -73,10 +73,19 @@ npm run backfill:24h    # Backfill 24h window metrics
 
 ## Database Schema (Core Tables)
 
+> **Primary data layer = `arena.*` schema** (partitioned, populated by the ingest
+> worker): `arena.traders`, `arena.trader_stats` (per trader×timeframe),
+> `arena.leaderboard_snapshots/entries`, `arena.positions_current`,
+> `arena.{position_history,order_records,transfer_history,copier_records}` (monthly
+> partitions). `compute-leaderboard` derives serving tables `public.leaderboard_ranks`
+>
+> - `lr_7d/30d/90d`. **`trader_latest` and `trader_snapshots_v2` were dropped
+>   2026-06-16.** See `docs/ARENA_REBUILD_SPEC.md`. The `public` tables below are
+>   legacy serving/enrichment + social/premium.
+
 ```sql
--- Traders
+-- Traders (legacy serving / enrichment)
 trader_sources          # Unique trader identities (source + source_trader_id)
-trader_snapshots        # Point-in-time performance data (ROI, PnL, rank)
 trader_details          # Enriched profile data (bio, avatar, stats)
 
 -- Social
