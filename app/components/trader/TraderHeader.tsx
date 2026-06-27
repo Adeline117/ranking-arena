@@ -265,12 +265,13 @@ export default function TraderHeader({
           >
             <Text
               as="h1"
-              size="lg"
+              size="2xl"
               weight="black"
               className="trader-name-truncate"
               style={{
                 color: hasCover ? tokens.colors.white : tokens.colors.text.primary,
-                lineHeight: 1.2,
+                lineHeight: 1.15,
+                letterSpacing: '-0.02em',
                 textShadow: hasCover ? '0 1px 4px var(--color-overlay-dark)' : undefined,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
