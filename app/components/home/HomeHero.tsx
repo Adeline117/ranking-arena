@@ -153,7 +153,7 @@ export default function HomeHero({
               <div
                 style={{
                   fontSize: '11px',
-                  color: 'var(--color-accent-secondary, #22d3ee)',
+                  color: 'var(--color-text-tertiary)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
                   fontWeight: 500,
