@@ -276,8 +276,10 @@ export default function ApiDocsPage() {
       <div style={{ marginBottom: tokens.spacing[10], textAlign: 'center' }}>
         <h1
           style={{
-            fontSize: tokens.typography.fontSize['3xl'],
-            fontWeight: 800,
+            fontSize: 'clamp(28px, 3.5vw, 40px)',
+            fontWeight: tokens.typography.fontWeight.black,
+            letterSpacing: '-0.02em',
+            lineHeight: 1.15,
             marginBottom: tokens.spacing[3],
           }}
         >
