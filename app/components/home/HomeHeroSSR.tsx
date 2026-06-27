@@ -139,7 +139,7 @@ export default async function HomeHeroSSR({
               <div
                 style={{
                   fontSize: '0.6875rem',
-                  color: 'var(--color-accent-secondary)',
+                  color: 'var(--color-text-tertiary)',
                   textTransform: 'uppercase',
                   letterSpacing: '0.06em',
                   fontWeight: tokens.typography.fontWeight.medium,
