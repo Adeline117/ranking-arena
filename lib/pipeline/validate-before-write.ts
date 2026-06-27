@@ -2,9 +2,9 @@
  * Data Write Gatekeeper — validateBeforeWrite()
  *
  * Single validation function that guards ALL writes to:
- * - trader_snapshots_v2
- * - trader_daily_snapshots
  * - leaderboard_ranks
+ * - trader_daily_snapshots
+ * (trader_snapshots_v2 was dropped 2026-06-16; arena.* schema is now primary)
  *
  * Dirty data never enters the database. Failed rows are logged to
  * pipeline_rejected_writes and trigger Telegram alerts.
@@ -87,10 +87,7 @@ function getString(row: Record<string, unknown>, ...keys: string[]): string | nu
 // Core Validation
 // ═══════════════════════════════════════════════════════
 
-function validateRow(
-  row: Record<string, unknown>,
-  targetTable: string,
-): ValidationFailure[] {
+function validateRow(row: Record<string, unknown>, targetTable: string): ValidationFailure[] {
   const failures: ValidationFailure[] = []
   const platform = getString(row, 'platform', 'source') || 'unknown'
   const traderKey = getString(row, 'trader_key', 'source_trader_id') || 'unknown'
@@ -138,13 +135,20 @@ function validateRow(
   // the other. This is LOG-ONLY (no rejection) to avoid ~2k false positives/day.
   // The check remains for observability but doesn't block writes.
 
-  // ── ROI ≈ PnL (common conversion bug) ──
-  // Only flag when ROI is large (>1000%) — small values like ROI=15%, PnL=$15
-  // are legitimate coincidences and cause ~2500 false positives/day.
-  // The original bug pattern was ROI=$45000 (PnL value in ROI field).
+  // ── ROI ≈ PnL (field-mapping bug: same source value copied into both fields) ──
+  // A real mapping bug copies the IDENTICAL value into roi_pct and pnl_usd, so the
+  // two are exactly equal (diff ≈ 0). Coincidental near-equality is legitimate and
+  // common for bot sources, whose roi% and pnl$ are naturally the same magnitude
+  // (e.g. bitget bot roi=1801.76%, pnl=$1802.3 → diff 0.54). The old threshold of
+  // <1 false-positived those every cycle. Require near-exact equality (<0.01) so we
+  // still catch the original bug (ROI=$45000 copied verbatim) without the noise.
   if (roi != null && pnl != null && Math.abs(roi) > 1000 && Math.abs(pnl) > 1000) {
-    if (Math.abs(roi - pnl) < 1) {
-      fail('roi_equals_pnl', `roi=${roi}, pnl=${pnl}`, 'roi_pct equals pnl_usd — likely field mapping error')
+    if (Math.abs(roi - pnl) < 0.01) {
+      fail(
+        'roi_equals_pnl',
+        `roi=${roi}, pnl=${pnl}`,
+        'roi_pct equals pnl_usd — likely field mapping error'
+      )
     }
   }
 
@@ -163,7 +167,11 @@ function validateRow(
   // ── Sharpe ratio bounds ──
   const sharpe = getField(row, 'sharpe_ratio')
   if (sharpe != null && (sharpe < RULES.SHARPE_MIN || sharpe > RULES.SHARPE_MAX)) {
-    fail('sharpe_ratio', sharpe, `Sharpe ${sharpe} outside [${RULES.SHARPE_MIN}, ${RULES.SHARPE_MAX}]`)
+    fail(
+      'sharpe_ratio',
+      sharpe,
+      `Sharpe ${sharpe} outside [${RULES.SHARPE_MIN}, ${RULES.SHARPE_MAX}]`
+    )
   }
 
   // ── Arena score bounds (leaderboard_ranks only) ──
@@ -185,7 +193,7 @@ function validateRow(
  */
 export function validateBeforeWrite<T extends Record<string, unknown>>(
   rows: T[],
-  targetTable: string,
+  targetTable: string
 ): ValidationResult<T> {
   const valid: T[] = []
   const rejected: ValidationFailure[] = []
@@ -200,7 +208,9 @@ export function validateBeforeWrite<T extends Record<string, unknown>>(
   }
 
   if (rejected.length > 0) {
-    logger.warn(`[validate-before-write] ${targetTable}: ${rejected.length} fields rejected from ${rows.length} rows`)
+    logger.warn(
+      `[validate-before-write] ${targetTable}: ${rejected.length} fields rejected from ${rows.length} rows`
+    )
   }
 
   return { valid, rejected }
@@ -212,7 +222,7 @@ export function validateBeforeWrite<T extends Record<string, unknown>>(
  */
 export function sanitizeRow<T extends Record<string, unknown>>(
   row: T,
-  targetTable: string,
+  targetTable: string
 ): { row: T; nulledFields: string[]; rejected: ValidationFailure[] } {
   const failures = validateRow(row, targetTable)
   const nulledFields: string[] = []
@@ -234,9 +244,9 @@ export function sanitizeRow<T extends Record<string, unknown>>(
       roi_pnl_sign: [], // Don't null — just warn
       roi_equals_pnl: ['roi', 'roi_pct'], // Null the ROI (PnL is more likely correct)
     }
-    for (const key of (fieldMappings[f.field] || [])) {
+    for (const key of fieldMappings[f.field] || []) {
       if (key in sanitized) {
-        (sanitized as Record<string, unknown>)[key] = null
+        ;(sanitized as Record<string, unknown>)[key] = null
         nulledFields.push(key)
       }
     }
@@ -254,14 +264,14 @@ export function sanitizeRow<T extends Record<string, unknown>>(
  */
 export async function logRejectedWrites(
   rejections: ValidationFailure[],
-  supabase?: SupabaseClient,
+  supabase?: SupabaseClient
 ): Promise<void> {
   if (rejections.length === 0) return
 
   // 1. Log to DB (best-effort)
   try {
     if (supabase) {
-      const rows = rejections.slice(0, 500).map(r => ({
+      const rows = rejections.slice(0, 500).map((r) => ({
         platform: r.platform,
         trader_key: r.trader_key,
         target_table: r.target_table,
@@ -279,22 +289,33 @@ export async function logRejectedWrites(
   // 2. Telegram alert (rate-limited, max 1 per 10 minutes)
   try {
     const { sendRateLimitedAlert } = await import('@/lib/alerts/send-alert')
-    const summary = rejections.slice(0, 10).map(r =>
-      `  ${r.platform}/${r.trader_key.slice(0, 12)}: ${r.field}=${r.value?.slice(0, 20)} — ${r.reason}`
-    ).join('\n')
-    await sendRateLimitedAlert({
-      title: `数据守门人: ${rejections.length} 条脏数据被拦截`,
-      message: `以下数据未通过校验，已拒绝写入:\n${summary}${rejections.length > 10 ? `\n  ... and ${rejections.length - 10} more` : ''}`,
-      level: 'warning',
-      details: { count: rejections.length, tables: [...new Set(rejections.map(r => r.target_table))] },
-    }, 'validate-gatekeeper', 10 * 60 * 1000)
+    const summary = rejections
+      .slice(0, 10)
+      .map(
+        (r) =>
+          `  ${r.platform}/${r.trader_key.slice(0, 12)}: ${r.field}=${r.value?.slice(0, 20)} — ${r.reason}`
+      )
+      .join('\n')
+    await sendRateLimitedAlert(
+      {
+        title: `数据守门人: ${rejections.length} 条脏数据被拦截`,
+        message: `以下数据未通过校验，已拒绝写入:\n${summary}${rejections.length > 10 ? `\n  ... and ${rejections.length - 10} more` : ''}`,
+        level: 'warning',
+        details: {
+          count: rejections.length,
+          tables: [...new Set(rejections.map((r) => r.target_table))],
+        },
+      },
+      'validate-gatekeeper',
+      10 * 60 * 1000
+    )
   } catch (alertErr) {
     // Non-critical for the write-path itself, but NEVER swallow silently —
     // a swallowed alert means dirty-data detection has gone dark.
     logger.error('[validate-gatekeeper] Failed to deliver Telegram alert for rejections', {
       error: alertErr instanceof Error ? alertErr.message : String(alertErr),
       rejectionCount: rejections.length,
-      tables: [...new Set(rejections.map(r => r.target_table))],
+      tables: [...new Set(rejections.map((r) => r.target_table))],
     })
   }
 }
