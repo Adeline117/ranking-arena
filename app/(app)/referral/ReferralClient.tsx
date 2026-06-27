@@ -122,10 +122,11 @@ export default function ReferralClient() {
         <div style={{ marginBottom: tokens.spacing[8], textAlign: 'center' }}>
           <h1
             style={{
-              fontSize: tokens.typography.fontSize.hero,
-              fontWeight: tokens.typography.fontWeight.bold,
+              fontSize: 'clamp(28px, 3.5vw, 40px)',
+              fontWeight: tokens.typography.fontWeight.black,
               margin: 0,
-              letterSpacing: '-0.5px',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.15,
             }}
           >
             Referral Program

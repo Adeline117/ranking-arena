@@ -98,7 +98,16 @@ export default function AboutPageClient() {
       >
         {/* Header */}
         <Box style={{ textAlign: 'center', marginBottom: tokens.spacing[8] }}>
-          <Text as="h1" size="3xl" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
+          <Text
+            as="h1"
+            weight="black"
+            style={{
+              fontSize: 'clamp(28px, 3.5vw, 40px)',
+              letterSpacing: '-0.02em',
+              lineHeight: 1.15,
+              marginBottom: tokens.spacing[3],
+            }}
+          >
             {t('aboutTitle')}
           </Text>
           <Text size="md" color="secondary">
