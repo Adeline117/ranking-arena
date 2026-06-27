@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import dynamic from 'next/dynamic'
+import PageHeader from '@/app/components/ui/PageHeader'
 import PortfolioOverview from '@/app/components/portfolio/PortfolioOverview'
 import PositionList from '@/app/components/portfolio/PositionList'
 
@@ -198,12 +199,15 @@ export default function PortfolioPage() {
     <>
       <div style={styles.page}>
         <div style={styles.container}>
-          <div style={styles.header}>
-            <h1 style={styles.title}>{t('portfolioTitle')}</h1>
-            <button style={styles.addBtn} onClick={() => setShowAddModal(true)}>
-              + {t('portfolioConnectExchange')}
-            </button>
-          </div>
+          <PageHeader
+            title={t('portfolioTitle')}
+            compact
+            actions={
+              <button style={styles.addBtn} onClick={() => setShowAddModal(true)}>
+                + {t('portfolioConnectExchange')}
+              </button>
+            }
+          />
 
           <PortfolioOverview
             totalEquity={totalEquity}
