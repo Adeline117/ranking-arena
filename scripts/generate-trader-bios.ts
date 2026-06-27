@@ -2,6 +2,10 @@
 /**
  * Generate AI bios for all traders missing bios in trader_profiles_v2.
  *
+ * ⚠️ DEPRECATED 2026-06-27 — targets the pre-arena schema (trader_snapshots_v2
+ * dropped 2026-06-16, trader_profiles_v2 unused, old platform slugs). Exits early
+ * unless run with --force; needs a rewrite against arena.trader_stats to be useful.
+ *
  * Uses metrics from trader_snapshots_v2 (falling back to v1) to produce
  * factual, 1-2 sentence bios describing the trader's style and performance.
  *
@@ -33,37 +37,90 @@ const BATCH_SIZE = 200
 // ─── Exchange config (inlined to avoid @/ imports) ───────────────────────────
 
 const EXCHANGE_NAMES: Record<string, string> = {
-  binance_futures: 'Binance', bybit: 'Bybit', bitget_futures: 'Bitget',
-  okx_futures: 'OKX', mexc: 'MEXC', kucoin: 'KuCoin', coinex: 'CoinEx',
-  htx_futures: 'HTX', weex: 'WEEX', phemex: 'Phemex', bingx: 'BingX',
-  gateio: 'Gate.io', xt: 'XT.COM', lbank: 'LBank', blofin: 'BloFin',
-  bitmart: 'BitMart', binance_spot: 'Binance Spot', bitget_spot: 'Bitget Spot',
-  bybit_spot: 'Bybit Spot', okx_spot: 'OKX Spot',
-  binance_web3: 'Binance Web3', okx_web3: 'OKX Web3', okx_wallet: 'OKX Wallet',
-  gmx: 'GMX', dydx: 'dYdX', hyperliquid: 'Hyperliquid', drift: 'Drift',
-  paradex: 'Paradex', gains: 'Gains Network', jupiter_perps: 'Jupiter Perps',
-  aevo: 'Aevo', perpetual_protocol: 'Perpetual Protocol',
-  dune_gmx: 'GMX (Dune)', dune_hyperliquid: 'Hyperliquid (Dune)',
-  dune_uniswap: 'Uniswap (Dune)', dune_defi: 'DeFi (Dune)',
-  bitunix: 'Bitunix', btcc: 'BTCC', bitfinex: 'Bitfinex', toobit: 'Toobit',
-  crypto_com: 'Crypto.com', etoro: 'eToro', web3_bot: 'Web3 Bot',
-  kwenta: 'Kwenta', synthetix: 'Synthetix', mux: 'MUX Protocol',
+  binance_futures: 'Binance',
+  bybit: 'Bybit',
+  bitget_futures: 'Bitget',
+  okx_futures: 'OKX',
+  mexc: 'MEXC',
+  kucoin: 'KuCoin',
+  coinex: 'CoinEx',
+  htx_futures: 'HTX',
+  weex: 'WEEX',
+  phemex: 'Phemex',
+  bingx: 'BingX',
+  gateio: 'Gate.io',
+  xt: 'XT.COM',
+  lbank: 'LBank',
+  blofin: 'BloFin',
+  bitmart: 'BitMart',
+  binance_spot: 'Binance Spot',
+  bitget_spot: 'Bitget Spot',
+  bybit_spot: 'Bybit Spot',
+  okx_spot: 'OKX Spot',
+  binance_web3: 'Binance Web3',
+  okx_web3: 'OKX Web3',
+  okx_wallet: 'OKX Wallet',
+  gmx: 'GMX',
+  dydx: 'dYdX',
+  hyperliquid: 'Hyperliquid',
+  drift: 'Drift',
+  paradex: 'Paradex',
+  gains: 'Gains Network',
+  jupiter_perps: 'Jupiter Perps',
+  aevo: 'Aevo',
+  perpetual_protocol: 'Perpetual Protocol',
+  dune_gmx: 'GMX (Dune)',
+  dune_hyperliquid: 'Hyperliquid (Dune)',
+  dune_uniswap: 'Uniswap (Dune)',
+  dune_defi: 'DeFi (Dune)',
+  bitunix: 'Bitunix',
+  btcc: 'BTCC',
+  bitfinex: 'Bitfinex',
+  toobit: 'Toobit',
+  crypto_com: 'Crypto.com',
+  etoro: 'eToro',
+  web3_bot: 'Web3 Bot',
+  kwenta: 'Kwenta',
+  synthetix: 'Synthetix',
+  mux: 'MUX Protocol',
 }
 
 const WEB3_PLATFORMS = new Set([
-  'gmx', 'dydx', 'hyperliquid', 'drift', 'paradex', 'gains', 'jupiter_perps',
-  'aevo', 'perpetual_protocol', 'dune_gmx', 'dune_hyperliquid', 'dune_uniswap',
-  'dune_defi', 'binance_web3', 'okx_web3', 'okx_wallet', 'web3_bot', 'kwenta',
+  'gmx',
+  'dydx',
+  'hyperliquid',
+  'drift',
+  'paradex',
+  'gains',
+  'jupiter_perps',
+  'aevo',
+  'perpetual_protocol',
+  'dune_gmx',
+  'dune_hyperliquid',
+  'dune_uniswap',
+  'dune_defi',
+  'binance_web3',
+  'okx_web3',
+  'okx_wallet',
+  'web3_bot',
+  'kwenta',
 ])
 
 const SPOT_PLATFORMS = new Set([
-  'binance_spot', 'bitget_spot', 'bybit_spot', 'okx_spot', 'dune_uniswap', 'etoro',
+  'binance_spot',
+  'bitget_spot',
+  'bybit_spot',
+  'okx_spot',
+  'dune_uniswap',
+  'etoro',
 ])
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function getPlatName(platform: string): string {
-  return EXCHANGE_NAMES[platform] ?? platform.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
+  return (
+    EXCHANGE_NAMES[platform] ?? platform.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())
+  )
 }
 
 function getMarketLabel(platform: string): string {
@@ -105,9 +162,13 @@ interface Metrics {
 // ─── Bio generation ──────────────────────────────────────────────────────────
 
 const STYLE_LABELS: Record<string, string> = {
-  scalper: 'scalping', hft: 'scalping', scalping: 'scalping',
-  swing: 'swing trading', day_trader: 'day trading',
-  trend: 'trend following', position: 'position trading',
+  scalper: 'scalping',
+  hft: 'scalping',
+  scalping: 'scalping',
+  swing: 'swing trading',
+  day_trader: 'day trading',
+  trend: 'trend following',
+  position: 'position trading',
 }
 
 function inferStyleFromHours(hours: number | null | undefined): string | null {
@@ -123,7 +184,7 @@ function generateBio(
   metrics: Metrics | null,
   window: string | null,
   totalOnPlatform: number | null,
-  isBot: boolean,
+  isBot: boolean
 ): string {
   const platName = getPlatName(platform)
   const market = getMarketLabel(platform)
@@ -136,9 +197,10 @@ function generateBio(
   const parts: string[] = []
 
   // Part 1: Intro with optional percentile
-  const pct = (metrics.rank != null && totalOnPlatform && totalOnPlatform > 0)
-    ? (metrics.rank / totalOnPlatform) * 100
-    : null
+  const pct =
+    metrics.rank != null && totalOnPlatform && totalOnPlatform > 0
+      ? (metrics.rank / totalOnPlatform) * 100
+      : null
 
   if (pct != null && pct <= 25) {
     const pctLabel = pct <= 1 ? '1' : pct <= 5 ? '5' : pct <= 10 ? '10' : '25'
@@ -198,7 +260,7 @@ function generateTags(
   platform: string,
   metrics: Metrics | null,
   totalOnPlatform: number | null,
-  isBot: boolean,
+  isBot: boolean
 ): string[] {
   const tags: string[] = []
 
@@ -207,9 +269,10 @@ function generateTags(
   if (!metrics) return tags
 
   // Percentile
-  const pct = (metrics.rank != null && totalOnPlatform && totalOnPlatform > 0)
-    ? (metrics.rank / totalOnPlatform) * 100
-    : null
+  const pct =
+    metrics.rank != null && totalOnPlatform && totalOnPlatform > 0
+      ? (metrics.rank / totalOnPlatform) * 100
+      : null
   if (pct != null) {
     if (pct <= 1) tags.push('top-1%')
     else if (pct <= 5) tags.push('top-5%')
@@ -221,8 +284,13 @@ function generateTags(
   const style = metrics.trading_style || inferStyleFromHours(metrics.avg_holding_hours)
   if (style) {
     const canonMap: Record<string, string> = {
-      scalper: 'scalper', hft: 'scalper', scalping: 'scalper',
-      day_trader: 'swing', swing: 'swing', trend: 'trend', position: 'position',
+      scalper: 'scalper',
+      hft: 'scalper',
+      scalping: 'scalper',
+      day_trader: 'swing',
+      swing: 'swing',
+      trend: 'trend',
+      position: 'position',
     }
     const c = canonMap[style] || style
     if (c !== 'unknown') tags.push(c)
@@ -249,6 +317,21 @@ function generateTags(
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
+  // DEPRECATED 2026-06-27: this script targets the pre-arena schema — it reads
+  // trader_snapshots_v2 (DROPPED 2026-06-16) / trader_snapshots and writes
+  // trader_profiles_v2 (empty/unused), and uses the old platform slugs (e.g.
+  // binance_futures, bybit) that no longer match arena.sources. It would need a
+  // rewrite against arena.trader_stats + the current source taxonomy to work.
+  // Guard against confusing runtime failures; pass --force to run anyway.
+  if (!args.includes('--force')) {
+    console.error(
+      '⛔ generate-trader-bios is deprecated: it targets dropped/empty pre-arena\n' +
+        '   tables (trader_snapshots_v2 dropped 2026-06-16, trader_profiles_v2 unused).\n' +
+        '   Rewrite against arena.trader_stats before use, or pass --force to override.'
+    )
+    process.exit(1)
+  }
+
   console.log(`\n=== Generate Trader Bios ===`)
   console.log(`Mode: ${DRY_RUN ? 'DRY RUN (no writes)' : 'LIVE'}`)
   console.log(`Limit: ${LIMIT || 'all'}`)
@@ -274,9 +357,7 @@ async function main() {
   const platformCounts: Record<string, number> = {}
   {
     // Fetch all platform values and count in-memory
-    const { data: platforms } = await supabase
-      .from('trader_profiles_v2')
-      .select('platform')
+    const { data: platforms } = await supabase.from('trader_profiles_v2').select('platform')
 
     if (platforms) {
       for (const p of platforms) {
@@ -446,9 +527,11 @@ async function main() {
       }
     }
 
-    console.log(`Batch done: ${processed}/${maxToProcess} processed` +
-      (DRY_RUN ? ' (dry run)' : `, ${updated} updated`) +
-      `, ${noMetrics} without metrics, ${errors} errors`)
+    console.log(
+      `Batch done: ${processed}/${maxToProcess} processed` +
+        (DRY_RUN ? ' (dry run)' : `, ${updated} updated`) +
+        `, ${noMetrics} without metrics, ${errors} errors`
+    )
 
     // Don't increment offset for live mode — processed rows no longer have NULL bio
     // For dry-run we need to paginate since rows are unchanged
@@ -465,7 +548,7 @@ async function main() {
   console.log(`Done.\n`)
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('Fatal error:', err)
   process.exit(1)
 })
