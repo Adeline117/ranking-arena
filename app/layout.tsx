@@ -61,11 +61,11 @@ export const metadata: Metadata = {
   manifest: '/manifest.json',
   icons: {
     icon: [
-      { url: '/favicon.ico?v=2', sizes: 'any' },
-      { url: '/icons/icon.svg?v=2', type: 'image/svg+xml' },
-      { url: '/icons/icon-192x192.png?v=2', sizes: '192x192', type: 'image/png' },
+      { url: '/favicon.ico?v=3', sizes: 'any' },
+      { url: '/icons/icon.svg?v=3', type: 'image/svg+xml' },
+      { url: '/icons/icon-192x192.png?v=3', sizes: '192x192', type: 'image/png' },
     ],
-    apple: [{ url: '/icons/apple-touch-icon.png?v=2', sizes: '180x180', type: 'image/png' }],
+    apple: [{ url: '/icons/apple-touch-icon.png?v=3', sizes: '180x180', type: 'image/png' }],
   },
   appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Arena' },
   formatDetection: { telephone: false },
