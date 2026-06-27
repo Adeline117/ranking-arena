@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text } from '@/app/components/base'
+import PageHeader from '@/app/components/ui/PageHeader'
 import PostFeed from '@/app/components/post/PostFeed'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -41,9 +42,7 @@ export default function HashtagClient({ tag }: HashtagClientProps) {
             padding: `${tokens.spacing[3]} 0`,
           }}
         >
-          <Text size="lg" weight="bold" style={{ color: 'var(--color-brand)' }}>
-            #{tag}
-          </Text>
+          <PageHeader title={<span style={{ color: 'var(--color-brand)' }}>#{tag}</span>} compact />
         </Box>
 
         {/* Post feed filtered by hashtag */}

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { tokens, alpha } from '@/lib/design-tokens'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { Box, Text } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
@@ -497,9 +498,7 @@ export default function FollowingPageClient() {
         >
           <Breadcrumb items={[{ label: t('myFollowing') }]} />
           {/* 页面标题 */}
-          <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[4] }}>
-            {t('myFollowing')}
-          </Text>
+          <PageHeader title={t('myFollowing')} compact />
 
           {loading ? (
             <ListSkeleton count={5} gap={12} />

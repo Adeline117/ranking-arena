@@ -35,6 +35,7 @@ import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { useActiveSection } from './hooks/useActiveSection'
 import { useSettingsHandlers } from './hooks/useSettingsHandlers'
 
@@ -298,9 +299,7 @@ function SettingsContent() {
 
         {/* Main Content */}
         <Box style={{ flex: 1, minWidth: 0 }}>
-          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            {t('settingsTitle')}
-          </Text>
+          <PageHeader title={t('settingsTitle')} compact />
 
           {/* Mobile Section Navigation */}
           <Box

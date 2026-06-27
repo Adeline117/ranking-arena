@@ -12,6 +12,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import PageHeader from '@/app/components/ui/PageHeader'
 import { logger } from '@/lib/logger'
 
 interface BookmarkFolder {
@@ -268,23 +269,21 @@ export default function FavoritesPageClient() {
       >
         <Breadcrumb items={[{ label: t('favorites') }]} />
         {/* 页面头部 */}
-        <Box
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: tokens.spacing[4],
-          }}
-        >
-          <Text size="2xl" weight="black">
-            {t('myFavorites')}
-          </Text>
-          {activeTab === 'my' && (
-            <Button variant="primary" size="sm" onClick={() => setShowCreateForm(!showCreateForm)}>
-              + {t('newFolder')}
-            </Button>
-          )}
-        </Box>
+        <PageHeader
+          title={t('myFavorites')}
+          compact
+          actions={
+            activeTab === 'my' ? (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setShowCreateForm(!showCreateForm)}
+              >
+                + {t('newFolder')}
+              </Button>
+            ) : undefined
+          }
+        />
 
         {/* 标签切换 */}
         <Box
