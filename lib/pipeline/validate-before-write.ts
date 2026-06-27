@@ -268,7 +268,10 @@ export async function logRejectedWrites(
 ): Promise<void> {
   if (rejections.length === 0) return
 
-  // 1. Log to DB (best-effort)
+  // 1. Log to DB (best-effort). Upsert by (platform, trader_key, target_table,
+  // field) via record_rejected_writes so a recurring outlier (e.g. one hyperliquid
+  // whale rejected every cycle) collapses to a single row with occurrence_count /
+  // last_seen_at, instead of growing the table unbounded.
   try {
     if (supabase) {
       const rows = rejections.slice(0, 500).map((r) => ({
@@ -280,7 +283,10 @@ export async function logRejectedWrites(
         reason: r.reason.slice(0, 500),
         metadata: r.metadata || {},
       }))
-      await supabase.from('pipeline_rejected_writes').insert(rows)
+      const { error } = await supabase.rpc('record_rejected_writes', { p_rows: rows })
+      if (error) {
+        logger.warn('[validate-before-write] Failed to log rejections to DB', error)
+      }
     }
   } catch (err) {
     logger.warn('[validate-before-write] Failed to log rejections to DB', err)
