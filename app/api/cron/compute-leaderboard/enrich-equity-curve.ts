@@ -17,8 +17,7 @@ import { getSupabaseAdmin } from '@/lib/api'
 import type { Period } from '@/lib/utils/arena-score'
 import type { TraderRow } from './trader-row'
 
-const periodDaysFor = (season: Period): number =>
-  season === '7D' ? 7 : season === '30D' ? 30 : 90
+const periodDaysFor = (season: Period): number => (season === '7D' ? 7 : season === '30D' ? 30 : 90)
 
 /**
  * Phase 4: derive win_rate + max_drawdown from trader_equity_curve for any
@@ -28,10 +27,11 @@ const periodDaysFor = (season: Period): number =>
 export async function deriveWrMddFromEquityCurve(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   traderMap: Map<string, TraderRow>,
-  isOutOfTime: (minMs?: number) => boolean,
+  isOutOfTime: (minMs?: number) => boolean
 ): Promise<number> {
-  const stillNeedingData = Array.from(traderMap.values())
-    .filter(t => t.win_rate == null || t.max_drawdown == null)
+  const stillNeedingData = Array.from(traderMap.values()).filter(
+    (t) => t.win_rate == null || t.max_drawdown == null
+  )
   if (stillNeedingData.length === 0) return 0
 
   const eqBySource = new Map<string, string[]>()
@@ -60,7 +60,9 @@ export async function deriveWrMddFromEquityCurve(
         // Group by trader
         const byTrader = new Map<string, Array<{ pnl: number | null; roi: number | null }>>()
         for (const row of eqRows) {
-          const tid = row.source_trader_id.startsWith('0x') ? row.source_trader_id.toLowerCase() : row.source_trader_id
+          const tid = row.source_trader_id.startsWith('0x')
+            ? row.source_trader_id.toLowerCase()
+            : row.source_trader_id
           const arr = byTrader.get(tid) || []
           arr.push({ pnl: row.pnl_usd, roi: row.roi_pct })
           byTrader.set(tid, arr)
@@ -72,7 +74,8 @@ export async function deriveWrMddFromEquityCurve(
 
           // Derive win_rate from daily PnL direction (lowered from 3 to 2 points)
           if (existing.win_rate == null && points.length >= 2) {
-            let wins = 0, total = 0
+            let wins = 0,
+              total = 0
             for (let j = 1; j < points.length; j++) {
               const prevPnl = points[j - 1].pnl ?? 0
               const currPnl = points[j].pnl ?? 0
@@ -88,9 +91,10 @@ export async function deriveWrMddFromEquityCurve(
 
           // Derive max_drawdown from cumulative PnL or ROI curve (lowered from 3 to 2 points)
           if (existing.max_drawdown == null && points.length >= 2) {
-            let peak = 0, maxDD = 0
+            let peak = 0,
+              maxDD = 0
             // Try ROI first, fall back to PnL
-            const values = points.map(p => p.roi ?? p.pnl ?? 0)
+            const values = points.map((p) => p.roi ?? p.pnl ?? 0)
             for (const v of values) {
               if (v > peak) peak = v
               if (peak > 0) {
@@ -98,14 +102,16 @@ export async function deriveWrMddFromEquityCurve(
                 if (dd > maxDD) maxDD = dd
               }
             }
-            if (maxDD > 0.01 && maxDD <= 100) {
+            // maxDD >= 100 means the ROI/PnL curve crossed <=0 (outlier snapshot),
+            // not a real drawdown — leave NULL (N/A) rather than write a fake -100%.
+            if (maxDD > 0.01 && maxDD < 100) {
               existing.max_drawdown = Math.round(maxDD * 100) / 100
               derived++
             }
           }
         }
       }
-    }),
+    })
   )
 
   return derived
@@ -123,10 +129,17 @@ export async function deriveAdvancedFromEquityCurve(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   traderMap: Map<string, TraderRow>,
   season: Period,
-  isOutOfTime: (minMs?: number) => boolean,
+  isOutOfTime: (minMs?: number) => boolean
 ): Promise<number> {
-  const needAdvanced = Array.from(traderMap.values())
-    .filter(t => t.roi != null && (t.sharpe_ratio == null || t.sortino_ratio == null || t.calmar_ratio == null || t.profit_factor == null || t.trades_count == null))
+  const needAdvanced = Array.from(traderMap.values()).filter(
+    (t) =>
+      t.roi != null &&
+      (t.sharpe_ratio == null ||
+        t.sortino_ratio == null ||
+        t.calmar_ratio == null ||
+        t.profit_factor == null ||
+        t.trades_count == null)
+  )
   if (needAdvanced.length === 0) return 0
 
   const advBySource = new Map<string, string[]>()
@@ -156,9 +169,16 @@ export async function deriveAdvancedFromEquityCurve(
         // Group by trader
         const byTrader = new Map<string, Array<{ roi: number; pnl: number | null; date: string }>>()
         for (const row of eqRows) {
-          const tid = row.source_trader_id.startsWith('0x') ? row.source_trader_id.toLowerCase() : row.source_trader_id
+          const tid = row.source_trader_id.startsWith('0x')
+            ? row.source_trader_id.toLowerCase()
+            : row.source_trader_id
           const arr = byTrader.get(tid) || []
-          if (row.roi_pct != null) arr.push({ roi: Number(row.roi_pct), pnl: row.pnl_usd != null ? Number(row.pnl_usd) : null, date: row.data_date })
+          if (row.roi_pct != null)
+            arr.push({
+              roi: Number(row.roi_pct),
+              pnl: row.pnl_usd != null ? Number(row.pnl_usd) : null,
+              date: row.data_date,
+            })
           byTrader.set(tid, arr)
         }
 
@@ -193,26 +213,33 @@ export async function deriveAdvancedFromEquityCurve(
 
           // Sharpe ratio = (mean daily return / std dev of daily returns) * sqrt(365)
           if (existing.sharpe_ratio == null && dailyReturns.length >= 7) {
-            const decimalReturns = dailyReturns.map(r => r / 100)
+            const decimalReturns = dailyReturns.map((r) => r / 100)
             const mean = decimalReturns.reduce((a, b) => a + b, 0) / decimalReturns.length
-            const variance = decimalReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / decimalReturns.length
+            const variance =
+              decimalReturns.reduce((s, r) => s + (r - mean) ** 2, 0) / decimalReturns.length
             const stdDev = Math.sqrt(variance)
             if (stdDev > 0) {
               const sharpe = (mean / stdDev) * Math.sqrt(365)
-              existing.sharpe_ratio = Math.round(Math.max(-20, Math.min(20, sharpe)) * 10000) / 10000
+              existing.sharpe_ratio =
+                Math.round(Math.max(-20, Math.min(20, sharpe)) * 10000) / 10000
               advancedDerived++
             }
           }
 
           // Sortino ratio
           if (existing.sortino_ratio == null && dailyReturns.length >= 3) {
-            const decimalReturns = dailyReturns.map(r => r / 100)
-            const negReturns = decimalReturns.filter(r => r < 0)
+            const decimalReturns = dailyReturns.map((r) => r / 100)
+            const negReturns = decimalReturns.filter((r) => r < 0)
             if (negReturns.length > 0) {
               const avgReturn = decimalReturns.reduce((a, b) => a + b, 0) / decimalReturns.length
-              const downsideDev = Math.sqrt(negReturns.reduce((s, r) => s + r * r, 0) / decimalReturns.length)
+              const downsideDev = Math.sqrt(
+                negReturns.reduce((s, r) => s + r * r, 0) / decimalReturns.length
+              )
               if (downsideDev > 0) {
-                const sortino = Math.max(-10, Math.min(10, (avgReturn / downsideDev) * Math.sqrt(365)))
+                const sortino = Math.max(
+                  -10,
+                  Math.min(10, (avgReturn / downsideDev) * Math.sqrt(365))
+                )
                 existing.sortino_ratio = Math.round(sortino * 10000) / 10000
                 advancedDerived++
               }
@@ -223,7 +250,12 @@ export async function deriveAdvancedFromEquityCurve(
           }
 
           // Calmar ratio = annualized ROI / |MDD|
-          if (existing.calmar_ratio == null && existing.roi != null && existing.max_drawdown != null && existing.max_drawdown > 0) {
+          if (
+            existing.calmar_ratio == null &&
+            existing.roi != null &&
+            existing.max_drawdown != null &&
+            existing.max_drawdown > 0
+          ) {
             const annualizedRoi = existing.roi * (365 / periodDays)
             const calmar = annualizedRoi / Math.abs(existing.max_drawdown)
             existing.calmar_ratio = Math.round(Math.max(-10, Math.min(10, calmar)) * 10000) / 10000
@@ -232,10 +264,11 @@ export async function deriveAdvancedFromEquityCurve(
 
           // Profit factor from daily returns (gross wins / gross losses)
           if (existing.profit_factor == null && dailyReturns.length >= 3) {
-            const grossWin = dailyReturns.filter(r => r > 0).reduce((s, r) => s + r, 0)
-            const grossLoss = Math.abs(dailyReturns.filter(r => r < 0).reduce((s, r) => s + r, 0))
+            const grossWin = dailyReturns.filter((r) => r > 0).reduce((s, r) => s + r, 0)
+            const grossLoss = Math.abs(dailyReturns.filter((r) => r < 0).reduce((s, r) => s + r, 0))
             if (grossLoss > 0) {
-              existing.profit_factor = Math.round(Math.min(10, grossWin / grossLoss) * 10000) / 10000
+              existing.profit_factor =
+                Math.round(Math.min(10, grossWin / grossLoss) * 10000) / 10000
             } else if (grossWin > 0) {
               existing.profit_factor = 10
             }
@@ -243,7 +276,7 @@ export async function deriveAdvancedFromEquityCurve(
           }
         }
       }
-    }),
+    })
   )
 
   return advancedDerived
