@@ -112,6 +112,20 @@ const coinexAdapter: SourceAdapter = {
       pagesYielded += 1
       if (maxPages !== null && pagesYielded >= maxPages) return
     }
+
+    // Empty-board guard (binance-web3 pattern, index.ts:94-103). CoinEx's board
+    // endpoint can answer HTTP 200 with {code:0, data:[]} when geo-gated or
+    // upstream-broken (observed 2026-06-29: empty in BOTH us-IP and SG regions).
+    // An active copy-trading board is never legitimately empty, so a zero-page
+    // crawl is a hard error — loud (logged + rate-limited Telegram alert via the
+    // tier-A processor) instead of a silent publish-nothing that only the
+    // count-check catches. Serving keeps the last good snapshot either way.
+    if (pagesYielded === 0) {
+      throw new Error(
+        `[coinex] empty board: tf${timeframe} returned 200 but 0 traders from ${listUrl} ` +
+          `— upstream endpoint/params likely changed (re-capture via scripts/ingest-capture-xhr.mts)`
+      )
+    }
   },
 
   /**
