@@ -37,6 +37,7 @@ interface HeartbeatPayload {
   regions?: string[]
   pid?: number
   node?: string
+  sha?: string
 }
 
 function parseBeat(raw: unknown): HeartbeatPayload | null {
@@ -70,6 +71,7 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
   const down: Array<{ node: string; age_min: number; regions: string[] }> = []
   const healthy: string[] = []
   const pruned: string[] = []
+  const liveShas: Array<{ node: string; sha: string }> = []
 
   for (const [node, raw] of entries) {
     const beat = parseBeat(raw)
@@ -87,6 +89,7 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
       down.push({ node, age_min: Math.round(age / 60_000), regions: beat.regions ?? [] })
     } else {
       healthy.push(node)
+      if (beat.sha && beat.sha !== 'unknown') liveShas.push({ node, sha: beat.sha })
     }
   }
 
@@ -119,8 +122,29 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
     ).catch((err) => logger.warn('[worker-heartbeat-check] alert failed:', err))
   }
 
+  // Code-drift alarm: live nodes running different commits (the root cause of the
+  // SG node silently running 18-day-old ingest code). Alert when ≥2 distinct SHAs.
+  const distinctShas = [...new Set(liveShas.map((s) => s.sha))]
+  if (distinctShas.length > 1) {
+    const lines = liveShas.map((s) => `  ${s.node}: ${s.sha.slice(0, 9)}`)
+    await sendRateLimitedAlert(
+      {
+        title: `Ingest worker code drift: ${distinctShas.length} versions live`,
+        message:
+          `Worker nodes are running DIFFERENT commits — fixes deployed to one node ` +
+          `are missing on the other (stale parsers / guards).\n${lines.join('\n')}\n\n` +
+          `Resync the lagging node: bash worker/deploy-ingest-sg.sh`,
+        level: 'warning',
+        details: { distinctShas, liveShas },
+      },
+      'worker-heartbeat:drift',
+      6 * 3600_000 // 6h cooldown — drift is not urgent, but must not go unseen
+    ).catch((err) => logger.warn('[worker-heartbeat-check] drift alert failed:', err))
+  }
+
   logger.info(
-    `[worker-heartbeat-check] ${healthy.length} healthy, ${down.length} down, ${pruned.length} pruned`
+    `[worker-heartbeat-check] ${healthy.length} healthy, ${down.length} down, ${pruned.length} pruned, ` +
+      `${distinctShas.length} live sha(s)`
   )
   return {
     count: entries.length,

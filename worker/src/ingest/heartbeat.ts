@@ -17,6 +17,9 @@
 
 import type IORedis from 'ioredis'
 import { hostname } from 'node:os'
+import { execSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 
 export const WORKER_ROSTER_KEY = 'arena:worker:roster'
 const BEAT_INTERVAL_MS = 60_000
@@ -27,11 +30,36 @@ export function workerNodeId(): string {
   return process.env.WORKER_NODE_ID || hostname()
 }
 
+/**
+ * The commit this node is running, so the drift sentinel can alarm when two nodes
+ * diverge (root cause of the SG node silently running 18-day-old code). Resolution
+ * order: DEPLOYED_SHA file (written by worker/deploy-ingest-sg.sh on the rsync'd SG
+ * node, which has no .git) → git rev-parse (the Mac Mini git checkout) → env →
+ * 'unknown'. Computed once at startup. Never throws.
+ */
+export function resolveDeployedSha(): string {
+  try {
+    return readFileSync(resolve(process.cwd(), 'DEPLOYED_SHA'), 'utf8').trim()
+  } catch {
+    /* not a deployed node */
+  }
+  try {
+    return execSync('git rev-parse HEAD', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim()
+  } catch {
+    /* not a git checkout */
+  }
+  return process.env.DEPLOYED_SHA || 'unknown'
+}
+
 interface HeartbeatPayload {
   ts: number
   regions: string[]
   pid: number
   node: string
+  sha: string
 }
 
 /**
@@ -41,8 +69,9 @@ interface HeartbeatPayload {
  */
 export function startHeartbeat(redis: IORedis, regions: string[]): NodeJS.Timeout {
   const node = workerNodeId()
+  const sha = resolveDeployedSha()
   const beat = async (): Promise<void> => {
-    const payload: HeartbeatPayload = { ts: Date.now(), regions, pid: process.pid, node }
+    const payload: HeartbeatPayload = { ts: Date.now(), regions, pid: process.pid, node, sha }
     try {
       await redis.hset(WORKER_ROSTER_KEY, node, JSON.stringify(payload))
     } catch (err) {
@@ -54,7 +83,7 @@ export function startHeartbeat(redis: IORedis, regions: string[]): NodeJS.Timeou
   // Don't let the heartbeat timer keep the event loop alive on shutdown.
   if (typeof timer.unref === 'function') timer.unref()
   console.log(
-    `[heartbeat] node=${node} regions=${regions.join(',')} every ${BEAT_INTERVAL_MS / 1000}s`
+    `[heartbeat] node=${node} regions=${regions.join(',')} sha=${sha.slice(0, 9)} every ${BEAT_INTERVAL_MS / 1000}s`
   )
   return timer
 }
