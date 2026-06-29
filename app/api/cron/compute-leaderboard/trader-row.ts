@@ -59,10 +59,21 @@ export function sanitizeTraderRow(snap: TraderRow): void {
   if (snap.roi != null && (snap.roi < VB.roi_pct.min || snap.roi > VB.roi_pct.max)) {
     snap.roi = null
   }
-  if (snap.win_rate != null && (snap.win_rate < VB.win_rate_pct.min || snap.win_rate > VB.win_rate_pct.max)) {
+  if (
+    snap.win_rate != null &&
+    (snap.win_rate < VB.win_rate_pct.min || snap.win_rate > VB.win_rate_pct.max)
+  ) {
     snap.win_rate = null
   }
-  if (snap.max_drawdown != null && (snap.max_drawdown < VB.max_drawdown_pct.min || snap.max_drawdown > VB.max_drawdown_pct.max)) {
+  // NOTE: `>=` max (not `>`). An MDD of exactly 100% is the cap-artifact value —
+  // upstream derivations (cumulative-ROI equity curves, copin/stats_detail) pin a
+  // fat tail of unreliable values at exactly 100, and 99.6% of board rows holding
+  // it are *profitable* traders, for whom a 100% drawdown is self-contradictory.
+  // Treat it as missing (null -> N/A) rather than a confident "-100%".
+  if (
+    snap.max_drawdown != null &&
+    (snap.max_drawdown < VB.max_drawdown_pct.min || snap.max_drawdown >= VB.max_drawdown_pct.max)
+  ) {
     snap.max_drawdown = null
   }
   // Copin aggregator returns default WIN=80%/MDD=80% for traders without real data.
@@ -82,7 +93,10 @@ export function sanitizeTraderRow(snap: TraderRow): void {
     snap.max_drawdown = null
   }
   // Sharpe ratio: uses VALIDATION_BOUNDS (was hardcoded ±20, now ±10)
-  if (snap.sharpe_ratio != null && (snap.sharpe_ratio < VB.sharpe_ratio.min || snap.sharpe_ratio > VB.sharpe_ratio.max)) {
+  if (
+    snap.sharpe_ratio != null &&
+    (snap.sharpe_ratio < VB.sharpe_ratio.min || snap.sharpe_ratio > VB.sharpe_ratio.max)
+  ) {
     snap.sharpe_ratio = null
   }
   // Win rate sanity: null out contradictory values
@@ -90,14 +104,26 @@ export function sanitizeTraderRow(snap: TraderRow): void {
   // - WR=100% with negative ROI is impossible
   // - WR=100% with trades < 2 is statistically meaningless
   if (snap.win_rate != null && snap.roi != null) {
-    if (snap.win_rate === 0 && snap.roi > 10) { snap.win_rate = null }
-    else if (snap.win_rate >= 100 && snap.roi < -10) { snap.win_rate = null }
+    if (snap.win_rate === 0 && snap.roi > 10) {
+      snap.win_rate = null
+    } else if (snap.win_rate >= 100 && snap.roi < -10) {
+      snap.win_rate = null
+    }
   }
-  if (snap.win_rate != null && snap.win_rate >= 100 && snap.trades_count != null && snap.trades_count < 2) {
+  if (
+    snap.win_rate != null &&
+    snap.win_rate >= 100 &&
+    snap.trades_count != null &&
+    snap.trades_count < 2
+  ) {
     snap.win_rate = null
   }
   // WR=100% with no trade count info is unverifiable — null it out
-  if (snap.win_rate != null && snap.win_rate >= 100 && (snap.trades_count == null || snap.trades_count === 0)) {
+  if (
+    snap.win_rate != null &&
+    snap.win_rate >= 100 &&
+    (snap.trades_count == null || snap.trades_count === 0)
+  ) {
     snap.win_rate = null
   }
 }
@@ -112,9 +138,7 @@ export function sanitizeTraderRow(snap: TraderRow): void {
  *   const addToTraderMap = makeAddToTraderMap(traderMap)
  *   for (const row of fetchedRows) addToTraderMap(row)
  */
-export function makeAddToTraderMap(
-  traderMap: Map<string, TraderRow>,
-): (snap: TraderRow) => void {
+export function makeAddToTraderMap(traderMap: Map<string, TraderRow>): (snap: TraderRow) => void {
   return function addToTraderMap(snap: TraderRow) {
     sanitizeTraderRow(snap)
 
@@ -126,21 +150,35 @@ export function makeAddToTraderMap(
     // Merge: fill null fields from the duplicate
     const existing = traderMap.get(key)!
     if (snap.win_rate != null && existing.win_rate == null) existing.win_rate = snap.win_rate
-    if (snap.max_drawdown != null && existing.max_drawdown == null) existing.max_drawdown = snap.max_drawdown
-    if (snap.trades_count != null && existing.trades_count == null) existing.trades_count = snap.trades_count
+    if (snap.max_drawdown != null && existing.max_drawdown == null)
+      existing.max_drawdown = snap.max_drawdown
+    if (snap.trades_count != null && existing.trades_count == null)
+      existing.trades_count = snap.trades_count
     if (snap.followers != null && existing.followers == null) existing.followers = snap.followers
-    if (snap.sharpe_ratio != null && existing.sharpe_ratio == null) existing.sharpe_ratio = snap.sharpe_ratio
-    if (snap.profitability_score != null && existing.profitability_score == null) existing.profitability_score = snap.profitability_score
-    if (snap.risk_control_score != null && existing.risk_control_score == null) existing.risk_control_score = snap.risk_control_score
-    if (snap.execution_score != null && existing.execution_score == null) existing.execution_score = snap.execution_score
-    if (snap.sortino_ratio != null && existing.sortino_ratio == null) existing.sortino_ratio = snap.sortino_ratio
-    if (snap.profit_factor != null && existing.profit_factor == null) existing.profit_factor = snap.profit_factor
-    if (snap.calmar_ratio != null && existing.calmar_ratio == null) existing.calmar_ratio = snap.calmar_ratio
-    if (snap.trading_style != null && existing.trading_style == null) existing.trading_style = snap.trading_style
-    if (snap.avg_holding_hours != null && existing.avg_holding_hours == null) existing.avg_holding_hours = snap.avg_holding_hours
-    if (snap.trader_type != null && existing.trader_type == null) existing.trader_type = snap.trader_type
-    if (snap.full_confidence_at &&
-        (!existing.full_confidence_at || snap.full_confidence_at > existing.full_confidence_at)) {
+    if (snap.sharpe_ratio != null && existing.sharpe_ratio == null)
+      existing.sharpe_ratio = snap.sharpe_ratio
+    if (snap.profitability_score != null && existing.profitability_score == null)
+      existing.profitability_score = snap.profitability_score
+    if (snap.risk_control_score != null && existing.risk_control_score == null)
+      existing.risk_control_score = snap.risk_control_score
+    if (snap.execution_score != null && existing.execution_score == null)
+      existing.execution_score = snap.execution_score
+    if (snap.sortino_ratio != null && existing.sortino_ratio == null)
+      existing.sortino_ratio = snap.sortino_ratio
+    if (snap.profit_factor != null && existing.profit_factor == null)
+      existing.profit_factor = snap.profit_factor
+    if (snap.calmar_ratio != null && existing.calmar_ratio == null)
+      existing.calmar_ratio = snap.calmar_ratio
+    if (snap.trading_style != null && existing.trading_style == null)
+      existing.trading_style = snap.trading_style
+    if (snap.avg_holding_hours != null && existing.avg_holding_hours == null)
+      existing.avg_holding_hours = snap.avg_holding_hours
+    if (snap.trader_type != null && existing.trader_type == null)
+      existing.trader_type = snap.trader_type
+    if (
+      snap.full_confidence_at &&
+      (!existing.full_confidence_at || snap.full_confidence_at > existing.full_confidence_at)
+    ) {
       existing.full_confidence_at = snap.full_confidence_at
     }
   }

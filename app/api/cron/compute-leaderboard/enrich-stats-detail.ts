@@ -29,11 +29,17 @@ export async function enrichFromStatsDetail(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   traderMap: Map<string, TraderRow>,
   season: Period,
-  isOutOfTime: (minMs?: number) => boolean,
+  isOutOfTime: (minMs?: number) => boolean
 ): Promise<number> {
-  const tradersNeedingEnrichment = Array.from(traderMap.values())
-    .filter(t => t.win_rate == null || t.max_drawdown == null || t.sharpe_ratio == null ||
-                 t.sortino_ratio == null || t.calmar_ratio == null || t.trades_count == null)
+  const tradersNeedingEnrichment = Array.from(traderMap.values()).filter(
+    (t) =>
+      t.win_rate == null ||
+      t.max_drawdown == null ||
+      t.sharpe_ratio == null ||
+      t.sortino_ratio == null ||
+      t.calmar_ratio == null ||
+      t.trades_count == null
+  )
 
   if (tradersNeedingEnrichment.length === 0) return 0
 
@@ -51,7 +57,9 @@ export async function enrichFromStatsDetail(
         const chunk = traderIds.slice(i, i + 100)
         const { data: statsRows } = await supabase
           .from('trader_stats_detail')
-          .select('source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period')
+          .select(
+            'source_trader_id, profitable_trades_pct, max_drawdown, sharpe_ratio, winning_positions, total_positions, total_trades, avg_holding_time_hours, volatility, copiers_count, aum, period'
+          )
           .eq('source', source)
           .in('source_trader_id', chunk)
           .order('captured_at', { ascending: false })
@@ -59,9 +67,11 @@ export async function enrichFromStatsDetail(
         if (!statsRows) continue
 
         // Dedup: keep the best row per trader (prefer matching season, then most recent)
-        const bestPerTrader = new Map<string, typeof statsRows[0]>()
+        const bestPerTrader = new Map<string, (typeof statsRows)[0]>()
         for (const sr of statsRows) {
-          const tid = sr.source_trader_id.startsWith('0x') ? sr.source_trader_id.toLowerCase() : sr.source_trader_id
+          const tid = sr.source_trader_id.startsWith('0x')
+            ? sr.source_trader_id.toLowerCase()
+            : sr.source_trader_id
           const existing = bestPerTrader.get(tid)
           if (!existing || (sr.period === season && existing.period !== season)) {
             bestPerTrader.set(tid, sr)
@@ -72,16 +82,32 @@ export async function enrichFromStatsDetail(
           const existing = traderMap.get(`${source}:${tid}`)
           if (!existing) continue
           // Validate enrichment values before applying (stats_detail may have bad data)
-          if (sr.profitable_trades_pct != null && existing.win_rate == null &&
-              sr.profitable_trades_pct >= 0 && sr.profitable_trades_pct <= 100) {
+          if (
+            sr.profitable_trades_pct != null &&
+            existing.win_rate == null &&
+            sr.profitable_trades_pct >= 0 &&
+            sr.profitable_trades_pct <= 100
+          ) {
             existing.win_rate = sr.profitable_trades_pct
           }
-          if (sr.max_drawdown != null && existing.max_drawdown == null &&
-              sr.max_drawdown >= 0 && sr.max_drawdown <= 100) {
+          // `< 100` (not `<= 100`): trader_stats_detail holds a 41K-row wall pinned
+          // at exactly 100 (and garbage up to 199.7%). Exactly-100 is the cap artifact,
+          // not a real drawdown — leave NULL (N/A). Matches sanitizeTraderRow + the
+          // equity-curve / snapshot derivation guards.
+          if (
+            sr.max_drawdown != null &&
+            existing.max_drawdown == null &&
+            sr.max_drawdown >= 0 &&
+            sr.max_drawdown < 100
+          ) {
             existing.max_drawdown = sr.max_drawdown
           }
-          if (sr.sharpe_ratio != null && existing.sharpe_ratio == null &&
-              sr.sharpe_ratio >= -20 && sr.sharpe_ratio <= 20) {
+          if (
+            sr.sharpe_ratio != null &&
+            existing.sharpe_ratio == null &&
+            sr.sharpe_ratio >= -20 &&
+            sr.sharpe_ratio <= 20
+          ) {
             existing.sharpe_ratio = sr.sharpe_ratio
           }
           // Fill trades_count from total_trades or total_positions
@@ -100,7 +126,7 @@ export async function enrichFromStatsDetail(
           // Arena followers come from trader_follows table, applied after scoring
         }
       }
-    }),
+    })
   )
 
   return tradersNeedingEnrichment.length
