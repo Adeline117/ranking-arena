@@ -26,6 +26,17 @@ import path from 'node:path'
 const BASELINE = '20260611000000' // ledger 可靠追踪起点之前不核对
 const MIGRATIONS_DIR = path.join(process.cwd(), 'supabase/migrations')
 
+// 已逐条核实"换名应用"的迁移 —— schema 效果确认在生产存在,只是 ledger.name
+// 与文件名不同(经 MCP/SQL-editor 用别的名字应用),按 name 匹配会误报。
+// 核实日期 2026-06-27,逐条生产证据见各行注释。绝不放真未应用的迁移进来。
+const KNOWN_RENAMED_APPLIED = new Set([
+  'fix_binance_futures_native_tfs', // arena.sources.timeframes_native={7,30,90} 已生效
+  'score_inputs_align_compat', // arena.score_inputs view 存在
+  'popular_tokens_matview', // mv_popular_tokens_90d + get_popular_tokens/refresh_popular_tokens_mv 存在
+  'unschedule_orphaned_mv_crons', // refresh-mv-daily-rankings / -hourly-prices 已不在 cron.job
+  'arena_avatar_mirrors_batch_rpc', // public.arena_avatar_mirrors() 存在
+])
+
 function readEnv(name) {
   if (process.env[name]) return process.env[name].replace(/^"|"$/g, '')
   for (const file of ['.env.local', '.env']) {
@@ -69,8 +80,8 @@ if (!res.ok) {
 const inv = await res.json()
 const ledger = new Set(inv.migration_names || [])
 
-// 3. 差集：仓库有、ledger 无 = 未应用
-const missing = repoNames.filter((m) => !ledger.has(m.name))
+// 3. 差集：仓库有、ledger 无、且不在已核实换名集合 = 候选未应用
+const missing = repoNames.filter((m) => !ledger.has(m.name) && !KNOWN_RENAMED_APPLIED.has(m.name))
 
 console.log(
   `检查范围(ADVISORY): 仓库 baseline(${BASELINE}) 后 ${repoNames.length} 个迁移 vs ledger ${ledger.size} 个已应用`
