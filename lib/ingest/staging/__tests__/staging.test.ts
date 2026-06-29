@@ -45,6 +45,23 @@ describe('validateLeaderboardRows', () => {
       ['a', 3],
     ])
   })
+
+  it('normalizes physically-impossible metrics (keeps the row)', () => {
+    const { valid } = validateLeaderboardRows([
+      row({ headlineRoi: 219_604_443_778, headlineWinRate: 850, headlineMdd: 1406 }),
+    ])
+    expect(valid).toHaveLength(1)
+    expect(valid[0].headlineRoi).toBe(10000) // clamped to canonical cap
+    expect(valid[0].headlineWinRate).toBeNull() // outside [0,100] -> null
+    expect(valid[0].headlineMdd).toBeNull() // impossible drawdown -> null
+  })
+
+  it('leaves in-range metrics untouched', () => {
+    const { valid } = validateLeaderboardRows([
+      row({ headlineRoi: 1250.5, headlineWinRate: 60, headlineMdd: 35.2 }),
+    ])
+    expect(valid[0]).toMatchObject({ headlineRoi: 1250.5, headlineWinRate: 60, headlineMdd: 35.2 })
+  })
 })
 
 describe('roiCrossCheckOk', () => {

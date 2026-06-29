@@ -18,6 +18,25 @@ export interface ValidationResult<T> {
 }
 
 /**
+ * Normalize physically-impossible metric values so source garbage never persists
+ * in the serving layer (arena.trader_stats / leaderboard_entries). This is NOT
+ * the "silent NULL" the header warns against — whole rows are still kept and the
+ * immutable raw payload stays in arena.raw_objects for re-parse. We only bound
+ * individual metrics to their canonical ranges so every downstream reader gets
+ * clean data without re-defending. Roots out e.g. a KuCoin broken
+ * thirtyDayPnlRatio (2.19e9 %) or an exchange-reported MDD of 140665%.
+ *   roi      -> clamp to [-10000, 10000]  (matches arena.score_inputs)
+ *   mdd      -> NULL when outside [0, 100] (definitional max drawdown)
+ *   win_rate -> NULL when outside [0, 100] (definitional)
+ */
+function clampRoi(v: number | null | undefined): number | null {
+  return v == null ? null : Math.max(-10000, Math.min(10000, v))
+}
+function boundPct(v: number | null | undefined): number | null {
+  return v == null || v < 0 || v > 100 ? null : v
+}
+
+/**
  * Validate + dedupe leaderboard rows.
  * requiredFields: sources.meta.required_fields — fields that must be
  * non-null for THIS source (e.g. Binance profiles must yield ROI+PnL).
@@ -48,7 +67,14 @@ export function validateLeaderboardRows(
     }
   }
 
-  for (const row of seen.values()) valid.push(row)
+  for (const row of seen.values()) {
+    valid.push({
+      ...row,
+      headlineRoi: clampRoi(row.headlineRoi),
+      headlineWinRate: boundPct(row.headlineWinRate),
+      headlineMdd: boundPct(row.headlineMdd),
+    })
+  }
   valid.sort((a, b) => a.rank - b.rank)
   return { valid, rejects }
 }
@@ -72,7 +98,12 @@ export function validateStats(
       rejects.push({ reason: `missing_required_field:${String(missing)}`, payload: block })
       continue
     }
-    valid.push(block)
+    valid.push({
+      ...block,
+      roi: clampRoi(block.roi),
+      mdd: boundPct(block.mdd),
+      winRate: boundPct(block.winRate),
+    })
   }
   return { valid, rejects }
 }

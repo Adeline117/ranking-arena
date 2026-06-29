@@ -66,6 +66,29 @@ function pct(v: unknown): number | null {
   return n === null ? null : Math.round(n * 1e6) / 1e4
 }
 
+/**
+ * KuCoin's thirtyDayPnlRatio is the exchange's own 30d ROI and is authoritative
+ * for normal traders (it's principal/time-adjusted, so it legitimately differs
+ * from naive pnl/current-principal by a few x). But it is occasionally broken —
+ * e.g. 2.19e9 % for a trader with $20.83 PnL on $120.83 principal (~17%). Only
+ * when the ratio is ABSURD (magnitude > 100000%, i.e. clearly garbage, far beyond
+ * any real leveraged 30d return) do we fall back to pnl/principal, which stays
+ * consistent with the PnL we display. The naive estimate is a sanity fallback,
+ * not a replacement for the exchange's number.
+ */
+const ABSURD_ROI_PCT = 100000
+function roiFromPnl(pnl: unknown, principal: unknown): number | null {
+  const p = num(pnl)
+  const base = num(principal)
+  if (p === null || base === null || base <= 0) return null
+  return Math.round((p / base) * 1e6) / 1e4
+}
+function kucoinHeadlineRoi(ratioField: unknown, pnl: unknown, principal: unknown): number | null {
+  const ratioRoi = pct(ratioField)
+  if (ratioRoi !== null && Math.abs(ratioRoi) <= ABSURD_ROI_PCT) return ratioRoi
+  return roiFromPnl(pnl, principal) ?? ratioRoi
+}
+
 /** KuCoin epochs are MILLISECONDS. */
 function iso(msEpoch: unknown): string | null {
   const n = num(msEpoch)
@@ -106,7 +129,9 @@ export function parseKucoinLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       walletAddress: null,
       traderKind: pilot ? 'bot' : 'human',
       botStrategy: pilot ? 'ai' : null,
-      headlineRoi: pct(item.thirtyDayPnlRatio),
+      // thirtyDayPnlRatio is the exchange's ROI (authoritative); fall back to
+      // pnl/principal only when it's absurd (broken field). See kucoinHeadlineRoi.
+      headlineRoi: kucoinHeadlineRoi(item.thirtyDayPnlRatio, item.thirtyDayPnl, item.leadPrincipal),
       headlinePnl: num(item.thirtyDayPnl),
       headlineWinRate: null, // not exposed on the board
       traderMeta: pilot ? { tradepilot: true, venue: item.exchange } : null,
