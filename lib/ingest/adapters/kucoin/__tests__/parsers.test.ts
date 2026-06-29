@@ -67,6 +67,34 @@ describe('parseKucoinLeaderboardPage', () => {
     expect(raw.leadAmount).toBeDefined()
   })
 
+  it('falls back to pnl/principal when thirtyDayPnlRatio is absurd (broken field)', () => {
+    const page = parseKucoinLeaderboardPage(
+      {
+        data: {
+          items: [
+            // Real prod case: ratio field returns 2.19e9 while pnl/principal ~17%.
+            {
+              leadConfigId: 1007384,
+              thirtyDayPnlRatio: '2196044437.78',
+              thirtyDayPnl: '20.83',
+              leadPrincipal: '120.83',
+            },
+            // Normal trader: ratio is sane (<100000%) so it is trusted as-is.
+            {
+              leadConfigId: 1008600,
+              thirtyDayPnlRatio: '4.32',
+              thirtyDayPnl: '6310',
+              leadPrincipal: '5000',
+            },
+          ],
+        },
+      },
+      ctx
+    )
+    expect(page.rows[0].headlineRoi).toBeCloseTo(17.24, 1) // 20.83/120.83*100, not 2.19e11
+    expect(page.rows[1].headlineRoi).toBe(432) // 4.32 ratio trusted (sane)
+  })
+
   it('returns empty rows for an error payload', () => {
     const page = parseKucoinLeaderboardPage({ success: false, data: null }, ctx)
     expect(page.rows).toHaveLength(0)
