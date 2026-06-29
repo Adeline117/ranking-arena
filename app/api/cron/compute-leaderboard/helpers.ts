@@ -188,7 +188,11 @@ export async function deriveWinRateMDD(
     for (const row of rows) {
       const upd: Record<string, number> = {}
       if (row.win_rate == null && wr != null) upd.win_rate = wr
-      if (row.max_drawdown == null && mdd > 0) upd.max_drawdown = Math.min(mdd, 100)
+      // A derived MDD at/above 100% means the cumulative-ROI equity curve touched
+      // <=0 — i.e. a spiky/outlier ROI snapshot, not a real drawdown (99.6% of such
+      // rows are *profitable* traders, for whom a 100% drawdown is self-contradictory).
+      // Leave it NULL (renders as N/A) instead of manufacturing a fake -100% wall.
+      if (row.max_drawdown == null && mdd > 0 && mdd < 100) upd.max_drawdown = mdd
       if (Object.keys(upd).length > 0) {
         leaderboardUpdates.push({
           source: rows[0].source,
@@ -213,7 +217,7 @@ export async function deriveWinRateMDD(
         // Validate against VALIDATION_BOUNDS before write
         if (upd.win_rate != null && upd.win_rate >= 0 && upd.win_rate <= 100)
           updateFields.win_rate = upd.win_rate
-        if (upd.max_drawdown != null && upd.max_drawdown >= 0 && upd.max_drawdown <= 100)
+        if (upd.max_drawdown != null && upd.max_drawdown >= 0 && upd.max_drawdown < 100)
           updateFields.max_drawdown = upd.max_drawdown
         if (Object.keys(updateFields).length === 0) return Promise.resolve({ error: null })
         return supabase
