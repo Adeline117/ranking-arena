@@ -1,6 +1,18 @@
 import type { Metadata } from 'next'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { ApiPricingSection } from './ApiPricingSection'
+import { getServerTranslation } from '@/lib/i18n/server'
+
+// Stable, XSS-safe anchor id for an endpoint name.
+function epId(name: string): string {
+  return (
+    'endpoint-' +
+    name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+  )
+}
 
 export const metadata: Metadata = {
   title: 'API Documentation — Arena Data API',
@@ -257,11 +269,29 @@ const preBlock = {
   lineHeight: 1.6,
 } as const
 
+const copyBtn = {
+  position: 'absolute' as const,
+  top: 8,
+  right: 8,
+  padding: '4px 10px',
+  borderRadius: tokens.radius.sm,
+  background: 'var(--color-bg-secondary)',
+  border: '1px solid var(--color-border-primary)',
+  color: 'var(--color-text-secondary)',
+  fontFamily: sans,
+  fontSize: 11,
+  fontWeight: 600,
+  cursor: 'pointer',
+  zIndex: 1,
+} as const
+
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export default function ApiDocsPage() {
+export default async function ApiDocsPage() {
+  const { t } = await getServerTranslation()
+
   return (
     <div
       style={{
@@ -272,6 +302,23 @@ export default function ApiDocsPage() {
         fontFamily: sans,
       }}
     >
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+.apiEndpointsLayout{display:grid;grid-template-columns:1fr;gap:24px}
+.apiEndpointIndex ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.apiEndpointIndex a{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;text-decoration:none;color:var(--color-text-secondary);font-size:13px;border:1px solid var(--color-border-primary)}
+.apiEndpointIndex a:hover{color:var(--color-text-primary);background:var(--color-bg-tertiary)}
+@media(min-width:880px){
+  .apiEndpointsLayout{grid-template-columns:200px minmax(0,1fr);align-items:start}
+  .apiEndpointIndex{position:sticky;top:88px}
+  .apiEndpointIndex ul{flex-direction:column;gap:4px}
+  .apiEndpointIndex a{border:none;padding:6px 8px}
+}
+`,
+        }}
+      />
+
       {/* Hero */}
       <div style={{ marginBottom: tokens.spacing[10], textAlign: 'center' }}>
         <h1
@@ -351,7 +398,12 @@ export default function ApiDocsPage() {
               >
                 {lang}
               </div>
-              <pre style={preBlock}>{code}</pre>
+              <div data-copy-block style={{ position: 'relative' }}>
+                <button type="button" data-copy-btn style={copyBtn}>
+                  {t('copy')}
+                </button>
+                <pre style={preBlock}>{code}</pre>
+              </div>
             </div>
           ))}
         </div>
@@ -367,7 +419,12 @@ export default function ApiDocsPage() {
           >
             Base URL
           </h3>
-          <pre style={{ ...preBlock, fontSize: 14 }}>https://www.arenafi.org/api/v3</pre>
+          <div data-copy-block style={{ position: 'relative' }}>
+            <button type="button" data-copy-btn style={copyBtn}>
+              {t('copy')}
+            </button>
+            <pre style={{ ...preBlock, fontSize: 14 }}>https://www.arenafi.org/api/v3</pre>
+          </div>
           <p
             style={{
               fontSize: 12,
@@ -393,114 +450,184 @@ export default function ApiDocsPage() {
           Endpoints
         </h2>
 
-        {ENDPOINTS.map((ep) => (
-          <div key={ep.name} style={{ ...card, marginBottom: tokens.spacing[5] }}>
-            {/* Header */}
-            <h3
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[3],
-                marginTop: 0,
-                marginBottom: tokens.spacing[3],
-                fontWeight: 600,
-              }}
-            >
-              <span
-                style={{
-                  padding: '2px 10px',
-                  borderRadius: tokens.radius.sm,
-                  background: alpha(tokens.colors.accent.success, 15),
-                  color: 'var(--color-accent-success)',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  fontFamily: mono,
-                }}
-              >
-                {ep.method}
-              </span>
-              <code style={{ fontSize: 14, fontWeight: 600, fontFamily: mono }}>{ep.path}</code>
-            </h3>
-            <p
-              style={{
-                fontSize: tokens.typography.fontSize.sm,
-                color: 'var(--color-text-secondary)',
-                marginBottom: tokens.spacing[4],
-                lineHeight: 1.6,
-              }}
-            >
-              {ep.description}
-            </p>
+        <div className="apiEndpointsLayout">
+          <nav className="apiEndpointIndex" aria-label={t('apiDocsOnThisPage')}>
+            <ul>
+              {ENDPOINTS.map((ep) => (
+                <li key={ep.name}>
+                  <a href={`#${epId(ep.name)}`}>
+                    <span
+                      style={{
+                        fontFamily: mono,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        color: 'var(--color-accent-success)',
+                      }}
+                    >
+                      {ep.method}
+                    </span>
+                    {ep.name}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          </nav>
 
-            {/* Parameters */}
-            <h4
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                marginBottom: tokens.spacing[2],
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              Parameters
-            </h4>
-            <div
-              style={{
-                borderRadius: tokens.radius.md,
-                border: '1px solid var(--color-border-primary)',
-                overflow: 'hidden',
-                marginBottom: tokens.spacing[4],
-              }}
-            >
-              {ep.params.map((p, i) => (
-                <div
-                  key={p.name}
+          <div className="apiEndpointList">
+            {ENDPOINTS.map((ep) => (
+              <div
+                key={ep.name}
+                id={epId(ep.name)}
+                style={{ ...card, marginBottom: tokens.spacing[5], scrollMarginTop: 88 }}
+              >
+                {/* Name (heading + anchor target) */}
+                <h3
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: '120px 70px 1fr',
-                    gap: tokens.spacing[3],
-                    padding: '8px 12px',
-                    fontSize: 13,
-                    borderBottom:
-                      i < ep.params.length - 1
-                        ? '1px solid var(--color-border-primary)'
-                        : undefined,
-                    background: i % 2 === 0 ? 'var(--color-bg-tertiary)' : 'transparent',
+                    fontSize: tokens.typography.fontSize.lg,
+                    fontWeight: 700,
+                    marginTop: 0,
+                    marginBottom: tokens.spacing[3],
                   }}
                 >
-                  <code style={{ fontFamily: mono, fontWeight: 600 }}>{p.name}</code>
-                  <span style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
-                    {p.required ? 'required' : 'optional'}
+                  {ep.name}
+                </h3>
+                {/* Method + path */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacing[3],
+                    marginBottom: tokens.spacing[3],
+                  }}
+                >
+                  <span
+                    style={{
+                      padding: '2px 10px',
+                      borderRadius: tokens.radius.sm,
+                      background: alpha(tokens.colors.accent.success, 15),
+                      color: 'var(--color-accent-success)',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      fontFamily: mono,
+                    }}
+                  >
+                    {ep.method}
                   </span>
-                  <span style={{ color: 'var(--color-text-secondary)' }}>{p.description}</span>
+                  <code style={{ fontSize: 14, fontWeight: 600, fontFamily: mono }}>{ep.path}</code>
                 </div>
-              ))}
-            </div>
+                <p
+                  style={{
+                    fontSize: tokens.typography.fontSize.sm,
+                    color: 'var(--color-text-secondary)',
+                    marginBottom: tokens.spacing[4],
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {ep.description}
+                </p>
 
-            {/* Example */}
-            <h4
-              style={{
-                fontSize: 13,
-                fontWeight: 600,
-                marginBottom: tokens.spacing[2],
-                color: 'var(--color-text-secondary)',
-              }}
-            >
-              Example
-            </h4>
-            <pre
-              style={{
-                ...preBlock,
-                fontSize: 12,
-                marginBottom: tokens.spacing[2],
-                color: 'var(--color-accent-success)',
-              }}
-            >
-              {ep.example.curl}
-            </pre>
-            <pre style={{ ...preBlock, fontSize: 11, maxHeight: 320 }}>{ep.example.response}</pre>
+                {/* Parameters */}
+                <h4
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    marginBottom: tokens.spacing[2],
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  Parameters
+                </h4>
+                <div
+                  style={{
+                    borderRadius: tokens.radius.md,
+                    border: '1px solid var(--color-border-primary)',
+                    overflow: 'hidden',
+                    marginBottom: tokens.spacing[4],
+                  }}
+                >
+                  {ep.params.map((p, i) => (
+                    <div
+                      key={p.name}
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: '120px 70px 1fr',
+                        gap: tokens.spacing[3],
+                        padding: '8px 12px',
+                        fontSize: 13,
+                        borderBottom:
+                          i < ep.params.length - 1
+                            ? '1px solid var(--color-border-primary)'
+                            : undefined,
+                        background: i % 2 === 0 ? 'var(--color-bg-tertiary)' : 'transparent',
+                      }}
+                    >
+                      <code style={{ fontFamily: mono, fontWeight: 600 }}>{p.name}</code>
+                      <span style={{ color: 'var(--color-text-tertiary)', fontSize: 12 }}>
+                        {p.required ? 'required' : 'optional'}
+                      </span>
+                      <span style={{ color: 'var(--color-text-secondary)' }}>{p.description}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Example */}
+                <h4
+                  style={{
+                    fontSize: 13,
+                    fontWeight: 600,
+                    marginBottom: tokens.spacing[2],
+                    color: 'var(--color-text-secondary)',
+                  }}
+                >
+                  Example
+                </h4>
+                <div
+                  data-copy-block
+                  style={{ position: 'relative', marginBottom: tokens.spacing[2] }}
+                >
+                  <button type="button" data-copy-btn style={copyBtn}>
+                    {t('copy')}
+                  </button>
+                  <pre
+                    style={{
+                      ...preBlock,
+                      fontSize: 12,
+                      color: 'var(--color-accent-success)',
+                    }}
+                  >
+                    {ep.example.curl}
+                  </pre>
+                </div>
+                <div data-copy-block style={{ position: 'relative' }}>
+                  <button type="button" data-copy-btn style={copyBtn}>
+                    {t('copy')}
+                  </button>
+                  <pre style={{ ...preBlock, fontSize: 11, maxHeight: 320 }}>
+                    {ep.example.response}
+                  </pre>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
       </section>
+
+      {/* Copy-to-clipboard wiring (progressive enhancement) */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html: `(function(){
+var COPY=${JSON.stringify(t('copy'))},COPIED=${JSON.stringify(t('copied'))};
+document.addEventListener("click",function(e){
+var btn=e.target&&e.target.closest?e.target.closest("[data-copy-btn]"):null;
+if(!btn)return;
+var block=btn.closest("[data-copy-block]");if(!block)return;
+var pre=block.querySelector("pre");if(!pre)return;
+var text=pre.innerText||pre.textContent||"";
+if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(text).then(function(){btn.textContent=COPIED;setTimeout(function(){btn.textContent=COPY;},1500);}).catch(function(){});}
+});
+})();`,
+        }}
+      />
 
       {/* Rate limits */}
       <section style={{ marginBottom: tokens.spacing[10] }}>
