@@ -229,8 +229,8 @@ export default function ResultPageClient({
                   style={{
                     padding: '6px 14px',
                     borderRadius: 20,
-                    background: '#EF444420',
-                    border: '1px solid #EF444430',
+                    background: colorAlpha('#EF4444', 13),
+                    border: '1px solid ' + colorAlpha('#EF4444', 19),
                     fontSize: 13,
                     color: '#EF4444',
                     fontWeight: 600,

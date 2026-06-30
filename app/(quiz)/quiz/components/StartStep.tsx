@@ -41,6 +41,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         <span className="quiz-badge">
           <span className="quiz-badge-icon">
             <svg
+              aria-hidden="true"
               width="14"
               height="14"
               viewBox="0 0 24 24"
@@ -63,6 +64,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         <span className="quiz-badge">
           <span className="quiz-badge-icon">
             <svg
+              aria-hidden="true"
               width="14"
               height="14"
               viewBox="0 0 24 24"
@@ -80,6 +82,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
         <span className="quiz-badge">
           <span className="quiz-badge-icon">
             <svg
+              aria-hidden="true"
               width="14"
               height="14"
               viewBox="0 0 24 24"
@@ -101,6 +104,7 @@ export default function StartStep({ tr, onStart }: StartStepProps) {
       <button type="button" onClick={onStart} className="quiz-start-btn">
         <span>{tr('quizStartBtn') !== 'quizStartBtn' ? tr('quizStartBtn') : 'Start Test'}</span>
         <svg
+          aria-hidden="true"
           width="18"
           height="18"
           viewBox="0 0 24 24"

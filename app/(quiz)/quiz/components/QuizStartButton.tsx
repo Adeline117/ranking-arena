@@ -22,6 +22,7 @@ export default function QuizStartButton() {
     <button type="button" onClick={handleStart} className="quiz-start-btn">
       <span>{hasProgress ? 'Continue Quiz' : 'Start Test'}</span>
       <svg
+        aria-hidden="true"
         width="18"
         height="18"
         viewBox="0 0 24 24"

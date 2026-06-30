@@ -71,7 +71,7 @@ const QuestionStep = React.memo(function QuestionStep({
       {isYesNo ? (
         /* Yes / No / Unsure: 3 horizontal buttons */
         <div
-          role="group"
+          role="radiogroup"
           aria-label={`Question ${questionNumber} of ${totalQuestions}`}
           style={{ display: 'flex', gap: 8 }}
         >
@@ -86,10 +86,11 @@ const QuestionStep = React.memo(function QuestionStep({
                   key={option.id}
                   type="button"
                   onClick={() => onSelect(question.id, option.id)}
-                  aria-pressed={isSelected}
+                  role="radio"
+                  aria-checked={isSelected}
                   className="quiz-yesno-btn"
                 >
-                  <span style={{ fontSize: 16, fontWeight: 700 }}>
+                  <span aria-hidden="true" style={{ fontSize: 16, fontWeight: 700 }}>
                     {YESNO_ICON[option.id] ?? '?'}
                   </span>
                   <span>{tr(option.labelKey)}</span>
@@ -100,7 +101,7 @@ const QuestionStep = React.memo(function QuestionStep({
       ) : (
         /* Standard A/B/C/D: 4 vertical buttons */
         <div
-          role="group"
+          role="radiogroup"
           aria-label={`Question ${questionNumber} of ${totalQuestions}`}
           style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
         >
@@ -111,10 +112,13 @@ const QuestionStep = React.memo(function QuestionStep({
                 key={option.id}
                 type="button"
                 onClick={() => onSelect(question.id, option.id)}
-                aria-pressed={isSelected}
+                role="radio"
+                aria-checked={isSelected}
                 className="quiz-option-btn"
               >
-                <span className="quiz-option-letter">{String.fromCharCode(65 + idx)}</span>
+                <span aria-hidden="true" className="quiz-option-letter">
+                  {String.fromCharCode(65 + idx)}
+                </span>
                 <span>{tr(option.labelKey)}</span>
               </button>
             )
