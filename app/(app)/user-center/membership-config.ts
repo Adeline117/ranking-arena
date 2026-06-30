@@ -83,6 +83,43 @@ export const getFaqData = (t: (key: string) => string) => [
   { q: t('faqSwitchPlanQ'), a: t('faqSwitchPlanA') },
 ]
 
+/**
+ * Canonical FAQ for the /pricing page (full set). Single source of truth — the
+ * pricing page imports this instead of hardcoding its own array. Distinct from
+ * getFaqData() above, which is the condensed FAQ shown on the user-center
+ * membership panel. All keys live in lib/i18n (pricingFaq*).
+ */
+export const getPricingFaqData = (t: (key: string) => string) => [
+  { q: t('pricingFaqCancelQ'), a: t('pricingFaqCancelA') },
+  { q: t('pricingFaqRefundQ'), a: t('pricingFaqRefundA') },
+  { q: t('pricingFaqLifetimeQ'), a: t('pricingFaqLifetimeA') },
+  { q: t('pricingFaqPaymentQ'), a: t('pricingFaqPaymentA') },
+  { q: t('pricingFaqTrialQ'), a: t('pricingFaqTrialA') },
+  { q: t('pricingFaqSwitchQ'), a: t('pricingFaqSwitchA') },
+  { q: t('pricingFaqApiQ'), a: t('pricingFaqApiA') },
+]
+
+/**
+ * Canonical Free-vs-Pro comparison for the /pricing page (full set). Single
+ * source of truth — the pricing page imports this instead of hardcoding rows.
+ * Distinct from getComparisonData() above (condensed, descriptive cells) shown
+ * on the user-center membership panel. Keys live in lib/i18n (pricingCompare*).
+ */
+export const getPricingComparisonData = (t: (key: string) => string): ComparisonRow[] => [
+  { feature: t('pricingCompareTraderRankings'), free: t('compFreeTop50'), pro: true },
+  { feature: t('pricingCompareAdvancedFilters'), free: false, pro: true },
+  { feature: t('pricingCompareScoreBreakdown'), free: false, pro: true },
+  { feature: t('pricingCompareTraderComparison'), free: false, pro: true },
+  { feature: t('pricingCompareCategoryRankings'), free: false, pro: true },
+  { feature: t('pricingCompareCsvExport'), free: false, pro: true },
+  { feature: t('pricingCompareTraderAlerts'), free: false, pro: true },
+  { feature: t('pricingCompareApiAccess'), free: false, pro: true },
+  { feature: t('pricingCompareCommunityPosts'), free: true, pro: true },
+  { feature: t('pricingCompareLibrary'), free: true, pro: true },
+  { feature: t('pricingComparePublicGroups'), free: true, pro: true },
+  { feature: t('pricingCompareMarketOverview'), free: true, pro: true },
+]
+
 export interface MembershipInfo {
   subscription: {
     tier: 'free' | 'pro'

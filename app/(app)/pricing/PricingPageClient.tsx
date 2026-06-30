@@ -7,7 +7,11 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { trackEvent } from '@/lib/analytics/track'
-import { PRICING } from '@/app/(app)/user-center/membership-config'
+import {
+  PRICING,
+  getPricingFaqData,
+  getPricingComparisonData,
+} from '@/app/(app)/user-center/membership-config'
 import { useDirectCheckout } from '@/lib/hooks/useDirectCheckout'
 import { useToast } from '@/app/components/ui/Toast'
 
@@ -130,6 +134,10 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
   const currentPrice = PRICING[billing]
   const yearlySavings = Math.round((1 - PRICING.yearly.price / 12 / PRICING.monthly.price) * 100)
+  // Concrete dollar saving on the yearly plan vs paying monthly for 12 months
+  const yearlySaveAmount = (PRICING.monthly.price * 12 - PRICING.yearly.price).toFixed(2)
+  // How long Lifetime takes to pay for itself at the yearly Pro rate (anchor cue)
+  const lifetimePaybackMonths = Math.round(PRICING.lifetime.price / (PRICING.yearly.price / 12))
   const {
     checkout: directCheckout,
     isLoading: checkoutLoading,
@@ -528,6 +536,23 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                   : 'mo'}
               </span>
             </p>
+            {/* Lifetime anchor cue — surfaces lifetime value next to Pro */}
+            <p
+              style={{
+                fontSize: 12,
+                color: tokens.colors.text.tertiary,
+                marginTop: 4,
+                marginBottom: 0,
+              }}
+            >
+              {resolved(
+                t('pricingLifetimeAnchor'),
+                'pricingLifetimeAnchor',
+                'Lifetime pays for itself in ~{months} months vs ${price}/yr'
+              )
+                .replace('{months}', String(lifetimePaybackMonths))
+                .replace('{price}', String(PRICING.yearly.price))}
+            </p>
             {billing === 'yearly' && (
               <p
                 style={{
@@ -540,7 +565,15 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 ${currentPrice.price}/year{' '}
                 {'original' in currentPrice && currentPrice.original ? (
                   <s style={{ opacity: 0.6 }}>${currentPrice.original.toFixed(2)}</s>
-                ) : null}
+                ) : null}{' '}
+                <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>
+                  ·{' '}
+                  {resolved(
+                    t('pricingYearlySaveAmount'),
+                    'pricingYearlySaveAmount',
+                    'Save ${amount}/yr'
+                  ).replace('{amount}', yearlySaveAmount)}
+                </span>
               </p>
             )}
             {billing === 'monthly' && <div style={{ marginBottom: tokens.spacing[6] }} />}
@@ -992,117 +1025,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               <span style={{ textAlign: 'center' }}>Free</span>
               <span style={{ textAlign: 'center', color: tokens.colors.accent.brand }}>Pro</span>
             </div>
-            {/* Rows */}
-            {[
-              {
-                feature: resolved(
-                  t('pricingCompareTraderRankings'),
-                  'pricingCompareTraderRankings',
-                  'Trader Rankings'
-                ),
-                free: 'Top 100',
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareAdvancedFilters'),
-                  'pricingCompareAdvancedFilters',
-                  'Advanced Filters'
-                ),
-                free: false,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareScoreBreakdown'),
-                  'pricingCompareScoreBreakdown',
-                  'Score Breakdown'
-                ),
-                free: false,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareTraderComparison'),
-                  'pricingCompareTraderComparison',
-                  'Trader Comparison'
-                ),
-                free: false,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareCategoryRankings'),
-                  'pricingCompareCategoryRankings',
-                  'Category Rankings'
-                ),
-                free: false,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareCsvExport'),
-                  'pricingCompareCsvExport',
-                  'CSV Export'
-                ),
-                free: false,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareTraderAlerts'),
-                  'pricingCompareTraderAlerts',
-                  'Trader Alerts'
-                ),
-                free: false,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareApiAccess'),
-                  'pricingCompareApiAccess',
-                  'API Access'
-                ),
-                free: false,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareCommunityPosts'),
-                  'pricingCompareCommunityPosts',
-                  'Community Posts'
-                ),
-                free: true,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareLibrary'),
-                  'pricingCompareLibrary',
-                  'Library Access'
-                ),
-                free: true,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingComparePublicGroups'),
-                  'pricingComparePublicGroups',
-                  'Public Groups'
-                ),
-                free: true,
-                pro: true,
-              },
-              {
-                feature: resolved(
-                  t('pricingCompareMarketOverview'),
-                  'pricingCompareMarketOverview',
-                  'Market Overview'
-                ),
-                free: true,
-                pro: true,
-              },
-            ].map((row, i) => (
+            {/* Rows — single source of truth: membership-config */}
+            {getPricingComparisonData(t).map((row, i) => (
               <div
                 key={i}
                 style={{
@@ -1242,76 +1166,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           >
             FAQ
           </h2>
-          {[
-            {
-              q: resolved(t('pricingFaqCancelQ'), 'pricingFaqCancelQ', 'Can I cancel anytime?'),
-              a: resolved(
-                t('pricingFaqCancelA'),
-                'pricingFaqCancelA',
-                'Yes! Monthly subscribers can cancel anytime. You keep access until the end of your billing period.'
-              ),
-            },
-            {
-              q: resolved(
-                t('pricingFaqRefundQ'),
-                'pricingFaqRefundQ',
-                'What about refunds for yearly plans?'
-              ),
-              a: resolved(
-                t('pricingFaqRefundA'),
-                'pricingFaqRefundA',
-                'Yearly subscribers can get a full refund within the first 7 days.'
-              ),
-            },
-            {
-              q: resolved(
-                t('pricingFaqLifetimeQ'),
-                'pricingFaqLifetimeQ',
-                'What does Lifetime mean?'
-              ),
-              a: resolved(
-                t('pricingFaqLifetimeA'),
-                'pricingFaqLifetimeA',
-                'Pay once, access all Pro features forever. Includes all future features and price increases.'
-              ),
-            },
-            {
-              q: resolved(
-                t('pricingFaqPaymentQ'),
-                'pricingFaqPaymentQ',
-                'What payment methods do you accept?'
-              ),
-              a: resolved(
-                t('pricingFaqPaymentA'),
-                'pricingFaqPaymentA',
-                'We accept all major credit cards, Apple Pay, and Google Pay via Stripe.'
-              ),
-            },
-            {
-              q: resolved(t('pricingFaqTrialQ'), 'pricingFaqTrialQ', 'Is there a free trial?'),
-              a: resolved(
-                t('pricingFaqTrialA'),
-                'pricingFaqTrialA',
-                'The free tier gives you access to basic rankings and community features. Upgrade anytime to unlock Pro.'
-              ),
-            },
-            {
-              q: resolved(t('pricingFaqSwitchQ'), 'pricingFaqSwitchQ', 'Can I switch plans?'),
-              a: resolved(
-                t('pricingFaqSwitchA'),
-                'pricingFaqSwitchA',
-                'Yes, you can switch between monthly and yearly anytime. We will prorate the difference.'
-              ),
-            },
-            {
-              q: resolved(t('pricingFaqApiQ'), 'pricingFaqApiQ', 'Does Pro include API access?'),
-              a: resolved(
-                t('pricingFaqApiA'),
-                'pricingFaqApiA',
-                'API access is coming soon for Pro members. You will be the first to get access.'
-              ),
-            },
-          ].map((faq, i) => (
+          {getPricingFaqData(t).map((faq, i) => (
             <details
               key={i}
               style={{
