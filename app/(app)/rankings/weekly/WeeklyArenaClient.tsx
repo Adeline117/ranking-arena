@@ -5,24 +5,39 @@
  * podium + table across serving sources, with BitMart's official weekly
  * arena as a reference panel. Data arrives pre-fetched from the server
  * component (ISR 1800) — the island never fetches.
+ *
+ * Leaderboard-bar parity (2026-06): a real 3-up podium for the top-3, pooled
+ * week range in the header, sortable headers with aria-sort, sticky thead +
+ * frozen rank/trader columns, ROI/PnL routed through <Metric showArrow>, a
+ * share affordance, and lazy avatars/logos with fallbacks.
  */
 
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, rankColors } from '@/lib/design-tokens'
 import PageHeader from '@/app/components/ui/PageHeader'
+import Metric from '@/app/components/ui/Metric'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import DerivedBoardBadge from '@/app/components/common/DerivedBoardBadge'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
-import type { BitmartWeeklyCategoryKey, WeeklyLeaders } from '@/lib/data/serving/weekly-leaders'
+import type {
+  BitmartWeeklyCategoryKey,
+  WeeklyLeaderRow,
+  WeeklyLeaders,
+} from '@/lib/data/serving/weekly-leaders'
 
 const CATEGORY_I18N: Record<BitmartWeeklyCategoryKey, string> = {
   open: 'weeklyArenaCategoryOpen',
   low_lev: 'weeklyArenaCategoryLowLev',
   protected: 'weeklyArenaCategoryProtected',
 }
+
+const MEDALS = ['🥇', '🥈', '🥉'] as const
+const MEDAL_RING = [rankColors.gold, rankColors.silver, rankColors.bronze] as const
+const RANK_COL_WIDTH = 64 // px — fixed so the frozen trader column can offset by it
 
 function fmtRoi(v: number): string {
   const compactOver = 10_000
@@ -49,6 +64,11 @@ function fmtMoney(value: number, currency: string): string {
   return `${sign}${compact} ${currency}`
 }
 
+function fmtWinRate(v: number | null): string {
+  if (v === null) return '—'
+  return `${v.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
+}
+
 const TH_STYLE: React.CSSProperties = {
   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
   fontSize: tokens.typography.fontSize.xs,
@@ -66,6 +86,238 @@ const TD_STYLE: React.CSSProperties = {
   borderTop: '1px solid var(--color-border-primary)',
 }
 
+const SORT_BTN_STYLE: React.CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  gap: tokens.spacing[1],
+  background: 'none',
+  border: 'none',
+  padding: 0,
+  margin: 0,
+  font: 'inherit',
+  color: 'inherit',
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+}
+
+// ── Sorting ──────────────────────────────────────────────────────────────
+type SortKey = 'trader' | 'exchange' | 'roi' | 'pnl' | 'winRate' | 'asOf'
+type SortDir = 'asc' | 'desc'
+
+function defaultDir(key: SortKey): SortDir {
+  return key === 'trader' || key === 'exchange' ? 'asc' : 'desc'
+}
+
+function sortValue(row: WeeklyLeaderRow, key: SortKey): number | string | null {
+  switch (key) {
+    case 'trader':
+      return (row.nickname ?? row.exchangeTraderId).toLowerCase()
+    case 'exchange':
+      return row.exchangeName.toLowerCase()
+    case 'roi':
+      return row.roi
+    case 'pnl':
+      return row.pnl?.value ?? null
+    case 'winRate':
+      return row.winRate
+    case 'asOf':
+      return row.provenance.asOf
+  }
+}
+
+function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
+  return (
+    <span aria-hidden="true" style={{ fontSize: '0.8em', opacity: active ? 1 : 0.3 }}>
+      {active ? (dir === 'asc' ? '▲' : '▼') : '↕'}
+    </span>
+  )
+}
+
+function SortableTh({
+  sortableKey,
+  label,
+  align,
+  frozen,
+  left,
+  width,
+  sortKey,
+  sortDir,
+  onSort,
+  sortByLabel,
+}: {
+  sortableKey: SortKey
+  label: string
+  align: 'left' | 'right'
+  frozen?: boolean
+  left?: number
+  width?: number
+  sortKey: SortKey
+  sortDir: SortDir
+  onSort: (k: SortKey) => void
+  sortByLabel: string
+}) {
+  const active = sortableKey === sortKey
+  const ariaSort = !active ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending'
+  return (
+    <th
+      aria-sort={ariaSort}
+      style={{
+        ...TH_STYLE,
+        textAlign: align,
+        width,
+        position: 'sticky',
+        top: 0,
+        left: frozen ? (left ?? 0) : undefined,
+        zIndex: frozen ? 4 : 3,
+        background: 'var(--color-bg-secondary)',
+      }}
+    >
+      <button
+        type="button"
+        onClick={() => onSort(sortableKey)}
+        aria-label={`${sortByLabel} ${label}`}
+        style={{
+          ...SORT_BTN_STYLE,
+          justifyContent: align === 'left' ? 'flex-start' : 'flex-end',
+          width: '100%',
+        }}
+      >
+        <span>{label}</span>
+        <SortIndicator active={active} dir={sortDir} />
+      </button>
+    </th>
+  )
+}
+
+function TraderAvatar({ row, size }: { row: WeeklyLeaderRow; size: number }) {
+  if (row.avatarSrc) {
+    return (
+      <img
+        src={row.avatarSrc}
+        alt=""
+        width={size}
+        height={size}
+        loading="lazy"
+        decoding="async"
+        style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }}
+      />
+    )
+  }
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        width: size,
+        height: size,
+        borderRadius: '50%',
+        flexShrink: 0,
+        background: 'var(--color-bg-tertiary)',
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: tokens.typography.fontSize.xs,
+        fontWeight: 700,
+        color: 'var(--color-text-tertiary)',
+      }}
+    >
+      {(row.nickname ?? row.exchangeTraderId).slice(0, 1).toUpperCase()}
+    </span>
+  )
+}
+
+function ExchangeLogo({ source, name, size }: { source: string; name: string; size: number }) {
+  const [errored, setErrored] = useState(false)
+  if (errored) {
+    return (
+      <span
+        aria-hidden="true"
+        style={{
+          width: size,
+          height: size,
+          flexShrink: 0,
+          borderRadius: tokens.radius.sm,
+          background: 'var(--color-bg-tertiary)',
+          color: 'var(--color-text-tertiary)',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: tokens.typography.fontSize.xs,
+          fontWeight: 700,
+        }}
+      >
+        {name.slice(0, 1).toUpperCase()}
+      </span>
+    )
+  }
+  return (
+    <img
+      src={getExchangeLogoUrl(source)}
+      alt=""
+      width={size}
+      height={size}
+      loading="lazy"
+      decoding="async"
+      onError={() => setErrored(true)}
+      style={{ borderRadius: tokens.radius.sm, flexShrink: 0 }}
+    />
+  )
+}
+
+function PodiumCard({ row, place }: { row: WeeklyLeaderRow; place: number }) {
+  return (
+    <Link
+      href={`/trader/${encodeURIComponent(row.exchangeTraderId)}`}
+      style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
+    >
+      <Box
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: tokens.spacing[2],
+          textAlign: 'center',
+          padding: tokens.spacing[4],
+          borderRadius: tokens.radius.lg,
+          border: '1px solid var(--color-border-primary)',
+          borderTop: `3px solid ${MEDAL_RING[place]}`,
+          background: 'var(--color-bg-secondary)',
+        }}
+      >
+        <span aria-hidden="true" style={{ fontSize: tokens.typography.fontSize.xl }}>
+          {MEDALS[place]}
+        </span>
+        <TraderAvatar row={row} size={48} />
+        <Text
+          size="sm"
+          weight="bold"
+          style={{
+            maxWidth: '100%',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {row.nickname ?? row.exchangeTraderId}
+        </Text>
+        <Box style={{ display: 'inline-flex', alignItems: 'center', gap: tokens.spacing[1] }}>
+          <ExchangeLogo source={row.source} name={row.exchangeName} size={14} />
+          <Text size="xs" color="secondary">
+            {row.exchangeName}
+          </Text>
+        </Box>
+        <Metric
+          value={row.roi}
+          format="roi"
+          display={fmtRoi(row.roi)}
+          showArrow
+          size="lg"
+          as="span"
+        />
+      </Box>
+    </Link>
+  )
+}
+
 export interface WeeklyArenaClientProps {
   data: WeeklyLeaders
 }
@@ -73,19 +325,157 @@ export interface WeeklyArenaClientProps {
 export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
   const { t, language } = useLanguage()
   const { rows, bitmart } = data
+  const [sortKey, setSortKey] = useState<SortKey>('roi')
+  const [sortDir, setSortDir] = useState<SortDir>('desc')
+  const [copied, setCopied] = useState(false)
+
+  // Canonical pooled ranking is by ROI — podium always reflects that, regardless
+  // of how the user re-sorts the explorable table below.
+  const podium = useMemo(() => [...rows].sort((a, b) => b.roi - a.roi).slice(0, 3), [rows])
+
+  const sortedRows = useMemo(() => {
+    const arr = [...rows]
+    arr.sort((a, b) => {
+      const av = sortValue(a, sortKey)
+      const bv = sortValue(b, sortKey)
+      const aNull = av === null || av === undefined
+      const bNull = bv === null || bv === undefined
+      if (aNull && bNull) return 0
+      if (aNull) return 1 // nulls always last
+      if (bNull) return -1
+      let cmp: number
+      if (typeof av === 'string') cmp = av.localeCompare(bv as string)
+      else cmp = (av as number) - (bv as number)
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return arr
+  }, [rows, sortKey, sortDir])
 
   const newestAsOf = rows.reduce<string | null>(
     (acc, r) => (acc === null || r.provenance.asOf > acc ? r.provenance.asOf : acc),
     null
   )
 
+  // Pooled week window: the 7-day span ending at the freshest snapshot.
+  const weekRange = useMemo(() => {
+    if (!newestAsOf) return null
+    const end = new Date(newestAsOf)
+    if (Number.isNaN(end.getTime())) return null
+    const start = new Date(end)
+    start.setDate(start.getDate() - 6)
+    const fmt = (d: Date) => d.toLocaleDateString(language, { month: 'short', day: 'numeric' })
+    return `${fmt(start)} – ${fmt(end)}`
+  }, [newestAsOf, language])
+
+  function onSort(key: SortKey) {
+    if (key === sortKey) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    } else {
+      setSortKey(key)
+      setSortDir(defaultDir(key))
+    }
+  }
+
+  const renderTh = (
+    sortableKey: SortKey,
+    label: string,
+    align: 'left' | 'right',
+    opts?: { frozen?: boolean; left?: number; width?: number }
+  ) => (
+    <SortableTh
+      sortableKey={sortableKey}
+      label={label}
+      align={align}
+      frozen={opts?.frozen}
+      left={opts?.left}
+      width={opts?.width}
+      sortKey={sortKey}
+      sortDir={sortDir}
+      onSort={onSort}
+      sortByLabel={t('sortBy')}
+    />
+  )
+
+  async function onShare() {
+    const url = typeof window !== 'undefined' ? window.location.href : ''
+    if (!url) return
+    const nav = typeof navigator !== 'undefined' ? navigator : undefined
+    if (nav?.share) {
+      try {
+        await nav.share({ title: t('weeklyArenaTitle'), url })
+        return
+      } catch {
+        // user dismissed the share sheet — fall through to clipboard
+      }
+    }
+    try {
+      await nav?.clipboard?.writeText(url)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // clipboard blocked (insecure context / permissions) — nothing to do
+    }
+  }
+
   return (
     <Box>
-      <PageHeader title={t('weeklyArenaTitle')} subtitle={t('weeklyArenaSubtitle')} compact />
+      {/* row hover + frozen-cell backgrounds (inline styles cannot express :hover) */}
+      <style>{`
+        .wka-frozen { background: var(--color-bg-secondary); }
+        .wka-row:hover td { background: var(--color-bg-tertiary); }
+        .wka-row:hover .wka-frozen { background: var(--color-bg-tertiary); }
+        .wka-row:focus-within td { background: var(--color-bg-tertiary); }
+      `}</style>
+
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: tokens.spacing[3],
+        }}
+      >
+        <Box>
+          <PageHeader title={t('weeklyArenaTitle')} subtitle={t('weeklyArenaSubtitle')} compact />
+          {weekRange && (
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ display: 'block', marginTop: tokens.spacing[1] }}
+            >
+              {weekRange}
+            </Text>
+          )}
+        </Box>
+
+        {rows.length > 0 && (
+          <button
+            type="button"
+            onClick={onShare}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: tokens.spacing[1],
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              color: 'var(--color-text-secondary)',
+              background: 'transparent',
+              border: '1px solid var(--color-border-primary)',
+              borderRadius: tokens.radius.md,
+              cursor: 'pointer',
+            }}
+          >
+            {copied ? t('linkCopied') : t('share')}
+          </button>
+        )}
+      </Box>
 
       {rows.length === 0 ? (
         <Box
           style={{
+            marginTop: tokens.spacing[4],
             padding: tokens.spacing[8],
             textAlign: 'center',
             border: '1px solid var(--color-border-primary)',
@@ -97,138 +487,175 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
           </Text>
         </Box>
       ) : (
-        <Box
-          style={{
-            overflowX: 'auto',
-            border: '1px solid var(--color-border-primary)',
-            borderRadius: tokens.radius.lg,
-            background: 'var(--color-bg-secondary)',
-          }}
-        >
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr>
-                <th style={{ ...TH_STYLE, textAlign: 'left' }}>{t('weeklyArenaColRank')}</th>
-                <th style={{ ...TH_STYLE, textAlign: 'left' }}>{t('weeklyArenaColTrader')}</th>
-                <th style={{ ...TH_STYLE, textAlign: 'left' }}>{t('weeklyArenaColExchange')}</th>
-                <th style={TH_STYLE}>{t('weeklyArenaColRoi')}</th>
-                <th style={TH_STYLE}>{t('weeklyArenaColPnl')}</th>
-                <th style={TH_STYLE}>{t('weeklyArenaColWinRate')}</th>
-                <th style={TH_STYLE}>{t('weeklyArenaColAsOf')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row, i) => (
-                <tr key={`${row.source}:${row.exchangeTraderId}`}>
-                  <td style={{ ...TD_STYLE, textAlign: 'left', fontWeight: 700 }}>
-                    {i < 3 ? ['🥇', '🥈', '🥉'][i] : `#${i + 1}`}
-                  </td>
-                  <td style={{ ...TD_STYLE, textAlign: 'left' }}>
-                    <Link
-                      href={`/trader/${encodeURIComponent(row.exchangeTraderId)}`}
+        <>
+          {/* ── Top-3 podium (canonical ROI ranking) ── */}
+          {podium.length > 0 && (
+            <Box
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                gap: tokens.spacing[3],
+                marginTop: tokens.spacing[4],
+                marginBottom: tokens.spacing[4],
+              }}
+            >
+              {podium.map((row, i) => (
+                <PodiumCard key={`${row.source}:${row.exchangeTraderId}`} row={row} place={i} />
+              ))}
+            </Box>
+          )}
+
+          <Box
+            style={{
+              overflowX: 'auto',
+              border: '1px solid var(--color-border-primary)',
+              borderRadius: tokens.radius.lg,
+              background: 'var(--color-bg-secondary)',
+            }}
+          >
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr>
+                  {/* Rank — positional, not sortable, but frozen */}
+                  <th
+                    style={{
+                      ...TH_STYLE,
+                      textAlign: 'left',
+                      width: RANK_COL_WIDTH,
+                      position: 'sticky',
+                      top: 0,
+                      left: 0,
+                      zIndex: 4,
+                      background: 'var(--color-bg-secondary)',
+                    }}
+                  >
+                    {t('weeklyArenaColRank')}
+                  </th>
+                  {renderTh('trader', t('weeklyArenaColTrader'), 'left', {
+                    frozen: true,
+                    left: RANK_COL_WIDTH,
+                  })}
+                  {renderTh('exchange', t('weeklyArenaColExchange'), 'left')}
+                  {renderTh('roi', t('weeklyArenaColRoi'), 'right')}
+                  {renderTh('pnl', t('weeklyArenaColPnl'), 'right')}
+                  {renderTh('winRate', t('weeklyArenaColWinRate'), 'right')}
+                  {renderTh('asOf', t('weeklyArenaColAsOf'), 'right')}
+                </tr>
+              </thead>
+              <tbody>
+                {sortedRows.map((row, i) => (
+                  <tr key={`${row.source}:${row.exchangeTraderId}`} className="wka-row">
+                    <td
+                      className="wka-frozen"
                       style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: tokens.spacing[2],
-                        textDecoration: 'none',
-                        color: 'var(--color-text-primary)',
+                        ...TD_STYLE,
+                        textAlign: 'left',
+                        fontWeight: 700,
+                        width: RANK_COL_WIDTH,
+                        position: 'sticky',
+                        left: 0,
+                        zIndex: 2,
                       }}
                     >
-                      {row.avatarSrc ? (
-                        <img
-                          src={row.avatarSrc}
-                          alt=""
-                          width={24}
-                          height={24}
-                          style={{ borderRadius: '50%', flexShrink: 0, objectFit: 'cover' }}
-                        />
-                      ) : (
-                        <span
-                          aria-hidden
-                          style={{
-                            width: 24,
-                            height: 24,
-                            borderRadius: '50%',
-                            flexShrink: 0,
-                            background: 'var(--color-bg-tertiary)',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            fontSize: 11,
-                            fontWeight: 700,
-                            color: 'var(--color-text-tertiary)',
-                          }}
-                        >
-                          {(row.nickname ?? row.exchangeTraderId).slice(0, 1).toUpperCase()}
-                        </span>
-                      )}
-                      <Text
-                        size="sm"
-                        weight="bold"
+                      {i < 3 ? MEDALS[i] : `#${i + 1}`}
+                    </td>
+                    <td
+                      className="wka-frozen"
+                      style={{
+                        ...TD_STYLE,
+                        textAlign: 'left',
+                        position: 'sticky',
+                        left: RANK_COL_WIDTH,
+                        zIndex: 2,
+                        boxShadow: '6px 0 8px -4px var(--color-overlay-medium)',
+                      }}
+                    >
+                      <Link
+                        href={`/trader/${encodeURIComponent(row.exchangeTraderId)}`}
                         style={{
-                          display: 'inline-block',
-                          maxWidth: 200,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          verticalAlign: 'middle',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: tokens.spacing[2],
+                          textDecoration: 'none',
+                          color: 'var(--color-text-primary)',
                         }}
                       >
-                        {row.nickname ?? row.exchangeTraderId}
-                      </Text>
-                      {row.traderKind === 'bot' && (
-                        <Text size="xs" color="tertiary">
-                          {t('traderKindBot')}
+                        <TraderAvatar row={row} size={24} />
+                        <Text
+                          size="sm"
+                          weight="bold"
+                          style={{
+                            display: 'inline-block',
+                            maxWidth: 200,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            verticalAlign: 'middle',
+                          }}
+                        >
+                          {row.nickname ?? row.exchangeTraderId}
                         </Text>
-                      )}
-                    </Link>
-                  </td>
-                  <td style={{ ...TD_STYLE, textAlign: 'left' }}>
-                    <Box
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: tokens.spacing[2],
-                      }}
-                    >
-                      {}
-                      <img
-                        src={getExchangeLogoUrl(row.source)}
-                        alt={row.exchangeName}
-                        width={16}
-                        height={16}
-                        style={{ borderRadius: tokens.radius.sm, flexShrink: 0 }}
+                        {row.traderKind === 'bot' && (
+                          <Text size="xs" color="tertiary">
+                            {t('traderKindBot')}
+                          </Text>
+                        )}
+                      </Link>
+                    </td>
+                    <td style={{ ...TD_STYLE, textAlign: 'left' }}>
+                      <Box
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: tokens.spacing[2],
+                        }}
+                      >
+                        <ExchangeLogo source={row.source} name={row.exchangeName} size={16} />
+                        <Text size="xs" color="secondary">
+                          {row.exchangeName}
+                        </Text>
+                        {row.provenance.derived && <DerivedBoardBadge />}
+                      </Box>
+                    </td>
+                    <td style={TD_STYLE}>
+                      <Metric
+                        value={row.roi}
+                        format="roi"
+                        display={fmtRoi(row.roi)}
+                        showArrow
+                        size="sm"
+                        as="span"
                       />
-                      <Text size="xs" color="secondary">
-                        {row.exchangeName}
-                      </Text>
-                      {row.provenance.derived && <DerivedBoardBadge />}
-                    </Box>
-                  </td>
-                  <td style={{ ...TD_STYLE, color: roiColor(row.roi), fontWeight: 700 }}>
-                    {fmtRoi(row.roi)}
-                  </td>
-                  <td style={{ ...TD_STYLE, color: row.pnl ? roiColor(row.pnl.value) : undefined }}>
-                    {row.pnl ? fmtMoney(row.pnl.value, row.pnl.currency) : '—'}
-                  </td>
-                  <td style={TD_STYLE}>
-                    {row.winRate === null
-                      ? '—'
-                      : `${row.winRate.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`}
-                  </td>
-                  <td style={{ ...TD_STYLE, color: 'var(--color-text-tertiary)' }}>
-                    <time
-                      dateTime={row.provenance.asOf}
-                      title={new Date(row.provenance.asOf).toLocaleString()}
-                    >
-                      {formatTimeAgo(row.provenance.asOf, language)}
-                    </time>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </Box>
+                    </td>
+                    <td style={TD_STYLE}>
+                      {row.pnl ? (
+                        <Metric
+                          value={row.pnl.value}
+                          format="pnl"
+                          display={fmtMoney(row.pnl.value, row.pnl.currency)}
+                          showArrow
+                          size="sm"
+                          as="span"
+                        />
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                    <td style={TD_STYLE}>{fmtWinRate(row.winRate)}</td>
+                    <td style={{ ...TD_STYLE, color: 'var(--color-text-tertiary)' }}>
+                      <time
+                        dateTime={row.provenance.asOf}
+                        title={new Date(row.provenance.asOf).toLocaleString()}
+                      >
+                        {formatTimeAgo(row.provenance.asOf, language)}
+                      </time>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </Box>
+        </>
       )}
 
       <Text
