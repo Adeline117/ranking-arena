@@ -5,7 +5,7 @@ import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import PageHeader from '@/app/components/ui/PageHeader'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { formatPnL } from '@/lib/utils/format'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
@@ -165,6 +165,14 @@ export default function WatchlistClient() {
     }
   }
   const sa = (col: SortKey) => (sortBy === col ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : '')
+  const ariaSort = (col: SortKey): React.AriaAttributes['aria-sort'] =>
+    sortBy === col ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+  const onSortKeyDown = (col: SortKey) => (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      doSort(col)
+    }
+  }
 
   return (
     <div
@@ -203,8 +211,8 @@ export default function WatchlistClient() {
                   background: 'var(--color-accent-primary)',
                   color: 'var(--color-bg-primary)',
                   borderRadius: tokens.radius.md,
-                  fontWeight: 600,
-                  fontSize: 14,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  fontSize: tokens.typography.fontSize.base,
                   textDecoration: 'none',
                 }}
               >
@@ -240,8 +248,8 @@ export default function WatchlistClient() {
                   background: 'var(--color-accent-primary)',
                   color: 'var(--color-bg-primary)',
                   borderRadius: tokens.radius.md,
-                  fontWeight: 600,
-                  fontSize: 14,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  fontSize: tokens.typography.fontSize.base,
                   textDecoration: 'none',
                 }}
               >
@@ -264,7 +272,7 @@ export default function WatchlistClient() {
             >
               <div
                 style={{
-                  fontSize: 13,
+                  fontSize: tokens.typography.fontSize.sm,
                   color:
                     watchlist.length >= 180
                       ? 'var(--color-accent-warning)'
@@ -285,7 +293,7 @@ export default function WatchlistClient() {
                     border: `1px solid ${tokens.colors.border.primary}`,
                     background: tokens.colors.bg.secondary,
                     color: tokens.colors.text.primary,
-                    fontSize: 12,
+                    fontSize: tokens.typography.fontSize.xs,
                     cursor: 'pointer',
                   }}
                 >
@@ -299,40 +307,66 @@ export default function WatchlistClient() {
               )}
             </div>
             <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+              <table
+                style={{
+                  width: '100%',
+                  borderCollapse: 'collapse',
+                  fontSize: tokens.typography.fontSize.base,
+                }}
+              >
                 <thead>
                   <tr style={{ borderBottom: `1px solid var(--color-border-primary)` }}>
-                    <th style={thStyle}>{t('trader')}</th>
-                    <th style={thStyle}>{t('exchange')}</th>
+                    <th scope="col" style={thStyle}>
+                      {t('trader')}
+                    </th>
+                    <th scope="col" style={thStyle}>
+                      {t('exchange')}
+                    </th>
                     <th
+                      scope="col"
+                      aria-sort={ariaSort('roi')}
+                      tabIndex={0}
                       style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
                       onClick={() => doSort('roi')}
+                      onKeyDown={onSortKeyDown('roi')}
                     >
                       {t('roi')}
                       {sa('roi')}
                     </th>
                     <th
+                      scope="col"
+                      aria-sort={ariaSort('pnl')}
+                      tabIndex={0}
                       style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
                       onClick={() => doSort('pnl')}
+                      onKeyDown={onSortKeyDown('pnl')}
                     >
                       {t('pnl')}
                       {sa('pnl')}
                     </th>
                     <th
+                      scope="col"
+                      aria-sort={ariaSort('rank')}
+                      tabIndex={0}
                       style={{ ...thStyle, textAlign: 'center', cursor: 'pointer' }}
                       onClick={() => doSort('rank')}
+                      onKeyDown={onSortKeyDown('rank')}
                     >
                       {t('rank')}
                       {sa('rank')}
                     </th>
                     <th
+                      scope="col"
+                      aria-sort={ariaSort('score')}
+                      tabIndex={0}
                       style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
                       onClick={() => doSort('score')}
+                      onKeyDown={onSortKeyDown('score')}
                     >
                       {t('score')}
                       {sa('score')}
                     </th>
-                    <th style={{ ...thStyle, textAlign: 'center', width: 100 }}>
+                    <th scope="col" style={{ ...thStyle, textAlign: 'center', width: 100 }}>
                       {t('watchlistActions')}
                     </th>
                   </tr>
@@ -371,7 +405,7 @@ export default function WatchlistClient() {
                             href={`/trader/${encodeURIComponent(item.handle || item.source_trader_id)}?platform=${item.source}`}
                             style={{
                               color: 'var(--color-text-primary)',
-                              fontWeight: 600,
+                              fontWeight: tokens.typography.fontWeight.semibold,
                               textDecoration: 'none',
                             }}
                             onClick={(e) => e.stopPropagation()}
@@ -387,7 +421,7 @@ export default function WatchlistClient() {
                             padding: '12px 16px',
                             textAlign: 'right',
                             color: roiColor,
-                            fontWeight: 600,
+                            fontWeight: tokens.typography.fontWeight.semibold,
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
@@ -418,7 +452,7 @@ export default function WatchlistClient() {
                             padding: '12px 16px',
                             textAlign: 'right',
                             color: 'var(--color-text-primary)',
-                            fontWeight: 600,
+                            fontWeight: tokens.typography.fontWeight.semibold,
                             fontVariantNumeric: 'tabular-nums',
                           }}
                         >
@@ -438,9 +472,10 @@ export default function WatchlistClient() {
                                   borderRadius: tokens.radius.sm,
                                   border: 'none',
                                   background: 'var(--color-accent-error)',
-                                  color: '#fff',
+                                  color: tokens.colors.white,
+                                  // eslint-disable-next-line no-restricted-syntax -- off-scale micro label by design
                                   fontSize: 11,
-                                  fontWeight: 600,
+                                  fontWeight: tokens.typography.fontWeight.semibold,
                                   cursor: 'pointer',
                                 }}
                               >
@@ -457,6 +492,7 @@ export default function WatchlistClient() {
                                   border: `1px solid ${tokens.colors.border.primary}`,
                                   background: 'transparent',
                                   color: tokens.colors.text.secondary,
+                                  // eslint-disable-next-line no-restricted-syntax -- off-scale micro label by design
                                   fontSize: 11,
                                   cursor: 'pointer',
                                 }}
@@ -477,14 +513,17 @@ export default function WatchlistClient() {
                                 border: '1px solid var(--color-accent-error)',
                                 background: 'transparent',
                                 color: 'var(--color-accent-error)',
-                                fontSize: 12,
-                                fontWeight: 500,
+                                fontSize: tokens.typography.fontSize.xs,
+                                fontWeight: tokens.typography.fontWeight.medium,
                                 cursor: isRemoving ? 'not-allowed' : 'pointer',
                                 transition: 'background 0.15s',
                               }}
                               onMouseEnter={(e) => {
                                 if (!isRemoving)
-                                  e.currentTarget.style.background = 'rgba(255,59,48,0.1)'
+                                  e.currentTarget.style.background = alpha(
+                                    'var(--color-accent-error)',
+                                    10
+                                  )
                               }}
                               onMouseLeave={(e) => {
                                 e.currentTarget.style.background = 'transparent'
@@ -511,9 +550,9 @@ export default function WatchlistClient() {
 const thStyle: React.CSSProperties = {
   padding: '12px 16px',
   textAlign: 'left',
-  fontWeight: 600,
+  fontWeight: tokens.typography.fontWeight.semibold,
   color: 'var(--color-text-secondary)',
-  fontSize: 12,
+  fontSize: tokens.typography.fontSize.xs,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
 }

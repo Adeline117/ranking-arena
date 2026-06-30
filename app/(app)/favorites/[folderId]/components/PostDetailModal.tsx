@@ -46,6 +46,7 @@ export default function PostDetailModal({
               background: 'transparent',
               color: tokens.colors.text.secondary,
               cursor: 'pointer',
+              // eslint-disable-next-line no-restricted-syntax -- off-scale icon glyph by design
               fontSize: 24,
               width: 36,
               height: 36,
@@ -74,7 +75,11 @@ export default function PostDetailModal({
           {post.author_handle && (
             <Link
               href={`/u/${encodeURIComponent(post.author_handle)}`}
-              style={{ color: tokens.colors.accent?.primary, textDecoration: 'none', fontSize: 14 }}
+              style={{
+                color: tokens.colors.accent?.primary,
+                textDecoration: 'none',
+                fontSize: tokens.typography.fontSize.base,
+              }}
             >
               @{post.author_handle}
             </Link>
@@ -121,7 +126,11 @@ export default function PostDetailModal({
         <Box style={{ marginTop: tokens.spacing[4], textAlign: 'center' }}>
           <Link
             href={`/post/${post.id}`}
-            style={{ color: tokens.colors.accent?.primary, textDecoration: 'none', fontSize: 14 }}
+            style={{
+              color: tokens.colors.accent?.primary,
+              textDecoration: 'none',
+              fontSize: tokens.typography.fontSize.base,
+            }}
           >
             {t('viewFullPost')} →
           </Link>
