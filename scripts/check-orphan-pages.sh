@@ -33,6 +33,7 @@ ALLOWED_ORPHANS=(
   "app/(app)/pricing/success/page.tsx"             # Stripe checkout redirect
   "app/(app)/tip/success/page.tsx"                 # Tip payment redirect
   "app/(app)/trader/authorize/page.tsx"            # Legacy redirect to /claim
+  "app/design-system/page.tsx"                     # Design-system preview prototype — direct URL only
 )
 
 path_to_route() {
