@@ -5686,6 +5686,26 @@ const ja = {
   noOpenInterestData: 'オープンインタレストのデータはまだありません',
   colOpenInterestUsd: 'オープンインタレスト（USD）',
   colUpdated: '更新',
+
+  // Passkeys (WebAuthn)
+  passkeySignIn: 'パスキーでサインイン',
+  passkeyNotSupported: 'このデバイスまたはブラウザはパスキーに対応していません',
+  passkeyCancelled: 'パスキーの操作がキャンセルされました',
+  passkeyError: 'パスキーでエラーが発生しました。もう一度お試しください。',
+  passkeyNoCredential: '一致するパスキーが見つかりません。別の方法でサインインしてください。',
+  passkeyAddTitle: 'パスキー',
+  passkeyDesc: 'デバイスの生体認証やセキュリティキーでパスワードなしでサインインできます。',
+  passkeyNamePlaceholder: 'パスキー名（例: MacBook）',
+  passkeyAddButton: 'パスキーを追加',
+  passkeyNone: 'パスキーはまだありません',
+  passkeyUnnamed: '名称未設定のパスキー',
+  passkeyAddedOn: '追加日',
+  passkeyLastUsed: '最終使用',
+  passkeyRemove: '削除',
+  passkeyRemoveTitle: 'パスキーを削除',
+  passkeyRemoveConfirm: 'このパスキーを削除してもよろしいですか？',
+  passkeyAdded: 'パスキーを追加しました',
+  passkeyRemoved: 'パスキーを削除しました',
 } as const
 
 export default ja

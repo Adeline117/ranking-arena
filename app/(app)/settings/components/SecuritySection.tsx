@@ -19,6 +19,14 @@ interface SessionInfo {
   isCurrent: boolean
 }
 
+interface PasskeyInfo {
+  id: string
+  deviceName: string | null
+  createdAt: string
+  lastUsedAt: string | null
+  transports: string[]
+}
+
 interface SecuritySectionProps {
   email: string | null
   // Email change
@@ -55,6 +63,14 @@ interface SecuritySectionProps {
   onSetup2FA: () => void
   onVerify2FA: () => void
   onDisable2FA: () => void
+  // Passkeys
+  passkeys: PasskeyInfo[]
+  loadingPasskeys: boolean
+  passkeyBusy: boolean
+  newPasskeyName: string
+  setNewPasskeyName: (v: string) => void
+  onAddPasskey: () => void
+  onRemovePasskey: (id: string) => void
   // Sessions
   sessions: SessionInfo[]
   loadingSessions: boolean
@@ -602,6 +618,92 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                 {t('cancel')}
               </Button>
             </Box>
+          </Box>
+        )}
+      </Box>
+
+      {/* Passkeys Section */}
+      <Box
+        style={{
+          marginTop: tokens.spacing[6],
+          paddingTop: tokens.spacing[6],
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
+        }}
+      >
+        <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+          {t('passkeyAddTitle')}
+        </Text>
+        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+          {t('passkeyDesc')}
+        </Text>
+
+        {/* Add passkey */}
+        <Box style={{ display: 'flex', gap: tokens.spacing[3], marginBottom: tokens.spacing[4] }}>
+          <input
+            type="text"
+            value={props.newPasskeyName}
+            onChange={(e) => props.setNewPasskeyName(e.target.value.slice(0, 60))}
+            placeholder={t('passkeyNamePlaceholder')}
+            maxLength={60}
+            style={{ ...getInputStyle(), flex: 1 }}
+          />
+          <Button variant="secondary" onClick={props.onAddPasskey} disabled={props.passkeyBusy}>
+            {props.passkeyBusy ? t('loading') : t('passkeyAddButton')}
+          </Button>
+        </Box>
+
+        {/* Enrolled passkeys list */}
+        {props.loadingPasskeys ? (
+          <Text size="sm" color="tertiary">
+            {t('loading')}
+          </Text>
+        ) : props.passkeys.length === 0 ? (
+          <Text size="sm" color="tertiary">
+            {t('passkeyNone')}
+          </Text>
+        ) : (
+          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+            {props.passkeys.map((passkey) => (
+              <Box
+                key={passkey.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.bg.primary,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                }}
+              >
+                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+                  <Text size="sm" weight="medium">
+                    {passkey.deviceName || t('passkeyUnnamed')}
+                  </Text>
+                  <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+                    <Text size="xs" color="tertiary">
+                      {t('passkeyAddedOn')} {formatTimeAgo(passkey.createdAt)}
+                    </Text>
+                    {passkey.lastUsedAt && (
+                      <Text size="xs" color="tertiary">
+                        {t('passkeyLastUsed')} {formatTimeAgo(passkey.lastUsedAt)}
+                      </Text>
+                    )}
+                  </Box>
+                </Box>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => props.onRemovePasskey(passkey.id)}
+                  style={{
+                    color: tokens.colors.accent.error,
+                    fontSize: tokens.typography.fontSize.xs,
+                  }}
+                >
+                  {t('passkeyRemove')}
+                </Button>
+              </Box>
+            ))}
           </Box>
         )}
       </Box>

@@ -5907,6 +5907,26 @@ const zh = {
   noOpenInterestData: '暂无未平仓量数据',
   colOpenInterestUsd: '未平仓量（USD）',
   colUpdated: '更新时间',
+
+  // Passkeys (WebAuthn)
+  passkeySignIn: '使用通行密钥登录',
+  passkeyNotSupported: '此设备或浏览器不支持通行密钥',
+  passkeyCancelled: '通行密钥操作已取消',
+  passkeyError: '通行密钥出错，请重试',
+  passkeyNoCredential: '未找到匹配的通行密钥，请尝试其他登录方式',
+  passkeyAddTitle: '通行密钥',
+  passkeyDesc: '使用设备生物识别或安全密钥免密登录。',
+  passkeyNamePlaceholder: '通行密钥名称（如 MacBook）',
+  passkeyAddButton: '添加通行密钥',
+  passkeyNone: '暂无通行密钥',
+  passkeyUnnamed: '未命名通行密钥',
+  passkeyAddedOn: '添加于',
+  passkeyLastUsed: '上次使用',
+  passkeyRemove: '移除',
+  passkeyRemoveTitle: '移除通行密钥',
+  passkeyRemoveConfirm: '确定要移除此通行密钥吗？',
+  passkeyAdded: '通行密钥已添加',
+  passkeyRemoved: '通行密钥已移除',
 } as const
 
 export default zh

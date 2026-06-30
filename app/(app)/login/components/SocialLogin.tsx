@@ -1,7 +1,9 @@
 'use client'
 
+import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import dynamic from 'next/dynamic'
+import { logger } from '@/lib/logger'
 
 const OneClickWalletButton = dynamic(
   () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.OneClickWalletButton })),
@@ -30,8 +32,75 @@ export default function SocialLogin({
   isAddAccount,
   onError,
   onWalletSuccess: _onWalletSuccess,
-  t: _t,
+  t,
 }: SocialLoginProps) {
+  const [passkeyLoading, setPasskeyLoading] = useState(false)
+
+  // Passwordless passkey (WebAuthn) sign-in. On success we call setSession,
+  // which fires onAuthStateChange in LoginPageClient and triggers the redirect.
+  const handlePasskeySignIn = async () => {
+    if (passkeyLoading) return
+    onError('')
+    setPasskeyLoading(true)
+    try {
+      const { startAuthentication, browserSupportsWebAuthn } =
+        await import('@simplewebauthn/browser')
+      if (!browserSupportsWebAuthn()) {
+        onError(t('passkeyNotSupported'))
+        return
+      }
+
+      const optRes = await fetch('/api/auth/webauthn/authentication-options', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{}',
+      })
+      if (!optRes.ok) {
+        onError(t('passkeyError'))
+        return
+      }
+      const { optionsJSON, challengeKey } = await optRes.json()
+
+      let assertion
+      try {
+        assertion = await startAuthentication({ optionsJSON })
+      } catch (err) {
+        // User cancelled the native prompt or no credential available.
+        const name = (err as Error)?.name
+        if (name === 'NotAllowedError' || name === 'AbortError') {
+          onError(t('passkeyCancelled'))
+        } else {
+          onError(t('passkeyError'))
+        }
+        return
+      }
+
+      const verifyRes = await fetch('/api/auth/webauthn/authentication-verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assertion, challengeKey }),
+      })
+      const verifyData = await verifyRes.json().catch(() => ({}))
+      if (!verifyRes.ok || !verifyData?.session) {
+        onError(verifyData?.error || t('passkeyNoCredential'))
+        return
+      }
+
+      const { error: setErr } = await supabase.auth.setSession(verifyData.session)
+      if (setErr) {
+        logger.warn('[Passkey] setSession failed:', setErr)
+        onError(t('passkeyError'))
+        return
+      }
+      // onAuthStateChange in LoginPageClient handles the redirect.
+    } catch (err) {
+      logger.warn('[Passkey] sign-in error:', err)
+      onError(t('passkeyError'))
+    } finally {
+      setPasskeyLoading(false)
+    }
+  }
+
   const getOAuthHandler =
     (provider: 'google' | 'twitter' | 'discord', providerLabel: string) => async () => {
       onError('')
@@ -174,6 +243,45 @@ export default function SocialLogin({
         redirectUrl={searchParams.get('returnUrl') || searchParams.get('redirect') || undefined}
         onError={(msg) => onError(msg)}
       />
+
+      {/* Passkey (WebAuthn) — passwordless sign-in */}
+      <button
+        onClick={handlePasskeySignIn}
+        disabled={passkeyLoading}
+        className="login-button"
+        style={{
+          width: '100%',
+          padding: '10px 16px',
+          borderRadius: 10,
+          border: '1px solid var(--glass-border-light)',
+          background: 'transparent',
+          color: 'var(--color-text-secondary)',
+          fontWeight: 600,
+          fontSize: 13,
+          cursor: passkeyLoading ? 'default' : 'pointer',
+          opacity: passkeyLoading ? 0.6 : 1,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+        }}
+      >
+        <svg
+          width="16"
+          height="16"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M2 18v3c0 .6.4 1 1 1h4v-3h3v-3h2l1.4-1.4a6.5 6.5 0 1 0-4-4Z" />
+          <circle cx="16.5" cy="7.5" r=".5" fill="currentColor" />
+        </svg>
+        {passkeyLoading ? t('loading') : t('passkeySignIn')}
+      </button>
     </div>
   )
 }
