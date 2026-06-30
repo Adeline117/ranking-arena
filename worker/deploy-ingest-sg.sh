@@ -75,6 +75,12 @@ ssh -o BatchMode=yes "$VPS_HOST" "echo '$SHA' > $REMOTE_DIR/DEPLOYED_SHA"
 # 5. Install deps only if the lock changed. NOTE: full install (NOT --omit=dev) —
 # the ingest worker imports devDependencies at runtime (dotenv, tsx via npx), so
 # --omit=dev crash-loops it with "Cannot find module 'dotenv'".
+#
+# ⚠️ HAZARD (2026-06-30): the SG box silently drops .js files during full npm
+# installs (exits 0 but luxon/abitype/… incomplete → worker crash-loops). See
+# docs/INGEST_WORKER_TOPOLOGY.md "SG box npm-install hazard". Until that box issue
+# is root-caused, a lock change here is RISKY — verify the worker reaches `ready`
+# and surgically repair any "Cannot find module" package (npm pack + cp) if not.
 if [ "$LOCK_CHANGED" = "1" ]; then
   echo "5/6 npm ci (deps changed — full install incl. dotenv/tsx)"
   ssh -o BatchMode=yes "$VPS_HOST" "cd $REMOTE_DIR && npm ci"
