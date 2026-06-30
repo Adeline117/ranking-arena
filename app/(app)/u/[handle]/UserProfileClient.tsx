@@ -137,7 +137,11 @@ export default function UserProfileClient({
         />
 
         {/* Tabs */}
-        <UserProfileTabs activeTab={activeProfileTab} onTabChange={handleProfileTabChange} />
+        <UserProfileTabs
+          activeTab={activeProfileTab}
+          onTabChange={handleProfileTabChange}
+          isVerifiedTrader={profile.isVerifiedTrader}
+        />
 
         {/* Tab Content */}
         <UserProfileContent
@@ -146,6 +150,7 @@ export default function UserProfileClient({
           isOwnProfile={isOwnProfile}
           activeTab={activeProfileTab}
           traderData={traderData}
+          isVerifiedTrader={profile.isVerifiedTrader}
         />
 
         {/* Followers modal — hidden when social is off */}

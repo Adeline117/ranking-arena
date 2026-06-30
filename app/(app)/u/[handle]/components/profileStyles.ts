@@ -55,4 +55,10 @@ export const userProfileStyles = `
       padding: 0 ${tokens.spacing[3]} !important;
     }
   }
+  @media (prefers-reduced-motion: reduce) {
+    .profile-header-avatar {
+      transform: none !important;
+      transition: none !important;
+    }
+  }
 `
