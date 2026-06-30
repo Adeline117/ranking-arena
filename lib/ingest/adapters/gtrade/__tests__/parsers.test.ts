@@ -159,3 +159,28 @@ describe('parseGtradePositions', () => {
     expect(() => parseGtradePositions({}, ctx)).toThrow('not supported')
   })
 })
+
+describe('parseGtradeProfile — Tier-0 base-free risk', () => {
+  // 10 realizing trades across 10 distinct days → 9 daily deltas (>=7), so the
+  // base-free Sharpe/Sortino path activates. gTrade exposes no capital base, so
+  // MDD stays NULL by design.
+  it('derives daily-approx Sharpe/Sortino but never MDD (no capital base)', () => {
+    const deltas = [120, -40, 90, -30, 70, -20, 110, -50, 60, -25]
+    const trades = deltas.map((d, i) => ({
+      id: i + 1,
+      date: `2026-06-${String(i + 2).padStart(2, '0')}T12:00:00.000Z`,
+      pair: 'ETH/USD',
+      action: 'TradeClose',
+      collateralPriceUsd: 1,
+      pnl: d,
+      pnl_net: d,
+    }))
+    const s = parseGtradeProfile({ stats: null, trades: { data: trades }, timeframe: 30 }, ctx)
+      .stats[0]
+    expect(typeof s.sharpe).toBe('number')
+    expect(s.mdd).toBeNull() // base-dependent → honest NULL for gTrade
+    expect(typeof s.extras.sortino).toBe('number')
+    expect(s.extras.risk_derivation).toBe('daily-approx')
+    expect(s.extras.risk_samples).toBe(10)
+  })
+})
