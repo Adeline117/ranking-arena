@@ -17,23 +17,13 @@ import { ACTIVITY_META } from '@/lib/types/activities'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import ActivityIcon from './ActivityIcon'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { formatTimeAgo } from '@/lib/utils/date'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useToast } from '@/app/components/ui/Toast'
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function formatRelativeTime(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const minutes = Math.floor(diff / 60000)
-  const hours = Math.floor(minutes / 60)
-  const days = Math.floor(hours / 24)
-
-  if (minutes < 1) return 'Just now'
-  if (minutes < 60) return `${minutes}m ago`
-  if (hours < 24) return `${hours}h ago`
-  if (days < 7) return `${days}d ago`
-  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
 
 function formatSourceLabel(source: string): string {
   // Convert "binance_futures" -> "Binance" etc.
@@ -61,10 +51,12 @@ export default function ActivityFeedItem({
   activity,
   showShareHint = true,
 }: ActivityFeedItemProps) {
+  const { t, language } = useLanguage()
+  const { showToast } = useToast()
   const [hovered, setHovered] = useState(false)
   const meta = ACTIVITY_META[activity.activity_type as ActivityType]
   const color = meta.colorVar
-  const relativeTime = formatRelativeTime(activity.occurred_at)
+  const relativeTime = formatTimeAgo(activity.occurred_at, language)
   const sourceLabel = formatSourceLabel(activity.source)
 
   // Some trader handles are (masked) emails, e.g. "lo***@gmail.com". This feed is
@@ -86,7 +78,10 @@ export default function ActivityFeedItem({
     e.preventDefault()
     if (typeof navigator !== 'undefined' && navigator.clipboard) {
       const url = `${window.location.origin}${shareHref}`
-      navigator.clipboard.writeText(url).catch(() => undefined)
+      navigator.clipboard.writeText(url).then(
+        () => showToast(t('linkCopied'), 'success'),
+        () => undefined
+      )
     }
   }
 
@@ -277,10 +272,14 @@ export default function ActivityFeedItem({
           {relativeTime}
         </span>
 
-        {showShareHint && hovered && (
+        {/* Always rendered (not hover-gated) so it stays reachable on touch
+            devices, where there is no hover state. */}
+        {showShareHint && (
           <button
+            type="button"
             onClick={handleShare}
-            title="Copy share link"
+            title={t('copyShareLink')}
+            aria-label={t('copyShareLink')}
             style={{
               background: 'none',
               border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
@@ -293,7 +292,7 @@ export default function ActivityFeedItem({
               transition: 'all 0.15s ease',
             }}
           >
-            Share
+            {t('share')}
           </button>
         )}
       </div>
