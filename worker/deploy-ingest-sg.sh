@@ -139,7 +139,7 @@ fi
 
 # 5. Restart + verify ready, AUTO-ROLLBACK on failure.
 echo "5/5 restarting $PM2_APP"
-ssh_sg "pm2 restart $PM2_APP --update-env || pm2 start $REMOTE_DIR/worker/ecosystem.config.cjs --only $PM2_APP" || true
+ssh_sg "pm2 restart $PM2_APP --update-env || pm2 start $REMOTE_DIR/worker/ecosystem.sg.config.cjs --only $PM2_APP" || true
 
 echo "--- waiting for ready (up to 30s) ---"
 if ssh_sg "for i in \$(seq 1 30); do pm2 logs $PM2_APP --lines 50 --nostream 2>/dev/null | grep -q 'ingest-worker. ready' && { echo READY; exit 0; }; sleep 1; done; exit 1"; then
