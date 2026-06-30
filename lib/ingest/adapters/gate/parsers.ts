@@ -92,6 +92,11 @@ export function parseGateLeaderboardPage(payload: unknown, _ctx: ParseCtx): Pars
       headlineRoi: pct(item.profit_rate),
       headlinePnl: num(item.profit),
       headlineWinRate: pct(item.win_rate),
+      // The board row carries max_drawdown (a decimal, like profit_rate/win_rate —
+      // 0.297 = 29.7%), so extract it to headlineMdd (publish writes trader_stats.mdd).
+      // Was raw-only → gate captured MDD only for top-N profiles (~36-65%).
+      headlineMdd: pct(item.max_drawdown),
+      headlineAum: num(item.aum),
       raw: item,
     })
   }
