@@ -110,6 +110,13 @@ export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedL
       headlineRoi: pct(item.incomeRate),
       headlinePnl: num(item.income),
       headlineWinRate: pct(item.winRate),
+      // XT's board JSON carries the per-TF MDD as `maxRetraction` (already a
+      // percent — 1.4925 = 1.49%; a value >1 can't be a decimal fraction since
+      // MDD <= 100%), even though the UI listing hides it. Drop it onto headlineMdd
+      // (the board is authoritative for XT) so the publish path writes it to
+      // trader_stats.mdd — matching blofin/bingx (which capture MDD at 90%+). Was
+      // previously unread, leaving XT at 0% MDD capture.
+      headlineMdd: num(item.maxRetraction),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: item,
     })
