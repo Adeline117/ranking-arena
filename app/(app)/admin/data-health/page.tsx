@@ -8,6 +8,7 @@
 import { useEffect, useState } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -36,7 +37,8 @@ const STATUS_COLORS: Record<string, string> = {
 }
 
 export default function DataHealthPage() {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const locale = getLocaleFromLanguage(language)
   const { email, isAdmin, authChecking } = useAdminAuth()
   const [data, setData] = useState<HealthData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -166,8 +168,10 @@ export default function DataHealthPage() {
     >
       <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 8 }}>{t('dataHealthTitle')}</h1>
       <p style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 24 }}>
-        最后检查: {new Date(data.timestamp).toLocaleString('zh-CN')} · 共 {data.total_platforms}{' '}
-        个活跃平台 · {data.total_traders} 名交易员
+        {t('dataHealthSubtitle')
+          .replace('{time}', new Date(data.timestamp).toLocaleString(locale))
+          .replace('{platforms}', data.total_platforms.toLocaleString(locale))
+          .replace('{traders}', data.total_traders.toLocaleString(locale))}
       </p>
 
       {/* Summary cards */}
@@ -334,7 +338,7 @@ export default function DataHealthPage() {
                       fontVariantNumeric: 'tabular-nums',
                     }}
                   >
-                    {p.total > 0 ? p.total.toLocaleString() : '-'}
+                    {p.total > 0 ? p.total.toLocaleString(locale) : '-'}
                   </td>
                   <td
                     style={{
@@ -345,7 +349,7 @@ export default function DataHealthPage() {
                     }}
                   >
                     {p.latest_snapshot
-                      ? new Date(p.latest_snapshot).toLocaleString('zh-CN', {
+                      ? new Date(p.latest_snapshot).toLocaleString(locale, {
                           month: 'short',
                           day: 'numeric',
                           hour: '2-digit',

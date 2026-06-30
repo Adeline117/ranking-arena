@@ -5,6 +5,7 @@ import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 
 interface FundingRateRow {
@@ -33,9 +34,9 @@ function formatRate(rate: number): string {
   return (rate * 100).toFixed(4) + '%'
 }
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, locale: string): string {
   const d = new Date(iso)
-  return d.toLocaleString('en-US', {
+  return d.toLocaleString(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -45,7 +46,8 @@ function formatTime(iso: string): string {
 }
 
 export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const locale = getLocaleFromLanguage(language)
   const [sortField, setSortField] = useState<SortField>('funding_rate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
@@ -315,7 +317,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        {formatTime(row.funding_time)}
+                        {formatTime(row.funding_time, locale)}
                       </td>
                     </tr>
                   )

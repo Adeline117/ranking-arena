@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { t } from '@/lib/i18n'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
 interface CachedTrader {
@@ -15,6 +15,7 @@ interface CachedTrader {
  * Shown when user is offline and no cached page is available
  */
 export default function OfflinePage() {
+  const { t } = useLanguage()
   const [cachedTraders, setCachedTraders] = useState<CachedTrader[]>([])
 
   useEffect(() => {
@@ -55,8 +56,7 @@ export default function OfflinePage() {
         padding: 'var(--spacing-4, 1rem)',
         backgroundColor: 'var(--color-bg-primary, #0B0A10)',
         color: 'var(--color-text-primary, #EDEDED)',
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
       }}
     >
       <div
@@ -168,7 +168,7 @@ export default function OfflinePage() {
                 letterSpacing: '0.05em',
               }}
             >
-              {t('cachedLeaderboard') || 'Last cached leaderboard'}
+              {t('cachedLeaderboard')}
             </p>
             {cachedTraders.map((trader, i) => (
               <div
@@ -178,10 +178,7 @@ export default function OfflinePage() {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '0.5rem 0',
-                  borderTop:
-                    i > 0
-                      ? '1px solid var(--color-border-primary, #2A2836)'
-                      : 'none',
+                  borderTop: i > 0 ? '1px solid var(--color-border-primary, #2A2836)' : 'none',
                 }}
               >
                 <span
