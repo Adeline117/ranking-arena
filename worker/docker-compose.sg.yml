@@ -1,0 +1,35 @@
+# Run the Arena ingest worker as a CONTAINER on the SG VPS (region vps_sg).
+# This is the cutover target that replaces the pm2 `arena-ingest-worker-sg` —
+# the box pulls a prebuilt, version-pinned image and NEVER installs deps (the
+# 2026-06-30 npm crash-loop hazard is gone). See docs/INGEST_WORKER_DEPLOY.md.
+#
+# Deploy on the box:
+#   echo "$GHCR_PAT" | docker login ghcr.io -u <user> --password-stdin   # one-time (read:packages)
+#   docker compose -f worker/docker-compose.sg.yml pull
+#   docker compose -f worker/docker-compose.sg.yml up -d
+#   docker compose -f worker/docker-compose.sg.yml logs -f   # expect "[ingest-worker] ready (regions=vps_sg…)"
+# Rollback = re-pin `image:` to the previous :<sha> tag and `up -d` again.
+
+services:
+  ingest-worker-sg:
+    image: ghcr.io/adeline117/ranking-arena/ingest-worker:latest
+    container_name: arena-ingest-worker-sg
+    # DB/Redis creds, PLAYWRIGHT_WS_*, etc. — box-local, never baked into the image.
+    env_file:
+      - /opt/arena-ingest/worker/.env
+    environment:
+      INGEST_REGIONS: vps_sg
+      INGEST_LOCAL_REGION: vps_sg
+    volumes:
+      # Persist anti-bot warm-cookie profiles across restarts/redeploys.
+      - /opt/arena-ingest/.arena-ingest:/app/.arena-ingest
+    restart: unless-stopped
+    init: true # reap zombie Chromium processes
+    mem_limit: 3g
+    # Chromium crashes with the default 64MB /dev/shm — give it room.
+    shm_size: 1gb
+    # > the worker's kill_timeout (30s) — let in-flight BullMQ jobs drain on SIGTERM.
+    stop_grace_period: 35s
+    logging:
+      driver: json-file
+      options: { max-size: '10m', max-file: '5' }
