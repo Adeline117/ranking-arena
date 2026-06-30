@@ -27,6 +27,7 @@ import type {
   RankingTimeframe,
   Timeframe,
 } from '../../core/types'
+import { riskFromEquitySeries } from '../../core/series-risk'
 
 type Dict = Record<string, unknown>
 
@@ -230,6 +231,13 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
         pnl !== null && startEquity !== null && startEquity > 0
           ? clampRoiPct((pnl / startEquity) * 100)
           : null
+      // Tier-0 risk from the REAL equity history (accountValueHistory) — true
+      // peak-to-trough MDD, no base reconstruction. Sample-limited → daily-approx.
+      const risk = riskFromEquitySeries(eqPts.map((p) => ({ ts: isoMs(p.ts), value: p.value })))
+      const riskExtras: Record<string, unknown> =
+        risk.mdd !== null || risk.sharpe !== null
+          ? { risk_derivation: 'daily-approx', risk_samples: risk.samples, sortino: risk.sortino }
+          : {}
       stats.push({
         timeframe: tf,
         asOf: ctx.scrapedAt,
@@ -237,8 +245,10 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
         pnl,
         aum,
         volume: num(win.vlm),
-        extras: { roi_basis: 'start_equity' },
+        extras: { roi_basis: 'start_equity', ...riskExtras },
         ...EMPTY_STATS,
+        sharpe: risk.sharpe, // Tier-0 (overrides EMPTY_STATS null)
+        mdd: risk.mdd,
       })
       push(seriesFrom(tf, 'pnl', pnlPts))
       push(seriesFrom(tf, 'account_value', eqPts))
@@ -258,6 +268,15 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
         pnl !== null && eqAnchor !== null && eqAnchor > 0
           ? clampRoiPct((pnl / eqAnchor) * 100)
           : null
+      // Tier-0 risk on the in-window equity slice (allTime equity ≥ windowStart).
+      const eqInWindow = eqPts.filter((p) => p.ts >= windowStart)
+      const risk = riskFromEquitySeries(
+        eqInWindow.map((p) => ({ ts: isoMs(p.ts), value: p.value }))
+      )
+      const riskExtras: Record<string, unknown> =
+        risk.mdd !== null || risk.sharpe !== null
+          ? { risk_derivation: 'daily-approx', risk_samples: risk.samples, sortino: risk.sortino }
+          : {}
       stats.push({
         timeframe: 90,
         asOf: ctx.scrapedAt,
@@ -265,8 +284,14 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
         pnl,
         aum,
         volume: null, // only allTime vlm exists — no honest 90d volume
-        extras: { derivation: 'portfolio_alltime_lerp', roi_basis: 'start_equity' },
+        extras: {
+          derivation: 'portfolio_alltime_lerp',
+          roi_basis: 'start_equity',
+          ...riskExtras,
+        },
         ...EMPTY_STATS,
+        sharpe: risk.sharpe, // Tier-0 (overrides EMPTY_STATS null)
+        mdd: risk.mdd,
       })
       const inWindow = pnlPts.filter((p) => p.ts >= windowStart)
       push(

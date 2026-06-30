@@ -93,7 +93,12 @@ describe('parseHyperliquidProfile', () => {
     expect(st.aum).toBeCloseTo(927231.356076, 4)
     expect(st.volume).toBeCloseTo(222920609.98, 1)
     expect(st.winRate).toBeNull()
-    expect(st.mdd).toBeNull()
+    // Tier-0 risk from the real accountValueHistory equity curve (47 samples).
+    expect(st.mdd).toBeCloseTo(-45.78, 1)
+    expect(st.sharpe).toBeCloseTo(3.1, 1)
+    expect(st.extras.sortino).toBeCloseTo(6.04, 1)
+    expect(st.extras.risk_derivation).toBe('daily-approx')
+    expect(st.extras.risk_samples).toBe(47)
     expect(st.copierCount).toBeNull() // DEX — no copy trading
     const pnlSeries = profile.series.find((s) => s.metric === 'pnl')
     expect(pnlSeries?.timeframe).toBe(30)
