@@ -34,7 +34,8 @@ export const Sparkline = memo(function Sparkline({
   if (!data || data.length < 2) {
     const roiVal = Number(roi ?? 0)
     const isPositive = roiVal >= 0
-    const barColor = color || (isPositive ? tokens.colors.sentiment.bull : tokens.colors.sentiment.bear)
+    const barColor =
+      color || (isPositive ? tokens.colors.sentiment.bull : tokens.colors.sentiment.bear)
     const barWidth = Math.min(Math.abs(roiVal) / 100, 1) * (width - 4)
 
     return (
@@ -90,11 +91,20 @@ export const Sparkline = memo(function Sparkline({
   const fillId = `spark-fill-${gradientId.replace(/:/g, '')}`
 
   // Area fill path
-  const areaPath = `M${points[0]} ${points.slice(1).map(p => `L${p}`).join(' ')} L${(padding + effectiveW).toFixed(1)},${(padding + effectiveH).toFixed(1)} L${padding},${(padding + effectiveH).toFixed(1)} Z`
+  const areaPath = `M${points[0]} ${points
+    .slice(1)
+    .map((p) => `L${p}`)
+    .join(
+      ' '
+    )} L${(padding + effectiveW).toFixed(1)},${(padding + effectiveH).toFixed(1)} L${padding},${(padding + effectiveH).toFixed(1)} Z`
 
   const first = data[0]
   const last = data[data.length - 1]
   const changePercent = first !== 0 ? (((last - first) / Math.abs(first)) * 100).toFixed(1) : '0.0'
+
+  // Tufte end-marker: anchor the current (last) value with a small dot
+  const lastDotX = padding + effectiveW
+  const lastDotY = padding + effectiveH - ((last - min) / range) * effectiveH
 
   return (
     <svg
@@ -120,6 +130,8 @@ export const Sparkline = memo(function Sparkline({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
+      {/* End-marker dot anchoring the current value */}
+      <circle cx={lastDotX} cy={lastDotY} r={2} fill={strokeColor} aria-hidden="true" />
     </svg>
   )
 })
