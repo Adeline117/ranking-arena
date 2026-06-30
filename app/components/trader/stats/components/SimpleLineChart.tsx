@@ -264,6 +264,15 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
 
   const hoverData = hoverIndex !== null ? validData[hoverIndex] : null
 
+  // Accessible summary so the chart isn't invisible to assistive tech (WCAG 1.1.1).
+  // The metric abbreviations (ROI/PnL) are universal in this domain; numbers carry
+  // the substance. Keyboard tooltip / full data-table fallback remains a follow-up.
+  const firstVal = values[0]
+  const chartAriaLabel =
+    `${dataKey === 'roi' ? 'ROI' : 'PnL'} ${period} chart, trending ${isPositive ? 'up' : 'down'}: ` +
+    `start ${formatTooltipValue(firstVal)}, end ${formatTooltipValue(lastVal)}, ` +
+    `low ${formatTooltipValue(minValue)}, high ${formatTooltipValue(maxValue)}`
+
   // Compute tooltip position with edge detection
   const tooltipStyle = (() => {
     if (!tooltipPos) return null
@@ -355,6 +364,8 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
         onWheel={handleWheel}
       >
         <svg
+          role="img"
+          aria-label={chartAriaLabel}
           viewBox={`0 0 ${width} ${height}`}
           preserveAspectRatio="none"
           style={{ width: '100%', height: '100%' }}
