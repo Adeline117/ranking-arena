@@ -1,7 +1,11 @@
 /** Unified null/missing data display symbol. Use instead of 'N/A', '--', or '-'. */
 export const NULL_DISPLAY = '—'
 
-export function formatNumber(num: number | string | null | undefined, decimals = 0, locale?: string): string {
+export function formatNumber(
+  num: number | string | null | undefined,
+  decimals = 0,
+  locale?: string
+): string {
   if (num === null || num === undefined) return NULL_DISPLAY
   const n = typeof num === 'string' ? parseFloat(num) : num
   if (!Number.isFinite(n)) return NULL_DISPLAY
@@ -60,7 +64,11 @@ export function formatCurrency(
 }
 
 /** Format large numbers compactly. Always uses K/M/B regardless of locale. */
-export function formatCompact(num: number | string | null | undefined, decimals = 2, _locale?: string): string {
+export function formatCompact(
+  num: number | string | null | undefined,
+  decimals = 2,
+  _locale?: string
+): string {
   if (num === null || num === undefined) return NULL_DISPLAY
   const n = typeof num === 'string' ? parseFloat(num) : num
   if (!Number.isFinite(n)) return NULL_DISPLAY
@@ -89,8 +97,12 @@ export function getLocaleFromLanguage(language: string): string {
  * Data objects typically have `zh` and `en` fields (e.g., `name` + `name_en`).
  * For ja/ko users, we fall back to English since data is only available in zh/en.
  */
-export function localizedLabel(zh: string, en: string | null | undefined, language: string): string {
-  return language === 'zh' ? zh : (en || zh)
+export function localizedLabel(
+  zh: string,
+  en: string | null | undefined,
+  language: string
+): string {
+  return language === 'zh' ? zh : en || zh
 }
 
 /**
@@ -122,7 +134,11 @@ export function formatROI(roi: number | null | undefined): string {
   if (!Number.isFinite(roi)) return NULL_DISPLAY
   const sign = roi >= 0 ? '+' : ''
   const abs = Math.abs(roi)
-  if (abs >= 10000) return `${sign}${(roi / 1000).toFixed(1)}K%`
+  // ROI is clamped to ±10000% at ingest/compute, so any value at the cap is
+  // "≥10000%" — render it as a capped indicator (>10K% / <-10K%) rather than a
+  // fake-precise "+10.0K%". A board full of capped whales then reads as "off the
+  // charts" (differentiate by PnL) instead of "suspiciously identical values".
+  if (abs >= 10000) return roi >= 0 ? '>10K%' : '<-10K%'
   if (abs >= 1000) return `${sign}${roi.toFixed(0)}%`
   if (abs >= 100) return `${sign}${roi.toFixed(1)}%`
   return `${sign}${roi.toFixed(2)}%`
