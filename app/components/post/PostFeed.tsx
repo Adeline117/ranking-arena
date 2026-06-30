@@ -30,6 +30,9 @@ interface PostFeedProps {
   layout?: 'list' | 'masonry'
   groupId?: string
   groupIds?: string[]
+  /** When provided, the feed is scoped to a single hashtag — fetches /api/hashtags/[tag] for both the
+   *  initial load and every infinite-scroll page, so pagination never leaks unrelated global posts. */
+  tag?: string
   authorHandle?: string
   initialPostId?: string | null
   showSortButtons?: boolean
@@ -104,24 +107,37 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       props.groupId,
       props.authorHandle,
       props.groupIds,
+      props.tag,
       props.sortBy,
       sortType,
       accessToken,
       feedRefreshTrigger,
     ],
     queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
-      const params = buildPostQueryParams({
-        pageSize,
-        offset: pageParam,
-        sortBy: props.sortBy,
-        sortType,
-        authorHandle: props.authorHandle,
-        groupId: props.groupId,
-        groupIds: props.groupIds,
-      })
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-      const response = await fetch(`/api/posts?${params.toString()}`, { headers })
+      // Hashtag-scoped feed: paginate the hashtag endpoint so infinite scroll only
+      // ever appends posts carrying this tag (never falls back to the global feed).
+      let url: string
+      if (props.tag) {
+        const hashParams = new URLSearchParams()
+        hashParams.set('limit', String(pageSize))
+        hashParams.set('offset', String(pageParam))
+        hashParams.set('sort_by', sortType === 'likes' ? 'hot_score' : 'created_at')
+        url = `/api/hashtags/${encodeURIComponent(props.tag)}?${hashParams.toString()}`
+      } else {
+        const params = buildPostQueryParams({
+          pageSize,
+          offset: pageParam,
+          sortBy: props.sortBy,
+          sortType,
+          authorHandle: props.authorHandle,
+          groupId: props.groupId,
+          groupIds: props.groupIds,
+        })
+        url = `/api/posts?${params.toString()}`
+      }
+      const response = await fetch(url, { headers })
       if (!response.ok) {
         const data = await response.json().catch(() => ({}))
         throw new Error(
@@ -132,9 +148,15 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       }
       const data = await response.json()
       const loadedPosts: Post[] = data.data?.posts || []
+      // successWithPagination puts has_more under meta.pagination (legacy data.pagination
+      // kept as a fallback); only fall back to a length heuristic if neither is present.
+      const hasMore =
+        data.meta?.pagination?.has_more ??
+        data.data?.pagination?.has_more ??
+        loadedPosts.length >= pageSize
       return {
         posts: loadedPosts,
-        hasMore: data.data?.pagination?.has_more ?? loadedPosts.length >= pageSize,
+        hasMore,
         offset: pageParam + loadedPosts.length,
       }
     },
