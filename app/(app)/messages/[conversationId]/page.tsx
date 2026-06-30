@@ -508,6 +508,8 @@ export default function ConversationPage({
                   highlightedMessageId={msgHook.highlightedMessageId}
                   onRetry={msgHook.handleRetry}
                   onDelete={msgHook.handleDeleteMessage}
+                  onReact={msgHook.handleToggleReaction}
+                  onReply={(m) => msgHook.setReplyingTo(m)}
                   onPreviewOpen={setPreviewOpen}
                   formatTime={msgHook.formatTime}
                   t={t}
@@ -690,6 +692,15 @@ export default function ConversationPage({
         t={t}
         language={language}
         inputRef={inputRef}
+        replyingTo={msgHook.replyingTo}
+        replyAuthorLabel={
+          msgHook.replyingTo
+            ? msgHook.replyingTo.sender_id === userId
+              ? t('you')
+              : msgHook.otherUser?.handle || `User ${msgHook.otherUser?.id.slice(0, 8) ?? ''}`
+            : undefined
+        }
+        onCancelReply={() => msgHook.setReplyingTo(null)}
       />
     </Box>
   )

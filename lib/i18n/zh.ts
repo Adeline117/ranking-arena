@@ -2667,6 +2667,8 @@ const zh = {
   listView: '列表视图',
   masonryView: '瀑布流视图',
   reply: '回复',
+  replyingTo: '回复',
+  you: '你',
 
   // 打赏操作
   loginToTip: '请先登录后再打赏',

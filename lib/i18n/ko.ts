@@ -2644,6 +2644,8 @@ const ko = {
   listView: '목록 보기',
   masonryView: '갤러리 보기',
   reply: '답글',
+  replyingTo: '답장 대상',
+  you: '나',
 
   // PostFooterActions
   loginToTip: '후원하려면 로그인해 주세요',

@@ -10,7 +10,7 @@ import { getSafeProfileUrl } from '@/lib/utils/profile-navigation'
 import { MessageErrorCode } from '@/lib/auth'
 import VoiceMessage from '@/app/components/chat/VoiceMessage'
 import { renderWithStickers, hasStickers } from '@/app/components/ui/StickerRenderer'
-import { getBubbleBorderRadius, renderTextWithLinks } from './types'
+import { getBubbleBorderRadius, renderTextWithLinks, DM_REACTION_EMOJIS } from './types'
 import type { Message, OtherUser } from './types'
 
 interface MessageBubbleProps {
@@ -25,6 +25,8 @@ interface MessageBubbleProps {
   highlightedMessageId: string | null
   onRetry: (msg: Message) => void
   onDelete?: (msgId: string) => void
+  onReact?: (messageId: string, emoji: string) => void
+  onReply?: (msg: Message) => void
   onPreviewOpen: (preview: {
     type: 'image' | 'video' | 'file'
     url: string
@@ -47,6 +49,8 @@ export default function MessageBubble({
   highlightedMessageId,
   onRetry,
   onDelete,
+  onReact,
+  onReply,
   onPreviewOpen,
   formatTime,
   t,
@@ -108,6 +112,25 @@ export default function MessageBubble({
     setShowContextMenu(false)
     onDelete?.(msg.id)
   }, [msg.id, onDelete])
+
+  const handleReply = useCallback(() => {
+    setShowContextMenu(false)
+    onReply?.(msg)
+  }, [msg, onReply])
+
+  const handleReactFromMenu = useCallback(
+    (emoji: string) => {
+      setShowContextMenu(false)
+      onReact?.(msg.id, emoji)
+    },
+    [msg.id, onReact]
+  )
+
+  const replySenderLabel = msg.reply_preview
+    ? msg.reply_preview.sender_id === userId
+      ? t('you')
+      : otherUser?.handle || `User ${otherUser?.id?.slice(0, 8) ?? ''}`
+    : ''
 
   return (
     <div
@@ -191,6 +214,40 @@ export default function MessageBubble({
             overflow: 'hidden',
           }}
         >
+          {/* Quoted reply preview */}
+          {msg.reply_preview && (
+            <Box
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: 2,
+                marginBottom: 6,
+                padding: '6px 10px',
+                borderRadius: tokens.radius.md,
+                borderLeft: `3px solid ${isMine ? 'var(--color-on-accent)' : tokens.colors.accent.brand}`,
+                background: isMine ? 'var(--glass-border-heavy)' : tokens.colors.bg.tertiary,
+                maxWidth: '100%',
+              }}
+            >
+              <Text size="xs" style={{ fontWeight: 700, opacity: 0.85, color: 'inherit' }}>
+                {replySenderLabel}
+              </Text>
+              <Text
+                size="xs"
+                style={{
+                  opacity: 0.7,
+                  color: 'inherit',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: 240,
+                }}
+              >
+                {msg.reply_preview.content || t('file')}
+              </Text>
+            </Box>
+          )}
+
           {/* Media content */}
           {msg.media_url && msg.media_type === 'image' && (
             <Image
@@ -354,6 +411,57 @@ export default function MessageBubble({
         </Box>
       </Box>
 
+      {/* Emoji reaction pills */}
+      {msg.reactions && msg.reactions.length > 0 && (
+        <Box
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 4,
+            marginTop: 4,
+            paddingLeft: isMine ? 0 : 36,
+            paddingRight: isMine ? 4 : 0,
+            justifyContent: isMine ? 'flex-end' : 'flex-start',
+            maxWidth: '80%',
+          }}
+        >
+          {msg.reactions.map((r) => (
+            <button
+              key={r.emoji}
+              onClick={() => onReact?.(msg.id, r.emoji)}
+              disabled={!onReact}
+              className="interactive-scale"
+              aria-label={`React ${r.emoji}`}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '2px 8px',
+                borderRadius: tokens.radius.full,
+                border: `1px solid ${r.mine ? 'var(--color-accent-primary-40)' : tokens.colors.border.primary}`,
+                background: r.mine ? 'var(--color-accent-primary-12)' : tokens.colors.bg.secondary,
+                cursor: onReact ? 'pointer' : 'default',
+                fontSize: 13,
+                lineHeight: 1.6,
+                transition: `all ${tokens.transition.fast}`,
+              }}
+            >
+              <span>{r.emoji}</span>
+              <span
+                style={{
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: r.mine ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {r.count}
+              </span>
+            </button>
+          ))}
+        </Box>
+      )}
+
       {/* Failed state */}
       {isMine && msg._status === 'failed' && (
         <Box
@@ -425,6 +533,79 @@ export default function MessageBubble({
             minWidth: 140,
           }}
         >
+          {/* Quick emoji reactions */}
+          {onReact && (
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 2,
+                padding: '8px 8px',
+                borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                maxWidth: 240,
+              }}
+            >
+              {DM_REACTION_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  onClick={() => handleReactFromMenu(emoji)}
+                  className="interactive-scale"
+                  aria-label={`React ${emoji}`}
+                  style={{
+                    width: 32,
+                    height: 32,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 18,
+                    border: 'none',
+                    borderRadius: tokens.radius.md,
+                    background: 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Reply */}
+          {onReply && (
+            <button
+              onClick={handleReply}
+              aria-label="Reply"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                width: '100%',
+                padding: '10px 16px',
+                border: 'none',
+                background: 'transparent',
+                color: tokens.colors.text.primary,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+              className="hover-bg-tertiary"
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <polyline points="9 17 4 12 9 7" />
+                <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+              </svg>
+              {t('reply')}
+            </button>
+          )}
           {/* Copy text - available for all messages with content */}
           {msg.content && !msg.content.startsWith('[') && (
             <button

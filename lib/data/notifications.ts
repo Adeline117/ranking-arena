@@ -33,6 +33,7 @@ export interface Notification {
 export type NotificationType =
   | 'follow'
   | 'like'
+  | 'reaction'
   | 'comment'
   | 'system'
   | 'mention'

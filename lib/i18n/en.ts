@@ -2742,6 +2742,8 @@ const en = {
   listView: 'List view',
   masonryView: 'Masonry view',
   reply: 'Reply',
+  replyingTo: 'Replying to',
+  you: 'You',
 
   // PostFooterActions
   loginToTip: 'Please login to tip',

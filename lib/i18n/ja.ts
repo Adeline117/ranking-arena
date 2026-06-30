@@ -2521,6 +2521,8 @@ const ja = {
   listView: 'リスト表示',
   masonryView: 'メイソンリー表示',
   reply: '返信',
+  replyingTo: '返信先',
+  you: 'あなた',
 
   loginToTip: 'チップするにはログインしてください',
   createPaymentFailed: '決済の作成に失敗しました',
