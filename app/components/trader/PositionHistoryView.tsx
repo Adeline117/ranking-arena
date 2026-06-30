@@ -148,11 +148,28 @@ export default function PositionHistoryView({
             <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 520 }}>
               <thead>
                 <tr>
-                  <th style={{ ...thStyle, textAlign: 'left' }}>{t('symbol')}</th>
-                  <th style={{ ...thStyle, textAlign: 'left' }}>{t('direction')}</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>{t('entryPrice')}</th>
-                  <th style={{ ...thStyle, textAlign: 'right' }}>{t('exitPrice')}</th>
+                  <th scope="col" style={{ ...thStyle, textAlign: 'left' }}>
+                    {t('symbol')}
+                  </th>
+                  <th scope="col" style={{ ...thStyle, textAlign: 'left' }}>
+                    {t('direction')}
+                  </th>
+                  <th scope="col" style={{ ...thStyle, textAlign: 'right' }}>
+                    {t('entryPrice')}
+                  </th>
+                  <th scope="col" style={{ ...thStyle, textAlign: 'right' }}>
+                    {t('exitPrice')}
+                  </th>
                   <th
+                    scope="col"
+                    aria-sort={
+                      sortBy === 'pnl'
+                        ? sortOrder === 'desc'
+                          ? 'descending'
+                          : 'ascending'
+                        : 'none'
+                    }
+                    tabIndex={0}
                     style={{
                       ...thStyle,
                       textAlign: 'right',
@@ -163,10 +180,26 @@ export default function PositionHistoryView({
                       onSortByChange('pnl')
                       if (sortBy === 'pnl') onSortOrderToggle()
                     }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onSortByChange('pnl')
+                        if (sortBy === 'pnl') onSortOrderToggle()
+                      }
+                    }}
                   >
                     {t('pnl')} {sortBy === 'pnl' && (sortOrder === 'desc' ? '\u2193' : '\u2191')}
                   </th>
                   <th
+                    scope="col"
+                    aria-sort={
+                      sortBy === 'closeTime'
+                        ? sortOrder === 'desc'
+                          ? 'descending'
+                          : 'ascending'
+                        : 'none'
+                    }
+                    tabIndex={0}
                     style={{
                       ...thStyle,
                       textAlign: 'right',
@@ -176,6 +209,13 @@ export default function PositionHistoryView({
                     onClick={() => {
                       onSortByChange('closeTime')
                       if (sortBy === 'closeTime') onSortOrderToggle()
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        onSortByChange('closeTime')
+                        if (sortBy === 'closeTime') onSortOrderToggle()
+                      }
                     }}
                   >
                     {t('closeTime')}{' '}

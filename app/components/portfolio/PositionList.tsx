@@ -44,7 +44,7 @@ export default function PositionList({ positions, isLoading }: PositionListProps
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc')
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
       setSortKey(key)
       setSortDir('desc')
@@ -56,10 +56,22 @@ export default function PositionList({ positions, isLoading }: PositionListProps
     return sortDir === 'asc' ? ' ^' : ' v'
   }
 
+  // a11y: announce sort state (WCAG aria-sort) + make sortable headers
+  // keyboard-operable (they are onClick-only otherwise).
+  const ariaSortFor = (key: SortKey): 'ascending' | 'descending' | 'none' =>
+    sortKey !== key ? 'none' : sortDir === 'asc' ? 'ascending' : 'descending'
+
+  const sortKeyDown = (key: SortKey) => (e: React.KeyboardEvent<HTMLTableCellElement>) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault()
+      toggleSort(key)
+    }
+  }
+
   if (isLoading) {
     return (
       <div style={styles.container}>
-        {[1, 2, 3].map(i => (
+        {[1, 2, 3].map((i) => (
           <div key={i} style={styles.skeleton} />
         ))}
       </div>
@@ -81,28 +93,74 @@ export default function PositionList({ positions, isLoading }: PositionListProps
         <table style={styles.table}>
           <thead>
             <tr>
-              <th style={styles.th} onClick={() => toggleSort('symbol')}>
-                {t('posSymbol')}{sortIndicator('symbol')}
+              <th
+                scope="col"
+                style={styles.th}
+                aria-sort={ariaSortFor('symbol')}
+                tabIndex={0}
+                onClick={() => toggleSort('symbol')}
+                onKeyDown={sortKeyDown('symbol')}
+              >
+                {t('posSymbol')}
+                {sortIndicator('symbol')}
               </th>
-              <th style={styles.th}>{t('posSide')}</th>
-              <th style={styles.th}>{t('posEntry')}</th>
-              <th style={styles.th}>{t('posMark')}</th>
-              <th style={styles.th} onClick={() => toggleSort('size')}>
-                {t('posSize')}{sortIndicator('size')}
+              <th scope="col" style={styles.th}>
+                {t('posSide')}
               </th>
-              <th style={styles.th} onClick={() => toggleSort('leverage')}>
-                {t('posLeverage')}{sortIndicator('leverage')}
+              <th scope="col" style={styles.th}>
+                {t('posEntry')}
               </th>
-              <th style={styles.th} onClick={() => toggleSort('pnl')}>
-                {t('posPnl')}{sortIndicator('pnl')}
+              <th scope="col" style={styles.th}>
+                {t('posMark')}
               </th>
-              <th style={styles.th} onClick={() => toggleSort('pnl_pct')}>
-                {t('pnlPercent')}{sortIndicator('pnl_pct')}
+              <th
+                scope="col"
+                style={styles.th}
+                aria-sort={ariaSortFor('size')}
+                tabIndex={0}
+                onClick={() => toggleSort('size')}
+                onKeyDown={sortKeyDown('size')}
+              >
+                {t('posSize')}
+                {sortIndicator('size')}
+              </th>
+              <th
+                scope="col"
+                style={styles.th}
+                aria-sort={ariaSortFor('leverage')}
+                tabIndex={0}
+                onClick={() => toggleSort('leverage')}
+                onKeyDown={sortKeyDown('leverage')}
+              >
+                {t('posLeverage')}
+                {sortIndicator('leverage')}
+              </th>
+              <th
+                scope="col"
+                style={styles.th}
+                aria-sort={ariaSortFor('pnl')}
+                tabIndex={0}
+                onClick={() => toggleSort('pnl')}
+                onKeyDown={sortKeyDown('pnl')}
+              >
+                {t('posPnl')}
+                {sortIndicator('pnl')}
+              </th>
+              <th
+                scope="col"
+                style={styles.th}
+                aria-sort={ariaSortFor('pnl_pct')}
+                tabIndex={0}
+                onClick={() => toggleSort('pnl_pct')}
+                onKeyDown={sortKeyDown('pnl_pct')}
+              >
+                {t('pnlPercent')}
+                {sortIndicator('pnl_pct')}
               </th>
             </tr>
           </thead>
           <tbody>
-            {sorted.map(pos => {
+            {sorted.map((pos) => {
               const pnlColor = pos.pnl >= 0 ? 'var(--color-success)' : 'var(--color-error)'
               const sign = pos.pnl >= 0 ? '+' : ''
               return (
@@ -113,13 +171,15 @@ export default function PositionList({ positions, isLoading }: PositionListProps
                       <span style={styles.exchange}>{pos.user_portfolios.exchange}</span>
                     )}
                   </td>
-                  <td style={{
-                    ...styles.td,
-                    color: pos.side === 'long' ? 'var(--color-success)' : 'var(--color-error)',
-                    textTransform: 'uppercase',
-                    fontWeight: 600,
-                    fontSize: '12px',
-                  }}>
+                  <td
+                    style={{
+                      ...styles.td,
+                      color: pos.side === 'long' ? 'var(--color-success)' : 'var(--color-error)',
+                      textTransform: 'uppercase',
+                      fontWeight: 600,
+                      fontSize: '12px',
+                    }}
+                  >
                     {pos.side}
                   </td>
                   <td style={styles.td}>${Number(pos.entry_price).toLocaleString('en-US')}</td>
@@ -130,7 +190,8 @@ export default function PositionList({ positions, isLoading }: PositionListProps
                     {sign}${Number(pos.pnl).toLocaleString('en-US', { minimumFractionDigits: 2 })}
                   </td>
                   <td style={{ ...styles.td, color: pnlColor }}>
-                    {sign}{Number(pos.pnl_pct).toFixed(2)}%
+                    {sign}
+                    {Number(pos.pnl_pct).toFixed(2)}%
                   </td>
                 </tr>
               )
@@ -141,26 +202,29 @@ export default function PositionList({ positions, isLoading }: PositionListProps
 
       {/* Mobile cards */}
       <div style={styles.mobileCards}>
-        {sorted.map(pos => {
+        {sorted.map((pos) => {
           const pnlColor = pos.pnl >= 0 ? 'var(--color-success)' : 'var(--color-error)'
           const sign = pos.pnl >= 0 ? '+' : ''
           return (
             <div key={pos.id} style={styles.mobileCard}>
               <div style={styles.mobileCardHeader}>
                 <span style={styles.symbol}>{pos.symbol}</span>
-                <span style={{
-                  color: pos.side === 'long' ? 'var(--color-success)' : 'var(--color-error)',
-                  fontWeight: 600,
-                  fontSize: '12px',
-                  textTransform: 'uppercase',
-                }}>
+                <span
+                  style={{
+                    color: pos.side === 'long' ? 'var(--color-success)' : 'var(--color-error)',
+                    fontWeight: 600,
+                    fontSize: '12px',
+                    textTransform: 'uppercase',
+                  }}
+                >
                   {pos.side} {pos.leverage}x
                 </span>
               </div>
               <div style={styles.mobileCardRow}>
                 <span style={styles.mobileLabel}>{t('posEntryMark')}</span>
                 <span style={styles.mobileValue}>
-                  ${Number(pos.entry_price).toLocaleString('en-US')} / ${Number(pos.mark_price).toLocaleString('en-US')}
+                  ${Number(pos.entry_price).toLocaleString('en-US')} / $
+                  {Number(pos.mark_price).toLocaleString('en-US')}
                 </span>
               </div>
               <div style={styles.mobileCardRow}>
@@ -170,7 +234,9 @@ export default function PositionList({ positions, isLoading }: PositionListProps
               <div style={styles.mobileCardRow}>
                 <span style={styles.mobileLabel}>{t('posPnl')}</span>
                 <span style={{ ...styles.mobileValue, color: pnlColor, fontWeight: 600 }}>
-                  {sign}${Number(pos.pnl).toLocaleString('en-US', { minimumFractionDigits: 2 })} ({sign}{Number(pos.pnl_pct).toFixed(2)}%)
+                  {sign}${Number(pos.pnl).toLocaleString('en-US', { minimumFractionDigits: 2 })} (
+                  {sign}
+                  {Number(pos.pnl_pct).toFixed(2)}%)
                 </span>
               </div>
             </div>
