@@ -142,6 +142,15 @@ function RankingTableInner(props: {
   } = props
   const { t, language } = useLanguage()
 
+  // Real per-row rank-trajectory sparklines (audit 1.3). rank_history is keyed by
+  // 7D/30D/90D, so map the COMPOSITE view onto its dominant 90D window.
+  const seriesPeriod = timeRange === 'COMPOSITE' ? '90D' : timeRange
+  // Map of `${period}:${platform}:${traderKey}` → ranks (oldest→newest). Period
+  // is part of the key so a timeframe switch can never surface stale ranks.
+  const [rankSeries, setRankSeries] = useState<Record<string, number[]>>({})
+  // Keys already requested (success keeps them; abort/failure releases for retry).
+  const requestedSeriesKeysRef = useRef<Set<string>>(new Set())
+
   // useDeferredValue allows React to interrupt the expensive 50-row render during hydration.
   // During loading state, show immediate (empty/skeleton) data.
   // When traders arrive, React renders the deferred value in a lower-priority pass,
@@ -458,6 +467,65 @@ function RankingTableInner(props: {
     traderTypeFilter,
     tradersFingerprint,
   ])
+
+  // Batch-fetch real rank-trajectory series for the visible cards (audit 1.3).
+  // Card view only — the desktop TraderRow has no sparkline. Fully non-blocking:
+  // ONE POST per page of keys, results stream into rankSeries as they arrive, and
+  // any failure leaves the static ROI-bar fallback untouched (no first-paint /
+  // poll regression). Never N+1.
+  useEffect(() => {
+    if (viewMode !== 'card') return
+    const visible = sortedTraders.slice(0, cardVisibleCount)
+    const release = (keys: string[]) => {
+      for (const k of keys) requestedSeriesKeysRef.current.delete(k)
+    }
+    const toFetch: { platform: string; trader_key: string }[] = []
+    for (const tr of visible) {
+      const platform = tr.source || source || ''
+      if (!platform || !tr.id) continue
+      const cacheKey = `${seriesPeriod}:${platform}:${tr.id}`
+      if (requestedSeriesKeysRef.current.has(cacheKey)) continue
+      requestedSeriesKeysRef.current.add(cacheKey)
+      toFetch.push({ platform, trader_key: tr.id })
+    }
+    if (toFetch.length === 0) return
+
+    const controller = new AbortController()
+    ;(async () => {
+      for (let i = 0; i < toFetch.length; i += 60) {
+        const chunk = toFetch.slice(i, i + 60)
+        const chunkKeys = chunk.map((c) => `${seriesPeriod}:${c.platform}:${c.trader_key}`)
+        try {
+          const res = await fetch('/api/rankings/rank-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ traders: chunk, period: seriesPeriod, days: 7 }),
+            signal: controller.signal,
+          })
+          if (!res.ok) {
+            release(chunkKeys)
+            continue
+          }
+          const map = (await res.json()) as Record<string, number[]>
+          if (controller.signal.aborted) {
+            release(chunkKeys)
+            return
+          }
+          // Re-key under the active period before merging into state.
+          const prefixed: Record<string, number[]> = {}
+          for (const [k, v] of Object.entries(map)) prefixed[`${seriesPeriod}:${k}`] = v
+          if (Object.keys(prefixed).length > 0) {
+            setRankSeries((prev) => ({ ...prev, ...prefixed }))
+          }
+        } catch {
+          // Network error / abort — release so a later render can retry.
+          release(chunkKeys)
+          if (controller.signal.aborted) return
+        }
+      }
+    })()
+    return () => controller.abort()
+  }, [viewMode, sortedTraders, cardVisibleCount, source, seriesPeriod])
 
   // Server-side pagination: use serverTotalCount for total pages.
   // When serverTotalCount is available, traders array is already one page from the API.
@@ -1058,6 +1126,8 @@ function RankingTableInner(props: {
                 {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
                   const positionRank = rankOffset + idx + 1
                   const rank = positionRank
+                  const series =
+                    rankSeries[`${seriesPeriod}:${trader.source || source || ''}:${trader.id}`]
                   return (
                     <SectionErrorBoundary key={`${trader.id}-${trader.source || 'unknown'}`}>
                       <TraderCard
@@ -1068,6 +1138,7 @@ function RankingTableInner(props: {
                         searchQuery={debouncedSearch}
                         getMedalGlowClass={getMedalGlowClass}
                         parseSourceInfo={parseSourceInfoWithT}
+                        series={series}
                       />
                     </SectionErrorBoundary>
                   )
