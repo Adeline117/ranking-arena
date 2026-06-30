@@ -58,7 +58,7 @@ export default function PortfolioPage() {
   const [token, setToken] = useState<string | null>(null)
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
   const [positions, setPositions] = useState<Position[]>([])
-  const [snapshots] = useState<Snapshot[]>([])
+  const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   const [showAddModal, setShowAddModal] = useState(false)
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -102,13 +102,19 @@ export default function PortfolioPage() {
       setLoading(true)
       const headers = { Authorization: `Bearer ${token}` }
       try {
-        const [pRes, posRes] = await Promise.all([
+        const [pRes, posRes, snapRes] = await Promise.all([
           fetch('/api/portfolio', { headers }),
           fetch('/api/portfolio/positions', { headers }),
+          fetch('/api/portfolio/snapshots', { headers }),
         ])
-        const [pJson, posJson] = await Promise.all([pRes.json(), posRes.json()])
+        const [pJson, posJson, snapJson] = await Promise.all([
+          pRes.json(),
+          posRes.json(),
+          snapRes.json(),
+        ])
         if (pJson.data) setPortfolios(pJson.data)
         if (posJson.data) setPositions(posJson.data)
+        if (snapJson.data) setSnapshots(snapJson.data)
       } catch {
         // Intentionally swallowed: portfolio load failure is non-critical
       } finally {
