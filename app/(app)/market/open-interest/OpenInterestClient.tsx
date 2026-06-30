@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
 interface OpenInterestRow {
@@ -47,6 +48,7 @@ function formatTime(iso: string): string {
 }
 
 export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }) {
+  const { t } = useLanguage()
   const [sortField, setSortField] = useState<SortField>('open_interest_usd')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
@@ -125,10 +127,10 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
             href="/market"
             style={{ color: tokens.colors.text.secondary, textDecoration: 'none' }}
           >
-            Market
+            {t('market')}
           </Link>
           <span style={{ margin: '0 6px' }}>/</span>
-          <span>Open Interest</span>
+          <span>{t('openInterest')}</span>
         </nav>
 
         {/* Header */}
@@ -141,7 +143,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
               letterSpacing: '-0.5px',
             }}
           >
-            Open Interest
+            {t('openInterest')}
           </h1>
           <p
             style={{
@@ -150,8 +152,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
               marginTop: 6,
             }}
           >
-            Total outstanding perpetual futures positions across exchanges. Rising OI with price
-            increases signals strong trend; rising OI with falling price signals potential squeeze.
+            {t('openInterestDesc')}
           </p>
         </div>
 
@@ -230,7 +231,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
               cursor: 'pointer',
             }}
           >
-            All
+            {t('all')}
           </button>
           {platforms.map((p) => (
             <button
@@ -265,10 +266,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
 
         {/* Table */}
         {rows.length === 0 ? (
-          <EmptyState
-            title="No open interest data yet"
-            description="Data will appear after the next cron cycle."
-          />
+          <EmptyState title={t('noOpenInterestData')} description={t('marketDataPending')} />
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table
@@ -282,10 +280,10 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                 <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
                   {(
                     [
-                      ['platform', 'Exchange'],
-                      ['symbol', 'Symbol'],
-                      ['open_interest_usd', 'Open Interest (USD)'],
-                      ['timestamp', 'Updated'],
+                      ['platform', t('exchange')],
+                      ['symbol', t('symbol')],
+                      ['open_interest_usd', t('colOpenInterestUsd')],
+                      ['timestamp', t('colUpdated')],
                     ] as [SortField, string][]
                   ).map(([field, label]) => (
                     <th

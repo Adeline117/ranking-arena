@@ -5639,6 +5639,48 @@ const ja = {
   weeklyArenaCategoryOpen: 'オープンリーグ',
   weeklyArenaCategoryLowLev: '低レバレッジリーグ',
   weeklyArenaCategoryProtected: 'プロテクトリーグ',
+
+  // API Keys section (settings)
+  apiKeysDesc: 'Arena Data API 用の API キーを作成・管理します。',
+  apiKeyCopyNowWarning: 'API キーを今すぐコピーしてください — 再表示されません',
+  dismiss: '閉じる',
+  apiKeyNamePlaceholder: 'キー名（任意）',
+  apiKeyCreating: '作成中...',
+  apiKeyCreate: 'キーを作成',
+  apiKeyMaxReached: '有効なキーは最大 5 個です。新しいキーを作成するには 1 つ取り消してください。',
+  apiKeyEmpty: 'まだ API キーがありません。作成して始めましょう。',
+  apiKeyRevokedSection: '取り消し済み',
+  apiKeyViewDocs: 'API ドキュメントを見る',
+  apiKeyUsage30d: '使用状況（30日間）',
+  apiKeyNoUsage:
+    'まだ使用データがありません。最初の API 呼び出しを行うとここに統計が表示されます。',
+  apiKeyTotalRequests: 'リクエスト（合計）',
+  apiKeyRequests: 'リクエスト',
+  apiPlanLabel: 'API プラン：',
+  apiTierStarter: 'Starter',
+  apiTierLimitFree: '100 リクエスト/日',
+  apiTierLimitStarter: '10,000 リクエスト/日',
+  apiUpgradeStarter: 'Starter にアップグレード',
+  apiKeyNever: 'なし',
+  apiKeyCreatedLabel: '作成日',
+  apiKeyLastUsed: '最終使用',
+  apiKeyTodaySuffix: '今日',
+  apiKeyCreateFailed: 'キーの作成に失敗しました',
+  apiKeyCreatedToast: 'API キーを作成しました',
+  apiKeyRevokeFailed: 'キーの取り消しに失敗しました',
+  apiKeyRevokedToast: 'API キーを取り消しました',
+
+  // Market: funding rates & open interest
+  fundingRatesDesc:
+    '各取引所の無期限先物のファンディングレート。プラスのレートはロングがショートに支払う（強気バイアス）、マイナスのレートはショートがロングに支払う（弱気バイアス）ことを示します。',
+  colFundingTime: 'ファンディング時刻',
+  noFundingData: 'ファンディングレートのデータはまだありません',
+  marketDataPending: 'データは次の cron サイクル後に表示されます。',
+  openInterestDesc:
+    '各取引所の無期限先物の建玉総額。価格上昇を伴う OI 増加は強いトレンドを、価格下落を伴う OI 増加はスクイーズの可能性を示します。',
+  noOpenInterestData: 'オープンインタレストのデータはまだありません',
+  colOpenInterestUsd: 'オープンインタレスト（USD）',
+  colUpdated: '更新',
 } as const
 
 export default ja

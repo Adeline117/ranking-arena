@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
 interface FundingRateRow {
@@ -44,6 +45,7 @@ function formatTime(iso: string): string {
 }
 
 export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] }) {
+  const { t } = useLanguage()
   const [sortField, setSortField] = useState<SortField>('funding_rate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
@@ -112,10 +114,10 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
             href="/market"
             style={{ color: tokens.colors.text.secondary, textDecoration: 'none' }}
           >
-            Market
+            {t('market')}
           </Link>
           <span style={{ margin: '0 6px' }}>/</span>
-          <span>Funding Rates</span>
+          <span>{t('fundingRates')}</span>
         </nav>
 
         {/* Header */}
@@ -128,7 +130,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
               letterSpacing: '-0.5px',
             }}
           >
-            Funding Rates
+            {t('fundingRates')}
           </h1>
           <p
             style={{
@@ -137,8 +139,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
               marginTop: 6,
             }}
           >
-            Perpetual futures funding rates across exchanges. Positive rates indicate longs pay
-            shorts (bullish bias). Negative rates indicate shorts pay longs (bearish bias).
+            {t('fundingRatesDesc')}
           </p>
         </div>
 
@@ -168,7 +169,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
               cursor: 'pointer',
             }}
           >
-            All
+            {t('all')}
           </button>
           {platforms.map((p) => (
             <button
@@ -203,10 +204,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
 
         {/* Table */}
         {rates.length === 0 ? (
-          <EmptyState
-            title="No funding rate data yet"
-            description="Data will appear after the next cron cycle."
-          />
+          <EmptyState title={t('noFundingData')} description={t('marketDataPending')} />
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table
@@ -220,10 +218,10 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                 <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
                   {(
                     [
-                      ['platform', 'Exchange'],
-                      ['symbol', 'Symbol'],
-                      ['funding_rate', 'Funding Rate'],
-                      ['funding_time', 'Funding Time'],
+                      ['platform', t('exchange')],
+                      ['symbol', t('symbol')],
+                      ['funding_rate', t('fundingRate')],
+                      ['funding_time', t('colFundingTime')],
                     ] as [SortField, string][]
                   ).map(([field, label]) => (
                     <th

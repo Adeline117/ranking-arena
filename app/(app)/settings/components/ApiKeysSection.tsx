@@ -7,6 +7,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useApiCheckout } from '@/lib/hooks/useApiCheckout'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { authedFetch } from '@/lib/api/client'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { SectionCard, getInputStyle } from './shared'
 
 interface ApiKey {
@@ -22,13 +23,18 @@ interface ApiKey {
   revoked_at: string | null
 }
 
-const TIER_LABELS: Record<string, { label: string; color: string; limit: string }> = {
-  free: { label: 'Free', color: 'var(--color-text-tertiary)', limit: '100 req/day' },
-  starter: { label: 'Starter', color: 'var(--color-brand)', limit: '10,000 req/day' },
-  pro: { label: 'Pro', color: 'var(--color-accent-success)', limit: 'Unlimited' },
+const TIER_LABELS: Record<string, { labelKey: string; color: string; limitKey: string }> = {
+  free: { labelKey: 'free', color: 'var(--color-text-tertiary)', limitKey: 'apiTierLimitFree' },
+  starter: {
+    labelKey: 'apiTierStarter',
+    color: 'var(--color-brand)',
+    limitKey: 'apiTierLimitStarter',
+  },
+  pro: { labelKey: 'pro', color: 'var(--color-accent-success)', limitKey: 'unlimitedLabel' },
 }
 
 export function ApiKeysSection() {
+  const { t } = useLanguage()
   const { showToast } = useToast()
   // /api/user/api-keys is wrapped in withAuth, which only reads the
   // Authorization Bearer header — these calls 401'd without it.
@@ -72,13 +78,13 @@ export function ApiKeysSection() {
         { name: newKeyName || 'Default' }
       )
       if (!res.ok || !res.data?.data) {
-        showToast(res.data?.error || 'Failed to create key', 'error')
+        showToast(res.data?.error || t('apiKeyCreateFailed'), 'error')
         return
       }
       setJustCreatedKey(res.data.data.key)
       setNewKeyName('')
       await fetchKeys()
-      showToast('API key created', 'success')
+      showToast(t('apiKeyCreatedToast'), 'success')
     } finally {
       setCreating(false)
     }
@@ -87,7 +93,7 @@ export function ApiKeysSection() {
   const revokeKey = async (id: string) => {
     const res = await authedFetch('/api/user/api-keys', 'PATCH', accessToken, { id })
     if (!res.ok) {
-      showToast('Failed to revoke key', 'error')
+      showToast(t('apiKeyRevokeFailed'), 'error')
       return
     }
     setKeys((prev) =>
@@ -95,23 +101,19 @@ export function ApiKeysSection() {
         k.id === id ? { ...k, active: false, revoked_at: new Date().toISOString() } : k
       )
     )
-    showToast('API key revoked', 'success')
+    showToast(t('apiKeyRevokedToast'), 'success')
   }
 
   const copyKey = (key: string) => {
     navigator.clipboard.writeText(key)
-    showToast('Copied to clipboard', 'success')
+    showToast(t('copiedToClipboard'), 'success')
   }
 
   const activeKeys = keys.filter((k) => k.active)
   const revokedKeys = keys.filter((k) => !k.active)
 
   return (
-    <SectionCard
-      id="api-keys"
-      title="API Keys"
-      description="Create and manage API keys for the Arena Data API."
-    >
+    <SectionCard id="api-keys" title={t('apiKeysSection')} description={t('apiKeysDesc')}>
       {/* Just-created key banner */}
       {justCreatedKey && (
         <Box
@@ -128,7 +130,7 @@ export function ApiKeysSection() {
             weight="bold"
             style={{ marginBottom: tokens.spacing[1], color: 'var(--color-accent-success)' }}
           >
-            Copy your API key now — it won{"'"}t be shown again
+            {t('apiKeyCopyNowWarning')}
           </Text>
           <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
             <code
@@ -145,7 +147,7 @@ export function ApiKeysSection() {
               {justCreatedKey}
             </code>
             <Button size="sm" onClick={() => copyKey(justCreatedKey)}>
-              Copy
+              {t('copy')}
             </Button>
           </div>
           <button
@@ -160,7 +162,7 @@ export function ApiKeysSection() {
               padding: 0,
             }}
           >
-            Dismiss
+            {t('dismiss')}
           </button>
         </Box>
       )}
@@ -177,7 +179,7 @@ export function ApiKeysSection() {
       <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4] }}>
         <input
           type="text"
-          placeholder="Key name (optional)"
+          placeholder={t('apiKeyNamePlaceholder')}
           value={newKeyName}
           onChange={(e) => setNewKeyName(e.target.value)}
           maxLength={50}
@@ -192,7 +194,7 @@ export function ApiKeysSection() {
           size="sm"
           variant="primary"
         >
-          {creating ? 'Creating...' : 'Create Key'}
+          {creating ? t('apiKeyCreating') : t('apiKeyCreate')}
         </Button>
       </Box>
 
@@ -201,18 +203,18 @@ export function ApiKeysSection() {
           size="xs"
           style={{ color: 'var(--color-accent-warning)', marginBottom: tokens.spacing[3] }}
         >
-          Maximum 5 active keys. Revoke one to create a new key.
+          {t('apiKeyMaxReached')}
         </Text>
       )}
 
       {/* Key list */}
       {loading ? (
         <Text size="sm" style={{ color: 'var(--color-text-tertiary)' }}>
-          Loading...
+          {t('loading')}
         </Text>
       ) : activeKeys.length === 0 && revokedKeys.length === 0 ? (
         <Text size="sm" style={{ color: 'var(--color-text-tertiary)' }}>
-          No API keys yet. Create one to get started.
+          {t('apiKeyEmpty')}
         </Text>
       ) : (
         <>
@@ -226,7 +228,7 @@ export function ApiKeysSection() {
                 weight="bold"
                 style={{ color: 'var(--color-text-tertiary)', marginBottom: tokens.spacing[2] }}
               >
-                Revoked
+                {t('apiKeyRevokedSection')}
               </Text>
               {revokedKeys.map((k) => (
                 <KeyRow key={k.id} apiKey={k} onRevoke={revokeKey} onCopy={copyKey} />
@@ -255,7 +257,7 @@ export function ApiKeysSection() {
             textDecoration: 'none',
           }}
         >
-          View API documentation →
+          {t('apiKeyViewDocs')} →
         </a>
       </div>
     </SectionCard>
@@ -269,6 +271,7 @@ type UsageData = {
 }
 
 function UsageChart() {
+  const { t } = useLanguage()
   const { accessToken } = useAuthSession()
   const [usage, setUsage] = useState<UsageData | null>(null)
 
@@ -294,10 +297,10 @@ function UsageChart() {
           weight="bold"
           style={{ color: 'var(--color-text-tertiary)', marginBottom: tokens.spacing[2] }}
         >
-          Usage (30 days)
+          {t('apiKeyUsage30d')}
         </Text>
         <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
-          No usage data yet. Make your first API call to see stats here.
+          {t('apiKeyNoUsage')}
         </Text>
       </div>
     )
@@ -339,10 +342,10 @@ function UsageChart() {
         }}
       >
         <Text size="xs" weight="bold" style={{ color: 'var(--color-text-tertiary)' }}>
-          Usage (30 days)
+          {t('apiKeyUsage30d')}
         </Text>
         <Text size="xs" style={{ color: 'var(--color-text-secondary)' }}>
-          {totalRequests.toLocaleString()} total requests
+          {totalRequests.toLocaleString()} {t('apiKeyTotalRequests')}
         </Text>
       </div>
 
@@ -359,7 +362,7 @@ function UsageChart() {
         {values.map((v, i) => (
           <div
             key={dates[i]}
-            title={`${dates[i]}: ${v} requests`}
+            title={`${dates[i]}: ${v} ${t('apiKeyRequests')}`}
             style={{
               flex: 1,
               height: Math.max((v / maxVal) * 56, v > 0 ? 2 : 0),
@@ -375,7 +378,7 @@ function UsageChart() {
           {dates[0]}
         </Text>
         <Text size="xs" style={{ color: 'var(--color-text-tertiary)', fontSize: 10 }}>
-          Today
+          {t('today')}
         </Text>
       </div>
 
@@ -418,6 +421,7 @@ function ApiTierBanner({
   isLoading: boolean
   error: string | null
 }) {
+  const { t } = useLanguage()
   const tier = TIER_LABELS[currentTier] || TIER_LABELS.free
 
   return (
@@ -435,7 +439,7 @@ function ApiTierBanner({
       <div>
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
           <Text size="sm" weight="bold">
-            API Plan:
+            {t('apiPlanLabel')}
           </Text>
           <span
             style={{
@@ -447,10 +451,10 @@ function ApiTierBanner({
               fontWeight: tokens.typography.fontWeight.bold,
             }}
           >
-            {tier.label}
+            {t(tier.labelKey)}
           </span>
           <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
-            {tier.limit}
+            {t(tier.limitKey)}
           </Text>
         </div>
         {error && (
@@ -468,7 +472,7 @@ function ApiTierBanner({
               onClick={() => onUpgrade('starter')}
               disabled={isLoading}
             >
-              {isLoading ? 'Loading...' : 'Upgrade to Starter'}
+              {isLoading ? t('loading') : t('apiUpgradeStarter')}
             </Button>
           )}
           <Button
@@ -477,7 +481,7 @@ function ApiTierBanner({
             onClick={() => onUpgrade('pro')}
             disabled={isLoading}
           >
-            {isLoading ? 'Loading...' : 'Upgrade to Pro'}
+            {isLoading ? t('loading') : t('upgradeToPro')}
           </Button>
         </div>
       )}
@@ -494,10 +498,11 @@ function KeyRow({
   onRevoke: (id: string) => void
   onCopy: (key: string) => void
 }) {
+  const { t } = useLanguage()
   const created = new Date(apiKey.created_at).toLocaleDateString()
   const lastUsed = apiKey.last_used_at
     ? new Date(apiKey.last_used_at).toLocaleDateString()
-    : 'Never'
+    : t('apiKeyNever')
 
   return (
     <div
@@ -527,15 +532,15 @@ function KeyRow({
         </div>
         <div style={{ display: 'flex', gap: tokens.spacing[3], marginTop: 2 }}>
           <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
-            Created {created}
+            {t('apiKeyCreatedLabel')} {created}
           </Text>
           <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
-            Last used: {lastUsed}
+            {t('apiKeyLastUsed')}: {lastUsed}
           </Text>
           {apiKey.active && (
             <Text size="xs" style={{ color: 'var(--color-text-tertiary)' }}>
               {apiKey.request_count_today}/{apiKey.daily_limit === 0 ? '∞' : apiKey.daily_limit}{' '}
-              today
+              {t('apiKeyTodaySuffix')}
             </Text>
           )}
         </div>
@@ -544,10 +549,10 @@ function KeyRow({
       {apiKey.active && (
         <div style={{ display: 'flex', gap: tokens.spacing[2], flexShrink: 0 }}>
           <Button size="sm" variant="ghost" onClick={() => onCopy(apiKey.key)}>
-            Copy
+            {t('copy')}
           </Button>
           <Button size="sm" variant="danger" onClick={() => onRevoke(apiKey.id)}>
-            Revoke
+            {t('revoke')}
           </Button>
         </div>
       )}
