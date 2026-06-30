@@ -23,6 +23,7 @@ import {
   SUBSCRIPTION_PLANS,
 } from './index'
 import { logger } from '@/lib/logger'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
 // ============================================
 // Feature Limits Export (for UI display)
@@ -49,14 +50,19 @@ export const FEATURE_LIMITS = {
 // ============================================
 
 /**
- * Beta mode: unlock all Pro features for everyone during early launch.
- * Set to false when paywalls should be enforced.
+ * Client-side unlock flag — bound to the single source of truth `PRO_FREE_PROMO`
+ * in `lib/types/premium.ts` so client + server share ONE flag.
  *
- * ⚠️ SECURITY: This flag MUST be false in production.
- * Setting to true bypasses ALL paywalls — revenue impact.
- * Changed to false on 2026-03-28 to enforce the paywall.
+ * During the "Pro features free for a limited time" promo this is `true`, so
+ * `useSubscription()` / `effectiveIsPremium` treat everyone as Pro and ProGate
+ * renders children ungated (no lock UI).
+ *
+ * ⚠️ ONE-LINE REVERT: flip `PRO_FREE_PROMO` to `false` in `lib/types/premium.ts`.
+ * That single change restores the full paywall on BOTH client (this const) and
+ * server (`hasFeatureAccess`/`getFeatureLimits`) and hides the promo banner.
+ * Do NOT hardcode this back to `false` — keep it bound to PRO_FREE_PROMO.
  */
-export const BETA_PRO_FEATURES_FREE = false
+export const BETA_PRO_FEATURES_FREE = PRO_FREE_PROMO
 
 // Runtime safeguard: prevent accidental enabling via env var in production
 if (

@@ -6061,6 +6061,10 @@ const en = {
   passkeyRemoveConfirm: 'Are you sure you want to remove this passkey?',
   passkeyAdded: 'Passkey added',
   passkeyRemoved: 'Passkey removed',
+  // Pro free limited-time promo banner
+  proPromoBanner:
+    '🎉 Pro features are free for a limited time — enjoy everything, no upgrade needed.',
+  proPromoBannerDismiss: 'Dismiss',
 } as const
 
 export default en

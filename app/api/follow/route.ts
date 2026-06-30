@@ -10,6 +10,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { success, badRequest, serverError } from '@/lib/api/response'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import { sendNotification } from '@/lib/data/notifications'
 import { invalidateFollowingCache } from '@/app/api/following/route'
 
@@ -94,7 +95,7 @@ export const POST = withAuth(
           .maybeSingle(),
       ])
       const tier = sub?.tier || 'free'
-      const limit = tier === 'pro' || tier === 'elite' ? 100 : 10
+      const limit = PRO_FREE_PROMO || tier === 'pro' || tier === 'elite' ? 100 : 10
       if ((followCount ?? 0) >= limit) {
         return NextResponse.json(
           {
