@@ -110,9 +110,14 @@ export function parseLbankLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedL
       headlineRoi: num(item.sprofitRate),
       headlinePnl: num(item.sprofit),
       headlineWinRate: num(item.swinRate),
+      // Board carries drawDown (already percent — "14.21" = 14.21%, per header) and
+      // AUM (followerBalance, absolute). Extract them — were raw-only, capping
+      // lbank's MDD/AUM at top-N-profile coverage.
+      headlineMdd: num(item.drawDown),
+      headlineAum: num(item.followerBalance),
       traderMeta: null,
-      // drawDown, sfollowerIncome, AUM (followerBalance), copier slots,
-      // medal badges, level, 31-point sparkline... kept verbatim.
+      // sfollowerIncome, copier slots, medal badges, level,
+      // 31-point sparkline... kept verbatim.
       raw: item,
     })
   }

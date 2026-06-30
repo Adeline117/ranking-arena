@@ -40,6 +40,8 @@ describe('parseLbankLeaderboardPage', () => {
       headlineRoi: 5.71, // sprofitRate "5.71" — ALREADY percent
       headlinePnl: 1290.3856,
       headlineWinRate: 93.44,
+      headlineMdd: 14.21, // drawDown "14.21" — already percent
+      headlineAum: 56318.32, // followerBalance
     })
     expect(page.rows[0].avatarUrlOrigin).toMatch(
       /^https:\/\/www\.lbank\.com\/static-old-backend\/imageRepository\//
