@@ -96,10 +96,11 @@ describe('parseLbankProfile', () => {
       copierPnl: 595.87,
       copierCount: 29,
       aum: 0, // stat followerBalance "0" (board card carries the real AUM)
-      profitShareRate: null,
+      profitShareRate: 20, // headInfo.profitShareRatio (was wrongly hardcoded null)
       sharpe: null,
       winPositions: null,
     })
+    expect(s.extras.lifetime_trades).toBe(2851) // headInfo.totalTransactionNum
     expect(s.tradingPreferences).toMatchObject({
       instruments: expect.arrayContaining([
         expect.objectContaining({ instrumentId: 'SPXUSDT', rate: '94.77' }),

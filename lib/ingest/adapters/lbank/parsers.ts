@@ -179,6 +179,11 @@ export function parseLbankProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (stat.followProfitNum !== undefined) {
       extras.profitable_copier_count = int(stat.followProfitNum)
     }
+    // Lifetime trade count — headInfo exposes it; surfaces as the lifetime_trades
+    // metric (Phase A: was raw-only).
+    if (head?.totalTransactionNum !== undefined) {
+      extras.lifetime_trades = int(head.totalTransactionNum)
+    }
 
     stats.push({
       timeframe: tf,
@@ -194,7 +199,7 @@ export function parseLbankProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       copierCount: int(stat.followerCount),
       aum: num(stat.followerBalance),
       volume: null, // daily volume bars in series instead
-      profitShareRate: null, // not exposed on public endpoints
+      profitShareRate: num(head?.profitShareRatio), // headInfo 分润比例 (percent)
       holdingDurationAvgHours: null, // holding-duration module not captured
       tradingPreferences: Array.isArray(prefs) ? { instruments: prefs } : null,
       extras,
