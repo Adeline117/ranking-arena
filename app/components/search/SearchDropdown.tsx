@@ -16,6 +16,12 @@ interface SearchDropdownProps {
   open: boolean
   query: string
   onClose: () => void
+  /**
+   * Reports the DOM id of the currently highlighted option (or null when none)
+   * so the owning combobox input can wire `aria-activedescendant`. Each rendered
+   * option carries `id="search-option-${globalIndex}"` (see SearchResultGroup).
+   */
+  onActiveOptionChange?: (optionId: string | null) => void
 }
 
 /**
@@ -26,7 +32,12 @@ interface SearchDropdownProps {
  * - Search history
  * - Hot posts
  */
-export default function SearchDropdown({ open, query, onClose }: SearchDropdownProps) {
+export default function SearchDropdown({
+  open,
+  query,
+  onClose,
+  onActiveOptionChange,
+}: SearchDropdownProps) {
   const router = useRouter()
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -89,6 +100,20 @@ export default function SearchDropdown({ open, query, onClose }: SearchDropdownP
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [open, flatResults, selectedIndex, query, onClose, router, saveToHistory, setSelectedIndex])
+
+  // Surface the highlighted option's id so the combobox input can set
+  // aria-activedescendant (screen-reader announcement of arrow-key movement).
+  useEffect(() => {
+    if (!onActiveOptionChange) return
+    const id =
+      open && selectedIndex >= 0 && flatResults.length > 0 ? `search-option-${selectedIndex}` : null
+    onActiveOptionChange(id)
+  }, [open, selectedIndex, flatResults.length, onActiveOptionChange])
+
+  // Clear active descendant when the dropdown unmounts.
+  useEffect(() => {
+    return () => onActiveOptionChange?.(null)
+  }, [onActiveOptionChange])
 
   // Prefetch on hover with debounce
   const prefetchTimerRef = useRef<NodeJS.Timeout | null>(null)

@@ -1,8 +1,11 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { generateBreadcrumbSchema } from '@/lib/seo/structured-data'
+import { BASE_URL } from '@/lib/constants/urls'
 
 export interface BreadcrumbItem {
   label: string
@@ -11,16 +14,41 @@ export interface BreadcrumbItem {
 
 interface BreadcrumbProps {
   items: BreadcrumbItem[]
+  /**
+   * Opt-in: emit BreadcrumbList JSON-LD structured data for SEO. Default off so
+   * existing call sites are unaffected. Only enable on pages whose hrefs form a
+   * canonical, crawlable trail.
+   */
+  jsonLd?: boolean
 }
 
-export default function Breadcrumb({ items }: BreadcrumbProps) {
+// Sentinel marking the collapsed middle segment on narrow viewports.
+const ELLIPSIS = { ellipsis: true } as const
+type RenderEntry = BreadcrumbItem | typeof ELLIPSIS
+const isEllipsis = (e: RenderEntry): e is typeof ELLIPSIS => 'ellipsis' in e
+
+export default function Breadcrumb({ items, jsonLd = false }: BreadcrumbProps) {
   const { t } = useLanguage()
   const homeLabel = t('home')
 
-  const allItems: BreadcrumbItem[] = [
-    { label: homeLabel, href: '/' },
-    ...items,
-  ]
+  const allItems: BreadcrumbItem[] = [{ label: homeLabel, href: '/' }, ...items]
+
+  // Collapse the middle of long trails on narrow viewports so the current page
+  // stays visible instead of being clipped by overflow:hidden. Starts false on
+  // both server and first client render (no hydration mismatch), then syncs.
+  const [isNarrow, setIsNarrow] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const sync = () => setIsNarrow(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  const shouldCollapse = isNarrow && allItems.length > 3
+  const rendered: RenderEntry[] = shouldCollapse
+    ? [allItems[0], ELLIPSIS, allItems[allItems.length - 1]]
+    : allItems
 
   return (
     <nav
@@ -34,6 +62,23 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
         textOverflow: 'ellipsis',
       }}
     >
+      {jsonLd && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify(
+              generateBreadcrumbSchema(
+                allItems.map((item) => ({
+                  name: item.label,
+                  ...(item.href
+                    ? { url: item.href.startsWith('http') ? item.href : `${BASE_URL}${item.href}` }
+                    : {}),
+                }))
+              )
+            ),
+          }}
+        />
+      )}
       <ol
         style={{
           listStyle: 'none',
@@ -42,8 +87,30 @@ export default function Breadcrumb({ items }: BreadcrumbProps) {
           display: 'inline',
         }}
       >
-        {allItems.map((item, idx) => {
-          const isLast = idx === allItems.length - 1
+        {rendered.map((entry, idx) => {
+          const isLast = idx === rendered.length - 1
+          if (isEllipsis(entry)) {
+            return (
+              <li
+                key="ellipsis"
+                style={{ display: 'inline', color: 'var(--color-text-tertiary, #8E8E9E)' }}
+              >
+                <span
+                  style={{
+                    margin: `0 ${tokens.spacing[1.5]}`,
+                    color: 'var(--color-text-tertiary, #8E8E9E)',
+                    opacity: 0.5,
+                    userSelect: 'none',
+                  }}
+                  aria-hidden="true"
+                >
+                  /
+                </span>
+                <span style={{ userSelect: 'none' }}>…</span>
+              </li>
+            )
+          }
+          const item = entry
           return (
             <li
               key={idx}
