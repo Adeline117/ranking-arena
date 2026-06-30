@@ -1,17 +1,22 @@
 'use client'
 
 import { useState, useEffect, Suspense, useRef } from 'react'
-import { supabase } from "@/lib/supabase/client"
+import { supabase } from '@/lib/supabase/client'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getPasswordStrength } from '../login/components/loginHelpers'
+
+// Password floor: minimum 8 chars AND strength at least "fair" (level >= 2),
+// matching the login/register flow. The strength meter is the real gate.
+const PASSWORD_MIN_LENGTH = 8
 
 // CSS keyframe animations
 const injectStyles = () => {
   if (typeof window === 'undefined') return
   if (document.getElementById('reset-password-styles')) return
-  
+
   const style = document.createElement('style')
   style.id = 'reset-password-styles'
   style.textContent = `
@@ -166,25 +171,23 @@ const injectStyles = () => {
     .password-toggle:hover {
       color: var(--color-brand) !important;
     }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reset-page-bg::before,
+      .reset-card,
+      .reset-input:focus,
+      .reset-button:not(:disabled):hover,
+      .error-shake,
+      .success-message,
+      .loader-spin {
+        animation: none !important;
+      }
+      .floating-particle {
+        display: none !important;
+      }
+    }
   `
   document.head.appendChild(style)
-}
-
-// Password strength indicator
-function getPasswordStrength(password: string): { level: 0 | 1 | 2 | 3 | 4; labelKey: string; color: string } {
-  if (!password) return { level: 0, labelKey: '', color: '' }
-
-  let score = 0
-  if (password.length >= 6) score++
-  if (password.length >= 8) score++
-  if (/[a-z]/.test(password) && /[A-Z]/.test(password)) score++
-  if (/\d/.test(password)) score++
-  if (/[^a-zA-Z0-9]/.test(password)) score++
-
-  if (score <= 1) return { level: 1, labelKey: 'loginPasswordWeak', color: tokens.colors.accent.error }
-  if (score === 2) return { level: 2, labelKey: 'loginPasswordFair', color: tokens.colors.accent.warning }
-  if (score === 3) return { level: 3, labelKey: 'loginPasswordGood', color: tokens.colors.accent.warning }
-  return { level: 4, labelKey: 'loginPasswordStrong', color: tokens.colors.accent.success }
 }
 
 function ResetPasswordContent() {
@@ -205,6 +208,8 @@ function ResetPasswordContent() {
   const _searchParams = useSearchParams()
 
   const passwordStrength = getPasswordStrength(newPassword)
+  const passwordMeetsFloor =
+    newPassword.length >= PASSWORD_MIN_LENGTH && passwordStrength.level >= 2
 
   useEffect(() => {
     injectStyles()
@@ -216,13 +221,14 @@ function ResetPasswordContent() {
     const hashParams = new URLSearchParams(window.location.hash.substring(1))
     const accessToken = hashParams.get('access_token')
     const type = hashParams.get('type')
-    
+
     if (accessToken && type === 'recovery') {
       setIsResetMode(true)
     }
 
-     
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, _session) => {
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, _session) => {
       if (event === 'PASSWORD_RECOVERY') {
         setIsResetMode(true)
       }
@@ -262,19 +268,21 @@ function ResetPasswordContent() {
     setLoading(true)
 
     try {
-      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+      // Account-enumeration safety: never reveal whether an email is registered.
+      // Show the same neutral "if an account exists, we've sent a link" state on
+      // both success and error, matching the login flow. The raw resetError
+      // message is intentionally not surfaced.
+      await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
 
-      if (resetError) {
-        setError(resetError.message)
-        return
-      }
-
       setSuccess(t('resetPasswordEmailSent'))
       setCountdown(60)
-    } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : t('loginSendFailedShort'))
+    } catch {
+      // Swallow network/transport errors into the neutral state too — surfacing
+      // them would still leak signal. (Logged-out, no PII to log here.)
+      setSuccess(t('resetPasswordEmailSent'))
+      setCountdown(60)
     } finally {
       setLoading(false)
     }
@@ -286,8 +294,13 @@ function ResetPasswordContent() {
       return
     }
 
-    if (newPassword.length < 6) {
+    if (newPassword.length < PASSWORD_MIN_LENGTH) {
       setError(t('resetPasswordPasswordMinLength'))
+      return
+    }
+
+    if (passwordStrength.level < 2) {
+      setError(t('resetPasswordPasswordTooWeak'))
       return
     }
 
@@ -324,7 +337,15 @@ function ResetPasswordContent() {
 
   // Loading spinner component
   const Spinner = () => (
-    <svg className="loader-spin" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+    <svg
+      className="loader-spin"
+      width="18"
+      height="18"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    >
       <circle cx="12" cy="12" r="10" strokeOpacity="0.25" />
       <path d="M12 2a10 10 0 0 1 10 10" strokeLinecap="round" />
     </svg>
@@ -333,18 +354,20 @@ function ResetPasswordContent() {
   if (!mounted) return null
 
   return (
-    <div style={{ 
-      minHeight: '100vh', 
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: 20,
-      position: 'relative',
-      overflow: 'hidden',
-    }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 20,
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
       {/* Animated background */}
       <div className="reset-page-bg" />
-      
+
       {/* Floating particles */}
       {[...Array(5)].map((_, i) => (
         <div
@@ -360,11 +383,11 @@ function ResetPasswordContent() {
           }}
         />
       ))}
-      
-      <div 
+
+      <div
         className="reset-card"
-        style={{ 
-          maxWidth: 440, 
+        style={{
+          maxWidth: 440,
           width: '100%',
           background: 'var(--color-backdrop-heavy)',
           border: '1px solid var(--color-accent-primary-15)',
@@ -372,23 +395,29 @@ function ResetPasswordContent() {
           padding: '40px 36px',
           position: 'relative',
           zIndex: 1,
-          boxShadow: '0 25px 50px -12px var(--color-overlay-dark), 0 0 80px var(--color-accent-primary-08)',
+          boxShadow:
+            '0 25px 50px -12px var(--color-overlay-dark), 0 0 80px var(--color-accent-primary-08)',
         }}
       >
         {/* Language selector */}
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'flex-end', 
-          marginBottom: 28,
-          gap: 8,
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            marginBottom: 28,
+            gap: 8,
+          }}
+        >
           <button
             className="lang-btn"
             onClick={() => setLang('zh')}
             style={{
               padding: '8px 14px',
               borderRadius: 10,
-              border: lang === 'zh' ? '1px solid var(--color-accent-primary-60)' : '1px solid var(--glass-border-light)',
+              border:
+                lang === 'zh'
+                  ? '1px solid var(--color-accent-primary-60)'
+                  : '1px solid var(--glass-border-light)',
               background: lang === 'zh' ? 'var(--color-accent-primary-15)' : 'transparent',
               color: lang === 'zh' ? 'var(--color-brand-accent)' : 'var(--color-text-secondary)',
               cursor: 'pointer',
@@ -404,7 +433,10 @@ function ResetPasswordContent() {
             style={{
               padding: '8px 14px',
               borderRadius: 10,
-              border: lang === 'en' ? '1px solid var(--color-accent-primary-60)' : '1px solid var(--glass-border-light)',
+              border:
+                lang === 'en'
+                  ? '1px solid var(--color-accent-primary-60)'
+                  : '1px solid var(--glass-border-light)',
               background: lang === 'en' ? 'var(--color-accent-primary-15)' : 'transparent',
               color: lang === 'en' ? 'var(--color-brand-accent)' : 'var(--color-text-secondary)',
               cursor: 'pointer',
@@ -417,21 +449,35 @@ function ResetPasswordContent() {
         </div>
 
         {/* Icon */}
-        <div style={{ 
-          textAlign: 'center', 
-          marginBottom: 24,
-        }}>
-          <div style={{
-            width: 56,
-            height: 56,
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            margin: '0 auto',
-          }}>
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--color-brand-accent)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <div
+          style={{
+            textAlign: 'center',
+            marginBottom: 24,
+          }}
+        >
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              background:
+                'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto',
+            }}
+          >
+            <svg
+              width="28"
+              height="28"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="var(--color-brand-accent)"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               {isResetMode ? (
                 <>
                   <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
@@ -448,24 +494,29 @@ function ResetPasswordContent() {
         </div>
 
         {/* Title */}
-        <h1 style={{ 
-          fontSize: tokens.typography.fontSize['2xl'], 
-          marginBottom: 8, 
-          fontWeight: tokens.typography.fontWeight.extrabold,
-          textAlign: 'center',
-          background: 'linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-brand-accent) 100%)',
-          WebkitBackgroundClip: 'text',
-          WebkitTextFillColor: 'transparent',
-        }}>
+        <h1
+          style={{
+            fontSize: tokens.typography.fontSize['2xl'],
+            marginBottom: 8,
+            fontWeight: tokens.typography.fontWeight.extrabold,
+            textAlign: 'center',
+            background:
+              'linear-gradient(135deg, var(--color-text-primary) 0%, var(--color-brand-accent) 100%)',
+            WebkitBackgroundClip: 'text',
+            WebkitTextFillColor: 'transparent',
+          }}
+        >
           {isResetMode ? t('resetPasswordSetNew') : t('resetPasswordTitle')}
         </h1>
 
-        <p style={{
-          fontSize: 14,
-          color: tokens.colors.text.secondary,
-          marginBottom: 28,
-          textAlign: 'center',
-        }}>
+        <p
+          style={{
+            fontSize: 14,
+            color: tokens.colors.text.secondary,
+            marginBottom: 28,
+            textAlign: 'center',
+          }}
+        >
           {isResetMode ? t('resetPasswordSetNewDesc') : t('resetPasswordDescription')}
         </p>
 
@@ -473,15 +524,23 @@ function ResetPasswordContent() {
           // Send reset email form
           <>
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: tokens.colors.text.secondary,
+                }}
+              >
                 {t('resetPasswordEmail')}
               </label>
               <input
                 type="email"
                 className="reset-input"
-                style={{ 
-                  width: '100%', 
-                  padding: '14px 16px', 
+                style={{
+                  width: '100%',
+                  padding: '14px 16px',
                   borderRadius: tokens.radius.lg,
                   border: '1px solid var(--glass-border-light)',
                   background: 'var(--color-bg-tertiary)',
@@ -504,14 +563,15 @@ function ResetPasswordContent() {
               onClick={handleSendResetEmail}
               disabled={loading || !email || countdown > 0}
               className="reset-button"
-              style={{ 
+              style={{
                 width: '100%',
-                padding: '14px 16px', 
+                padding: '14px 16px',
                 borderRadius: tokens.radius.lg,
                 border: 'none',
-                background: loading || !email || countdown > 0 
-                  ? 'var(--color-accent-primary-20)' 
-                  : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+                background:
+                  loading || !email || countdown > 0
+                    ? 'var(--color-accent-primary-20)'
+                    : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                 color: tokens.colors.white,
                 fontWeight: 700,
                 fontSize: 16,
@@ -524,23 +584,35 @@ function ResetPasswordContent() {
               }}
             >
               {loading && <Spinner />}
-              {loading ? t('resetPasswordSending') : countdown > 0 ? `${countdown} ${t('resetPasswordCountdown')}` : t('resetPasswordSendLink')}
+              {loading
+                ? t('resetPasswordSending')
+                : countdown > 0
+                  ? `${countdown} ${t('resetPasswordCountdown')}`
+                  : t('resetPasswordSendLink')}
             </button>
           </>
         ) : (
           // Set new password form
           <>
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: tokens.colors.text.secondary,
+                }}
+              >
                 {t('resetPasswordNewPassword')}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showPassword ? 'text' : 'password'}
                   className="reset-input"
-                  style={{ 
-                    width: '100%', 
-                    padding: '14px 16px', 
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
                     paddingRight: 50,
                     borderRadius: tokens.radius.lg,
                     border: '1px solid var(--glass-border-light)',
@@ -574,7 +646,7 @@ function ResetPasswordContent() {
                   {showPassword ? t('loginHide') : t('loginShow')}
                 </button>
               </div>
-              
+
               {/* Password strength indicator */}
               {newPassword && (
                 <div style={{ marginTop: 10 }}>
@@ -586,18 +658,34 @@ function ResetPasswordContent() {
                           flex: 1,
                           height: 4,
                           borderRadius: 2,
-                          background: level <= passwordStrength.level ? passwordStrength.color : 'var(--glass-border-light)',
+                          background:
+                            level <= passwordStrength.level
+                              ? passwordStrength.color
+                              : 'var(--glass-border-light)',
                           transition: `all ${tokens.transition.slow}`,
                         }}
                       />
                     ))}
                   </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
                     <span style={{ fontSize: 11, color: passwordStrength.color, fontWeight: 500 }}>
                       {t('loginPasswordStrength').replace('{label}', t(passwordStrength.labelKey))}
                     </span>
-                    <span style={{ fontSize: 11, color: newPassword.length >= 6 ? 'var(--color-text-secondary)' : 'var(--color-accent-error)' }}>
-                      {newPassword.length}/6
+                    <span
+                      style={{
+                        fontSize: 11,
+                        color: passwordMeetsFloor
+                          ? 'var(--color-text-secondary)'
+                          : 'var(--color-accent-error)',
+                      }}
+                    >
+                      {newPassword.length}/{PASSWORD_MIN_LENGTH}
                     </span>
                   </div>
                 </div>
@@ -605,16 +693,24 @@ function ResetPasswordContent() {
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <label style={{ display: 'block', marginBottom: 8, fontSize: 13, fontWeight: 600, color: tokens.colors.text.secondary }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: 8,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: tokens.colors.text.secondary,
+                }}
+              >
                 {t('resetPasswordConfirm')}
               </label>
               <div style={{ position: 'relative' }}>
                 <input
                   type={showConfirmPassword ? 'text' : 'password'}
                   className="reset-input"
-                  style={{ 
-                    width: '100%', 
-                    padding: '14px 16px', 
+                  style={{
+                    width: '100%',
+                    padding: '14px 16px',
                     paddingRight: 50,
                     borderRadius: tokens.radius.lg,
                     border: `1px solid ${confirmPassword && confirmPassword !== newPassword ? 'var(--color-accent-error)' : 'var(--glass-border-light)'}`,
@@ -627,7 +723,7 @@ function ResetPasswordContent() {
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !loading && newPassword && confirmPassword) {
+                    if (e.key === 'Enter' && !loading && passwordMeetsFloor && confirmPassword) {
                       handleResetPassword()
                     }
                   }}
@@ -655,27 +751,31 @@ function ResetPasswordContent() {
               </div>
               {confirmPassword && confirmPassword === newPassword && (
                 <div style={{ marginTop: 6, fontSize: 12 }}>
-                  <span style={{ color: tokens.colors.accent.success }}>OK - {t('loginPasswordsMatch')}</span>
+                  <span style={{ color: tokens.colors.accent.success }}>
+                    OK - {t('loginPasswordsMatch')}
+                  </span>
                 </div>
               )}
             </div>
 
             <button
               onClick={handleResetPassword}
-              disabled={loading || !newPassword || !confirmPassword}
+              disabled={loading || !passwordMeetsFloor || !confirmPassword}
               className="reset-button"
-              style={{ 
+              style={{
                 width: '100%',
-                padding: '14px 16px', 
+                padding: '14px 16px',
                 borderRadius: tokens.radius.lg,
                 border: 'none',
-                background: loading || !newPassword || !confirmPassword 
-                  ? 'var(--color-accent-primary-20)' 
-                  : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
+                background:
+                  loading || !passwordMeetsFloor || !confirmPassword
+                    ? 'var(--color-accent-primary-20)'
+                    : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
                 color: tokens.colors.white,
                 fontWeight: 700,
                 fontSize: 16,
-                cursor: loading || !newPassword || !confirmPassword ? 'not-allowed' : 'pointer',
+                cursor:
+                  loading || !passwordMeetsFloor || !confirmPassword ? 'not-allowed' : 'pointer',
                 marginBottom: 20,
                 display: 'flex',
                 alignItems: 'center',
@@ -704,7 +804,16 @@ function ResetPasswordContent() {
             textDecoration: 'none',
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <line x1="19" y1="12" x2="5" y2="12"></line>
             <polyline points="12 19 5 12 12 5"></polyline>
           </svg>
@@ -713,9 +822,9 @@ function ResetPasswordContent() {
 
         {/* Error message */}
         {error && (
-          <div 
+          <div
             ref={errorRef}
-            style={{ 
+            style={{
               marginTop: 20,
               padding: 14,
               borderRadius: tokens.radius.lg,
@@ -729,7 +838,14 @@ function ResetPasswordContent() {
               gap: 8,
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <circle cx="12" cy="12" r="10" />
               <line x1="12" y1="8" x2="12" y2="12" />
               <line x1="12" y1="16" x2="12.01" y2="16" />
@@ -740,9 +856,9 @@ function ResetPasswordContent() {
 
         {/* Success message */}
         {success && (
-          <div 
+          <div
             className="success-message"
-            style={{ 
+            style={{
               marginTop: 20,
               padding: 14,
               borderRadius: tokens.radius.lg,
@@ -756,7 +872,16 @@ function ResetPasswordContent() {
               gap: 8,
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <polyline points="20 6 9 17 4 12"></polyline>
             </svg>
             {success}
@@ -770,25 +895,31 @@ function ResetPasswordContent() {
 // Wrap with Suspense
 export default function ResetPasswordPage() {
   return (
-    <Suspense fallback={
-      <div style={{ 
-        minHeight: '100vh', 
-        background: tokens.colors.bg.primary, 
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}>
-        <div style={{
-          width: 40,
-          height: 40,
-          border: '3px solid var(--color-accent-primary-20)',
-          borderTopColor: 'var(--color-brand)',
-          borderRadius: '50%',
-          animation: 'spin 1s linear infinite',
-        }} />
-        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div
+          style={{
+            minHeight: '100vh',
+            background: tokens.colors.bg.primary,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <div
+            style={{
+              width: 40,
+              height: 40,
+              border: '3px solid var(--color-accent-primary-20)',
+              borderTopColor: 'var(--color-brand)',
+              borderRadius: '50%',
+              animation: 'spin 1s linear infinite',
+            }}
+          />
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      }
+    >
       <ResetPasswordContent />
     </Suspense>
   )
