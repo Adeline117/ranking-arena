@@ -1,6 +1,6 @@
 'use client'
 
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { CrownIcon } from './MembershipIcons'
 import { PRICING, type PlanType } from './membership-config'
@@ -22,21 +22,25 @@ export default function UpgradeSection({
   cardStyle,
   t,
 }: UpgradeSectionProps) {
-  const yearlySavings = Math.round((1 - (PRICING.yearly.price / 12) / PRICING.monthly.price) * 100)
+  const yearlySavings = Math.round((1 - PRICING.yearly.price / 12 / PRICING.monthly.price) * 100)
 
   return (
-    <div style={{
-      ...cardStyle,
-      border: '1px solid var(--color-pro-glow)',
-      background: `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.bg.secondary} 100%)`,
-    }}>
+    <div
+      style={{
+        ...cardStyle,
+        border: '1px solid var(--color-pro-glow)',
+        background: `linear-gradient(135deg, ${tokens.colors.bg.tertiary} 0%, ${tokens.colors.bg.secondary} 100%)`,
+      }}
+    >
       {/* Header */}
-      <Box style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        marginBottom: tokens.spacing[5],
-      }}>
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          marginBottom: tokens.spacing[5],
+        }}
+      >
         <Box style={{ color: 'var(--color-pro-gradient-start)' }}>
           <CrownIcon size={20} />
         </Box>
@@ -45,12 +49,20 @@ export default function UpgradeSection({
         </Text>
       </Box>
 
-      <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[5], lineHeight: 1.6 }}>
+      <Text
+        size="sm"
+        color="secondary"
+        style={{ marginBottom: tokens.spacing[5], lineHeight: 1.6 }}
+      >
         {t('pricingDescription')}
       </Text>
 
       {/* Plan Selector */}
-      <Box style={{ marginBottom: tokens.spacing[5] }}>
+      <Box
+        role="radiogroup"
+        aria-label={t('pricingTitle')}
+        style={{ marginBottom: tokens.spacing[5] }}
+      >
         {/* Monthly */}
         <PlanOption
           selected={selectedPlan === 'monthly'}
@@ -64,7 +76,17 @@ export default function UpgradeSection({
 
         {/* Yearly */}
         <Box
+          role="radio"
+          aria-checked={selectedPlan === 'yearly'}
+          aria-label={t('yearlyPlan')}
+          tabIndex={0}
           onClick={() => setSelectedPlan('yearly')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setSelectedPlan('yearly')
+            }
+          }}
           style={{
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.lg,
@@ -83,8 +105,9 @@ export default function UpgradeSection({
               padding: '2px 8px',
               background: 'var(--color-accent-success)',
               borderRadius: tokens.radius.full,
+              // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
               fontSize: 10,
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
               color: tokens.colors.white,
             }}
           >
@@ -93,12 +116,19 @@ export default function UpgradeSection({
 
           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box>
-              <Text size="sm" weight="bold">{t('yearlyPlan')}</Text>
-              <Text size="xs" color="tertiary">{t('bestValue')}</Text>
+              <Text size="sm" weight="bold">
+                {t('yearlyPlan')}
+              </Text>
+              <Text size="xs" color="tertiary">
+                {t('bestValue')}
+              </Text>
             </Box>
             <Box style={{ textAlign: 'right' }}>
               <Box style={{ display: 'flex', alignItems: 'baseline', gap: 4 }}>
-                <Text size="xs" style={{ textDecoration: 'line-through', color: 'var(--color-text-tertiary)' }}>
+                <Text
+                  size="xs"
+                  style={{ textDecoration: 'line-through', color: 'var(--color-text-tertiary)' }}
+                >
                   ${PRICING.yearly.original}
                 </Text>
                 <Text size="xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
@@ -114,12 +144,25 @@ export default function UpgradeSection({
 
         {/* Lifetime */}
         <Box
+          role="radio"
+          aria-checked={selectedPlan === 'lifetime'}
+          aria-label={t('membershipFoundingLifetime')}
+          tabIndex={0}
           onClick={() => setSelectedPlan('lifetime')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault()
+              setSelectedPlan('lifetime')
+            }
+          }}
           style={{
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.lg,
-            border: `2px solid ${selectedPlan === 'lifetime' ? '#f59e0b' : 'var(--color-border-primary)'}`,
-            background: selectedPlan === 'lifetime' ? 'color-mix(in srgb, #f59e0b 8%, transparent)' : 'transparent',
+            border: `2px solid ${selectedPlan === 'lifetime' ? 'var(--color-founding-accent, #f59e0b)' : 'var(--color-border-primary)'}`,
+            background:
+              selectedPlan === 'lifetime'
+                ? 'color-mix(in srgb, var(--color-founding-accent, #f59e0b) 8%, transparent)'
+                : 'transparent',
             cursor: 'pointer',
             transition: 'all 0.2s',
             position: 'relative',
@@ -134,8 +177,9 @@ export default function UpgradeSection({
               padding: '2px 8px',
               background: 'var(--color-founding-accent, #f59e0b)',
               borderRadius: tokens.radius.full,
+              // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
               fontSize: 10,
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
               color: 'var(--color-on-accent, #fff)',
             }}
           >
@@ -144,14 +188,28 @@ export default function UpgradeSection({
 
           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box>
-              <Text size="sm" weight="bold" style={{ color: 'var(--color-founding-accent, #f59e0b)' }}>{t('membershipFoundingLifetime')}</Text>
-              <Text size="xs" color="tertiary">{t('membershipOneTimeForever')}</Text>
+              <Text
+                size="sm"
+                weight="bold"
+                style={{ color: 'var(--color-founding-accent, #f59e0b)' }}
+              >
+                {t('membershipFoundingLifetime')}
+              </Text>
+              <Text size="xs" color="tertiary">
+                {t('membershipOneTimeForever')}
+              </Text>
             </Box>
             <Box style={{ textAlign: 'right' }}>
-              <Text size="xl" weight="black" style={{ color: 'var(--color-founding-accent, #f59e0b)' }}>
+              <Text
+                size="xl"
+                weight="black"
+                style={{ color: 'var(--color-founding-accent, #f59e0b)' }}
+              >
                 ${PRICING.lifetime.price}
               </Text>
-              <Text size="xs" color="tertiary">{t('membershipOneTime')}</Text>
+              <Text size="xs" color="tertiary">
+                {t('membershipOneTime')}
+              </Text>
             </Box>
           </Box>
         </Box>
@@ -165,11 +223,17 @@ export default function UpgradeSection({
         style={{
           width: '100%',
           padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-          background: selectedPlan === 'lifetime' ? '#f59e0b' : 'var(--color-pro-badge-bg)',
+          background:
+            selectedPlan === 'lifetime'
+              ? 'var(--color-founding-accent, #f59e0b)'
+              : 'var(--color-pro-badge-bg)',
           border: 'none',
-          boxShadow: selectedPlan === 'lifetime' ? '0 4px 16px rgba(245,158,11,0.3)' : '0 4px 16px var(--color-pro-badge-shadow)',
+          boxShadow:
+            selectedPlan === 'lifetime'
+              ? `0 4px 16px ${alpha('var(--color-founding-accent, #f59e0b)', 30)}`
+              : '0 4px 16px var(--color-pro-badge-shadow)',
           fontSize: tokens.typography.fontSize.md,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
         }}
       >
         {subscribing
@@ -210,7 +274,17 @@ function PlanOption({
 }) {
   return (
     <Box
+      role="radio"
+      aria-checked={selected}
+      aria-label={t(titleKey)}
+      tabIndex={0}
       onClick={onClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onClick()
+        }
+      }}
       style={{
         padding: tokens.spacing[4],
         borderRadius: tokens.radius.lg,
@@ -223,14 +297,20 @@ function PlanOption({
     >
       <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <Box>
-          <Text size="sm" weight="bold">{t(titleKey)}</Text>
-          <Text size="xs" color="tertiary">{t(subtitleKey)}</Text>
+          <Text size="sm" weight="bold">
+            {t(titleKey)}
+          </Text>
+          <Text size="xs" color="tertiary">
+            {t(subtitleKey)}
+          </Text>
         </Box>
         <Box style={{ textAlign: 'right' }}>
           <Text size="xl" weight="black" style={{ color: 'var(--color-pro-gradient-start)' }}>
             {price}
           </Text>
-          <Text size="xs" color="tertiary">{t(priceSubKey)}</Text>
+          <Text size="xs" color="tertiary">
+            {t(priceSubKey)}
+          </Text>
         </Box>
       </Box>
     </Box>

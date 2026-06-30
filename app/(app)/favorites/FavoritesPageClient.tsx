@@ -236,8 +236,8 @@ export default function FavoritesPageClient() {
                   color: tokens.colors.white,
                   borderRadius: tokens.radius.md,
                   textDecoration: 'none',
-                  fontWeight: 900,
-                  fontSize: '14px',
+                  fontWeight: tokens.typography.fontWeight.black,
+                  fontSize: tokens.typography.fontSize.base,
                 }}
               >
                 {t('goToLogin')}
@@ -287,6 +287,8 @@ export default function FavoritesPageClient() {
 
         {/* 标签切换 */}
         <Box
+          role="tablist"
+          aria-label={t('myFavorites')}
           style={{
             display: 'flex',
             gap: tokens.spacing[1],
@@ -295,9 +297,13 @@ export default function FavoritesPageClient() {
           }}
         >
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'my'}
             onClick={() => setActiveTab('my')}
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              minHeight: 44,
               background: 'transparent',
               border: 'none',
               borderBottom:
@@ -305,7 +311,10 @@ export default function FavoritesPageClient() {
                   ? `2px solid ${tokens.colors.accent?.primary || tokens.colors.accent.brand}`
                   : '2px solid transparent',
               color: activeTab === 'my' ? tokens.colors.text.primary : tokens.colors.text.tertiary,
-              fontWeight: activeTab === 'my' ? 700 : 400,
+              fontWeight:
+                activeTab === 'my'
+                  ? tokens.typography.fontWeight.bold
+                  : tokens.typography.fontWeight.normal,
               fontSize: tokens.typography.fontSize.sm,
               cursor: 'pointer',
               marginBottom: -1,
@@ -315,9 +324,13 @@ export default function FavoritesPageClient() {
             {t('myFoldersTab')} ({folders.length})
           </button>
           <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'subscribed'}
             onClick={() => setActiveTab('subscribed')}
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+              minHeight: 44,
               background: 'transparent',
               border: 'none',
               borderBottom:
@@ -328,7 +341,10 @@ export default function FavoritesPageClient() {
                 activeTab === 'subscribed'
                   ? tokens.colors.text.primary
                   : tokens.colors.text.tertiary,
-              fontWeight: activeTab === 'subscribed' ? 700 : 400,
+              fontWeight:
+                activeTab === 'subscribed'
+                  ? tokens.typography.fontWeight.bold
+                  : tokens.typography.fontWeight.normal,
               fontSize: tokens.typography.fontSize.sm,
               cursor: 'pointer',
               marginBottom: -1,
@@ -441,8 +457,8 @@ export default function FavoritesPageClient() {
                     borderRadius: tokens.radius.md,
                     border: 'none',
                     cursor: 'pointer',
-                    fontWeight: 700,
-                    fontSize: 14,
+                    fontWeight: tokens.typography.fontWeight.bold,
+                    fontSize: tokens.typography.fontSize.base,
                   }}
                 >
                   + {t('newFolder')}
@@ -524,10 +540,11 @@ export default function FavoritesPageClient() {
                       {folder.is_default && (
                         <span
                           style={{
+                            // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
                             fontSize: 10,
                             padding: '2px 6px',
-                            background: tokens.colors.accent?.primary + '20',
-                            color: tokens.colors.accent?.primary,
+                            background: alpha(tokens.colors.accent.primary, 13),
+                            color: tokens.colors.accent.primary,
                             borderRadius: tokens.radius.sm,
                           }}
                         >
@@ -537,6 +554,7 @@ export default function FavoritesPageClient() {
                       {folder.is_public ? (
                         <span
                           style={{
+                            // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
                             fontSize: 10,
                             padding: '2px 6px',
                             background: alpha(tokens.colors.accent.success, 13),
@@ -549,6 +567,7 @@ export default function FavoritesPageClient() {
                       ) : (
                         <span
                           style={{
+                            // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
                             fontSize: 10,
                             padding: '2px 6px',
                             background: 'var(--glass-bg-medium)',
@@ -596,8 +615,8 @@ export default function FavoritesPageClient() {
                   color: tokens.colors.white,
                   borderRadius: tokens.radius.md,
                   textDecoration: 'none',
-                  fontWeight: 700,
-                  fontSize: 14,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  fontSize: tokens.typography.fontSize.base,
                 }}
               >
                 {t('browsePublicFolders')}
@@ -673,6 +692,7 @@ export default function FavoritesPageClient() {
                     </Text>
                     <span
                       style={{
+                        // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
                         fontSize: 10,
                         padding: '2px 6px',
                         background: alpha(tokens.colors.accent.warning, 13),

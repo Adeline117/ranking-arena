@@ -403,10 +403,17 @@ function UserCenterPage() {
         </Box>
 
         {/* Tab Navigation */}
-        <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}>
+        <Box
+          role="tablist"
+          aria-label={t('userCenter') || 'User Center'}
+          style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}
+        >
           {tabs.map((tab) => (
             <button
               key={tab.key}
+              type="button"
+              role="tab"
+              aria-selected={activeTab === tab.key}
               onClick={() => handleTabChange(tab.key)}
               style={{
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,

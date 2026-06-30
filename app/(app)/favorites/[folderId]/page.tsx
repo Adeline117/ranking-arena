@@ -3,7 +3,7 @@
 import { useEffect, useState, use } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import { Box, Text, Button } from '@/app/components/base'
@@ -369,8 +369,8 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   color: tokens.colors.white,
                   borderRadius: tokens.radius.md,
                   textDecoration: 'none',
-                  fontWeight: 900,
-                  fontSize: '14px',
+                  fontWeight: tokens.typography.fontWeight.black,
+                  fontSize: tokens.typography.fontSize.base,
                 }}
               >
                 {t('backToFavorites')}
@@ -467,7 +467,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                     background: tokens.colors.bg.primary,
                     color: tokens.colors.text.primary,
                     fontSize: tokens.typography.fontSize.lg,
-                    fontWeight: 700,
+                    fontWeight: tokens.typography.fontWeight.bold,
                   }}
                 />
                 <textarea
@@ -526,10 +526,11 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   {folder.is_default && (
                     <span
                       style={{
+                        // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
                         fontSize: 10,
                         padding: '2px 6px',
-                        background: tokens.colors.accent?.primary + '20',
-                        color: tokens.colors.accent?.primary,
+                        background: alpha(tokens.colors.accent.primary, 13),
+                        color: tokens.colors.accent.primary,
                         borderRadius: tokens.radius.sm,
                       }}
                     >
@@ -539,6 +540,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   {folder.is_public ? (
                     <span
                       style={{
+                        // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
                         fontSize: 10,
                         padding: '2px 6px',
                         background: 'var(--color-accent-success-20)',
@@ -551,6 +553,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   ) : (
                     <span
                       style={{
+                        // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
                         fontSize: 10,
                         padding: '2px 6px',
                         background: 'var(--glass-bg-medium)',
@@ -624,12 +627,16 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                 t('processing')
               ) : isSubscribed ? (
                 <>
-                  <span style={{ fontSize: 14 }}>✓</span>
+                  <span aria-hidden="true" style={{ fontSize: tokens.typography.fontSize.base }}>
+                    ✓
+                  </span>
                   {t('bookmarked')}
                 </>
               ) : (
                 <>
-                  <span style={{ fontSize: 14 }}>☆</span>
+                  <span aria-hidden="true" style={{ fontSize: tokens.typography.fontSize.base }}>
+                    ☆
+                  </span>
                   {t('bookmark')}
                 </>
               )}
@@ -645,7 +652,16 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
             {posts.map((post) => (
               <Box
                 key={post.bookmark_id}
+                role="button"
+                tabIndex={0}
+                aria-label={post.title}
                 onClick={() => handleOpenPost(post)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleOpenPost(post)
+                  }
+                }}
                 style={{
                   display: 'block',
                   padding: tokens.spacing[4],
@@ -736,7 +752,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                         border: 'none',
                         background: 'transparent',
                         color: tokens.colors.text.tertiary,
-                        fontSize: 12,
+                        fontSize: tokens.typography.fontSize.xs,
                         cursor: removingBookmark[post.id] ? 'wait' : 'pointer',
                         opacity: removingBookmark[post.id] ? 0.5 : 1,
                       }}
