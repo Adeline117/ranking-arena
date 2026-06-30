@@ -3,32 +3,32 @@ import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { features } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import PostDetailClient from './PostDetailClient'
+import { getPostById } from '@/lib/data/posts'
+import PostDetailPageBody from './PostDetailPageBody'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { generatePostArticleSchema } from '@/lib/seo/structured-data'
 import { BASE_URL as APP_URL } from '@/lib/constants/urls'
 
 export const revalidate = 60
 
-const getPostMeta = cache(async (id: string) => {
+// Single fetch shared between generateMetadata and the page (request-deduped).
+const getPost = cache(async (id: string) => {
   try {
-    const supabase = getSupabaseAdmin()
-    const { data } = await supabase
-      .from('posts')
-      .select('id, title, content, author_handle, created_at, updated_at, like_count, comment_count, view_count')
-      .eq('id', id)
-      .maybeSingle()
-    return data
+    return await getPostById(getSupabaseAdmin(), id)
   } catch {
     return null
   }
 })
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>
+}): Promise<Metadata> {
   const { id } = await params
 
   try {
-    const data = await getPostMeta(id)
+    const data = await getPost(id)
 
     if (!data) {
       return { title: 'Post Not Found' }
@@ -72,34 +72,37 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
   const { id } = await params
 
   // Validate id format (UUID or numeric)
-  const isValidId = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || /^\d+$/.test(id)
+  const isValidId =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id) || /^\d+$/.test(id)
   if (!isValidId) {
     notFound()
   }
 
   // Reuses cached result from generateMetadata — no extra DB query
-  const data = await getPostMeta(id)
-  if (!data) {
+  const post = await getPost(id)
+  if (!post) {
     notFound()
   }
 
-  // Server-side JSON-LD for crawlers (client component also renders it after hydration)
+  // Server-side JSON-LD for crawlers
   const postJsonLd = generatePostArticleSchema({
-    id: data.id,
-    title: data.title,
-    content: data.content ?? undefined,
-    authorHandle: data.author_handle ?? 'anonymous',
-    createdAt: data.created_at,
-    updatedAt: data.updated_at ?? undefined,
-    likeCount: data.like_count ?? undefined,
-    commentCount: data.comment_count ?? undefined,
-    viewCount: data.view_count ?? undefined,
+    id: post.id,
+    title: post.title,
+    content: post.content ?? undefined,
+    authorHandle: post.author_handle ?? 'anonymous',
+    createdAt: post.created_at,
+    updatedAt: post.updated_at ?? undefined,
+    likeCount: post.like_count ?? undefined,
+    commentCount: post.comment_count ?? undefined,
+    viewCount: post.view_count ?? undefined,
   })
 
   return (
     <>
       <JsonLd data={postJsonLd} />
-      <PostDetailClient postId={id} />
+      {/* Client island — SSR-rendered with the server-fetched post (real HTML
+          body for SEO/LCP); per-user state + i18n labels hydrate after mount. */}
+      <PostDetailPageBody post={post} />
     </>
   )
 }

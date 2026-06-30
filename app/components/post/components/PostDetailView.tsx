@@ -18,6 +18,13 @@ type Post = PostWithUserState
 interface PostDetailViewProps {
   openPost: Post
   onClose: () => void
+  /**
+   * When true, render the post body inline inside a plain <article> container
+   * (used by the /post/[id] detail page) instead of wrapping it in <PostModal>.
+   * When falsy (the default), the modal path is rendered unchanged — every
+   * in-feed / favorites caller still gets the overlay.
+   */
+  asPage?: boolean
   language: string
   currentUserId: string | null
   accessToken: string | null
@@ -89,6 +96,7 @@ interface PostDetailViewProps {
 export default function PostDetailView({
   openPost,
   onClose,
+  asPage = false,
   language,
   currentUserId,
   accessToken,
@@ -141,8 +149,8 @@ export default function PostDetailView({
   translatedComments,
   t,
 }: PostDetailViewProps) {
-  return (
-    <PostModal onClose={onClose}>
+  const content = (
+    <>
       {openPost.group_name &&
         (openPost.group_id ? (
           <Link
@@ -442,6 +450,25 @@ export default function PostDetailView({
           translatedComments={translatedComments}
         />
       </div>
-    </PostModal>
+    </>
   )
+
+  // Detail-page path: render inline in a plain <article> (no modal overlay).
+  if (asPage) {
+    return (
+      <article
+        style={{
+          background: tokens.colors.bg.secondary,
+          border: `1px solid ${tokens.colors.border.primary}`,
+          borderRadius: tokens.radius.xl,
+          padding: 16,
+        }}
+      >
+        {content}
+      </article>
+    )
+  }
+
+  // Default (unchanged) path: modal overlay.
+  return <PostModal onClose={onClose}>{content}</PostModal>
 }
