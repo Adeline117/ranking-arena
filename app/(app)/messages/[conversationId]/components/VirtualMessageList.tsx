@@ -24,7 +24,13 @@ interface VirtualMessageListProps {
   highlightedMessageId: string | null
   onRetry: (msg: Message) => void
   onDelete?: (msgId: string) => void
-  onPreviewOpen: (preview: { type: 'image' | 'video' | 'file'; url: string; fileName?: string }) => void
+  onReact?: (messageId: string, emoji: string) => void
+  onReply?: (msg: Message) => void
+  onPreviewOpen: (preview: {
+    type: 'image' | 'video' | 'file'
+    url: string
+    fileName?: string
+  }) => void
   formatTime: (dateString: string) => string
   formatDate: (dateString: string) => string
   t: (key: string) => string
@@ -41,6 +47,8 @@ export default function VirtualMessageList({
   highlightedMessageId,
   onRetry,
   onDelete,
+  onReact,
+  onReply,
   onPreviewOpen,
   formatTime,
   formatDate,
@@ -56,7 +64,7 @@ export default function VirtualMessageList({
   const flatItems = useMemo<FlatItem[]>(() => {
     const items: FlatItem[] = []
     const groups = groupMessagesByDate(messages)
-    groups.forEach(group => {
+    groups.forEach((group) => {
       items.push({ type: 'date-separator', date: group.date })
       group.messages.forEach((msg, i) => {
         const prevMsg = i > 0 ? group.messages[i - 1] : null
@@ -73,7 +81,8 @@ export default function VirtualMessageList({
     return items
   }, [messages, userId])
 
-  const virtualizer = useVirtualizer({ // eslint-disable-line react-hooks/incompatible-library -- by design
+  const virtualizer = useVirtualizer({
+    // eslint-disable-line react-hooks/incompatible-library -- by design
     count: flatItems.length,
     getScrollElement: () => parentRef.current,
     estimateSize: (index) => {
@@ -118,20 +127,27 @@ export default function VirtualMessageList({
     >
       {hasMore && (
         <Box style={{ textAlign: 'center', marginBottom: 12 }}>
-          <button onClick={onLoadMore} disabled={loadingMore} style={{
-            padding: '6px 16px', background: tokens.colors.bg.secondary,
-            border: `1px solid ${tokens.colors.border.primary}`, borderRadius: tokens.radius.xl,
-            color: tokens.colors.text.secondary, fontSize: 13,
-            cursor: loadingMore ? 'not-allowed' : 'pointer',
-            opacity: loadingMore ? 0.6 : 1,
-          }}>
+          <button
+            onClick={onLoadMore}
+            disabled={loadingMore}
+            style={{
+              padding: '6px 16px',
+              background: tokens.colors.bg.secondary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.xl,
+              color: tokens.colors.text.secondary,
+              fontSize: 13,
+              cursor: loadingMore ? 'not-allowed' : 'pointer',
+              opacity: loadingMore ? 0.6 : 1,
+            }}
+          >
             {loadingMore ? t('loading') : t('loadOlderMessages')}
           </button>
         </Box>
       )}
 
       <div style={{ height: virtualizer.getTotalSize(), width: '100%', position: 'relative' }}>
-        {virtualizer.getVirtualItems().map(virtualItem => {
+        {virtualizer.getVirtualItems().map((virtualItem) => {
           const item = flatItems[virtualItem.index]
 
           if (item.type === 'date-separator') {
@@ -148,15 +164,39 @@ export default function VirtualMessageList({
                 data-index={virtualItem.index}
                 ref={virtualizer.measureElement}
               >
-                <Box style={{
-                  textAlign: 'center', margin: `${tokens.spacing[5]} 0`,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: tokens.spacing[3],
-                }}>
-                  <Box style={{ flex: 1, height: 1, background: `linear-gradient(to right, transparent, ${tokens.colors.border.primary})`, maxWidth: 80 }} />
-                  <Text size="xs" color="tertiary" style={{ fontSize: 11, letterSpacing: '0.5px', fontWeight: 600 }}>
+                <Box
+                  style={{
+                    textAlign: 'center',
+                    margin: `${tokens.spacing[5]} 0`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: tokens.spacing[3],
+                  }}
+                >
+                  <Box
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: `linear-gradient(to right, transparent, ${tokens.colors.border.primary})`,
+                      maxWidth: 80,
+                    }}
+                  />
+                  <Text
+                    size="xs"
+                    color="tertiary"
+                    style={{ fontSize: 11, letterSpacing: '0.5px', fontWeight: 600 }}
+                  >
                     {formatDate(item.date!)}
                   </Text>
-                  <Box style={{ flex: 1, height: 1, background: `linear-gradient(to left, transparent, ${tokens.colors.border.primary})`, maxWidth: 80 }} />
+                  <Box
+                    style={{
+                      flex: 1,
+                      height: 1,
+                      background: `linear-gradient(to left, transparent, ${tokens.colors.border.primary})`,
+                      maxWidth: 80,
+                    }}
+                  />
                 </Box>
               </div>
             )
@@ -188,10 +228,14 @@ export default function VirtualMessageList({
                 highlightedMessageId={highlightedMessageId}
                 onRetry={onRetry}
                 onDelete={onDelete}
+                onReact={onReact}
+                onReply={onReply}
                 onPreviewOpen={onPreviewOpen}
                 formatTime={formatTime}
                 t={t}
-                messageRef={(el) => { messageRefs.current[msg.id] = el }}
+                messageRef={(el) => {
+                  messageRefs.current[msg.id] = el
+                }}
               />
             </div>
           )

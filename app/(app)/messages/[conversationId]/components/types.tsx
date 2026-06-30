@@ -10,6 +10,19 @@ export type MediaAttachment = {
   fileSize?: number
 }
 
+// Aggregated emoji reaction on a single message
+export type MessageReaction = {
+  emoji: string
+  count: number
+  mine: boolean
+}
+
+// Lightweight preview of the parent message a reply quotes
+export type ReplyPreview = {
+  sender_id: string
+  content: string
+}
+
 export type Message = {
   id: string
   sender_id: string
@@ -21,12 +34,54 @@ export type Message = {
   media_url?: string | null
   media_type?: 'image' | 'video' | 'file' | null
   media_name?: string | null
+  reactions?: MessageReaction[]
+  reply_to_id?: string | null
+  reply_preview?: ReplyPreview | null
   _status?: MessageStatus
   _tempId?: string
   _errorCode?: MessageErrorCode
   _errorMessage?: string
   _attachment?: MediaAttachment
 }
+
+// Apply a delta to a message's reactions array (delta-based, supports rollback).
+export function applyReactionDelta(
+  reactions: MessageReaction[] | undefined,
+  emoji: string,
+  delta: number,
+  mine?: boolean
+): MessageReaction[] {
+  const arr = reactions ? reactions.map((r) => ({ ...r })) : []
+  const idx = arr.findIndex((r) => r.emoji === emoji)
+  if (idx >= 0) {
+    const nextCount = arr[idx].count + delta
+    if (nextCount <= 0) {
+      arr.splice(idx, 1)
+    } else {
+      arr[idx].count = nextCount
+      if (mine !== undefined) arr[idx].mine = mine
+    }
+  } else if (delta > 0) {
+    arr.push({ emoji, count: delta, mine: mine ?? false })
+  }
+  return arr
+}
+
+// Emoji reaction allowlist — mirrors the post reaction set
+export const DM_REACTION_EMOJIS = [
+  '👍',
+  '🔥',
+  '💎',
+  '🚀',
+  '❤️',
+  '👀',
+  '🎯',
+  '💰',
+  '📈',
+  '📉',
+  '🤔',
+  '😂',
+]
 
 export type OtherUser = {
   id: string
@@ -36,16 +91,26 @@ export type OtherUser = {
 }
 
 // Helper to get media type label
-export function getMediaTypeLabel(type: 'image' | 'video' | 'file', t: (key: string) => string): string {
+export function getMediaTypeLabel(
+  type: 'image' | 'video' | 'file',
+  t: (key: string) => string
+): string {
   switch (type) {
-    case 'image': return t('image')
-    case 'video': return t('video')
-    case 'file': return t('file')
+    case 'image':
+      return t('image')
+    case 'video':
+      return t('video')
+    case 'file':
+      return t('file')
   }
 }
 
 // Helper to calculate message bubble border radius based on grouping
-export function getBubbleBorderRadius(isMine: boolean, isSameSenderAsPrev: boolean, isSameSenderAsNext: boolean): string {
+export function getBubbleBorderRadius(
+  isMine: boolean,
+  isSameSenderAsPrev: boolean,
+  isSameSenderAsNext: boolean
+): string {
   if (isMine) {
     if (isSameSenderAsPrev && isSameSenderAsNext) return '18px 6px 6px 18px'
     if (isSameSenderAsPrev) return '18px 6px 18px 18px'
@@ -67,7 +132,7 @@ export function updateMessageStatus(
   errorCode?: MessageErrorCode,
   errorMessage?: string
 ): Message[] {
-  return messages.map(m => {
+  return messages.map((m) => {
     const match = isTemp ? m._tempId === identifier : m.id === identifier
     if (!match) return m
     return {
@@ -119,8 +184,8 @@ export function isPdfFile(url: string, fileName?: string): boolean {
 export function groupMessagesByDate(msgs: Message[]) {
   const groups: { date: string; messages: Message[] }[] = []
   let currentDate = ''
-  
-  msgs.forEach(msg => {
+
+  msgs.forEach((msg) => {
     const msgDate = new Date(msg.created_at).toDateString()
     if (msgDate !== currentDate) {
       currentDate = msgDate
@@ -129,6 +194,6 @@ export function groupMessagesByDate(msgs: Message[]) {
       groups[groups.length - 1].messages.push(msg)
     }
   })
-  
+
   return groups
 }

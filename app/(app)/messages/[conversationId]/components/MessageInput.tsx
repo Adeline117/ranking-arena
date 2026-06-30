@@ -9,7 +9,7 @@ import { DynamicStickerPicker } from '@/app/components/ui/Dynamic'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { getMediaTypeLabel } from './types'
-import type { MediaAttachment } from './types'
+import type { MediaAttachment, Message } from './types'
 import type { Sticker } from '@/lib/stickers'
 
 interface MessageInputProps {
@@ -39,6 +39,12 @@ interface MessageInputProps {
   onTyping?: () => void
   /** Called when input is cleared / message sent — stop typing indicator */
   onStopTyping?: () => void
+  /** Message being replied to (null = not replying) */
+  replyingTo?: Message | null
+  /** Display label for the reply target's author */
+  replyAuthorLabel?: string
+  /** Cancel the pending reply */
+  onCancelReply?: () => void
 }
 
 function formatFileSize(bytes: number) {
@@ -68,6 +74,9 @@ export default function MessageInput({
   inputRef,
   onTyping,
   onStopTyping,
+  replyingTo,
+  replyAuthorLabel,
+  onCancelReply,
 }: MessageInputProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -171,6 +180,84 @@ export default function MessageInput({
         boxShadow: '0 -2px 12px var(--color-overlay-subtle)',
       }}
     >
+      {/* Reply preview */}
+      {replyingTo && (
+        <Box
+          style={{
+            maxWidth: 800,
+            margin: '0 auto',
+            marginBottom: 8,
+            padding: '8px 10px',
+            background: tokens.colors.bg.tertiary,
+            borderRadius: tokens.radius.lg,
+            borderLeft: `3px solid ${tokens.colors.accent.brand}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.accent.brand}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0 }}
+          >
+            <polyline points="9 17 4 12 9 7" />
+            <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+          </svg>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" style={{ fontWeight: 700, color: tokens.colors.accent.brand }}>
+              {t('replyingTo')}
+              {replyAuthorLabel ? ` ${replyAuthorLabel}` : ''}
+            </Text>
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {replyingTo.content || getMediaTypeLabel(replyingTo.media_type || 'file', t)}
+            </Text>
+          </Box>
+          <button
+            onClick={onCancelReply}
+            aria-label="Cancel reply"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              border: 'none',
+              background: 'var(--color-accent-error-15)',
+              color: tokens.colors.accent.error,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </Box>
+      )}
+
       {/* Attachment preview */}
       {pendingAttachment && (
         <Box
