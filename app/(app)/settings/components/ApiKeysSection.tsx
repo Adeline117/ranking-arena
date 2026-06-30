@@ -118,8 +118,8 @@ export function ApiKeysSection() {
           style={{
             padding: tokens.spacing[4],
             borderRadius: tokens.radius.md,
-            background: 'rgba(47, 229, 125, 0.1)',
-            border: '1px solid rgba(47, 229, 125, 0.3)',
+            background: alpha(tokens.colors.accent.success, 10),
+            border: `1px solid ${alpha(tokens.colors.accent.success, 30)}`,
             marginBottom: tokens.spacing[4],
           }}
         >
@@ -444,7 +444,7 @@ function ApiTierBanner({
               background: `${alpha(tier.color, 13)}`,
               color: tier.color,
               fontSize: 12,
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
             }}
           >
             {tier.label}

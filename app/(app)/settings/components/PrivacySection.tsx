@@ -6,6 +6,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { SectionCard, ToggleSwitch, RadioOption } from './shared'
+import EmptyState from '@/app/components/ui/EmptyState'
 
 interface BlockedUserInfo {
   blockedId: string
@@ -56,6 +57,7 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
               {t('showFollowingListLabel')}
             </Text>
             <ToggleSwitch
+              ariaLabel={t('showFollowingListLabel')}
               checked={props.showFollowing}
               onChange={(v) => props.setShowFollowing(v)}
             />
@@ -73,6 +75,7 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
               {t('showFollowersListLabel')}
             </Text>
             <ToggleSwitch
+              ariaLabel={t('showFollowersListLabel')}
               checked={props.showFollowers}
               onChange={(v) => props.setShowFollowers(v)}
             />
@@ -102,7 +105,11 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
               {t('proBadgeNote')}
             </Text>
           </Box>
-          <ToggleSwitch checked={props.showProBadge} onChange={(v) => props.setShowProBadge(v)} />
+          <ToggleSwitch
+            ariaLabel={t('showProBadgeLabel')}
+            checked={props.showProBadge}
+            onChange={(v) => props.setShowProBadge(v)}
+          />
         </Box>
       </Box>
 
@@ -159,18 +166,7 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
             {t('loading')}
           </Text>
         ) : props.blockedUsers.length === 0 ? (
-          <Box
-            style={{
-              padding: tokens.spacing[4],
-              textAlign: 'center',
-              borderRadius: tokens.radius.md,
-              background: tokens.colors.bg.primary,
-            }}
-          >
-            <Text size="sm" color="tertiary">
-              {t('noBlockedUsers')}
-            </Text>
-          </Box>
+          <EmptyState variant="compact" title={t('noBlockedUsers')} />
         ) : (
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
             {props.blockedUsers.map((blockedUser) => (

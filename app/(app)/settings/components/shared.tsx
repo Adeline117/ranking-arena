@@ -7,14 +7,17 @@ import { Box, Text } from '@/app/components/base'
 export function ToggleSwitch({
   checked,
   onChange,
+  ariaLabel,
 }: {
   checked: boolean
   onChange: (v: boolean) => void
+  ariaLabel?: string
 }) {
   return (
     <button
       role="switch"
       aria-checked={checked}
+      aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
       style={{
         width: 48,

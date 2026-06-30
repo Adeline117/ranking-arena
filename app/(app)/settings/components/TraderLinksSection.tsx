@@ -10,6 +10,7 @@ import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { NULL_DISPLAY } from '@/lib/utils/format'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
+import EmptyState from '@/app/components/ui/EmptyState'
 import { logger } from '@/lib/logger'
 import { getCsrfHeaders } from '@/lib/api/client'
 
@@ -283,27 +284,9 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   // Empty state
   if (traders.length === 0) {
     return (
-      <Box
-        style={{
-          padding: tokens.spacing[8],
-          textAlign: 'center',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: tokens.spacing[3],
-        }}
-      >
-        <Box
-          style={{
-            width: 56,
-            height: 56,
-            borderRadius: tokens.radius.full,
-            background: `${alpha(tokens.colors.accent.primary, 6)}`,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
+      <EmptyState
+        variant="compact"
+        icon={
           <svg
             width="28"
             height="28"
@@ -313,28 +296,18 @@ export function TraderLinksSection({ userId }: { userId: string }) {
             strokeWidth="1.5"
             strokeLinecap="round"
             strokeLinejoin="round"
+            aria-hidden="true"
           >
             <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
             <circle cx="9" cy="7" r="4" />
             <line x1="19" y1="8" x2="19" y2="14" />
             <line x1="22" y1="11" x2="16" y2="11" />
           </svg>
-        </Box>
-        <Text size="sm" weight="medium">
-          {t('noLinkedAccounts')}
-        </Text>
-        <Text size="xs" color="tertiary" style={{ maxWidth: 300, lineHeight: 1.6 }}>
-          {t('linkAccountDescription')}
-        </Text>
-        <Button
-          variant="primary"
-          size="sm"
-          onClick={() => router.push('/claim')}
-          style={{ marginTop: tokens.spacing[2] }}
-        >
-          {t('linkNewAccount')}
-        </Button>
-      </Box>
+        }
+        title={t('noLinkedAccounts')}
+        description={t('linkAccountDescription')}
+        action={{ label: t('linkNewAccount'), onClick: () => router.push('/claim') }}
+      />
     )
   }
 
@@ -450,7 +423,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                         background: `${alpha(tokens.colors.accent.primary, 13)}`,
                         color: tokens.colors.accent.primary,
                         fontSize: tokens.typography.fontSize.xs,
-                        fontWeight: 700,
+                        fontWeight: tokens.typography.fontWeight.bold,
                         letterSpacing: '0.5px',
                         textTransform: 'uppercase',
                       }}
@@ -661,12 +634,25 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
       {/* Link new account button */}
       <Box
+        role="button"
+        tabIndex={0}
+        aria-label={t('linkNewAccount')}
         onClick={() => {
           if (traders.length >= 10) {
             showToast(t('maxLinkedAccounts'), 'error')
             return
           }
           router.push('/claim')
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            if (traders.length >= 10) {
+              showToast(t('maxLinkedAccounts'), 'error')
+              return
+            }
+            router.push('/claim')
+          }
         }}
         style={{
           display: 'flex',
@@ -689,6 +675,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
           stroke={tokens.colors.text.tertiary}
           strokeWidth="2"
           strokeLinecap="round"
+          aria-hidden="true"
         >
           <line x1="12" y1="5" x2="12" y2="19" />
           <line x1="5" y1="12" x2="19" y2="12" />
