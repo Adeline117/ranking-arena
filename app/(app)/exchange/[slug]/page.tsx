@@ -241,7 +241,7 @@ export default async function ExchangeLandingPage({
         {/* Header */}
         <PageHeader
           title={`${data.displayName} Top Traders & Rankings`}
-          subtitle={`${data.traderCount.toLocaleString()} ranked traders on ${data.displayName} (${sourceTypeLabel}). Updated every 5 minutes.`}
+          subtitle={`${data.traderCount.toLocaleString()} ranked traders on ${data.displayName} (${sourceTypeLabel}). Updated every 30 minutes.`}
         />
 
         {/* Top traders table */}
@@ -447,7 +447,7 @@ export default async function ExchangeLandingPage({
             ranking them by Arena Score — a composite metric combining ROI, PnL, risk management,
             and consistency across 7-day, 30-day, and 90-day periods. {data.displayName} is a{' '}
             {sourceTypeLabel.toLowerCase()} trading platform. All performance data is refreshed
-            every 5 minutes from live exchange APIs.
+            every 30 minutes from live exchange APIs.
           </p>
         </div>
       </div>
