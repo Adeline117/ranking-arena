@@ -41,6 +41,7 @@ describe('parseBitunixLeaderboardPage', () => {
       headlinePnl: 27178.416518,
       headlineWinRate: 59.45,
       headlineMdd: 43.51, // "0.4351" fraction → percent (board carries per-TF MDD)
+      headlineAum: 15599.02220038572, // "aum" absolute USDT (board carries AUM)
     })
     // mdd, aum, copier slots, sparkline... kept verbatim
     const raw = page.rows[0].raw as Record<string, unknown>
