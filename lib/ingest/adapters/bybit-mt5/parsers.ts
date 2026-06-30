@@ -97,6 +97,11 @@ export function parseBybitMt5LeaderboardPage(
       headlineRoi: pctE4(item.roeE4),
       headlinePnl: e(item.masterPnlE8, 8),
       headlineWinRate: pctE4(item.winRateE4),
+      // Board carries MDD (maxDrawDownE4, E4→pct) and Sharpe (sharpeRatioE4, E4
+      // raw ratio) on every row — were raw-only. ~9/16 fixture rows have real
+      // sub-100% MDD; the rest hit the 100% cap (boundPct keeps it as the cap).
+      headlineMdd: pctE4(item.maxDrawDownE4),
+      headlineSharpe: e(item.sharpeRatioE4, 4),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: item,
     })
