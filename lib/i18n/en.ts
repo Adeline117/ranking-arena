@@ -515,7 +515,11 @@ const en = {
   // Pricing page
   pricingTitle: 'Upgrade to Pro',
   pricingSubtitle: 'Unlock all premium features',
-  pricingTrialBadge: '7-day free trial on all plans. Cancel anytime.',
+  pricingTrialBadge: '7-day free trial on Pro monthly & yearly. Cancel anytime.',
+  pricingFoundingBanner: 'Founding Member Offer: Lifetime Pro for ${price} ({spots} spots only)',
+  pricingTrustSecureCheckout: 'Secure checkout by Stripe',
+  pricingTrustMoneyBack: '7-day money-back guarantee',
+  pricingTrustCancelAnytime: 'Cancel anytime',
   monthlyPlan: 'Monthly Plan',
   yearlyPlan: 'Yearly Plan',
   monthlySubscription: 'Monthly subscription',
@@ -4866,7 +4870,7 @@ const en = {
   pricingFaqPaymentA: 'We accept all major credit cards, Apple Pay, and Google Pay via Stripe.',
   pricingFaqTrialQ: 'Is there a free trial?',
   pricingFaqTrialA:
-    'Yes! We offer a 7-day free trial with full Pro access. No charge until the trial ends. Cancel anytime.',
+    'Yes — Pro monthly and yearly plans include a 7-day free trial with full Pro access. No charge until the trial ends, and you can cancel anytime. The Lifetime plan is a one-time purchase and does not include a trial.',
   pricingFaqSwitchQ: 'Can I switch plans?',
   pricingFaqSwitchA:
     'Yes, you can switch between monthly and yearly anytime. We will prorate the difference.',

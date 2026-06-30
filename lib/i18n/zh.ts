@@ -507,7 +507,11 @@ const zh = {
   // 定价页面
   pricingTitle: '升级 Pro 会员',
   pricingSubtitle: '解锁全部高级功能',
-  pricingTrialBadge: '所有套餐均享 7 天免费试用，随时取消',
+  pricingTrialBadge: 'Pro 月付和年付享 7 天免费试用，随时取消',
+  pricingFoundingBanner: '创始会员优惠：终身 Pro 仅 ${price}（仅限 {spots} 个名额）',
+  pricingTrustSecureCheckout: 'Stripe 安全结账',
+  pricingTrustMoneyBack: '7 天退款保证',
+  pricingTrustCancelAnytime: '随时取消',
   monthlyPlan: '月付会员',
   yearlyPlan: '年付会员',
   monthlySubscription: '按月订阅',
@@ -4765,7 +4769,8 @@ const zh = {
   pricingFaqPaymentQ: '支持哪些支付方式？',
   pricingFaqPaymentA: '我们通过 Stripe 支持所有主流信用卡、Apple Pay 和 Google Pay。',
   pricingFaqTrialQ: '有免费试用吗？',
-  pricingFaqTrialA: '有！我们提供 7 天免费试用，可体验 Pro 全部功能。试用期内不收费，随时可取消。',
+  pricingFaqTrialA:
+    '有 — Pro 月付和年付套餐均包含 7 天免费试用，可体验 Pro 全部功能。试用期内不收费，随时可取消。终身套餐为一次性付费，不含试用。',
   pricingFaqSwitchQ: '可以切换套餐吗？',
   pricingFaqSwitchA: '可以，你可以随时在月付和年付之间切换，我们会按比例计算差额。',
   pricingFaqApiQ: 'Pro 包含 API 访问吗？',

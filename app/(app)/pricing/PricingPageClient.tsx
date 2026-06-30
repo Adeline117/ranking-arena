@@ -49,6 +49,42 @@ function resolved(value: string, key: string, fallback: string): string {
   return value === key ? fallback : value
 }
 
+/* Compact trust strip rendered under checkout CTAs (Stripe / refund / cancel) */
+function TrustStrip({ items }: { items: string[] }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        alignItems: 'center',
+        gap: tokens.spacing[3],
+        marginTop: tokens.spacing[3],
+      }}
+    >
+      {items.map((item, i) => (
+        <span
+          key={item}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 12,
+            color: tokens.colors.text.tertiary,
+          }}
+        >
+          {i === 0 ? (
+            <LockIcon size={11} />
+          ) : (
+            <CheckIcon size={11} color={tokens.colors.accent.success} />
+          )}
+          {item}
+        </span>
+      ))}
+    </div>
+  )
+}
+
 interface PricingPageClientProps {
   lifetimeCount?: number
 }
@@ -187,7 +223,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           {resolved(
             t('pricingTrialBadge'),
             'pricingTrialBadge',
-            '7-day free trial on all plans. Cancel anytime.'
+            '7-day free trial on Pro monthly & yearly. Cancel anytime.'
           )}
         </div>
 
@@ -216,7 +252,13 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               letterSpacing: '-0.01em',
             }}
           >
-            Founding Member Offer: Lifetime Pro for $49.99 (200 spots only)
+            {resolved(
+              t('pricingFoundingBanner'),
+              'pricingFoundingBanner',
+              'Founding Member Offer: Lifetime Pro for ${price} ({spots} spots only)'
+            )
+              .replace('{price}', String(PRICING.lifetime.price))
+              .replace('{spots}', String(PRICING.lifetime.spots))}
           </span>
         </div>
 
@@ -637,6 +679,26 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               )}
             </p>
 
+            <TrustStrip
+              items={[
+                resolved(
+                  t('pricingTrustSecureCheckout'),
+                  'pricingTrustSecureCheckout',
+                  'Secure checkout by Stripe'
+                ),
+                resolved(
+                  t('pricingTrustMoneyBack'),
+                  'pricingTrustMoneyBack',
+                  '7-day money-back guarantee'
+                ),
+                resolved(
+                  t('pricingTrustCancelAnytime'),
+                  'pricingTrustCancelAnytime',
+                  'Cancel anytime'
+                ),
+              ]}
+            />
+
             <div
               style={{
                 marginTop: tokens.spacing[4],
@@ -875,6 +937,19 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 )}
               </Link>
             )}
+
+            <TrustStrip
+              items={[
+                resolved(
+                  t('pricingTrustSecureCheckout'),
+                  'pricingTrustSecureCheckout',
+                  'Secure checkout by Stripe'
+                ),
+                // Money-back guarantee intentionally omitted for Lifetime: the
+                // documented 7-day refund covers subscriptions, not the one-time
+                // purchase. Don't surface an unverified refund claim.
+              ]}
+            />
           </div>
         </div>
         {/* Feature Comparison Table */}
