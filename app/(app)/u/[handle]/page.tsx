@@ -136,6 +136,7 @@ interface UserProfileData {
   proBadgeTier: 'pro' | null
   role?: string
   traderHandle?: string
+  created_at?: string
 }
 
 async function fetchUserProfile(handle: string): Promise<UserProfileData | null> {
@@ -147,7 +148,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   // Only select columns that actually exist in user_profiles table
   // follower_count / following_count are cached columns — avoid re-counting.
   const selectFields =
-    'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role, follower_count, following_count'
+    'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role, follower_count, following_count, created_at'
 
   const [handleResult, handleIlikeResult, uuidResult] = await Promise.race([
     Promise.all([
@@ -253,6 +254,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     proBadgeTier: hasPro && userProfile.show_pro_badge !== false ? 'pro' : null,
     role: userProfile.role || undefined,
     traderHandle,
+    created_at: userProfile.created_at || undefined,
   }
 }
 

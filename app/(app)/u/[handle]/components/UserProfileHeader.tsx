@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import type { CSSProperties } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
@@ -9,6 +10,7 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
+import { formatDateLocalized } from '@/lib/utils/format'
 import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 import LevelBadge from '@/app/components/user/LevelBadge'
 
@@ -45,8 +47,12 @@ export default function UserProfileHeader({
   onFollowersClick,
 }: UserProfileHeaderProps) {
   const router = useRouter()
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [avatarHovered, setAvatarHovered] = useState(false)
+
+  const joinedLabel = profile.created_at
+    ? formatDateLocalized(profile.created_at, language, { year: 'numeric', month: 'long' })
+    : null
 
   const hasCover = Boolean(profile.cover_url)
   const containerBackground = hasCover
@@ -108,6 +114,23 @@ export default function UserProfileHeader({
             }}
           />
         </Box>
+      )}
+
+      {hasCover && (
+        /* Contrast scrim — guarantees text legibility over arbitrary cover images
+           (textShadow alone is insufficient on light/busy photos) */
+        <Box
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            borderRadius: `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+            background:
+              'linear-gradient(to top, var(--color-overlay-dark) 0%, var(--color-overlay-subtle) 55%, transparent 100%)',
+            pointerEvents: 'none',
+            zIndex: 0,
+          }}
+        />
       )}
 
       {/* Profile Info */}
@@ -215,6 +238,8 @@ export default function UserProfileHeader({
 
             {profile.isVerifiedTrader && (
               <Box
+                role="img"
+                aria-label={t('verifiedTrader')}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -225,7 +250,7 @@ export default function UserProfileHeader({
                   borderRadius: tokens.radius.full,
                   boxShadow: `0 2px 8px ${alpha(tokens.colors.accent.success, 25)}`,
                 }}
-                title={t('verifiedTrader') || t('verifiedUser')}
+                title={t('verifiedTrader')}
               >
                 <svg
                   width="12"
@@ -236,6 +261,8 @@ export default function UserProfileHeader({
                   strokeWidth="3"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  aria-hidden="true"
+                  focusable="false"
                 >
                   <polyline points="20 6 9 17 4 12" />
                 </svg>
@@ -327,54 +354,99 @@ export default function UserProfileHeader({
                 flexWrap: 'wrap',
               }}
             >
-              <Box
-                onClick={() => isOwnProfile && router.push('/following')}
-                style={{
-                  cursor: isOwnProfile ? 'pointer' : 'default',
+              {(() => {
+                const followingInteractive = isOwnProfile
+                const followersInteractive =
+                  profile.isRegistered && (isOwnProfile || profile.show_followers !== false)
+                const statButtonStyle = (interactive: boolean): CSSProperties => ({
+                  appearance: 'none',
+                  background: 'transparent',
+                  border: 'none',
+                  font: 'inherit',
+                  textAlign: 'left',
+                  cursor: interactive ? 'pointer' : 'default',
                   display: 'flex',
                   alignItems: 'center',
                   gap: 4,
                   padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                   borderRadius: tokens.radius.md,
-                }}
-              >
-                <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
-                  <Text
-                    as="span"
-                    weight="bold"
-                    style={{ color: textColor, marginRight: 4, textShadow }}
-                  >
-                    {followingCount}
-                  </Text>
-                  {t('following')}
-                </Text>
-              </Box>
+                })
+                return (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => followingInteractive && router.push('/following')}
+                      disabled={!followingInteractive}
+                      aria-label={`${followingCount} ${t('following')}`}
+                      style={statButtonStyle(followingInteractive)}
+                    >
+                      <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                        <Text
+                          as="span"
+                          weight="bold"
+                          style={{ color: textColor, marginRight: 4, textShadow }}
+                        >
+                          {followingCount}
+                        </Text>
+                        {t('following')}
+                      </Text>
+                    </button>
 
-              <Box
-                onClick={onFollowersClick}
-                style={{
-                  cursor:
-                    profile.isRegistered && (isOwnProfile || profile.show_followers !== false)
-                      ? 'pointer'
-                      : 'default',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
-                  borderRadius: tokens.radius.md,
-                }}
+                    <button
+                      type="button"
+                      onClick={() => followersInteractive && onFollowersClick()}
+                      disabled={!followersInteractive}
+                      aria-label={`${followersCount} ${t('followers')}`}
+                      style={statButtonStyle(followersInteractive)}
+                    >
+                      <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                        <Text
+                          as="span"
+                          weight="bold"
+                          style={{ color: textColor, marginRight: 4, textShadow }}
+                        >
+                          {followersCount}
+                        </Text>
+                        {t('followers')}
+                      </Text>
+                    </button>
+                  </>
+                )
+              })()}
+            </Box>
+          )}
+
+          {/* About — joined date (only field that exists on user_profiles) */}
+          {joinedLabel && (
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                marginTop: tokens.spacing[2],
+              }}
+            >
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ color: secondaryTextColor, flexShrink: 0 }}
+                aria-hidden="true"
+                focusable="false"
               >
-                <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
-                  <Text
-                    as="span"
-                    weight="bold"
-                    style={{ color: textColor, marginRight: 4, textShadow }}
-                  >
-                    {followersCount}
-                  </Text>
-                  {t('followers')}
-                </Text>
-              </Box>
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <Text size="sm" style={{ color: secondaryTextColor, textShadow }}>
+                {t('joined')} {joinedLabel}
+              </Text>
             </Box>
           )}
         </Box>

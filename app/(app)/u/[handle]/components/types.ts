@@ -23,6 +23,7 @@ export interface ServerProfile {
   role?: string
   traderHandle?: string
   exp?: number
+  created_at?: string
 }
 
 export interface EquityCurveData {

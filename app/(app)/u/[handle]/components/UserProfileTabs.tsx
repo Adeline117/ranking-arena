@@ -9,15 +9,26 @@ import type { ProfileTabKey } from './types'
 interface UserProfileTabsProps {
   activeTab: ProfileTabKey
   onTabChange: (tab: ProfileTabKey) => void
+  /** Stats + Portfolio are trading-data tabs — hidden for non-trader users
+   *  where they would only ever render "no stats yet" dead-ends. */
+  isVerifiedTrader?: boolean
 }
 
-export default function UserProfileTabs({ activeTab, onTabChange }: UserProfileTabsProps) {
+export default function UserProfileTabs({
+  activeTab,
+  onTabChange,
+  isVerifiedTrader = false,
+}: UserProfileTabsProps) {
   const { t } = useLanguage()
 
   const profileTabs: Array<{ key: ProfileTabKey; label: string }> = [
     { key: 'overview', label: t('overview') },
-    { key: 'stats', label: t('stats') },
-    { key: 'portfolio', label: t('portfolio') },
+    ...(isVerifiedTrader
+      ? ([
+          { key: 'stats', label: t('stats') },
+          { key: 'portfolio', label: t('portfolio') },
+        ] as Array<{ key: ProfileTabKey; label: string }>)
+      : []),
   ]
 
   return (
