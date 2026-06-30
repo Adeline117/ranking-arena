@@ -5942,6 +5942,21 @@ const ko = {
   // Pro 기능 한정 기간 무료 프로모션 배너
   proPromoBanner: '🎉 Pro 기능을 기간 한정 무료로 — 모든 유료 기능을 업그레이드 없이 이용하세요.',
   proPromoBannerDismiss: '닫기',
+  tokenRankingsSortLabel: '정렬 기준',
+  tokenRankingsSortTraders: '트레이더 수',
+  tokenRankingsSortTrades: '거래 수',
+  tokenRankingsSortPnl: '손익',
+  tokenRankingsNoActivity: '아직 활동 없음',
+  referralRewardBannerTitle: '친구 {count}명을 초대하고 Pro {days}일 무료 받기',
+  referralRewardBannerSubtitle:
+    '친구를 Arena에 초대하세요. {count}명이 내 링크로 가입하면 Arena Pro {days}일을 무료로 받습니다.',
+  referralHowItWorks: '이용 방법',
+  referralStep1: '아래의 추천 링크를 복사하세요',
+  referralStep2: '암호화폐를 좋아하는 친구에게 공유하세요',
+  referralStep3: '친구 {count}명이 가입하면 Pro {days}일이 잠금 해제됩니다',
+  referralFriendsReferred: '초대한 친구',
+  referralRewardUnlocked: '보상 잠금 해제!',
+  referralFriendTrialNote: '보너스: 친구가 내 링크로 가입하면 {days}일 Pro 체험을 받습니다.',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: '성능 모니터링',

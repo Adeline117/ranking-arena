@@ -5931,6 +5931,21 @@ const zh = {
   // Pro 限时免费促销横幅
   proPromoBanner: '🎉 Pro 功能限时免费 —— 所有付费功能现在全部免费使用，无需升级。',
   proPromoBannerDismiss: '关闭',
+  tokenRankingsSortLabel: '排序方式',
+  tokenRankingsSortTraders: '交易员数',
+  tokenRankingsSortTrades: '交易数',
+  tokenRankingsSortPnl: '盈亏',
+  tokenRankingsNoActivity: '暂无交易活动',
+  referralRewardBannerTitle: '邀请 {count} 位好友，免费获得 {days} 天 Pro',
+  referralRewardBannerSubtitle:
+    '邀请好友加入 Arena。当 {count} 位好友通过你的链接注册，你将获得 {days} 天 Arena Pro——完全免费。',
+  referralHowItWorks: '如何运作',
+  referralStep1: '复制下方的专属邀请链接',
+  referralStep2: '分享给热爱加密货币的好友',
+  referralStep3: '当 {count} 位好友注册后，即可解锁 {days} 天 Pro',
+  referralFriendsReferred: '已邀请好友',
+  referralRewardUnlocked: '奖励已解锁！',
+  referralFriendTrialNote: '额外福利：好友通过你的链接加入即可获得 {days} 天 Pro 试用。',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: '性能监控',
