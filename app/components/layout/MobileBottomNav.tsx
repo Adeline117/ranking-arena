@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { PRIMARY_NAV_ITEMS, type PrimaryNavIconKind } from '@/lib/config/primary-nav'
 import { useLanguage } from '../Providers/LanguageProvider'
 // Supabase: dynamic import to avoid pulling ~50KB into initial client bundle.
 // Only needed for auth state (getSession + onAuthStateChange).
@@ -155,6 +156,14 @@ interface NavItem {
   Icon: (props: IconProps) => React.ReactElement
   badge?: number
   highlight?: boolean
+}
+
+// Maps canonical primary-nav icon kinds → this surface's 24px SVG components.
+const ICON_MAP: Record<PrimaryNavIconKind, (props: IconProps) => React.ReactElement> = {
+  rankings: RankingsIcon,
+  market: MarketIcon,
+  groups: GroupsIcon,
+  hot: FireIcon,
 }
 
 // Cache key for persisting user handle across navigations
@@ -412,18 +421,20 @@ export default function MobileBottomNav(): React.ReactElement {
   }, [impact])
 
   const navItems: NavItem[] = useMemo(() => {
-    const items: NavItem[] = [
-      { href: '/', labelKey: 'rankings', Icon: RankingsIcon },
-      { href: '/market', labelKey: 'market', Icon: MarketIcon },
-      { href: '/groups', labelKey: 'groups', Icon: GroupsIcon },
-      { href: '/hot', labelKey: 'hot', Icon: FireIcon },
+    // Shared canonical core (Rankings/Market/Groups/Hot) + surface-specific "Me".
+    const core: NavItem[] = PRIMARY_NAV_ITEMS.map((item) => ({
+      href: item.href,
+      labelKey: item.labelKey,
+      Icon: ICON_MAP[item.icon],
+    }))
+    return [
+      ...core,
       {
         href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
         labelKey: 'me',
         Icon: UserIcon,
       },
     ]
-    return items
   }, [userHandle])
 
   // Compute active index for sliding indicator
