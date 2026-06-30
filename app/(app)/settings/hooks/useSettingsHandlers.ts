@@ -90,6 +90,19 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   const [disablePassword, setDisablePassword] = useState('')
   const [showDisable2FA, setShowDisable2FA] = useState(false)
 
+  // Passkey (WebAuthn) state
+  interface PasskeyInfo {
+    id: string
+    deviceName: string | null
+    createdAt: string
+    lastUsedAt: string | null
+    transports: string[]
+  }
+  const [passkeys, setPasskeys] = useState<PasskeyInfo[]>([])
+  const [loadingPasskeys, setLoadingPasskeys] = useState(false)
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
+  const [newPasskeyName, setNewPasskeyName] = useState('')
+
   // Sessions state
   interface SessionInfo {
     id: string
@@ -800,6 +813,127 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     }
   }
 
+  // ===== Passkey (WebAuthn) handlers =====
+  const loadPasskeys = useCallback(async () => {
+    setLoadingPasskeys(true)
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+      if (!session?.access_token) {
+        setLoadingPasskeys(false)
+        return
+      }
+      const res = await fetch('/api/auth/webauthn/credentials', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setPasskeys((data.passkeys || []) as PasskeyInfo[])
+      }
+    } catch (error) {
+      uiLogger.error('[Passkeys] Load error:', error)
+    } finally {
+      setLoadingPasskeys(false)
+    }
+  }, [])
+
+  const handleAddPasskey = async () => {
+    if (submittingRef.current || passkeyBusy) return
+    submittingRef.current = true
+    setPasskeyBusy(true)
+    try {
+      const { startRegistration, browserSupportsWebAuthn } = await import('@simplewebauthn/browser')
+      if (!browserSupportsWebAuthn()) {
+        showToast(t('passkeyNotSupported'), 'error')
+        return
+      }
+      const token = await getFreshToken()
+      if (!token) {
+        showToast(t('pleaseLoginFirst'), 'error')
+        return
+      }
+
+      const optRes = await fetch('/api/auth/webauthn/registration-options', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, ...getCsrfHeaders() },
+      })
+      const optData = await optRes.json().catch(() => ({}))
+      if (!optRes.ok || !optData?.optionsJSON) {
+        showToast(optData?.error || t('passkeyError'), 'error')
+        return
+      }
+
+      let assertion
+      try {
+        assertion = await startRegistration({ optionsJSON: optData.optionsJSON })
+      } catch (err) {
+        const name = (err as Error)?.name
+        showToast(
+          name === 'NotAllowedError' || name === 'AbortError'
+            ? t('passkeyCancelled')
+            : t('passkeyError'),
+          'error'
+        )
+        return
+      }
+
+      const verifyRes = await fetch('/api/auth/webauthn/registration-verify', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ assertion, deviceName: newPasskeyName.trim() || undefined }),
+      })
+      const verifyData = await verifyRes.json().catch(() => ({}))
+      if (!verifyRes.ok || !verifyData?.verified) {
+        showToast(verifyData?.error || t('passkeyError'), 'error')
+        return
+      }
+
+      showToast(t('passkeyAdded'), 'success')
+      setNewPasskeyName('')
+      await loadPasskeys()
+    } catch (error) {
+      uiLogger.error('[Passkeys] Add error:', error)
+      showToast(t('passkeyError'), 'error')
+    } finally {
+      setPasskeyBusy(false)
+      submittingRef.current = false
+    }
+  }
+
+  const handleRemovePasskey = async (id: string) => {
+    const confirmed = await showConfirm(t('passkeyRemoveTitle'), t('passkeyRemoveConfirm'))
+    if (!confirmed) return
+    try {
+      const token = await getFreshToken()
+      if (!token) {
+        showToast(t('pleaseLoginFirst'), 'error')
+        return
+      }
+      const res = await fetch('/api/auth/webauthn/credentials', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ id }),
+      })
+      if (res.ok) {
+        setPasskeys((prev) => prev.filter((p) => p.id !== id))
+        showToast(t('passkeyRemoved'), 'success')
+      } else {
+        showToast(t('operationFailed'), 'error')
+      }
+    } catch {
+      showToast(t('networkError'), 'error')
+    }
+  }
+
   // ===== Sessions handlers =====
   const loadSessions = useCallback(async () => {
     setLoadingSessions(true)
@@ -1124,6 +1258,16 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     setShowDisable2FA,
     disablePassword,
     setDisablePassword,
+
+    // Passkeys
+    passkeys,
+    loadingPasskeys,
+    passkeyBusy,
+    newPasskeyName,
+    setNewPasskeyName,
+    loadPasskeys,
+    handleAddPasskey,
+    handleRemovePasskey,
 
     // Sessions
     sessions,

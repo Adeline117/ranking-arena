@@ -6041,6 +6041,26 @@ const en = {
   noOpenInterestData: 'No open interest data yet',
   colOpenInterestUsd: 'Open Interest (USD)',
   colUpdated: 'Updated',
+
+  // Passkeys (WebAuthn)
+  passkeySignIn: 'Sign in with passkey',
+  passkeyNotSupported: 'Passkeys are not supported on this device or browser',
+  passkeyCancelled: 'Passkey prompt was cancelled',
+  passkeyError: 'Something went wrong with the passkey. Please try again.',
+  passkeyNoCredential: 'No matching passkey found. Try another sign-in method.',
+  passkeyAddTitle: 'Passkeys',
+  passkeyDesc: 'Sign in without a password using your device biometrics or security key.',
+  passkeyNamePlaceholder: 'Passkey name (e.g. MacBook)',
+  passkeyAddButton: 'Add passkey',
+  passkeyNone: 'No passkeys yet',
+  passkeyUnnamed: 'Unnamed passkey',
+  passkeyAddedOn: 'Added',
+  passkeyLastUsed: 'Last used',
+  passkeyRemove: 'Remove',
+  passkeyRemoveTitle: 'Remove passkey',
+  passkeyRemoveConfirm: 'Are you sure you want to remove this passkey?',
+  passkeyAdded: 'Passkey added',
+  passkeyRemoved: 'Passkey removed',
 } as const
 
 export default en

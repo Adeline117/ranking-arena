@@ -5918,6 +5918,26 @@ const ko = {
   noOpenInterestData: '아직 미결제약정 데이터가 없습니다',
   colOpenInterestUsd: '미결제약정 (USD)',
   colUpdated: '업데이트',
+
+  // Passkeys (WebAuthn)
+  passkeySignIn: '패스키로 로그인',
+  passkeyNotSupported: '이 기기 또는 브라우저에서는 패스키를 지원하지 않습니다',
+  passkeyCancelled: '패스키 작업이 취소되었습니다',
+  passkeyError: '패스키 처리 중 오류가 발생했습니다. 다시 시도해 주세요.',
+  passkeyNoCredential: '일치하는 패스키를 찾을 수 없습니다. 다른 로그인 방법을 사용해 주세요.',
+  passkeyAddTitle: '패스키',
+  passkeyDesc: '기기의 생체 인증 또는 보안 키로 비밀번호 없이 로그인하세요.',
+  passkeyNamePlaceholder: '패스키 이름 (예: MacBook)',
+  passkeyAddButton: '패스키 추가',
+  passkeyNone: '아직 패스키가 없습니다',
+  passkeyUnnamed: '이름 없는 패스키',
+  passkeyAddedOn: '추가일',
+  passkeyLastUsed: '마지막 사용',
+  passkeyRemove: '삭제',
+  passkeyRemoveTitle: '패스키 삭제',
+  passkeyRemoveConfirm: '이 패스키를 삭제하시겠습니까?',
+  passkeyAdded: '패스키가 추가되었습니다',
+  passkeyRemoved: '패스키가 삭제되었습니다',
 } as const
 
 export default ko

@@ -66,6 +66,7 @@ function SettingsContent() {
 
   // Lazy-load flags
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
+  const [passkeysLoaded, setPasskeysLoaded] = useState(false)
   const [blockedUsersLoaded, setBlockedUsersLoaded] = useState(false)
 
   const h = useSettingsHandlers({ showToast, showConfirm, t })
@@ -94,6 +95,10 @@ function SettingsContent() {
       setSessionsLoaded(true)
       h.loadSessions()
     }
+    if (activeSection === 'security' && !passkeysLoaded && !h.loadingPasskeys) {
+      setPasskeysLoaded(true)
+      h.loadPasskeys()
+    }
     if (activeSection === 'privacy' && h.userId && !blockedUsersLoaded && !h.loadingBlockedUsers) {
       setBlockedUsersLoaded(true)
       h.loadBlockedUsers(h.userId)
@@ -101,9 +106,11 @@ function SettingsContent() {
   }, [
     activeSection,
     sessionsLoaded,
+    passkeysLoaded,
     blockedUsersLoaded,
     h.userId,
     h.loadingSessions,
+    h.loadingPasskeys,
     h.loadingBlockedUsers,
   ])
 
@@ -417,6 +424,13 @@ function SettingsContent() {
             onSetup2FA={h.handleSetup2FA}
             onVerify2FA={h.handleVerify2FA}
             onDisable2FA={h.handleDisable2FA}
+            passkeys={h.passkeys}
+            loadingPasskeys={h.loadingPasskeys}
+            passkeyBusy={h.passkeyBusy}
+            newPasskeyName={h.newPasskeyName}
+            setNewPasskeyName={h.setNewPasskeyName}
+            onAddPasskey={h.handleAddPasskey}
+            onRemovePasskey={h.handleRemovePasskey}
             sessions={h.sessions}
             loadingSessions={h.loadingSessions}
             onRevokeSession={h.handleRevokeSession}
