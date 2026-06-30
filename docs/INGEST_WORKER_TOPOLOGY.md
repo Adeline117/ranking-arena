@@ -42,7 +42,20 @@ of packages** (observed: luxon, abitype, ccxt, …). Reproduced across npm + pnp
 cache-clean, raised ulimit, freed memory, serial `--maxsockets 1`. The filesystem
 reports clean (ext4 rw, space + inodes free, no dmesg errors) and a _manual_
 single-package `npm pack && tar xzf` extracts the same files correctly — so it's
-something about large concurrent extraction on this box. ROOT CAUSE STILL OPEN.
+something about large concurrent extraction on this box.
+
+**Investigation (2026-06-30):** no AV/security software, no quarantine, fs clean,
+disk + inodes free. The "many packages broken" count was mostly a FALSE POSITIVE
+of a naive `main`-existsSync check (modern pkgs use `.cjs`/`exports`, not a `.js`
+main). The ONLY genuinely-incomplete packages the worker actually failed on were
+**luxon** (`build/node/luxon.js` absent, `.js.map` present) and **abitype**
+(`dist/cjs/exports/index.js` absent). MOST LIKELY CAUSE: the transient corruption
+came from MY OWN panic — multiple concurrent + SIGHUP-interrupted `npm install`
+runs fighting over the same node_modules (npm is not concurrency-safe). After
+killing all installs, doing ONE tmux-detached install, and surgically repairing
+luxon+abitype, the worker is stable. So this may NOT be a persistent box fault —
+but a clean-reinstall test wasn't run (it would risk the now-working worker).
+Lesson: never run concurrent/interrupted installs; one tmux install, let it finish.
 
 Consequences:
 
