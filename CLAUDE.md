@@ -318,6 +318,17 @@ push` 应用(ledger.name = 文件名,核对才可靠)。别手工 SQL-editor 改
    顶到 100%,所有 spawn 进程的命令(git/node)排队卡死,而 MCP/文件 IO 不受影响
    (诊断信号:bash 挂但 MCP 秒回 = syspolicyd 饱和)。解药:`sudo killall
 syspolicyd`(launchd 重启)+ 减少并发会话。
+5. **交互会话用独立 worktree(强烈推荐,根治规则 3 的共享工作树之痛)。** 起新会话用
+   `scripts/new-session-worktree.sh <name>` → 在 `~/arena-worktrees/<name>` 自己的
+   `session/<name>` 分支干活(env + node_modules 已 symlink),经 push-lock 合 main。
+   别人改 lock/核心文件/暂存区不再当场污染你的 tsc/lint/commit。(2026-06-30 血泪:
+   并发会话改 lock 害 SG 部署 npm-ci 崩溃循环;另一会话的过期 premium 测试卡死所有人推送。)
+6. **并发会话上限 2–4,不是 7。** 研究 + 实测:超过 ~4 个并行,协调/合并/syspolicyd
+   fork 风暴成本盖过收益。conductor.json 的 review_phase(5 个)分两批跑,别一次 10 个全开。
+7. **worker 部署走单一通道(仿 schema 单一通道)。** 一次一个会话部署,优先经 CI
+   产物流水线;**绝不多会话各自手工 `deploy-ingest-sg.sh` 并发跑、绝不在 SG box 上
+   `npm ci`**(非并发安全、丢 .js → 崩溃循环)。dep 无变的改动走 `--code-only`;
+   手工脚本仅作 CI 不可用时的逃生口(默认已拒绝 npm ci,见脚本头)。
 
 ### Database Concurrency Safety — MANDATORY
 
