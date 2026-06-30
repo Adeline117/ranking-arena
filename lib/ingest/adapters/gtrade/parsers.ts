@@ -31,6 +31,7 @@ import type {
   ParsedProfile,
   RankingTimeframe,
 } from '../../core/types'
+import { ratiosFromCumulativePnl } from '../../core/series-risk'
 
 type Dict = Record<string, unknown>
 
@@ -130,6 +131,28 @@ export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     daily.set(day, (daily.get(day) ?? 0) + usd)
   }
 
+  // Daily-bucketed cumulative realized-PnL curve (shared by the series block
+  // and Tier-0 risk derivation below).
+  const cumPoints: Array<{ ts: string; value: number }> = []
+  {
+    const days = [...daily.entries()].sort(([a], [b]) => a.localeCompare(b))
+    let cum = 0
+    for (const [day, value] of days) {
+      cum += value
+      cumPoints.push({ ts: `${day}T00:00:00.000Z`, value: cum })
+    }
+  }
+
+  // Tier-0 base-free risk: gTrade exposes NO capital base (ROI/AUM are NULL), so
+  // a percentage MDD isn't honestly derivable — but Sharpe/Sortino are, because
+  // the constant-capital base cancels out of mean/std (see series-risk.ts). MDD
+  // stays NULL. daily-approx provenance.
+  const ratios = ratiosFromCumulativePnl(cumPoints)
+  const riskExtras: Record<string, unknown> =
+    ratios.sharpe !== null || ratios.sortino !== null
+      ? { risk_derivation: 'daily-approx', risk_samples: ratios.samples, sortino: ratios.sortino }
+      : {}
+
   const stats: ParsedProfile['stats'] = []
   if (sawAny || lifetime) {
     stats.push({
@@ -137,8 +160,8 @@ export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       asOf: ctx.scrapedAt,
       roi: null, // no capital basis exposed → NULL
       pnl: sawAny || closes > 0 ? pnl : null,
-      sharpe: null,
-      mdd: null,
+      sharpe: ratios.sharpe, // Tier-0 base-free daily-approx (base cancels)
+      mdd: null, // needs a real equity base gTrade doesn't expose → honest NULL
       winRate: closes > 0 ? (wins / closes) * 100 : null,
       winPositions: closes > 0 ? wins : null,
       totalPositions: closes > 0 ? closes : null,
@@ -157,21 +180,17 @@ export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
         thirty_day_volume: lifetime ? num(lifetime.thirtyDayVolume) : null,
         // pages capped before reaching the window start → under-coverage
         trades_truncated: tradesWrap.truncated === true,
+        ...riskExtras,
       },
     })
   }
 
   const series: ParsedProfile['series'] = []
-  if (daily.size > 0) {
-    const days = [...daily.entries()].sort(([a], [b]) => a.localeCompare(b))
-    let cum = 0
+  if (cumPoints.length > 0) {
     series.push({
       timeframe: tf,
       metric: 'pnl', // window-cumulative realized PnL, daily buckets
-      points: days.map(([day, value]) => {
-        cum += value
-        return { ts: `${day}T00:00:00.000Z`, value: cum }
-      }),
+      points: cumPoints,
     })
   }
 

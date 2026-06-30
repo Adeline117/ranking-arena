@@ -1,4 +1,4 @@
-import { riskFromCumulativePnl } from '../series-risk'
+import { riskFromCumulativePnl, ratiosFromCumulativePnl } from '../series-risk'
 
 /** Build a cumulative-PnL series from per-day deltas. */
 function cum(deltas: number[]): Array<{ ts: string; value: number }> {
@@ -77,5 +77,27 @@ describe('riskFromCumulativePnl', () => {
     const b = riskFromCumulativePnl(shuffled, 10000)
     expect(b.mdd).toBeCloseTo(a.mdd as number, 5)
     expect(b.sharpe).toBeCloseTo(a.sharpe as number, 5)
+  })
+})
+
+describe('ratiosFromCumulativePnl (base-free, for DEX without capital base)', () => {
+  it('needs >=7 deltas and returns no MDD field', () => {
+    const deltas = [10, -5, 12, -3, 8, -2, 15, -4]
+    const r = ratiosFromCumulativePnl(cum(deltas))
+    expect(typeof r.sharpe).toBe('number')
+    expect(typeof r.sortino).toBe('number')
+    expect(r.samples).toBe(deltas.length)
+    expect((r as Record<string, unknown>).mdd).toBeUndefined()
+    expect(ratiosFromCumulativePnl(cum([1, 2, 3])).sharpe).toBeNull()
+  })
+
+  it('base cancels: Sharpe matches the base-aware version when capital is huge (≈constant equity)', () => {
+    // With a very large base relative to PnL, equity is ~constant so the
+    // base-aware return-ratio Sharpe converges to the base-free delta Sharpe.
+    const deltas = [10, -5, 12, -3, 8, -2, 15, -4, 6, -7]
+    const free = ratiosFromCumulativePnl(cum(deltas))
+    const aware = riskFromCumulativePnl(cum(deltas), 1e9)
+    expect(free.sharpe).toBeCloseTo(aware.sharpe as number, 2)
+    expect(free.sortino).toBeCloseTo(aware.sortino as number, 2)
   })
 })

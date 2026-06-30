@@ -77,9 +77,47 @@ export function riskFromCumulativePnl(
 
   return {
     mdd: maxDrawdownPct(equity),
-    sharpe: sharpeFromEquity(equity),
-    sortino: sortinoFromEquity(equity),
+    sharpe: sharpeOfChanges(dailyReturns(equity)),
+    sortino: sortinoOfChanges(dailyReturns(equity)),
     samples: equity.length,
+  }
+}
+
+export interface PnlRatios {
+  sharpe: number | null
+  sortino: number | null
+  samples: number
+}
+
+/**
+ * Base-free Sharpe/Sortino from a cumulative-PnL series — for DEX sources that
+ * expose NO capital base (e.g. gTrade, whose ROI/AUM are already NULL).
+ *
+ * Under the constant-capital daily-approx assumption the capital base CANCELS
+ * out of both ratios: returnᵢ = Δpnlᵢ / base, and Sharpe = mean/std is
+ * scale-invariant, so Sharpe = mean(Δ)/std(Δ)·√365 regardless of `base`. MDD is
+ * deliberately absent here — it is scale-DEPENDENT (needs a real equity base);
+ * use riskFromCumulativePnl when a base exists.
+ *
+ * Same daily-approx provenance caveat — caller MUST tag
+ * `extras.risk_derivation = 'daily-approx'`.
+ */
+export function ratiosFromCumulativePnl(
+  points: CumulativePnlPoint[] | null | undefined
+): PnlRatios {
+  if (!Array.isArray(points) || points.length < 2)
+    return { sharpe: null, sortino: null, samples: 0 }
+  const clean = points
+    .filter((p) => p && typeof p.ts === 'string' && p.value != null && isFinite(p.value))
+    .slice()
+    .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+  if (clean.length < 2) return { sharpe: null, sortino: null, samples: 0 }
+  const deltas: number[] = []
+  for (let i = 1; i < clean.length; i++) deltas.push(clean[i].value - clean[i - 1].value)
+  return {
+    sharpe: sharpeOfChanges(deltas),
+    sortino: sortinoOfChanges(deltas),
+    samples: clean.length,
   }
 }
 
@@ -110,9 +148,13 @@ function mean(xs: number[]): number {
   return xs.reduce((a, b) => a + b, 0) / xs.length
 }
 
-/** Annualised Sharpe (rf=0), sample std-dev, clamped. */
-function sharpeFromEquity(equity: number[]): number | null {
-  const r = dailyReturns(equity)
+/**
+ * Annualised Sharpe (rf=0), sample std-dev, clamped. `changes` are per-period
+ * values — either returns (base-aware) or raw PnL deltas (base-free; the base
+ * cancels in mean/std, so both yield the same Sharpe under constant capital).
+ */
+function sharpeOfChanges(changes: number[]): number | null {
+  const r = changes
   if (r.length < MIN_RATIO_POINTS) return null
   const mu = mean(r)
   const variance = r.reduce((s, x) => s + (x - mu) * (x - mu), 0) / (r.length - 1)
@@ -122,9 +164,9 @@ function sharpeFromEquity(equity: number[]): number | null {
   return clampRatio(sharpe)
 }
 
-/** Annualised Sortino (rf=0), downside deviation, clamped. */
-function sortinoFromEquity(equity: number[]): number | null {
-  const r = dailyReturns(equity)
+/** Annualised Sortino (rf=0), downside deviation, clamped. See sharpeOfChanges. */
+function sortinoOfChanges(changes: number[]): number | null {
+  const r = changes
   if (r.length < MIN_RATIO_POINTS) return null
   const mu = mean(r)
   const negs = r.filter((x) => x < 0)
