@@ -32,6 +32,9 @@ describe('parseXtLeaderboardPage', () => {
     expect(first.headlinePnl).toBeCloseTo(119279.25, 1)
     // winRate 1 → 100%
     expect(first.headlineWinRate).toBeCloseTo(100, 5)
+    // maxRetraction 0.4257 (already percent) → headlineMdd, so XT captures MDD
+    // (was previously dropped → 0% MDD capture in prod).
+    expect(first.headlineMdd).toBeCloseTo(0.4257, 4)
     // Lvl badge → traderMeta
     expect(first.traderMeta).toMatchObject({ xt_level: 2, xt_level_name: 'Lvl 2' })
     // chart series preserved verbatim in raw
