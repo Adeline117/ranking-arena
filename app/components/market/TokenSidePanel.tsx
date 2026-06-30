@@ -444,7 +444,9 @@ export default function TokenSidePanel({
                   {PERIODS.map((p) => (
                     <button
                       key={p.days}
+                      type="button"
                       onClick={() => setSelectedPeriod(p.days)}
+                      aria-pressed={selectedPeriod === p.days}
                       style={{
                         background:
                           selectedPeriod === p.days ? tokens.colors.accent.primary : 'transparent',

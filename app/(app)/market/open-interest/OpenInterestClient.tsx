@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
+import EmptyState from '@/app/components/ui/EmptyState'
 import { tokens } from '@/lib/design-tokens'
 
 interface OpenInterestRow {
@@ -100,6 +101,9 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
   const sortIndicator = (field: SortField) =>
     sortField === field ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : ''
 
+  const ariaSort = (field: SortField): 'ascending' | 'descending' | 'none' =>
+    sortField === field ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+
   return (
     <div
       style={{
@@ -110,7 +114,13 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
     >
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 16px 60px' }}>
         {/* Breadcrumb */}
-        <nav style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 16 }}>
+        <nav
+          style={{
+            fontSize: tokens.typography.fontSize.sm,
+            color: tokens.colors.text.tertiary,
+            marginBottom: 16,
+          }}
+        >
           <Link
             href="/market"
             style={{ color: tokens.colors.text.secondary, textDecoration: 'none' }}
@@ -123,10 +133,23 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
 
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>
+          <h1
+            style={{
+              fontSize: tokens.typography.fontSize.hero,
+              fontWeight: tokens.typography.fontWeight.bold,
+              margin: 0,
+              letterSpacing: '-0.5px',
+            }}
+          >
             Open Interest
           </h1>
-          <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginTop: 6 }}>
+          <p
+            style={{
+              fontSize: tokens.typography.fontSize.base,
+              color: tokens.colors.text.secondary,
+              marginTop: 6,
+            }}
+          >
             Total outstanding perpetual futures positions across exchanges. Rising OI with price
             increases signals strong trend; rising OI with falling price signals potential squeeze.
           </p>
@@ -154,8 +177,8 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
               >
                 <div
                   style={{
-                    fontSize: 12,
-                    fontWeight: 600,
+                    fontSize: tokens.typography.fontSize.xs,
+                    fontWeight: tokens.typography.fontWeight.semibold,
                     color: tokens.colors.text.tertiary,
                     textTransform: 'uppercase',
                     letterSpacing: '0.3px',
@@ -167,8 +190,8 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                 <div
                   style={
                     {
-                      fontSize: 20,
-                      fontWeight: 700,
+                      fontSize: tokens.typography.fontSize.xl,
+                      fontWeight: tokens.typography.fontWeight.bold,
                       fontFamily: 'var(--font-mono, monospace)',
                       fontVariantNumeric: 'tabular-nums',
                     } as React.CSSProperties
@@ -184,7 +207,9 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
         {/* Filter */}
         <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
+            type="button"
             onClick={() => setFilterPlatform('all')}
+            aria-pressed={filterPlatform === 'all'}
             style={{
               padding: '6px 14px',
               borderRadius: tokens.radius.md,
@@ -200,8 +225,8 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                 filterPlatform === 'all'
                   ? 'var(--color-accent-primary)'
                   : tokens.colors.text.secondary,
-              fontSize: 13,
-              fontWeight: 500,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.medium,
               cursor: 'pointer',
             }}
           >
@@ -210,7 +235,9 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
           {platforms.map((p) => (
             <button
               key={p}
+              type="button"
               onClick={() => setFilterPlatform(p)}
+              aria-pressed={filterPlatform === p}
               style={{
                 padding: '6px 14px',
                 borderRadius: tokens.radius.md,
@@ -226,8 +253,8 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                   filterPlatform === p
                     ? 'var(--color-accent-primary)'
                     : tokens.colors.text.secondary,
-                fontSize: 13,
-                fontWeight: 500,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.medium,
                 cursor: 'pointer',
               }}
             >
@@ -238,19 +265,19 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
 
         {/* Table */}
         {rows.length === 0 ? (
-          <div
-            style={{
-              padding: '60px 20px',
-              textAlign: 'center',
-              color: tokens.colors.text.tertiary,
-              fontSize: 14,
-            }}
-          >
-            No open interest data available yet. Data will appear after the next cron cycle.
-          </div>
+          <EmptyState
+            title="No open interest data yet"
+            description="Data will appear after the next cron cycle."
+          />
         ) : (
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: tokens.typography.fontSize.base,
+              }}
+            >
               <thead>
                 <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
                   {(
@@ -263,16 +290,25 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                   ).map(([field, label]) => (
                     <th
                       key={field}
+                      scope="col"
+                      aria-sort={ariaSort(field)}
+                      tabIndex={0}
                       onClick={() => handleSort(field)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleSort(field)
+                        }
+                      }}
                       style={{
                         padding: '12px 16px',
                         textAlign: field === 'open_interest_usd' ? 'right' : 'left',
-                        fontWeight: 600,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                         color: tokens.colors.text.secondary,
                         cursor: 'pointer',
                         userSelect: 'none',
                         whiteSpace: 'nowrap',
-                        fontSize: 12,
+                        fontSize: tokens.typography.fontSize.xs,
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
                       }}
@@ -296,25 +332,33 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                     }
                     onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                   >
-                    <td style={{ padding: '12px 16px', fontWeight: 500 }}>
+                    <td
+                      style={{
+                        padding: '12px 16px',
+                        fontWeight: tokens.typography.fontWeight.medium,
+                      }}
+                    >
                       {PLATFORM_LABELS[row.platform] || row.platform}
                     </td>
                     <td
                       style={{
                         padding: '12px 16px',
                         fontFamily: 'var(--font-mono, monospace)',
-                        fontWeight: 500,
+                        fontWeight: tokens.typography.fontWeight.medium,
                       }}
                     >
                       {normalizeSymbol(row.symbol)}
                     </td>
                     <td
-                      style={{
-                        padding: '12px 16px',
-                        textAlign: 'right',
-                        fontFamily: 'var(--font-mono, monospace)',
-                        fontWeight: 600,
-                      }}
+                      style={
+                        {
+                          padding: '12px 16px',
+                          textAlign: 'right',
+                          fontFamily: 'var(--font-mono, monospace)',
+                          fontVariantNumeric: 'tabular-nums',
+                          fontWeight: tokens.typography.fontWeight.semibold,
+                        } as React.CSSProperties
+                      }
                     >
                       {formatUsd(row.open_interest_usd)}
                     </td>
@@ -322,7 +366,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                       style={{
                         padding: '12px 16px',
                         color: tokens.colors.text.tertiary,
-                        fontSize: 13,
+                        fontSize: tokens.typography.fontSize.sm,
                       }}
                     >
                       {formatTime(row.timestamp)}

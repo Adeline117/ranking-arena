@@ -54,7 +54,7 @@ function ChangeCell({ value }: { value: number | null }) {
       style={
         {
           color,
-          fontWeight: 700,
+          fontWeight: tokens.typography.fontWeight.bold,
           padding: '2px 8px',
           borderRadius: tokens.radius.sm,
           background: bg,
@@ -151,7 +151,7 @@ function FlashPrice({ value, flash }: { value: string; flash?: PriceFlashInfo })
         color,
         borderRadius: tokens.radius.sm,
         padding: '1px 4px',
-        fontWeight: 600,
+        fontWeight: tokens.typography.fontWeight.semibold,
       }}
     >
       {value}
@@ -274,7 +274,14 @@ export default function SpotMarket({
         width: '48px',
         sortable: true,
         render: (r) => (
-          <span style={{ color: tokens.colors.text.tertiary, fontWeight: 600 }}>{r.rank}</span>
+          <span
+            style={{
+              color: tokens.colors.text.tertiary,
+              fontWeight: tokens.typography.fontWeight.semibold,
+            }}
+          >
+            {r.rank}
+          </span>
         ),
       },
       {
@@ -310,7 +317,7 @@ export default function SpotMarket({
             )}
             <span
               style={{
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
                 whiteSpace: 'nowrap',
@@ -410,16 +417,19 @@ export default function SpotMarket({
           const isFav = favorites.has(r.id)
           return (
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 toggleFav(r.id)
               }}
+              aria-pressed={isFav}
+              aria-label={t('favorite')}
               style={{
                 background: 'none',
                 border: 'none',
                 cursor: 'pointer',
                 color: isFav ? tokens.colors.accent.warning : tokens.colors.text.tertiary,
-                fontSize: 18,
+                fontSize: tokens.typography.fontSize.lg,
                 padding: 4,
                 minWidth: 44,
                 minHeight: 44,
@@ -493,7 +503,9 @@ export default function SpotMarket({
           />
         </div>
         <button
+          type="button"
           onClick={() => setShowFavOnly((v) => !v)}
+          aria-pressed={showFavOnly}
           style={{
             padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
             background: showFavOnly ? tokens.colors.accent.warning : tokens.glass.bg.medium,
@@ -502,7 +514,7 @@ export default function SpotMarket({
             borderRadius: tokens.radius.lg,
             cursor: 'pointer',
             fontSize: tokens.typography.fontSize.sm,
-            fontWeight: 600,
+            fontWeight: tokens.typography.fontWeight.semibold,
             whiteSpace: 'nowrap',
             transition: `all ${tokens.transition.fast}`,
             minHeight: 44,
@@ -512,7 +524,9 @@ export default function SpotMarket({
             backdropFilter: tokens.glass.blur.sm,
           }}
         >
-          <span style={{ fontSize: 16 }}>{showFavOnly ? '\u2605' : '\u2606'}</span>
+          <span aria-hidden="true" style={{ fontSize: tokens.typography.fontSize.md }}>
+            {showFavOnly ? '\u2605' : '\u2606'}
+          </span>
           {t('favorite')}
           {favorites.size > 0 && (
             <span
@@ -521,7 +535,7 @@ export default function SpotMarket({
                 borderRadius: tokens.radius.full,
                 background: showFavOnly ? 'var(--color-overlay-light)' : tokens.colors.bg.tertiary,
                 fontSize: tokens.typography.fontSize.xs,
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
               }}
             >
               {favorites.size}

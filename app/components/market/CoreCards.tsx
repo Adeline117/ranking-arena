@@ -76,7 +76,7 @@ function CardWrapper({
         <span
           style={{
             fontSize: tokens.typography.fontSize.base,
-            fontWeight: 700,
+            fontWeight: tokens.typography.fontWeight.bold,
             color: tokens.colors.text.primary,
             letterSpacing: '0.3px',
           }}
@@ -175,8 +175,9 @@ function CoinItem({
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design
             fontSize: 10,
-            fontWeight: 700,
+            fontWeight: tokens.typography.fontWeight.bold,
             color: tokens.colors.text.tertiary,
             flexShrink: 0,
           }}
@@ -186,7 +187,7 @@ function CoinItem({
         <CryptoIcon symbol={sym} size={20} />
         <span
           style={{
-            fontWeight: 600,
+            fontWeight: tokens.typography.fontWeight.semibold,
             color: tokens.colors.text.primary,
             fontSize: tokens.typography.fontSize.sm,
           }}
@@ -213,7 +214,7 @@ function CoinItem({
           style={
             {
               color,
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
               fontSize: tokens.typography.fontSize.sm,
               minWidth: 72,
               textAlign: 'right',
@@ -295,6 +296,7 @@ const UpdatedAgoLabel = memo(function UpdatedAgoLabel({
     <div
       style={{
         textAlign: 'right',
+        // eslint-disable-next-line no-restricted-syntax -- off-scale by design
         fontSize: 11,
         color: 'var(--color-text-tertiary)',
         marginBottom: 6,
@@ -506,8 +508,9 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
                         display: 'inline-flex',
                         alignItems: 'center',
                         justifyContent: 'center',
+                        // eslint-disable-next-line no-restricted-syntax -- off-scale by design
                         fontSize: 10,
-                        fontWeight: 700,
+                        fontWeight: tokens.typography.fontWeight.bold,
                         color: tokens.colors.text.tertiary,
                         flexShrink: 0,
                       }}
@@ -516,7 +519,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
                     </span>
                     <span
                       style={{
-                        fontWeight: 600,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                         color: tokens.colors.text.primary,
                         fontSize: tokens.typography.fontSize.sm,
                       }}
