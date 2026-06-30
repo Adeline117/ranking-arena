@@ -102,6 +102,8 @@ export function parseBtccLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
   for (let i = 0; i < items.length; i++) {
     const item = items[i]
     if (item.traderId === undefined || item.traderId === null) continue
+    // maxBackRate is the MDD in BASIS POINTS (5676 = 56.76%) → /100 for percent.
+    const mddBps = num(item.maxBackRate)
     out.push({
       exchangeTraderId: String(item.traderId),
       // Positional in-page rank; re-anchored across pages by the caller.
@@ -114,8 +116,11 @@ export function parseBtccLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
       headlineRoi: num(item.rateProfit), // already percent
       headlinePnl: num(item.totalNetProfit),
       headlineWinRate: num(item.winRate), // already percent
-      // followNum/limitFollow, AUM (totalTraderAtom), bps maxBackRate,
-      // netProfitList sparkline, supportSyms... kept verbatim (spec §3).
+      // Board carries MDD (maxBackRate, bps→/100) and AUM (totalTraderAtom,
+      // absolute USD) — were raw-only, so board-tier traders had no MDD/AUM.
+      headlineMdd: mddBps === null ? null : mddBps / 100,
+      headlineAum: num(item.totalTraderAtom),
+      // followNum/limitFollow, netProfitList sparkline, supportSyms... verbatim.
       raw: item,
     })
   }
