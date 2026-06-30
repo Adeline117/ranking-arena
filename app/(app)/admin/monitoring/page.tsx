@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import HealthScoreCard from './components/HealthScoreCard'
 import AlertsPanel from './components/AlertsPanel'
@@ -107,6 +108,7 @@ interface MonitoringData {
 }
 
 export default function MonitoringPage() {
+  const { t } = useLanguage()
   const { showToast } = useToast()
   const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
   const [data, setData] = useState<MonitoringData | null>(null)
@@ -161,7 +163,7 @@ export default function MonitoringPage() {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-          <Text>Verifying admin permissions...</Text>
+          <Text>{t('verifyingAdminPermission')}</Text>
         </Box>
       </Box>
     )
@@ -172,9 +174,9 @@ export default function MonitoringPage() {
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
           <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            Access Denied
+            {t('noPermissionAccess')}
           </Text>
-          <Text color="tertiary">You do not have admin permissions to view this page.</Text>
+          <Text color="tertiary">{t('noAdminPermission')}</Text>
         </Box>
       </Box>
     )
@@ -193,11 +195,11 @@ export default function MonitoringPage() {
           }}
         >
           <Box>
-            <Text size="3xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
-              Performance Monitoring
+            <Text as="h1" size="3xl" weight="black" style={{ marginBottom: tokens.spacing[2] }}>
+              {t('monTitle')}
             </Text>
             <Text size="sm" color="tertiary">
-              Real-time system health and performance metrics
+              {t('monSubtitle')}
             </Text>
           </Box>
 
@@ -212,12 +214,12 @@ export default function MonitoringPage() {
               />
               <label htmlFor="auto-refresh" style={{ cursor: 'pointer' }}>
                 <Text size="sm" color="secondary">
-                  Auto-refresh (30s)
+                  {t('autoRefreshInterval').replace('{n}', '30')}
                 </Text>
               </label>
             </Box>
             <Button variant="secondary" size="sm" onClick={loadData} disabled={loading}>
-              {loading ? 'Refreshing...' : 'Refresh Now'}
+              {loading ? t('refreshing') : t('refreshNow')}
             </Button>
           </Box>
         </Box>
@@ -225,7 +227,7 @@ export default function MonitoringPage() {
         {loading && !data ? (
           <Card>
             <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-              <Text color="tertiary">Loading monitoring data...</Text>
+              <Text color="tertiary">{t('loadingMonitoringData')}</Text>
             </Box>
           </Card>
         ) : data ? (
@@ -263,7 +265,7 @@ export default function MonitoringPage() {
         ) : (
           <Card>
             <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-              <Text color="tertiary">No data available</Text>
+              <Text color="tertiary">{t('noDataAvailableGeneric')}</Text>
             </Box>
           </Card>
         )}
@@ -272,7 +274,7 @@ export default function MonitoringPage() {
         {data && (
           <Box style={{ marginTop: tokens.spacing[4], textAlign: 'center' }}>
             <Text size="xs" color="tertiary">
-              Last updated: {new Date(data.timestamp).toLocaleString()}
+              {t('lastUpdatedLabel')}: {new Date(data.timestamp).toLocaleString()}
             </Text>
           </Box>
         )}

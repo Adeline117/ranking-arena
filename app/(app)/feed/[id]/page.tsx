@@ -104,6 +104,10 @@ export default async function ActivitySharePage({ params }: PageProps) {
 
   const meta = ACTIVITY_META[activity.activity_type as ActivityType]
   const color = meta.colorVar
+  // i18n limitation: this is an ISR-cached server component (revalidate=300) with a
+  // single shared render across all users, so it cannot read the per-user language
+  // (stored client-side in localStorage by LanguageProvider). The date is therefore
+  // formatted with a fixed neutral 'en-US' locale rather than the active language.
   const occurredDate = new Date(activity.occurred_at).toLocaleString('en-US', {
     month: 'short',
     day: 'numeric',

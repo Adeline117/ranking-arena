@@ -113,7 +113,7 @@ export default function ProMetricsPage() {
       .then((payload) => {
         if (cancelled) return
         if (!payload?.success) {
-          setError(payload?.error || 'Failed to load metrics')
+          setError(payload?.error || t('failedToLoadMetrics'))
           setLoading(false)
           return
         }
@@ -128,7 +128,7 @@ export default function ProMetricsPage() {
     return () => {
       cancelled = true
     }
-  }, [isAdmin, accessToken])
+  }, [isAdmin, accessToken, t])
 
   if (authChecking) {
     return (
@@ -170,7 +170,7 @@ export default function ProMetricsPage() {
               margin: 0,
             }}
           >
-            Pro Metrics
+            {t('proMetricsTitle')}
           </h1>
           <p
             style={{
@@ -179,13 +179,18 @@ export default function ProMetricsPage() {
               fontSize: tokens.typography.fontSize.sm,
             }}
           >
-            The three numbers that answer &ldquo;is the paywall working?&rdquo;
-            {data?.timestamp && <> &middot; updated {new Date(data.timestamp).toLocaleString()}</>}
+            {t('proMetricsSubtitle')}
+            {data?.timestamp && (
+              <>
+                {' '}
+                &middot; {t('updatedAt')} {new Date(data.timestamp).toLocaleString()}
+              </>
+            )}
           </p>
         </header>
 
         {loading && (
-          <div style={{ padding: 40, color: 'var(--color-text-secondary)' }}>Loading&hellip;</div>
+          <div style={{ padding: 40, color: 'var(--color-text-secondary)' }}>{t('loading')}</div>
         )}
         {error && (
           <div
@@ -213,16 +218,16 @@ export default function ProMetricsPage() {
               }}
             >
               <MetricTile
-                label="Total paying"
+                label={t('totalPaying')}
                 value={data.totalPaying}
-                sub="active + trialing × pro|lifetime"
+                sub={t('totalPayingSub')}
               />
               <MetricTile
-                label="New this week"
+                label={t('newThisWeek')}
                 value={data.newPayingThisWeek}
-                sub={`last ${data.windowDays} days`}
+                sub={t('lastNDays').replace('{n}', String(data.windowDays))}
               />
-              <MetricTile label="WAU (7d)" value={data.wau} sub="distinct user_activity rows" />
+              <MetricTile label={t('wau7d')} value={data.wau} sub={t('wauSub')} />
             </section>
 
             <section>
@@ -233,10 +238,10 @@ export default function ProMetricsPage() {
                   marginBottom: tokens.spacing[4],
                 }}
               >
-                Recent paying signups
+                {t('recentPayingSignups')}
               </h2>
               {data.recentSignups.length === 0 ? (
-                <div style={{ color: 'var(--color-text-tertiary)' }}>No signups yet.</div>
+                <div style={{ color: 'var(--color-text-tertiary)' }}>{t('noSignupsYet')}</div>
               ) : (
                 <div
                   style={{
@@ -266,7 +271,7 @@ export default function ProMetricsPage() {
                             fontWeight: tokens.typography.fontWeight.semibold,
                           }}
                         >
-                          User
+                          {t('colUser')}
                         </th>
                         <th
                           scope="col"
@@ -275,7 +280,7 @@ export default function ProMetricsPage() {
                             fontWeight: tokens.typography.fontWeight.semibold,
                           }}
                         >
-                          Tier
+                          {t('colTier')}
                         </th>
                         <th
                           scope="col"
@@ -284,7 +289,7 @@ export default function ProMetricsPage() {
                             fontWeight: tokens.typography.fontWeight.semibold,
                           }}
                         >
-                          Plan
+                          {t('colPlan')}
                         </th>
                         <th
                           scope="col"
@@ -293,7 +298,7 @@ export default function ProMetricsPage() {
                             fontWeight: tokens.typography.fontWeight.semibold,
                           }}
                         >
-                          Status
+                          {t('colStatus')}
                         </th>
                         <th
                           scope="col"
@@ -302,7 +307,7 @@ export default function ProMetricsPage() {
                             fontWeight: tokens.typography.fontWeight.semibold,
                           }}
                         >
-                          Signed up
+                          {t('colSignedUp')}
                         </th>
                       </tr>
                     </thead>

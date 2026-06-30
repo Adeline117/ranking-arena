@@ -5,6 +5,7 @@ import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 
 interface OpenInterestRow {
@@ -36,9 +37,9 @@ function formatUsd(value: number): string {
   return '$' + value.toFixed(0)
 }
 
-function formatTime(iso: string): string {
+function formatTime(iso: string, locale: string): string {
   const d = new Date(iso)
-  return d.toLocaleString('en-US', {
+  return d.toLocaleString(locale, {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
@@ -48,7 +49,8 @@ function formatTime(iso: string): string {
 }
 
 export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
+  const locale = getLocaleFromLanguage(language)
   const [sortField, setSortField] = useState<SortField>('open_interest_usd')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
@@ -367,7 +369,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                         fontSize: tokens.typography.fontSize.sm,
                       }}
                     >
-                      {formatTime(row.timestamp)}
+                      {formatTime(row.timestamp, locale)}
                     </td>
                   </tr>
                 ))}

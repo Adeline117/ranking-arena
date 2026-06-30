@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useAdminAuth } from '../../hooks/useAdminAuth'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 
 // ============================================
@@ -311,6 +312,7 @@ const sty = {
 // ============================================
 
 export default function PipelineMonitoringDashboard() {
+  const { t } = useLanguage()
   const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
   const [pipelineData, setPipelineData] = useState<PipelineData | null>(null)
   const [enrichmentData, setEnrichmentData] = useState<EnrichmentData | null>(null)
@@ -363,15 +365,15 @@ export default function PipelineMonitoringDashboard() {
   }, [autoRefresh, isAdmin, fetchData])
 
   if (authChecking) {
-    return <div style={sty.loading}>Verifying permissions...</div>
+    return <div style={sty.loading}>{t('verifyingPermission')}</div>
   }
 
   if (!isAdmin) {
     return (
       <div style={sty.container}>
         <div style={{ padding: 40, textAlign: 'center' }}>
-          <h2>Access Denied</h2>
-          <p style={{ color: 'var(--color-text-secondary)' }}>Admin privileges required.</p>
+          <h1>{t('noPermissionAccess')}</h1>
+          <p style={{ color: 'var(--color-text-secondary)' }}>{t('adminPrivilegesRequired')}</p>
         </div>
       </div>
     )
@@ -380,7 +382,7 @@ export default function PipelineMonitoringDashboard() {
   if (loading && !pipelineData) {
     return (
       <div style={sty.container}>
-        <div style={sty.loading}>Loading pipeline monitoring...</div>
+        <div style={sty.loading}>{t('loadingPipelineMonitoring')}</div>
       </div>
     )
   }
@@ -393,11 +395,13 @@ export default function PipelineMonitoringDashboard() {
         {/* Header */}
         <div style={sty.header}>
           <div>
-            <div style={sty.title}>Pipeline Health Monitor</div>
+            <h1 style={sty.title}>{t('pipelineHealthMonitor')}</h1>
             <div style={sty.subtitle}>
               {d
-                ? `Status: ${d.status.toUpperCase()} | Updated: ${new Date(d.timestamp).toLocaleTimeString()}`
-                : 'Loading...'}
+                ? t('pipelineStatusUpdated')
+                    .replace('{status}', d.status.toUpperCase())
+                    .replace('{time}', new Date(d.timestamp).toLocaleTimeString())
+                : t('loading')}
             </div>
           </div>
           <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
@@ -407,10 +411,10 @@ export default function PipelineMonitoringDashboard() {
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
               />
-              Auto-refresh (60s)
+              {t('autoRefreshInterval').replace('{n}', '60')}
             </label>
             <button style={sty.btn} onClick={fetchData}>
-              {loading ? 'Refreshing...' : 'Refresh'}
+              {loading ? t('refreshing') : t('refresh')}
             </button>
           </div>
         </div>
@@ -424,13 +428,13 @@ export default function PipelineMonitoringDashboard() {
               <div style={{ ...sty.cardValue, color: statusColor(d.status) }}>
                 {d.summary.avgSuccessRate7d}%
               </div>
-              <div style={sty.cardLabel}>7D Success Rate</div>
+              <div style={sty.cardLabel}>{t('successRate7d')}</div>
             </div>
             <div style={sty.card('var(--color-accent-success)')}>
               <div style={{ ...sty.cardValue, color: 'var(--color-accent-success)' }}>
                 {d.summary.healthyJobs}
               </div>
-              <div style={sty.cardLabel}>Healthy Jobs</div>
+              <div style={sty.cardLabel}>{t('healthyJobs')}</div>
             </div>
             <div style={sty.card('var(--color-accent-error)')}>
               <div
@@ -444,7 +448,7 @@ export default function PipelineMonitoringDashboard() {
               >
                 {d.summary.failedJobs}
               </div>
-              <div style={sty.cardLabel}>Failed Jobs</div>
+              <div style={sty.cardLabel}>{t('failedJobs')}</div>
             </div>
             <div style={sty.card('var(--color-accent-warning)')}>
               <div
@@ -458,11 +462,11 @@ export default function PipelineMonitoringDashboard() {
               >
                 {d.summary.staleJobs}
               </div>
-              <div style={sty.cardLabel}>Stale Jobs</div>
+              <div style={sty.cardLabel}>{t('staleJobs')}</div>
             </div>
             <div style={sty.card('var(--color-border-primary)')}>
               <div style={sty.cardValue}>{d.summary.totalPlatforms}</div>
-              <div style={sty.cardLabel}>Platforms</div>
+              <div style={sty.cardLabel}>{t('platforms')}</div>
             </div>
             {enrichmentData && (
               <div style={sty.card('var(--color-border-secondary)')}>
@@ -474,7 +478,7 @@ export default function PipelineMonitoringDashboard() {
                 >
                   {enrichmentData.summary.enrichableCoveragePct}%
                 </div>
-                <div style={sty.cardLabel}>Enrichment Coverage</div>
+                <div style={sty.cardLabel}>{t('enrichmentCoverage')}</div>
               </div>
             )}
           </div>
@@ -484,11 +488,11 @@ export default function PipelineMonitoringDashboard() {
         <div style={sty.tabs} role="tablist" aria-label="Pipeline monitoring sections">
           {(
             [
-              ['overview', 'Overview'],
-              ['jobs', 'Job Stats'],
-              ['freshness', 'Data Freshness'],
-              ['failures', 'Recent Failures'],
-              ['enrichment', 'Enrichment'],
+              ['overview', t('tabOverview')],
+              ['jobs', t('tabJobStats')],
+              ['freshness', t('tabDataFreshness')],
+              ['failures', t('tabRecentFailures')],
+              ['enrichment', t('tabEnrichment')],
             ] as [TabId, string][]
           ).map(([id, label]) => (
             <button
@@ -540,6 +544,7 @@ function OverviewTab({
   data: PipelineData
   enrichment: EnrichmentData | null
 }) {
+  const { t } = useLanguage()
   const healthyPct =
     data.summary.totalPlatforms > 0
       ? Math.round((data.summary.platformHealthy / data.summary.totalPlatforms) * 100)
@@ -557,7 +562,7 @@ function OverviewTab({
         }}
       >
         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '16px' }}>
-          Platform Health
+          {t('platformHealth')}
         </div>
         <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
           <div>
@@ -569,7 +574,7 @@ function OverviewTab({
             <span
               style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
             >
-              healthy
+              {t('statusHealthyLower')}
             </span>
           </div>
           <div>
@@ -581,7 +586,7 @@ function OverviewTab({
             <span
               style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
             >
-              warning
+              {t('statusWarningLower')}
             </span>
           </div>
           <div>
@@ -591,7 +596,7 @@ function OverviewTab({
             <span
               style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
             >
-              critical
+              {t('statusCriticalLower')}
             </span>
           </div>
         </div>
@@ -600,7 +605,7 @@ function OverviewTab({
             <div style={sty.barFill(healthyPct, 'var(--color-accent-success)')} />
           </div>
           <div style={{ fontSize: '11px', color: 'var(--color-text-tertiary)', marginTop: '4px' }}>
-            {healthyPct}% platforms healthy
+            {t('pctPlatformsHealthy').replace('{n}', String(healthyPct))}
           </div>
         </div>
       </div>
@@ -616,7 +621,7 @@ function OverviewTab({
           }}
         >
           <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
-            Jobs With Errors (7D)
+            {t('jobsWithErrors7d')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {data.stats
@@ -636,7 +641,7 @@ function OverviewTab({
                   <span style={{ fontSize: '13px', fontWeight: 500 }}>{j.job_name}</span>
                   <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
                     <span style={{ fontSize: '12px', color: 'var(--color-accent-error)' }}>
-                      {j.error_count} errors
+                      {t('nErrors').replace('{n}', String(j.error_count))}
                     </span>
                     <span style={{ fontSize: '12px', color: successRateColor(j.success_rate) }}>
                       {j.success_rate}%
@@ -659,7 +664,7 @@ function OverviewTab({
           }}
         >
           <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
-            Enrichment Coverage (90D)
+            {t('enrichmentCoverage90d')}
           </div>
           <div style={{ display: 'flex', gap: '24px', flexWrap: 'wrap' }}>
             <div>
@@ -669,7 +674,10 @@ function OverviewTab({
               <span
                 style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
               >
-                / {enrichment.summary.totalTraders.toLocaleString()} traders enriched
+                {t('tradersEnrichedSuffix').replace(
+                  '{n}',
+                  enrichment.summary.totalTraders.toLocaleString()
+                )}
               </span>
             </div>
             <div>
@@ -685,7 +693,7 @@ function OverviewTab({
               <span
                 style={{ color: 'var(--color-text-tertiary)', marginLeft: '6px', fontSize: '13px' }}
               >
-                enrichable coverage
+                {t('enrichableCoverageLower')}
               </span>
             </div>
           </div>
@@ -700,6 +708,7 @@ function OverviewTab({
 // ============================================
 
 function JobStatsTab({ stats }: { stats: JobStat[] }) {
+  const { t } = useLanguage()
   const [sortField, setSortField] = useState<
     'job_name' | 'success_rate' | 'error_count' | 'last_run_at'
   >('success_rate')
@@ -735,7 +744,7 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
         }
       }}
     >
-      {label} {sortField === field ? (sortAsc ? ' ^' : ' v') : ''}
+      {label} {sortField === field ? (sortAsc ? '▲' : '▼') : ''}
     </th>
   )
 
@@ -750,16 +759,16 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
       <table style={sty.table}>
         <thead>
           <tr>
-            {thSortable('Job Name', 'job_name')}
+            {thSortable(t('colJobName'), 'job_name')}
             <th scope="col" style={sty.th}>
-              Runs (7D)
+              {t('colRuns7d')}
             </th>
-            {thSortable('Success Rate', 'success_rate')}
-            {thSortable('Errors', 'error_count')}
+            {thSortable(t('colSuccessRate'), 'success_rate')}
+            {thSortable(t('colErrors'), 'error_count')}
             <th scope="col" style={sty.th}>
-              Avg Duration
+              {t('colAvgDuration')}
             </th>
-            {thSortable('Last Run', 'last_run_at')}
+            {thSortable(t('colLastRun'), 'last_run_at')}
           </tr>
         </thead>
         <tbody>
@@ -802,7 +811,7 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
       </table>
       {sorted.length === 0 && (
         <div style={{ textAlign: 'center', padding: '32px', color: 'var(--color-text-tertiary)' }}>
-          No job statistics available.
+          {t('noJobStats')}
         </div>
       )}
     </div>
@@ -814,6 +823,7 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
 // ============================================
 
 function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
+  const { t } = useLanguage()
   const [filter, setFilter] = useState<'all' | 'warning' | 'critical'>('all')
 
   const filtered = platforms.filter((p) => {
@@ -842,10 +852,16 @@ function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
             }}
           >
             {f === 'all'
-              ? `All (${platforms.length})`
+              ? t('filterAll').replace('{n}', String(platforms.length))
               : f === 'warning'
-                ? `Warning+ (${platforms.filter((p) => p.status !== 'healthy').length})`
-                : `Critical (${platforms.filter((p) => p.status === 'critical').length})`}
+                ? t('filterWarningPlus').replace(
+                    '{n}',
+                    String(platforms.filter((p) => p.status !== 'healthy').length)
+                  )
+                : t('filterCritical').replace(
+                    '{n}',
+                    String(platforms.filter((p) => p.status === 'critical').length)
+                  )}
           </button>
         ))}
       </div>
@@ -861,25 +877,25 @@ function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
           <thead>
             <tr>
               <th scope="col" style={sty.th}>
-                Platform
+                {t('colPlatform')}
               </th>
               <th scope="col" style={sty.th}>
-                Status
+                {t('colStatus')}
               </th>
               <th scope="col" style={sty.th}>
-                Last Update
+                {t('colLastUpdate')}
               </th>
               <th scope="col" style={sty.th}>
-                Age
+                {t('colAge')}
               </th>
               <th scope="col" style={sty.th}>
-                Recent Count
+                {t('colRecentCount')}
               </th>
               <th scope="col" style={sty.th}>
-                Avg Count
+                {t('colAvgCount')}
               </th>
               <th scope="col" style={sty.th}>
-                Ratio
+                {t('colRatio')}
               </th>
             </tr>
           </thead>
@@ -946,10 +962,11 @@ function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
 // ============================================
 
 function FailuresTab({ failures }: { failures: RecentFailure[] }) {
+  const { t } = useLanguage()
   if (failures.length === 0) {
     return (
       <div style={{ textAlign: 'center', padding: '48px', color: 'var(--color-text-tertiary)' }}>
-        No recent failures. All clear!
+        {t('noRecentFailures')}
       </div>
     )
   }
@@ -1008,10 +1025,11 @@ function FailuresTab({ failures }: { failures: RecentFailure[] }) {
 // ============================================
 
 function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
+  const { t } = useLanguage()
   if (!data) {
     return (
       <div style={{ textAlign: 'center', padding: '48px', color: 'var(--color-text-tertiary)' }}>
-        Enrichment data not available. Check CRON_SECRET configuration.
+        {t('enrichmentDataUnavailable')}
       </div>
     )
   }
@@ -1027,19 +1045,19 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
       <div style={sty.summaryGrid}>
         <div style={sty.card('var(--color-border-primary)')}>
           <div style={sty.cardValue}>{data.summary.totalTraders.toLocaleString()}</div>
-          <div style={sty.cardLabel}>Total Traders</div>
+          <div style={sty.cardLabel}>{t('totalTraders')}</div>
         </div>
         <div style={sty.card('var(--color-accent-success)')}>
           <div style={{ ...sty.cardValue, color: 'var(--color-accent-success)' }}>
             {data.summary.totalEnriched.toLocaleString()}
           </div>
-          <div style={sty.cardLabel}>Enriched</div>
+          <div style={sty.cardLabel}>{t('enriched')}</div>
         </div>
         <div style={sty.card('var(--color-border-secondary)')}>
           <div style={{ ...sty.cardValue, color: coverageColor(data.summary.overallCoveragePct) }}>
             {data.summary.overallCoveragePct}%
           </div>
-          <div style={sty.cardLabel}>Overall Coverage</div>
+          <div style={sty.cardLabel}>{t('overallCoverage')}</div>
         </div>
         <div style={sty.card('var(--color-border-secondary)')}>
           <div
@@ -1047,22 +1065,22 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
           >
             {data.summary.enrichableCoveragePct}%
           </div>
-          <div style={sty.cardLabel}>Enrichable Coverage</div>
+          <div style={sty.cardLabel}>{t('enrichableCoverageLabel')}</div>
         </div>
         <div style={sty.card('var(--color-border-primary)')}>
           <div style={sty.cardValue}>{data.summary.enrichablePlatforms}</div>
-          <div style={sty.cardLabel}>Enrichable Platforms</div>
+          <div style={sty.cardLabel}>{t('enrichablePlatformsLabel')}</div>
         </div>
         <div style={sty.card('var(--color-border-primary)')}>
           <div style={sty.cardValue}>{data.summary.noEnrichmentPlatforms}</div>
-          <div style={sty.cardLabel}>No Enrichment API</div>
+          <div style={sty.cardLabel}>{t('noEnrichmentApi')}</div>
         </div>
       </div>
 
       {/* Enrichable platforms table */}
       <div>
         <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
-          Enrichable Platforms ({enrichable.length})
+          {t('enrichablePlatformsCount').replace('{n}', String(enrichable.length))}
         </div>
         <div
           style={{
@@ -1075,19 +1093,19 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
             <thead>
               <tr>
                 <th scope="col" style={sty.th}>
-                  Platform
+                  {t('colPlatform')}
                 </th>
                 <th scope="col" style={sty.th}>
-                  Total Traders
+                  {t('totalTraders')}
                 </th>
                 <th scope="col" style={sty.th}>
-                  Enriched
+                  {t('enriched')}
                 </th>
                 <th scope="col" style={sty.th}>
-                  Coverage
+                  {t('colCoverage')}
                 </th>
                 <th scope="col" style={sty.th}>
-                  Last Enrichment
+                  {t('colLastEnrichment')}
                 </th>
               </tr>
             </thead>
@@ -1133,7 +1151,7 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
       {(noEnrich.length > 0 || noConfig.length > 0) && (
         <div>
           <div style={{ fontSize: '15px', fontWeight: 600, marginBottom: '12px' }}>
-            Not Enrichable ({noEnrich.length + noConfig.length})
+            {t('notEnrichableCount').replace('{n}', String(noEnrich.length + noConfig.length))}
           </div>
           <div
             style={{
