@@ -1,5 +1,5 @@
 import type { Metadata } from 'next'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { ApiPricingSection } from './ApiPricingSection'
 
 export const metadata: Metadata = {
@@ -396,19 +396,21 @@ export default function ApiDocsPage() {
         {ENDPOINTS.map((ep) => (
           <div key={ep.name} style={{ ...card, marginBottom: tokens.spacing[5] }}>
             {/* Header */}
-            <div
+            <h3
               style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: tokens.spacing[3],
+                marginTop: 0,
                 marginBottom: tokens.spacing[3],
+                fontWeight: 600,
               }}
             >
               <span
                 style={{
                   padding: '2px 10px',
                   borderRadius: tokens.radius.sm,
-                  background: 'rgba(47, 229, 125, 0.15)',
+                  background: alpha(tokens.colors.accent.success, 15),
                   color: 'var(--color-accent-success)',
                   fontSize: 12,
                   fontWeight: 700,
@@ -418,7 +420,7 @@ export default function ApiDocsPage() {
                 {ep.method}
               </span>
               <code style={{ fontSize: 14, fontWeight: 600, fontFamily: mono }}>{ep.path}</code>
-            </div>
+            </h3>
             <p
               style={{
                 fontSize: tokens.typography.fontSize.sm,

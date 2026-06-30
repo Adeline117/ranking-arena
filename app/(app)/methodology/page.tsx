@@ -402,7 +402,9 @@ export default function MethodologyPage() {
       <div style={dividerStyle} />
 
       {/* ======================= CHINESE ======================= */}
-      <h1 style={h1Style}>方法论</h1>
+      {/* Demoted to h2 to keep a single logical <h1> per page (a11y); visual
+          weight preserved via h1Style. */}
+      <h2 style={h1Style}>方法论</h2>
       <p style={subtitleStyle}>
         Arena 如何对 25+ 交易所的加密交易者进行排名 &mdash; 透明、数据驱动、每 30 分钟更新
       </p>

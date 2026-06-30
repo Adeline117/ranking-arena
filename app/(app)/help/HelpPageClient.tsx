@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useId } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase/client'
 import { tokens } from '@/lib/design-tokens'
@@ -8,6 +8,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ContactSupportButton from '@/app/components/ui/ContactSupportButton'
+import EmptyState from '@/app/components/ui/EmptyState'
 
 // FAQ data using i18n
 const getFaqData = (t: (key: string) => string) => {
@@ -73,6 +74,7 @@ const ChevronIcon = ({ isOpen }: { isOpen: boolean }) => (
     fill="none"
     stroke="currentColor"
     strokeWidth="2"
+    aria-hidden="true"
     style={{
       transition: 'transform 0.2s',
       transform: isOpen ? 'rotate(180deg)' : 'rotate(0deg)',
@@ -85,6 +87,7 @@ const ChevronIcon = ({ isOpen }: { isOpen: boolean }) => (
 // FAQ 项组件
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [isOpen, setIsOpen] = useState(false)
+  const contentId = useId()
 
   return (
     <Box
@@ -93,12 +96,21 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
       }}
     >
       <Box
+        as="button"
+        aria-expanded={isOpen}
+        aria-controls={contentId}
         onClick={() => setIsOpen(!isOpen)}
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          width: '100%',
           padding: `${tokens.spacing[4]} 0`,
+          background: 'none',
+          border: 'none',
+          textAlign: 'left',
+          color: 'inherit',
+          font: 'inherit',
           cursor: 'pointer',
           transition: 'color 0.2s',
         }}
@@ -119,6 +131,7 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
       {isOpen && (
         <Box
+          id={contentId}
           className="faq-item-content"
           style={{
             paddingBottom: tokens.spacing[4],
@@ -281,6 +294,7 @@ export default function HelpPageClient() {
                   height={24}
                   viewBox="0 0 24 24"
                   fill="var(--color-pro-gradient-start)"
+                  aria-hidden="true"
                 >
                   <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
                 </svg>
@@ -318,6 +332,7 @@ export default function HelpPageClient() {
                   fill="none"
                   stroke="var(--color-text-secondary)"
                   strokeWidth="2"
+                  aria-hidden="true"
                 >
                   <circle cx="12" cy="12" r="3" />
                   <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
@@ -374,11 +389,7 @@ export default function HelpPageClient() {
               <FaqSection key={section.key} title={section.title} items={section.items} />
             ))
           ) : (
-            <Box style={{ textAlign: 'center', padding: tokens.spacing[6] }}>
-              <Text size="sm" color="tertiary">
-                {t('faqNoResults')}
-              </Text>
-            </Box>
+            <EmptyState variant="compact" title={t('faqNoResults')} />
           )}
         </Box>
 
