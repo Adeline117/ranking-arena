@@ -50,6 +50,30 @@ uncomment the `push:` trigger so dep changes auto-deploy. Until the secrets exis
 It is the **single channel** for SG deploys (a `concurrency` group serializes
 runs) — never two sessions deploying at once, never concurrent `npm ci`.
 
+## Container path (the most robust — zero box-side install, A6)
+
+`worker/Dockerfile.ingest` + `.github/workflows/build-ingest-image.yml` bake a
+deterministic, platform-matched `node_modules` **and** the Playwright browsers into
+an immutable image ONCE in CI, pushed to `ghcr.io/<repo>/ingest-worker`. The SG box
+then only `docker run`s a pinned digest — it never runs npm/playwright-install, so
+the crash-loop hazard is structurally impossible (not just policy).
+
+- **Deps are built on `node:20`** (npm 10 — the SAME toolchain that generated
+  `package-lock.json`; the existing CI + the tarball pipeline also pin node 20). The
+  Playwright base image ships node 24 / npm 11, whose stricter optional-peer
+  resolution (jsdom / react-native) rejects this lock as "out of sync" — so deps are
+  NOT built on it. The tree is portable to the runtime stage (all native addons are
+  NAPI prebuilds, Linux-x64 on both). The runtime stage is the Playwright image (its
+  non-root `pwuser` runs Chromium without `--no-sandbox`).
+- CI **smoke-runs the image** (`node -e require.resolve(...)` of every critical
+  module) before trusting the tag — a dropped/missing module fails the build.
+- **Cutover** (`worker/docker-compose.sg.yml`): one-time `docker login ghcr.io` with a
+  read:packages PAT, then `docker compose -f worker/docker-compose.sg.yml pull && up -d`.
+  Rollback = re-pin `image:` to the previous `:<sha>` tag and `up -d`.
+- **Local-build note:** the image builds in CI (ubuntu — can pull node:20 + the
+  Playwright base). Building it on a locked-keychain macOS that can't pull the
+  node:20 base will fail at the pull, not the Dockerfile.
+
 ## `worker/deploy-ingest-sg.sh` modes
 
 - `--dry-run` — preview the rsync, no changes.
