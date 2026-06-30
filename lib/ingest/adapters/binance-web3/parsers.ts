@@ -159,9 +159,10 @@ export function parseBinanceWeb3LeaderboardPage(
       headlinePnl: num(item.realizedPnl),
       headlineWinRate: pct(item.winRate),
       // Board IS the stats substrate (profile page is 202-gated and unneeded —
-      // the board row carries the full §2.5d on-chain superset). Backfill AUM
-      // (wallet balance), volume + on-chain extras into trader_stats.
-      headlineAum: num(item.balance),
+      // the board row carries the full §2.5d on-chain superset). NO headlineAum:
+      // `balance` is the BNB amount (NOT USD, per header doc) — using it as AUM
+      // wrote a garbage sub-$1 value. No USD AUM exists on this on-chain board;
+      // the raw BNB balance stays in `raw` for anyone who needs it.
       headlineVolume: num(item.totalVolume),
       headlineExtras: web3BoardExtras(item),
       // durable routing/identity facts only when present (spec traderMeta)
