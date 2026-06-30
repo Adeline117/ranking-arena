@@ -223,6 +223,14 @@ export function parsePhemexProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (trade?.totalTradeVolume !== undefined) {
       extras.total_trade_volume = num(trade.totalTradeVolume)
     }
+    // Lifetime trade count + win rate (Phase A: were raw-only). Win rate is a
+    // decimal fraction → ×100. Surface as lifetime_trades / lifetime_win_rate.
+    if (trade?.totalTradeCount !== undefined) {
+      extras.lifetime_trades = int(trade.totalTradeCount)
+    }
+    if (trade?.totalTradeWinRate !== undefined) {
+      extras.lifetime_win_rate = pct(trade.totalTradeWinRate)
+    }
     // SUM of position hold time over the window (ns) — raw, not averaged.
     const holdNs = num(trade?.[`avgPositionHoldTimeNs${tf}d`])
     if (holdNs !== null) extras.position_hold_time_total_ns = holdNs

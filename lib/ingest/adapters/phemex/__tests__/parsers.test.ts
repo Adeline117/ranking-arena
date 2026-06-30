@@ -123,7 +123,9 @@ describe('parsePhemexProfile', () => {
       max_copier_slots: 100,
       position_hold_time_total_ns: 2994139773479394,
       preference_symbols: expect.arrayContaining(['SIRENUSDT']),
+      lifetime_trades: 1071, // tradeData.totalTradeCount (Phase A)
     })
+    expect(s.extras.lifetime_win_rate as number).toBeCloseTo(60.13, 2) // 0.60130719 ×100
 
     const roi = profile.series.find((x) => x.metric === 'roi')!
     expect(roi.timeframe).toBe(30)
