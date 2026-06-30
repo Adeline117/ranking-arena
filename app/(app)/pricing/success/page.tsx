@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useState, useCallback } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
@@ -72,14 +72,12 @@ export default function PaymentSuccessPage() {
 }
 
 function PaymentSuccessContent() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const { language: _language, t } = useLanguage()
   const { showToast } = useToast()
   const { refresh: refreshPremium } = usePremium()
 
   const [email, setEmail] = useState<string | null>(null)
-  const [countdown, setCountdown] = useState(30)
   const [verificationStatus, setVerificationStatus] = useState<'verifying' | 'success' | 'error'>(
     'verifying'
   )
@@ -307,22 +305,6 @@ function PaymentSuccessContent() {
     }
   }, [retrying, verificationStatus])
 
-  // 自动跳转倒计时（只在验证成功后开始）
-  useEffect(() => {
-    if (verificationStatus !== 'success') return
-
-    if (countdown <= 0) {
-      router.push('/')
-      return
-    }
-
-    const timer = setTimeout(() => {
-      setCountdown((prev) => prev - 1)
-    }, 1000)
-
-    return () => clearTimeout(timer)
-  }, [countdown, router, verificationStatus])
-
   return (
     <Box
       style={{
@@ -404,48 +386,99 @@ function PaymentSuccessContent() {
               </Text>
             </Box>
 
-            {/* 功能提示 */}
+            {/* 可执行的上手清单（带跳转链接） */}
             <Box
               style={{
                 background: 'var(--color-bg-secondary)',
                 borderRadius: tokens.radius.xl,
                 border: '1px solid var(--color-border-primary)',
                 padding: tokens.spacing[5],
-                marginBottom: tokens.spacing[6],
+                marginBottom: tokens.spacing[5],
                 textAlign: 'left',
               }}
             >
               <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-                {t('nowYouCan')}
+                {t('proGetStarted')}
               </Text>
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
                 {[
-                  t('proBenefit1'),
-                  t('proBenefit2'),
-                  t('proBenefit3'),
-                  t('proBenefit4'),
-                  t('proBenefit5'),
-                ].map((text, i) => (
-                  <Box key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  { href: '/rankings', label: t('proStep1') },
+                  { href: '/rankings', label: t('proStep2') },
+                  { href: '/settings', label: t('proStep3') },
+                ].map((step, i) => (
+                  <Link key={i} href={step.href} style={{ textDecoration: 'none' }}>
                     <Box
                       style={{
-                        width: 6,
-                        height: 6,
-                        borderRadius: '50%',
-                        background: 'var(--color-accent-success)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: tokens.spacing[3],
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                        borderRadius: tokens.radius.lg,
+                        background: 'var(--color-bg-primary)',
+                        border: '1px solid var(--color-border-primary)',
                       }}
-                    />
-                    <Text size="sm" color="secondary">
-                      {text}
-                    </Text>
-                  </Box>
+                    >
+                      <Box
+                        style={{
+                          flexShrink: 0,
+                          width: 22,
+                          height: 22,
+                          borderRadius: '50%',
+                          background: 'var(--color-pro-badge-bg)',
+                          color: tokens.colors.white,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <Text size="xs" weight="bold" style={{ color: tokens.colors.white }}>
+                          {i + 1}
+                        </Text>
+                      </Box>
+                      <Text size="sm" color="secondary" style={{ flex: 1 }}>
+                        {step.label}
+                      </Text>
+                      <Text size="sm" color="tertiary">
+                        →
+                      </Text>
+                    </Box>
+                  </Link>
                 ))}
               </Box>
             </Box>
 
-            {/* 按钮 */}
+            {/* 推荐好友交叉销售 */}
+            <Link href="/referral" style={{ textDecoration: 'none' }}>
+              <Box
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[3],
+                  padding: tokens.spacing[4],
+                  marginBottom: tokens.spacing[6],
+                  borderRadius: tokens.radius.xl,
+                  background: 'var(--color-bg-secondary)',
+                  border: '1px solid var(--color-border-primary)',
+                  textAlign: 'left',
+                }}
+              >
+                <Box style={{ flex: 1 }}>
+                  <Text size="sm" weight="bold">
+                    {t('inviteFriendsTitle')}
+                  </Text>
+                  <Text size="xs" color="secondary">
+                    {t('inviteFriendsDesc')}
+                  </Text>
+                </Box>
+                <Text size="sm" weight="bold" style={{ color: 'var(--color-accent-primary)' }}>
+                  {t('inviteFriendsCta')} →
+                </Text>
+              </Box>
+            </Link>
+
+            {/* 按钮：主操作=第一价值动作（排行榜），次操作=随便逛逛 */}
             <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
-              <Link href="/" style={{ textDecoration: 'none' }}>
+              <Link href="/rankings" style={{ textDecoration: 'none' }}>
                 <Button
                   variant="primary"
                   style={{
@@ -455,22 +488,29 @@ function PaymentSuccessContent() {
                     boxShadow: '0 4px 12px var(--color-pro-badge-shadow)',
                   }}
                 >
-                  {t('startExploring')}
+                  {t('exploreProRankings')}
                 </Button>
               </Link>
-              <Link href="/settings" style={{ textDecoration: 'none' }}>
+              <Link href="/" style={{ textDecoration: 'none' }}>
                 <Button
                   variant="secondary"
                   style={{ padding: `${tokens.spacing[3]} ${tokens.spacing[6]}` }}
                 >
-                  {t('settings')}
+                  {t('startExploring')}
                 </Button>
               </Link>
             </Box>
 
-            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[6] }}>
-              {t('redirectingCountdown').replace('{seconds}', String(countdown))}
-            </Text>
+            {/* 收据安心提示 */}
+            {email ? (
+              <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[6] }}>
+                {t('receiptSentTo').replace('{email}', email)}
+              </Text>
+            ) : (
+              <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[6] }}>
+                {t('receiptEmailed')}
+              </Text>
+            )}
           </>
         )}
 
