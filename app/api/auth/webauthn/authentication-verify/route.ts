@@ -81,7 +81,13 @@ export const POST = withPublic(
       return badRequest('Passkey not recognized')
     }
 
-    const { rpID, origin } = getWebAuthnConfig(request)
+    let rpID: string
+    let origin: string
+    try {
+      ;({ rpID, origin } = getWebAuthnConfig(request))
+    } catch {
+      return badRequest('Unrecognized origin')
+    }
 
     let verification
     try {
