@@ -72,10 +72,12 @@ rsync -az --delete "${RSYNC_EXCLUDES[@]}" "${RSYNC_PATHS[@]}" "$VPS_HOST:$REMOTE
 echo "4/6 stamp DEPLOYED_SHA=$SHA"
 ssh -o BatchMode=yes "$VPS_HOST" "echo '$SHA' > $REMOTE_DIR/DEPLOYED_SHA"
 
-# 5. Install deps only if the lock changed.
+# 5. Install deps only if the lock changed. NOTE: full install (NOT --omit=dev) —
+# the ingest worker imports devDependencies at runtime (dotenv, tsx via npx), so
+# --omit=dev crash-loops it with "Cannot find module 'dotenv'".
 if [ "$LOCK_CHANGED" = "1" ]; then
-  echo "5/6 npm ci (deps changed)"
-  ssh -o BatchMode=yes "$VPS_HOST" "cd $REMOTE_DIR && npm ci --omit=dev"
+  echo "5/6 npm ci (deps changed — full install incl. dotenv/tsx)"
+  ssh -o BatchMode=yes "$VPS_HOST" "cd $REMOTE_DIR && npm ci"
 else
   echo "5/6 npm ci skipped (lock unchanged)"
 fi
