@@ -1386,6 +1386,9 @@ const ko = {
   clearSearch: '검색 초기화',
   tableView: '테이블 보기',
   cardView: '카드 보기',
+  rowDensity: '행 밀도',
+  densityComfortable: '편안하게',
+  densityCompact: '간결하게',
   resetAutoLayout: '자동 레이아웃으로 초기화',
 
   // RankingSection

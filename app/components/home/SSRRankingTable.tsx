@@ -4,11 +4,14 @@
  * transition is invisible. Same card structure, same sizes, same colors.
  */
 
+import type { ReactNode } from 'react'
 import type { InitialTrader } from '@/lib/getInitialTraders'
-import { formatROI, formatPnL } from '@/lib/utils/format'
+import { formatPnL } from '@/lib/utils/format'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { getScoreColorInfo } from '@/lib/utils/score-colors'
 import { tokens } from '@/lib/design-tokens'
+import Metric from '@/app/components/ui/Metric'
+import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
 
 /** Same tiers + CSS vars as the hydrated TraderCard (getScoreStyle in
  *  TraderDisplay wraps the same util) — the SSR shell previously used stale
@@ -76,6 +79,47 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               ? '< 0.1%'
               : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`
             : '—'
+
+        // PnL / MDD render through the shared Metric so they carry the same
+        // colorblind-safe arrow cue (audit 1.2) as the hydrated TraderCard.
+        const stats: { label: string; value: string; color?: string; node?: ReactNode }[] = [
+          { label: 'Sharpe', value: '—' },
+          {
+            label: 'PnL',
+            value: formatPnL(trader.pnl),
+            node:
+              trader.pnl != null ? (
+                <Metric value={trader.pnl} format="pnl" size="sm" as="span" showArrow />
+              ) : undefined,
+          },
+          {
+            label: 'Win%',
+            value: winRate,
+            color:
+              trader.win_rate != null && trader.win_rate > 50
+                ? 'var(--color-accent-success)'
+                : undefined,
+          },
+          {
+            label: 'MDD',
+            value: mdd,
+            node:
+              trader.max_drawdown != null ? (
+                <Metric
+                  value={-Math.abs(trader.max_drawdown)}
+                  format="percent"
+                  display={
+                    Math.abs(trader.max_drawdown) < 0.05
+                      ? '< 0.1%'
+                      : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`
+                  }
+                  size="sm"
+                  as="span"
+                  showArrow
+                />
+              ) : undefined,
+          },
+        ]
 
         return (
           <a
@@ -211,25 +255,37 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                 </div>
               </div>
 
-              {/* Score badge */}
+              {/* Score badge + graded mini-bar (audit §4) */}
               {score && scoreStyle && (
                 <div
                   style={{
-                    minWidth: 50,
-                    height: 28,
-                    // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
-                    borderRadius: 8,
-                    background: scoreStyle.bg,
-                    border: `1px solid ${scoreStyle.border}`,
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: tokens.typography.fontSize.base,
-                    fontWeight: tokens.typography.fontWeight.black,
-                    color: scoreStyle.color,
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
+                    gap: 4,
                   }}
                 >
-                  {score}
+                  <div
+                    style={{
+                      minWidth: 50,
+                      height: 28,
+                      // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
+                      borderRadius: 8,
+                      background: scoreStyle.bg,
+                      border: `1px solid ${scoreStyle.border}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: tokens.typography.fontSize.base,
+                      fontWeight: tokens.typography.fontWeight.black,
+                      color: scoreStyle.color,
+                    }}
+                  >
+                    {score}
+                  </div>
+                  {trader.arena_score != null && (
+                    <ScoreMiniBar score={Number(trader.arena_score)} width={50} height={4} />
+                  )}
                 </div>
               )}
             </div>
@@ -248,47 +304,18 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                   opacity: 0.7,
                 }}
               />
-              <span
-                style={{
-                  fontSize: tokens.typography.fontSize.xl,
-                  fontWeight: tokens.typography.fontWeight.black,
-                  marginLeft: 'auto',
-                  color: roiPositive ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
-                  letterSpacing: '-0.02em',
-                }}
-              >
-                {formatROI(trader.roi)}
-              </span>
+              <Metric
+                value={trader.roi}
+                format="roi"
+                size="lg"
+                showArrow
+                style={{ marginLeft: 'auto' }}
+              />
             </div>
 
             {/* Row 3: Stats grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              {[
-                { label: 'Sharpe', value: '—' },
-                {
-                  label: 'PnL',
-                  value: formatPnL(trader.pnl),
-                  color:
-                    trader.pnl != null
-                      ? trader.pnl >= 0
-                        ? 'var(--color-accent-success)'
-                        : 'var(--color-accent-error)'
-                      : undefined,
-                },
-                {
-                  label: 'Win%',
-                  value: winRate,
-                  color:
-                    trader.win_rate != null && trader.win_rate > 50
-                      ? 'var(--color-accent-success)'
-                      : undefined,
-                },
-                {
-                  label: 'MDD',
-                  value: mdd,
-                  color: trader.max_drawdown != null ? 'var(--color-accent-error)' : undefined,
-                },
-              ].map((stat) => (
+              {stats.map((stat) => (
                 <div
                   key={stat.label}
                   style={{
@@ -315,16 +342,18 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                   >
                     {stat.label}
                   </span>
-                  <span
-                    style={{
-                      fontSize: tokens.typography.fontSize.sm,
-                      fontWeight: tokens.typography.fontWeight.medium,
-                      color: stat.color || 'var(--color-text-secondary)',
-                      fontVariantNumeric: 'tabular-nums',
-                    }}
-                  >
-                    {stat.value}
-                  </span>
+                  {stat.node ?? (
+                    <span
+                      style={{
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: tokens.typography.fontWeight.medium,
+                        color: stat.color || 'var(--color-text-secondary)',
+                        fontVariantNumeric: 'tabular-nums',
+                      }}
+                    >
+                      {stat.value}
+                    </span>
+                  )}
                 </div>
               ))}
             </div>

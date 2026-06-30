@@ -1431,6 +1431,9 @@ const zh = {
   clearSearch: '清除搜索',
   tableView: '表格视图',
   cardView: '卡片视图',
+  rowDensity: '行密度',
+  densityComfortable: '舒适',
+  densityCompact: '紧凑',
   resetAutoLayout: '恢复自动布局',
 
   // RankingSection

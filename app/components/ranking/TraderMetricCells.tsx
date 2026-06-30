@@ -6,8 +6,9 @@ import { Box, Text } from '../base'
 import { t as i18nT } from '@/lib/i18n'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { useCountUp } from '@/lib/hooks/useCountUp'
-import { TRADER_TEXT_TERTIARY, TRADER_ACCENT_ERROR } from './shared/TraderDisplay'
-import { formatPnL, formatROI } from './utils'
+import { TRADER_TEXT_TERTIARY } from './shared/TraderDisplay'
+import { formatROI } from './utils'
+import Metric from '../ui/Metric'
 import type { Trader } from './RankingTable'
 import {
   NA_STYLE,
@@ -16,7 +17,6 @@ import {
   PNL_CELL_STYLE,
   RIGHT_CELL_STYLE,
   STAT_TEXT_TERTIARY_STYLE,
-  MDD_TEXT_BASE_STYLE,
   ROI_TEXT_BASE_STYLE,
 } from './TraderRowStyles'
 
@@ -53,6 +53,11 @@ function AnimatedROI({
 }) {
   const animatedValue = useCountUp(animate ? roi : roi, animate ? 500 : 0)
   const displayValue = animate ? animatedValue : roi
+  // Colorblind-safe direction cue (audit 1.2): the +/− sign already lives in the
+  // text, so the arrow is redundant reinforcement and is aria-hidden. Mirrors
+  // <Metric showArrow>. Kept here (rather than swapping in Metric) to preserve
+  // the count-up animation on the top-3 rows.
+  const arrowGlyph = roi > 0 ? '▲' : roi < 0 ? '▼' : ''
   return (
     <Text
       size="md"
@@ -61,6 +66,11 @@ function AnimatedROI({
       style={{ ...ROI_TEXT_BASE_STYLE, color: roiColor }}
       title={`${roi >= 0 ? '+' : ''}${Number(roi).toFixed(2)}%`}
     >
+      {arrowGlyph && (
+        <span aria-hidden="true" style={{ marginRight: '0.25em', fontSize: '0.8em' }}>
+          {arrowGlyph}
+        </span>
+      )}
       {formatROI(displayValue)}
     </Text>
   )
@@ -100,12 +110,6 @@ export const TraderMetricCells = memo(function TraderMetricCells({
   // PnL
   const pnl = trader.pnl
   const hasPnl = pnl != null
-  const pnlColor = hasPnl
-    ? pnl >= 0
-      ? tokens.colors.accent.success
-      : TRADER_ACCENT_ERROR
-    : TRADER_TEXT_TERTIARY
-  const pnlText = hasPnl ? formatPnL(pnl) : '\u2014'
 
   return (
     <>
@@ -114,24 +118,18 @@ export const TraderMetricCells = memo(function TraderMetricCells({
         <AnimatedROI roi={roi} roiColor={roiColor} animate={rank <= 3} />
       </Box>
 
-      {/* PnL */}
+      {/* PnL — shared Metric with colorblind-safe arrow (audit 1.2) */}
       <Box className="col-pnl" style={PNL_CELL_STYLE}>
-        <Text
+        <Metric
+          value={hasPnl ? pnl : null}
+          format="pnl"
           size="sm"
-          weight="medium"
+          align="right"
+          showArrow
           className="pnl-value"
-          style={{
-            color: pnlColor,
-            lineHeight: 1.2,
-            fontSize: tokens.typography.fontSize.sm,
-            opacity: hasPnl ? 0.7 : 0.4,
-            cursor: hasPnl ? 'help' : 'default',
-            fontVariantNumeric: 'tabular-nums',
-          }}
           title={hasPnl ? getPnLTooltipFn(trader.source || source || '', language) : undefined}
-        >
-          {pnlText}
-        </Text>
+          style={{ opacity: hasPnl ? 0.7 : 0.4, cursor: hasPnl ? 'help' : 'default' }}
+        />
       </Box>
 
       {/* Win% */}
@@ -158,21 +156,25 @@ export const TraderMetricCells = memo(function TraderMetricCells({
         )}
       </Box>
 
-      {/* MDD */}
+      {/* MDD — shared Metric, rendered as a negative loss with arrow (audit 1.2).
+          Pre-formatted via `display` because the values are already in percent
+          units (Metric's `percent` formatter would multiply by 100). */}
       <Box className="col-mdd" style={RIGHT_CELL_STYLE}>
         {trader.max_drawdown != null && Number.isFinite(Number(trader.max_drawdown)) ? (
-          <Text
+          <Metric
+            value={-Math.abs(Number(trader.max_drawdown))}
+            format="percent"
+            display={`${trader.metrics_estimated ? '~' : ''}${
+              Math.abs(Number(trader.max_drawdown)) < 0.05
+                ? '< 0.1%'
+                : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}%`
+            }`}
             size="sm"
-            weight="medium"
-            style={{ ...MDD_TEXT_BASE_STYLE, opacity: trader.metrics_estimated ? 0.4 : 0.7 }}
+            align="right"
+            showArrow
             title={trader.metrics_estimated ? t('estimatedFromRoi') : undefined}
-          >
-            {trader.metrics_estimated ? '~' : ''}
-            {Math.abs(Number(trader.max_drawdown)) < 0.05
-              ? '< 0.1'
-              : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}`}
-            %
-          </Text>
+            style={{ opacity: trader.metrics_estimated ? 0.4 : 0.7 }}
+          />
         ) : (
           <NaIndicator source={trader.source || source} metricType="drawdown" />
         )}

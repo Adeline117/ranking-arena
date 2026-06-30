@@ -114,6 +114,39 @@
     box-shadow 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
 }
 
+/* ============================================================
+   Row Density (audit 1.4) — comfortable (default) / compact
+
+   Row min-height moved off TraderRow's inline style so these rules
+   can win. Scoped to .ranking-table-rows so the mobile TraderCard
+   (which also carries .ranking-row) is never shrunk by the toggle.
+   ============================================================ */
+.ranking-table-rows .ranking-row {
+  min-height: 58px;
+}
+.ranking-table-rows .ranking-row.rank-1,
+.ranking-table-rows .ranking-row.rank-2,
+.ranking-table-rows .ranking-row.rank-3 {
+  min-height: 72px;
+}
+
+.ranking-table-container[data-density='compact'] .ranking-table-rows .ranking-row {
+  min-height: 44px;
+  /* override TraderRow's inline ROW_BASE_STYLE vertical padding */
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+.ranking-table-container[data-density='compact'] .ranking-table-rows .ranking-row.rank-1,
+.ranking-table-container[data-density='compact'] .ranking-table-rows .ranking-row.rank-2,
+.ranking-table-container[data-density='compact'] .ranking-table-rows .ranking-row.rank-3 {
+  min-height: 56px;
+}
+/* Compact also tightens the sticky header grid padding */
+.ranking-table-container[data-density='compact'] .ranking-table-header.ranking-table-grid {
+  padding-top: 6px !important;
+  padding-bottom: 6px !important;
+}
+
 /* Gradient separator — simplified to solid border for performance.
    Each ::after pseudo-element with gradient + transition creates
    a separate compositor layer, adding ~3ms per row on mid-tier mobile. */
