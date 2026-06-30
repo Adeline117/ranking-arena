@@ -92,6 +92,13 @@ export function sanitizeTraderRow(snap: TraderRow): void {
   if (snap.max_drawdown != null && snap.max_drawdown < 1 && snap.roi != null && snap.roi > 500) {
     snap.max_drawdown = null
   }
+  // A near-total drawdown (>=99%) on a PROFITABLE trader is self-contradictory: you
+  // cannot lose ~everything and still be net-positive. This is the cap-artifact tail —
+  // it does not always land exactly on 100 (Math.round rounding / source-reported
+  // 99.9x), so the boundary check above (>=100) misses it. Null it out (-> N/A).
+  if (snap.max_drawdown != null && snap.max_drawdown >= 99 && snap.roi != null && snap.roi > 0) {
+    snap.max_drawdown = null
+  }
   // Sharpe ratio: uses VALIDATION_BOUNDS (was hardcoded ±20, now ±10)
   if (
     snap.sharpe_ratio != null &&
