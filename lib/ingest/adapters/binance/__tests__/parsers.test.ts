@@ -39,6 +39,7 @@ describe('parseBinanceLeaderboardPage', () => {
     expect(first.traderKind).toBe('human')
     expect(typeof first.headlineRoi).toBe('number') // already percent
     expect(typeof first.headlinePnl).toBe('number')
+    expect(first.headlineAum).toBeCloseTo(85079.66905633, 2) // board aum (absolute USD)
     expect(first.raw).toHaveProperty('sharpRatio') // board card extras kept
     expect(first.raw).toHaveProperty('chartItems')
   })
