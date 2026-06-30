@@ -20,8 +20,46 @@ export default function CreateCompetitionPage() {
   const [startAt, setStartAt] = useState('')
   const [endAt, setEndAt] = useState('')
   const [maxParticipants, setMaxParticipants] = useState('100')
+  const [entryFee, setEntryFee] = useState('0')
+  const [prizePool, setPrizePool] = useState('0')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Per-field validation messages, keyed by field id.
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+
+  // Validate every field; returns the error map (empty = valid).
+  const validate = (): Record<string, string> => {
+    const errs: Record<string, string> = {}
+    if (!title.trim()) {
+      errs.title = t('compErrTitleRequired')
+    }
+    const now = new Date()
+    const start = startAt ? new Date(startAt) : null
+    const end = endAt ? new Date(endAt) : null
+    if (!start || isNaN(start.getTime())) {
+      errs.start = t('compErrStartRequired')
+    } else if (start.getTime() <= now.getTime()) {
+      errs.start = t('compErrStartFuture')
+    }
+    if (!end || isNaN(end.getTime())) {
+      errs.end = t('compErrEndRequired')
+    } else if (start && !isNaN(start.getTime()) && end.getTime() <= start.getTime()) {
+      errs.end = t('compErrEndAfterStart')
+    }
+    const max = parseInt(maxParticipants, 10)
+    if (isNaN(max) || max < 2) {
+      errs.max = t('compErrMaxParticipants')
+    }
+    const fee = parseFloat(entryFee)
+    if (entryFee.trim() === '' || isNaN(fee) || fee < 0) {
+      errs.entryFee = t('compErrAmountInvalid')
+    }
+    const prize = parseFloat(prizePool)
+    if (prizePool.trim() === '' || isNaN(prize) || prize < 0) {
+      errs.prizePool = t('compErrAmountInvalid')
+    }
+    return errs
+  }
 
   const metrics = [
     { value: 'roi', label: 'ROI' },
@@ -34,6 +72,24 @@ export default function CreateCompetitionPage() {
     e.preventDefault()
     if (!isLoggedIn) {
       setError(t('compLoginRequired'))
+      return
+    }
+
+    // Block submit on any invalid field; focus the first offending control.
+    const errs = validate()
+    setFieldErrors(errs)
+    if (Object.keys(errs).length > 0) {
+      const order = ['title', 'start', 'end', 'max', 'entryFee', 'prizePool']
+      const firstKey = order.find((k) => errs[k])
+      const idMap: Record<string, string> = {
+        title: 'comp-title',
+        start: 'comp-start',
+        end: 'comp-end',
+        max: 'comp-max',
+        entryFee: 'comp-entry-fee',
+        prizePool: 'comp-prize-pool',
+      }
+      if (firstKey) document.getElementById(idMap[firstKey])?.focus()
       return
     }
 
@@ -55,6 +111,8 @@ export default function CreateCompetitionPage() {
           start_at: new Date(startAt).toISOString(),
           end_at: new Date(endAt).toISOString(),
           max_participants: parseInt(maxParticipants) || 100,
+          entry_fee_cents: Math.round((parseFloat(entryFee) || 0) * 100),
+          prize_pool_cents: Math.round((parseFloat(prizePool) || 0) * 100),
         }),
       })
       const json = await res.json()
@@ -88,6 +146,34 @@ export default function CreateCompetitionPage() {
     marginBottom: tokens.spacing[1],
     color: tokens.colors.text.secondary,
   }
+
+  const hintStyle = {
+    fontSize: tokens.typography.fontSize.xs,
+    color: tokens.colors.text.tertiary,
+    marginTop: tokens.spacing[1],
+  }
+
+  // Merge a red border onto inputs that currently have an error.
+  const inputStyleFor = (field: string) =>
+    fieldErrors[field]
+      ? { ...inputStyle, border: `1px solid ${tokens.colors.accent.error}` }
+      : inputStyle
+
+  // Inline, screen-reader-linked error message for a field.
+  const FieldError = ({ field }: { field: string }) =>
+    fieldErrors[field] ? (
+      <Text
+        id={`${field}-error`}
+        role="alert"
+        style={{
+          color: tokens.colors.accent.error,
+          fontSize: tokens.typography.fontSize.xs,
+          marginTop: tokens.spacing[1],
+        }}
+      >
+        {fieldErrors[field]}
+      </Text>
+    ) : null
 
   return (
     <Box
@@ -151,7 +237,7 @@ export default function CreateCompetitionPage() {
             <Text style={{ color: tokens.colors.text.secondary }}>{t('compLoginRequired')}</Text>
           </Box>
         ) : (
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} noValidate>
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
               {/* Title */}
               <Box>
@@ -164,10 +250,12 @@ export default function CreateCompetitionPage() {
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   placeholder={t('compFieldTitlePlaceholder')}
-                  required
                   maxLength={100}
-                  style={inputStyle}
+                  aria-invalid={!!fieldErrors.title}
+                  aria-describedby={fieldErrors.title ? 'title-error' : undefined}
+                  style={inputStyleFor('title')}
                 />
+                <FieldError field="title" />
               </Box>
 
               {/* Description */}
@@ -216,9 +304,11 @@ export default function CreateCompetitionPage() {
                     type="datetime-local"
                     value={startAt}
                     onChange={(e) => setStartAt(e.target.value)}
-                    required
-                    style={inputStyle}
+                    aria-invalid={!!fieldErrors.start}
+                    aria-describedby={fieldErrors.start ? 'start-error' : undefined}
+                    style={inputStyleFor('start')}
                   />
+                  <FieldError field="start" />
                 </Box>
                 <Box style={{ flex: 1 }}>
                   <label htmlFor="comp-end" style={labelStyle}>
@@ -229,9 +319,11 @@ export default function CreateCompetitionPage() {
                     type="datetime-local"
                     value={endAt}
                     onChange={(e) => setEndAt(e.target.value)}
-                    required
-                    style={inputStyle}
+                    aria-invalid={!!fieldErrors.end}
+                    aria-describedby={fieldErrors.end ? 'end-error' : undefined}
+                    style={inputStyleFor('end')}
                   />
+                  <FieldError field="end" />
                 </Box>
               </Box>
 
@@ -247,8 +339,59 @@ export default function CreateCompetitionPage() {
                   onChange={(e) => setMaxParticipants(e.target.value)}
                   min={2}
                   max={10000}
-                  style={inputStyle}
+                  aria-invalid={!!fieldErrors.max}
+                  aria-describedby={fieldErrors.max ? 'max-error' : undefined}
+                  style={inputStyleFor('max')}
                 />
+                <FieldError field="max" />
+              </Box>
+
+              {/* Entry Fee + Prize Pool */}
+              <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+                <Box style={{ flex: 1 }}>
+                  <label htmlFor="comp-entry-fee" style={labelStyle}>
+                    {t('compFieldEntryFee')} *
+                  </label>
+                  <input
+                    id="comp-entry-fee"
+                    type="number"
+                    value={entryFee}
+                    onChange={(e) => setEntryFee(e.target.value)}
+                    min={0}
+                    step="0.01"
+                    aria-invalid={!!fieldErrors.entryFee}
+                    aria-describedby={
+                      fieldErrors.entryFee ? 'entryFee-error' : 'comp-entry-fee-hint'
+                    }
+                    style={inputStyleFor('entryFee')}
+                  />
+                  <Text id="comp-entry-fee-hint" style={hintStyle}>
+                    {t('compFieldEntryFeeHint')}
+                  </Text>
+                  <FieldError field="entryFee" />
+                </Box>
+                <Box style={{ flex: 1 }}>
+                  <label htmlFor="comp-prize-pool" style={labelStyle}>
+                    {t('compFieldPrizePool')} *
+                  </label>
+                  <input
+                    id="comp-prize-pool"
+                    type="number"
+                    value={prizePool}
+                    onChange={(e) => setPrizePool(e.target.value)}
+                    min={0}
+                    step="0.01"
+                    aria-invalid={!!fieldErrors.prizePool}
+                    aria-describedby={
+                      fieldErrors.prizePool ? 'prizePool-error' : 'comp-prize-pool-hint'
+                    }
+                    style={inputStyleFor('prizePool')}
+                  />
+                  <Text id="comp-prize-pool-hint" style={hintStyle}>
+                    {t('compFieldPrizePoolHint')}
+                  </Text>
+                  <FieldError field="prizePool" />
+                </Box>
               </Box>
 
               {error && (

@@ -7,6 +7,8 @@ import PageHeader from '@/app/components/ui/PageHeader'
 import EmptyState from '@/app/components/ui/EmptyState'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import CompetitionCountdown from './CompetitionCountdown'
+import CompetitionCapacityBar from './CompetitionCapacityBar'
 import Link from 'next/link'
 
 interface Competition {
@@ -25,16 +27,6 @@ interface Competition {
 }
 
 type TabStatus = 'upcoming' | 'active' | 'completed'
-
-function formatTimeRemaining(dateStr: string): string {
-  const diff = new Date(dateStr).getTime() - Date.now()
-  if (diff <= 0) return 'Ended'
-  const days = Math.floor(diff / (1000 * 60 * 60 * 24))
-  const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60))
-  if (days > 0) return `${days}d ${hours}h`
-  const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60))
-  return `${hours}h ${mins}m`
-}
 
 function formatPrize(cents: number): string {
   if (cents === 0) return 'Free'
@@ -56,6 +48,12 @@ export default function CompetitionsPageClient() {
   const [tab, setTab] = useState<TabStatus>('active')
   const [competitions, setCompetitions] = useState<Competition[]>([])
   const [loading, setLoading] = useState(true)
+  // Per-tab total counts for the tab badges (null = not loaded yet).
+  const [counts, setCounts] = useState<Record<TabStatus, number | null>>({
+    active: null,
+    upcoming: null,
+    completed: null,
+  })
   // Per-tab cache to avoid refetch on tab switch
   const tabCacheRef = useRef<Record<string, { data: Competition[]; ts: number }>>({})
 
@@ -75,6 +73,10 @@ export default function CompetitionsPageClient() {
         const data = json.data.competitions
         tabCacheRef.current[status] = { data, ts: Date.now() }
         setCompetitions(data)
+        const total = json.data.pagination?.total
+        if (typeof total === 'number') {
+          setCounts((prev) => ({ ...prev, [status]: total }))
+        }
       }
     } catch {
       // silent
@@ -86,6 +88,27 @@ export default function CompetitionsPageClient() {
   useEffect(() => {
     fetchCompetitions(tab)
   }, [tab, fetchCompetitions])
+
+  // Load the count for every tab once on mount so all badges populate
+  // immediately (limit=1 keeps each request cheap; pagination.total is exact).
+  useEffect(() => {
+    let cancelled = false
+    const statuses: TabStatus[] = ['active', 'upcoming', 'completed']
+    statuses.forEach(async (status) => {
+      try {
+        const res = await fetch(`/api/competitions?status=${status}&limit=1`)
+        const json = await res.json()
+        if (!cancelled && json.success && typeof json.data.pagination?.total === 'number') {
+          setCounts((prev) => ({ ...prev, [status]: json.data.pagination.total }))
+        }
+      } catch {
+        // badge simply stays hidden — non-critical
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const tabs: { key: TabStatus; label: string }[] = [
     { key: 'active', label: t('compTabActive') },
@@ -135,6 +158,7 @@ export default function CompetitionsPageClient() {
         >
           {tabs.map((t_) => {
             const selected = tab === t_.key
+            const count = counts[t_.key]
             return (
               <button
                 key={t_.key}
@@ -144,6 +168,9 @@ export default function CompetitionsPageClient() {
                 aria-controls="comp-tabpanel"
                 onClick={() => setTab(t_.key)}
                 style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[2],
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   background: selected ? tokens.colors.bg.tertiary : 'transparent',
                   color: selected ? tokens.colors.text.primary : tokens.colors.text.secondary,
@@ -158,10 +185,41 @@ export default function CompetitionsPageClient() {
                 }}
               >
                 {t_.label}
+                {count != null && (
+                  <span
+                    aria-label={`${count}`}
+                    style={{
+                      minWidth: 18,
+                      padding: `0 ${tokens.spacing[1]}`,
+                      borderRadius: tokens.radius.full,
+                      background: selected
+                        ? tokens.colors.accent.primary
+                        : tokens.colors.bg.tertiary,
+                      color: selected ? '#fff' : tokens.colors.text.secondary,
+                      fontSize: tokens.typography.fontSize.xs,
+                      fontWeight: tokens.typography.fontWeight.semibold,
+                      fontVariantNumeric: 'tabular-nums',
+                      textAlign: 'center',
+                      lineHeight: '18px',
+                    }}
+                  >
+                    {count}
+                  </span>
+                )}
               </button>
             )
           })}
         </Box>
+
+        {/* Keyboard focus ring for the card links (inline styles can't express
+            :focus-visible, so a scoped stylesheet carries it). */}
+        <style>{`
+          .comp-card-link { border-radius: ${tokens.radius.lg}; outline: none; }
+          .comp-card-link:focus-visible {
+            outline: 2px solid var(--focus-ring-color, rgba(139, 111, 168, 0.5));
+            outline-offset: 2px;
+          }
+        `}</style>
 
         {/* List */}
         <Box id="comp-tabpanel" role="tabpanel" aria-labelledby={`comp-tab-${tab}`}>
@@ -175,6 +233,7 @@ export default function CompetitionsPageClient() {
                 <Link
                   key={comp.id}
                   href={`/competitions/${comp.id}`}
+                  className="comp-card-link"
                   style={{ textDecoration: 'none', color: 'inherit' }}
                 >
                   <Box
@@ -261,26 +320,10 @@ export default function CompetitionsPageClient() {
                           {metricLabel(comp.metric)}
                         </Text>
                       </Box>
-                      <Box
-                        style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: tokens.typography.fontSize.xs,
-                            color: tokens.colors.text.tertiary,
-                          }}
-                        >
-                          {t('compParticipants')}:
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: tokens.typography.fontSize.xs,
-                            fontWeight: tokens.typography.fontWeight.medium,
-                          }}
-                        >
-                          {comp.participant_count}/{comp.max_participants}
-                        </Text>
-                      </Box>
+                      <CompetitionCapacityBar
+                        current={comp.participant_count}
+                        max={comp.max_participants}
+                      />
                       <Box
                         style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
                       >
@@ -301,28 +344,11 @@ export default function CompetitionsPageClient() {
                           {formatPrize(comp.prize_pool_cents)}
                         </Text>
                       </Box>
-                      <Box
-                        style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: tokens.typography.fontSize.xs,
-                            color: tokens.colors.text.tertiary,
-                          }}
-                        >
-                          {comp.status === 'completed' ? t('compEnded') : t('compTimeLeft')}:
-                        </Text>
-                        <Text
-                          style={{
-                            fontSize: tokens.typography.fontSize.xs,
-                            fontWeight: tokens.typography.fontWeight.medium,
-                          }}
-                        >
-                          {comp.status === 'completed'
-                            ? new Date(comp.end_at).toLocaleDateString()
-                            : formatTimeRemaining(comp.end_at)}
-                        </Text>
-                      </Box>
+                      <CompetitionCountdown
+                        startAt={comp.start_at}
+                        endAt={comp.end_at}
+                        status={comp.status}
+                      />
                     </Box>
                   </Box>
                 </Link>

@@ -9,6 +9,9 @@ import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
+import Metric from '@/app/components/ui/Metric'
+import CompetitionCountdown from '../CompetitionCountdown'
+import CompetitionCapacityBar from '../CompetitionCapacityBar'
 import Link from 'next/link'
 
 interface Competition {
@@ -238,15 +241,22 @@ function StandingsTable({
   metric,
   isLive,
   lastUpdate,
+  currentUserId,
   t,
 }: {
   entries: CompetitionEntry[]
   metric: string
   isLive: boolean
   lastUpdate: Date | null
+  currentUserId: string | null
   t: (key: string) => string
 }) {
-  const sorted = [...entries].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
+  // Platform filter — only surfaced when >1 distinct platform is present.
+  const platforms = Array.from(new Set(entries.map((e) => e.platform).filter(Boolean)))
+  const [platformFilter, setPlatformFilter] = useState<string>('all')
+  const visible =
+    platformFilter === 'all' ? entries : entries.filter((e) => e.platform === platformFilter)
+  const sorted = [...visible].sort((a, b) => (a.rank ?? 999) - (b.rank ?? 999))
 
   return (
     <Box
@@ -283,13 +293,41 @@ function StandingsTable({
             />
           )}
         </Box>
-        {lastUpdate && (
-          <Text
-            style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}
-          >
-            {t('compStandingsLastUpdate')}: {lastUpdate.toLocaleTimeString()}
-          </Text>
-        )}
+        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
+          {platforms.length > 1 && (
+            <select
+              aria-label={t('compFilterPlatform')}
+              value={platformFilter}
+              onChange={(e) => setPlatformFilter(e.target.value)}
+              style={{
+                padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
+                background: tokens.colors.bg.primary,
+                color: tokens.colors.text.primary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                borderRadius: tokens.radius.md,
+                fontSize: tokens.typography.fontSize.xs,
+                cursor: 'pointer',
+              }}
+            >
+              <option value="all">{t('compAllPlatforms')}</option>
+              {platforms.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </select>
+          )}
+          {lastUpdate && (
+            <Text
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: tokens.colors.text.tertiary,
+              }}
+            >
+              {t('compStandingsLastUpdate')}: {lastUpdate.toLocaleTimeString()}
+            </Text>
+          )}
+        </Box>
       </Box>
 
       {sorted.length === 0 ? (
@@ -326,8 +364,8 @@ function StandingsTable({
             <tbody>
               {sorted.map((entry, idx) => {
                 const delta = (entry.current_value ?? 0) - (entry.baseline_value ?? 0)
-                const isPositive = delta >= 0
                 const isTop3 = (entry.rank ?? 999) <= 3
+                const isCurrentUser = currentUserId != null && entry.user_id === currentUserId
                 const medalColor =
                   entry.rank === 1
                     ? '#FFD700'
@@ -336,6 +374,11 @@ function StandingsTable({
                       : entry.rank === 3
                         ? '#CD7F32'
                         : undefined
+                const rowBg = isCurrentUser
+                  ? alpha(tokens.colors.accent.primary, 12)
+                  : isTop3 && medalColor
+                    ? alpha(medalColor, 3)
+                    : undefined
                 return (
                   <tr
                     key={entry.id}
@@ -344,7 +387,10 @@ function StandingsTable({
                         idx < sorted.length - 1
                           ? `1px solid ${tokens.colors.border.primary}`
                           : undefined,
-                      background: isTop3 && medalColor ? alpha(medalColor, 3) : undefined,
+                      background: rowBg,
+                      boxShadow: isCurrentUser
+                        ? `inset 3px 0 0 ${tokens.colors.accent.primary}`
+                        : undefined,
                     }}
                   >
                     <td
@@ -361,14 +407,36 @@ function StandingsTable({
                       style={{
                         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                         fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: isTop3 ? 600 : 400,
+                        fontWeight: isTop3 || isCurrentUser ? 600 : 400,
                         maxWidth: 200,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap' as const,
                       }}
                     >
-                      {entry.trader_id}
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: tokens.spacing[2],
+                        }}
+                      >
+                        {entry.trader_id}
+                        {isCurrentUser && (
+                          <span
+                            style={{
+                              padding: `0 ${tokens.spacing[1]}`,
+                              borderRadius: tokens.radius.sm,
+                              background: tokens.colors.accent.primary,
+                              color: '#fff',
+                              fontSize: tokens.typography.fontSize.xs,
+                              fontWeight: tokens.typography.fontWeight.semibold,
+                            }}
+                          >
+                            {t('compYouTag')}
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td
                       style={{
@@ -391,11 +459,18 @@ function StandingsTable({
                       style={{
                         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                         fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: tokens.typography.fontWeight.semibold,
-                        color: isPositive ? '#22c55e' : '#ef4444',
                       }}
                     >
-                      {formatDelta(entry.baseline_value, entry.current_value, metric)}
+                      {/* Metric adds a colorblind-safe ▲/▼ shape cue alongside the
+                          sign-based color (DESIGN.md "Signal Accent"). */}
+                      <Metric
+                        as="span"
+                        size="sm"
+                        value={delta}
+                        colorBySign
+                        showArrow
+                        display={formatDelta(entry.baseline_value, entry.current_value, metric)}
+                      />
                     </td>
                   </tr>
                 )
@@ -662,18 +737,16 @@ export default function CompetitionDetailPage() {
                 {metricLabel(competition.metric)}
               </Text>
             </Box>
+            <Box style={{ minWidth: 160 }}>
+              <CompetitionCapacityBar current={entries.length} max={competition.max_participants} />
+            </Box>
             <Box>
-              <Text
-                style={{
-                  fontSize: tokens.typography.fontSize.xs,
-                  color: tokens.colors.text.tertiary,
-                }}
-              >
-                {t('compParticipants')}
-              </Text>
-              <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
-                {entries.length}/{competition.max_participants}
-              </Text>
+              <CompetitionCountdown
+                startAt={competition.start_at}
+                endAt={competition.end_at}
+                status={competition.status}
+                size="md"
+              />
             </Box>
             <Box>
               <Text
@@ -877,6 +950,7 @@ export default function CompetitionDetailPage() {
               metric={competition.metric}
               isLive={competition.status === 'active'}
               lastUpdate={lastUpdate}
+              currentUserId={userId ?? null}
               t={t}
             />
           ) : (
