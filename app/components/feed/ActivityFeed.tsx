@@ -389,13 +389,14 @@ function FilterChip({ label, active, onClick, small = false }: FilterChipProps) 
   return (
     <button
       onClick={onClick}
+      aria-pressed={active}
       style={{
         padding: small ? '2px 8px' : '4px 12px',
         borderRadius: tokens.radius.full,
         border: active
           ? '1px solid var(--color-accent-primary)'
           : `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
-        background: active ? 'var(--color-accent-primary)20' : 'transparent',
+        background: active ? alpha(tokens.colors.accent.primary, 12) : 'transparent',
         color: active ? 'var(--color-accent-primary)' : tokens.colors.text.tertiary,
         fontSize: small ? 11 : tokens.typography.fontSize.xs,
         fontWeight: active
