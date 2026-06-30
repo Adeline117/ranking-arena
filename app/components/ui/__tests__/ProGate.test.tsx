@@ -35,7 +35,7 @@ describe('ProGate', () => {
       </ProGate>
     )
     expect(screen.getByText('secret content')).toBeInTheDocument()
-    expect(screen.queryByText('upgradeToPro')).not.toBeInTheDocument()
+    expect(screen.queryByText('startFreeTrial')).not.toBeInTheDocument()
   })
 
   it('renders children ungated while subscription is loading (no paywall flash)', () => {
@@ -46,7 +46,7 @@ describe('ProGate', () => {
       </ProGate>
     )
     expect(screen.getByText('secret content')).toBeInTheDocument()
-    expect(screen.queryByText('upgradeToPro')).not.toBeInTheDocument()
+    expect(screen.queryByText('startFreeTrial')).not.toBeInTheDocument()
   })
 
   it('inline variant replaces children with the upsell card', () => {
@@ -57,7 +57,7 @@ describe('ProGate', () => {
     )
     expect(screen.queryByText('secret content')).not.toBeInTheDocument()
     expect(screen.getByText('proFeatureBlurred')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('upgradeToPro'))
+    fireEvent.click(screen.getByText('startFreeTrial'))
     expect(mockPush).toHaveBeenCalledWith('/pricing')
   })
 
@@ -68,7 +68,7 @@ describe('ProGate', () => {
       </ProGate>
     )
     expect(screen.getByText('secret content')).toBeInTheDocument()
-    expect(screen.getByText('upgradeToPro')).toBeInTheDocument()
+    expect(screen.getByText('startFreeTrial')).toBeInTheDocument()
   })
 
   it('modal variant intercepts clicks and opens the upsell dialog', () => {
@@ -77,10 +77,10 @@ describe('ProGate', () => {
         <button>locked action</button>
       </ProGate>
     )
-    expect(screen.queryByText('upgradeToPro')).not.toBeInTheDocument()
+    expect(screen.queryByText('startFreeTrial')).not.toBeInTheDocument()
     fireEvent.click(screen.getByText('locked action'))
-    expect(screen.getByText('upgradeToPro')).toBeInTheDocument()
-    fireEvent.click(screen.getByText('upgradeToPro'))
+    expect(screen.getByText('startFreeTrial')).toBeInTheDocument()
+    fireEvent.click(screen.getByText('startFreeTrial'))
     expect(mockPush).toHaveBeenCalledWith('/pricing')
   })
 })

@@ -21,10 +21,97 @@
 import { useState, type ReactNode } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
+import { trackEvent } from '@/lib/analytics/track'
+import { SUBSCRIPTION_PLANS } from '@/lib/types/premium'
 import { Box, Text } from '../base'
 import ModalOverlay from './ModalOverlay'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useSubscription } from '../home/hooks/useSubscription'
+
+/**
+ * Price anchor for the upsell card — pulled from the single source of truth
+ * (SUBSCRIPTION_PLANS) so it never drifts from the pricing page. Falls back to
+ * the known Pro monthly price if the plan list ever changes shape.
+ */
+const PRO_PLAN = SUBSCRIPTION_PLANS.find((p) => p.id === 'pro')
+const PRO_PRICE_LABEL = `$${PRO_PLAN?.price.monthly ?? 4.99}`
+
+/**
+ * featureKey → default outcome-framed benefit i18n keys. Ports the framing the
+ * deprecated PremiumGate baked in (FEATURE_BENEFITS) to the canonical ProGate:
+ * a gate with a known featureKey now gets contextual bullets automatically when
+ * the caller doesn't hand-pass `benefits`. Add new gates here as they appear.
+ */
+const DEFAULT_BENEFIT_KEYS: Record<string, string[]> = {
+  // trader stats blur (TraderProfileClient / StatsPage / TraderProfileView)
+  upgradeProStatsDesc: [
+    'gateBenefitScoreSubScores',
+    'gateBenefitScoreFormula',
+    'gateBenefitScorePeerCompare',
+  ],
+  // trader comparison (ComparePageClient)
+  featureTraderCompareDesc: [
+    'gateBenefitCompareSideBySide',
+    'gateBenefitCompareMetrics',
+    'gateBenefitCompareExport',
+  ],
+  // advanced ranking filters (RankingSection / AdvancedFilter)
+  proFilterTooltip: [
+    'gateBenefitFilters150Plus',
+    'gateBenefitFiltersSaved',
+    'gateBenefitFiltersCombo',
+  ],
+  unlockAdvancedFilter: [
+    'gateBenefitFilters150Plus',
+    'gateBenefitFiltersSaved',
+    'gateBenefitFiltersCombo',
+  ],
+  // linked exchange accounts (MultiAccountSection)
+  linkedAccountsDesc: [
+    'gateBenefitLinkedMultiAccount',
+    'gateBenefitLinkedUnifiedPnl',
+    'gateBenefitLinkedAutoSync',
+  ],
+  // Pro groups (ProGroupOption / GroupSettings / group join)
+  proGroupDescFree: [
+    'gateBenefitGroupExclusive',
+    'gateBenefitGroupSignals',
+    'gateBenefitGroupPriority',
+  ],
+  proExclusiveGroupDesc: [
+    'gateBenefitGroupExclusive',
+    'gateBenefitGroupSignals',
+    'gateBenefitGroupPriority',
+  ],
+  proMembersOnly: [
+    'gateBenefitGroupExclusive',
+    'gateBenefitGroupSignals',
+    'gateBenefitGroupPriority',
+  ],
+}
+
+/**
+ * Resolve the bullet list for a gate: caller-supplied `benefits` win; otherwise
+ * fall back to the per-featureKey default map (translated). Returns undefined
+ * when neither applies so the card simply omits the list.
+ */
+function resolveBenefits(
+  featureKey: string | undefined,
+  benefits: string[] | undefined,
+  t: (key: string) => string
+): string[] | undefined {
+  if (benefits && benefits.length > 0) return benefits
+  const keys = featureKey ? DEFAULT_BENEFIT_KEYS[featureKey] : undefined
+  return keys ? keys.map((k) => t(k)) : undefined
+}
+
+/** Fire the paywall clickthrough event, then route to /pricing. NOTE: this is the
+ *  CTA-CLICK event (distinct from `paywall_blocked`, which call sites fire when a
+ *  gate is first shown) — keeping them separate avoids double-counting blocks. */
+function goToPricing(router: ReturnType<typeof useRouter>, featureKey: string) {
+  trackEvent('paywall_cta_click', { source: 'progate', featureKey })
+  router.push('/pricing')
+}
 
 export interface ProGateProps {
   /** Optional for variant="inline", which renders only the upsell card. */
@@ -136,8 +223,11 @@ function UpsellCard({
           cursor: 'pointer',
         }}
       >
-        {t('upgradeToPro')}
+        {t('startFreeTrial')}
       </button>
+      <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
+        {t('proPriceAnchor').replace('{price}', PRO_PRICE_LABEL)}
+      </Text>
     </Box>
   )
 }
@@ -165,7 +255,8 @@ export function ProUpsellModal({
       <div style={{ padding: tokens.spacing[6] }}>
         <UpsellCard
           description={description ?? t(featureKey)}
-          onUpgrade={() => router.push('/pricing')}
+          benefits={resolveBenefits(featureKey, undefined, t)}
+          onUpgrade={() => goToPricing(router, featureKey)}
           t={t}
         />
       </div>
@@ -186,12 +277,14 @@ export default function ProGate({
   const { isPro, isLoading } = useSubscription()
   const [modalOpen, setModalOpen] = useState(false)
   const upsellText = description ?? t(featureKey)
+  // Caller-supplied benefits win; otherwise auto-frame from the featureKey map.
+  const resolvedBenefits = resolveBenefits(featureKey, benefits, t)
 
   // Pro users and the loading window render ungated — a transient paywall
   // flash for paying users is worse than a delayed gate for free users.
   if (isPro || isLoading) return <>{children}</>
 
-  const goUpgrade = () => router.push('/pricing')
+  const goUpgrade = () => goToPricing(router, featureKey)
 
   if (variant === 'blur') {
     return (
@@ -209,7 +302,12 @@ export default function ProGate({
             zIndex: 2,
           }}
         >
-          <UpsellCard description={upsellText} benefits={benefits} onUpgrade={goUpgrade} t={t} />
+          <UpsellCard
+            description={upsellText}
+            benefits={resolvedBenefits}
+            onUpgrade={goUpgrade}
+            t={t}
+          />
         </div>
       </div>
     )
@@ -244,7 +342,12 @@ export default function ProGate({
           maxWidth={380}
         >
           <div style={{ padding: tokens.spacing[6] }}>
-            <UpsellCard description={upsellText} benefits={benefits} onUpgrade={goUpgrade} t={t} />
+            <UpsellCard
+              description={upsellText}
+              benefits={resolvedBenefits}
+              onUpgrade={goUpgrade}
+              t={t}
+            />
           </div>
         </ModalOverlay>
       </>
@@ -255,7 +358,7 @@ export default function ProGate({
   return (
     <UpsellCard
       description={upsellText}
-      benefits={benefits}
+      benefits={resolvedBenefits}
       minHeight={fallbackHeight}
       onUpgrade={goUpgrade}
       t={t}
