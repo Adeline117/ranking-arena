@@ -150,7 +150,7 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
         viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
         style={{ width: '100%', height: 'auto', cursor: 'crosshair' }}
         role="img"
-        aria-label="Underwater drawdown chart"
+        aria-label={`Underwater drawdown chart, max ${minDrawdown.toFixed(1)}%`}
         onMouseMove={handleMouseMove}
         onMouseLeave={() => setHoverIdx(null)}
       >
