@@ -35,6 +35,8 @@ describe('parseGateLeaderboardPage', () => {
     // profit_rate 14.4897 (decimal) → 1448.97%
     expect(first.headlineRoi).toBeCloseTo(1448.97, 1)
     expect(first.headlineWinRate).toBeCloseTo(50, 5)
+    expect(first.headlineMdd).toBeCloseTo(29.7, 1) // max_drawdown 0.297 decimal → percent
+    expect(first.headlineAum).toBeCloseTo(10, 5)
     expect(first.raw).toMatchObject({ leader_id: 3355 })
   })
 
