@@ -134,8 +134,11 @@ export function parseKucoinLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       headlineRoi: kucoinHeadlineRoi(item.thirtyDayPnlRatio, item.thirtyDayPnl, item.leadPrincipal),
       headlinePnl: num(item.thirtyDayPnl),
       headlineWinRate: null, // not exposed on the board
+      // leadAmount = Lead Size / AUM (absolute USD; identical to profile overview.aum)
+      // — was raw-only, so board-tier traders had no AUM. (KuCoin exposes no MDD.)
+      headlineAum: num(item.leadAmount),
       traderMeta: pilot ? { tradepilot: true, venue: item.exchange } : null,
-      // 30-point PnL sparkline, lead size, copier slots, days... verbatim
+      // 30-point PnL sparkline, copier slots, days, leadPrincipal... verbatim
       raw: item,
     })
   }
