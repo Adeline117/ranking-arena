@@ -110,9 +110,14 @@ export function parseToobitLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       headlineRoi: pct(item.leaderAvgProfitRatio),
       headlinePnl: num(item.pnl),
       headlineWinRate: pct(item.leaderProfitOrderRatio),
+      // Board carries AUM (totalLeadAmount, absolute USD) and Sharpe (sharpeRatio,
+      // raw ratio) — were raw-only. (Toobit is geo-blocked → no MDD on board;
+      // takes effect once a VPS region can reach it.)
+      headlineAum: num(item.totalLeadAmount),
+      headlineSharpe: num(item.sharpeRatio),
       traderMeta: null,
-      // sharpeRatio / totalLeadAmount / followTotalProfit / the embedded
-      // cumulative-ROI sparkline (leaderTradeProfit) — kept verbatim.
+      // followTotalProfit / the embedded cumulative-ROI sparkline
+      // (leaderTradeProfit) — kept verbatim.
       raw: item,
     })
   }
