@@ -1,0 +1,55 @@
+# Arena INGEST worker — immutable container image.
+#
+# Why (2026-06-30 incident): deploying to the SG VPS ran `npm ci` on the box, whose
+# npm is not concurrency-safe and silently drops .js files → worker crash-loop → SG
+# ingestion DOWN. A container bakes a deterministic, platform-matched node_modules +
+# the Playwright browsers ONCE here in CI; the box just `docker run`s it and never
+# installs anything. This is the ultimate form of the CI-artifact pipeline.
+#
+# Base = the official Playwright image pinned to the LOCKFILE playwright version
+# (package-lock → 1.59.1). It ships Chromium + system deps + a non-root `pwuser`
+# (the worker launches Chromium WITHOUT --no-sandbox, so it must NOT run as root).
+# Keep this tag in sync with package-lock's playwright version — the CI dep-verify
+# step + a smoke run catch a mismatch.
+#
+# Build (context = repo root):  docker build -f worker/Dockerfile.ingest -t arena-ingest .
+# The worker runs interpreted TS via tsx (no compile) → runtime needs source +
+# node_modules + tsconfig (for the @/* path alias). `.env` is MOUNTED at run time
+# (never baked); the anti-bot Playwright profiles persist via a mounted volume.
+
+ARG PW_VERSION=v1.59.1-jammy
+
+# ── deps: deterministic full install (incl devDeps tsx/dotenv — runtime needs them) ──
+# Built on node:20 (npm 10) — the SAME toolchain that generated package-lock.json
+# (the existing CI + the tarball artifact pipeline also pin node 20). The Playwright
+# base image ships node 24 / npm 11, whose stricter optional-peer resolution
+# (jsdom/react-native) rejects this lock as "out of sync" — so deps are NOT built on
+# it. The resulting tree is portable to the runtime stage: all native addons here are
+# NAPI prebuilds (ABI-stable across node versions) and Linux-x64 on both stages.
+FROM node:20-bookworm-slim AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+# ── runtime ──
+FROM mcr.microsoft.com/playwright:${PW_VERSION} AS runtime
+ENV NODE_ENV=production \
+    NODE_OPTIONS=--max-old-space-size=2560 \
+    INGEST_REGIONS=vps_sg \
+    INGEST_LOCAL_REGION=vps_sg
+WORKDIR /app
+
+COPY --from=deps /app/node_modules ./node_modules
+# Branded Google Chrome channel (some sources use sources.meta.browser_channel
+# 'chrome' for the Akamai TLS fingerprint). Chromium is already in the base image.
+RUN npx playwright install chrome
+COPY package.json tsconfig.json ./
+COPY lib ./lib
+COPY worker ./worker
+
+# Persisted anti-bot profiles (warm cookies / SingletonLock cleanup happen here).
+RUN mkdir -p /app/.arena-ingest/profiles && chown -R pwuser:pwuser /app
+USER pwuser
+
+# tsx is the interpreter; the entry resolves @/* via tsconfig.
+CMD ["npx", "tsx", "worker/src/ingest-worker.ts"]
