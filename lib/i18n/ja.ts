@@ -5712,6 +5712,22 @@ const ja = {
   proPromoBanner:
     '🎉 Pro機能が期間限定で無料 —— すべての有料機能を、アップグレードなしでお使いいただけます。',
   proPromoBannerDismiss: '閉じる',
+  tokenRankingsSortLabel: '並び替え',
+  tokenRankingsSortTraders: 'トレーダー数',
+  tokenRankingsSortTrades: '取引数',
+  tokenRankingsSortPnl: '損益',
+  tokenRankingsNoActivity: 'まだ取引なし',
+  referralRewardBannerTitle: '友達を{count}人招待して、Proを{days}日間無料でゲット',
+  referralRewardBannerSubtitle:
+    '友達をArenaに招待しましょう。{count}人があなたのリンクから登録すると、Arena Proが{days}日間無料になります。',
+  referralHowItWorks: '仕組み',
+  referralStep1: '下の紹介リンクをコピー',
+  referralStep2: '暗号資産好きの友達にシェア',
+  referralStep3: '友達が{count}人登録すると、Proが{days}日間解除されます',
+  referralFriendsReferred: '招待した友達',
+  referralRewardUnlocked: '特典をゲット！',
+  referralFriendTrialNote:
+    '特典：友達があなたのリンクから参加すると、{days}日間のProトライアルを獲得できます。',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: 'パフォーマンス監視',

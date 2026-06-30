@@ -6066,6 +6066,22 @@ const en = {
   proPromoBanner:
     '🎉 Pro features are free for a limited time — enjoy everything, no upgrade needed.',
   proPromoBannerDismiss: 'Dismiss',
+  tokenRankingsSortLabel: 'Sort by',
+  tokenRankingsSortTraders: 'Traders',
+  tokenRankingsSortTrades: 'Trades',
+  tokenRankingsSortPnl: 'PnL',
+  tokenRankingsNoActivity: 'No activity yet',
+  referralRewardBannerTitle: 'Refer {count} friends, get {days} days of Pro free',
+  referralRewardBannerSubtitle:
+    'Invite friends to Arena. When {count} sign up with your link, you get {days} days of Arena Pro — free.',
+  referralHowItWorks: 'How it works',
+  referralStep1: 'Copy your referral link below',
+  referralStep2: 'Share it with friends who love crypto',
+  referralStep3: 'When {count} friends sign up, you unlock {days} days of Pro',
+  referralFriendsReferred: 'Friends Referred',
+  referralRewardUnlocked: 'Reward unlocked!',
+  referralFriendTrialNote:
+    'Bonus: your friends get a {days}-day Pro trial when they join via your link.',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: 'Performance Monitoring',
