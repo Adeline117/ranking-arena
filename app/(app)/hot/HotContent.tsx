@@ -1,7 +1,6 @@
 'use client'
 
 import { Suspense, lazy } from 'react'
-import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import ThreeColumnLayout from '@/app/components/layout/ThreeColumnLayout'
 const TopTraders = lazy(() => import('@/app/components/sidebar/TopTraders'))
@@ -34,7 +33,6 @@ export default function HotContent({ initialPosts }: HotContentProps) {
     loggedIn,
     accessToken,
     loadingPosts,
-    hotPosts,
     visibleHot,
     expandedPosts,
     setExpandedPosts,
@@ -73,6 +71,11 @@ export default function HotContent({ initialPosts }: HotContentProps) {
     >
       <PullToRefreshWrapper
         onRefresh={async () => {
+          // TODO(7.6): replace full-page reload with an in-place refetch. The hot
+          // page uses a manual fetch in useHotPageData (not React Query) and does
+          // not expose its loadPosts() callback, so a targeted refetch isn't
+          // available here without changing that hook. Keeping reload for now so
+          // pull-to-refresh still produces fresh data.
           window.location.reload()
         }}
       >
@@ -140,6 +143,8 @@ export default function HotContent({ initialPosts }: HotContentProps) {
 
                 {/* Tabbed Sections */}
                 <Box
+                  role="tablist"
+                  aria-label={t('hotList')}
                   style={{
                     display: 'flex',
                     gap: '8px',
@@ -153,6 +158,9 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                   ].map((tab) => (
                     <button
                       key={tab.value}
+                      type="button"
+                      role="tab"
+                      aria-selected={activeHotTab === tab.value}
                       onClick={() => setActiveHotTab(tab.value)}
                       style={{
                         padding: '7px 16px',
@@ -250,119 +258,6 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                             />
                           )
                         })}
-
-                        {/* Login CTA for anonymous users (after all posts) */}
-                        {false && !loggedIn && hotPosts.length > visibleHot.length && (
-                          <>
-                            {hotPosts
-                              .slice(visibleHot.length, visibleHot.length + 3)
-                              .map((p, idx) => {
-                                const rank = visibleHot.length + idx + 1
-                                return (
-                                  <Box
-                                    key={`blur-${p.id}`}
-                                    style={{
-                                      padding: tokens.spacing[4],
-                                      borderRadius: tokens.radius.lg,
-                                      background: 'var(--color-bg-secondary)',
-                                      border: `1px solid var(--color-border-primary)`,
-                                      filter: 'blur(6px)',
-                                      pointerEvents: 'none',
-                                      opacity: 0.5,
-                                    }}
-                                  >
-                                    <Box
-                                      style={{
-                                        display: 'flex',
-                                        gap: tokens.spacing[2],
-                                        marginBottom: tokens.spacing[2],
-                                        flexWrap: 'wrap',
-                                        alignItems: 'center',
-                                      }}
-                                    >
-                                      <Text
-                                        size="sm"
-                                        weight="black"
-                                        style={{ color: 'var(--color-text-secondary)' }}
-                                      >
-                                        #{rank}
-                                      </Text>
-                                      <Text size="xs" color="secondary">
-                                        {localizedName(p.group, p.group_en)}
-                                      </Text>
-                                      <Text size="xs" color="tertiary">
-                                        {(p.views ?? 0).toLocaleString('en-US')} {t('views')}
-                                      </Text>
-                                    </Box>
-                                    <Text
-                                      size="base"
-                                      weight="bold"
-                                      style={{ marginBottom: tokens.spacing[2] }}
-                                    >
-                                      {p.title}
-                                    </Text>
-                                    <Text
-                                      size="sm"
-                                      color="secondary"
-                                      style={{ marginBottom: tokens.spacing[2], lineHeight: 1.5 }}
-                                    >
-                                      {p.body.slice(0, 100)}...
-                                    </Text>
-                                    <Box
-                                      style={{
-                                        display: 'flex',
-                                        gap: tokens.spacing[3],
-                                        fontSize: tokens.typography.fontSize.xs,
-                                        color: 'var(--color-text-tertiary)',
-                                      }}
-                                    >
-                                      <Text size="xs" color="tertiary">
-                                        {p.author}
-                                      </Text>
-                                      <Text size="xs" color="tertiary">
-                                        {p.time}
-                                      </Text>
-                                    </Box>
-                                  </Box>
-                                )
-                              })}
-
-                            {/* Login CTA */}
-                            <Box
-                              style={{
-                                background: tokens.gradient.primarySubtle,
-                                borderRadius: tokens.radius.md,
-                                padding: '12px 16px',
-                                textAlign: 'center',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                gap: '12px',
-                                flexWrap: 'wrap',
-                              }}
-                            >
-                              <Text size="sm" color="secondary">
-                                {t('loginToViewFullHotList')}
-                              </Text>
-                              <button
-                                onClick={() => useLoginModal.getState().openLoginModal()}
-                                style={{
-                                  display: 'inline-block',
-                                  padding: '6px 16px',
-                                  background: tokens.gradient.primary,
-                                  color: tokens.colors.white,
-                                  borderRadius: tokens.radius.sm,
-                                  border: 'none',
-                                  cursor: 'pointer',
-                                  fontWeight: 700,
-                                  fontSize: '12px',
-                                }}
-                              >
-                                {t('loginNow')}
-                              </button>
-                            </Box>
-                          </>
-                        )}
                       </Box>
                     )}
                   </>

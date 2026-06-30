@@ -326,6 +326,7 @@ export const PostListItem = memo(
           {/* Report button for non-author posts */}
           {currentUserId && p.author_id !== currentUserId && onReport && (
             <button
+              type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 onReport(p)
@@ -347,8 +348,9 @@ export const PostListItem = memo(
                 e.currentTarget.style.color = tokens.colors.text.tertiary
               }}
               title={t('report')}
+              aria-label={t('report')}
             >
-              ⚑
+              <span aria-hidden="true">⚑</span>
             </button>
           )}
           {/* Author actions: Pin/Edit/Delete */}
