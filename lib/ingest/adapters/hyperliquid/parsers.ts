@@ -101,8 +101,12 @@ export function parseHyperliquidLeaderboardPage(
       headlineRoi: clampRoiPct(rawRoi === null ? null : rawRoi * 100),
       headlinePnl: num(perf?.pnl),
       headlineWinRate: null, // needs fills analysis — out of v1 (spike §8.3)
+      // accountValue = the trader's on-chain equity (absolute USD) — the board IS
+      // the authoritative source for AUM here, and the leaderboard covers ~382k
+      // traders far beyond profile-crawl reach, so capture it for everyone.
+      headlineAum: num(item.accountValue),
       traderMeta: null,
-      raw: item, // all 4 windows + accountValue + vlm, verbatim (spec §3)
+      raw: item, // all 4 windows + vlm, verbatim (spec §3)
     })
   }
 
