@@ -104,6 +104,10 @@ export function parseBitgetBotsBoardPage(raw: unknown, _ctx: ParseCtx): ParsedLe
       headlineRoi: num(item.profitRate), // cumulative since creation, percent
       headlinePnl: num(item.profitAmount),
       headlineWinRate: null,
+      // 最大回撤 shown on every bot card (spec §11.5) — thirtyMaxDrawdown is the
+      // 30d MDD, already in percent. Was dropped (board had no MDD field, profile
+      // set mdd:null), so bot risk was uncaptured everywhere.
+      headlineMdd: num(item.thirtyMaxDrawdown),
       traderMeta: {
         bot: {
           exchange_bot_id: String(id),
