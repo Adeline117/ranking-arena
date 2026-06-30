@@ -7,6 +7,12 @@ import { tokens } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import {
+  REFERRAL_REWARD_THRESHOLD,
+  REFERRAL_ADVOCATE_PRO_DAYS,
+  REFERRED_FRIEND_TRIAL_DAYS,
+} from '@/lib/constants/referral'
 
 interface ReferralData {
   referral_code: string
@@ -15,7 +21,7 @@ interface ReferralData {
 }
 
 export default function ReferralClient() {
-  const [email, setEmail] = useState<string | null>(null)
+  const { t } = useLanguage()
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [referral, setReferral] = useState<ReferralData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -33,7 +39,6 @@ export default function ReferralClient() {
         return
       }
       setIsAuthenticated(true)
-      setEmail(user.email ?? null)
 
       const {
         data: { session },
@@ -103,6 +108,24 @@ export default function ReferralClient() {
   const shareUrl = referral?.referral_link || ''
   const shareText = 'Check out Arena - the crypto trader ranking platform!'
 
+  const referralCount = referral?.referral_count ?? 0
+  const progress = Math.min(referralCount / REFERRAL_REWARD_THRESHOLD, 1)
+  const rewardEarned = referralCount >= REFERRAL_REWARD_THRESHOLD
+
+  const rewardTitle = t('referralRewardBannerTitle')
+    .replace('{count}', String(REFERRAL_REWARD_THRESHOLD))
+    .replace('{days}', String(REFERRAL_ADVOCATE_PRO_DAYS))
+  const rewardSubtitle = t('referralRewardBannerSubtitle')
+    .replace('{count}', String(REFERRAL_REWARD_THRESHOLD))
+    .replace('{days}', String(REFERRAL_ADVOCATE_PRO_DAYS))
+  const step3 = t('referralStep3')
+    .replace('{count}', String(REFERRAL_REWARD_THRESHOLD))
+    .replace('{days}', String(REFERRAL_ADVOCATE_PRO_DAYS))
+  const friendTrialNote = t('referralFriendTrialNote').replace(
+    '{days}',
+    String(REFERRED_FRIEND_TRIAL_DAYS)
+  )
+
   return (
     <div
       style={{
@@ -140,6 +163,77 @@ export default function ReferralClient() {
           >
             Invite friends to Arena and track your referrals.
           </p>
+        </div>
+
+        {/* Reward hero — clearly states the reward + how it works */}
+        <div
+          style={{
+            padding: tokens.spacing[6],
+            background: 'var(--color-accent-primary-08)',
+            borderRadius: tokens.radius.lg,
+            border: '1px solid var(--color-accent-primary-15)',
+            marginBottom: tokens.spacing[6],
+          }}
+        >
+          <div
+            style={{
+              fontSize: tokens.typography.fontSize.xl,
+              fontWeight: tokens.typography.fontWeight.bold,
+              color: tokens.colors.text.primary,
+              marginBottom: tokens.spacing[2],
+              lineHeight: 1.3,
+            }}
+          >
+            {rewardTitle}
+          </div>
+          <p
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.secondary,
+              margin: `0 0 ${tokens.spacing[4]}`,
+            }}
+          >
+            {rewardSubtitle}
+          </p>
+
+          {/* How it works */}
+          <div
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              color: tokens.colors.text.primary,
+              marginBottom: tokens.spacing[2],
+            }}
+          >
+            {t('referralHowItWorks')}
+          </div>
+          <ol
+            style={{
+              margin: 0,
+              paddingLeft: tokens.spacing[5],
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.spacing[1],
+              fontSize: tokens.typography.fontSize.sm,
+              color: tokens.colors.text.secondary,
+            }}
+          >
+            <li>{t('referralStep1')}</li>
+            <li>{t('referralStep2')}</li>
+            <li>{step3}</li>
+          </ol>
+
+          {REFERRED_FRIEND_TRIAL_DAYS > 0 && (
+            <p
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: tokens.colors.accent.success,
+                margin: `${tokens.spacing[3]} 0 0`,
+              }}
+            >
+              {friendTrialNote}
+            </p>
+          )}
         </div>
 
         {/* Auth gate */}
@@ -209,72 +303,83 @@ export default function ReferralClient() {
         {/* Referral content */}
         {!loading && isAuthenticated && (
           <>
-            {/* Stats cards */}
+            {/* Progress toward reward — single accurate stat (the old two
+                cards showed the same number). */}
             <div
               style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: tokens.spacing[3],
+                padding: tokens.spacing[6],
+                background: tokens.glass.bg.secondary,
+                borderRadius: tokens.radius.lg,
+                border: tokens.glass.border.light,
                 marginBottom: tokens.spacing[6],
               }}
             >
               <div
                 style={{
-                  padding: tokens.spacing[6],
-                  background: tokens.glass.bg.secondary,
-                  borderRadius: tokens.radius.lg,
-                  border: tokens.glass.border.light,
-                  textAlign: 'center',
+                  display: 'flex',
+                  alignItems: 'baseline',
+                  justifyContent: 'space-between',
+                  gap: tokens.spacing[3],
+                  marginBottom: tokens.spacing[3],
                 }}
               >
-                <div
-                  style={{
-                    fontSize: tokens.typography.fontSize['3xl'],
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    fontFamily: 'var(--font-mono, monospace)',
-                    color: 'var(--color-accent-primary)',
-                  }}
-                >
-                  {referral?.referral_count ?? 0}
+                <div>
+                  <span
+                    style={{
+                      fontSize: tokens.typography.fontSize['3xl'],
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      fontFamily: 'var(--font-mono, monospace)',
+                      color: 'var(--color-accent-primary)',
+                    }}
+                  >
+                    {referralCount}
+                  </span>
+                  <span
+                    style={{
+                      fontSize: tokens.typography.fontSize.sm,
+                      color: tokens.colors.text.secondary,
+                      marginLeft: tokens.spacing[2],
+                    }}
+                  >
+                    {t('referralFriendsReferred')}
+                  </span>
                 </div>
-                <div
+                <span
                   style={{
                     fontSize: tokens.typography.fontSize.sm,
-                    color: tokens.colors.text.secondary,
-                    marginTop: tokens.spacing[1],
+                    fontWeight: rewardEarned
+                      ? tokens.typography.fontWeight.semibold
+                      : tokens.typography.fontWeight.normal,
+                    color: rewardEarned
+                      ? tokens.colors.accent.success
+                      : tokens.colors.text.tertiary,
                   }}
                 >
-                  Friends Invited
-                </div>
+                  {rewardEarned
+                    ? t('referralRewardUnlocked')
+                    : `${referralCount}/${REFERRAL_REWARD_THRESHOLD}`}
+                </span>
               </div>
+              {/* Progress bar */}
               <div
                 style={{
-                  padding: tokens.spacing[6],
-                  background: tokens.glass.bg.secondary,
-                  borderRadius: tokens.radius.lg,
-                  border: tokens.glass.border.light,
-                  textAlign: 'center',
+                  height: 6,
+                  borderRadius: 3,
+                  background: tokens.glass.bg.medium,
+                  overflow: 'hidden',
                 }}
               >
                 <div
                   style={{
-                    fontSize: tokens.typography.fontSize['3xl'],
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    fontFamily: 'var(--font-mono, monospace)',
-                    color: tokens.colors.accent.success,
+                    height: '100%',
+                    width: `${progress * 100}%`,
+                    borderRadius: 3,
+                    background: rewardEarned
+                      ? tokens.colors.accent.success
+                      : 'var(--color-accent-primary)',
+                    transition: 'width 0.3s ease',
                   }}
-                >
-                  {referral?.referral_count ?? 0}
-                </div>
-                <div
-                  style={{
-                    fontSize: tokens.typography.fontSize.sm,
-                    color: tokens.colors.text.secondary,
-                    marginTop: tokens.spacing[1],
-                  }}
-                >
-                  Active Referrals
-                </div>
+                />
               </div>
             </div>
 
