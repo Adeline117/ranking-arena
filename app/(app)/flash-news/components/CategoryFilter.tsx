@@ -3,6 +3,7 @@
 import { localizedLabel } from '@/lib/utils/format'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface CategoryOption {
   key: string
@@ -23,8 +24,11 @@ export default function CategoryFilter({
   onCategoryChange,
   language,
 }: CategoryFilterProps) {
+  const { t } = useLanguage()
   return (
     <Box
+      role="group"
+      aria-label={t('filterByCategory')}
       style={{
         marginBottom: tokens.spacing[4],
         display: 'flex',
@@ -37,8 +41,10 @@ export default function CategoryFilter({
         return (
           <button
             key={cat.key}
+            type="button"
             className="filter-chip"
             data-active={isActive ? 'true' : undefined}
+            aria-pressed={isActive}
             onClick={() => onCategoryChange(cat.key)}
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,

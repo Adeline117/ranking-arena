@@ -351,6 +351,7 @@ export default function FlashNewsPageClient() {
         {/* Header */}
         <Box style={{ marginBottom: tokens.spacing[5] }}>
           <Text
+            as="h1"
             style={{
               fontSize: tokens.typography.fontSize['3xl'],
               fontWeight: tokens.typography.fontWeight.black,
@@ -409,6 +410,7 @@ export default function FlashNewsPageClient() {
                   fill="none"
                   stroke="currentColor"
                   strokeWidth="1.5"
+                  aria-hidden="true"
                 >
                   <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
                 </svg>
@@ -440,10 +442,12 @@ export default function FlashNewsPageClient() {
               <div ref={sentinelRef} style={{ height: 1 }} />
               {loadingMore && (
                 <Box
+                  role="status"
                   style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}
                 >
                   <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                     <Box
+                      aria-hidden="true"
                       style={{
                         width: 16,
                         height: 16,
