@@ -125,8 +125,12 @@ export function parseCoinexLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       headlineRoi: pct(item.profit_rate),
       headlinePnl: num(item.profit_amount),
       headlineWinRate: pct(item.winning_rate),
+      // Board carries mdd (fraction, "0.0594"→5.94%) and aum (absolute USD) — extract
+      // them (were raw-only, so board-tier traders had no MDD/AUM).
+      headlineMdd: pct(item.mdd),
+      headlineAum: num(item.aum),
       traderMeta: null,
-      // mdd, aum, copier slots, profit share, sparkline... kept verbatim
+      // copier slots, profit share, sparkline... kept verbatim
       raw: item,
     })
   }
