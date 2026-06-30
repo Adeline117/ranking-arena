@@ -1,9 +1,9 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams, usePathname } from 'next/navigation'
-import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import {
   getAvatarGradient,
@@ -11,17 +11,22 @@ import {
   isWalletAddress,
   generateBlockieSvg,
 } from '@/lib/utils/avatar'
-import { formatPnL, NULL_DISPLAY } from '@/lib/utils/format'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { getScoreColor } from '@/lib/utils/score-colors'
+import { getScoreColorInfo } from '@/lib/utils/score-colors'
 import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import EmptyState from '@/app/components/ui/EmptyState'
+import Metric from '@/app/components/ui/Metric'
+import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
+import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
+import { Skeleton } from '@/app/components/ui/Skeleton'
 
-type Period = '7D' | '30D' | '90D'
+export type Period = '7D' | '30D' | '90D'
 
-interface TokenTrader {
+export interface TokenTrader {
   source: string
   source_trader_id: string
   handle: string | null
@@ -34,6 +39,24 @@ interface TokenTrader {
   token_win_rate: number | null
   token_avg_pnl_pct: number | null
 }
+
+const PAGE_SIZE = 50
+
+// Frozen rank + name (sticky-left) then six numeric columns. gap:0 so the
+// sticky offsets are exact px (a grid `gap` would shift the trader column's
+// left edge and break the freeze). Trader column is the flex one (minmax 1fr)
+// so it absorbs spare width on wide screens and clamps → horizontal scroll on
+// narrow ones.
+const GRID_TEMPLATE = '56px minmax(190px, 1fr) 116px 116px 88px 100px 104px 104px'
+const GRID_MIN_WIDTH = 874
+
+type SortKey =
+  | 'token_pnl'
+  | 'total_pnl'
+  | 'token_trade_count'
+  | 'token_win_rate'
+  | 'roi'
+  | 'arena_score'
 
 function getDisplayName(trader: TokenTrader): string {
   if (trader.handle) return trader.handle
@@ -140,7 +163,7 @@ function PeriodSelector({
             border: 'none',
             fontSize: 13,
             fontWeight: period === p ? 700 : 500,
-            background: period === p ? colorAlpha(tokens.colors.accent.brand, 13) : 'transparent',
+            background: period === p ? alpha(tokens.colors.accent.brand, 13) : 'transparent',
             color: period === p ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
             cursor: loading ? 'wait' : 'pointer',
             opacity: loading ? 0.6 : 1,
@@ -154,29 +177,109 @@ function PeriodSelector({
   )
 }
 
-export default function TokenRankingClient({ token }: { token: string }) {
+/** Small ▲/▼ glyph mirroring RankingTable's SortIndicator. Decorative — the
+ *  authoritative cue is aria-sort on the header button. */
+function SortGlyph({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+  return (
+    <span
+      aria-hidden="true"
+      style={{
+        fontSize: 9,
+        marginLeft: 3,
+        opacity: active ? 1 : 0.3,
+        color: active ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+      }}
+    >
+      {active ? (dir === 'asc' ? '▲' : '▼') : '▾'}
+    </span>
+  )
+}
+
+function SortHeader({
+  label,
+  colKey,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  label: string
+  colKey: SortKey
+  sortKey: SortKey
+  sortDir: 'asc' | 'desc'
+  onSort: (k: SortKey) => void
+}) {
+  const active = sortKey === colKey
+  return (
+    <button
+      type="button"
+      role="columnheader"
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'}
+      aria-label={`${label} — sort`}
+      onClick={() => onSort(colKey)}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 0,
+        padding: '0 12px',
+        height: '100%',
+        border: 'none',
+        background: 'transparent',
+        cursor: 'pointer',
+        fontSize: 12,
+        fontWeight: active ? 700 : 600,
+        color: active ? tokens.colors.text.primary : tokens.colors.text.secondary,
+        textAlign: 'right',
+        whiteSpace: 'nowrap',
+      }}
+    >
+      {label}
+      <SortGlyph active={active} dir={sortDir} />
+    </button>
+  )
+}
+
+export default function TokenRankingClient({
+  token,
+  initialPeriod,
+  initialTraders,
+  initialTotal,
+  asOf,
+}: {
+  token: string
+  initialPeriod: Period
+  initialTraders: TokenTrader[]
+  initialTotal: number
+  asOf: string
+}) {
   const { t } = useLanguage()
   const router = useRouter()
   const pathname = usePathname()
   const searchParams = useSearchParams()
-  const urlPeriod = (searchParams.get('period')?.toUpperCase() || '90D') as Period
-  const validPeriod = (['7D', '30D', '90D'] as const).includes(urlPeriod)
-    ? urlPeriod
-    : ('90D' as Period)
 
   const urlPage = Math.max(0, parseInt(searchParams.get('page') || '0', 10) || 0)
-  const [period, setPeriod] = useState<Period>(validPeriod)
-  const [traders, setTraders] = useState<TokenTrader[]>([])
-  const [total, setTotal] = useState(0)
-  const [loading, setLoading] = useState(true)
+  const hasSSR = initialTraders.length > 0 && urlPage === 0
+
+  const [period, setPeriod] = useState<Period>(initialPeriod)
+  const [traders, setTraders] = useState<TokenTrader[]>(hasSSR ? initialTraders : [])
+  const [total, setTotal] = useState(hasSSR ? initialTotal : 0)
+  const [loading, setLoading] = useState(!hasSSR)
   const [page, setPageRaw] = useState(urlPage)
-  const PAGE_SIZE = 50
+  const [sortKey, setSortKey] = useState<SortKey>('token_pnl')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+
+  // Key of the data we already hold (SSR seed or a completed fetch). The mount
+  // effect compares against this to skip the redundant first fetch — no
+  // spinner-on-every-visit when SSR already shipped page 0.
+  const loadedKeyRef = useRef<string | null>(hasSSR ? `${initialPeriod}:0` : null)
+  const abortRef = useRef<AbortController | null>(null)
+
+  const tokenColor = TOKEN_COLORS[token] || tokens.colors.accent.primary
 
   const setPage = useCallback(
     (p: number | ((prev: number) => number)) => {
       setPageRaw((prev) => {
         const next = typeof p === 'function' ? p(prev) : p
-        // Sync page to URL
         const params = new URLSearchParams(searchParams.toString())
         if (next > 0) params.set('page', String(next))
         else params.delete('page')
@@ -188,12 +291,9 @@ export default function TokenRankingClient({ token }: { token: string }) {
     },
     [searchParams, router, pathname]
   )
-  const abortRef = useRef<AbortController | null>(null)
-
-  const tokenColor = TOKEN_COLORS[token] || tokens.colors.accent.primary
 
   const fetchData = useCallback(
-    async (p: Period, offset: number) => {
+    async (p: Period, pageIndex: number) => {
       if (abortRef.current) abortRef.current.abort()
       const controller = new AbortController()
       abortRef.current = controller
@@ -201,13 +301,14 @@ export default function TokenRankingClient({ token }: { token: string }) {
       setLoading(true)
       try {
         const res = await fetch(
-          `/api/rankings/by-token?token=${encodeURIComponent(token)}&period=${p}&limit=${PAGE_SIZE}&offset=${offset}`,
+          `/api/rankings/by-token?token=${encodeURIComponent(token)}&period=${p}&limit=${PAGE_SIZE}&offset=${pageIndex * PAGE_SIZE}`,
           { signal: controller.signal }
         )
         if (!res.ok) throw new Error('Failed')
         const data = await res.json()
         setTraders(data.traders || [])
         setTotal(data.total || 0)
+        loadedKeyRef.current = `${p}:${pageIndex}`
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') return
       } finally {
@@ -218,39 +319,82 @@ export default function TokenRankingClient({ token }: { token: string }) {
   )
 
   useEffect(() => {
-    fetchData(period, page * PAGE_SIZE)
+    const key = `${period}:${page}`
+    if (loadedKeyRef.current === key) return
+    fetchData(period, page)
   }, [period, page, fetchData])
 
   const handlePeriodChange = useCallback(
     (newPeriod: Period) => {
       setPeriod(newPeriod)
       setPageRaw(0)
-      // Update both period and page in a single URL write
       const params = new URLSearchParams(searchParams.toString())
       if (newPeriod === '90D') params.delete('period')
       else params.set('period', newPeriod)
-      params.delete('page') // reset to page 0
+      params.delete('page')
       const qs = params.toString()
       router.replace(`${pathname}${qs ? '?' + qs : ''}`, { scroll: false })
     },
     [pathname, router, searchParams]
   )
 
+  const handleSort = useCallback((key: SortKey) => {
+    setSortKey((prevKey) => {
+      setSortDir((prevDir) => (prevKey === key ? (prevDir === 'desc' ? 'asc' : 'desc') : 'desc'))
+      return key
+    })
+  }, [])
+
   const totalPages = Math.ceil(total / PAGE_SIZE)
+
+  // Attach the server (token-PnL) rank BEFORE display sorting so medals + the #
+  // column always reflect the leaderboard position, not the transient sort.
+  const ranked = useMemo(
+    () => traders.map((tr, i) => ({ ...tr, _rank: page * PAGE_SIZE + i + 1 })),
+    [traders, page]
+  )
+
+  const displayed = useMemo(() => {
+    const arr = [...ranked]
+    arr.sort((a, b) => {
+      const av = a[sortKey]
+      const bv = b[sortKey]
+      const an = av == null ? Number.NEGATIVE_INFINITY : (av as number)
+      const bn = bv == null ? Number.NEGATIVE_INFINITY : (bv as number)
+      return sortDir === 'desc' ? bn - an : an - bn
+    })
+    return arr
+  }, [ranked, sortKey, sortDir])
+
+  const numCols: { key: SortKey; label: string }[] = [
+    { key: 'token_pnl', label: `${token} PnL` },
+    { key: 'total_pnl', label: t('tokenRankingTotalPnl') },
+    { key: 'token_trade_count', label: t('tokenRankingTrades') },
+    { key: 'token_win_rate', label: t('rankingWinRate') },
+    { key: 'roi', label: 'ROI' },
+    { key: 'arena_score', label: t('rankingScore') },
+  ]
+
+  const stickyCell: React.CSSProperties = {
+    position: 'sticky',
+    zIndex: 1,
+    background: 'var(--row-bg)',
+  }
 
   return (
     <Box>
+      <style>{`
+        .token-row { --row-bg: var(--color-bg-secondary); background: var(--row-bg); }
+        .token-row:hover { --row-bg: var(--overlay-hover); }
+      `}</style>
+
+      {/* Breadcrumb: Home / Token Rankings / {TOKEN} */}
+      <Breadcrumb
+        items={[{ label: t('tokenRankingsTitle'), href: '/rankings/tokens' }, { label: token }]}
+      />
+
       {/* Header */}
-      <Box style={{ marginBottom: 24 }}>
-        <Box style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-          <Link
-            href="/rankings/tokens"
-            style={{ color: tokens.colors.text.tertiary, textDecoration: 'none', fontSize: 14 }}
-          >
-            {t('tokenRankingsTitle')}
-          </Link>
-          <span style={{ color: tokens.colors.text.tertiary }}>/</span>
-        </Box>
+      <Box style={{ marginBottom: 24, marginTop: 4 }}>
         <Box style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
           <Box
             style={{
@@ -289,293 +433,372 @@ export default function TokenRankingClient({ token }: { token: string }) {
         <PeriodSelector period={period} onChange={handlePeriodChange} loading={loading} />
       </Box>
 
-      {/* Loading */}
-      {loading && (
-        <Box style={{ display: 'flex', justifyContent: 'center', padding: 40 }}>
-          <div
-            style={{
-              width: 24,
-              height: 24,
-              border: `2px solid ${alpha(tokens.colors.accent.brand, 19)}`,
-              borderTopColor: tokens.colors.accent.brand,
-              borderRadius: '50%',
-              animation: 'spin 0.8s linear infinite',
-            }}
-          />
-          <style>{'@keyframes spin { to { transform: rotate(360deg) } }'}</style>
-        </Box>
-      )}
-
-      {/* Results Table */}
-      {!loading && traders.length > 0 && (
+      {/* Table — chrome (header row) stays mounted across period/page changes so
+          only the body swaps (no full layout shift). */}
+      {(loading || displayed.length > 0) && (
         <>
-          <style>{`.token-row:hover { background: var(--overlay-hover) !important; }`}</style>
           <Box
+            role="table"
+            aria-label={t('tokenRankingHeader').replace('{token}', token)}
             style={{
               borderRadius: tokens.radius.lg,
               overflow: 'hidden',
-              background: 'var(--overlay-hover)',
               border: '1px solid var(--glass-border-light)',
             }}
           >
-            {/* Header Row */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: '40px minmax(140px, 1fr) 100px 100px 80px 80px 80px 80px',
-                gap: 8,
-                padding: '12px 16px',
-                fontSize: 12,
-                fontWeight: 600,
-                color: tokens.colors.text.secondary,
-                borderBottom: '1px solid var(--glass-border-light)',
-                background: 'var(--color-bg-primary)',
-              }}
-            >
-              <div>#</div>
-              <div>{t('rankingTrader')}</div>
-              <div style={{ textAlign: 'right' }}>{token} PnL</div>
-              <div style={{ textAlign: 'right' }}>{t('tokenRankingTotalPnl')}</div>
-              <div style={{ textAlign: 'right' }}>{t('tokenRankingTrades')}</div>
-              <div style={{ textAlign: 'right' }}>{t('rankingWinRate')}</div>
-              <div style={{ textAlign: 'right' }}>ROI</div>
-              <div style={{ textAlign: 'right' }}>{t('rankingScore')}</div>
-            </div>
-
-            {/* Data Rows */}
-            {traders.map((trader, i) => {
-              const rank = page * PAGE_SIZE + i + 1
-              const name = getDisplayName(trader)
-              const platformName = EXCHANGE_NAMES[trader.source] || trader.source
-
-              return (
-                <Link
-                  key={`${trader.source}:${trader.source_trader_id}`}
-                  href={`/trader/${encodeURIComponent(trader.handle || trader.source_trader_id)}?platform=${trader.source}`}
-                  className="token-row"
+            <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+              <div style={{ minWidth: GRID_MIN_WIDTH }}>
+                {/* Header Row */}
+                <div
+                  role="row"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: '40px minmax(140px, 1fr) 100px 100px 80px 80px 80px 80px',
-                    gap: 8,
-                    padding: '10px 16px',
-                    alignItems: 'center',
-                    textDecoration: 'none',
-                    borderBottom: '1px solid var(--overlay-hover)',
-                    transition: 'background 0.15s',
-                    ...(rank <= 3
-                      ? {
-                          background:
-                            rank === 1
-                              ? 'linear-gradient(135deg, rgba(255,215,0,0.10), transparent 80%)'
-                              : rank === 2
-                                ? 'linear-gradient(135deg, rgba(192,192,192,0.08), transparent 80%)'
-                                : 'linear-gradient(135deg, rgba(205,127,50,0.08), transparent 80%)',
-                          boxShadow: `inset 3px 0 0 ${rank === 1 ? '#FFD700' : rank === 2 ? '#C0C0C0' : '#CD7F32'}`,
-                        }
-                      : {}),
+                    gridTemplateColumns: GRID_TEMPLATE,
+                    height: 44,
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: tokens.colors.text.secondary,
+                    borderBottom: '1px solid var(--glass-border-light)',
+                    background: 'var(--color-bg-primary)',
                   }}
                 >
-                  {/* Rank */}
-                  <div>
-                    {rank <= 3 ? (
-                      <span
-                        style={{
-                          width: 28,
-                          height: 28,
-                          borderRadius: '50%',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 13,
-                          fontWeight: 700,
-                          background:
-                            rank === 1
-                              ? 'linear-gradient(135deg, #FFD700, #FFA500)'
-                              : rank === 2
-                                ? 'linear-gradient(135deg, #C0C0C0, #A0A0A0)'
-                                : 'linear-gradient(135deg, #CD7F32, #A0522D)',
-                          color: rank === 1 ? 'var(--color-bg-primary)' : 'var(--color-on-accent)',
-                        }}
-                      >
-                        {rank}
-                      </span>
-                    ) : (
-                      <span
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: tokens.colors.text.secondary,
-                          minWidth: 28,
-                          textAlign: 'center',
-                          display: 'inline-block',
-                        }}
-                      >
-                        {rank}
-                      </span>
-                    )}
+                  <div
+                    role="columnheader"
+                    style={{
+                      ...stickyCell,
+                      left: 0,
+                      background: 'var(--color-bg-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      paddingLeft: 16,
+                    }}
+                  >
+                    #
                   </div>
+                  <div
+                    role="columnheader"
+                    style={{
+                      ...stickyCell,
+                      left: 56,
+                      background: 'var(--color-bg-primary)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      paddingLeft: 4,
+                    }}
+                  >
+                    {t('rankingTrader')}
+                  </div>
+                  {numCols.map((c) => (
+                    <SortHeader
+                      key={c.key}
+                      label={c.label}
+                      colKey={c.key}
+                      sortKey={sortKey}
+                      sortDir={sortDir}
+                      onSort={handleSort}
+                    />
+                  ))}
+                </div>
 
-                  {/* Trader */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
-                    <div
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
-                        flexShrink: 0,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden',
-                        background: getAvatarGradient(trader.source_trader_id),
-                      }}
-                    >
-                      <TraderAvatar
-                        avatarUrl={trader.avatar_url}
-                        traderKey={trader.source_trader_id}
-                        name={name}
-                        size={32}
-                      />
-                    </div>
-                    <div style={{ minWidth: 0 }}>
+                {/* Body: skeleton while loading, else rows */}
+                {loading
+                  ? Array.from({ length: 8 }).map((_, i) => (
                       <div
+                        key={`sk-${i}`}
+                        role="row"
                         style={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: tokens.colors.text.primary,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {name}
-                      </div>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <ExchangeLogo exchange={trader.source} size={12} />
-                        <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                          {platformName}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Token PnL */}
-                  <div
-                    style={{
-                      textAlign: 'right',
-                      fontSize: 13,
-                      fontWeight: 700,
-                      color:
-                        trader.token_pnl >= 0
-                          ? tokens.colors.accent.success
-                          : tokens.colors.accent.error,
-                    }}
-                  >
-                    {formatPnL(trader.token_pnl)}
-                  </div>
-
-                  {/* Total PnL */}
-                  <div
-                    style={{
-                      textAlign: 'right',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color:
-                        trader.total_pnl >= 0
-                          ? tokens.colors.accent.success
-                          : tokens.colors.accent.error,
-                    }}
-                  >
-                    {formatPnL(trader.total_pnl)}
-                  </div>
-
-                  {/* Trade Count */}
-                  <div
-                    style={{
-                      textAlign: 'right',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: tokens.colors.text.secondary,
-                    }}
-                  >
-                    {trader.token_trade_count}
-                  </div>
-
-                  {/* Win Rate */}
-                  <div
-                    style={{
-                      textAlign: 'right',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color:
-                        trader.token_win_rate != null
-                          ? trader.token_win_rate >= 50
-                            ? tokens.colors.accent.success
-                            : tokens.colors.accent.error
-                          : tokens.colors.text.tertiary,
-                    }}
-                  >
-                    {trader.token_win_rate != null
-                      ? `${trader.token_win_rate.toFixed(1)}%`
-                      : NULL_DISPLAY}
-                  </div>
-
-                  {/* ROI */}
-                  <div
-                    style={{
-                      textAlign: 'right',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color:
-                        trader.roi != null
-                          ? trader.roi >= 0
-                            ? tokens.colors.accent.success
-                            : tokens.colors.accent.error
-                          : tokens.colors.text.tertiary,
-                    }}
-                  >
-                    {trader.roi != null
-                      ? `${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(1)}%`
-                      : NULL_DISPLAY}
-                  </div>
-
-                  {/* Arena Score */}
-                  <div style={{ textAlign: 'right', display: 'flex', justifyContent: 'flex-end' }}>
-                    {trader.arena_score != null ? (
-                      <span
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '50%',
-                          border: `2px solid ${getScoreColor(trader.arena_score)}`,
-                          background: `color-mix(in srgb, ${getScoreColor(trader.arena_score)} 10%, transparent)`,
-                          display: 'inline-flex',
+                          display: 'grid',
+                          gridTemplateColumns: GRID_TEMPLATE,
+                          height: 56,
                           alignItems: 'center',
-                          justifyContent: 'center',
-                          fontSize: 12,
-                          fontWeight: 800,
-                          color: getScoreColor(trader.arena_score),
+                          borderBottom: '1px solid var(--overlay-hover)',
+                          background: 'var(--color-bg-secondary)',
                         }}
                       >
-                        {trader.arena_score.toFixed(0)}
-                      </span>
-                    ) : (
-                      <span style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-                        {NULL_DISPLAY}
-                      </span>
-                    )}
-                  </div>
-                </Link>
-              )
-            })}
+                        <div style={{ paddingLeft: 16 }}>
+                          <Skeleton width={20} height={14} />
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                          <Skeleton width={32} height={32} variant="circular" />
+                          <Skeleton width={110} height={14} />
+                        </div>
+                        {numCols.map((c) => (
+                          <div
+                            key={c.key}
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'flex-end',
+                              paddingRight: 12,
+                            }}
+                          >
+                            <Skeleton width={52} height={14} />
+                          </div>
+                        ))}
+                      </div>
+                    ))
+                  : displayed.map((trader) => {
+                      const rank = trader._rank
+                      const name = getDisplayName(trader)
+                      const platformName = EXCHANGE_NAMES[trader.source] || trader.source
+                      const medal =
+                        rank === 1
+                          ? {
+                              from: 'var(--color-medal-gold)',
+                              to: 'var(--color-medal-gold-end)',
+                              accent: 'var(--color-medal-gold)',
+                            }
+                          : rank === 2
+                            ? {
+                                from: 'var(--color-medal-silver)',
+                                to: 'var(--color-medal-silver-end)',
+                                accent: 'var(--color-medal-silver)',
+                              }
+                            : rank === 3
+                              ? {
+                                  from: 'var(--color-medal-bronze)',
+                                  to: 'var(--color-medal-bronze-end)',
+                                  accent: 'var(--color-medal-bronze)',
+                                }
+                              : null
+                      const scoreInfo =
+                        trader.arena_score != null ? getScoreColorInfo(trader.arena_score) : null
+
+                      return (
+                        <Link
+                          key={`${trader.source}:${trader.source_trader_id}`}
+                          href={`/trader/${encodeURIComponent(trader.handle || trader.source_trader_id)}?platform=${trader.source}`}
+                          className="token-row"
+                          role="row"
+                          style={{
+                            display: 'grid',
+                            gridTemplateColumns: GRID_TEMPLATE,
+                            minHeight: 56,
+                            alignItems: 'center',
+                            textDecoration: 'none',
+                            borderBottom: '1px solid var(--overlay-hover)',
+                          }}
+                        >
+                          {/* Rank (frozen) */}
+                          <div
+                            role="cell"
+                            style={{
+                              ...stickyCell,
+                              left: 0,
+                              display: 'flex',
+                              alignItems: 'center',
+                              paddingLeft: 16,
+                              boxShadow: medal ? `inset 3px 0 0 ${medal.accent}` : undefined,
+                            }}
+                          >
+                            {medal ? (
+                              <span
+                                style={{
+                                  width: 26,
+                                  height: 26,
+                                  borderRadius: '50%',
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: 13,
+                                  fontWeight: 700,
+                                  background: `linear-gradient(135deg, ${medal.from}, ${medal.to})`,
+                                  color: 'var(--color-bg-primary)',
+                                }}
+                              >
+                                {rank}
+                              </span>
+                            ) : (
+                              <span
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  color: tokens.colors.text.secondary,
+                                  minWidth: 26,
+                                  textAlign: 'center',
+                                  display: 'inline-block',
+                                }}
+                              >
+                                {rank}
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Trader (frozen) */}
+                          <div
+                            role="cell"
+                            style={{
+                              ...stickyCell,
+                              left: 56,
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 10,
+                              minWidth: 0,
+                              paddingLeft: 4,
+                              paddingRight: 8,
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: 32,
+                                height: 32,
+                                borderRadius: '50%',
+                                flexShrink: 0,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                overflow: 'hidden',
+                                background: getAvatarGradient(trader.source_trader_id),
+                              }}
+                            >
+                              <TraderAvatar
+                                avatarUrl={trader.avatar_url}
+                                traderKey={trader.source_trader_id}
+                                name={name}
+                                size={32}
+                              />
+                            </div>
+                            <div style={{ minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: 13,
+                                  fontWeight: 600,
+                                  color: tokens.colors.text.primary,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {name}
+                              </div>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <ExchangeLogo exchange={trader.source} size={12} />
+                                <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                                  {platformName}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Token PnL */}
+                          <div
+                            role="cell"
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'flex-end',
+                              paddingRight: 12,
+                            }}
+                          >
+                            <Metric value={trader.token_pnl} format="pnl" size="sm" showArrow />
+                          </div>
+
+                          {/* Total PnL */}
+                          <div
+                            role="cell"
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'flex-end',
+                              paddingRight: 12,
+                            }}
+                          >
+                            <Metric value={trader.total_pnl} format="pnl" size="sm" showArrow />
+                          </div>
+
+                          {/* Trade Count (neutral) */}
+                          <div
+                            role="cell"
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'flex-end',
+                              paddingRight: 12,
+                            }}
+                          >
+                            <Metric value={trader.token_trade_count} format="number" size="sm" />
+                          </div>
+
+                          {/* Win Rate — sign relative to 50% breakeven so the
+                              arrow + color read as a colorblind-safe cue. */}
+                          <div
+                            role="cell"
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'flex-end',
+                              paddingRight: 12,
+                            }}
+                          >
+                            <Metric
+                              value={
+                                trader.token_win_rate != null ? trader.token_win_rate - 50 : null
+                              }
+                              display={
+                                trader.token_win_rate != null
+                                  ? `${trader.token_win_rate.toFixed(1)}%`
+                                  : undefined
+                              }
+                              format="percent"
+                              size="sm"
+                              showArrow
+                            />
+                          </div>
+
+                          {/* ROI */}
+                          <div
+                            role="cell"
+                            style={{
+                              display: 'flex',
+                              justifyContent: 'flex-end',
+                              paddingRight: 12,
+                            }}
+                          >
+                            <Metric value={trader.roi} format="roi" size="sm" showArrow />
+                          </div>
+
+                          {/* Arena Score → graded chip + mini-bar (tokens) */}
+                          <div
+                            role="cell"
+                            style={{
+                              display: 'flex',
+                              flexDirection: 'column',
+                              alignItems: 'flex-end',
+                              gap: 3,
+                              paddingRight: 16,
+                            }}
+                          >
+                            {trader.arena_score != null && scoreInfo ? (
+                              <>
+                                <span
+                                  style={{
+                                    fontSize: 13,
+                                    fontWeight: 800,
+                                    color: scoreInfo.color,
+                                    fontVariantNumeric: 'tabular-nums',
+                                  }}
+                                >
+                                  {trader.arena_score.toFixed(0)}
+                                </span>
+                                <ScoreMiniBar score={trader.arena_score} width={52} height={4} />
+                              </>
+                            ) : (
+                              <span style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
+                                {NULL_DISPLAY}
+                              </span>
+                            )}
+                          </div>
+                        </Link>
+                      )
+                    })}
+              </div>
+            </div>
           </Box>
+
+          {/* Provenance footer (spec §6) */}
+          <ProvenanceFooter provenance={{ source: 'arena', asOf }} exchangeName="Arena" />
 
           {/* Pagination */}
           {totalPages > 1 && (
             <Box style={{ display: 'flex', justifyContent: 'center', gap: 8, padding: '20px 0' }}>
               <button
                 onClick={() => setPage((p) => Math.max(0, p - 1))}
-                disabled={page === 0}
+                disabled={page === 0 || loading}
                 style={{
                   padding: '8px 16px',
                   borderRadius: tokens.radius.md,
@@ -600,7 +823,7 @@ export default function TokenRankingClient({ token }: { token: string }) {
               </span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
-                disabled={page >= totalPages - 1}
+                disabled={page >= totalPages - 1 || loading}
                 style={{
                   padding: '8px 16px',
                   borderRadius: tokens.radius.md,
@@ -622,7 +845,7 @@ export default function TokenRankingClient({ token }: { token: string }) {
       )}
 
       {/* Empty State */}
-      {!loading && traders.length === 0 && (
+      {!loading && displayed.length === 0 && (
         <EmptyState
           icon={
             <svg
