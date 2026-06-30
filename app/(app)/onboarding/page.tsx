@@ -56,23 +56,46 @@ export default function OnboardingPage() {
       setTheme(savedTheme)
       document.documentElement.setAttribute('data-theme', savedTheme)
     }
+    // Fast path: the local flag short-circuits a re-onboard on the same device.
     if (localStorage.getItem('hasOnboarded') === 'true') {
-      router.replace('/')
+      router.replace(afterOnboarding)
       return
     }
     supabase.auth
       .getUser()
-      .then(({ data }) => {
-        if (data.user) {
-          setUserId(data.user.id)
-        } else {
+      .then(async ({ data }) => {
+        if (!data.user) {
           router.replace('/login?returnUrl=/onboarding')
+          return
+        }
+        setUserId(data.user.id)
+        // DB onboarding_completed is the authoritative source: a user who already
+        // finished onboarding (possibly on another device, where localStorage is
+        // empty) must not be re-onboarded. Hydrate the local flag from it.
+        try {
+          const { data: profile, error } = await supabase
+            .from('user_profiles')
+            .select('onboarding_completed')
+            .eq('id', data.user.id)
+            .maybeSingle()
+          if (error) {
+            logger.warn('Onboarding flag read failed', error)
+          } else if (profile?.onboarding_completed === true) {
+            try {
+              localStorage.setItem('hasOnboarded', 'true')
+            } catch {
+              /* localStorage may be unavailable */
+            }
+            router.replace(afterOnboarding)
+          }
+        } catch (err) {
+          logger.warn('Onboarding flag read threw', err)
         }
       })
       .catch(() => {
         router.replace('/login?returnUrl=/onboarding')
       })
-  }, [router])
+  }, [router, afterOnboarding])
 
   const fetchTraders = useCallback(async () => {
     setLoadingTraders(true)
@@ -163,19 +186,18 @@ export default function OnboardingPage() {
       data: { session },
     } = await supabase.auth.getSession()
     if (!session?.access_token) return
-    const promises = Array.from(queue.entries()).map(
-      ([traderId, action]) =>
-        fetch('/api/follow', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ traderId, action }),
-        }).catch(() => {
-          /* swallow individual failures; UI already updated optimistically */
-        }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+    const promises = Array.from(queue.entries()).map(([traderId, action]) =>
+      fetch('/api/follow', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ traderId, action }),
+      }).catch(() => {
+        /* swallow individual failures; UI already updated optimistically */
+      })
     )
     Promise.all(promises)
   }, [])
@@ -189,19 +211,18 @@ export default function OnboardingPage() {
       data: { session },
     } = await supabase.auth.getSession()
     if (!session?.access_token) return
-    const promises = Array.from(queue.entries()).map(
-      ([groupId, action]) =>
-        fetch('/api/groups/subscribe', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session.access_token}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ groupId, action }),
-        }).catch(() => {
-          /* swallow individual failures; UI already updated optimistically */
-        }) // eslint-disable-line no-restricted-syntax -- fire-and-forget
+    const promises = Array.from(queue.entries()).map(([groupId, action]) =>
+      fetch('/api/groups/subscribe', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${session.access_token}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ groupId, action }),
+      }).catch(() => {
+        /* swallow individual failures; UI already updated optimistically */
+      })
     )
     Promise.all(promises)
   }, [])
@@ -262,6 +283,29 @@ export default function OnboardingPage() {
       showToast(tr('saveFailed'), 'error')
     } finally {
       setSaving(false)
+    }
+  }
+
+  // Skip the activation flow: mark onboarding complete (so it never reappears)
+  // and exit to the returnUrl. Routing always proceeds even if the DB write fails.
+  const handleSkip = async () => {
+    if (saving) return
+    setSaving(true)
+    try {
+      if (userId) {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ onboarding_completed: true })
+          .eq('id', userId)
+        if (error) logger.error('Error skipping onboarding:', error)
+      }
+      try {
+        localStorage.setItem('hasOnboarded', 'true')
+      } catch {
+        /* localStorage may be unavailable */
+      }
+    } finally {
+      router.replace(afterOnboarding)
     }
   }
 
@@ -338,6 +382,33 @@ export default function OnboardingPage() {
             : '0 25px 50px -12px var(--color-overlay-subtle), 0 0 100px var(--color-accent-primary-10)',
         }}
       >
+        {/* Skip for now — available on every step before completion */}
+        {step !== 'complete' && (
+          <button
+            type="button"
+            onClick={handleSkip}
+            disabled={saving}
+            className="onboarding-skip-btn"
+            style={{
+              position: 'absolute',
+              top: 16,
+              right: 18,
+              background: 'transparent',
+              border: 'none',
+              color: obTheme.textSecondary,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.medium,
+              cursor: saving ? 'wait' : 'pointer',
+              padding: '6px 10px',
+              borderRadius: tokens.radius.md,
+              opacity: saving ? 0.6 : 1,
+              zIndex: 2,
+            }}
+          >
+            {tr('skip')}
+          </button>
+        )}
+
         {/* Progress bar - hidden on complete step */}
         <Box
           style={{

@@ -57,6 +57,63 @@ function AuthCallbackContent() {
       const isSafeReturn = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
       const defaultRedirect = isAddAccount ? '/' : isSafeReturn ? returnUrl : '/'
 
+      // Fire-and-forget welcome email for genuinely-new signups (created_at window).
+      // (route auth reads only the Authorization Bearer header)
+      const sendWelcomeEmailIfNew = (sess: NonNullable<typeof session>) => {
+        const createdAt = new Date(sess.user.created_at).getTime()
+        if (Date.now() - createdAt < 30_000) {
+          fetch('/api/email/welcome', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${sess.access_token}`,
+            },
+          })
+            // eslint-disable-next-line no-restricted-syntax
+            .catch(() => {
+              /* intentional: fire-and-forget */
+            })
+        }
+      }
+
+      // Durable post-auth routing. New-user detection reads the DB
+      // user_profiles.onboarding_completed flag (durable) rather than a fragile
+      // created_at time window: first-time users (flag false/null) go through the
+      // full /onboarding activation flow; returning users go to their normal
+      // destination. Add-account flows never see onboarding.
+      const finalizeRedirect = async (sess: NonNullable<typeof session>) => {
+        sendWelcomeEmailIfNew(sess)
+
+        if (isAddAccount) {
+          router.replace('/')
+          return
+        }
+
+        let needsOnboarding = false
+        try {
+          const { data: profile, error: profileError } = await supabase
+            .from('user_profiles')
+            .select('onboarding_completed')
+            .eq('id', sess.user.id)
+            .maybeSingle()
+          if (profileError) {
+            // Fail-open: never trap a returning user on a transient read error.
+            logger.warn('Onboarding flag read failed; skipping onboarding', profileError)
+          } else {
+            needsOnboarding = profile?.onboarding_completed !== true
+          }
+        } catch (err) {
+          logger.warn('Onboarding flag read threw; skipping onboarding', err)
+        }
+
+        if (needsOnboarding) {
+          const ru = isSafeReturn ? returnUrl! : '/'
+          router.replace(`/onboarding?returnUrl=${encodeURIComponent(ru)}`)
+        } else {
+          router.replace(defaultRedirect)
+        }
+      }
+
       // Save new account to multi-account store
       const saveToStore = async (sess: typeof session) => {
         if (!isAddAccount || !sess) return
@@ -127,36 +184,7 @@ function AuthCallbackContent() {
           } catch {
             /* intentional */
           }
-        // Check if this is a new user (created within the last 30 seconds)
-        const createdAt = new Date(session.user.created_at).getTime()
-        const now = Date.now()
-        const isNewUser = now - createdAt < 30_000
-
-        // Fire-and-forget: send welcome email for new users
-        // (route auth reads only the Authorization Bearer header)
-        if (isNewUser) {
-          fetch('/api/email/welcome', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${session.access_token}`,
-            },
-          })
-            // eslint-disable-next-line no-restricted-syntax
-            .catch(() => {
-              /* intentional: fire-and-forget */
-            })
-        }
-
-        // New users → preserve returnUrl with welcome banner (skip complex onboarding)
-        if (isAddAccount) {
-          router.replace('/')
-        } else if (isNewUser) {
-          const target = isSafeReturn ? returnUrl! : '/'
-          router.replace(target + (target.includes('?') ? '&' : '?') + 'welcome=1')
-        } else {
-          router.replace(defaultRedirect)
-        }
+        await finalizeRedirect(session)
       } else {
         // Retry with backoff: supabase may need time to process the hash fragment
         const tryGetSession = async (
@@ -178,35 +206,7 @@ function AuthCallbackContent() {
             } catch {
               /* intentional */
             }
-          const createdAt = new Date(retrySession.user.created_at).getTime()
-          const now = Date.now()
-          const isNewUser = now - createdAt < 30_000
-
-          // Fire-and-forget: send welcome email for new users
-          // (route auth reads only the Authorization Bearer header)
-          if (isNewUser) {
-            fetch('/api/email/welcome', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                Authorization: `Bearer ${retrySession.access_token}`,
-              },
-            })
-              // eslint-disable-next-line no-restricted-syntax
-              .catch(() => {
-                /* intentional: fire-and-forget */
-              })
-          }
-
-          // New users → preserve returnUrl with welcome banner (consistent with immediate-session path)
-          if (isAddAccount) {
-            router.replace('/')
-          } else if (isNewUser) {
-            const target = isSafeReturn ? returnUrl! : '/'
-            router.replace(target + (target.includes('?') ? '&' : '?') + 'welcome=1')
-          } else {
-            router.replace(defaultRedirect)
-          }
+          await finalizeRedirect(retrySession)
         } else {
           router.replace('/login?error=no_session')
         }

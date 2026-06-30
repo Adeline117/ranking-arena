@@ -524,9 +524,11 @@ export default function LoginPageClient() {
           if (updateError) logger.error('Error updating handle:', updateError)
         }
         await createUserProfile(user.id, email, handle)
+        // Brand-new email signup → route through the full /onboarding activation
+        // flow (onboarding_completed is still false). The original destination is
+        // preserved as returnUrl so onboarding (or Skip) lands them back there.
         const dest = getRedirectUrl(handle, email)
-        const separator = dest.includes('?') ? '&' : '?'
-        router.push(`${dest}${separator}welcome=1`)
+        router.push(`/onboarding?returnUrl=${encodeURIComponent(dest)}`)
       } else {
         router.push(getRedirectUrl())
       }

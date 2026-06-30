@@ -41,7 +41,9 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
         })
 
         if (result.isNew) {
-          router.push('/?welcome=1')
+          // New users → full /onboarding activation flow, preserving destination
+          const dest = redirectUrl || '/'
+          router.push(`/onboarding?returnUrl=${encodeURIComponent(dest)}`)
         } else {
           router.push(redirectUrl || '/')
         }
