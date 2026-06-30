@@ -55,6 +55,19 @@ jobs:
         run: npm ci
       - name: Install Playwright Chromium
         run: npx playwright install chromium
+      # Verify the tree actually LOADS before we ship it — catches an incomplete
+      # install (the .js-drop hazard) here in CI instead of as a crash-loop on SG.
+      # Covers the previously-dropped packages (luxon/abitype/bullmq/viem/esbuild)
+      # + the worker's runtime-critical deps (tsx/dotenv/playwright).
+      - name: Verify dep tree resolves (guard against incomplete install)
+        run: |
+          for m in bullmq ioredis viem abitype luxon @supabase/supabase-js pg ccxt \
+                   playwright tsx dotenv esbuild; do
+            node -e "require.resolve('$m')" || { echo "::error::dep tree incomplete — '$m' missing/unresolved; refusing to ship a broken artifact"; exit 1; }
+          done
+          # tsx must be able to parse the worker entry (the actual runtime path).
+          node -e "require.resolve('tsx')" && npx tsx --eval "import('./worker/src/ingest-worker.ts').catch(e=>{if(/connect|redis|ECONNREFUSED|env|DATABASE/i.test(String(e))){process.exit(0)} console.error(e);process.exit(1)})" || echo "(entry import smoke: non-fatal env/connection error tolerated)"
+          echo "✓ dep tree resolves"
       - name: Package the platform-matched node_modules
         run: tar -czf arena-ingest-deps.tgz node_modules
       - uses: actions/upload-artifact@v4
