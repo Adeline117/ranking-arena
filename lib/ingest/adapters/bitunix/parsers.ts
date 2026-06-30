@@ -128,7 +128,12 @@ export function parseBitunixLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parse
       headlineRoi: pct(item.roi),
       headlinePnl: num(item.pl),
       headlineWinRate: pct(item.winRate),
-      // dailyWinRate sparkline, mdd, aum, copier slots, symbolList, full,
+      // The board row carries per-TF mdd (a FRACTION, like roi/winRate — see header
+      // doc), so extract it to headlineMdd (publish writes it to trader_stats.mdd).
+      // Was previously left only in raw → board-tier traders had no MDD, leaving
+      // bitunix at ~20% capture (only top-N profiled traders got it).
+      headlineMdd: pct(item.mdd),
+      // dailyWinRate sparkline, aum, copier slots, symbolList, full,
       // privateMode... kept verbatim (spec §3 raw JSONB note).
       raw: item,
     })
