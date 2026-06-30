@@ -13,6 +13,14 @@ import { useRealtime } from '@/lib/hooks/useRealtime'
 import { usePresence, formatLastSeen } from '@/lib/hooks/usePresence'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  applyReactionDelta,
+  DM_REACTION_EMOJIS,
+} from '@/app/(app)/messages/[conversationId]/components/types'
+import type {
+  MessageReaction,
+  ReplyPreview,
+} from '@/app/(app)/messages/[conversationId]/components/types'
 
 type ChannelMessage = {
   id: string
@@ -23,6 +31,9 @@ type ChannelMessage = {
   media_type?: 'image' | 'video' | 'file' | null
   media_name?: string | null
   created_at: string
+  reply_to_id?: string | null
+  reply_preview?: ReplyPreview | null
+  reactions?: MessageReaction[]
   _status?: 'sending' | 'sent' | 'failed'
   _tempId?: string
 }
@@ -71,9 +82,41 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     fileSize?: number
   } | null>(null)
   const [uploading, setUploading] = useState(false)
+  // Reply / quote: the message currently being replied to (null = not replying)
+  const [replyingTo, setReplyingTo] = useState<ChannelMessage | null>(null)
+  // Per-message context menu (react / reply / copy)
+  const [ctxMenu, setCtxMenu] = useState<{ msgId: string; x: number; y: number } | null>(null)
+  const ctxMenuRef = useRef<HTMLDivElement>(null)
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Guard against state updates after unmount in realtime callbacks (CLAUDE.md)
+  const mountedRef = useRef(true)
+  // Maps reaction row id -> {messageId, emoji, userId} so DELETE events (PK-only
+  // under default replica identity) resolve back to a message.
+  const reactionRowMapRef = useRef<
+    Map<string, { messageId: string; emoji: string; userId: string }>
+  >(new Map())
 
   const memberIds = members.map((m) => m.user_id)
   const { getUserPresence } = usePresence(userId || null, memberIds)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  // Close context menu on outside click
+  useEffect(() => {
+    if (!ctxMenu) return
+    const handleClick = (e: MouseEvent) => {
+      if (ctxMenuRef.current && !ctxMenuRef.current.contains(e.target as Node)) {
+        setCtxMenu(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [ctxMenu])
 
   useEffect(() => {
     if (params && typeof params === 'object' && 'then' in params) {
@@ -136,6 +179,116 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     },
   })
 
+  // Realtime: emoji reactions (INSERT). RLS limits delivery to channel members;
+  // we only apply when the affected message is already in view.
+  useRealtime<{ id: string; message_id: string; user_id: string; emoji: string }>({
+    table: 'channel_message_reactions',
+    event: 'INSERT',
+    enabled: !!channelId && !!userId,
+    autoReconnect: true,
+    maxRetries: 5,
+    onInsert: (row) => {
+      if (!mountedRef.current) return
+      reactionRowMapRef.current.set(row.id, {
+        messageId: row.message_id,
+        emoji: row.emoji,
+        userId: row.user_id,
+      })
+      // Our own reactions are already applied optimistically.
+      if (row.user_id === userId) return
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === row.message_id
+            ? { ...m, reactions: applyReactionDelta(m.reactions, row.emoji, 1, false) }
+            : m
+        )
+      )
+    },
+  })
+
+  // Realtime: emoji reactions (DELETE). Default replica identity sends only the PK,
+  // so resolve message/emoji via the row map populated on INSERT.
+  useRealtime<{ id: string }>({
+    table: 'channel_message_reactions',
+    event: 'DELETE',
+    enabled: !!channelId && !!userId,
+    autoReconnect: true,
+    maxRetries: 5,
+    onDelete: (row) => {
+      if (!mountedRef.current) return
+      const info = reactionRowMapRef.current.get(row.id)
+      reactionRowMapRef.current.delete(row.id)
+      if (!info || info.userId === userId) return
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === info.messageId
+            ? { ...m, reactions: applyReactionDelta(m.reactions, info.emoji, -1) }
+            : m
+        )
+      )
+    },
+  })
+
+  // Toggle an emoji reaction — delta-based optimistic update + rollback.
+  const handleToggleReaction = useCallback(
+    async (messageId: string, emoji: string) => {
+      if (!userId || !accessToken || !channelId) return
+      setCtxMenu(null)
+
+      let wasMine = false
+      setMessages((prev) =>
+        prev.map((m) => {
+          if (m.id !== messageId) return m
+          wasMine = !!m.reactions?.find((r) => r.emoji === emoji)?.mine
+          return {
+            ...m,
+            reactions: applyReactionDelta(m.reactions, emoji, wasMine ? -1 : 1, !wasMine),
+          }
+        })
+      )
+
+      try {
+        const res = await globalThis.fetch(
+          `/api/channels/${channelId}/messages/${messageId}/react`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${accessToken}`,
+              ...getCsrfHeaders(),
+            },
+            body: JSON.stringify({ emoji }),
+          }
+        )
+        const data = await res.json()
+        if (res.ok && data.success) {
+          const counts = (data.counts || {}) as Record<string, number>
+          const userEmojis = new Set((data.userEmojis || []) as string[])
+          const reactions: MessageReaction[] = Object.entries(counts)
+            .filter(([, c]) => c > 0)
+            .map(([e, c]) => ({ emoji: e, count: c, mine: userEmojis.has(e) }))
+          setMessages((prev) => prev.map((m) => (m.id === messageId ? { ...m, reactions } : m)))
+        } else {
+          throw new Error('react failed')
+        }
+      } catch {
+        // Rollback the optimistic delta
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === messageId
+              ? {
+                  ...m,
+                  reactions: applyReactionDelta(m.reactions, emoji, wasMine ? 1 : -1, wasMine),
+                }
+              : m
+          )
+        )
+        showToast(t('operationFailed'), 'error')
+      }
+    },
+    [userId, accessToken, channelId, showToast] // eslint-disable-line react-hooks/exhaustive-deps -- t is stable
+  )
+
   const getMemberName = (senderId: string) => {
     const m = members.find((m) => m.user_id === senderId)
     return m?.nickname || m?.handle || senderId.slice(0, 8)
@@ -156,6 +309,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       return
     }
 
+    // Snapshot + clear the reply target so the composer resets immediately
+    const replyTo = replyingTo
+    setReplyingTo(null)
+
     const tempId = `temp_${Date.now()}`
     const optimistic: ChannelMessage = {
       id: tempId,
@@ -166,6 +323,10 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       media_type: pendingAttachment?.type,
       media_name: pendingAttachment?.originalName,
       created_at: new Date().toISOString(),
+      reply_to_id: replyTo?.id ?? null,
+      reply_preview: replyTo
+        ? { sender_id: replyTo.sender_id, content: (replyTo.content || '').slice(0, 120) }
+        : null,
       _status: 'sending',
       _tempId: tempId,
     }
@@ -186,6 +347,9 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         body.media_type = attachment.type
         body.media_name = attachment.originalName
       }
+      if (replyTo) {
+        body.reply_to_id = replyTo.id
+      }
       const res = await globalThis.fetch(`/api/channels/${channelId}/messages`, {
         method: 'POST',
         headers: {
@@ -198,7 +362,11 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       const data = await res.json()
       if (res.ok && data.message) {
         setMessages((prev) =>
-          prev.map((m) => (m._tempId === tempId ? { ...data.message, _status: 'sent' } : m))
+          prev.map((m) =>
+            m._tempId === tempId
+              ? { ...data.message, reply_preview: optimistic.reply_preview, _status: 'sent' }
+              : m
+          )
         )
       } else {
         setMessages((prev) =>
@@ -487,9 +655,38 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
             const showAvatar = !isMine && msg.sender_id !== prev?.sender_id
             const showName = !isMine && msg.sender_id !== prev?.sender_id
 
+            const replySenderLabel = msg.reply_preview
+              ? msg.reply_preview.sender_id === userId
+                ? t('you')
+                : getMemberName(msg.reply_preview.sender_id)
+              : ''
+
             return (
               <Box
                 key={msg.id}
+                onContextMenu={(e) => {
+                  if (msg._status === 'sending') return
+                  e.preventDefault()
+                  setCtxMenu({ msgId: msg.id, x: e.clientX, y: e.clientY })
+                }}
+                onTouchStart={() => {
+                  if (msg._status === 'sending') return
+                  longPressTimer.current = setTimeout(() => {
+                    setCtxMenu({ msgId: msg.id, x: 0, y: 0 })
+                  }, 500)
+                }}
+                onTouchEnd={() => {
+                  if (longPressTimer.current) {
+                    clearTimeout(longPressTimer.current)
+                    longPressTimer.current = null
+                  }
+                }}
+                onTouchCancel={() => {
+                  if (longPressTimer.current) {
+                    clearTimeout(longPressTimer.current)
+                    longPressTimer.current = null
+                  }
+                }}
                 style={{
                   display: 'flex',
                   flexDirection: 'column',
@@ -559,6 +756,44 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                       maxWidth: '75%',
                     }}
                   >
+                    {/* Quoted reply preview */}
+                    {msg.reply_preview && (
+                      <Box
+                        style={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: 2,
+                          marginBottom: 6,
+                          padding: '6px 10px',
+                          borderRadius: tokens.radius.md,
+                          borderLeft: `3px solid ${isMine ? 'var(--color-on-accent)' : tokens.colors.accent.brand}`,
+                          background: isMine
+                            ? 'var(--glass-border-heavy)'
+                            : tokens.colors.bg.tertiary,
+                          maxWidth: '100%',
+                        }}
+                      >
+                        <Text
+                          size="xs"
+                          style={{ fontWeight: 700, opacity: 0.85, color: 'inherit' }}
+                        >
+                          {replySenderLabel}
+                        </Text>
+                        <Text
+                          size="xs"
+                          style={{
+                            opacity: 0.7,
+                            color: 'inherit',
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                            maxWidth: 240,
+                          }}
+                        >
+                          {msg.reply_preview.content || t('file')}
+                        </Text>
+                      </Box>
+                    )}
                     {msg.media_url && msg.media_type === 'image' && (
                       <Image
                         src={msg.media_url}
@@ -584,6 +819,59 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
                     )}
                   </Box>
                 </Box>
+                {/* Emoji reaction pills */}
+                {msg.reactions && msg.reactions.length > 0 && (
+                  <Box
+                    style={{
+                      display: 'flex',
+                      flexWrap: 'wrap',
+                      gap: 4,
+                      marginTop: 4,
+                      paddingLeft: isMine ? 0 : 36,
+                      paddingRight: isMine ? 4 : 0,
+                      justifyContent: isMine ? 'flex-end' : 'flex-start',
+                      maxWidth: '80%',
+                    }}
+                  >
+                    {msg.reactions.map((r) => (
+                      <button
+                        key={r.emoji}
+                        onClick={() => handleToggleReaction(msg.id, r.emoji)}
+                        className="interactive-scale"
+                        aria-label={`React ${r.emoji}`}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 4,
+                          padding: '2px 8px',
+                          borderRadius: tokens.radius.full,
+                          border: `1px solid ${r.mine ? 'var(--color-accent-primary-40)' : tokens.colors.border.primary}`,
+                          background: r.mine
+                            ? 'var(--color-accent-primary-12)'
+                            : tokens.colors.bg.secondary,
+                          cursor: 'pointer',
+                          fontSize: 13,
+                          lineHeight: 1.6,
+                          transition: `all ${tokens.transition.fast}`,
+                        }}
+                      >
+                        <span>{r.emoji}</span>
+                        <span
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 700,
+                            color: r.mine
+                              ? tokens.colors.accent.primary
+                              : tokens.colors.text.tertiary,
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          {r.count}
+                        </span>
+                      </button>
+                    ))}
+                  </Box>
+                )}
                 {msg.sender_id !== messages[i + 1]?.sender_id && msg._status !== 'failed' && (
                   <Text
                     size="xs"
@@ -781,6 +1069,82 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         style={{ display: 'none' }}
       />
 
+      {/* Reply preview bar */}
+      {replyingTo && (
+        <Box
+          style={{
+            maxWidth: 800,
+            margin: '0 auto',
+            marginBottom: 4,
+            padding: '8px 10px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            background: tokens.colors.bg.tertiary,
+            borderRadius: tokens.radius.lg,
+            borderLeft: `3px solid ${tokens.colors.accent.brand}`,
+          }}
+        >
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.accent.brand}
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            style={{ flexShrink: 0 }}
+          >
+            <polyline points="9 17 4 12 9 7" />
+            <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+          </svg>
+          <Box style={{ flex: 1, minWidth: 0 }}>
+            <Text size="xs" style={{ fontWeight: 700, color: tokens.colors.accent.brand }}>
+              {t('replyingTo')}{' '}
+              {replyingTo.sender_id === userId ? t('you') : getMemberName(replyingTo.sender_id)}
+            </Text>
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+            >
+              {replyingTo.content && !replyingTo.content.startsWith('[')
+                ? replyingTo.content
+                : t('file')}
+            </Text>
+          </Box>
+          <button
+            onClick={() => setReplyingTo(null)}
+            aria-label="Cancel reply"
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: '50%',
+              border: 'none',
+              background: 'var(--color-accent-error-15)',
+              color: tokens.colors.accent.error,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              flexShrink: 0,
+            }}
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </Box>
+      )}
+
       {pendingAttachment && (
         <Box
           style={{
@@ -935,6 +1299,147 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
           </button>
         </Box>
       </Box>
+
+      {/* Message context menu — react / reply / copy */}
+      {ctxMenu &&
+        (() => {
+          const ctxMsg = messages.find((m) => m.id === ctxMenu.msgId)
+          if (!ctxMsg) return null
+          return (
+            <div
+              ref={ctxMenuRef}
+              style={{
+                position: 'fixed',
+                top: ctxMenu.y || '50%',
+                left: ctxMenu.x || '50%',
+                transform: ctxMenu.x ? 'none' : 'translate(-50%, -50%)',
+                zIndex: tokens.zIndex.max,
+                background: tokens.colors.bg.secondary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                borderRadius: tokens.radius.lg,
+                boxShadow: tokens.shadow.xl,
+                overflow: 'hidden',
+                minWidth: 140,
+              }}
+            >
+              {/* Quick emoji reactions */}
+              <div
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: 2,
+                  padding: '8px 8px',
+                  borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                  maxWidth: 240,
+                }}
+              >
+                {DM_REACTION_EMOJIS.map((emoji) => (
+                  <button
+                    key={emoji}
+                    onClick={() => handleToggleReaction(ctxMsg.id, emoji)}
+                    className="interactive-scale"
+                    aria-label={`React ${emoji}`}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 18,
+                      border: 'none',
+                      borderRadius: tokens.radius.md,
+                      background: 'transparent',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+              {/* Reply */}
+              <button
+                onClick={() => {
+                  setReplyingTo(ctxMsg)
+                  setCtxMenu(null)
+                  inputRef.current?.focus()
+                }}
+                aria-label="Reply"
+                className="hover-bg-tertiary"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  width: '100%',
+                  padding: '10px 16px',
+                  border: 'none',
+                  background: 'transparent',
+                  color: tokens.colors.text.primary,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  textAlign: 'left',
+                }}
+              >
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <polyline points="9 17 4 12 9 7" />
+                  <path d="M20 18v-2a4 4 0 0 0-4-4H4" />
+                </svg>
+                {t('reply')}
+              </button>
+              {/* Copy text */}
+              {ctxMsg.content && !ctxMsg.content.startsWith('[') && (
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(ctxMsg.content).catch(() => {
+                      /* clipboard write may fail in some browsers */
+                    })
+                    setCtxMenu(null)
+                  }}
+                  aria-label="Copy text"
+                  className="hover-bg-tertiary"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    width: '100%',
+                    padding: '10px 16px',
+                    border: 'none',
+                    background: 'transparent',
+                    color: tokens.colors.text.primary,
+                    fontSize: 13,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                  {t('copyText')}
+                </button>
+              )}
+            </div>
+          )
+        })()}
     </Box>
   )
 }
