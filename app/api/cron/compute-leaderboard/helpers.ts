@@ -82,7 +82,7 @@ export async function deriveWinRateMDD(
 ): Promise<number> {
   const { data: missing } = await supabase
     .from('leaderboard_ranks')
-    .select('source, source_trader_id, win_rate, max_drawdown, season_id')
+    .select('source, source_trader_id, win_rate, max_drawdown, roi, pnl, season_id')
     .or('win_rate.is.null,max_drawdown.is.null')
     .limit(2000) // Process up to 2000 per run to stay within timeout
 
@@ -187,12 +187,25 @@ export async function deriveWinRateMDD(
 
     for (const row of rows) {
       const upd: Record<string, number> = {}
-      if (row.win_rate == null && wr != null) upd.win_rate = wr
+      // This path writes DIRECTLY to leaderboard_ranks (bypasses the traderMap
+      // re-sanitize), so apply the same contradiction guards here:
+      const roi = row.roi as number | null
+      const pnl = row.pnl as number | null
+      const profitable = (roi != null && roi > 10) || (pnl != null && pnl > 0)
+      // WR=0% on a profitable trader is impossible — a profit needs >=1 win.
+      if (row.win_rate == null && wr != null && !(wr === 0 && profitable)) upd.win_rate = wr
       // A derived MDD at/above 100% means the cumulative-ROI equity curve touched
       // <=0 — i.e. a spiky/outlier ROI snapshot, not a real drawdown (99.6% of such
       // rows are *profitable* traders, for whom a 100% drawdown is self-contradictory).
       // Leave it NULL (renders as N/A) instead of manufacturing a fake -100% wall.
-      if (row.max_drawdown == null && mdd > 0 && mdd < 100) upd.max_drawdown = mdd
+      // Also reject the rounding tail (>=99% on a profitable trader).
+      if (
+        row.max_drawdown == null &&
+        mdd > 0 &&
+        mdd < 100 &&
+        !(mdd >= 99 && roi != null && roi > 0)
+      )
+        upd.max_drawdown = mdd
       if (Object.keys(upd).length > 0) {
         leaderboardUpdates.push({
           source: rows[0].source,
