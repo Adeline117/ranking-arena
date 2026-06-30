@@ -32,6 +32,7 @@ import type {
   ParsedProfile,
   RankingTimeframe,
 } from '../../core/types'
+import { riskFromCumulativePnl } from '../../core/series-risk'
 
 type Dict = Record<string, unknown>
 
@@ -166,19 +167,32 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   if (row || totalPnl !== null) {
     const realizedPnl = row ? gmxRealizedPnlUsd(row) : null
     const pnl = totalPnl ?? realizedPnl
+    const aum = row ? usd(row.maxCapital) : null
+    // Tier-0 on-chain-equivalent risk: GMX exposes no MDD/Sharpe, so derive
+    // them from the daily cumulative-PnL series (accountPnlHistoryStats) over
+    // the max-capital base. daily-approx — understates intraday DD; see
+    // series-risk.ts provenance note. Returns all-null without a positive base.
+    const risk = riskFromCumulativePnl(
+      points.map((p) => ({ ts: new Date(p.ts).toISOString(), value: p.value })),
+      aum
+    )
+    const riskExtras: Record<string, unknown> =
+      risk.mdd !== null || risk.sharpe !== null
+        ? { risk_derivation: 'daily-approx', risk_samples: risk.samples, sortino: risk.sortino }
+        : {}
     stats.push({
       timeframe: tf,
       asOf: ctx.scrapedAt,
       roi: row ? roiOnMaxCapital(pnl, row) : null,
       pnl,
-      sharpe: null, // not exposed — NULL collapses in UI
-      mdd: null, // daily samples would understate DD — deliberately NULL
+      sharpe: risk.sharpe, // Tier-0 daily-approx (was NULL — not exposed by GMX)
+      mdd: risk.mdd, // Tier-0 daily-approx peak-to-trough on equity curve
       winRate: row ? winRatePct(row) : null,
       winPositions: row ? num(row.wins) : null,
       totalPositions: row ? (num(row.wins) ?? 0) + (num(row.losses) ?? 0) : null,
       copierPnl: null, // DEX — no copy trading
       copierCount: null,
-      aum: row ? usd(row.maxCapital) : null,
+      aum,
       volume: row ? usd(row.volume) : null,
       profitShareRate: null,
       holdingDurationAvgHours: null,
@@ -189,6 +203,7 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
         realized_pnl_usd: realizedPnl,
         window_from: num(payload.from),
         closed_count: row ? num(row.closedCount) : null,
+        ...riskExtras,
       },
     })
   }
