@@ -85,6 +85,20 @@ const TraderMetaStrip = dynamic(() => import('@/app/components/trader/serving/Tr
 const OnchainInsights = dynamic(() => import('@/app/components/trader/serving/OnchainInsights'), {
   ssr: false,
 })
+// M1: rich serving modules promoted to the DEFAULT three-tab path (were only on
+// the ?threetab=0 escape hatch, invisible to normal users). All NULL-collapse,
+// fed by servingTab.metaExtras (90d extras: risk_rating / style / liquidation /
+// ability_scores / hold_histogram).
+const SignalChips = dynamic(() => import('@/app/components/trader/serving/SignalChips'), {
+  ssr: false,
+})
+const AbilityRadar = dynamic(() => import('@/app/components/trader/serving/AbilityRadar'), {
+  ssr: false,
+})
+const HoldingDistribution = dynamic(
+  () => import('@/app/components/trader/serving/HoldingDistribution'),
+  { ssr: false }
+)
 // ExchangeLinksBar — static import (no client-only deps). Previously dynamic
 // with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
 // trader page load. Static import eliminates the flash + reduces chunk count.
@@ -735,6 +749,11 @@ export default function TraderProfileClient({
                         extras={servingTab.metaExtras}
                         currency={servingTab.currency}
                       />
+                      {/* M1: risk rating / style tags / last-liquidation chips +
+                          MEXC ability radar — surfaced on the default path. Both
+                          NULL-collapse when the source lacks the extras. */}
+                      <SignalChips source={data.source} extras={servingTab.metaExtras} />
+                      <AbilityRadar extras={servingTab.metaExtras} />
                     </Box>
                   )}
                   <OverviewTab
@@ -789,6 +808,9 @@ export default function TraderProfileClient({
                           currency={servingTab.currency}
                         />
                       )}
+                      {/* M1: holding-duration histogram (MEXC etc.) on default
+                          Stats tab. NULL-collapses when no hold_histogram. */}
+                      {useThreeTab && <HoldingDistribution extras={servingTab.metaExtras} />}
                       <StatsTab
                         visited
                         stats={effStats}
