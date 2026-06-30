@@ -3880,6 +3880,11 @@ td[data-numeric],
       --ranking-grid-cols,
       40px minmax(140px, 1.4fr) 58px 80px 64px 64px
     ) !important;
+    /* Sum of column widths — lets the grid overflow into the horizontal-scroll
+       wrapper (frozen columns) once the viewport is narrower than this, instead
+       of being clipped. No effect when the viewport is wider (1.5fr absorbs the
+       slack), so wide-screen layout is unchanged. */
+    min-width: var(--ranking-grid-min, 654px);
   }
   .ranking-table-container[data-hide-score] .col-score {
     display: none !important;

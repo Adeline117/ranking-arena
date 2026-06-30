@@ -595,6 +595,114 @@
 }
 
 /* ============================================================
+   Frozen first columns — rank + trader name stay put while the rest
+   of the row scrolls horizontally.
+
+   The whole effect is gated on:
+     @media (min-width: 768px) and (hover: hover) and (pointer: fine)
+       → fine-pointer desktops only. Coarse-pointer devices (tablets) keep the
+         current per-row overflow:hidden because (a) their swipe-to-reveal
+         actions are positioned against the clipped row box and (b) a horizontal
+         finger-swipe is already claimed by the row swipe gesture, so a frozen
+         horizontal scroll would be unreachable there anyway.
+     .ranking-hscroll[data-hscroll='true']
+       → only while the grid actually overflows. On wide screens where
+         everything fits there is ZERO change: no sticky cells, no backgrounds,
+         no divider, no scrollbar — byte-identical to the prior layout.
+
+   .ranking-hscroll is the single scroll container shared by the sticky header
+   and the rows, so the frozen rank (1st grid cell) and name (2nd grid cell)
+   pin to the same left edge in both.
+   ============================================================ */
+@media (min-width: 768px) and (hover: hover) and (pointer: fine) {
+  /* Un-clip rows so a wider-than-viewport grid can overflow into the shared
+     horizontal scroll container instead of being clipped per-row. Gated on
+     data-hscroll so that when the table fits, the per-row overflow:hidden (and
+     therefore the exact current hero-glow clipping) is fully preserved. The
+     always-un-clipped sticky header is what trips data-hscroll, so there is no
+     chicken-and-egg: header and rows share the same min-width threshold. */
+  .ranking-hscroll[data-hscroll='true'] .swipe-row-wrapper {
+    overflow: visible;
+  }
+
+  /* Freeze the first two grid cells (rank + trader-name) of both the header row
+     and every data row. Only engaged once the table overflows (data-hscroll). */
+  .ranking-hscroll[data-hscroll='true'] .ranking-table-grid-custom > :nth-child(1),
+  .ranking-hscroll[data-hscroll='true'] .ranking-table-grid-custom > :nth-child(2) {
+    position: sticky;
+    z-index: 3;
+  }
+  .ranking-hscroll[data-hscroll='true'] .ranking-table-grid-custom > :nth-child(1) {
+    left: 0;
+  }
+  /* Offset the name cell by the rank track width (1st column = 40px). */
+  .ranking-hscroll[data-hscroll='true'] .ranking-table-grid-custom > :nth-child(2) {
+    left: 40px;
+    /* Right-edge divider + soft shadow so scrolled cells pass visibly "under" */
+    box-shadow: 6px 0 8px -4px rgba(0, 0, 0, 0.35);
+  }
+
+  /* Opaque backgrounds so the scrolling columns never bleed through the frozen
+     cells. Header sits on bg-secondary, rows on bg-primary (= .swipe-row-content). */
+  .ranking-hscroll[data-hscroll='true'] .ranking-table-header > :nth-child(1),
+  .ranking-hscroll[data-hscroll='true'] .ranking-table-header > :nth-child(2) {
+    background: var(--color-bg-secondary, #151320);
+  }
+  .ranking-hscroll[data-hscroll='true'] .ranking-row > :nth-child(1),
+  .ranking-hscroll[data-hscroll='true'] .ranking-row > :nth-child(2) {
+    background: var(--color-bg-primary, #0a0910);
+  }
+
+  /* Top-3 heroes: tint the frozen cells to continue the medal gradient, layered
+     over an opaque base so nothing shows through. */
+  .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-1 > :nth-child(1),
+  .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-1 > :nth-child(2) {
+    background:
+      linear-gradient(
+        135deg,
+        rgba(255, 215, 0, 0.18) 0%,
+        rgba(255, 215, 0, 0.06) 70%,
+        transparent 100%
+      ),
+      var(--color-bg-primary, #0a0910);
+  }
+  .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-2 > :nth-child(1),
+  .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-2 > :nth-child(2) {
+    background:
+      linear-gradient(
+        135deg,
+        rgba(192, 192, 192, 0.14) 0%,
+        rgba(192, 192, 192, 0.04) 70%,
+        transparent 100%
+      ),
+      var(--color-bg-primary, #0a0910);
+  }
+  .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-3 > :nth-child(1),
+  .ranking-hscroll[data-hscroll='true'] .ranking-row.rank-3 > :nth-child(2) {
+    background:
+      linear-gradient(
+        135deg,
+        rgba(205, 127, 50, 0.14) 0%,
+        rgba(205, 127, 50, 0.04) 70%,
+        transparent 100%
+      ),
+      var(--color-bg-primary, #0a0910);
+  }
+
+  /* Hover wash on the frozen cells for non-hero rows (heroes keep their tint). */
+  .ranking-hscroll[data-hscroll='true']
+    .ranking-row:not(.rank-1):not(.rank-2):not(.rank-3):hover
+    > :nth-child(1),
+  .ranking-hscroll[data-hscroll='true']
+    .ranking-row:not(.rank-1):not(.rank-2):not(.rank-3):hover
+    > :nth-child(2) {
+    background:
+      linear-gradient(90deg, var(--color-accent-primary-08) 0%, transparent 60%),
+      var(--color-bg-primary, #0a0910);
+  }
+}
+
+/* ============================================================
    Keyboard Navigation — Focus Ring
    When a row has data-kb-focused="true", show a visible focus ring
    so keyboard users can see which row is active.

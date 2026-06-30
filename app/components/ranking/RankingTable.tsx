@@ -285,6 +285,32 @@ function RankingTableInner(props: {
     return template
   }, [visibleColumns])
 
+  // Min-width for the desktop grid = sum of every column at its template size
+  // (name column at its 140px floor) + gaps + horizontal padding. Drives the
+  // horizontal-scroll threshold: the grid only overflows (and the frozen columns
+  // engage) once the viewport is narrower than this. On wider screens the 1.5fr
+  // name column absorbs the slack and min-width has no effect — layout unchanged.
+  // Uses the row's larger gap (12px) / padding (40px) so the box fully covers its
+  // background + bottom border even in the overflow region.
+  const desktopGridMinWidth = React.useMemo(() => {
+    const widths: number[] = [40, 140] // rank, name (floor)
+    if (visibleColumns.includes('score')) widths.push(58)
+    if (visibleColumns.includes('roi')) widths.push(96)
+    if (visibleColumns.includes('pnl')) widths.push(80)
+    if (visibleColumns.includes('winrate')) widths.push(64)
+    if (visibleColumns.includes('mdd')) widths.push(64)
+    if (visibleColumns.includes('sharpe')) widths.push(64)
+    if (visibleColumns.includes('sortino')) widths.push(70)
+    if (visibleColumns.includes('alpha')) widths.push(70)
+    if (visibleColumns.includes('style')) widths.push(80)
+    if (visibleColumns.includes('followers')) widths.push(70)
+    if (visibleColumns.includes('trades')) widths.push(70)
+    const cols = widths.reduce((a, b) => a + b, 0)
+    const gaps = (widths.length - 1) * 12 // row gap = tokens.spacing[3]
+    const padding = 40 // row horizontal padding = 2 × tokens.spacing[5]
+    return cols + gaps + padding
+  }, [visibleColumns])
+
   // Grid template + hidden-column flags are driven by a CSS variable and
   // data-attributes on the .ranking-table-container element (see globals.css).
   // Previously this was a runtime <style>{...}</style> element that React
@@ -556,6 +582,11 @@ function RankingTableInner(props: {
 
   // Reset scroll position on page/sort/filter changes
   const tableScrollRef = useRef<HTMLDivElement>(null)
+  // Horizontal-scroll wrapper (desktop table view). When the grid is wider than
+  // the viewport it scrolls horizontally with the rank + name columns frozen.
+  // We flip data-hscroll only while it actually overflows so wide screens (where
+  // everything fits) keep the exact current layout — no sticky cells, no scrollbar.
+  const hScrollRef = useRef<HTMLDivElement>(null)
   const resetKey = useMemo(
     () =>
       `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}-${scoreGradeFilter}-${traderTypeFilter}`,
@@ -572,6 +603,28 @@ function RankingTableInner(props: {
   useEffect(() => {
     if (tableScrollRef.current) tableScrollRef.current.scrollTop = 0
   }, [resetKey])
+
+  // Detect horizontal overflow on the desktop table wrapper and toggle
+  // data-hscroll. The frozen-column CSS (sticky cells + backgrounds + divider
+  // shadow) is gated entirely on data-hscroll="true", so on wide screens where
+  // the grid fits there is zero visual/layout change. Re-measures on viewport
+  // resize (ResizeObserver) and whenever column visibility / density / row count
+  // changes the intrinsic grid width.
+  useEffect(() => {
+    const el = hScrollRef.current
+    if (!el) return
+    if (viewMode !== 'table') {
+      el.removeAttribute('data-hscroll')
+      return
+    }
+    const measure = () => {
+      el.dataset.hscroll = el.scrollWidth > el.clientWidth + 1 ? 'true' : 'false'
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [viewMode, visibleColumns, density, paginatedTraders.length])
 
   // Wrap parseSourceInfo with translation function
   const parseSourceInfoWithT = useCallback((src: string) => parseSourceInfoUtil(src, t), [t])
@@ -661,6 +714,8 @@ function RankingTableInner(props: {
           border: tokens.glass.border.light,
           // Dynamic grid template via CSS variable — no <style> element needed.
           ['--ranking-grid-cols' as string]: desktopGridTemplate,
+          // Horizontal-scroll threshold for the frozen-column layout (desktop).
+          ['--ranking-grid-min' as string]: `${desktopGridMinWidth}px`,
         }}
       >
         {/* Category Tabs + Tool buttons (extracted to RankingFilters) */}
@@ -694,218 +749,165 @@ function RankingTableInner(props: {
           />
         )}
 
-        {/* Table Header (only in table view) - sticky */}
-        {viewMode === 'table' && (
-          <Box
-            className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
-            role="row"
-            style={{
-              display: 'grid',
-              gap: tokens.spacing[2],
-              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-              borderBottom: `1px solid var(--glass-border-light)`,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-              background: 'var(--color-bg-secondary, #14121C)',
-              borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
-              position: 'sticky',
-              top: 56,
-              zIndex: tokens.zIndex.sticky,
-            }}
-          >
-            <Text
-              size="xs"
-              weight="bold"
-              color="tertiary"
-              role="columnheader"
-              aria-label={t('rank')}
+        {/* Horizontal-scroll wrapper — header + rows share ONE scroll container so
+            they scroll together and stay column-aligned. overflow-x:auto only
+            engages when the grid is wider than the viewport (narrow window / many
+            columns); on wide screens the grid expands to fit and nothing scrolls.
+            overflow-y:hidden mirrors the container so the sticky top header still
+            pins under the nav exactly as before. In card view it is inert. */}
+        <div
+          ref={hScrollRef}
+          className="ranking-hscroll"
+          role="presentation"
+          style={{
+            overflowX: viewMode === 'table' ? 'auto' : 'visible',
+            overflowY: viewMode === 'table' ? 'hidden' : 'visible',
+          }}
+        >
+          {/* Table Header (only in table view) - sticky */}
+          {viewMode === 'table' && (
+            <Box
+              className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
+              role="row"
               style={{
-                textAlign: 'center',
-                textTransform: 'uppercase',
-                letterSpacing: '0.8px',
-                whiteSpace: 'nowrap',
-                fontSize: tokens.typography.fontSize.xs,
+                display: 'grid',
+                gap: tokens.spacing[2],
+                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                borderBottom: `1px solid var(--glass-border-light)`,
+                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+                background: 'var(--color-bg-secondary, #14121C)',
+                borderRadius: onCategoryChange
+                  ? '0'
+                  : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+                position: 'sticky',
+                top: 56,
+                zIndex: tokens.zIndex.sticky,
               }}
             >
-              {t('rank')}
-            </Text>
-            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <Text
                 size="xs"
                 weight="bold"
                 color="tertiary"
                 role="columnheader"
-                aria-label={t('trader')}
+                aria-label={t('rank')}
                 style={{
+                  textAlign: 'center',
                   textTransform: 'uppercase',
                   letterSpacing: '0.8px',
                   whiteSpace: 'nowrap',
                   fontSize: tokens.typography.fontSize.xs,
                 }}
               >
-                {t('trader')}
+                {t('rank')}
               </Text>
-              <button
-                onClick={() => setShowRules(!showRules)}
-                className="info-btn-circle"
-                title={t('rankingRules')}
-                aria-label={t('rankingRules')}
-                aria-expanded={showRules}
-              >
-                ?
-              </button>
-            </Box>
-            <Box
-              className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`}
-              as="button"
-              onClick={() => handleSort('score')}
-              role="columnheader"
-              aria-label={`${t('score')} — click to sort`}
-              aria-sort={
-                sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-              }
-              data-sortable
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}
-            >
-              {t('score')}
-              <span
-                title={
-                  t('arenaScoreHeaderTooltip') ||
-                  'Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust. Higher = better risk-adjusted performance.'
-                }
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 13,
-                  height: 13,
-                  borderRadius: '50%',
-                  border: `1px solid var(--color-text-tertiary)`,
-                  fontSize: 10,
-                  fontWeight: 700,
-                  color: 'var(--color-text-tertiary)',
-                  lineHeight: 1,
-                  cursor: 'help',
-                  flexShrink: 0,
-                  opacity: 0.65,
-                  fontStyle: 'normal',
-                }}
-                aria-label={
-                  t('arenaScoreHeaderTooltip') ||
-                  'Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust. Higher = better risk-adjusted performance.'
-                }
-              >
-                i
-              </span>
-              <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
-            </Box>
-            <Box
-              className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`}
-              as="button"
-              onClick={() => handleSort('roi')}
-              title={t('roiTooltip').replace('{range}', timeRange)}
-              role="columnheader"
-              aria-label={`${t('roi')} (${timeRange}) — click to sort`}
-              aria-sort={
-                sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-              }
-              data-sortable
-            >
-              {t('roi')} ({timeRange}) <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
-            </Box>
-            <Box
-              className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`}
-              as="button"
-              onClick={() => handleSort('pnl')}
-              title={t('pnlTooltip') || 'Profit & Loss'}
-              role="columnheader"
-              aria-label={`${t('pnl')} — click to sort`}
-              aria-sort={
-                sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-              }
-              data-sortable
-            >
-              {t('pnl')} <SortIndicator active={sortColumn === 'pnl'} dir={sortDir} />
-            </Box>
-            <Box
-              className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`}
-              as="button"
-              onClick={() => handleSort('winrate')}
-              title={t('winRateTooltip') || 'Percentage of profitable trading days.'}
-              role="columnheader"
-              aria-label={`${t('winRateShort')} — click to sort`}
-              aria-sort={
-                sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-              }
-              data-sortable
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
-            >
-              {t('winRateShort')}
-              <InfoTooltip
-                text={
-                  t('winRateTooltip') ||
-                  'Win Rate: Percentage of profitable trades.\nHigher = more consistent profits.'
-                }
-              />
-              <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
-            </Box>
-            <Box
-              className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`}
-              as="button"
-              onClick={() => handleSort('mdd')}
-              title={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'}
-              role="columnheader"
-              aria-label={`${t('maxDrawdownShort')} — click to sort`}
-              aria-sort={
-                sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-              }
-              data-sortable
-              style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}
-            >
-              {t('maxDrawdownShort')}
-              <InfoTooltip
-                text={
-                  t('mddTooltip') ||
-                  'Max Drawdown: Largest peak-to-trough decline.\nLower = better risk control.'
-                }
-              />
-              <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
-            </Box>
-            {visibleColumns.includes('sharpe') && (
-              <Box
-                className="col-sharpe sort-header sort-header-end"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  gap: 2,
-                }}
-              >
+              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
                 <Text
                   size="xs"
                   weight="bold"
                   color="tertiary"
-                  style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                  role="columnheader"
+                  aria-label={t('trader')}
+                  style={{
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.8px',
+                    whiteSpace: 'nowrap',
+                    fontSize: tokens.typography.fontSize.xs,
+                  }}
                 >
-                  Sharpe
+                  {t('trader')}
                 </Text>
-                <InfoTooltip
-                  text={
-                    t('sharpeTooltip') ||
-                    'Sharpe Ratio: Risk-adjusted return per unit of risk.\n> 1 good, > 2 excellent, > 3 outstanding.'
-                  }
-                />
+                <button
+                  onClick={() => setShowRules(!showRules)}
+                  className="info-btn-circle"
+                  title={t('rankingRules')}
+                  aria-label={t('rankingRules')}
+                  aria-expanded={showRules}
+                >
+                  ?
+                </button>
               </Box>
-            )}
-            {visibleColumns.includes('sortino') && (
               <Box
-                className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`}
+                className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`}
                 as="button"
-                onClick={() => handleSort('sortino')}
-                title={t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'}
+                onClick={() => handleSort('score')}
                 role="columnheader"
-                aria-label={`${t('sortinoRatio')} — click to sort`}
+                aria-label={`${t('score')} — click to sort`}
                 aria-sort={
-                  sortColumn === 'sortino'
+                  sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                }
+                data-sortable
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}
+              >
+                {t('score')}
+                <span
+                  title={
+                    t('arenaScoreHeaderTooltip') ||
+                    'Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust. Higher = better risk-adjusted performance.'
+                  }
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    width: 13,
+                    height: 13,
+                    borderRadius: '50%',
+                    border: `1px solid var(--color-text-tertiary)`,
+                    fontSize: 10,
+                    fontWeight: 700,
+                    color: 'var(--color-text-tertiary)',
+                    lineHeight: 1,
+                    cursor: 'help',
+                    flexShrink: 0,
+                    opacity: 0.65,
+                    fontStyle: 'normal',
+                  }}
+                  aria-label={
+                    t('arenaScoreHeaderTooltip') ||
+                    'Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust. Higher = better risk-adjusted performance.'
+                  }
+                >
+                  i
+                </span>
+                <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
+              </Box>
+              <Box
+                className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`}
+                as="button"
+                onClick={() => handleSort('roi')}
+                title={t('roiTooltip').replace('{range}', timeRange)}
+                role="columnheader"
+                aria-label={`${t('roi')} (${timeRange}) — click to sort`}
+                aria-sort={
+                  sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                }
+                data-sortable
+              >
+                {t('roi')} ({timeRange}){' '}
+                <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
+              </Box>
+              <Box
+                className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`}
+                as="button"
+                onClick={() => handleSort('pnl')}
+                title={t('pnlTooltip') || 'Profit & Loss'}
+                role="columnheader"
+                aria-label={`${t('pnl')} — click to sort`}
+                aria-sort={
+                  sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                }
+                data-sortable
+              >
+                {t('pnl')} <SortIndicator active={sortColumn === 'pnl'} dir={sortDir} />
+              </Box>
+              <Box
+                className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`}
+                as="button"
+                onClick={() => handleSort('winrate')}
+                title={t('winRateTooltip') || 'Percentage of profitable trading days.'}
+                role="columnheader"
+                aria-label={`${t('winRateShort')} — click to sort`}
+                aria-sort={
+                  sortColumn === 'winrate'
                     ? sortDir === 'asc'
                       ? 'ascending'
                       : 'descending'
@@ -919,331 +921,311 @@ function RankingTableInner(props: {
                   gap: 2,
                 }}
               >
-                {t('sortinoRatio')}
+                {t('winRateShort')}
                 <InfoTooltip
                   text={
-                    t('sortinoTooltip') ||
-                    'Sortino: Like Sharpe but only penalizes downside risk.\nHigher = better risk-adjusted return.'
+                    t('winRateTooltip') ||
+                    'Win Rate: Percentage of profitable trades.\nHigher = more consistent profits.'
                   }
                 />
-                <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
+                <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
               </Box>
-            )}
-            {visibleColumns.includes('alpha') && (
               <Box
-                className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`}
+                className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`}
                 as="button"
-                onClick={() => handleSort('alpha')}
-                title={t('alphaTooltip') || 'Alpha (excess return)'}
+                onClick={() => handleSort('mdd')}
+                title={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'}
                 role="columnheader"
-                aria-label="Alpha — click to sort"
+                aria-label={`${t('maxDrawdownShort')} — click to sort`}
                 aria-sort={
-                  sortColumn === 'alpha' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                  sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
                 }
                 data-sortable
-              >
-                Alpha <SortIndicator active={sortColumn === 'alpha'} dir={sortDir} />
-              </Box>
-            )}
-            {visibleColumns.includes('style') && (
-              <Box className="col-style" style={{ textAlign: 'center' }}>
-                <Text
-                  size="sm"
-                  weight="bold"
-                  color="tertiary"
-                  style={{
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    fontSize: tokens.typography.fontSize.sm,
-                  }}
-                >
-                  {t('tradingStyle') || 'Style'}
-                </Text>
-              </Box>
-            )}
-            {visibleColumns.includes('followers') && (
-              <Box className="col-followers" style={{ textAlign: 'right' }}>
-                <Text
-                  size="xs"
-                  weight="bold"
-                  color="tertiary"
-                  style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                >
-                  {t('followers') || 'Followers'}
-                </Text>
-              </Box>
-            )}
-            {visibleColumns.includes('trades') && (
-              <Box className="col-trades" style={{ textAlign: 'right' }}>
-                <Text
-                  size="xs"
-                  weight="bold"
-                  color="tertiary"
-                  style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                >
-                  {t('trades') || 'Trades'}
-                </Text>
-              </Box>
-            )}
-          </Box>
-        )}
-
-        {/* Rules explanation */}
-        {showRules && (
-          <Box
-            style={{
-              padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-              background: alpha(tokens.colors.accent.primary, 6),
-              borderBottom: `1px solid ${tokens.colors.border.primary}`,
-              fontSize: tokens.typography.fontSize.sm,
-              color: tokens.colors.text.secondary,
-              lineHeight: 1.7,
-            }}
-          >
-            <Text
-              size="sm"
-              weight="bold"
-              style={{ color: tokens.colors.accent.primary, marginBottom: 8, display: 'block' }}
-            >
-              {t('arenaScoreRankingRules')}
-            </Text>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span>{t('rankingRule1')}</span>
-              <span>{t('rankingRule2')}</span>
-              <span>{t('rankingRule3')}</span>
-              <span style={{ color: tokens.colors.text.tertiary, marginTop: 6 }}>
-                {t('rankingRuleROINote')}
-              </span>
-            </div>
-            <button onClick={() => setShowScoreRulesModal(true)} className="detail-btn">
-              {t('detailButton')}
-            </button>
-          </Box>
-        )}
-
-        <ScoreRulesModal
-          isOpen={showScoreRulesModal}
-          onClose={() => setShowScoreRulesModal(false)}
-        />
-
-        <Box
-          style={{
-            minHeight: 400,
-            contain: 'layout style',
-            position: 'relative',
-            // Background refresh: keep rows visible, dim instead of overlay/skeleton.
-            // Rows stay readable but non-interactive until fresh data lands.
-            opacity: isRefreshing ? 0.55 : 1,
-            transition: 'opacity 150ms ease',
-            pointerEvents: isRefreshing ? 'none' : undefined,
-          }}
-        >
-          {loading && sortedTraders.length === 0 ? (
-            <Box style={{ animation: 'fadeIn 0.2s ease-in' }}>
-              <RankingSkeleton />
-            </Box>
-          ) : error && sortedTraders.length === 0 ? (
-            <Box
-              style={{
-                padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`,
-                textAlign: 'center',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: tokens.spacing[3],
-              }}
-            >
-              <Text size="md" color="secondary">
-                {error}
-              </Text>
-              {onRetry && (
-                <button
-                  onClick={onRetry}
-                  className="retry-btn"
-                  style={{
-                    padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
-                    background: alpha(tokens.colors.accent.primary, 13),
-                    border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
-                    borderRadius: tokens.radius.md,
-                    color: tokens.colors.accent.primary,
-                    cursor: 'pointer',
-                    fontSize: tokens.typography.fontSize.sm,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    transition: `all ${tokens.transition.base}`,
-                  }}
-                >
-                  {t('retry')}
-                </button>
-              )}
-            </Box>
-          ) : sortedTraders.length === 0 ? (
-            <EmptyState
-              icon={
-                <svg
-                  width="28"
-                  height="28"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                >
-                  <circle cx="11" cy="11" r="8" />
-                  <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
-                </svg>
-              }
-              title={
-                debouncedSearch.trim() || hasActiveFilters
-                  ? t('rankingNoMatchCriteria')
-                  : t('noTraderData')
-              }
-              description={
-                debouncedSearch.trim() || hasActiveFilters ? t('rankingBroadenFilters') : undefined
-              }
-              action={
-                debouncedSearch.trim() || hasActiveFilters
-                  ? {
-                      label: t('clearSearch'),
-                      onClick: () => {
-                        if (debouncedSearch.trim()) {
-                          if (onSearchChange) onSearchChange('')
-                          else setInternalSearchQuery('')
-                        }
-                      },
-                    }
-                  : undefined
-              }
-            />
-          ) : viewMode === 'card' ? (
-            <>
-              <Box
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
-                  gap: tokens.spacing[3],
-                  padding: tokens.spacing[4],
-                }}
-              >
-                {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
-                  const positionRank = rankOffset + idx + 1
-                  const rank = positionRank
-                  const series =
-                    rankSeries[`${seriesPeriod}:${trader.source || source || ''}:${trader.id}`]
-                  return (
-                    <SectionErrorBoundary key={`${trader.id}-${trader.source || 'unknown'}`}>
-                      <TraderCard
-                        trader={trader}
-                        rank={rank}
-                        source={source}
-                        language={language}
-                        searchQuery={debouncedSearch}
-                        getMedalGlowClass={getMedalGlowClass}
-                        parseSourceInfo={parseSourceInfoWithT}
-                        series={series}
-                      />
-                    </SectionErrorBoundary>
-                  )
-                })}
-              </Box>
-              {cardVisibleCount < sortedTraders.length && cardVisibleCount < MAX_CARD_COUNT && (
-                <>
-                  {/* Auto-load more via IntersectionObserver */}
-                  <CardLoadMoreSentinel
-                    onVisible={() =>
-                      setCardVisibleCount((prev) =>
-                        Math.min(prev + 20, MAX_CARD_COUNT, sortedTraders.length)
-                      )
-                    }
-                  />
-                  <Box
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      padding: tokens.spacing[4],
-                    }}
-                  >
-                    <button
-                      onClick={() =>
-                        setCardVisibleCount((prev) =>
-                          Math.min(prev + 20, MAX_CARD_COUNT, sortedTraders.length)
-                        )
-                      }
-                      style={{
-                        padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
-                        borderRadius: tokens.radius.md,
-                        fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: tokens.typography.fontWeight.semibold,
-                        color: tokens.colors.accent.primary,
-                        background: `${colorAlpha(tokens.colors.accent.primary, 6)}`,
-                        border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 19)}`,
-                        cursor: 'pointer',
-                        transition: `all ${tokens.transition.fast}`,
-                        width: '100%',
-                        maxWidth: 320,
-                      }}
-                    >
-                      {t('loadMore')} ({cardVisibleCount}/{sortedTraders.length})
-                    </button>
-                  </Box>
-                </>
-              )}
-              {cardVisibleCount >= MAX_CARD_COUNT && sortedTraders.length > MAX_CARD_COUNT && (
-                <Box style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
-                  <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
-                    {t('showingTopN')?.replace('{n}', String(MAX_CARD_COUNT)) ||
-                      `Showing top ${MAX_CARD_COUNT}.`}
-                  </Text>
-                  <button
-                    onClick={() => setViewMode('table')}
-                    style={{
-                      padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
-                      borderRadius: tokens.radius.md,
-                      fontSize: tokens.typography.fontSize.sm,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      color: tokens.colors.accent.primary,
-                      background: `${colorAlpha(tokens.colors.accent.primary, 8)}`,
-                      border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 25)}`,
-                      cursor: 'pointer',
-                      transition: `all ${tokens.transition.fast}`,
-                    }}
-                  >
-                    {t('switchToTableView') || 'Switch to table view for full list'}
-                  </button>
-                </Box>
-              )}
-              {cardVisibleCount >= sortedTraders.length &&
-                sortedTraders.length > 20 &&
-                sortedTraders.length <= MAX_CARD_COUNT && (
-                  <Box style={{ textAlign: 'center', padding: tokens.spacing[4], opacity: 0.5 }}>
-                    <Text size="xs" color="tertiary">
-                      {t('endOfList') || `All ${sortedTraders.length} traders shown`}
-                    </Text>
-                  </Box>
-                )}
-            </>
-          ) : (
-            <>
-              <Box
-                className="content-appear ranking-table-rows"
                 style={{
                   display: 'flex',
-                  flexDirection: 'column',
-                  gap: 0,
-                  position: 'relative',
-                  contain: 'layout style paint',
-                  outline: 'none',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: 2,
                 }}
-                {...kbContainerProps}
               >
-                {paginatedTraders.map((trader, idx) => {
-                  const positionRank = rankOffset + idx + 1
-                  const rank = positionRank
-                  return (
-                    <div
-                      key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
-                      {...kbGetRowProps(idx)}
-                    >
-                      <SectionErrorBoundary>
-                        <TraderRow
+                {t('maxDrawdownShort')}
+                <InfoTooltip
+                  text={
+                    t('mddTooltip') ||
+                    'Max Drawdown: Largest peak-to-trough decline.\nLower = better risk control.'
+                  }
+                />
+                <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
+              </Box>
+              {visibleColumns.includes('sharpe') && (
+                <Box
+                  className="col-sharpe sort-header sort-header-end"
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: 2,
+                  }}
+                >
+                  <Text
+                    size="xs"
+                    weight="bold"
+                    color="tertiary"
+                    style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                  >
+                    Sharpe
+                  </Text>
+                  <InfoTooltip
+                    text={
+                      t('sharpeTooltip') ||
+                      'Sharpe Ratio: Risk-adjusted return per unit of risk.\n> 1 good, > 2 excellent, > 3 outstanding.'
+                    }
+                  />
+                </Box>
+              )}
+              {visibleColumns.includes('sortino') && (
+                <Box
+                  className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`}
+                  as="button"
+                  onClick={() => handleSort('sortino')}
+                  title={
+                    t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'
+                  }
+                  role="columnheader"
+                  aria-label={`${t('sortinoRatio')} — click to sort`}
+                  aria-sort={
+                    sortColumn === 'sortino'
+                      ? sortDir === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                  data-sortable
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                    gap: 2,
+                  }}
+                >
+                  {t('sortinoRatio')}
+                  <InfoTooltip
+                    text={
+                      t('sortinoTooltip') ||
+                      'Sortino: Like Sharpe but only penalizes downside risk.\nHigher = better risk-adjusted return.'
+                    }
+                  />
+                  <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
+                </Box>
+              )}
+              {visibleColumns.includes('alpha') && (
+                <Box
+                  className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`}
+                  as="button"
+                  onClick={() => handleSort('alpha')}
+                  title={t('alphaTooltip') || 'Alpha (excess return)'}
+                  role="columnheader"
+                  aria-label="Alpha — click to sort"
+                  aria-sort={
+                    sortColumn === 'alpha'
+                      ? sortDir === 'asc'
+                        ? 'ascending'
+                        : 'descending'
+                      : 'none'
+                  }
+                  data-sortable
+                >
+                  Alpha <SortIndicator active={sortColumn === 'alpha'} dir={sortDir} />
+                </Box>
+              )}
+              {visibleColumns.includes('style') && (
+                <Box className="col-style" style={{ textAlign: 'center' }}>
+                  <Text
+                    size="sm"
+                    weight="bold"
+                    color="tertiary"
+                    style={{
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      fontSize: tokens.typography.fontSize.sm,
+                    }}
+                  >
+                    {t('tradingStyle') || 'Style'}
+                  </Text>
+                </Box>
+              )}
+              {visibleColumns.includes('followers') && (
+                <Box className="col-followers" style={{ textAlign: 'right' }}>
+                  <Text
+                    size="xs"
+                    weight="bold"
+                    color="tertiary"
+                    style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                  >
+                    {t('followers') || 'Followers'}
+                  </Text>
+                </Box>
+              )}
+              {visibleColumns.includes('trades') && (
+                <Box className="col-trades" style={{ textAlign: 'right' }}>
+                  <Text
+                    size="xs"
+                    weight="bold"
+                    color="tertiary"
+                    style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                  >
+                    {t('trades') || 'Trades'}
+                  </Text>
+                </Box>
+              )}
+            </Box>
+          )}
+
+          {/* Rules explanation */}
+          {showRules && (
+            <Box
+              style={{
+                padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+                background: alpha(tokens.colors.accent.primary, 6),
+                borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                fontSize: tokens.typography.fontSize.sm,
+                color: tokens.colors.text.secondary,
+                lineHeight: 1.7,
+              }}
+            >
+              <Text
+                size="sm"
+                weight="bold"
+                style={{ color: tokens.colors.accent.primary, marginBottom: 8, display: 'block' }}
+              >
+                {t('arenaScoreRankingRules')}
+              </Text>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <span>{t('rankingRule1')}</span>
+                <span>{t('rankingRule2')}</span>
+                <span>{t('rankingRule3')}</span>
+                <span style={{ color: tokens.colors.text.tertiary, marginTop: 6 }}>
+                  {t('rankingRuleROINote')}
+                </span>
+              </div>
+              <button onClick={() => setShowScoreRulesModal(true)} className="detail-btn">
+                {t('detailButton')}
+              </button>
+            </Box>
+          )}
+
+          <ScoreRulesModal
+            isOpen={showScoreRulesModal}
+            onClose={() => setShowScoreRulesModal(false)}
+          />
+
+          <Box
+            style={{
+              minHeight: 400,
+              contain: 'layout style',
+              position: 'relative',
+              // Background refresh: keep rows visible, dim instead of overlay/skeleton.
+              // Rows stay readable but non-interactive until fresh data lands.
+              opacity: isRefreshing ? 0.55 : 1,
+              transition: 'opacity 150ms ease',
+              pointerEvents: isRefreshing ? 'none' : undefined,
+            }}
+          >
+            {loading && sortedTraders.length === 0 ? (
+              <Box style={{ animation: 'fadeIn 0.2s ease-in' }}>
+                <RankingSkeleton />
+              </Box>
+            ) : error && sortedTraders.length === 0 ? (
+              <Box
+                style={{
+                  padding: `${tokens.spacing[10]} ${tokens.spacing[4]}`,
+                  textAlign: 'center',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: tokens.spacing[3],
+                }}
+              >
+                <Text size="md" color="secondary">
+                  {error}
+                </Text>
+                {onRetry && (
+                  <button
+                    onClick={onRetry}
+                    className="retry-btn"
+                    style={{
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                      background: alpha(tokens.colors.accent.primary, 13),
+                      border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
+                      borderRadius: tokens.radius.md,
+                      color: tokens.colors.accent.primary,
+                      cursor: 'pointer',
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      transition: `all ${tokens.transition.base}`,
+                    }}
+                  >
+                    {t('retry')}
+                  </button>
+                )}
+              </Box>
+            ) : sortedTraders.length === 0 ? (
+              <EmptyState
+                icon={
+                  <svg
+                    width="28"
+                    height="28"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                  >
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="M21 21l-4.35-4.35" strokeLinecap="round" />
+                  </svg>
+                }
+                title={
+                  debouncedSearch.trim() || hasActiveFilters
+                    ? t('rankingNoMatchCriteria')
+                    : t('noTraderData')
+                }
+                description={
+                  debouncedSearch.trim() || hasActiveFilters
+                    ? t('rankingBroadenFilters')
+                    : undefined
+                }
+                action={
+                  debouncedSearch.trim() || hasActiveFilters
+                    ? {
+                        label: t('clearSearch'),
+                        onClick: () => {
+                          if (debouncedSearch.trim()) {
+                            if (onSearchChange) onSearchChange('')
+                            else setInternalSearchQuery('')
+                          }
+                        },
+                      }
+                    : undefined
+                }
+              />
+            ) : viewMode === 'card' ? (
+              <>
+                <Box
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))',
+                    gap: tokens.spacing[3],
+                    padding: tokens.spacing[4],
+                  }}
+                >
+                  {sortedTraders.slice(0, cardVisibleCount).map((trader, idx) => {
+                    const positionRank = rankOffset + idx + 1
+                    const rank = positionRank
+                    const series =
+                      rankSeries[`${seriesPeriod}:${trader.source || source || ''}:${trader.id}`]
+                    return (
+                      <SectionErrorBoundary key={`${trader.id}-${trader.source || 'unknown'}`}>
+                        <TraderCard
                           trader={trader}
                           rank={rank}
                           source={source}
@@ -1251,66 +1233,195 @@ function RankingTableInner(props: {
                           searchQuery={debouncedSearch}
                           getMedalGlowClass={getMedalGlowClass}
                           parseSourceInfo={parseSourceInfoWithT}
-                          getPnLTooltipFn={getPnLTooltip}
-                          isExpanded={expandedRowId === trader.id}
-                          onToggleExpand={handleToggleExpand}
+                          series={series}
                         />
                       </SectionErrorBoundary>
-                    </div>
-                  )
-                })}
-              </Box>
-              {/* Registration CTA after first page for non-logged-in users */}
-              {!props.loggedIn &&
-                currentPage === 1 &&
-                (serverTotalCount != null
-                  ? serverTotalCount > itemsPerPage
-                  : sortedTraders.length > itemsPerPage) && (
-                  <button
-                    onClick={() => useLoginModal.getState()?.openLoginModal?.()}
-                    style={{
-                      border: 'none',
-                      cursor: 'pointer',
-                      background: 'none',
-                      width: '100%',
-                      padding: 0,
-                    }}
-                  >
+                    )
+                  })}
+                </Box>
+                {cardVisibleCount < sortedTraders.length && cardVisibleCount < MAX_CARD_COUNT && (
+                  <>
+                    {/* Auto-load more via IntersectionObserver */}
+                    <CardLoadMoreSentinel
+                      onVisible={() =>
+                        setCardVisibleCount((prev) =>
+                          Math.min(prev + 20, MAX_CARD_COUNT, sortedTraders.length)
+                        )
+                      }
+                    />
                     <Box
                       style={{
-                        margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                        padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
-                        background: `${colorAlpha(tokens.colors.accent.brand, 8)}`,
-                        border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 25)}`,
-                        borderRadius: tokens.radius.lg,
-                        textAlign: 'center',
-                        cursor: 'pointer',
-                        transition: `all ${tokens.transition.base}`,
                         display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: tokens.spacing[1],
+                        justifyContent: 'center',
+                        padding: tokens.spacing[4],
                       }}
                     >
-                      <Text size="sm" weight="bold" style={{ color: tokens.colors.accent.primary }}>
-                        {t('rankingSignUpFree')}
-                      </Text>
-                      <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
-                        {t('rankingShowingTop')
-                          .replace('{count}', String(itemsPerPage))
-                          .replace('{total}', String(sortedTraders.length))}
+                      <button
+                        onClick={() =>
+                          setCardVisibleCount((prev) =>
+                            Math.min(prev + 20, MAX_CARD_COUNT, sortedTraders.length)
+                          )
+                        }
+                        style={{
+                          padding: `${tokens.spacing[2]} ${tokens.spacing[6]}`,
+                          borderRadius: tokens.radius.md,
+                          fontSize: tokens.typography.fontSize.sm,
+                          fontWeight: tokens.typography.fontWeight.semibold,
+                          color: tokens.colors.accent.primary,
+                          background: `${colorAlpha(tokens.colors.accent.primary, 6)}`,
+                          border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 19)}`,
+                          cursor: 'pointer',
+                          transition: `all ${tokens.transition.fast}`,
+                          width: '100%',
+                          maxWidth: 320,
+                        }}
+                      >
+                        {t('loadMore')} ({cardVisibleCount}/{sortedTraders.length})
+                      </button>
+                    </Box>
+                  </>
+                )}
+                {cardVisibleCount >= MAX_CARD_COUNT && sortedTraders.length > MAX_CARD_COUNT && (
+                  <Box style={{ textAlign: 'center', padding: tokens.spacing[4] }}>
+                    <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[2] }}>
+                      {t('showingTopN')?.replace('{n}', String(MAX_CARD_COUNT)) ||
+                        `Showing top ${MAX_CARD_COUNT}.`}
+                    </Text>
+                    <button
+                      onClick={() => setViewMode('table')}
+                      style={{
+                        padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                        borderRadius: tokens.radius.md,
+                        fontSize: tokens.typography.fontSize.sm,
+                        fontWeight: tokens.typography.fontWeight.bold,
+                        color: tokens.colors.accent.primary,
+                        background: `${colorAlpha(tokens.colors.accent.primary, 8)}`,
+                        border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 25)}`,
+                        cursor: 'pointer',
+                        transition: `all ${tokens.transition.fast}`,
+                      }}
+                    >
+                      {t('switchToTableView') || 'Switch to table view for full list'}
+                    </button>
+                  </Box>
+                )}
+                {cardVisibleCount >= sortedTraders.length &&
+                  sortedTraders.length > 20 &&
+                  sortedTraders.length <= MAX_CARD_COUNT && (
+                    <Box style={{ textAlign: 'center', padding: tokens.spacing[4], opacity: 0.5 }}>
+                      <Text size="xs" color="tertiary">
+                        {t('endOfList') || `All ${sortedTraders.length} traders shown`}
                       </Text>
                     </Box>
-                  </button>
-                )}
-              <Pagination
-                currentPage={currentPage}
-                totalPages={totalPages}
-                onPageChange={handlePaginationChange}
-              />
-            </>
-          )}
-        </Box>
+                  )}
+              </>
+            ) : (
+              <>
+                <Box
+                  className="content-appear ranking-table-rows"
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 0,
+                    position: 'relative',
+                    // 'layout style' (not 'paint'): paint-containment clips overflow,
+                    // which would prevent a wide grid from scrolling horizontally
+                    // inside .ranking-hscroll. Vertical clipping is still handled by
+                    // the wrapper (overflow-y:hidden) and the container.
+                    contain: 'layout style',
+                    outline: 'none',
+                  }}
+                  {...kbContainerProps}
+                >
+                  {paginatedTraders.map((trader, idx) => {
+                    const positionRank = rankOffset + idx + 1
+                    const rank = positionRank
+                    return (
+                      <div
+                        key={`${trader.id}-${trader.source || 'unknown'}-${startIndex + idx}`}
+                        {...kbGetRowProps(idx)}
+                      >
+                        <SectionErrorBoundary>
+                          <TraderRow
+                            trader={trader}
+                            rank={rank}
+                            source={source}
+                            language={language}
+                            searchQuery={debouncedSearch}
+                            getMedalGlowClass={getMedalGlowClass}
+                            parseSourceInfo={parseSourceInfoWithT}
+                            getPnLTooltipFn={getPnLTooltip}
+                            isExpanded={expandedRowId === trader.id}
+                            onToggleExpand={handleToggleExpand}
+                          />
+                        </SectionErrorBoundary>
+                      </div>
+                    )
+                  })}
+                </Box>
+                {/* Registration CTA after first page for non-logged-in users */}
+                {!props.loggedIn &&
+                  currentPage === 1 &&
+                  (serverTotalCount != null
+                    ? serverTotalCount > itemsPerPage
+                    : sortedTraders.length > itemsPerPage) && (
+                    <button
+                      onClick={() => useLoginModal.getState()?.openLoginModal?.()}
+                      style={{
+                        border: 'none',
+                        cursor: 'pointer',
+                        background: 'none',
+                        width: '100%',
+                        padding: 0,
+                        // Stay put when the table is scrolled horizontally.
+                        position: 'sticky',
+                        left: 0,
+                      }}
+                    >
+                      <Box
+                        style={{
+                          margin: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                          padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
+                          background: `${colorAlpha(tokens.colors.accent.brand, 8)}`,
+                          border: `1px solid ${colorAlpha(tokens.colors.accent.primary, 25)}`,
+                          borderRadius: tokens.radius.lg,
+                          textAlign: 'center',
+                          cursor: 'pointer',
+                          transition: `all ${tokens.transition.base}`,
+                          display: 'flex',
+                          flexDirection: 'column',
+                          alignItems: 'center',
+                          gap: tokens.spacing[1],
+                        }}
+                      >
+                        <Text
+                          size="sm"
+                          weight="bold"
+                          style={{ color: tokens.colors.accent.primary }}
+                        >
+                          {t('rankingSignUpFree')}
+                        </Text>
+                        <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
+                          {t('rankingShowingTop')
+                            .replace('{count}', String(itemsPerPage))
+                            .replace('{total}', String(sortedTraders.length))}
+                        </Text>
+                      </Box>
+                    </button>
+                  )}
+                {/* Sticky-left so pagination stays centered in the viewport while
+                  the table body is scrolled horizontally. */}
+                <div style={{ position: 'sticky', left: 0 }}>
+                  <Pagination
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    onPageChange={handlePaginationChange}
+                  />
+                </div>
+              </>
+            )}
+          </Box>
+        </div>
       </Box>
     </>
   )
