@@ -125,8 +125,12 @@ function cardRow(item: Dict, positionalRank: number, tf: number): ParsedLeaderbo
     headlineRoi: pct(tfField(item, 'pnlRate', tf)),
     headlinePnl: num(tfField(item, 'pnl', tf)),
     headlineWinRate: pct(tfField(item, 'tradeWinRate', tf)),
+    // Per-TF MDD (mdd{tf}d, fraction→pct) + AUM (absolute USD) — were raw-only,
+    // so board-tier traders had no MDD/AUM (profile captured them for top-N).
+    headlineMdd: pct(tfField(item, 'mdd', tf)),
+    headlineAum: num(item.aum),
     traderMeta: ai ? { ai_trader: true } : null,
-    // Both TF variants, mdd, aum, copier slots, profit share, star flag,
+    // Both TF variants, copier slots, profit share, star flag,
     // aiDescription... kept verbatim (spec §3 raw JSONB note).
     raw: { ...item, copyTradeData: copyData },
   }
