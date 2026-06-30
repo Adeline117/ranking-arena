@@ -1,7 +1,7 @@
 'use client'
 
 import { localizedLabel } from '@/lib/utils/format'
-import React, { useRef, useEffect } from 'react'
+import React, { useRef, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
@@ -11,7 +11,7 @@ import { useToast } from '../ui/Toast'
 import { type CategoryType } from './CategoryRankingTabs'
 import { FilterIcon, CompareIcon, SettingsIcon, LockIconSmall } from './Icons'
 import type { ColumnKey } from './RankingTable'
-import { getFilterableStyles, type TradingStyle } from '@/lib/utils/trading-style'
+import { getFilterableStyles, classifyStyle, type TradingStyle } from '@/lib/utils/trading-style'
 
 const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = [
   'score',
@@ -56,6 +56,12 @@ interface ExportRankingButtonProps {
     win_rate?: number | null
     max_drawdown?: number | null
     followers: number
+    // Optional facet fields (present on full Trader objects) — used for per-chip match counts (3.2)
+    trading_style?: string | null
+    avg_holding_hours?: number | null
+    trades_count?: number | null
+    is_bot?: boolean
+    trader_type?: 'human' | 'bot' | 'suspected_bot' | null
   }[]
   source?: string
   timeRange?: string
@@ -265,17 +271,25 @@ function FilterChip({
   active,
   label,
   color,
+  count,
+  disabled,
   onClick,
 }: {
   active: boolean
   label: string
   color?: string
+  /** Per-facet match count appended as `Label N` (3.2). Omit to render label only. */
+  count?: number
+  /** Greyed-out + non-interactive when this facet has zero matches (3.2). */
+  disabled?: boolean
   onClick: () => void
 }) {
   const activeColor = color || tokens.colors.accent.primary
   return (
     <button
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
+      aria-pressed={active}
       style={{
         padding: '5px 12px',
         borderRadius: tokens.radius.full,
@@ -285,12 +299,25 @@ function FilterChip({
         color: active ? activeColor : tokens.colors.text.secondary,
         fontSize: tokens.typography.fontSize.xs,
         fontWeight: active ? 700 : 500,
-        cursor: 'pointer',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        opacity: disabled ? 0.4 : 1,
         transition: 'all 0.15s ease, transform 0.1s ease',
         whiteSpace: 'nowrap',
       }}
     >
       {label}
+      {count != null && (
+        <span
+          style={{
+            marginLeft: 5,
+            opacity: 0.65,
+            fontWeight: tokens.typography.fontWeight.semibold,
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {count}
+        </span>
+      )}
     </button>
   )
 }
@@ -354,6 +381,107 @@ export function RankingFilters({
     return () => document.removeEventListener('mousedown', handler)
   }, [filterOpen, onFilterToggle])
 
+  // 3.2 — per-facet match counts over the loaded trader list. Memoized so this
+  // O(n) pass only re-runs when the trader data changes (not on every render).
+  const styleCounts = useMemo(() => {
+    const m: Record<string, number> = {}
+    for (const tr of traders) {
+      const style =
+        tr.trading_style && tr.trading_style !== 'unknown'
+          ? tr.trading_style
+          : classifyStyle({
+              avg_holding_hours: tr.avg_holding_hours,
+              trades_count: tr.trades_count,
+              win_rate: tr.win_rate,
+            })
+      m[style] = (m[style] || 0) + 1
+    }
+    return m
+  }, [traders])
+
+  const scoreCounts = useMemo(() => {
+    const c: Record<'S' | 'A' | 'B' | 'C' | 'D', number> = { S: 0, A: 0, B: 0, C: 0, D: 0 }
+    for (const tr of traders) {
+      const s = tr.arena_score ?? 0
+      if (s >= 90) c.S++
+      else if (s >= 70) c.A++
+      else if (s >= 50) c.B++
+      else if (s >= 30) c.C++
+      else c.D++
+    }
+    return c
+  }, [traders])
+
+  // 3.3 — persist style / score-grade / trader-type filters in the URL so a
+  // filtered leaderboard is shareable, bookmarkable and back-safe. Mirrors the
+  // window.history pattern in useRankingFilters (avoids forcing a Suspense
+  // boundary via useSearchParams). Only non-default values are written; selecting
+  // 'all' clears the param, keeping the URL clean.
+  const writeFilterParam = useCallback((key: string, value: string) => {
+    if (typeof window === 'undefined') return
+    const params = new URLSearchParams(window.location.search)
+    if (value && value !== 'all') params.set(key, value)
+    else params.delete(key)
+    const qs = params.toString()
+    window.history.replaceState(
+      null,
+      '',
+      qs ? `${window.location.pathname}?${qs}` : window.location.pathname
+    )
+  }, [])
+
+  const handleStyleChange = useCallback(
+    (s: TradingStyle | 'all') => {
+      onStyleFilterChange(s)
+      writeFilterParam('style', s)
+    },
+    [onStyleFilterChange, writeFilterParam]
+  )
+  const handleScoreChange = useCallback(
+    (g: 'all' | 'S' | 'A' | 'B' | 'C' | 'D') => {
+      onScoreGradeFilterChange(g)
+      writeFilterParam('grade', g)
+    },
+    [onScoreGradeFilterChange, writeFilterParam]
+  )
+  const handleTraderTypeChange = useCallback(
+    (ty: 'all' | 'human' | 'bot') => {
+      onTraderTypeFilterChange?.(ty)
+      writeFilterParam('ttype', ty)
+    },
+    [onTraderTypeFilterChange, writeFilterParam]
+  )
+
+  // Read filter state back from the URL once on mount (3.3 read-back on load).
+  const hydratedRef = useRef(false)
+  useEffect(() => {
+    if (hydratedRef.current || typeof window === 'undefined') return
+    hydratedRef.current = true
+    const params = new URLSearchParams(window.location.search)
+    const urlStyle = params.get('style')
+    const urlGrade = params.get('grade')
+    const urlType = params.get('ttype')
+    if (
+      urlStyle &&
+      urlStyle !== styleFilter &&
+      getFilterableStyles().some((s) => s.style === urlStyle)
+    ) {
+      onStyleFilterChange(urlStyle as TradingStyle)
+    }
+    if (urlGrade && urlGrade !== scoreGradeFilter && ['S', 'A', 'B', 'C', 'D'].includes(urlGrade)) {
+      onScoreGradeFilterChange(urlGrade as 'S' | 'A' | 'B' | 'C' | 'D')
+    }
+    if (
+      urlType &&
+      urlType !== traderTypeFilter &&
+      (urlType === 'human' || urlType === 'bot') &&
+      onTraderTypeFilterChange
+    ) {
+      onTraderTypeFilterChange(urlType)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount to hydrate from initial URL
+  }, [])
+
   const activeFilterCount =
     (styleFilter !== 'all' ? 1 : 0) +
     (scoreGradeFilter !== 'all' ? 1 : 0) +
@@ -386,7 +514,7 @@ export function RankingFilters({
             ].map((opt) => (
               <button
                 key={opt.value}
-                onClick={() => onTraderTypeFilterChange(opt.value)}
+                onClick={() => handleTraderTypeChange(opt.value)}
                 style={{
                   padding: '4px 10px',
                   borderRadius: tokens.radius.lg,
@@ -647,16 +775,22 @@ export function RankingFilters({
                 <FilterChip
                   active={styleFilter === 'all'}
                   label={t('rankingStyleAll')}
-                  onClick={() => onStyleFilterChange('all')}
+                  count={traders.length}
+                  onClick={() => handleStyleChange('all')}
                 />
-                {getFilterableStyles().map((s) => (
-                  <FilterChip
-                    key={s.style}
-                    active={styleFilter === s.style}
-                    label={localizedLabel(s.label, s.labelEn, language)}
-                    onClick={() => onStyleFilterChange(s.style)}
-                  />
-                ))}
+                {getFilterableStyles().map((s) => {
+                  const n = styleCounts[s.style] || 0
+                  return (
+                    <FilterChip
+                      key={s.style}
+                      active={styleFilter === s.style}
+                      label={localizedLabel(s.label, s.labelEn, language)}
+                      count={n}
+                      disabled={n === 0 && styleFilter !== s.style}
+                      onClick={() => handleStyleChange(s.style)}
+                    />
+                  )
+                })}
               </div>
             </div>
           )}
@@ -675,17 +809,23 @@ export function RankingFilters({
               <FilterChip
                 active={scoreGradeFilter === 'all'}
                 label={t('rankingStyleAll')}
-                onClick={() => onScoreGradeFilterChange('all')}
+                count={traders.length}
+                onClick={() => handleScoreChange('all')}
               />
-              {SCORE_TIERS.map((tier) => (
-                <FilterChip
-                  key={tier.value}
-                  active={scoreGradeFilter === tier.value}
-                  label={`${tier.value} ${tier.range}`}
-                  color={tier.color}
-                  onClick={() => onScoreGradeFilterChange(tier.value)}
-                />
-              ))}
+              {SCORE_TIERS.map((tier) => {
+                const n = scoreCounts[tier.value]
+                return (
+                  <FilterChip
+                    key={tier.value}
+                    active={scoreGradeFilter === tier.value}
+                    label={`${tier.value} ${tier.range}`}
+                    color={tier.color}
+                    count={n}
+                    disabled={n === 0 && scoreGradeFilter !== tier.value}
+                    onClick={() => handleScoreChange(tier.value)}
+                  />
+                )
+              })}
             </div>
           </div>
 
@@ -693,8 +833,8 @@ export function RankingFilters({
           {(styleFilter !== 'all' || scoreGradeFilter !== 'all') && (
             <button
               onClick={() => {
-                onStyleFilterChange('all')
-                onScoreGradeFilterChange('all')
+                handleStyleChange('all')
+                handleScoreChange('all')
               }}
               style={{
                 alignSelf: 'flex-start',
