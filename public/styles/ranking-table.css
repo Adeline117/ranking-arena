@@ -68,6 +68,14 @@
   opacity: 1 !important;
 }
 
+/* Touch devices have no hover — the compare control would otherwise be
+   invisible (inline opacity:0) and unusable. Keep it persistently visible. */
+@media (hover: none) and (pointer: coarse) {
+  .compare-checkbox-cell {
+    opacity: 1 !important;
+  }
+}
+
 /* Tabular nums for all numeric cells */
 .ranking-row [class*='roi'],
 .ranking-row [class*='score'],
