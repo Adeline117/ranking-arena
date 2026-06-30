@@ -111,6 +111,10 @@ export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
       headlineRoi: roiOnMaxCapital(pnl, item),
       headlinePnl: pnl,
       headlineWinRate: winRatePct(item),
+      // maxCapital = the trader's peak capital (1e30 fixed-point → usd) = AUM basis;
+      // the profile uses the same field. Board-level capture covers profile-less
+      // traders. (On-chain: no precomputed MDD/Sharpe → those stay N/A.)
+      headlineAum: usd(item.maxCapital),
       traderMeta: null,
       raw: item, // full PeriodAccountStatObject verbatim (spec §3)
     })
