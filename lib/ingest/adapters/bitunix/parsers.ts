@@ -133,7 +133,10 @@ export function parseBitunixLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parse
       // Was previously left only in raw → board-tier traders had no MDD, leaving
       // bitunix at ~20% capture (only top-N profiled traders got it).
       headlineMdd: pct(item.mdd),
-      // dailyWinRate sparkline, aum, copier slots, symbolList, full,
+      // The board also carries aum (資金規模) as an absolute USDT amount — extract
+      // it so board-tier traders get AUM too (was raw-only → ~20% capture).
+      headlineAum: num(item.aum),
+      // dailyWinRate sparkline, copier slots, symbolList, full,
       // privateMode... kept verbatim (spec §3 raw JSONB note).
       raw: item,
     })
