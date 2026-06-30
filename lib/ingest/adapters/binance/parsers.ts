@@ -97,7 +97,11 @@ export function parseBinanceLeaderboardPage(
       headlineRoi: num(item.roi),
       headlinePnl: num(item.pnl),
       headlineWinRate: num(item.winRate), // spot rows don't expose it → null
-      // Board card extras (sharpRatio, aum, mdd, sparkline chartItems,
+      // The board carries aum as an absolute USD amount on every row — extract it
+      // (was raw-only, so AUM came only from the deep-profile tier). MDD/sharpe on
+      // the board are 0/null sentinels (real values are profile-only), so not lifted.
+      headlineAum: num(item.aum),
+      // Board card extras (sharpRatio, mdd, sparkline chartItems,
       // badge, aiSummary...) ride along verbatim in raw.
       raw: item,
     })
