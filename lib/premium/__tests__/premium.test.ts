@@ -10,31 +10,32 @@ import {
   getPlan,
 } from '../index'
 import type { SubscriptionTier, PremiumFeatureId } from '../index'
+import { PRO_FREE_PROMO } from '../../types/premium'
 
 describe('SUBSCRIPTION_PLANS', () => {
   test('包含所有订阅等级', () => {
-    const tiers = SUBSCRIPTION_PLANS.map(plan => plan.id)
+    const tiers = SUBSCRIPTION_PLANS.map((plan) => plan.id)
     expect(tiers).toContain('free')
     expect(tiers).toContain('pro')
     expect(tiers.length).toBe(2)
   })
 
   test('每个计划都有名称和描述', () => {
-    SUBSCRIPTION_PLANS.forEach(plan => {
+    SUBSCRIPTION_PLANS.forEach((plan) => {
       expect(plan.name).toBeTruthy()
       expect(plan.description).toBeTruthy()
     })
   })
 
   test('价格配置正确', () => {
-    SUBSCRIPTION_PLANS.forEach(plan => {
+    SUBSCRIPTION_PLANS.forEach((plan) => {
       expect(plan.price).toHaveProperty('monthly')
       expect(plan.price).toHaveProperty('yearly')
     })
   })
 
   test('免费计划价格为 0', () => {
-    const freePlan = SUBSCRIPTION_PLANS.find(p => p.id === 'free')
+    const freePlan = SUBSCRIPTION_PLANS.find((p) => p.id === 'free')
     expect(freePlan?.price.monthly).toBe(0)
     expect(freePlan?.price.yearly).toBe(0)
   })
@@ -42,7 +43,7 @@ describe('SUBSCRIPTION_PLANS', () => {
 
 describe('PREMIUM_FEATURES', () => {
   test('包含核心功能', () => {
-    const featureIds = PREMIUM_FEATURES.map(f => f.id)
+    const featureIds = PREMIUM_FEATURES.map((f) => f.id)
     expect(featureIds).toContain('trader_comparison')
     expect(featureIds).toContain('api_access')
     expect(featureIds).toContain('trader_alerts')
@@ -50,7 +51,7 @@ describe('PREMIUM_FEATURES', () => {
   })
 
   test('每个功能都有名称和描述', () => {
-    PREMIUM_FEATURES.forEach(feature => {
+    PREMIUM_FEATURES.forEach((feature) => {
       expect(feature.name).toBeTruthy()
       expect(feature.description).toBeTruthy()
     })
@@ -60,7 +61,7 @@ describe('PREMIUM_FEATURES', () => {
     // 已下线的功能 tier 为空数组是正常的
     const deprecatedFeatures = ['portfolio_suggestions']
 
-    PREMIUM_FEATURES.forEach(feature => {
+    PREMIUM_FEATURES.forEach((feature) => {
       expect(Array.isArray(feature.tier)).toBe(true)
       if (!deprecatedFeatures.includes(feature.id)) {
         expect(feature.tier.length).toBeGreaterThan(0)
@@ -71,20 +72,23 @@ describe('PREMIUM_FEATURES', () => {
 
 describe('hasFeatureAccess', () => {
   test('免费用户无法访问高级功能', () => {
-    expect(hasFeatureAccess('free', 'api_access')).toBe(false)
-    expect(hasFeatureAccess('free', 'advanced_analytics')).toBe(false)
+    // PRO_FREE_PROMO 促销期：统一闸门全员解锁 → free 也有 access。
+    // 促销关闭(=false)后恢复真实付费墙 → free 无 access。两种状态都正确断言。
+    const expected = PRO_FREE_PROMO // promo on → true(解锁); off → false(挡住)
+    expect(hasFeatureAccess('free', 'api_access')).toBe(expected)
+    expect(hasFeatureAccess('free', 'advanced_analytics')).toBe(expected)
   })
 
   test('Pro 用户可以访问 Pro 级功能', () => {
     // 根据实际配置测试
-    const proFeatures = PREMIUM_FEATURES.filter(f => f.tier.includes('pro'))
-    proFeatures.forEach(feature => {
+    const proFeatures = PREMIUM_FEATURES.filter((f) => f.tier.includes('pro'))
+    proFeatures.forEach((feature) => {
       expect(hasFeatureAccess('pro', feature.id)).toBe(true)
     })
   })
 
   test('Pro 用户可以访问所有 Pro 功能', () => {
-    PREMIUM_FEATURES.forEach(feature => {
+    PREMIUM_FEATURES.forEach((feature) => {
       if (feature.tier.includes('pro')) {
         expect(hasFeatureAccess('pro', feature.id)).toBe(true)
       }
@@ -92,7 +96,8 @@ describe('hasFeatureAccess', () => {
   })
 
   test('不存在的功能返回 false', () => {
-    expect(hasFeatureAccess('pro', 'nonexistent_feature' as PremiumFeatureId)).toBe(false)
+    // 促销期统一闸门对任意 featureId 短路返回 true；促销关闭后未知功能查不到 → false。
+    expect(hasFeatureAccess('pro', 'nonexistent_feature' as PremiumFeatureId)).toBe(PRO_FREE_PROMO)
   })
 })
 
@@ -108,9 +113,15 @@ describe('getFeatureLimits', () => {
     const freeLimits = getFeatureLimits('free')
     const proLimits = getFeatureLimits('pro')
 
-    expect(proLimits.apiCallsPerDay).toBeGreaterThan(freeLimits.apiCallsPerDay)
-    expect(proLimits.followLimit).toBeGreaterThan(freeLimits.followLimit)
-    expect(proLimits.historicalDataDays).toBeGreaterThan(freeLimits.historicalDataDays)
+    if (PRO_FREE_PROMO) {
+      // 促销期：free 也拿 Pro 额度（getFeatureLimits effectiveTier='pro'），二者相等。
+      expect(freeLimits.apiCallsPerDay).toBe(proLimits.apiCallsPerDay)
+      expect(freeLimits.followLimit).toBe(proLimits.followLimit)
+    } else {
+      expect(proLimits.apiCallsPerDay).toBeGreaterThan(freeLimits.apiCallsPerDay)
+      expect(proLimits.followLimit).toBeGreaterThan(freeLimits.followLimit)
+      expect(proLimits.historicalDataDays).toBeGreaterThan(freeLimits.historicalDataDays)
+    }
   })
 })
 
@@ -128,4 +139,3 @@ describe('getPlan', () => {
     expect(plan).toBeUndefined()
   })
 })
-
