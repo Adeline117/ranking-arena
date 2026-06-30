@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useState } from 'react'
 import dynamic from 'next/dynamic'
 import { tokens } from '@/lib/design-tokens'
 import { Box } from '../base'
@@ -27,6 +27,9 @@ export default function NavSearchBar({
   onSearch,
 }: NavSearchBarProps) {
   const { t } = useLanguage()
+  // Tracks the highlighted dropdown option's id so screen readers announce
+  // arrow-key movement through results (reported by SearchDropdown).
+  const [activeOptionId, setActiveOptionId] = useState<string | null>(null)
 
   return (
     <div
@@ -53,6 +56,7 @@ export default function NavSearchBar({
           aria-expanded={showSearchDropdown}
           aria-haspopup="listbox"
           aria-controls="search-dropdown-listbox"
+          aria-activedescendant={activeOptionId ?? undefined}
           aria-autocomplete="list"
           role="combobox"
           tabIndex={0}
@@ -118,6 +122,7 @@ export default function NavSearchBar({
         open={showSearchDropdown}
         query={searchQuery}
         onClose={() => setShowSearchDropdown(false)}
+        onActiveOptionChange={setActiveOptionId}
       />
     </div>
   )
