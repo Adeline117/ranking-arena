@@ -85,10 +85,11 @@ export default function AdminReportsPage() {
           {['pending', 'reviewed', 'actioned', 'dismissed'].map((s) => (
             <button
               key={s}
+              aria-pressed={filter === s}
               onClick={() => setFilter(s)}
               style={{
                 padding: '6px 16px',
-                borderRadius: 6,
+                borderRadius: tokens.radius.sm,
                 border: 'none',
                 background:
                   filter === s ? 'var(--color-accent-primary)' : 'var(--color-bg-tertiary)',

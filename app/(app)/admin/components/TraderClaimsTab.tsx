@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -75,8 +75,8 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
       })
       if (res.ok) {
         await loadClaims()
-        setRejectInputs(prev => ({ ...prev, [claimId]: false }))
-        setRejectReasons(prev => ({ ...prev, [claimId]: '' }))
+        setRejectInputs((prev) => ({ ...prev, [claimId]: false }))
+        setRejectReasons((prev) => ({ ...prev, [claimId]: '' }))
       }
     } catch {
       // Silent fail
@@ -85,38 +85,49 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
     }
   }
 
-  const filtered = filter === 'all'
-    ? claims
-    : claims.filter(c => c.status === filter)
+  const filtered = filter === 'all' ? claims : claims.filter((c) => c.status === filter)
 
   const statusColor = (status: string) => {
     switch (status) {
-      case 'verified': return tokens.colors.accent.success
-      case 'pending': case 'reviewing': return tokens.colors.accent.warning
-      case 'rejected': return tokens.colors.accent.error
-      default: return tokens.colors.text.tertiary
+      case 'verified':
+        return tokens.colors.accent.success
+      case 'pending':
+      case 'reviewing':
+        return tokens.colors.accent.warning
+      case 'rejected':
+        return tokens.colors.accent.error
+      default:
+        return tokens.colors.text.tertiary
     }
   }
 
   const counts = {
     all: claims.length,
-    pending: claims.filter(c => c.status === 'pending' || c.status === 'reviewing').length,
-    verified: claims.filter(c => c.status === 'verified').length,
-    rejected: claims.filter(c => c.status === 'rejected').length,
+    pending: claims.filter((c) => c.status === 'pending' || c.status === 'reviewing').length,
+    verified: claims.filter((c) => c.status === 'verified').length,
+    rejected: claims.filter((c) => c.status === 'rejected').length,
   }
 
   return (
     <Card title={t('traderClaims') || 'Trader Claims'}>
       {/* Filter buttons */}
-      <Box style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[4], flexWrap: 'wrap' }}>
-        {(['all', 'pending', 'verified', 'rejected'] as const).map(f => (
+      <Box
+        style={{
+          display: 'flex',
+          gap: tokens.spacing[2],
+          marginBottom: tokens.spacing[4],
+          flexWrap: 'wrap',
+        }}
+      >
+        {(['all', 'pending', 'verified', 'rejected'] as const).map((f) => (
           <Button
             key={f}
+            aria-pressed={filter === f}
             variant={filter === f ? 'primary' : 'secondary'}
             size="sm"
             onClick={() => setFilter(f)}
           >
-            {f === 'all' ? (t('all') || 'All') : f.charAt(0).toUpperCase() + f.slice(1)}
+            {f === 'all' ? t('all') || 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
             {counts[f] > 0 && ` (${counts[f]})`}
           </Button>
         ))}
@@ -132,7 +143,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-          {filtered.map(claim => (
+          {filtered.map((claim) => (
             <Box
               key={claim.id}
               style={{
@@ -142,27 +153,48 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
                 border: `1px solid ${tokens.colors.border.primary}`,
               }}
             >
-              <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: tokens.spacing[3] }}>
+              <Box
+                style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: tokens.spacing[3],
+                }}
+              >
                 <Box style={{ flex: 1, minWidth: 0 }}>
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[1] }}>
-                    <Text weight="bold" style={{ fontSize: 14 }}>
+                  <Box
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[2],
+                      marginBottom: tokens.spacing[1],
+                    }}
+                  >
+                    <Text weight="bold" style={{ fontSize: tokens.typography.fontSize.base }}>
                       {claim.handle || claim.trader_id}
                     </Text>
-                    <Text size="xs" style={{
-                      padding: '2px 8px',
-                      borderRadius: tokens.radius.full,
-                      background: statusColor(claim.status) + '20',
-                      color: statusColor(claim.status),
-                      fontWeight: 700,
-                    }}>
+                    <Text
+                      size="xs"
+                      style={{
+                        padding: '2px 8px',
+                        borderRadius: tokens.radius.full,
+                        background: alpha(statusColor(claim.status), 13),
+                        color: statusColor(claim.status),
+                        fontWeight: tokens.typography.fontWeight.bold,
+                      }}
+                    >
                       {claim.status}
                     </Text>
                   </Box>
                   <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                    {claim.source} · {claim.verification_method} · {new Date(claim.created_at).toLocaleDateString()}
+                    {claim.source} · {claim.verification_method} ·{' '}
+                    {new Date(claim.created_at).toLocaleDateString()}
                   </Text>
                   <Text size="xs" color="tertiary">
-                    trader_id: {claim.trader_id.length > 20 ? claim.trader_id.slice(0, 10) + '...' + claim.trader_id.slice(-6) : claim.trader_id}
+                    trader_id:{' '}
+                    {claim.trader_id.length > 20
+                      ? claim.trader_id.slice(0, 10) + '...' + claim.trader_id.slice(-6)
+                      : claim.trader_id}
                   </Text>
                   {claim.user_email && (
                     <Text size="xs" color="tertiary">
@@ -170,7 +202,10 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
                     </Text>
                   )}
                   {claim.reject_reason && (
-                    <Text size="xs" style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}>
+                    <Text
+                      size="xs"
+                      style={{ color: tokens.colors.accent.error, marginTop: tokens.spacing[1] }}
+                    >
                       Reason: {claim.reject_reason}
                     </Text>
                   )}
@@ -185,23 +220,27 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
                       onClick={() => handleReview(claim.id, true)}
                       disabled={actionLoading === claim.id}
                     >
-                      {actionLoading === claim.id ? '...' : (t('approve') || 'Approve')}
+                      {actionLoading === claim.id ? '...' : t('approve') || 'Approve'}
                     </Button>
                     {!rejectInputs[claim.id] ? (
                       <Button
                         variant="secondary"
                         size="sm"
-                        onClick={() => setRejectInputs(prev => ({ ...prev, [claim.id]: true }))}
+                        onClick={() => setRejectInputs((prev) => ({ ...prev, [claim.id]: true }))}
                       >
                         {t('reject') || 'Reject'}
                       </Button>
                     ) : (
-                      <Box style={{ display: 'flex', gap: tokens.spacing[1], alignItems: 'center' }}>
+                      <Box
+                        style={{ display: 'flex', gap: tokens.spacing[1], alignItems: 'center' }}
+                      >
                         <input
                           type="text"
                           placeholder="Reason..."
                           value={rejectReasons[claim.id] || ''}
-                          onChange={e => setRejectReasons(prev => ({ ...prev, [claim.id]: e.target.value }))}
+                          onChange={(e) =>
+                            setRejectReasons((prev) => ({ ...prev, [claim.id]: e.target.value }))
+                          }
                           style={{
                             padding: '4px 8px',
                             fontSize: 12,

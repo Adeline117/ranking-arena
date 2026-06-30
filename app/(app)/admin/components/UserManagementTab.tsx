@@ -85,6 +85,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
           {(['all', 'active', 'banned'] as const).map((f) => (
             <Button
               key={f}
+              aria-pressed={filter === f}
               variant={filter === f ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => setFilter(f)}
@@ -133,6 +134,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
               <thead>
                 <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
                   <th
+                    scope="col"
                     style={{
                       padding: tokens.spacing[3],
                       textAlign: 'left',
@@ -142,6 +144,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     {t('adminTableUser')}
                   </th>
                   <th
+                    scope="col"
                     style={{
                       padding: tokens.spacing[3],
                       textAlign: 'left',
@@ -151,6 +154,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     {t('adminTableEmail')}
                   </th>
                   <th
+                    scope="col"
                     style={{
                       padding: tokens.spacing[3],
                       textAlign: 'center',
@@ -160,6 +164,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     {t('adminTableFollowers')}
                   </th>
                   <th
+                    scope="col"
                     style={{
                       padding: tokens.spacing[3],
                       textAlign: 'center',
@@ -169,6 +174,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     {t('adminTableStatus')}
                   </th>
                   <th
+                    scope="col"
                     style={{
                       padding: tokens.spacing[3],
                       textAlign: 'left',
@@ -178,6 +184,7 @@ export default function UserManagementTab({ accessToken }: UserManagementTabProp
                     {t('adminTableRegistered')}
                   </th>
                   <th
+                    scope="col"
                     style={{
                       padding: tokens.spacing[3],
                       textAlign: 'right',

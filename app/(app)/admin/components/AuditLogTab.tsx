@@ -56,35 +56,38 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
   const [dateFrom, setDateFrom] = useState<string>('')
   const [dateTo, setDateTo] = useState<string>('')
 
-  const loadLogs = useCallback(async (pageNum: number = 1) => {
-    if (!accessToken) return
+  const loadLogs = useCallback(
+    async (pageNum: number = 1) => {
+      if (!accessToken) return
 
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: String(pageNum),
-        limit: String(PAGE_SIZE),
-      })
-      if (actionFilter !== 'all') params.set('action', actionFilter)
-      if (dateFrom) params.set('from', dateFrom)
-      if (dateTo) params.set('to', dateTo)
+      setLoading(true)
+      try {
+        const params = new URLSearchParams({
+          page: String(pageNum),
+          limit: String(PAGE_SIZE),
+        })
+        if (actionFilter !== 'all') params.set('action', actionFilter)
+        if (dateFrom) params.set('from', dateFrom)
+        if (dateTo) params.set('to', dateTo)
 
-      const res = await fetch(`/api/admin/audit-logs?${params}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      const data = await res.json()
+        const res = await fetch(`/api/admin/audit-logs?${params}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        const data = await res.json()
 
-      if (data.success) {
-        setLogs(data.data.logs)
-        setTotalPages(Math.ceil((data.data.total || 0) / PAGE_SIZE) || 1)
-        setPage(pageNum)
+        if (data.success) {
+          setLogs(data.data.logs)
+          setTotalPages(Math.ceil((data.data.total || 0) / PAGE_SIZE) || 1)
+          setPage(pageNum)
+        }
+      } catch (err) {
+        logger.error('Error loading audit logs:', err)
+      } finally {
+        setLoading(false)
       }
-    } catch (err) {
-      logger.error('Error loading audit logs:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [accessToken, actionFilter, dateFrom, dateTo])
+    },
+    [accessToken, actionFilter, dateFrom, dateTo]
+  )
 
   useEffect(() => {
     if (accessToken) {
@@ -108,9 +111,19 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
   return (
     <Card title={t('auditLog') || 'Audit Log'}>
       {/* Filters */}
-      <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', gap: tokens.spacing[3], flexWrap: 'wrap', alignItems: 'center' }}>
+      <Box
+        style={{
+          marginBottom: tokens.spacing[4],
+          display: 'flex',
+          gap: tokens.spacing[3],
+          flexWrap: 'wrap',
+          alignItems: 'center',
+        }}
+      >
         <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
-          <Text size="sm" color="secondary">Action:</Text>
+          <Text size="sm" color="secondary">
+            Action:
+          </Text>
           <select
             value={actionFilter}
             onChange={(e) => setActionFilter(e.target.value)}
@@ -132,7 +145,9 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
         </Box>
 
         <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
-          <Text size="sm" color="secondary">From:</Text>
+          <Text size="sm" color="secondary">
+            From:
+          </Text>
           <input
             type="date"
             value={dateFrom}
@@ -142,7 +157,9 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
         </Box>
 
         <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
-          <Text size="sm" color="secondary">To:</Text>
+          <Text size="sm" color="secondary">
+            To:
+          </Text>
           <input
             type="date"
             value={dateTo}
@@ -168,14 +185,65 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
       ) : (
         <>
           <Box style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: tokens.typography.fontSize.sm }}>
+            <table
+              style={{
+                width: '100%',
+                borderCollapse: 'collapse',
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
               <thead>
                 <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>Time</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>Actor</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>Action</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>Target</th>
-                  <th style={{ padding: tokens.spacing[3], textAlign: 'left', color: tokens.colors.text.tertiary }}>Details</th>
+                  <th
+                    scope="col"
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    Time
+                  </th>
+                  <th
+                    scope="col"
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    Actor
+                  </th>
+                  <th
+                    scope="col"
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    Action
+                  </th>
+                  <th
+                    scope="col"
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    Target
+                  </th>
+                  <th
+                    scope="col"
+                    style={{
+                      padding: tokens.spacing[3],
+                      textAlign: 'left',
+                      color: tokens.colors.text.tertiary,
+                    }}
+                  >
+                    Details
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -193,9 +261,7 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
                       </Text>
                     </td>
                     <td style={{ padding: tokens.spacing[3] }}>
-                      <Text size="sm">
-                        @{log.actor_handle || 'system'}
-                      </Text>
+                      <Text size="sm">@{log.actor_handle || 'system'}</Text>
                       <Text size="xs" color="tertiary">
                         {log.source === 'group' ? '(group)' : '(admin)'}
                       </Text>
@@ -229,11 +295,16 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
                         <Text size="xs" color="secondary" style={{ wordBreak: 'break-word' }}>
                           {Object.entries(log.details)
                             .filter(([k]) => k !== 'timestamp')
-                            .map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`)
+                            .map(
+                              ([k, v]) =>
+                                `${k}: ${typeof v === 'object' ? JSON.stringify(v) : String(v)}`
+                            )
                             .join(', ')}
                         </Text>
                       ) : (
-                        <Text size="xs" color="tertiary">-</Text>
+                        <Text size="xs" color="tertiary">
+                          -
+                        </Text>
                       )}
                       {log.group_name && (
                         <Text size="xs" color="tertiary">
@@ -249,7 +320,14 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <Box style={{ marginTop: tokens.spacing[4], display: 'flex', justifyContent: 'center', gap: tokens.spacing[2] }}>
+            <Box
+              style={{
+                marginTop: tokens.spacing[4],
+                display: 'flex',
+                justifyContent: 'center',
+                gap: tokens.spacing[2],
+              }}
+            >
               <Button
                 variant="secondary"
                 size="sm"

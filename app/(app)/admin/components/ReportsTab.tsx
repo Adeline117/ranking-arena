@@ -65,6 +65,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
           {(['pending', 'resolved', 'dismissed', 'all'] as const).map((s) => (
             <Button
               key={s}
+              aria-pressed={status === s}
               variant={status === s ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => setStatus(s)}
@@ -94,6 +95,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
           {(['all', 'post', 'comment', 'message', 'user'] as const).map((ct) => (
             <Button
               key={ct}
+              aria-pressed={contentType === ct}
               variant={contentType === ct ? 'primary' : 'secondary'}
               size="sm"
               onClick={() => setContentType(ct)}
