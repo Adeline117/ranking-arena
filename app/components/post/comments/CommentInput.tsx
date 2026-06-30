@@ -5,7 +5,6 @@ import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import { ButtonSpinner } from '../../ui/LoadingSpinner'
 import { ARENA_PURPLE } from '@/lib/utils/content'
-import { useToast } from '../../ui/Toast'
 import { STICKERS } from '@/lib/stickers'
 
 interface CommentInputProps {
@@ -28,7 +27,6 @@ export function CommentInput({
   t,
 }: CommentInputProps): React.ReactNode {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
-  const { showToast } = useToast()
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
 
   // Close emoji picker on outside click
@@ -40,7 +38,11 @@ export function CommentInput({
     const timer = setTimeout(() => {
       if (mounted) document.addEventListener('click', handler)
     }, 0)
-    return () => { mounted = false; clearTimeout(timer); document.removeEventListener('click', handler) }
+    return () => {
+      mounted = false
+      clearTimeout(timer)
+      document.removeEventListener('click', handler)
+    }
   }, [showEmojiPicker])
 
   return (
@@ -55,8 +57,12 @@ export function CommentInput({
           paddingBottom: 48,
           transition: 'border-color 0.2s',
         }}
-        onFocus={(e) => { e.currentTarget.style.borderColor = ARENA_PURPLE }}
-        onBlur={(e) => { e.currentTarget.style.borderColor = tokens.colors.border.primary }}
+        onFocus={(e) => {
+          e.currentTarget.style.borderColor = ARENA_PURPLE
+        }}
+        onBlur={(e) => {
+          e.currentTarget.style.borderColor = tokens.colors.border.primary
+        }}
       >
         <textarea
           ref={commentInputRef}
@@ -101,22 +107,26 @@ export function CommentInput({
         />
 
         {/* Toolbar row - bottom of input box */}
-        <div style={{
-          position: 'absolute',
-          bottom: 6,
-          left: 10,
-          right: 10,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}>
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 6,
+            left: 10,
+            right: 10,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
           {/* Left: action buttons */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
             {/* Sticker picker */}
             <div style={{ position: 'relative' }}>
               <button
                 type="button"
-                onClick={() => { setShowEmojiPicker(prev => !prev) }}
+                onClick={() => {
+                  setShowEmojiPicker((prev) => !prev)
+                }}
                 aria-label={t('postEmoji')}
                 style={{
                   background: 'transparent',
@@ -136,7 +146,16 @@ export function CommentInput({
                 }}
                 title={t('postEmoji')}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  width="18"
+                  height="18"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <circle cx="12" cy="12" r="10" />
                   <path d="M8 14s1.5 2 4 2 4-2 4-2" />
                   <line x1="9" y1="9" x2="9.01" y2="9" />
@@ -144,25 +163,27 @@ export function CommentInput({
                 </svg>
               </button>
               {showEmojiPicker && (
-                <div style={{
-                  position: 'fixed',
-                  bottom: 80,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  background: tokens.colors.bg.secondary,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  borderRadius: tokens.radius.lg,
-                  padding: 8,
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(5, 1fr)',
-                  gap: 4,
-                  zIndex: tokens.zIndex.max,
-                  boxShadow: 'var(--shadow-lg-dark)',
-                  width: 'min(300px, calc(100vw - 32px))',
-                  maxHeight: 280,
-                  overflowY: 'auto',
-                }}>
-                  {STICKERS.map(sticker => (
+                <div
+                  style={{
+                    position: 'fixed',
+                    bottom: 80,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: tokens.colors.bg.secondary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    borderRadius: tokens.radius.lg,
+                    padding: 8,
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(5, 1fr)',
+                    gap: 4,
+                    zIndex: tokens.zIndex.max,
+                    boxShadow: 'var(--shadow-lg-dark)',
+                    width: 'min(300px, calc(100vw - 32px))',
+                    maxHeight: 280,
+                    overflowY: 'auto',
+                  }}
+                >
+                  {STICKERS.map((sticker) => (
                     <button
                       key={sticker.id}
                       onClick={() => {
@@ -181,12 +202,25 @@ export function CommentInput({
                         alignItems: 'center',
                         gap: 2,
                       }}
-                      onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-                      onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.background = tokens.colors.bg.tertiary
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.background = 'transparent'
+                      }}
                       title={language === 'zh' ? sticker.name_zh : sticker.name_en}
                     >
-                      <Image src={sticker.path} alt={sticker.name_en} width={36} height={36} loading="lazy" style={{ objectFit: 'contain' }} />
-                      <span style={{ fontSize: 10, color: tokens.colors.text.tertiary, lineHeight: 1 }}>
+                      <Image
+                        src={sticker.path}
+                        alt={sticker.name_en}
+                        width={36}
+                        height={36}
+                        loading="lazy"
+                        style={{ objectFit: 'contain' }}
+                      />
+                      <span
+                        style={{ fontSize: 10, color: tokens.colors.text.tertiary, lineHeight: 1 }}
+                      >
                         {language === 'zh' ? sticker.name_zh : sticker.name_en}
                       </span>
                     </button>
@@ -225,79 +259,46 @@ export function CommentInput({
               @
             </button>
 
-            {/* Image (placeholder for future) */}
-            <button
-              type="button"
-              onClick={() => {
-                if (typeof window !== 'undefined') {
-                  const input = document.createElement('input')
-                  input.type = 'file'
-                  input.accept = 'image/*'
-                  input.onchange = () => {
-                    // Future: upload and attach image
-                    showToast(t('commentImageComingSoon'), 'warning')
-                  }
-                  input.click()
-                }
-              }}
-              aria-label={t('postImage')}
-              style={{
-                background: 'transparent',
-                border: 'none',
-                cursor: 'pointer',
-                // 36×36 touch target (was ~24×24). See sticker button above.
-                width: 36,
-                height: 36,
-                padding: 0,
-                borderRadius: tokens.radius.sm,
-                color: tokens.colors.text.tertiary,
-                fontSize: 16,
-                lineHeight: 1.2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-              title={t('postImage')}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect x="3" y="3" width="18" height="18" rx="2" ry="2"/>
-                <circle cx="8.5" cy="8.5" r="1.5"/>
-                <polyline points="21 15 16 10 5 21"/>
-              </svg>
-            </button>
+            {/* Image attach intentionally omitted until upload is wired (was a
+                file-picker that dead-ended in a "coming soon" toast). */}
           </div>
 
           {/* Right: character counter + send button */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{
-            fontSize: 11,
-            color: newComment.length > 1900 ? 'var(--color-accent-error)' : tokens.colors.text.tertiary,
-            fontVariantNumeric: 'tabular-nums',
-            whiteSpace: 'nowrap',
-          }}>
-            {newComment.length}/2000
-          </span>
-          <button
-            onClick={() => onSubmitComment(postId)}
-            disabled={submittingComment || !newComment.trim()}
-            style={{
-              // Match toolbar button height (36px) for consistent touch targets
-              minHeight: 36,
-              padding: '6px 14px',
-              borderRadius: tokens.radius.md,
-              border: 'none',
-              background: newComment.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
-              color: tokens.colors.white,
-              fontSize: 13,
-              fontWeight: 700,
-              cursor: submittingComment || !newComment.trim() ? 'default' : 'pointer',
-              opacity: submittingComment ? 0.6 : 1,
-              transition: 'all 0.2s',
-              lineHeight: '22px',
-            }}
-          >
-            {submittingComment ? <ButtonSpinner size="xs" /> : t('send')}
-          </button>
+            <span
+              style={{
+                fontSize: 11,
+                color:
+                  newComment.length > 1900
+                    ? 'var(--color-accent-error)'
+                    : tokens.colors.text.tertiary,
+                fontVariantNumeric: 'tabular-nums',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {newComment.length}/2000
+            </span>
+            <button
+              onClick={() => onSubmitComment(postId)}
+              disabled={submittingComment || !newComment.trim()}
+              style={{
+                // Match toolbar button height (36px) for consistent touch targets
+                minHeight: 36,
+                padding: '6px 14px',
+                borderRadius: tokens.radius.md,
+                border: 'none',
+                background: newComment.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
+                color: tokens.colors.white,
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: submittingComment || !newComment.trim() ? 'default' : 'pointer',
+                opacity: submittingComment ? 0.6 : 1,
+                transition: 'all 0.2s',
+                lineHeight: '22px',
+              }}
+            >
+              {submittingComment ? <ButtonSpinner size="xs" /> : t('send')}
+            </button>
           </div>
         </div>
       </div>
