@@ -25,7 +25,8 @@ export interface CumulativePnlPoint {
 }
 
 export interface SeriesRisk {
-  /** Max drawdown, percent, negative (e.g. -15.3); null if not derivable. */
+  /** Max drawdown, POSITIVE percent magnitude (e.g. 15.3) — matches all other
+   *  adapters + the serving `max_drawdown >= 0` guard; null if not derivable. */
   mdd: number | null
   /** Annualised Sharpe (rf=0), daily-approx; null if insufficient samples. */
   sharpe: number | null
@@ -69,8 +70,9 @@ export function riskFromCumulativePnl(
   for (const p of clean) {
     const e = capitalBase + p.value
     if (e <= 0) {
-      // Capital fully eroded at this sample → MDD is -100%, ratios undefined.
-      return { mdd: -100, sharpe: null, sortino: null, samples: clean.length }
+      // Capital fully eroded at this sample → MDD is 100% (positive magnitude),
+      // ratios undefined.
+      return { mdd: 100, sharpe: null, sortino: null, samples: clean.length }
     }
     equity.push(e)
   }
@@ -145,7 +147,12 @@ export function riskFromEquitySeries(points: CumulativePnlPoint[] | null | undef
   }
 }
 
-/** Peak-to-trough max drawdown over an equity curve, percent negative. */
+/**
+ * Peak-to-trough max drawdown over an equity curve, returned as a POSITIVE
+ * percent magnitude (e.g. 45.78) — matching every other adapter's mdd
+ * convention (raw maxDrawdown/maxRetracement fields are positive), the serving
+ * `max_drawdown >= 0 && < 100` guard, and the registry `inverted:true` metric.
+ */
 function maxDrawdownPct(equity: number[]): number | null {
   if (equity.length < 2) return null
   let peak = equity[0]
@@ -156,7 +163,7 @@ function maxDrawdownPct(equity: number[]): number | null {
     const dd = (v - peak) / peak // <= 0
     if (dd < worst) worst = dd
   }
-  return Math.round(worst * 100 * 100) / 100 // percent, 2dp, negative
+  return Math.round(Math.abs(worst) * 100 * 100) / 100 // positive percent magnitude, 2dp (avoids -0)
 }
 
 /** Per-day simple returns from an equity curve. */
