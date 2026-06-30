@@ -157,6 +157,26 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
     loadChannel()
   }, [loadChannel])
 
+  // Mark channel read on open / refocus / new message so group unread state
+  // advances (channel_message_reads.last_read_at). Table exists since 00065.
+  useEffect(() => {
+    if (!channelId || !accessToken) return
+    const markRead = () => {
+      globalThis
+        .fetch(`/api/channels/${channelId}/read`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        .catch(() => void 0)
+    }
+    markRead()
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') markRead()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => document.removeEventListener('visibilitychange', onVisible)
+  }, [channelId, accessToken, messages.length])
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
