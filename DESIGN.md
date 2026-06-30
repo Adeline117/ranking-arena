@@ -299,3 +299,32 @@ No interactive component ships without all of these. Reuse the shared infra; don
 
 `DataStateWrapper` collapses Loading → Error → Empty → Content automatically — prefer it for
 any async data region on the core path.
+
+---
+
+## 8. UI/UX Optimization Program — how we run a site-wide pass
+
+Established 2026-06-29 (Waves 0–5 + three high-risk features). Reuse this when doing a broad UI/UX sweep.
+
+1. **Research → ground, don't guess.** Per functional domain, web-research the current (2026) bar,
+   THEN read the real code, and record gaps with file:line + severity in a dated audit ledger
+   (`docs/UIUX_AUDIT_<date>.md`). The ledger drives every fix; it's the steering doc.
+2. **Wave it.** Wave 0 audit → Wave 1 cross-cutting (one fix benefits every page: a11y primitives,
+   nav IA, color-blind cues, focus rings) → Wave 2 core path → Wave 3 secondary sweep →
+   Wave 4 flagship redesign (prototype at `/design-system` FIRST, confirm, then port live) →
+   Wave 5 verify.
+3. **Agent team, disjoint files.** Fan out parallel agents but give each a non-overlapping file set;
+   serialize anything touching shared files (i18n locale files, `lib/data/notifications.ts`,
+   `package.json`) through one owner to avoid write races. Locale parity (en/zh/ja/ko) is mandatory
+   for every new key.
+4. **Migration discipline (hard rule).** Schema changes go single-channel, serialized:
+   `scripts/new-migration.sh` (pure timestamp) → write SQL → verify live columns via Supabase MCP
+   first (this repo has migration drift) → apply the SINGLE migration via MCP `apply_migration`
+   (NOT `supabase db push` — it would re-push the drift backlog) → `npm run qa:schema` green →
+   only then write dependent code. Never let parallel agents create/apply migrations.
+5. **Auth/payment code gets an adversarial security review BEFORE it ships.** (Passkey caught
+   header-trusted rpID + non-atomic challenge consume this way.)
+6. **One fix = one commit = immediate push** (atomic, visible progress); pushes run the pre-push
+   tsc/lint gate. After each deploy run `scripts/post-deploy-check.sh`; any core URL 500 → roll back.
+7. **Decide the semantic-color question once.** Keep red/green (trader convention) and add a SHAPE
+   cue (arrow/sign/marker) for color-blind safety — do NOT switch to blue/orange.
