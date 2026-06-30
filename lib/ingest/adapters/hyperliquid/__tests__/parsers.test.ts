@@ -52,6 +52,7 @@ describe('parseHyperliquidLeaderboardPage', () => {
     // week roi -0.0213260146 (decimal fraction) → -2.13260146 percent
     expect(page.rows[0].headlineRoi).toBeCloseTo(-2.13260146, 6)
     expect(page.rows[0].headlinePnl).toBeCloseTo(-1600655.247453, 4)
+    expect(page.rows[0].headlineAum).toBeCloseTo(58880227.366394, 2) // accountValue = on-chain equity
     // named whale keeps its displayName
     expect(page.rows[1].nickname).toBe('ABC')
     expect(page.rows[1].headlineRoi).toBeCloseTo(0.17678109, 6)
