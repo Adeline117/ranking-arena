@@ -115,6 +115,8 @@ export default function PortfolioTable({
     )
   }
 
+  // Current holdings = free for everyone (core transparency/trust signal for
+  // copy-trade decisions). Deep position HISTORY stays Pro-gated.
   const portfolioContent =
     viewMode === 'current' ? (
       <PortfolioCurrentView
@@ -124,7 +126,7 @@ export default function PortfolioTable({
         onHoverRow={setHoveredRow}
         onSelectMarket={setSelectedMarket}
       />
-    ) : (
+    ) : isPro ? (
       <PositionHistoryView
         sortedHistory={sortedHistory}
         hasExtendedFields={hasExtendedFields}
@@ -138,6 +140,22 @@ export default function PortfolioTable({
         onHistoryExpandedToggle={() => setHistoryExpanded(!historyExpanded)}
         onHoverRow={setHoveredRow}
       />
+    ) : (
+      <ProGate variant="blur">
+        <PositionHistoryView
+          sortedHistory={sortedHistory}
+          hasExtendedFields={hasExtendedFields}
+          sortBy={sortBy}
+          sortOrder={sortOrder}
+          historyExpanded={historyExpanded}
+          hoveredRow={hoveredRow}
+          collapsedCount={COLLAPSED_COUNT}
+          onSortByChange={setSortBy}
+          onSortOrderToggle={() => setSortOrder(sortOrder === 'desc' ? 'asc' : 'desc')}
+          onHistoryExpandedToggle={() => setHistoryExpanded(!historyExpanded)}
+          onHoverRow={setHoveredRow}
+        />
+      </ProGate>
     )
 
   return (
@@ -159,10 +177,9 @@ export default function PortfolioTable({
         {/* Header */}
         <PortfolioTableHeader viewMode={viewMode} onViewModeChange={setViewMode} />
 
-        {/* Content — Pro-gated behind unified ProGate (blurred preview + upsell card) */}
-        <Box style={{ padding: tokens.spacing[5] }}>
-          {isPro ? portfolioContent : <ProGate variant="blur">{portfolioContent}</ProGate>}
-        </Box>
+        {/* Content — current holdings are free; only position history is
+            Pro-gated (handled inside portfolioContent above) */}
+        <Box style={{ padding: tokens.spacing[5] }}>{portfolioContent}</Box>
       </Box>
 
       {/* Market Detail Drawer */}
