@@ -3,19 +3,28 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
+import { PRIMARY_NAV_ITEMS } from '@/lib/config/primary-nav'
 import { Box } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
+
+// Surface-specific tooltips keyed by canonical path (top nav only).
+const TOOLTIP_KEYS: Record<string, string | undefined> = {
+  '/market': 'navTooltipMarket',
+  '/groups': 'navTooltipGroups',
+}
 
 export default function NavLinks() {
   const { t, language: _language } = useLanguage()
   const pathname = usePathname()
 
-  const items = [
-    { href: '/', labelKey: 'rankings' as const, tooltip: undefined as string | undefined },
-    { href: '/market', labelKey: 'market' as const, tooltip: t('navTooltipMarket') },
-    { href: '/groups', labelKey: 'groups' as const, tooltip: t('navTooltipGroups') },
-    { href: '/hot', labelKey: 'hot' as const, tooltip: undefined as string | undefined },
-  ]
+  const items = PRIMARY_NAV_ITEMS.map((item) => {
+    const tooltipKey = TOOLTIP_KEYS[item.href]
+    return {
+      href: item.href,
+      labelKey: item.labelKey,
+      tooltip: tooltipKey ? t(tooltipKey) : undefined,
+    }
+  })
 
   return (
     <Box

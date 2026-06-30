@@ -4,26 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import { PRIMARY_NAV_ITEMS, type PrimaryNavIconKind } from '@/lib/config/primary-nav'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
-
-function HomeIcon({ active }: { active: boolean }) {
-  return (
-    <svg
-      width="20"
-      height="20"
-      viewBox="0 0 24 24"
-      fill={active ? 'currentColor' : 'none'}
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
-      <polyline points="9 22 9 12 15 12 15 22" />
-    </svg>
-  )
-}
 
 function TrophyIcon({ active }: { active: boolean }) {
   return (
@@ -47,7 +30,7 @@ function TrophyIcon({ active }: { active: boolean }) {
   )
 }
 
-function _GroupIcon({ active }: { active: boolean }) {
+function GroupIcon({ active }: { active: boolean }) {
   return (
     <svg
       width="20"
@@ -63,6 +46,23 @@ function _GroupIcon({ active }: { active: boolean }) {
       <circle cx="9" cy="7" r="4" />
       <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
       <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+    </svg>
+  )
+}
+
+function FireIcon({ active }: { active: boolean }) {
+  return (
+    <svg
+      width="20"
+      height="20"
+      viewBox="0 0 24 24"
+      fill={active ? 'currentColor' : 'none'}
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M12 12c2-2.96 0-7-1-8 0 3.038-1.773 4.741-3 6-1.226 1.26-2 3.24-2 5a6 6 0 1 0 12 0c0-1.532-1.056-3.94-2-5-1.786 3-2.791 3-4 2z" />
     </svg>
   )
 }
@@ -100,6 +100,14 @@ function UserIcon({ active }: { active: boolean }) {
       <path d="M20 21a8 8 0 1 0-16 0" />
     </svg>
   )
+}
+
+// Maps canonical primary-nav icon kinds → this surface's 20px SVG components.
+const ICON_MAP: Record<PrimaryNavIconKind, (props: { active: boolean }) => React.ReactElement> = {
+  rankings: TrophyIcon,
+  market: MarketIcon,
+  groups: GroupIcon,
+  hot: FireIcon,
 }
 
 export default function DesktopSidebar() {
@@ -148,19 +156,22 @@ export default function DesktopSidebar() {
     }
   }, [])
 
+  // Shared canonical core (Rankings/Market/Groups/Hot) + surface-specific "Me".
   const navItems = [
-    { href: '/', labelKey: 'home' as const, icon: HomeIcon },
-    { href: '/rankings', labelKey: 'rankings' as const, icon: TrophyIcon },
-    { href: '/market', labelKey: 'market' as const, icon: MarketIcon },
+    ...PRIMARY_NAV_ITEMS.map((item) => ({
+      href: item.href,
+      labelKey: item.labelKey,
+      icon: ICON_MAP[item.icon],
+    })),
     {
       href: userHandle ? `/u/${encodeURIComponent(userHandle)}` : '/settings',
-      labelKey: 'me' as const,
+      labelKey: 'me',
       icon: UserIcon,
     },
   ]
 
   const isActive = (href: string) => {
-    if (href === '/') return pathname === '/'
+    if (href === '/') return pathname === '/' || pathname.startsWith('/rankings')
     if (href.startsWith('/u/') || href === '/settings') {
       return pathname.startsWith('/u/') || pathname === '/settings'
     }
