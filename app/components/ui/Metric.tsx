@@ -133,11 +133,14 @@ export default function Metric({
 
   const { size: sizeToken, weight } = SIZE_MAP[size]
 
-  const arrow =
+  // Decorative direction glyph: the sign (+/−) already lives in `text`, so the
+  // arrow is redundant reinforcement (colorblind-safe cue, not the only signal)
+  // and must be aria-hidden — mirrors RankChangeIndicator. See DESIGN.md.
+  const arrowGlyph =
     showArrow && signed && finite && (value as number) !== 0
       ? (value as number) > 0
-        ? '▲ ' // ▲
-        : '▼ ' // ▼
+        ? '▲' // ▲
+        : '▼' // ▼
       : ''
 
   const valueNode = (
@@ -152,7 +155,11 @@ export default function Metric({
         whiteSpace: 'nowrap',
       }}
     >
-      {arrow}
+      {arrowGlyph && (
+        <span aria-hidden="true" style={{ marginRight: '0.25em', fontSize: '0.8em' }}>
+          {arrowGlyph}
+        </span>
+      )}
       {text}
     </span>
   )
