@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useMemo } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
@@ -297,6 +297,56 @@ function SearchContent() {
 
   const totalResults = groupResults.length + postResults.length + traderResults.length
 
+  // 3.10 — roving-tabindex / arrow-key navigation over the full results list.
+  // Build a flat ordered list matching the section render order so a single
+  // index maps each result link to its keyboard position.
+  const tradersShown = activeTab === 'all' || activeTab === 'traders'
+  const postsShown = features.social && (activeTab === 'all' || activeTab === 'posts')
+  const groupsShown = features.social && (activeTab === 'all' || activeTab === 'groups')
+  const flatResults = useMemo(() => {
+    const list: SearchResult[] = []
+    if (tradersShown) list.push(...traderResults)
+    if (postsShown) list.push(...postResults)
+    if (groupsShown) list.push(...groupResults)
+    return list
+  }, [tradersShown, postsShown, groupsShown, traderResults, postResults, groupResults])
+  const postOffset = tradersShown ? traderResults.length : 0
+  const groupOffset = postOffset + (postsShown ? postResults.length : 0)
+
+  const [selectedIndex, setSelectedIndex] = useState(-1)
+  const linkRefs = useRef<(HTMLAnchorElement | null)[]>([])
+
+  // Reset the highlight whenever the result set changes.
+  useEffect(() => {
+    setSelectedIndex(-1)
+  }, [query, activeTab, flatResults.length])
+
+  const focusResult = useCallback((index: number) => {
+    setSelectedIndex(index)
+    linkRefs.current[index]?.focus()
+  }, [])
+
+  const handleResultsKeyDown = useCallback(
+    (e: React.KeyboardEvent) => {
+      if (flatResults.length === 0) return
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        focusResult(selectedIndex < flatResults.length - 1 ? selectedIndex + 1 : 0)
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        focusResult(selectedIndex > 0 ? selectedIndex - 1 : flatResults.length - 1)
+      } else if (e.key === 'Home') {
+        e.preventDefault()
+        focusResult(0)
+      } else if (e.key === 'End') {
+        e.preventDefault()
+        focusResult(flatResults.length - 1)
+      }
+      // Enter activates the focused <a> (Link) natively — no handler needed.
+    },
+    [flatResults.length, selectedIndex, focusResult]
+  )
+
   const renderSection = (
     title: string,
     results: SearchResult[],
@@ -304,7 +354,8 @@ function SearchContent() {
     tabParam: string,
     iconLetter: string,
     accentColor: string,
-    accentBg: string
+    accentBg: string,
+    indexOffset: number
   ) => {
     if (results.length === 0) {
       return (
@@ -424,115 +475,123 @@ function SearchContent() {
         </div>
 
         {/* Results */}
-        {results.map((result, idx) => (
-          <Link
-            key={`${result.type}-${result.id}`}
-            href={getHref(result)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '12px 18px',
-              textDecoration: 'none',
-              color: 'inherit',
-              borderBottom:
-                idx < results.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
-              transition: 'background 0.15s',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = 'var(--overlay-hover)'
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'transparent'
-            }}
-          >
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div
-                style={{
-                  fontSize: 14,
-                  fontWeight: 600,
-                  color: tokens.colors.text.primary,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {highlightText(result.title, query)}
-              </div>
-              {result.subtitle && (
+        {results.map((result, idx) => {
+          const globalIndex = indexOffset + idx
+          return (
+            <Link
+              key={`${result.type}-${result.id}`}
+              href={getHref(result)}
+              ref={(el) => {
+                linkRefs.current[globalIndex] = el
+              }}
+              tabIndex={globalIndex === Math.max(selectedIndex, 0) ? 0 : -1}
+              onFocus={() => setSelectedIndex(globalIndex)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 12,
+                padding: '12px 18px',
+                textDecoration: 'none',
+                color: 'inherit',
+                borderBottom:
+                  idx < results.length - 1 ? `1px solid ${tokens.colors.border.primary}` : 'none',
+                transition: 'background 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'var(--overlay-hover)'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent'
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
-                    fontSize: 12,
-                    color: tokens.colors.text.tertiary,
-                    marginTop: 2,
+                    fontSize: 14,
+                    fontWeight: 600,
+                    color: tokens.colors.text.primary,
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
                     whiteSpace: 'nowrap',
                   }}
                 >
-                  {result.type === 'trader' && (result.roi != null || result.score != null)
-                    ? // Color ROI (by sign) + Score (by tier) within the subtitle; the
-                      // exchange/rank parts stay neutral. Format: "exchange · #rank · ROI · Score".
-                      result.subtitle.split(' · ').map((part, i, arr) => {
-                        const isRoi = result.roi != null && /%$/.test(part) && /[+-]/.test(part)
-                        const isScore = result.score != null && /^score/i.test(part)
-                        const c = isRoi
-                          ? result.roi! >= 0
-                            ? 'var(--color-accent-success)'
-                            : 'var(--color-accent-error)'
-                          : isScore
-                            ? getScoreColor(result.score!)
-                            : undefined
-                        return (
-                          <span key={i}>
-                            <span
-                              style={
-                                c
-                                  ? { color: c, fontWeight: tokens.typography.fontWeight.bold }
-                                  : undefined
-                              }
-                            >
-                              {part}
-                            </span>
-                            {i < arr.length - 1 ? ' · ' : ''}
-                          </span>
-                        )
-                      })
-                    : result.subtitle}
+                  {highlightText(result.title, query)}
                 </div>
+                {result.subtitle && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: tokens.colors.text.tertiary,
+                      marginTop: 2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {result.type === 'trader' && (result.roi != null || result.score != null)
+                      ? // Color ROI (by sign) + Score (by tier) within the subtitle; the
+                        // exchange/rank parts stay neutral. Format: "exchange · #rank · ROI · Score".
+                        result.subtitle.split(' · ').map((part, i, arr) => {
+                          const isRoi = result.roi != null && /%$/.test(part) && /[+-]/.test(part)
+                          const isScore = result.score != null && /^score/i.test(part)
+                          const c = isRoi
+                            ? result.roi! >= 0
+                              ? 'var(--color-accent-success)'
+                              : 'var(--color-accent-error)'
+                            : isScore
+                              ? getScoreColor(result.score!)
+                              : undefined
+                          return (
+                            <span key={i}>
+                              <span
+                                style={
+                                  c
+                                    ? { color: c, fontWeight: tokens.typography.fontWeight.bold }
+                                    : undefined
+                                }
+                              >
+                                {part}
+                              </span>
+                              {i < arr.length - 1 ? ' · ' : ''}
+                            </span>
+                          )
+                        })
+                      : result.subtitle}
+                  </div>
+                )}
+              </div>
+              {result.meta && (
+                <span
+                  style={{
+                    fontSize: 11,
+                    padding: '2px 8px',
+                    borderRadius: tokens.radius.full,
+                    background: accentBg,
+                    color: accentColor,
+                    fontWeight: 600,
+                    flexShrink: 0,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {result.meta}
+                </span>
               )}
-            </div>
-            {result.meta && (
-              <span
-                style={{
-                  fontSize: 11,
-                  padding: '2px 8px',
-                  borderRadius: tokens.radius.full,
-                  background: accentBg,
-                  color: accentColor,
-                  fontWeight: 600,
-                  flexShrink: 0,
-                  textTransform: 'uppercase',
-                }}
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke={tokens.colors.text.tertiary}
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ flexShrink: 0, opacity: 0.5 }}
               >
-                {result.meta}
-              </span>
-            )}
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={tokens.colors.text.tertiary}
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              style={{ flexShrink: 0, opacity: 0.5 }}
-            >
-              <polyline points="9 18 15 12 9 6" />
-            </svg>
-          </Link>
-        ))}
+                <polyline points="9 18 15 12 9 6" />
+              </svg>
+            </Link>
+          )
+        })}
       </section>
     )
   }
@@ -1114,6 +1173,8 @@ function SearchContent() {
           </div>
         ) : (
           <div
+            onKeyDown={handleResultsKeyDown}
+            aria-label={t('searchResults')}
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(auto-fill, minmax(min(380px, 100%), 1fr))',
@@ -1126,7 +1187,7 @@ function SearchContent() {
               alignItems: 'start',
             }}
           >
-            {(activeTab === 'all' || activeTab === 'traders') &&
+            {tradersShown &&
               renderSection(
                 t('traders'),
                 traderResults,
@@ -1134,10 +1195,10 @@ function SearchContent() {
                 'traders',
                 'T',
                 tokens.colors.accent.success || 'var(--color-score-great)',
-                'var(--color-accent-success-12)'
+                'var(--color-accent-success-12)',
+                0
               )}
-            {features.social &&
-              (activeTab === 'all' || activeTab === 'posts') &&
+            {postsShown &&
               renderSection(
                 t('searchPostsSection'),
                 postResults,
@@ -1145,10 +1206,10 @@ function SearchContent() {
                 'posts',
                 'P',
                 tokens.colors.accent.primary,
-                tokens.gradient.primarySubtle || 'var(--color-indigo-subtle)'
+                tokens.gradient.primarySubtle || 'var(--color-indigo-subtle)',
+                postOffset
               )}
-            {features.social &&
-              (activeTab === 'all' || activeTab === 'groups') &&
+            {groupsShown &&
               renderSection(
                 t('groups'),
                 groupResults,
@@ -1156,7 +1217,8 @@ function SearchContent() {
                 'groups',
                 'G',
                 tokens.colors.accent.warning || 'var(--color-score-average)',
-                'var(--color-orange-subtle)'
+                'var(--color-orange-subtle)',
+                groupOffset
               )}
           </div>
         )}
