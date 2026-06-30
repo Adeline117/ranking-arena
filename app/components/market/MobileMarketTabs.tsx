@@ -11,7 +11,9 @@ const TAB_KEYS = [
   { key: 'watchlist', i18nKey: 'mobileMarketWatchlist' as const },
 ]
 
-export default function MobileMarketTabs({ children }: {
+export default function MobileMarketTabs({
+  children,
+}: {
   children: Record<string, React.ReactNode>
 }) {
   const { t } = useLanguage()
@@ -24,11 +26,11 @@ export default function MobileMarketTabs({ children }: {
   const currentYRef = useRef(0)
   const isDragging = useRef(false)
 
-  const currentIndex = TAB_KEYS.findIndex(tab => tab.key === activeTab)
+  const currentIndex = TAB_KEYS.findIndex((tab) => tab.key === activeTab)
 
   // Track mounted tabs for caching
   useEffect(() => {
-    setMountedTabs(prev => {
+    setMountedTabs((prev) => {
       if (prev.has(activeTab)) return prev
       return new Set([...prev, activeTab])
     })
@@ -80,28 +82,44 @@ export default function MobileMarketTabs({ children }: {
   return (
     <div>
       {/* Tab Bar */}
-      <div style={{
-        display: 'flex',
-        borderBottom: `1px solid ${tokens.colors.border.primary}`,
-        background: tokens.colors.bg.secondary,
-        position: 'sticky',
-        top: 'var(--top-nav-height, 48px)',
-        zIndex: tokens.zIndex.dropdown,
-      }}>
-        {TAB_KEYS.map(tab => (
+      <div
+        role="tablist"
+        aria-label={t('market')}
+        style={{
+          display: 'flex',
+          borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          background: tokens.colors.bg.secondary,
+          position: 'sticky',
+          top: 'var(--top-nav-height, 48px)',
+          zIndex: tokens.zIndex.dropdown,
+        }}
+      >
+        {TAB_KEYS.map((tab) => (
           <button
             key={tab.key}
+            type="button"
+            role="tab"
+            id={`market-tab-${tab.key}`}
+            aria-selected={activeTab === tab.key}
+            aria-controls={`market-tabpanel-${tab.key}`}
             onClick={() => setActiveTab(tab.key)}
             style={{
               flex: 1,
               padding: '12px 0',
               minHeight: 44,
-              fontSize: 13,
-              fontWeight: activeTab === tab.key ? 600 : 400,
-              color: activeTab === tab.key ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight:
+                activeTab === tab.key
+                  ? tokens.typography.fontWeight.semibold
+                  : tokens.typography.fontWeight.normal,
+              color:
+                activeTab === tab.key ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
               background: 'none',
               border: 'none',
-              borderBottom: activeTab === tab.key ? `2px solid ${tokens.colors.accent.primary}` : '2px solid transparent',
+              borderBottom:
+                activeTab === tab.key
+                  ? `2px solid ${tokens.colors.accent.primary}`
+                  : '2px solid transparent',
               cursor: 'pointer',
               transition: 'all 0.15s ease',
             }}
@@ -113,23 +131,29 @@ export default function MobileMarketTabs({ children }: {
 
       {/* Tab Content - cached: once mounted, keep in DOM but hide */}
       <div ref={containerRef} style={{ minHeight: '60vh', padding: '16px 0' }}>
-        {TAB_KEYS.map(tab => {
+        {TAB_KEYS.map((tab) => {
           if (!mountedTabs.has(tab.key)) return null
           const isActive = tab.key === activeTab
           return (
             <div
               key={tab.key}
+              role="tabpanel"
+              id={`market-tabpanel-${tab.key}`}
+              aria-labelledby={`market-tab-${tab.key}`}
+              hidden={!isActive}
               style={{ display: isActive ? 'block' : 'none' }}
             >
               {children[tab.key] || (
-                <div style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  height: 200,
-                  color: tokens.colors.text.tertiary,
-                  fontSize: 14,
-                }}>
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    height: 200,
+                    color: tokens.colors.text.tertiary,
+                    fontSize: tokens.typography.fontSize.base,
+                  }}
+                >
                   {t('comingSoon')}
                 </div>
               )}

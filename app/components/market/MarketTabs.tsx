@@ -17,6 +17,7 @@ export default function MarketTabs({ children }: MarketTabsProps) {
   return (
     <div>
       <div
+        role="tablist"
         style={{
           display: 'flex',
           gap: tokens.spacing[1],
@@ -27,6 +28,9 @@ export default function MarketTabs({ children }: MarketTabsProps) {
         {tabs.map((tab) => (
           <button
             key={tab.key}
+            type="button"
+            role="tab"
+            aria-selected={active === tab.key}
             onClick={() => setActive(tab.key)}
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,

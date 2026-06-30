@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
+import EmptyState from '@/app/components/ui/EmptyState'
 import { tokens } from '@/lib/design-tokens'
 
 interface FundingRateRow {
@@ -87,6 +88,9 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
   const sortIndicator = (field: SortField) =>
     sortField === field ? (sortDir === 'asc' ? ' \u2191' : ' \u2193') : ''
 
+  const ariaSort = (field: SortField): 'ascending' | 'descending' | 'none' =>
+    sortField === field ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+
   return (
     <div
       style={{
@@ -97,7 +101,13 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
     >
       <div style={{ maxWidth: 1200, margin: '0 auto', padding: '24px 16px 60px' }}>
         {/* Breadcrumb */}
-        <nav style={{ fontSize: 13, color: tokens.colors.text.tertiary, marginBottom: 16 }}>
+        <nav
+          style={{
+            fontSize: tokens.typography.fontSize.sm,
+            color: tokens.colors.text.tertiary,
+            marginBottom: 16,
+          }}
+        >
           <Link
             href="/market"
             style={{ color: tokens.colors.text.secondary, textDecoration: 'none' }}
@@ -110,10 +120,23 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
 
         {/* Header */}
         <div style={{ marginBottom: 24 }}>
-          <h1 style={{ fontSize: 28, fontWeight: 700, margin: 0, letterSpacing: '-0.5px' }}>
+          <h1
+            style={{
+              fontSize: tokens.typography.fontSize.hero,
+              fontWeight: tokens.typography.fontWeight.bold,
+              margin: 0,
+              letterSpacing: '-0.5px',
+            }}
+          >
             Funding Rates
           </h1>
-          <p style={{ fontSize: 14, color: tokens.colors.text.secondary, marginTop: 6 }}>
+          <p
+            style={{
+              fontSize: tokens.typography.fontSize.base,
+              color: tokens.colors.text.secondary,
+              marginTop: 6,
+            }}
+          >
             Perpetual futures funding rates across exchanges. Positive rates indicate longs pay
             shorts (bullish bias). Negative rates indicate shorts pay longs (bearish bias).
           </p>
@@ -122,7 +145,9 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
         {/* Filter */}
         <div style={{ marginBottom: 16, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <button
+            type="button"
             onClick={() => setFilterPlatform('all')}
+            aria-pressed={filterPlatform === 'all'}
             style={{
               padding: '6px 14px',
               borderRadius: tokens.radius.md,
@@ -138,8 +163,8 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                 filterPlatform === 'all'
                   ? 'var(--color-accent-primary)'
                   : tokens.colors.text.secondary,
-              fontSize: 13,
-              fontWeight: 500,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.medium,
               cursor: 'pointer',
             }}
           >
@@ -148,7 +173,9 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
           {platforms.map((p) => (
             <button
               key={p}
+              type="button"
               onClick={() => setFilterPlatform(p)}
+              aria-pressed={filterPlatform === p}
               style={{
                 padding: '6px 14px',
                 borderRadius: tokens.radius.md,
@@ -164,8 +191,8 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                   filterPlatform === p
                     ? 'var(--color-accent-primary)'
                     : tokens.colors.text.secondary,
-                fontSize: 13,
-                fontWeight: 500,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.medium,
                 cursor: 'pointer',
               }}
             >
@@ -176,23 +203,17 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
 
         {/* Table */}
         {rates.length === 0 ? (
-          <div
-            style={{
-              padding: '60px 20px',
-              textAlign: 'center',
-              color: tokens.colors.text.tertiary,
-              fontSize: 14,
-            }}
-          >
-            No funding rate data available yet. Data will appear after the next cron cycle.
-          </div>
+          <EmptyState
+            title="No funding rate data yet"
+            description="Data will appear after the next cron cycle."
+          />
         ) : (
           <div style={{ overflowX: 'auto' }}>
             <table
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                fontSize: 14,
+                fontSize: tokens.typography.fontSize.base,
               }}
             >
               <thead>
@@ -207,16 +228,25 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                   ).map(([field, label]) => (
                     <th
                       key={field}
+                      scope="col"
+                      aria-sort={ariaSort(field)}
+                      tabIndex={0}
                       onClick={() => handleSort(field)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault()
+                          handleSort(field)
+                        }
+                      }}
                       style={{
                         padding: '12px 16px',
                         textAlign: field === 'funding_rate' ? 'right' : 'left',
-                        fontWeight: 600,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                         color: tokens.colors.text.secondary,
                         cursor: 'pointer',
                         userSelect: 'none',
                         whiteSpace: 'nowrap',
-                        fontSize: 12,
+                        fontSize: tokens.typography.fontSize.xs,
                         textTransform: 'uppercase',
                         letterSpacing: '0.5px',
                       }}
@@ -248,26 +278,34 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                       }
                       onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     >
-                      <td style={{ padding: '12px 16px', fontWeight: 500 }}>
+                      <td
+                        style={{
+                          padding: '12px 16px',
+                          fontWeight: tokens.typography.fontWeight.medium,
+                        }}
+                      >
                         {PLATFORM_LABELS[row.platform] || row.platform}
                       </td>
                       <td
                         style={{
                           padding: '12px 16px',
                           fontFamily: 'var(--font-mono, monospace)',
-                          fontWeight: 500,
+                          fontWeight: tokens.typography.fontWeight.medium,
                         }}
                       >
                         {normalizeSymbol(row.symbol)}
                       </td>
                       <td
-                        style={{
-                          padding: '12px 16px',
-                          textAlign: 'right',
-                          fontFamily: 'var(--font-mono, monospace)',
-                          fontWeight: 600,
-                          color: rateColor,
-                        }}
+                        style={
+                          {
+                            padding: '12px 16px',
+                            textAlign: 'right',
+                            fontFamily: 'var(--font-mono, monospace)',
+                            fontVariantNumeric: 'tabular-nums',
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                            color: rateColor,
+                          } as React.CSSProperties
+                        }
                       >
                         {row.funding_rate > 0 ? '+' : ''}
                         {formatRate(row.funding_rate)}
@@ -276,7 +314,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                         style={{
                           padding: '12px 16px',
                           color: tokens.colors.text.tertiary,
-                          fontSize: 13,
+                          fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
                         {formatTime(row.funding_time)}

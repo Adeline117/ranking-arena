@@ -306,7 +306,9 @@ export default function LiveTradesFeed() {
             return (
               <button
                 key={ex}
+                type="button"
                 onClick={() => toggleExchange(ex)}
+                aria-pressed={active}
                 style={{
                   padding: `1px ${tokens.spacing[1]}`,
                   // eslint-disable-next-line no-restricted-syntax -- off-scale by design (compact filter pill)
