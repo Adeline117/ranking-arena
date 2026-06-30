@@ -121,6 +121,30 @@ export function ratiosFromCumulativePnl(
   }
 }
 
+/**
+ * MDD + Sharpe + Sortino from a DIRECT equity series (value = equity in USD,
+ * e.g. Hyperliquid's accountValueHistory). This is the most honest input — MDD
+ * is true peak-to-trough on the actual sampled equity, no base reconstruction.
+ * Still `daily-approx` / sample-limited provenance (sparse samples miss
+ * intra-sample dips) — caller MUST tag `extras.risk_derivation`.
+ */
+export function riskFromEquitySeries(points: CumulativePnlPoint[] | null | undefined): SeriesRisk {
+  if (!Array.isArray(points) || points.length < 2) return EMPTY
+  const equity = points
+    .filter((p) => p && typeof p.ts === 'string' && p.value != null && isFinite(p.value))
+    .slice()
+    .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+    .map((p) => p.value)
+    .filter((v) => v > 0)
+  if (equity.length < 2) return EMPTY
+  return {
+    mdd: maxDrawdownPct(equity),
+    sharpe: sharpeOfChanges(dailyReturns(equity)),
+    sortino: sortinoOfChanges(dailyReturns(equity)),
+    samples: equity.length,
+  }
+}
+
 /** Peak-to-trough max drawdown over an equity curve, percent negative. */
 function maxDrawdownPct(equity: number[]): number | null {
   if (equity.length < 2) return null

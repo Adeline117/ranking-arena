@@ -1,4 +1,8 @@
-import { riskFromCumulativePnl, ratiosFromCumulativePnl } from '../series-risk'
+import {
+  riskFromCumulativePnl,
+  ratiosFromCumulativePnl,
+  riskFromEquitySeries,
+} from '../series-risk'
 
 /** Build a cumulative-PnL series from per-day deltas. */
 function cum(deltas: number[]): Array<{ ts: string; value: number }> {
@@ -99,5 +103,29 @@ describe('ratiosFromCumulativePnl (base-free, for DEX without capital base)', ()
     const aware = riskFromCumulativePnl(cum(deltas), 1e9)
     expect(free.sharpe).toBeCloseTo(aware.sharpe as number, 2)
     expect(free.sortino).toBeCloseTo(aware.sortino as number, 2)
+  })
+})
+
+describe('riskFromEquitySeries (direct equity curve, e.g. Hyperliquid)', () => {
+  it('computes true peak-to-trough MDD on the actual equity samples', () => {
+    const equity = [
+      { ts: '2026-06-01T00:00:00Z', value: 10000 },
+      { ts: '2026-06-02T00:00:00Z', value: 12000 }, // peak
+      { ts: '2026-06-03T00:00:00Z', value: 9000 }, // trough → -25%
+      { ts: '2026-06-04T00:00:00Z', value: 11000 },
+    ]
+    const r = riskFromEquitySeries(equity)
+    expect(r.mdd).toBeCloseTo(-25, 1)
+    expect(r.samples).toBe(4)
+  })
+
+  it('drops non-positive equity samples and returns all-null when too few remain', () => {
+    expect(riskFromEquitySeries(null).mdd).toBeNull()
+    expect(
+      riskFromEquitySeries([
+        { ts: 'a', value: -1 },
+        { ts: 'b', value: 5000 },
+      ]).mdd
+    ).toBeNull()
   })
 })
