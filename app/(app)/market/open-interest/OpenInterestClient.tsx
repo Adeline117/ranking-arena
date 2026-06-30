@@ -6,7 +6,7 @@ import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 
 interface OpenInterestRow {
   platform: string
@@ -36,6 +36,17 @@ function formatUsd(value: number): string {
   if (value >= 1_000) return '$' + (value / 1_000).toFixed(1) + 'K'
   return '$' + value.toFixed(0)
 }
+
+function formatShare(share: number): string {
+  return (share * 100).toFixed(1) + '%'
+}
+
+// NOTE: a "24h Δ" column was requested but is intentionally omitted. The page
+// data source (RPC `get_latest_open_interest`) returns only the latest snapshot
+// per platform×symbol — no prior-period value is available to this client, and
+// fabricating a delta would be misleading. Adding Δ requires a server-side
+// change (e.g. a window-function RPC returning value-24h-ago) in page.tsx, which
+// is out of scope for this surgical client edit.
 
 function formatTime(iso: string, locale: string): string {
   const d = new Date(iso)
@@ -92,6 +103,13 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
     }
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
   }, [rows])
+
+  // Grand total across the loaded set drives the share-of-total bars (no extra
+  // data needed — pure derivation, so BTC's dominance is immediately visible).
+  const grandTotal = useMemo(
+    () => rows.reduce((sum, r) => sum + (r.open_interest_usd || 0), 0),
+    [rows]
+  )
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -168,42 +186,88 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
               marginBottom: 24,
             }}
           >
-            {aggregated.map(([sym, total]) => (
-              <div
-                key={sym}
-                style={{
-                  padding: '16px',
-                  background: tokens.glass.bg.secondary,
-                  borderRadius: tokens.radius.lg,
-                  border: tokens.glass.border.light,
-                }}
-              >
+            {aggregated.map(([sym, total]) => {
+              const share = grandTotal > 0 ? total / grandTotal : 0
+              return (
                 <div
+                  key={sym}
                   style={{
-                    fontSize: tokens.typography.fontSize.xs,
-                    fontWeight: tokens.typography.fontWeight.semibold,
-                    color: tokens.colors.text.tertiary,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.3px',
-                    marginBottom: 6,
+                    padding: '16px',
+                    background: tokens.glass.bg.secondary,
+                    borderRadius: tokens.radius.lg,
+                    border: tokens.glass.border.light,
                   }}
                 >
-                  {sym}
+                  <div
+                    style={{
+                      fontSize: tokens.typography.fontSize.xs,
+                      fontWeight: tokens.typography.fontWeight.semibold,
+                      color: tokens.colors.text.tertiary,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.3px',
+                      marginBottom: 6,
+                    }}
+                  >
+                    {sym}
+                  </div>
+                  <div
+                    style={
+                      {
+                        fontSize: tokens.typography.fontSize.xl,
+                        fontWeight: tokens.typography.fontWeight.bold,
+                        fontFamily: 'var(--font-mono, monospace)',
+                        fontVariantNumeric: 'tabular-nums',
+                      } as React.CSSProperties
+                    }
+                  >
+                    {formatUsd(total)}
+                  </div>
+                  {/* Share-of-total bar — visualizes per-symbol OI dominance */}
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      marginTop: 10,
+                    }}
+                  >
+                    <div
+                      role="img"
+                      aria-label={`${t('colShare')}: ${formatShare(share)}`}
+                      style={{
+                        flex: 1,
+                        height: 4,
+                        borderRadius: tokens.radius.full,
+                        background: alpha(tokens.colors.accent.primary, 14),
+                        overflow: 'hidden',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: `${Math.max(share * 100, 1)}%`,
+                          height: '100%',
+                          borderRadius: tokens.radius.full,
+                          background: tokens.colors.accent.primary,
+                        }}
+                      />
+                    </div>
+                    <span
+                      style={
+                        {
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: tokens.colors.text.tertiary,
+                          fontVariantNumeric: 'tabular-nums',
+                          minWidth: 38,
+                          textAlign: 'right',
+                        } as React.CSSProperties
+                      }
+                    >
+                      {formatShare(share)}
+                    </span>
+                  </div>
                 </div>
-                <div
-                  style={
-                    {
-                      fontSize: tokens.typography.fontSize.xl,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      fontFamily: 'var(--font-mono, monospace)',
-                      fontVariantNumeric: 'tabular-nums',
-                    } as React.CSSProperties
-                  }
-                >
-                  {formatUsd(total)}
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
 
@@ -320,59 +384,106 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                 </tr>
               </thead>
               <tbody>
-                {sorted.map((row, i) => (
-                  <tr
-                    key={`${row.platform}-${row.symbol}-${i}`}
-                    style={{
-                      borderBottom: `1px solid ${tokens.colors.border.secondary}`,
-                      transition: 'background 0.15s',
-                    }}
-                    onMouseEnter={(e) =>
-                      (e.currentTarget.style.background = tokens.colors.bg.hover)
-                    }
-                    onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-                  >
-                    <td
+                {sorted.map((row, i) => {
+                  const share = grandTotal > 0 ? row.open_interest_usd / grandTotal : 0
+                  return (
+                    <tr
+                      key={`${row.platform}-${row.symbol}-${i}`}
                       style={{
-                        padding: '12px 16px',
-                        fontWeight: tokens.typography.fontWeight.medium,
+                        borderBottom: `1px solid ${tokens.colors.border.secondary}`,
+                        transition: 'background 0.15s',
                       }}
-                    >
-                      {PLATFORM_LABELS[row.platform] || row.platform}
-                    </td>
-                    <td
-                      style={{
-                        padding: '12px 16px',
-                        fontFamily: 'var(--font-mono, monospace)',
-                        fontWeight: tokens.typography.fontWeight.medium,
-                      }}
-                    >
-                      {normalizeSymbol(row.symbol)}
-                    </td>
-                    <td
-                      style={
-                        {
-                          padding: '12px 16px',
-                          textAlign: 'right',
-                          fontFamily: 'var(--font-mono, monospace)',
-                          fontVariantNumeric: 'tabular-nums',
-                          fontWeight: tokens.typography.fontWeight.semibold,
-                        } as React.CSSProperties
+                      onMouseEnter={(e) =>
+                        (e.currentTarget.style.background = tokens.colors.bg.hover)
                       }
+                      onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
                     >
-                      {formatUsd(row.open_interest_usd)}
-                    </td>
-                    <td
-                      style={{
-                        padding: '12px 16px',
-                        color: tokens.colors.text.tertiary,
-                        fontSize: tokens.typography.fontSize.sm,
-                      }}
-                    >
-                      {formatTime(row.timestamp, locale)}
-                    </td>
-                  </tr>
-                ))}
+                      <td
+                        style={{
+                          padding: '12px 16px',
+                          fontWeight: tokens.typography.fontWeight.medium,
+                        }}
+                      >
+                        {PLATFORM_LABELS[row.platform] || row.platform}
+                      </td>
+                      <td
+                        style={{
+                          padding: '12px 16px',
+                          fontFamily: 'var(--font-mono, monospace)',
+                          fontWeight: tokens.typography.fontWeight.medium,
+                        }}
+                      >
+                        {normalizeSymbol(row.symbol)}
+                      </td>
+                      <td
+                        style={
+                          {
+                            padding: '12px 16px',
+                            textAlign: 'right',
+                            fontFamily: 'var(--font-mono, monospace)',
+                            fontVariantNumeric: 'tabular-nums',
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                          } as React.CSSProperties
+                        }
+                      >
+                        <div>{formatUsd(row.open_interest_usd)}</div>
+                        {/* Share-of-total bar — value / sum across the loaded set */}
+                        <div
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-end',
+                            gap: 6,
+                            marginTop: 5,
+                          }}
+                        >
+                          <div
+                            role="img"
+                            aria-label={`${t('colShare')}: ${formatShare(share)}`}
+                            style={{
+                              width: 72,
+                              height: 4,
+                              borderRadius: tokens.radius.full,
+                              background: alpha(tokens.colors.accent.primary, 14),
+                              overflow: 'hidden',
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: `${Math.max(share * 100, 1)}%`,
+                                height: '100%',
+                                borderRadius: tokens.radius.full,
+                                background: tokens.colors.accent.primary,
+                              }}
+                            />
+                          </div>
+                          <span
+                            style={
+                              {
+                                fontSize: tokens.typography.fontSize.xs,
+                                fontWeight: tokens.typography.fontWeight.medium,
+                                color: tokens.colors.text.tertiary,
+                                fontVariantNumeric: 'tabular-nums',
+                                minWidth: 38,
+                              } as React.CSSProperties
+                            }
+                          >
+                            {formatShare(share)}
+                          </span>
+                        </div>
+                      </td>
+                      <td
+                        style={{
+                          padding: '12px 16px',
+                          color: tokens.colors.text.tertiary,
+                          fontSize: tokens.typography.fontSize.sm,
+                        }}
+                      >
+                        {formatTime(row.timestamp, locale)}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
