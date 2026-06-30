@@ -89,8 +89,11 @@ export function parseOkxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
       headlineRoi: pct(item.pnlRatio), // last-90d figures (board native TF)
       headlinePnl: num(item.pnl),
       headlineWinRate: pct(item.winRatio),
+      // Board carries aum (absolute USD) — was raw-only. (OKX CEX is geo-blocked
+      // → no MDD on board; forward fix, effective once a VPS region reaches it.)
+      headlineAum: num(item.aum),
       traderMeta: null,
-      // aum / copyTraderNum / leadDays / pnlRatios sparkline / traderInsts
+      // copyTraderNum / leadDays / pnlRatios sparkline / traderInsts
       // — board-card extras kept verbatim (spec §3 raw JSONB note).
       raw: item,
     })
