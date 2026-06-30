@@ -48,3 +48,7 @@ playwright-report
 # Other
 .vercel
 .turbo
+.arena-ingest
+backups
+worker/logs
+.claude/worktrees
