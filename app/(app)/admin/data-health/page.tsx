@@ -36,6 +36,15 @@ const STATUS_COLORS: Record<string, string> = {
   no_data: 'var(--color-score-low)',
 }
 
+// Distinct shape per status so the indicator is NOT color-only (WCAG 1.4.1).
+// healthy=filled circle, warning=triangle, critical=cross, no_data=hollow circle.
+const STATUS_GLYPHS: Record<string, string> = {
+  healthy: '●',
+  warning: '▲',
+  critical: '✕',
+  no_data: '○',
+}
+
 export default function DataHealthPage() {
   const { t, language } = useLanguage()
   const locale = getLocaleFromLanguage(language)
@@ -43,6 +52,15 @@ export default function DataHealthPage() {
   const [data, setData] = useState<HealthData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+
+  const statusLabel = (status: string): string =>
+    status === 'healthy'
+      ? t('dataHealthy')
+      : status === 'warning'
+        ? t('dataWarning')
+        : status === 'critical'
+          ? t('dataCritical')
+          : t('dataNoData')
 
   useEffect(() => {
     if (!isAdmin) return
@@ -185,14 +203,7 @@ export default function DataHealthPage() {
       >
         {['healthy', 'warning', 'critical', 'no_data'].map((status) => {
           const count = data.platforms.filter((p) => p.status === status).length
-          const label =
-            status === 'healthy'
-              ? t('dataHealthy')
-              : status === 'warning'
-                ? t('dataWarning')
-                : status === 'critical'
-                  ? t('dataCritical')
-                  : t('dataNoData')
+          const label = statusLabel(status)
           return (
             <div
               key={status}
@@ -216,8 +227,14 @@ export default function DataHealthPage() {
                 style={{
                   fontSize: tokens.typography.fontSize.xs,
                   color: tokens.colors.text.tertiary,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
+                <span aria-hidden="true" style={{ color: STATUS_COLORS[status] }}>
+                  {STATUS_GLYPHS[status]}
+                </span>
                 {label}
               </div>
             </div>
@@ -417,16 +434,17 @@ export default function DataHealthPage() {
                   <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                     <span
                       role="img"
-                      aria-label={p.status}
-                      title={p.status}
+                      aria-label={statusLabel(p.status)}
+                      title={statusLabel(p.status)}
                       style={{
                         display: 'inline-block',
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        backgroundColor: STATUS_COLORS[p.status] || STATUS_COLORS.no_data,
+                        fontSize: 13,
+                        lineHeight: 1,
+                        color: STATUS_COLORS[p.status] || STATUS_COLORS.no_data,
                       }}
-                    />
+                    >
+                      {STATUS_GLYPHS[p.status] || STATUS_GLYPHS.no_data}
+                    </span>
                   </td>
                 </tr>
               ))}

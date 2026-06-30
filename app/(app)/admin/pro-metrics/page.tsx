@@ -16,6 +16,7 @@
 
 import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
+import Metric from '@/app/components/ui/Metric'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -35,17 +36,29 @@ interface ProMetricsData {
   recentSignups: RecentSignup[]
   windowDays: number
   timestamp: string
+  // Optional prior-period values — when the API supplies them the KPI cards
+  // render a Δ vs prior period. Absent today (server response has no prior
+  // snapshot yet), so the Δ stays hidden rather than fabricating a trend.
+  totalPayingPrev?: number | null
+  newPayingPrevWeek?: number | null
+  wauPrev?: number | null
 }
 
 function MetricTile({
   label,
   value,
   sub,
+  delta,
+  deltaLabel,
 }: {
   label: string
-  value: number | null | string
+  value: number | null
   sub?: string
+  /** Change vs prior period (current − prior). null/undefined → no Δ shown. */
+  delta?: number | null
+  deltaLabel?: string
 }) {
+  const hasDelta = delta != null && Number.isFinite(delta)
   return (
     <div
       style={{
@@ -68,17 +81,36 @@ function MetricTile({
       >
         {label}
       </div>
-      <div
-        style={{
-          fontSize: tokens.typography.fontSize['3xl'],
-          fontWeight: 800,
-          color: value == null ? 'var(--color-text-tertiary)' : 'var(--color-text-primary)',
-          fontVariantNumeric: 'tabular-nums',
-          lineHeight: 1.1,
-        }}
-      >
-        {value == null ? '—' : value}
-      </div>
+      <Metric value={value} format="number" size="hero" />
+      {hasDelta && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: tokens.spacing[2],
+            marginTop: tokens.spacing[2],
+          }}
+        >
+          {/* showArrow → ▲/▼ glyph is a colorblind-safe redundancy for the sign color */}
+          <Metric
+            value={delta}
+            display={`${(delta as number) > 0 ? '+' : ''}${(delta as number).toLocaleString()}`}
+            colorBySign
+            showArrow
+            size="sm"
+          />
+          {deltaLabel && (
+            <span
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: 'var(--color-text-tertiary)',
+              }}
+            >
+              {deltaLabel}
+            </span>
+          )}
+        </div>
+      )}
       {sub && (
         <div
           style={{
@@ -221,13 +253,31 @@ export default function ProMetricsPage() {
                 label={t('totalPaying')}
                 value={data.totalPaying}
                 sub={t('totalPayingSub')}
+                delta={
+                  data.totalPaying != null && data.totalPayingPrev != null
+                    ? data.totalPaying - data.totalPayingPrev
+                    : null
+                }
+                deltaLabel={t('vsPriorPeriod')}
               />
               <MetricTile
                 label={t('newThisWeek')}
                 value={data.newPayingThisWeek}
                 sub={t('lastNDays').replace('{n}', String(data.windowDays))}
+                delta={
+                  data.newPayingThisWeek != null && data.newPayingPrevWeek != null
+                    ? data.newPayingThisWeek - data.newPayingPrevWeek
+                    : null
+                }
+                deltaLabel={t('vsPriorPeriod')}
               />
-              <MetricTile label={t('wau7d')} value={data.wau} sub={t('wauSub')} />
+              <MetricTile
+                label={t('wau7d')}
+                value={data.wau}
+                sub={t('wauSub')}
+                delta={data.wau != null && data.wauPrev != null ? data.wau - data.wauPrev : null}
+                deltaLabel={t('vsPriorPeriod')}
+              />
             </section>
 
             <section>
