@@ -23,6 +23,7 @@
 #   bash worker/deploy-ingest-sg.sh --dry-run     # preview what rsync would change
 #   bash worker/deploy-ingest-sg.sh --code-only   # sync code only (no deps) — DEFAULT-SAFE for dep-free fixes
 #   bash worker/deploy-ingest-sg.sh               # full sync; REFUSES npm ci if lock changed (points to CI)
+#   bash worker/deploy-ingest-sg.sh --from-artifact=PATH.tgz  # ship a CI-built node_modules + atomic swap (CI uses this)
 #   bash worker/deploy-ingest-sg.sh --force-npm-ci  # last-resort: run the hazardous npm ci on the box
 #
 # stop→sync→start ordering minimises scheduler split-brain (worker/src/ingest/queues.ts).
@@ -43,9 +44,11 @@ for arg in "$@"; do
     --dry-run) MODE="dry-run" ;;
     --code-only) MODE="code-only" ;;
     --force-npm-ci) FORCE_NPM_CI=1 ;;
+    --from-artifact=*) FROM_ARTIFACT="${arg#*=}"; MODE="artifact" ;;
     *) echo "unknown arg: $arg" >&2; exit 2 ;;
   esac
 done
+FROM_ARTIFACT="${FROM_ARTIFACT:-}"
 
 SHA="$(git rev-parse HEAD)"
 TS="$(date +%Y%m%d-%H%M%S)"
@@ -111,8 +114,23 @@ echo "3/5 rsync ($MODE)"
 rsync -az --delete "${RSYNC_EXCLUDES[@]}" "${PATHS[@]}" "$VPS_HOST:$REMOTE_DIR/"
 ssh_sg "echo '$SHA' > $REMOTE_DIR/DEPLOYED_SHA"
 
-# 4. Deps: only on explicit --force-npm-ci (hazardous, opt-in).
-if [ "$MODE" = "full" ] && [ "$LOCK_CHANGED" = 1 ] && [ "$FORCE_NPM_CI" = 1 ]; then
+# 4. Deps.
+if [ "$MODE" = "artifact" ]; then
+  # Ship a CI-built, platform-matched node_modules tree and swap it in atomically.
+  # This is the SAFE dep-deploy path (no npm on the box → no .js-drop hazard). The
+  # swap is a `mv` rename; the .bak-$TS backup preserves the old tree for rollback.
+  [ -f "$FROM_ARTIFACT" ] || { echo "✗ artifact not found: $FROM_ARTIFACT" >&2; exit 1; }
+  echo "4/5 shipping prebuilt deps artifact → $VPS_HOST (atomic swap, no npm on box)"
+  scp -q -o BatchMode=yes "$FROM_ARTIFACT" "$VPS_HOST:/tmp/arena-ingest-deps.tgz"
+  ssh_sg "set -e; cd $REMOTE_DIR
+    rm -rf .nm-staging && mkdir .nm-staging
+    tar -xzf /tmp/arena-ingest-deps.tgz -C .nm-staging        # → .nm-staging/node_modules
+    test -d .nm-staging/node_modules
+    rm -rf node_modules.old
+    [ -d node_modules ] && mv node_modules node_modules.old
+    mv .nm-staging/node_modules node_modules
+    rm -rf node_modules.old .nm-staging /tmp/arena-ingest-deps.tgz"
+elif [ "$MODE" = "full" ] && [ "$LOCK_CHANGED" = 1 ] && [ "$FORCE_NPM_CI" = 1 ]; then
   echo "4/5 ⚠️ npm ci (FORCED — hazardous on this box; full install incl. dotenv/tsx)"
   ssh_sg "cd $REMOTE_DIR && npm ci"
 else

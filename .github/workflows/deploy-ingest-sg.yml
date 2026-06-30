@@ -1,0 +1,109 @@
+name: Deploy Ingest Worker (SG)
+
+# Builds the ingest worker's dependency tree on ubuntu-latest (Linux x64 — the SAME
+# arch as the Singapore VPS) and ships the complete tree to the SG box, so we NEVER
+# run `npm install` on SG. Root cause (2026-06-30): SG's npm is not concurrency-safe
+# and silently drops .js files mid-install → worker crash-loops on "Cannot find
+# module" → SG ingestion DOWN. A prebuilt, platform-matched tree copied over rsync
+# does not have that failure mode. See docs/INGEST_WORKER_TOPOLOGY.md + the hardened
+# worker/deploy-ingest-sg.sh.
+#
+# ─────────────────────────────────────────────────────────────────────────────
+# ACTIVATION (one-time, by a maintainer):
+#   1. Add repo secrets:
+#        INGEST_SG_SSH_KEY  — a private key whose pubkey is in SG's authorized_keys
+#        INGEST_SG_HOST     — e.g. root@45.76.152.169
+#   2. Run this workflow from the Actions tab (workflow_dispatch). The `build-deps`
+#      job works WITHOUT secrets (proves the artifact builds); `deploy-sg` skips
+#      itself with a warning until the secrets exist.
+#   3. Once a manual run is green, uncomment the `push:` trigger below to
+#      auto-deploy when deps change. Keep it the SINGLE channel for SG deploys
+#      (the `concurrency` group serializes runs — never two deploys at once).
+# ─────────────────────────────────────────────────────────────────────────────
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: 'full (rebuild + ship deps) or code-only (lib/worker only)'
+        type: choice
+        options: [full, code-only]
+        default: full
+  # Enable after the first green manual run:
+  # push:
+  #   branches: [main]
+  #   paths: ['package-lock.json']        # dep changes → rebuild + ship the tree
+
+concurrency:
+  group: deploy-ingest-sg
+  cancel-in-progress: false               # never interrupt an in-flight SG deploy
+
+jobs:
+  build-deps:
+    # Skip the (expensive) dep build for code-only deploys.
+    if: ${{ github.event.inputs.mode != 'code-only' }}
+    runs-on: ubuntu-latest                # Linux x64 — matches the SG VPS
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      # Full install (NOT --omit=dev): the worker runs via tsx and imports
+      # devDeps (tsx/dotenv/playwright) at runtime.
+      - name: npm ci (deterministic, full)
+        run: npm ci
+      - name: Install Playwright Chromium
+        run: npx playwright install chromium
+      - name: Package the platform-matched node_modules
+        run: tar -czf arena-ingest-deps.tgz node_modules
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arena-ingest-deps
+          path: arena-ingest-deps.tgz
+          retention-days: 3
+
+  deploy-sg:
+    needs: [build-deps]
+    if: ${{ always() && !cancelled() }}   # also runs for code-only (build-deps skipped)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Guard — require SG secrets (skip cleanly if absent)
+        id: guard
+        run: |
+          if [ -z "${{ secrets.INGEST_SG_SSH_KEY }}" ] || [ -z "${{ secrets.INGEST_SG_HOST }}" ]; then
+            echo "::warning::INGEST_SG_SSH_KEY/INGEST_SG_HOST not set — skipping SG deploy (build artifact is available for manual use)."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Download deps artifact
+        if: ${{ steps.guard.outputs.skip != 'true' && github.event.inputs.mode != 'code-only' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: arena-ingest-deps
+      - name: Setup SSH
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.INGEST_SG_SSH_KEY }}" > ~/.ssh/id_sg
+          chmod 600 ~/.ssh/id_sg
+          host='${{ secrets.INGEST_SG_HOST }}'; ssh-keyscan -H "${host#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
+      # Ships the prebuilt deps (full mode) + code, then restarts with auto-rollback.
+      # Reuses the hardened worker/deploy-ingest-sg.sh deploy logic via --from-artifact
+      # (extracts the tgz into node_modules atomically — NEVER npm-installs on SG).
+      - name: Deploy to SG (prebuilt artifact, no npm on box)
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        env:
+          INGEST_SG_HOST: ${{ secrets.INGEST_SG_HOST }}
+          GIT_SSH_COMMAND: 'ssh -i ~/.ssh/id_sg -o BatchMode=yes'
+        run: |
+          if [ "${{ github.event.inputs.mode }}" = "code-only" ]; then
+            bash worker/deploy-ingest-sg.sh --code-only
+          else
+            bash worker/deploy-ingest-sg.sh --from-artifact="$PWD/arena-ingest-deps.tgz"
+          fi
+      - name: Verify both nodes converged on one SHA (drift gate)
+        if: ${{ steps.guard.outputs.skip != 'true' }}
+        run: |
+          echo "Deployed ${GITHUB_SHA::9}. The 15-min worker-heartbeat-check cron alarms on >=2 live SHAs;"
+          echo "a follow-up gate that polls /api/cron/worker-heartbeat-check here is the A4 next step."
