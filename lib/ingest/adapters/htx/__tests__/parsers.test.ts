@@ -38,6 +38,8 @@ describe('parseHtxLeaderboardPage', () => {
       headlineRoi: 3122.57, // profitRate90 "31.2257" fraction
       headlinePnl: 56028.8765,
       headlineWinRate: 100, // winRate "1.0000"
+      headlineMdd: 125.32, // mdd "1.2532" fraction → percent (>100 garbage; boundPct nulls downstream)
+      headlineAum: 13640.187592, // absolute USDT
       traderKind: 'human',
       botStrategy: null,
       traderMeta: { user_sign: 'NTQ2NDk4NjQ' }, // profile endpoint routing key

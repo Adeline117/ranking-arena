@@ -99,10 +99,16 @@ export function parseHtxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
       headlineRoi: pct(item.profitRate90),
       headlinePnl: num(item.profit90),
       headlineWinRate: pct(item.winRate),
+      // Board carries per-trader mdd (a fraction, per header doc + profile parser's
+      // pct(perf.mdd)) and aum (absolute). Extract them — were raw-only, so HTX
+      // captured MDD/AUM only for top-N profiles (~40-64%). Garbage >100% MDD
+      // (fraction >1) is correctly nulled downstream by boundPct.
+      headlineMdd: pct(item.mdd),
+      headlineAum: num(item.aum),
       // userSign routes every trader-info profile endpoint (spec §1.4
       // durable routing fact — same pattern as Bitget portfolio_id).
       traderMeta: item.userSign ? { user_sign: String(item.userSign) } : null,
-      // mdd, aum, copyProfit, copier slots, 30-point sparkline... verbatim
+      // copyProfit, copier slots, 30-point sparkline... verbatim
       raw: item,
     })
   }
