@@ -190,6 +190,12 @@ export function parseToobitProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       if (detail.isFull !== undefined) extras.is_full = detail.isFull === true
       const startLead = iso(detail.startLeadTime)
       if (startLead !== null) extras.start_lead_time = startLead
+      // Lifetime lead profit + rate (Phase A: was raw-only). Rate is a decimal
+      // fraction like the radar ratios → ×100. Surface as total_pnl / total_roi.
+      const totalLeadPnl = num(detail.totalLeadProfit)
+      if (totalLeadPnl !== null) extras.total_pnl = totalLeadPnl
+      const totalLeadRoi = pct(detail.totalLeadProfitRate)
+      if (totalLeadRoi !== null) extras.total_roi = totalLeadRoi
     }
     if (radar) {
       // Site-relative percentiles (Arena Score v2 features, spec §12.2)
