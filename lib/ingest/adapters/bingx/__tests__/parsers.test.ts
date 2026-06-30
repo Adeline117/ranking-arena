@@ -44,8 +44,10 @@ describe('parseBingxLeaderboardPage', () => {
     expect(Object.keys(first.headlineExtras ?? {}).length).toBeGreaterThan(0)
     // apiIdentity routing fact on traderMeta (TF-independent)
     expect(first.traderMeta).toMatchObject({ bingx_api_identity: '1579905006518878200' })
-    // per-TF risk rating stays in raw.rankStat (spec §11.12), not traderMeta
+    // per-TF risk rating: NOT on traderMeta (TF-independent), but IS wired into
+    // per-TF headlineExtras (spec §11.12 — was previously dropped, only in raw)
     expect(first.traderMeta?.risk_rating).toBeUndefined()
+    expect((first.headlineExtras as { risk_rating?: number })?.risk_rating).toBe(7)
     expect((first.raw as { rankStat: { riskLevel30Days: string } }).rankStat.riskLevel30Days).toBe(
       '7'
     )

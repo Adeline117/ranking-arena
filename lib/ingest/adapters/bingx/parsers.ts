@@ -132,7 +132,7 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
       headlineTotalPositions: int(rankStat.totalPositionCount),
       // Rich rankStat superset → trader_stats.extras (surfaced by the metric
       // registry / meta strip with no UI changes). TF-independent overall stats.
-      headlineExtras: bingxBoardExtras(rankStat),
+      headlineExtras: bingxBoardExtras(rankStat, tf),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: item,
     })
@@ -145,7 +145,7 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
  *  meta-strip keys, so they surface with zero UI change). Amount fields are
  *  comma-formatted strings; lastTradeTime is already ISO. Returns null when
  *  nothing parses so the publish upsert leaves extras untouched. */
-function bingxBoardExtras(rankStat: Dict): Record<string, unknown> | null {
+function bingxBoardExtras(rankStat: Dict, tf: RankingTimeframe): Record<string, unknown> | null {
   const ext: Record<string, unknown> = {}
   const avgProfit = parseDisplayPct(rankStat.avgProfitAmount)
   if (avgProfit !== null) ext.avg_profit = avgProfit
@@ -157,6 +157,11 @@ function bingxBoardExtras(rankStat: Dict): Record<string, unknown> | null {
   if (td !== null) ext.trading_days = td
   const ltt = rankStat.lastTradeTime
   if (typeof ltt === 'string' && !Number.isNaN(Date.parse(ltt))) ext.last_trade_time = ltt
+  // Per-TF risk rating 1-10 (spec §11.12) — flagged Arena-Score feature. The
+  // board row IS the stats substrate; riskLevel{tf}Days lives in rankStat. The
+  // registry already has the `risk_rating` key — this just wires it through.
+  const risk = int(rankStat[`riskLevel${tf}Days`])
+  if (risk !== null) ext.risk_rating = risk
   return Object.keys(ext).length > 0 ? ext : null
 }
 
