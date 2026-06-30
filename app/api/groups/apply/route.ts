@@ -3,6 +3,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { logger } from '@/lib/logger'
 import { notifyNewGroup } from '@/lib/notifications/activity-alerts'
 import { socialFeatureGuard } from '@/lib/features'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
@@ -62,7 +63,9 @@ export const POST = withAuth(
         .eq('id', user.id)
         .maybeSingle()
 
-      const isPro = (profile as { subscription_tier?: string } | null)?.subscription_tier === 'pro'
+      const isPro =
+        PRO_FREE_PROMO ||
+        (profile as { subscription_tier?: string } | null)?.subscription_tier === 'pro'
 
       if (!isPro) {
         return NextResponse.json(

@@ -5,6 +5,7 @@ import { JsonLd } from './components/Providers/JsonLd'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getCriticalCss, getResourceHints } from '@/lib/performance/critical-css'
 import BetaBanner from './components/layout/BetaBanner'
+import ProPromoBanner from './components/layout/ProPromoBanner'
 
 // Optimized font loading — 3 weights for better typographic hierarchy, 'optional' avoids font-swap LCP delay
 const inter = Inter({
@@ -281,6 +282,7 @@ export default function RootLayout({
           }}
         />
         <BetaBanner />
+        <ProPromoBanner />
         {children}
       </body>
     </html>

@@ -27,6 +27,31 @@
 // 订阅计划
 // ============================================
 
+// ============================================
+// 限时促销开关（单一真相源 / single source of truth）
+// ============================================
+
+/**
+ * PRO_FREE_PROMO — 限时促销：Pro 功能全员免费。
+ *
+ * This is the limited-time promotion flag. When `true`, every Pro feature is
+ * unlocked for everyone, on BOTH client and server:
+ *   - server: `hasFeatureAccess()` / `getFeatureLimits()` below short-circuit to
+ *     Pro access + Pro/unlimited limits, so all ~20 Pro API routes stop 403'ing.
+ *   - client: `lib/premium/hooks.tsx` sets `BETA_PRO_FEATURES_FREE = PRO_FREE_PROMO`,
+ *     so `useSubscription()` / `effectiveIsPremium` treat everyone as Pro and
+ *     ProGate renders children ungated.
+ *
+ * ⚠️ ONE-LINE REVERT — set this to `false` to instantly restore the full paywall
+ * everywhere (client UI gates + server 403s) and hide the promo banner. No other
+ * edits needed. Checkout/subscribe keep working in both states — users CAN still
+ * subscribe during the promo; they just don't need to.
+ *
+ * NOTE: this file is server-safe (no 'use client'), which is why the flag lives
+ * here and the client const imports it — guaranteeing client + server share ONE flag.
+ */
+export const PRO_FREE_PROMO = true
+
 export type SubscriptionTier = 'free' | 'pro'
 
 /** How the user obtained their subscription */
@@ -57,7 +82,7 @@ export interface SubscriptionPlan {
   limits: FeatureLimits
   badge?: string
   recommended?: boolean
-  highlights: string[]  // 核心卖点
+  highlights: string[] // 核心卖点
 }
 
 // ============================================
@@ -65,32 +90,32 @@ export interface SubscriptionPlan {
 // ============================================
 
 export type PremiumFeatureId =
-  | 'email_notifications'     // 邮件通知
-  | 'push_notifications'      // 推送通知
-  | 'portfolio_suggestions'   // 跟单组合建议
-  | 'trader_comparison'       // 交易员对比报告
-  | 'api_access'              // API 接口访问
-  | 'custom_rankings'         // 自定义排行榜
-  | 'export_data'             // 数据导出
-  | 'historical_data'         // 历史数据访问
-  | 'category_ranking'        // 分类排行
-  | 'trader_alerts'           // 交易员变动提醒
-  | 'score_breakdown'         // 评分详情
-  | 'pro_badge'               // Pro 徽章
-  | 'advanced_filter'         // 高级筛选
-  | 'premium_groups'          // Pro 专属群组
-  | 'detailed_explanation'    // 详细解释层（贡献拆解、变化归因、风险分解）
-  | 'cross_exchange_compare'  // 跨交易所对比
+  | 'email_notifications' // 邮件通知
+  | 'push_notifications' // 推送通知
+  | 'portfolio_suggestions' // 跟单组合建议
+  | 'trader_comparison' // 交易员对比报告
+  | 'api_access' // API 接口访问
+  | 'custom_rankings' // 自定义排行榜
+  | 'export_data' // 数据导出
+  | 'historical_data' // 历史数据访问
+  | 'category_ranking' // 分类排行
+  | 'trader_alerts' // 交易员变动提醒
+  | 'score_breakdown' // 评分详情
+  | 'pro_badge' // Pro 徽章
+  | 'advanced_filter' // 高级筛选
+  | 'premium_groups' // Pro 专属群组
+  | 'detailed_explanation' // 详细解释层（贡献拆解、变化归因、风险分解）
+  | 'cross_exchange_compare' // 跨交易所对比
   | 'extended_snapshot_history' // 扩展快照历史
-  | 'advanced_alerts'         // 高级告警条件
+  | 'advanced_alerts' // 高级告警条件
 
 export interface PremiumFeature {
   id: PremiumFeatureId
   name: string
   description: string
   icon: string
-  tier: SubscriptionTier[]  // 哪些订阅等级包含此功能
-  isCore?: boolean          // 是否为核心卖点
+  tier: SubscriptionTier[] // 哪些订阅等级包含此功能
+  isCore?: boolean // 是否为核心卖点
 }
 
 export interface FeatureLimits {
@@ -135,8 +160,8 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
     },
     highlights: [
       '排行榜完整浏览',
-      '分类排行（合约/现货/链上）',  // v2.0: 免费化
-      'Arena Score 子分数可见',       // v2.0: 免费化
+      '分类排行（合约/现货/链上）', // v2.0: 免费化
+      'Arena Score 子分数可见', // v2.0: 免费化
       '基础交易员详情',
       '社区参与',
       '关注 10 个交易员',
@@ -146,28 +171,28 @@ export const SUBSCRIPTION_PLANS: SubscriptionPlan[] = [
   {
     id: 'pro',
     name: 'Pro',
-    description: '不再错过异动，保护你的跟单收益',  // v2.0: 强调核心价值
+    description: '不再错过异动，保护你的跟单收益', // v2.0: 强调核心价值
     price: { monthly: 4.99, yearly: 29.99, currency: 'USD' },
     features: [],
     limits: {
       apiCallsPerDay: 1000,
-      followLimit: 100,                     // v2.0: 从 50 提升到 100
-      comparisonReportsPerMonth: -1,        // v2.0: 无限制（-1 表示无限）
-      exportsPerMonth: -1,                  // v2.0: 无限制
-      historicalDataDays: 365,              // v2.0: 从 90 天扩展到 1 年
-      customRankingsLimit: 10,              // v2.0: 提升到 10
-      emailNotificationsPerMonth: -1,       // v2.0: 无限制
-      portfolioSuggestionsLimit: 0,         // v2.0: 已下线
+      followLimit: 100, // v2.0: 从 50 提升到 100
+      comparisonReportsPerMonth: -1, // v2.0: 无限制（-1 表示无限）
+      exportsPerMonth: -1, // v2.0: 无限制
+      historicalDataDays: 365, // v2.0: 从 90 天扩展到 1 年
+      customRankingsLimit: 10, // v2.0: 提升到 10
+      emailNotificationsPerMonth: -1, // v2.0: 无限制
+      portfolioSuggestionsLimit: 0, // v2.0: 已下线
     },
     badge: '推荐',
     recommended: true,
     highlights: [
-      '交易员变动提醒（核心）',          // v2.0: 突出核心
+      '交易员变动提醒（核心）', // v2.0: 突出核心
       '交易员对比（无限制）',
       '评分详情 + 同类百分位',
-      '1 年历史数据',                    // v2.0: 从 90 天扩展
+      '1 年历史数据', // v2.0: 从 90 天扩展
       'API 访问',
-      '关注 100 个交易员',                  // v2.0: 从 50 提升
+      '关注 100 个交易员', // v2.0: 从 50 提升
     ],
   },
 ]
@@ -360,12 +385,12 @@ export function getCorePremiumFeatures(): PremiumFeature[] {
     'historical_data',
     'api_access',
   ]
-  return PREMIUM_FEATURES.filter(f => coreIds.includes(f.id))
+  return PREMIUM_FEATURES.filter((f) => coreIds.includes(f.id))
 }
 
 /** 检查功能是否已下线 */
 export function isFeatureDeprecated(featureId: PremiumFeatureId): boolean {
-  const feature = PREMIUM_FEATURES.find(f => f.id === featureId)
+  const feature = PREMIUM_FEATURES.find((f) => f.id === featureId)
   return feature ? feature.tier.length === 0 : true
 }
 
@@ -376,11 +401,11 @@ export function isFeatureDeprecated(featureId: PremiumFeatureId): boolean {
 /**
  * 检查用户是否有某个功能的权限
  */
-export function hasFeatureAccess(
-  userTier: SubscriptionTier,
-  featureId: PremiumFeatureId
-): boolean {
-  const feature = PREMIUM_FEATURES.find(f => f.id === featureId)
+export function hasFeatureAccess(userTier: SubscriptionTier, featureId: PremiumFeatureId): boolean {
+  // 限时促销：全员解锁所有 Pro 功能。这是所有 Pro 服务端路由的统一闸门 ——
+  // 设 PRO_FREE_PROMO=false 立即在每条路由上恢复付费墙（无需逐路由改动）。
+  if (PRO_FREE_PROMO) return true
+  const feature = PREMIUM_FEATURES.find((f) => f.id === featureId)
   if (!feature) return false
   return feature.tier.includes(userTier)
 }
@@ -389,7 +414,10 @@ export function hasFeatureAccess(
  * 获取用户的功能限制
  */
 export function getFeatureLimits(tier: SubscriptionTier): FeatureLimits {
-  const plan = SUBSCRIPTION_PLANS.find(p => p.id === tier)
+  // 限时促销：返回 Pro 等级额度，确保 per-feature 限额检查（API 配额、关注上限、
+  // 历史数据天数等）不会卡住促销用户。PRO_FREE_PROMO=false 时回到真实 tier 额度。
+  const effectiveTier: SubscriptionTier = PRO_FREE_PROMO ? 'pro' : tier
+  const plan = SUBSCRIPTION_PLANS.find((p) => p.id === effectiveTier)
   return plan?.limits || SUBSCRIPTION_PLANS[0].limits
 }
 
@@ -397,7 +425,7 @@ export function getFeatureLimits(tier: SubscriptionTier): FeatureLimits {
  * 获取核心功能列表
  */
 export function getCoreFeatures(): PremiumFeature[] {
-  return PREMIUM_FEATURES.filter(f => f.isCore)
+  return PREMIUM_FEATURES.filter((f) => f.isCore)
 }
 
 /**
@@ -406,13 +434,11 @@ export function getCoreFeatures(): PremiumFeature[] {
 export function getNewFeaturesForTier(tier: SubscriptionTier): PremiumFeature[] {
   const tierOrder: SubscriptionTier[] = ['free', 'pro']
   const currentIndex = tierOrder.indexOf(tier)
-  
+
   if (currentIndex <= 0) {
-    return PREMIUM_FEATURES.filter(f => f.tier.includes(tier))
+    return PREMIUM_FEATURES.filter((f) => f.tier.includes(tier))
   }
-  
+
   const previousTier = tierOrder[currentIndex - 1]
-  return PREMIUM_FEATURES.filter(
-    f => f.tier.includes(tier) && !f.tier.includes(previousTier)
-  )
+  return PREMIUM_FEATURES.filter((f) => f.tier.includes(tier) && !f.tier.includes(previousTier))
 }

@@ -5938,6 +5938,9 @@ const ko = {
   passkeyRemoveConfirm: '이 패스키를 삭제하시겠습니까?',
   passkeyAdded: '패스키가 추가되었습니다',
   passkeyRemoved: '패스키가 삭제되었습니다',
+  // Pro 기능 한정 기간 무료 프로모션 배너
+  proPromoBanner: '🎉 Pro 기능을 기간 한정 무료로 — 모든 유료 기능을 업그레이드 없이 이용하세요.',
+  proPromoBannerDismiss: '닫기',
 } as const
 
 export default ko

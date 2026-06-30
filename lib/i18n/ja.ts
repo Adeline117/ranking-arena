@@ -5706,6 +5706,10 @@ const ja = {
   passkeyRemoveConfirm: 'このパスキーを削除してもよろしいですか？',
   passkeyAdded: 'パスキーを追加しました',
   passkeyRemoved: 'パスキーを削除しました',
+  // Pro 機能 期間限定無料キャンペーンバナー
+  proPromoBanner:
+    '🎉 Pro機能が期間限定で無料 —— すべての有料機能を、アップグレードなしでお使いいただけます。',
+  proPromoBannerDismiss: '閉じる',
 } as const
 
 export default ja

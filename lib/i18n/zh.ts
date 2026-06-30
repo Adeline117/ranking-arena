@@ -5927,6 +5927,9 @@ const zh = {
   passkeyRemoveConfirm: '确定要移除此通行密钥吗？',
   passkeyAdded: '通行密钥已添加',
   passkeyRemoved: '通行密钥已移除',
+  // Pro 限时免费促销横幅
+  proPromoBanner: '🎉 Pro 功能限时免费 —— 所有付费功能现在全部免费使用，无需升级。',
+  proPromoBannerDismiss: '关闭',
 } as const
 
 export default zh
