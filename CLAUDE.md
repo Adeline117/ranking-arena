@@ -369,11 +369,17 @@ STRIPE_SECRET_KEY
 2. **Memory**: Dev server needs `--max-old-space-size=3584` (configured in npm scripts)
 3. **Build time**: Full build takes significant time; use Turbopack in dev
 4. **Concurrent push races**: Arena runs up to 7 `claude` sessions + openclaw cron
-   jobs simultaneously, all pushing to main with the same git identity. The
-   pre-push hook (`.git/hooks/pre-push`) auto-serializes via `flock` on
-   `/tmp/arena-git-push.lock` + auto-rebase on divergence. Raw `git push origin
-main` is safe. For scripted pushes, `scripts/git-push-safe.sh` provides the
-   same behavior as a standalone wrapper.
+   jobs simultaneously, all pushing to main with the same git identity. **Two
+   distinct locks** (not one, and the push lock is NOT `flock` — macOS has no
+   `flock(1)`):
+   - **Push**: an atomic `mkdir` lock DIR at `/tmp/arena-git-push.lock.d` (60s
+     deadline, steals a stale lock if the holder PID is dead). The pre-push hook
+     (`.git/hooks/pre-push`) acquires it + auto-rebases on divergence; raw `git
+push origin main` is safe. `scripts/git-push-safe.sh` is the standalone
+     wrapper and sets `ARENA_PUSH_LOCK_OWNER=$$` so the hook skips re-acquiring
+     (avoids self-deadlock).
+   - **Commit/index**: real `flock -w 120` on `/tmp/arena-git-index.lock`, used by
+     `scripts/git-commit-safe.sh` (a separate lock from push — see issue #5).
 5. **Stale staged files leaking into commits**: when a commit fails (pre-commit
    hook OR `git reset --soft HEAD^`) the previously-staged files REMAIN in the
    index. The next `git add foo && git commit` then bundles those leftover
