@@ -110,12 +110,21 @@ export function sanitizeTraderRow(snap: TraderRow): void {
   // - WR=0% with positive ROI is impossible (at least one winning trade)
   // - WR=100% with negative ROI is impossible
   // - WR=100% with trades < 2 is statistically meaningless
-  if (snap.win_rate != null && snap.roi != null) {
-    if (snap.win_rate === 0 && snap.roi > 10) {
-      snap.win_rate = null
-    } else if (snap.win_rate >= 100 && snap.roi < -10) {
-      snap.win_rate = null
-    }
+  // WR=0% with a positive return is impossible — a profit needs >=1 winning trade.
+  // WR=100% with a loss is impossible. Check PnL as well as ROI: ~119 board traders
+  // were profitable-by-PnL but low-ROI, so the old ROI>10-only guard left them showing
+  // a contradictory "0%". Null the contradiction -> N/A.
+  if (
+    snap.win_rate === 0 &&
+    ((snap.roi != null && snap.roi > 10) || (snap.pnl != null && snap.pnl > 0))
+  ) {
+    snap.win_rate = null
+  } else if (
+    snap.win_rate != null &&
+    snap.win_rate >= 100 &&
+    ((snap.roi != null && snap.roi < -10) || (snap.pnl != null && snap.pnl < 0))
+  ) {
+    snap.win_rate = null
   }
   if (
     snap.win_rate != null &&
