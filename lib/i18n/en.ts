@@ -5995,6 +5995,47 @@ const en = {
   weeklyArenaCategoryOpen: 'Open league',
   weeklyArenaCategoryLowLev: 'Low-leverage league',
   weeklyArenaCategoryProtected: 'Protected league',
+
+  // API Keys section (settings)
+  apiKeysDesc: 'Create and manage API keys for the Arena Data API.',
+  apiKeyCopyNowWarning: "Copy your API key now — it won't be shown again",
+  dismiss: 'Dismiss',
+  apiKeyNamePlaceholder: 'Key name (optional)',
+  apiKeyCreating: 'Creating...',
+  apiKeyCreate: 'Create Key',
+  apiKeyMaxReached: 'Maximum 5 active keys. Revoke one to create a new key.',
+  apiKeyEmpty: 'No API keys yet. Create one to get started.',
+  apiKeyRevokedSection: 'Revoked',
+  apiKeyViewDocs: 'View API documentation',
+  apiKeyUsage30d: 'Usage (30 days)',
+  apiKeyNoUsage: 'No usage data yet. Make your first API call to see stats here.',
+  apiKeyTotalRequests: 'total requests',
+  apiKeyRequests: 'requests',
+  apiPlanLabel: 'API Plan:',
+  apiTierStarter: 'Starter',
+  apiTierLimitFree: '100 req/day',
+  apiTierLimitStarter: '10,000 req/day',
+  apiUpgradeStarter: 'Upgrade to Starter',
+  apiKeyNever: 'Never',
+  apiKeyCreatedLabel: 'Created',
+  apiKeyLastUsed: 'Last used',
+  apiKeyTodaySuffix: 'today',
+  apiKeyCreateFailed: 'Failed to create key',
+  apiKeyCreatedToast: 'API key created',
+  apiKeyRevokeFailed: 'Failed to revoke key',
+  apiKeyRevokedToast: 'API key revoked',
+
+  // Market: funding rates & open interest
+  fundingRatesDesc:
+    'Perpetual futures funding rates across exchanges. Positive rates indicate longs pay shorts (bullish bias). Negative rates indicate shorts pay longs (bearish bias).',
+  colFundingTime: 'Funding Time',
+  noFundingData: 'No funding rate data yet',
+  marketDataPending: 'Data will appear after the next cron cycle.',
+  openInterestDesc:
+    'Total outstanding perpetual futures positions across exchanges. Rising OI with price increases signals strong trend; rising OI with falling price signals potential squeeze.',
+  noOpenInterestData: 'No open interest data yet',
+  colOpenInterestUsd: 'Open Interest (USD)',
+  colUpdated: 'Updated',
 } as const
 
 export default en

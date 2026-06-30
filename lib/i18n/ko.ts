@@ -5872,6 +5872,47 @@ const ko = {
   weeklyArenaCategoryOpen: '오픈 리그',
   weeklyArenaCategoryLowLev: '저레버리지 리그',
   weeklyArenaCategoryProtected: '보호 리그',
+
+  // API Keys section (settings)
+  apiKeysDesc: 'Arena 데이터 API용 API 키를 생성하고 관리합니다.',
+  apiKeyCopyNowWarning: 'API 키를 지금 복사하세요 — 다시 표시되지 않습니다',
+  dismiss: '닫기',
+  apiKeyNamePlaceholder: '키 이름 (선택 사항)',
+  apiKeyCreating: '생성 중...',
+  apiKeyCreate: '키 생성',
+  apiKeyMaxReached: '활성 키는 최대 5개입니다. 새 키를 생성하려면 하나를 해지하세요.',
+  apiKeyEmpty: '아직 API 키가 없습니다. 키를 생성하여 시작하세요.',
+  apiKeyRevokedSection: '해지됨',
+  apiKeyViewDocs: 'API 문서 보기',
+  apiKeyUsage30d: '사용량 (30일)',
+  apiKeyNoUsage: '아직 사용 데이터가 없습니다. 첫 API 호출을 하면 여기에 통계가 표시됩니다.',
+  apiKeyTotalRequests: '총 요청',
+  apiKeyRequests: '요청',
+  apiPlanLabel: 'API 플랜:',
+  apiTierStarter: 'Starter',
+  apiTierLimitFree: '100 요청/일',
+  apiTierLimitStarter: '10,000 요청/일',
+  apiUpgradeStarter: 'Starter로 업그레이드',
+  apiKeyNever: '없음',
+  apiKeyCreatedLabel: '생성일',
+  apiKeyLastUsed: '마지막 사용',
+  apiKeyTodaySuffix: '오늘',
+  apiKeyCreateFailed: '키 생성에 실패했습니다',
+  apiKeyCreatedToast: 'API 키가 생성되었습니다',
+  apiKeyRevokeFailed: '키 해지에 실패했습니다',
+  apiKeyRevokedToast: 'API 키가 해지되었습니다',
+
+  // Market: funding rates & open interest
+  fundingRatesDesc:
+    '거래소 전반의 무기한 선물 펀딩비. 양수 펀딩비는 롱이 숏에게 지급(강세 편향), 음수 펀딩비는 숏이 롱에게 지급(약세 편향)함을 의미합니다.',
+  colFundingTime: '펀딩 시각',
+  noFundingData: '아직 펀딩비 데이터가 없습니다',
+  marketDataPending: '데이터는 다음 cron 주기 후에 표시됩니다.',
+  openInterestDesc:
+    '거래소 전반의 무기한 선물 미결제약정 총액. 가격 상승과 함께 OI가 증가하면 강한 추세를, 가격 하락과 함께 OI가 증가하면 스퀴즈 가능성을 시사합니다.',
+  noOpenInterestData: '아직 미결제약정 데이터가 없습니다',
+  colOpenInterestUsd: '미결제약정 (USD)',
+  colUpdated: '업데이트',
 } as const
 
 export default ko

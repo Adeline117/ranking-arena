@@ -5861,6 +5861,47 @@ const zh = {
   weeklyArenaCategoryOpen: '公开组',
   weeklyArenaCategoryLowLev: '低杠杆组',
   weeklyArenaCategoryProtected: '保护组',
+
+  // API Keys section (settings)
+  apiKeysDesc: '为 Arena 数据 API 创建和管理 API 密钥。',
+  apiKeyCopyNowWarning: '请立即复制你的 API 密钥——它不会再次显示',
+  dismiss: '关闭',
+  apiKeyNamePlaceholder: '密钥名称（可选）',
+  apiKeyCreating: '创建中...',
+  apiKeyCreate: '创建密钥',
+  apiKeyMaxReached: '最多 5 个有效密钥。请先撤销一个再创建新密钥。',
+  apiKeyEmpty: '还没有 API 密钥。创建一个即可开始使用。',
+  apiKeyRevokedSection: '已撤销',
+  apiKeyViewDocs: '查看 API 文档',
+  apiKeyUsage30d: '用量（30 天）',
+  apiKeyNoUsage: '还没有用量数据。发起第一次 API 调用即可在此查看统计。',
+  apiKeyTotalRequests: '次请求总计',
+  apiKeyRequests: '次请求',
+  apiPlanLabel: 'API 套餐：',
+  apiTierStarter: 'Starter',
+  apiTierLimitFree: '100 次/天',
+  apiTierLimitStarter: '10,000 次/天',
+  apiUpgradeStarter: '升级到 Starter',
+  apiKeyNever: '从未',
+  apiKeyCreatedLabel: '创建于',
+  apiKeyLastUsed: '最近使用',
+  apiKeyTodaySuffix: '今天',
+  apiKeyCreateFailed: '创建密钥失败',
+  apiKeyCreatedToast: 'API 密钥已创建',
+  apiKeyRevokeFailed: '撤销密钥失败',
+  apiKeyRevokedToast: 'API 密钥已撤销',
+
+  // Market: funding rates & open interest
+  fundingRatesDesc:
+    '各交易所的永续合约资金费率。正费率表示多头向空头支付（偏多）；负费率表示空头向多头支付（偏空）。',
+  colFundingTime: '资金费率时间',
+  noFundingData: '暂无资金费率数据',
+  marketDataPending: '数据将在下一个定时任务周期后显示。',
+  openInterestDesc:
+    '各交易所永续合约未平仓总量。未平仓量随价格上涨而上升表明趋势强劲；未平仓量随价格下跌而上升则可能预示逼空。',
+  noOpenInterestData: '暂无未平仓量数据',
+  colOpenInterestUsd: '未平仓量（USD）',
+  colUpdated: '更新时间',
 } as const
 
 export default zh
