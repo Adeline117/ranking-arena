@@ -49,8 +49,9 @@ describe('parseBinanceWeb3LeaderboardPage', () => {
     expect(page.rows[0].headlineRoi).toBeCloseTo(51.79739614962856, 6)
     expect(page.rows[0].headlinePnl).toBeCloseTo(59312.259257, 4)
     expect(page.rows[0].headlineWinRate).toBeCloseTo(47.37, 6)
-    // Board-backfill: AUM (balance) + volume + on-chain extras → trader_stats
-    expect(typeof page.rows[0].headlineAum).toBe('number')
+    // No headlineAum: `balance` is BNB (not USD) — must not be written as AUM.
+    expect(page.rows[0].headlineAum).toBeUndefined()
+    // Board-backfill: volume + on-chain extras → trader_stats
     expect(typeof page.rows[0].headlineVolume).toBe('number')
     expect(page.rows[0].headlineExtras).toBeTruthy()
     expect(typeof page.rows[0].headlineExtras?.total_traded_tokens).toBe('number')
