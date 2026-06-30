@@ -135,6 +135,7 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
       >
         {/* Tabs: 关注 / 推荐 / 书架 */}
         <Box
+          role="tablist"
           style={{
             display: 'flex',
             gap: tokens.spacing[5],
@@ -149,6 +150,8 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
           ].map((tab) => (
             <button
               key={tab.key}
+              role="tab"
+              aria-selected={subTab === tab.key}
               onClick={() => setSubTab(tab.key)}
               style={{
                 padding: `${tokens.spacing[2]} 0 ${tokens.spacing[2]}`,
