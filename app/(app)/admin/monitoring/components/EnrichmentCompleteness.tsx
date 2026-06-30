@@ -192,12 +192,24 @@ export default function EnrichmentCompleteness({ accessToken }: { accessToken: s
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
             <thead>
               <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-                <th style={{ textAlign: 'left', padding: '6px 8px' }}>Platform</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>Leaderboard</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>Equity Curve</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>Stats Detail</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>EC %</th>
-                <th style={{ textAlign: 'right', padding: '6px 8px' }}>SD %</th>
+                <th scope="col" style={{ textAlign: 'left', padding: '6px 8px' }}>
+                  Platform
+                </th>
+                <th scope="col" style={{ textAlign: 'right', padding: '6px 8px' }}>
+                  Leaderboard
+                </th>
+                <th scope="col" style={{ textAlign: 'right', padding: '6px 8px' }}>
+                  Equity Curve
+                </th>
+                <th scope="col" style={{ textAlign: 'right', padding: '6px 8px' }}>
+                  Stats Detail
+                </th>
+                <th scope="col" style={{ textAlign: 'right', padding: '6px 8px' }}>
+                  EC %
+                </th>
+                <th scope="col" style={{ textAlign: 'right', padding: '6px 8px' }}>
+                  SD %
+                </th>
               </tr>
             </thead>
             <tbody>

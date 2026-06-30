@@ -194,15 +194,28 @@ export default function DataHealthPage() {
               key={status}
               style={{
                 padding: '16px 20px',
-                borderRadius: 10,
-                background: `${STATUS_COLORS[status]}12`,
-                border: `1px solid ${STATUS_COLORS[status]}30`,
+                borderRadius: tokens.radius.md,
+                background: alpha(STATUS_COLORS[status], 7),
+                border: `1px solid ${alpha(STATUS_COLORS[status], 19)}`,
               }}
             >
-              <div style={{ fontSize: 28, fontWeight: 700, color: STATUS_COLORS[status] }}>
+              <div
+                style={{
+                  fontSize: tokens.typography.fontSize.hero,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  color: STATUS_COLORS[status],
+                }}
+              >
                 {count}
               </div>
-              <div style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>{label}</div>
+              <div
+                style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: tokens.colors.text.tertiary,
+                }}
+              >
+                {label}
+              </div>
             </div>
           )
         })}
@@ -214,6 +227,7 @@ export default function DataHealthPage() {
           <thead>
             <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
               <th
+                scope="col"
                 style={{
                   textAlign: 'left',
                   padding: '8px 12px',
@@ -224,6 +238,7 @@ export default function DataHealthPage() {
                 {t('dataHealthPlatform')}
               </th>
               <th
+                scope="col"
                 style={{
                   textAlign: 'right',
                   padding: '8px 12px',
@@ -234,6 +249,7 @@ export default function DataHealthPage() {
                 {t('dataHealthCount')}
               </th>
               <th
+                scope="col"
                 style={{
                   textAlign: 'right',
                   padding: '8px 12px',
@@ -244,6 +260,7 @@ export default function DataHealthPage() {
                 {t('dataHealthLastUpdate')}
               </th>
               <th
+                scope="col"
                 style={{
                   textAlign: 'right',
                   padding: '8px 12px',
@@ -254,6 +271,7 @@ export default function DataHealthPage() {
                 {t('dataHealthAge')}
               </th>
               <th
+                scope="col"
                 style={{
                   textAlign: 'right',
                   padding: '8px 12px',
@@ -264,6 +282,7 @@ export default function DataHealthPage() {
                 ROI%
               </th>
               <th
+                scope="col"
                 style={{
                   textAlign: 'right',
                   padding: '8px 12px',
@@ -274,6 +293,7 @@ export default function DataHealthPage() {
                 WR%
               </th>
               <th
+                scope="col"
                 style={{
                   textAlign: 'right',
                   padding: '8px 12px',
@@ -284,6 +304,7 @@ export default function DataHealthPage() {
                 DD%
               </th>
               <th
+                scope="col"
                 style={{
                   textAlign: 'center',
                   padding: '8px 12px',
@@ -391,6 +412,9 @@ export default function DataHealthPage() {
                   </td>
                   <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                     <span
+                      role="img"
+                      aria-label={p.status}
+                      title={p.status}
                       style={{
                         display: 'inline-block',
                         width: 8,

@@ -144,12 +144,16 @@ export default function AdminPage() {
           }}
         >
           <Button
+            role="tab"
+            aria-selected={activeTab === 'dashboard'}
             variant={activeTab === 'dashboard' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('dashboard')}
           >
             {t('dashboard')}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'scraperStatus'}
             variant={activeTab === 'scraperStatus' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('scraperStatus')}
           >
@@ -168,18 +172,24 @@ export default function AdminPage() {
             )}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'users'}
             variant={activeTab === 'users' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('users')}
           >
             {t('userManagement')}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'reports'}
             variant={activeTab === 'reports' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('reports')}
           >
             {t('contentReports')}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'applications'}
             variant={activeTab === 'applications' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('applications')}
           >
@@ -187,6 +197,8 @@ export default function AdminPage() {
             {pendingApplicationsCount > 0 && `(${pendingApplicationsCount})`}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'editApplications'}
             variant={activeTab === 'editApplications' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('editApplications')}
           >
@@ -194,24 +206,32 @@ export default function AdminPage() {
             {pendingEditApplicationsCount > 0 && `(${pendingEditApplicationsCount})`}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'traderClaims'}
             variant={activeTab === 'traderClaims' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('traderClaims')}
           >
             {t('traderClaims') || 'Trader Claims'}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'alertConfig'}
             variant={activeTab === 'alertConfig' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('alertConfig')}
           >
             {t('alertConfig')}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'moderationQueue'}
             variant={activeTab === 'moderationQueue' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('moderationQueue')}
           >
             {t('moderationQueue') || 'Mod Queue'}
           </Button>
           <Button
+            role="tab"
+            aria-selected={activeTab === 'auditLog'}
             variant={activeTab === 'auditLog' ? 'primary' : 'secondary'}
             onClick={() => setActiveTab('auditLog')}
           >

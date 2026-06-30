@@ -259,11 +259,51 @@ export default function ProMetricsPage() {
                           textAlign: 'left',
                         }}
                       >
-                        <th style={{ padding: tokens.spacing[3], fontWeight: 600 }}>User</th>
-                        <th style={{ padding: tokens.spacing[3], fontWeight: 600 }}>Tier</th>
-                        <th style={{ padding: tokens.spacing[3], fontWeight: 600 }}>Plan</th>
-                        <th style={{ padding: tokens.spacing[3], fontWeight: 600 }}>Status</th>
-                        <th style={{ padding: tokens.spacing[3], fontWeight: 600 }}>Signed up</th>
+                        <th
+                          scope="col"
+                          style={{
+                            padding: tokens.spacing[3],
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                          }}
+                        >
+                          User
+                        </th>
+                        <th
+                          scope="col"
+                          style={{
+                            padding: tokens.spacing[3],
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                          }}
+                        >
+                          Tier
+                        </th>
+                        <th
+                          scope="col"
+                          style={{
+                            padding: tokens.spacing[3],
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                          }}
+                        >
+                          Plan
+                        </th>
+                        <th
+                          scope="col"
+                          style={{
+                            padding: tokens.spacing[3],
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                          }}
+                        >
+                          Status
+                        </th>
+                        <th
+                          scope="col"
+                          style={{
+                            padding: tokens.spacing[3],
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                          }}
+                        >
+                          Signed up
+                        </th>
                       </tr>
                     </thead>
                     <tbody>

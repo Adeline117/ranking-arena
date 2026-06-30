@@ -135,24 +135,24 @@ export default function ArenaPipelinePanel({ accessToken }: { accessToken: strin
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr>
-                <th style={cellStyle}>
+                <th scope="col" style={cellStyle}>
                   <Text size="xs" color="tertiary" weight="bold">
                     Source
                   </Text>
                 </th>
-                <th style={cellStyle}>
+                <th scope="col" style={cellStyle}>
                   <Text size="xs" color="tertiary" weight="bold">
                     Mode
                   </Text>
                 </th>
                 {timeframes.map((tf) => (
-                  <th key={tf} style={cellStyle}>
+                  <th key={tf} scope="col" style={cellStyle}>
                     <Text size="xs" color="tertiary" weight="bold">
                       {TF_LABEL[tf] ?? `${tf}D`}
                     </Text>
                   </th>
                 ))}
-                <th style={cellStyle}>
+                <th scope="col" style={cellStyle}>
                   <Text size="xs" color="tertiary" weight="bold">
                     Rejects 24h
                   </Text>

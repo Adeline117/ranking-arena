@@ -256,7 +256,7 @@ const sty = {
     fontSize: '11px',
     fontWeight: 600,
     backgroundColor: color,
-    color: '#fff',
+    color: tokens.colors.white,
   }),
   barContainer: {
     width: '100%',
@@ -481,7 +481,7 @@ export default function PipelineMonitoringDashboard() {
         )}
 
         {/* Tabs */}
-        <div style={sty.tabs}>
+        <div style={sty.tabs} role="tablist" aria-label="Pipeline monitoring sections">
           {(
             [
               ['overview', 'Overview'],
@@ -491,7 +491,13 @@ export default function PipelineMonitoringDashboard() {
               ['enrichment', 'Enrichment'],
             ] as [TabId, string][]
           ).map(([id, label]) => (
-            <button key={id} style={sty.tab(activeTab === id)} onClick={() => setActiveTab(id)}>
+            <button
+              key={id}
+              role="tab"
+              aria-selected={activeTab === id}
+              style={sty.tab(activeTab === id)}
+              onClick={() => setActiveTab(id)}
+            >
               {label}
               {id === 'failures' && d && d.recentFailures.length > 0 && (
                 <span
@@ -502,7 +508,7 @@ export default function PipelineMonitoringDashboard() {
                     fontSize: '10px',
                     fontWeight: 600,
                     backgroundColor: 'var(--color-accent-error)',
-                    color: '#fff',
+                    color: tokens.colors.white,
                   }}
                 >
                   {d.recentFailures.length}
@@ -717,8 +723,17 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
 
   const thSortable = (label: string, field: typeof sortField) => (
     <th
+      scope="col"
+      tabIndex={0}
+      aria-sort={sortField === field ? (sortAsc ? 'ascending' : 'descending') : 'none'}
       style={{ ...sty.th, cursor: 'pointer', userSelect: 'none' }}
       onClick={() => toggleSort(field)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          toggleSort(field)
+        }
+      }}
     >
       {label} {sortField === field ? (sortAsc ? ' ^' : ' v') : ''}
     </th>
@@ -736,10 +751,14 @@ function JobStatsTab({ stats }: { stats: JobStat[] }) {
         <thead>
           <tr>
             {thSortable('Job Name', 'job_name')}
-            <th style={sty.th}>Runs (7D)</th>
+            <th scope="col" style={sty.th}>
+              Runs (7D)
+            </th>
             {thSortable('Success Rate', 'success_rate')}
             {thSortable('Errors', 'error_count')}
-            <th style={sty.th}>Avg Duration</th>
+            <th scope="col" style={sty.th}>
+              Avg Duration
+            </th>
             {thSortable('Last Run', 'last_run_at')}
           </tr>
         </thead>
@@ -809,6 +828,7 @@ function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
         {(['all', 'warning', 'critical'] as const).map((f) => (
           <button
             key={f}
+            aria-pressed={filter === f}
             onClick={() => setFilter(f)}
             style={{
               padding: '6px 14px',
@@ -840,20 +860,34 @@ function FreshnessTab({ platforms }: { platforms: PlatformHealth[] }) {
         <table style={sty.table}>
           <thead>
             <tr>
-              <th style={sty.th}>Platform</th>
-              <th style={sty.th}>Status</th>
-              <th style={sty.th}>Last Update</th>
-              <th style={sty.th}>Age</th>
-              <th style={sty.th}>Recent Count</th>
-              <th style={sty.th}>Avg Count</th>
-              <th style={sty.th}>Ratio</th>
+              <th scope="col" style={sty.th}>
+                Platform
+              </th>
+              <th scope="col" style={sty.th}>
+                Status
+              </th>
+              <th scope="col" style={sty.th}>
+                Last Update
+              </th>
+              <th scope="col" style={sty.th}>
+                Age
+              </th>
+              <th scope="col" style={sty.th}>
+                Recent Count
+              </th>
+              <th scope="col" style={sty.th}>
+                Avg Count
+              </th>
+              <th scope="col" style={sty.th}>
+                Ratio
+              </th>
             </tr>
           </thead>
           <tbody>
             {filtered.map((p) => (
               <tr key={p.platform} style={{ backgroundColor: statusBg(p.status) }}>
                 <td style={sty.td}>
-                  <span style={sty.dot(p.status)} />
+                  <span style={sty.dot(p.status)} aria-hidden="true" />
                   <span style={{ fontWeight: 600 }}>{p.displayName}</span>
                   <span
                     style={{
@@ -1040,11 +1074,21 @@ function EnrichmentTab({ data }: { data: EnrichmentData | null }) {
           <table style={sty.table}>
             <thead>
               <tr>
-                <th style={sty.th}>Platform</th>
-                <th style={sty.th}>Total Traders</th>
-                <th style={sty.th}>Enriched</th>
-                <th style={sty.th}>Coverage</th>
-                <th style={sty.th}>Last Enrichment</th>
+                <th scope="col" style={sty.th}>
+                  Platform
+                </th>
+                <th scope="col" style={sty.th}>
+                  Total Traders
+                </th>
+                <th scope="col" style={sty.th}>
+                  Enriched
+                </th>
+                <th scope="col" style={sty.th}>
+                  Coverage
+                </th>
+                <th scope="col" style={sty.th}>
+                  Last Enrichment
+                </th>
               </tr>
             </thead>
             <tbody>
