@@ -99,6 +99,12 @@ const HoldingDistribution = dynamic(
   () => import('@/app/components/trader/serving/HoldingDistribution'),
   { ssr: false }
 )
+// Registry-driven superset metric grid (sharpe/sortino/mdd/risk ratios — incl.
+// DEX Tier-0 derived). Was escape-hatch only; promoted to the default Stats tab
+// so the captured risk metrics are actually visible. NULL-collapses.
+const MetricGrid = dynamic(() => import('@/app/components/trader/serving/MetricGrid'), {
+  ssr: false,
+})
 // ExchangeLinksBar — static import (no client-only deps). Previously dynamic
 // with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
 // trader page load. Static import eliminates the flash + reduces chunk count.
@@ -811,6 +817,16 @@ export default function TraderProfileClient({
                       {/* M1: holding-duration histogram (MEXC etc.) on default
                           Stats tab. NULL-collapses when no hold_histogram. */}
                       {useThreeTab && <HoldingDistribution extras={servingTab.metaExtras} />}
+                      {/* M1/M2: registry superset metric grid (sharpe/sortino/mdd/
+                          risk ratios — incl. DEX Tier-0 derived). Was escape-hatch
+                          only; NULL-collapses per source capability. */}
+                      {useThreeTab && (
+                        <MetricGrid
+                          stats={servingTab.gridStats}
+                          capabilityMetrics={servingTab.gridCapabilityMetrics}
+                          currency={servingTab.currency}
+                        />
+                      )}
                       <StatsTab
                         visited
                         stats={effStats}

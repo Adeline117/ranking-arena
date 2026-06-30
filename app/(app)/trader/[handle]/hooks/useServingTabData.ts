@@ -26,6 +26,7 @@ import {
   type EquityCurveByTf,
   type AssetBreakdownByTf,
 } from '@/lib/data/serving/legacy-adapter'
+import { promoteExtrasMetrics, EXTRAS_PROMOTABLE_KEYS } from '@/lib/constants/metric-registry'
 import type { TraderFirstScreen, SourceCapability, ServingCurrency } from '@/lib/data/serving/types'
 import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
@@ -43,6 +44,11 @@ export interface ServingTabData {
    *  last-trade / copier-cap / margin-balance etc. NULL-collapses when absent. */
   metaExtras: Record<string, unknown>
   currency: ServingCurrency
+  /** 90d registry-driven superset metric grid (sharpe/sortino/mdd/risk ratios,
+   *  incl. DEX Tier-0 derived). NULL-collapses; same data ServingProfilePanel's
+   *  MetricGrid uses, so the default three-tab can render it too (M1/M2 unify). */
+  gridStats: Record<string, number | string | null>
+  gridCapabilityMetrics: string[]
   loading: boolean
 }
 
@@ -122,6 +128,13 @@ export function useServingTabData(
       traderPositionHistory: historyToPositionHistory(histRows ?? []),
       metaExtras: m90?.extras ?? {},
       currency: m90?.currency ?? 'USD',
+      gridStats: promoteExtrasMetrics(m90?.stats ?? {}, m90?.extras ?? {}),
+      gridCapabilityMetrics: [
+        ...(capability?.metrics ?? Object.keys(m90?.stats ?? {})),
+        // Extras-sourced metrics (sortino, volatility…) aren't in the capability
+        // RPC's trader_stats column scan — allow them when present.
+        ...EXTRAS_PROMOTABLE_KEYS,
+      ],
       loading: c7.isLoading || c30.isLoading || c90.isLoading,
     }
   }, [
@@ -135,6 +148,7 @@ export function useServingTabData(
     m90,
     posRows,
     histRows,
+    capability,
     c7.isLoading,
     c30.isLoading,
     c90.isLoading,
