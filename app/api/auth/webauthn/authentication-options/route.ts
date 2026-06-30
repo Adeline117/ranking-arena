@@ -7,7 +7,7 @@
 import { randomBytes } from 'crypto'
 import { generateAuthenticationOptions } from '@simplewebauthn/server'
 import { withPublic } from '@/lib/api/middleware'
-import { serverError } from '@/lib/api/response'
+import { serverError, badRequest } from '@/lib/api/response'
 import { NextResponse } from 'next/server'
 import { getWebAuthnConfig, storeAuthenticationChallenge } from '@/lib/auth/webauthn'
 import { createLogger } from '@/lib/utils/logger'
@@ -34,6 +34,9 @@ export const POST = withPublic(
 
       return NextResponse.json({ optionsJSON: options, challengeKey })
     } catch (err) {
+      if (err instanceof Error && err.message === 'Unrecognized WebAuthn origin') {
+        return badRequest('Unrecognized origin')
+      }
       logger.error('[authentication-options] Error:', err)
       return serverError('Failed to generate authentication options')
     }
