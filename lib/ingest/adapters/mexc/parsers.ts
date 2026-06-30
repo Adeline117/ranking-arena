@@ -95,6 +95,11 @@ function cardRow(
     headlineRoi: pct(item.roi),
     headlinePnl: num(item.pnl),
     headlineWinRate: pct(item.winRate),
+    // Board (7d-only) carries the 7d MDD (maxDrawdown7, fraction→pct) and AUM
+    // (followCopyFunds 带单规模, absolute USD) — were raw-only. Profile already
+    // captures these ~99%, so this just broadens board-only/un-enriched coverage.
+    headlineMdd: pct(item.maxDrawdown7),
+    headlineAum: num(item.followCopyFunds),
     traderMeta: isAi ? { trader_type: 'AI' } : null,
     // Style tags, sparkline arrays, contractRateList, matchRate, S-grade
     // inputs... kept verbatim (spec §12.2 Arena Score v2 features).
