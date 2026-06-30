@@ -6025,6 +6025,156 @@ const zh = {
   compFieldEntryFeeHint: '填 0 表示免费参加',
   compFieldPrizePool: '奖池（美元）',
   compFieldPrizePoolHint: '颁发给获胜者的总奖金',
+  legalKeyPoints: '要点摘要',
+  legalOnThisPage: '本页目录',
+  legalBackHome: '返回首页',
+  termsKeyPoint1: 'Arena 基于公开数据对交易者进行排名 —— 这不构成投资或财务建议。',
+  termsKeyPoint2: '所有数据均按"原样"提供。过往表现不保证未来收益。',
+  termsKeyPoint3: '请勿爬取数据、操纵排名，或滥用平台及其社区功能。',
+  termsKeyPoint4: '您可随时删除账户，我们的责任在法律允许的范围内受到限制。',
+  termsSec1Title: '1. 服务说明',
+  termsSec1Body:
+    'Arena 是一个加密货币交易者排名和绩效分析平台。我们从 25 多个中心化和去中心化交易所聚合公开的交易数据，使用我们专有的 Arena Score 算法计算交易者排名。',
+  termsSec1Warning:
+    '重要提示：Arena 不是投资咨询服务。本平台上提供的排名和数据不构成财务建议、交易推荐或交易招揽。在做出任何投资决定之前，请始终进行自己的研究。',
+  termsSec2Title: '2. 免责声明',
+  termsSec2List:
+    'Arena 不对基于本平台信息的任何交易损失或结果负责\n所有数据均按"原样"提供，不对准确性、完整性或时效性作任何保证\n交易所数据可能存在延迟、不完整或超出我们控制范围的错误\n过往表现不保证未来收益。排名仅反映历史数据\n加密货币交易涉及重大亏损风险，不适合所有投资者',
+  termsSec3Title: '3. 用户责任',
+  termsSec3Intro: '使用 Arena 即表示您同意：',
+  termsSec3List:
+    '创建账户时提供准确的信息\n未经书面许可，不得爬取、抓取或使用自动化工具从平台提取数据\n不得操纵排名、利用系统漏洞或提交虚假数据\n不得将平台用于任何非法或未经授权的目的\n尊重其他用户，在社区功能中不得进行骚扰、垃圾信息或滥用行为\n不得反向工程、反编译或试图提取我们专有系统的源代码',
+  termsSec4Title: '4. 知识产权',
+  termsSec4Body:
+    'Arena Score 算法、平台设计、用户界面、原创内容和品牌是 Arena 的知识产权。未经事先书面同意，不得复制、分发或创作我们专有内容的衍生作品。\n\n用户生成的内容（帖子、评论）仍归用户所有，但在 Arena 上发布即表示您授予我们非排他性的全球许可，以在平台内展示和分发该内容。',
+  termsSec5Title: '5. 账户终止',
+  termsSec5Intro: 'Arena 保留因以下原因暂停或终止账户的权利：',
+  termsSec5List:
+    '违反本服务条款\n滥用或欺诈行为\n试图操纵排名或数据\n长期不活跃（不活跃超过 24 个月的账户可能被归档）',
+  termsSec5Contact: '用户可随时通过账户设置或私信联系以下账号删除自己的账户：',
+  termsSec6Title: '6. 责任限制',
+  termsSec6Body:
+    '在法律允许的最大范围内，Arena 及其运营者不对任何间接、附带、特殊、后果性或惩罚性损害赔偿承担责任，包括但不限于利润损失、数据损失或交易资本损失，无论该等损害是因您使用或无法使用本平台而产生。\n\n我们对任何索赔的总责任不超过您在索赔前 12 个月内向 Arena 支付的金额或 100 美元（以较大者为准）。',
+  termsSec7Title: '7. Pro 订阅',
+  termsSec7Body:
+    'Pro 订阅通过 Stripe 按月或按年计费。退款根据具体情况处理。您可以随时取消订阅；访问权限持续到计费周期结束。',
+  termsSec8Title: '8. 适用法律',
+  termsSec8Body:
+    '本条款受适用管辖区法律管辖并按其解释。因本条款或您使用 Arena 而产生的任何争议应首先通过善意协商解决，必要时通过具有约束力的仲裁解决。',
+  termsSec9Title: '9. 条款变更',
+  termsSec9Body:
+    '我们可能会不时更新本条款。重大变更将通过电子邮件或平台上的显著通知告知您。变更后继续使用 Arena 即表示接受更新后的条款。',
+  termsSec10Title: '10. 联系方式',
+  termsSec10Body: '如对本条款有任何疑问，请私信联系：',
+  privacyTitle: '隐私政策',
+  privacyKeyPoint1:
+    '我们只收集必要的信息：您的邮箱、可选的个人资料、钱包地址（如使用 Web3 登录）以及基本使用分析。',
+  privacyKeyPoint2: '我们仅使用必要的 Cookie —— 没有定向广告，也没有第三方跟踪 Cookie。',
+  privacyKeyPoint3: '您可随时访问、更正、导出或删除您的数据，并可退订非必要邮件。',
+  privacyKeyPoint4: '我们遵守 GDPR 和 CCPA，并在 30 天内回复数据请求。',
+  privacySec1Title: '1. 概述',
+  privacySec1Body:
+    'Arena（以下简称"我们"）运营网站 arenafi.org 及相关服务。本隐私政策说明我们收集哪些个人信息、如何使用这些信息，以及您对这些信息享有的权利。',
+  privacySec2Title: '2. 我们收集的信息',
+  privacySec2ProvidedLabel: '您主动提供的信息：',
+  privacySec2ProvidedList:
+    '创建账户时的电子邮箱地址\n通过 Web3 登录（Privy）连接时的钱包地址\n您选择添加的个人资料（显示名称、头像）\n您发布的内容（评论、群组帖子）',
+  privacySec2AutoLabel: '自动收集的信息：',
+  privacySec2AutoList:
+    '使用分析数据（页面浏览量、功能交互），通过 Vercel Analytics 收集\n设备和浏览器信息（用户代理、屏幕分辨率）\nIP 地址（用于安全和反滥用，不长期存储）',
+  privacySec3Title: '3. 我们如何使用您的数据',
+  privacySec3List:
+    '提供和改进交易者排名服务\n展示排行榜排名和绩效分析\n验证您的身份并管理您的账户\n处理 Pro 订阅付款\n发送重要的服务更新（营销通讯需选择加入）\n检测和防止滥用、欺诈和安全威胁',
+  privacySec4Title: '4. 第三方服务',
+  privacySec4Intro: '我们使用以下第三方服务来运营 Arena：',
+  privacySec4List:
+    'Supabase —— 数据库和身份验证\nVercel —— 托管和分析\nStripe —— Pro 订阅付款处理\nPrivy —— Web3 钱包身份验证\nUpstash —— Redis 缓存层',
+  privacySec4Outro:
+    '每个服务提供商都有自己的隐私政策和数据处理惯例。我们仅共享每项服务运行所需的最少数据。',
+  privacySec5Title: '5. Cookie 政策',
+  privacySec5Body:
+    'Arena 仅使用必要的 Cookie 用于身份验证和会话管理。我们使用 Vercel Analytics 进行使用跟踪，不使用第三方 Cookie。我们不提供定向广告，也不使用跟踪 Cookie。',
+  privacySec6Title: '6. 您的权利',
+  privacySec6Intro: '您有权：',
+  privacySec6List:
+    '访问 —— 请求获取您的个人数据副本\n更正 —— 更新或更正不准确的信息\n删除 —— 请求删除您的账户和数据\n导出 —— 以可移植格式下载您的数据\n退订 —— 取消订阅非必要通讯',
+  privacySec6Contact: '如需行使上述任何权利，请私信联系：',
+  privacySec7Title: '7. GDPR 和 CCPA 合规',
+  privacySec7Body:
+    'Arena 致力于遵守适用的数据保护法规，包括《通用数据保护条例》(GDPR) 和《加利福尼亚消费者隐私法》(CCPA)。如果您是欧洲经济区或加利福尼亚州的居民，您享有这些法规规定的额外权利。我们将在 30 天内回复任何数据主体请求。',
+  privacySec8Title: '8. 数据安全和保留',
+  privacySec8Body:
+    '我们实施行业标准安全措施，包括传输加密 (TLS)、加密存储、行级安全 (RLS) 策略和定期访问审计。我们仅在提供服务所需或法律要求的期限内保留个人数据。您可以随时请求删除。',
+  privacySec9Title: '9. 政策变更',
+  privacySec9Body:
+    '我们可能会不时更新本隐私政策。重大变更将通过电子邮件或网站上的显著通知告知您。变更后继续使用 Arena 即表示接受更新后的政策。',
+  privacySec10Title: '10. 联系方式',
+  privacySec10Body: '如对本隐私政策有任何疑问或顾虑，请私信联系：',
+  methodologyTitle: '方法论',
+  methodologySubtitle:
+    'Arena 如何对 25+ 交易所的加密交易者进行排名 —— 透明、数据驱动、每 30 分钟更新',
+  methodologyBackRankings: '返回排行榜',
+  methodologyKeyPoint1: 'Arena Score（0–100）衡量的是风险调整后的绩效，而非单纯的 ROI。',
+  methodologyKeyPoint2: '我们聚合 25+ 交易所的公开数据，并每 30 分钟重新计算一次排行榜。',
+  methodologyKeyPoint3: '长期一致性占主导：90 天权重 70%、30 天 25%、7 天 5%。',
+  methodologyKeyPoint4: 'tanh 归一化、异常检测和服务端计算共同防止作弊。',
+  methodologySec1Title: '数据来源',
+  methodologySec1Intro: 'Arena 从 25 多个中心化和去中心化交易所聚合公开的交易数据，包括：',
+  methodologySec1List:
+    'CEX：Binance Futures、Binance Spot、Bybit、OKX、Bitget、MEXC、HTX、Gate.io、CoinEx、BingX、BTCC、Bitfinex、Bitunix、eToro 等\nDEX：Hyperliquid、GMX、dYdX、Vertex、Drift、Aevo、Gains Network、Kwenta 等',
+  methodologySec1Outro:
+    '数据通过官方交易所 API 收集，对于有地理限制或 WAF 保护的交易所，则通过部署在多个地区（新加坡、日本）的 VPS 爬虫收集。',
+  methodologySec2Title: '更新频率',
+  methodologySec2List:
+    'CEX 数据：每 3-6 小时刷新\nDEX 数据：每 4 小时刷新\n排行榜：每 30 分钟重新计算\n过期阈值：超过 48 小时（CEX）或 72 小时（DEX）的数据将被排除在综合评分计算之外',
+  methodologySec3Title: 'Arena Score 算法 (0-100)',
+  methodologySec3Intro:
+    'Arena Score 是一个综合评分，旨在衡量跨交易所的风险调整绩效。它由两个主要部分组成：',
+  methodologyFormulaReturnLabel: '回报得分 (0-60 分)',
+  methodologyFormulaPnlLabel: '盈亏得分 (0-40 分)',
+  methodologyFormulaFinalLabel: '最终得分',
+  methodologySec3Tanh:
+    '（双曲正切）归一化为极端值创造递减收益，防止单笔异常交易主导排名。系数和指数因时间周期而异，以适当权衡短期与长期绩效。',
+  methodologySec3Confidence:
+    '置信度乘数考虑数据完整性 —— 缺少关键指标（胜率、最大回撤）的交易者将受到惩罚（0.80-0.92 倍）。',
+  methodologySec4Title: '时间窗口与综合评分',
+  methodologySec4Intro: '排名在三个时间窗口上计算。综合评分高度侧重长期一致性：',
+  methodologySec4Outro:
+    '这种权重设计奖励数月内保持强劲、稳定表现的交易者，而非仅有短期爆发的交易者。',
+  methodologySec5Title: '跨交易所归一化',
+  methodologySec5Intro: '不同交易所以不同方式报告 ROI 和 PnL：',
+  methodologySec5List:
+    '有些报告交易者自身的 PnL，有些报告跟单者的 PnL\nROI 可能以比率 (0.25) 或百分比 (25%) 表示\n有些交易所包含未实现 PnL，有些仅包含已实现 PnL',
+  methodologySec5Outro:
+    'Arena 在数据摄入期间将所有值归一化为一致格式（ROI 为百分比，PnL 为美元）。每个交易所的 trustWeight 因子根据数据质量和报告标准进行调整。',
+  methodologySec6Title: '反作弊措施',
+  methodologySec6List:
+    'tanh 归一化：限制极端 ROI 值 —— 10,000% ROI 的得分仅略高于 1,000%\n异常检测：统计检查标记快照之间 ROI 或 PnL 的异常跳跃\n最低要求：交易者必须满足最低交易次数和数据可用性阈值\n服务端计算：评分在我们的服务器上计算，不能自行报告\n数据新鲜度过滤：只有在新鲜度阈值内的数据才会纳入排名',
+  methodologySec7Title: '数据局限性',
+  methodologySec7Intro: '我们相信对数据能做什么和不能做什么保持透明：',
+  methodologySec7List:
+    '交易所 API 可能有 1-6 小时的延迟，具体取决于平台\n部分交易所不公开所有指标（如最大回撤、夏普比率）\n地理限制可能导致某些交易所的数据暂时中断\nDEX 数据依赖区块链索引器，在链上拥堵时可能延迟\n排名仅反映历史表现，不预测未来收益',
+  methodologySec8Title: '常见问题',
+  methodologyFaqQ1: '问：为什么我关注的交易者评分比预期低？',
+  methodologyFaqA1:
+    '答：Arena Score 侧重长期一致性（90D = 70%）。短期表现出色但历史不稳定的交易者可能得分低于稳定表现的交易者。数据完整性也会影响评分 —— 缺少指标会导致置信度惩罚。',
+  methodologyFaqQ2: '问：排名多久更新一次？',
+  methodologyFaqA2: '答：原始数据每 3-6 小时获取一次。排行榜每 30 分钟使用最新可用数据重新计算。',
+  methodologyFaqQ3: '问：可以比较不同交易所的交易者吗？',
+  methodologyFaqA3:
+    '答：可以，这正是 Arena Score 的主要目的。但为了最准确的比较，我们建议同时查看各交易所的排名，因为数据报告标准因平台而异。',
+  methodologyFaqQ4: '问：为什么我在某交易所关注的交易者没有出现在 Arena 上？',
+  methodologyFaqA4:
+    '答：我们从每个交易所获取排名靠前的交易者。如果交易者不在交易所的公开排行榜中或数据不足，可能不会出现。我们目前跟踪所有平台的 34,000 多名交易者。',
+  methodologyFaqQ5: '问：Arena Score 和 ROI 一样吗？',
+  methodologyFaqA5:
+    '答：不一样。Arena Score 是结合 ROI、绝对 PnL 和数据质量因素的综合指标。ROI 适中但利润大且稳定的交易者可能得分高于 ROI 极高但 PnL 很小的交易者。',
+  methodologyFaqQ6: '问：Arena 提供交易信号或建议吗？',
+  methodologyFaqA6:
+    '答：不提供。Arena 是一个数据平台。我们根据历史绩效数据对交易者进行排名。我们不提供财务建议、交易信号或推荐。请始终进行自己的研究。',
+  disclaimerKeyPoint1: 'Arena 仅提供数据和排名供参考 —— 不构成财务建议。',
+  disclaimerKeyPoint2: '加密货币交易风险重大；过往表现不保证未来收益。',
+  disclaimerKeyPoint3: '数据可能存在延迟或不完整，Arena 不对据此做出的决策负责。',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: '性能监控',

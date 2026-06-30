@@ -6163,6 +6163,170 @@ const en = {
   compFieldEntryFeeHint: 'Enter 0 for free entry',
   compFieldPrizePool: 'Prize Pool (USD)',
   compFieldPrizePoolHint: 'Total prize awarded to winners',
+  legalKeyPoints: 'Key points',
+  legalOnThisPage: 'On this page',
+  legalBackHome: 'Back to Home',
+  termsKeyPoint1:
+    'Arena ranks traders from publicly available data — it is not investment or financial advice.',
+  termsKeyPoint2: 'All data is provided "as-is." Past performance never guarantees future results.',
+  termsKeyPoint3:
+    "Don't scrape, manipulate rankings, or abuse the platform or its community features.",
+  termsKeyPoint4:
+    'You can delete your account at any time, and our liability is limited to the extent the law allows.',
+  termsSec1Title: '1. Service Description',
+  termsSec1Body:
+    'Arena is a cryptocurrency trader ranking and performance analytics platform. We aggregate publicly available trading data from 25+ centralized and decentralized exchanges to compute trader rankings using our proprietary Arena Score algorithm.',
+  termsSec1Warning:
+    'Important: Arena is NOT an investment advisory service. Rankings and data provided on this platform do not constitute financial advice, trading recommendations, or solicitation to trade. Always conduct your own research before making any investment decisions.',
+  termsSec2Title: '2. Disclaimer',
+  termsSec2List:
+    'Arena is not responsible for any trading losses or outcomes based on information displayed on this platform\nAll data is provided "as-is" without warranties of accuracy, completeness, or timeliness\nExchange data may be delayed, incomplete, or subject to errors beyond our control\nPast performance does not guarantee future results. Rankings reflect historical data only\nCryptocurrency trading involves substantial risk of loss and is not suitable for all investors',
+  termsSec3Title: '3. User Responsibilities',
+  termsSec3Intro: 'By using Arena, you agree to:',
+  termsSec3List:
+    'Provide accurate information when creating an account\nNot scrape, crawl, or use automated tools to extract data from the platform without written permission\nNot attempt to manipulate rankings, game the system, or submit false data\nNot use the platform for any illegal or unauthorized purposes\nRespect other users and refrain from harassment, spam, or abusive behavior in community features\nNot reverse-engineer, decompile, or attempt to extract the source code of our proprietary systems',
+  termsSec4Title: '4. Intellectual Property',
+  termsSec4Body:
+    'The Arena Score algorithm, platform design, user interface, original content, and branding are the intellectual property of Arena. You may not reproduce, distribute, or create derivative works from our proprietary content without prior written consent.\n\nUser-generated content (posts, comments) remains owned by the user, but by posting on Arena you grant us a non-exclusive, worldwide license to display and distribute that content within the platform.',
+  termsSec5Title: '5. Account Termination',
+  termsSec5Intro: 'Arena reserves the right to suspend or terminate accounts for:',
+  termsSec5List:
+    'Violation of these Terms of Service\nAbusive or fraudulent behavior\nAttempted manipulation of rankings or data\nExtended inactivity (accounts inactive for 24+ months may be archived)',
+  termsSec5Contact:
+    'Users may delete their own accounts at any time through account settings, or by messaging',
+  termsSec6Title: '6. Limitation of Liability',
+  termsSec6Body:
+    'To the maximum extent permitted by law, Arena and its operators shall not be liable for any indirect, incidental, special, consequential, or punitive damages, including but not limited to loss of profits, data, or trading capital, arising from your use of or inability to use the platform.\n\nOur total liability for any claim shall not exceed the amount you paid to Arena in the 12 months preceding the claim, or $100 USD, whichever is greater.',
+  termsSec7Title: '7. Pro Subscription',
+  termsSec7Body:
+    'Pro subscriptions are billed monthly or annually via Stripe. Refunds are handled on a case-by-case basis. You may cancel your subscription at any time; access continues until the end of the billing period.',
+  termsSec8Title: '8. Governing Law',
+  termsSec8Body:
+    'These Terms shall be governed by and construed in accordance with the laws of the applicable jurisdiction. Any disputes arising from these Terms or your use of Arena shall be resolved through good-faith negotiation first, then binding arbitration if necessary.',
+  termsSec9Title: '9. Changes to Terms',
+  termsSec9Body:
+    'We may update these Terms from time to time. Material changes will be communicated via email or a prominent notice on the platform. Continued use of Arena after changes constitutes acceptance of the updated Terms.',
+  termsSec10Title: '10. Contact',
+  termsSec10Body: 'For questions about these Terms, send a message to',
+  privacyTitle: 'Privacy Policy',
+  privacyKeyPoint1:
+    'We collect only what we need: your email, optional profile info, wallet address (if you use Web3 login), and basic usage analytics.',
+  privacyKeyPoint2:
+    'We use essential cookies only — no targeted advertising and no third-party tracking cookies.',
+  privacyKeyPoint3:
+    'You can access, correct, export, or delete your data at any time, and opt out of non-essential emails.',
+  privacyKeyPoint4: 'We follow GDPR and CCPA and respond to data requests within 30 days.',
+  privacySec1Title: '1. Overview',
+  privacySec1Body:
+    'Arena ("we", "us", or "our") operates the website arenafi.org and related services. This Privacy Policy explains what personal information we collect, how we use it, and your rights regarding that information.',
+  privacySec2Title: '2. Information We Collect',
+  privacySec2ProvidedLabel: 'Information you provide:',
+  privacySec2ProvidedList:
+    'Email address when you create an account\nWallet addresses when you connect via Web3 login (Privy)\nProfile information you choose to add (display name, avatar)\nContent you post (comments, group posts)',
+  privacySec2AutoLabel: 'Information collected automatically:',
+  privacySec2AutoList:
+    'Usage analytics (page views, feature interactions) via Vercel Analytics\nDevice and browser information (user agent, screen resolution)\nIP address (used for security and anti-abuse, not stored long-term)',
+  privacySec3Title: '3. How We Use Your Data',
+  privacySec3List:
+    'To provide and improve the trader ranking service\nTo display leaderboard rankings and performance analytics\nTo authenticate your identity and manage your account\nTo process Pro subscription payments\nTo send important service updates (opt-in for marketing)\nTo detect and prevent abuse, fraud, and security threats',
+  privacySec4Title: '4. Third-Party Services',
+  privacySec4Intro: 'We use the following third-party services to operate Arena:',
+  privacySec4List:
+    'Supabase — Database and authentication\nVercel — Hosting and analytics\nStripe — Payment processing for Pro subscriptions\nPrivy — Web3 wallet authentication\nUpstash — Redis caching layer',
+  privacySec4Outro:
+    'Each of these providers has their own privacy policy and data handling practices. We only share the minimum data necessary for each service to function.',
+  privacySec5Title: '5. Cookies',
+  privacySec5Body:
+    'Arena uses essential cookies only for authentication and session management. We use Vercel Analytics for usage tracking, which does not use third-party cookies. We do not serve targeted advertising or use tracking cookies.',
+  privacySec6Title: '6. Your Rights',
+  privacySec6Intro: 'You have the right to:',
+  privacySec6List:
+    'Access — Request a copy of your personal data\nCorrection — Update or correct inaccurate information\nDeletion — Request deletion of your account and data\nExport — Download your data in a portable format\nOpt-out — Unsubscribe from non-essential communications',
+  privacySec6Contact: 'To exercise any of these rights, send a message to',
+  privacySec7Title: '7. GDPR & CCPA Compliance',
+  privacySec7Body:
+    'Arena is committed to complying with applicable data protection regulations, including the General Data Protection Regulation (GDPR) and the California Consumer Privacy Act (CCPA). If you are a resident of the European Economic Area or California, you have additional rights as outlined in those regulations. We will respond to any data subject request within 30 days.',
+  privacySec8Title: '8. Data Security & Retention',
+  privacySec8Body:
+    'We implement industry-standard security measures including encryption in transit (TLS), encrypted storage, Row Level Security (RLS) policies, and regular access audits. We retain personal data only as long as necessary to provide our services or as required by law. You may request deletion at any time.',
+  privacySec9Title: '9. Changes to This Policy',
+  privacySec9Body:
+    'We may update this Privacy Policy from time to time. Significant changes will be communicated via email or a prominent notice on our website. Continued use of Arena after changes constitutes acceptance of the updated policy.',
+  privacySec10Title: '10. Contact',
+  privacySec10Body: 'For questions or concerns about this Privacy Policy, please send a message to',
+  methodologyTitle: 'Methodology',
+  methodologySubtitle:
+    'How Arena ranks crypto traders across 25+ exchanges — transparent, data-driven, updated every 30 minutes',
+  methodologyBackRankings: 'Back to Rankings',
+  methodologyKeyPoint1: 'Arena Score (0–100) measures risk-adjusted performance, not raw ROI.',
+  methodologyKeyPoint2:
+    'We aggregate public data from 25+ exchanges and recompute the leaderboard every 30 minutes.',
+  methodologyKeyPoint3: 'Long-term consistency dominates: 90D is weighted 70%, 30D 25%, and 7D 5%.',
+  methodologyKeyPoint4:
+    'Tanh normalization, outlier checks, and server-side computation guard against gaming.',
+  methodologySec1Title: 'Data Sources',
+  methodologySec1Intro:
+    'Arena aggregates publicly available trading data from 25+ centralized and decentralized exchanges, including:',
+  methodologySec1List:
+    'CEX: Binance Futures, Binance Spot, Bybit, OKX, Bitget, MEXC, HTX, Gate.io, CoinEx, BingX, BTCC, Bitfinex, Bitunix, eToro, and more\nDEX: Hyperliquid, GMX, dYdX, Vertex, Drift, Aevo, Gains Network, Kwenta, and more',
+  methodologySec1Outro:
+    'Data is collected via official exchange APIs and, for geo-restricted or WAF-protected exchanges, through VPS-based scrapers deployed in multiple regions (Singapore, Japan).',
+  methodologySec2Title: 'Update Frequency',
+  methodologySec2List:
+    'CEX data: Refreshed every 3-6 hours\nDEX data: Refreshed every 4 hours\nLeaderboard: Recomputed every 30 minutes\nStale threshold: Data older than 48 hours (CEX) or 72 hours (DEX) is excluded from composite score computation',
+  methodologySec3Title: 'Arena Score Algorithm (0-100)',
+  methodologySec3Intro:
+    'The Arena Score is a composite rating designed to measure risk-adjusted performance across exchanges. It consists of two primary components:',
+  methodologyFormulaReturnLabel: 'Return Score (0-60 points)',
+  methodologyFormulaPnlLabel: 'PnL Score (0-40 points)',
+  methodologyFormulaFinalLabel: 'Final Score',
+  methodologySec3Tanh:
+    '(hyperbolic tangent) normalization creates diminishing returns for extreme values, preventing a single outlier trade from dominating rankings. Coefficients and exponents vary by time period to appropriately weight short vs. long-term performance.',
+  methodologySec3Confidence:
+    'Confidence multiplier accounts for data completeness — traders missing key metrics (win rate, max drawdown) receive a penalty (0.80-0.92x).',
+  methodologySec4Title: 'Time Windows & Composite Score',
+  methodologySec4Intro:
+    'Rankings are computed across three time windows. The overall composite score heavily weights long-term consistency:',
+  methodologySec4Outro:
+    'This weighting rewards traders who maintain strong, consistent performance over months rather than those with short-term spikes.',
+  methodologySec5Title: 'Cross-Exchange Normalization',
+  methodologySec5Intro: 'Different exchanges report ROI and PnL in different ways:',
+  methodologySec5List:
+    "Some report the trader's own PnL, others report followers' copy-trading PnL\nROI may be expressed as a ratio (0.25) or percentage (25%)\nSome exchanges include unrealized PnL, others only realized",
+  methodologySec5Outro:
+    'Arena normalizes all values to a consistent format (ROI as percentage, PnL in USD) during data ingestion. A per-exchange trustWeight factor adjusts for data quality and reporting standards.',
+  methodologySec6Title: 'Anti-Gaming Measures',
+  methodologySec6List:
+    'Tanh normalization: Caps extreme ROI values — 10,000% ROI scores only marginally higher than 1,000%\nOutlier detection: Statistical checks flag abnormal jumps in ROI or PnL between snapshots\nMinimum requirements: Traders must meet minimum trade count and data availability thresholds\nServer-side computation: Scores are computed on our servers and cannot be self-reported\nData freshness filter: Only data within the freshness threshold contributes to rankings',
+  methodologySec7Title: 'Data Limitations',
+  methodologySec7Intro: 'We believe in transparency about what our data can and cannot tell you:',
+  methodologySec7List:
+    'Exchange APIs may have delays of 1-6 hours depending on the platform\nSome exchanges do not expose all metrics (e.g., max drawdown, Sharpe ratio)\nGeo-restrictions may cause temporary data gaps for certain exchanges\nDEX data depends on blockchain indexers which may lag during congestion\nRankings reflect historical performance only and do not predict future results',
+  methodologySec8Title: 'Frequently Asked Questions',
+  methodologyFaqQ1: 'Q: Why does my favorite trader have a lower score than expected?',
+  methodologyFaqA1:
+    'A: Arena Score weighs long-term consistency (90D = 70%). A trader with spectacular short-term gains but inconsistent history may score lower than a steady performer. Data completeness also affects scores — missing metrics result in a confidence penalty.',
+  methodologyFaqQ2: 'Q: How often are rankings updated?',
+  methodologyFaqA2:
+    'A: Raw data is fetched every 3-6 hours. The leaderboard is recomputed every 30 minutes using the latest available data.',
+  methodologyFaqQ3: 'Q: Can I compare traders across different exchanges?',
+  methodologyFaqA3:
+    'A: Yes, that is the primary purpose of Arena Score. However, for the most accurate comparison, we recommend also checking the per-exchange rankings, as data reporting standards vary between platforms.',
+  methodologyFaqQ4: 'Q: Why is a trader I follow on an exchange not appearing on Arena?',
+  methodologyFaqA4:
+    "A: We fetch the top-ranked traders from each exchange. If a trader is not in the exchange's public leaderboard or has insufficient data, they may not appear. We currently track 34,000+ traders across all platforms.",
+  methodologyFaqQ5: 'Q: Is Arena Score the same as ROI?',
+  methodologyFaqA5:
+    'A: No. Arena Score is a composite metric that combines ROI, absolute PnL, and data quality factors. A trader with moderate ROI but large consistent profits may score higher than one with extremely high ROI but tiny PnL.',
+  methodologyFaqQ6: 'Q: Does Arena provide trading signals or advice?',
+  methodologyFaqA6:
+    'A: No. Arena is a data platform. We rank traders based on historical performance data. We do not provide financial advice, trading signals, or recommendations. Always do your own research.',
+  disclaimerKeyPoint1:
+    'Arena provides data and rankings for information only — not financial advice.',
+  disclaimerKeyPoint2:
+    'Crypto trading carries substantial risk; past performance never guarantees future results.',
+  disclaimerKeyPoint3:
+    'Data may be delayed or incomplete, and Arena is not liable for decisions made from it.',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: 'Performance Monitoring',

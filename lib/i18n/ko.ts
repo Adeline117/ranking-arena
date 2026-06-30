@@ -6038,6 +6038,170 @@ const ko = {
   compFieldEntryFeeHint: '무료 참가는 0 입력',
   compFieldPrizePool: '상금 풀 (USD)',
   compFieldPrizePoolHint: '우승자에게 지급되는 총 상금',
+  legalKeyPoints: '핵심 요약',
+  legalOnThisPage: '이 페이지의 목차',
+  legalBackHome: '홈으로 돌아가기',
+  termsKeyPoint1:
+    'Arena는 공개된 데이터를 바탕으로 트레이더 순위를 매깁니다 — 이는 투자 또는 금융 자문이 아닙니다.',
+  termsKeyPoint2:
+    '모든 데이터는 "있는 그대로" 제공됩니다. 과거 실적이 미래 수익을 보장하지 않습니다.',
+  termsKeyPoint3: '데이터 스크래핑, 순위 조작, 플랫폼 및 커뮤니티 기능의 남용을 하지 마세요.',
+  termsKeyPoint4:
+    '언제든지 계정을 삭제할 수 있으며, 당사의 책임은 법이 허용하는 범위로 제한됩니다.',
+  termsSec1Title: '1. 서비스 설명',
+  termsSec1Body:
+    'Arena는 암호화폐 트레이더 순위 및 성과 분석 플랫폼입니다. 당사는 25개 이상의 중앙화 및 탈중앙화 거래소에서 공개된 거래 데이터를 집계하여 독자적인 Arena Score 알고리즘으로 트레이더 순위를 산출합니다.',
+  termsSec1Warning:
+    '중요: Arena는 투자 자문 서비스가 아닙니다. 본 플랫폼에서 제공되는 순위와 데이터는 금융 자문, 거래 추천 또는 거래 권유를 구성하지 않습니다. 투자 결정을 내리기 전에 항상 직접 조사하십시오.',
+  termsSec2Title: '2. 면책 조항',
+  termsSec2List:
+    'Arena는 본 플랫폼에 표시된 정보에 근거한 어떠한 거래 손실이나 결과에 대해서도 책임지지 않습니다\n모든 데이터는 정확성, 완전성 또는 적시성에 대한 보증 없이 "있는 그대로" 제공됩니다\n거래소 데이터는 지연되거나 불완전하거나 당사의 통제를 벗어난 오류가 있을 수 있습니다\n과거 실적은 미래 수익을 보장하지 않습니다. 순위는 과거 데이터만 반영합니다\n암호화폐 거래는 상당한 손실 위험을 수반하며 모든 투자자에게 적합하지 않습니다',
+  termsSec3Title: '3. 사용자의 책임',
+  termsSec3Intro: 'Arena를 이용함으로써 귀하는 다음에 동의합니다:',
+  termsSec3List:
+    '계정 생성 시 정확한 정보를 제공할 것\n서면 허가 없이 스크래핑, 크롤링 또는 자동화 도구를 사용해 플랫폼에서 데이터를 추출하지 않을 것\n순위를 조작하거나 시스템을 악용하거나 허위 데이터를 제출하지 않을 것\n불법적이거나 승인되지 않은 목적으로 플랫폼을 사용하지 않을 것\n다른 사용자를 존중하고 커뮤니티 기능에서 괴롭힘, 스팸 또는 욕설 행위를 하지 않을 것\n당사 독자 시스템의 소스 코드를 리버스 엔지니어링, 디컴파일 또는 추출하려고 시도하지 않을 것',
+  termsSec4Title: '4. 지적 재산권',
+  termsSec4Body:
+    'Arena Score 알고리즘, 플랫폼 디자인, 사용자 인터페이스, 원본 콘텐츠 및 브랜드는 Arena의 지적 재산입니다. 사전 서면 동의 없이 당사의 독점 콘텐츠를 복제, 배포하거나 2차적 저작물을 제작할 수 없습니다.\n\n사용자가 생성한 콘텐츠(게시물, 댓글)의 소유권은 사용자에게 있으나, Arena에 게시함으로써 귀하는 당사에 해당 콘텐츠를 플랫폼 내에서 표시 및 배포할 수 있는 비독점적·전 세계적 라이선스를 부여합니다.',
+  termsSec5Title: '5. 계정 해지',
+  termsSec5Intro: 'Arena는 다음과 같은 이유로 계정을 정지하거나 해지할 권리를 보유합니다:',
+  termsSec5List:
+    '본 이용약관 위반\n악용 또는 사기 행위\n순위 또는 데이터 조작 시도\n장기 미사용(24개월 이상 미사용 계정은 보관 처리될 수 있음)',
+  termsSec5Contact:
+    '사용자는 계정 설정을 통해 언제든지 자신의 계정을 삭제할 수 있으며, 또는 다음으로 메시지를 보낼 수 있습니다:',
+  termsSec6Title: '6. 책임의 제한',
+  termsSec6Body:
+    '법이 허용하는 최대 범위에서, Arena와 그 운영자는 플랫폼의 이용 또는 이용 불능으로 인해 발생하는 이익, 데이터 또는 거래 자본의 손실을 포함하되 이에 국한되지 않는 간접적, 부수적, 특별, 결과적 또는 징벌적 손해에 대해 책임지지 않습니다.\n\n어떠한 청구에 대한 당사의 총 책임은 청구 발생 전 12개월 동안 귀하가 Arena에 지불한 금액 또는 미화 100달러 중 더 큰 금액을 초과하지 않습니다.',
+  termsSec7Title: '7. Pro 구독',
+  termsSec7Body:
+    'Pro 구독은 Stripe를 통해 월간 또는 연간으로 청구됩니다. 환불은 사안별로 처리됩니다. 언제든지 구독을 취소할 수 있으며, 이용 권한은 청구 기간이 끝날 때까지 유지됩니다.',
+  termsSec8Title: '8. 준거법',
+  termsSec8Body:
+    '본 약관은 해당 관할권의 법률에 따라 규율되고 해석됩니다. 본 약관 또는 귀하의 Arena 이용에서 발생하는 모든 분쟁은 먼저 성실한 협상을 통해 해결하며, 필요한 경우 구속력 있는 중재로 해결합니다.',
+  termsSec9Title: '9. 약관 변경',
+  termsSec9Body:
+    '당사는 본 약관을 수시로 업데이트할 수 있습니다. 중요한 변경 사항은 이메일 또는 플랫폼 내 눈에 띄는 공지로 알려드립니다. 변경 후에도 Arena를 계속 이용하면 업데이트된 약관에 동의한 것으로 간주됩니다.',
+  termsSec10Title: '10. 문의',
+  termsSec10Body: '본 약관에 대한 문의는 다음으로 메시지를 보내주세요:',
+  privacyTitle: '개인정보 처리방침',
+  privacyKeyPoint1:
+    '필요한 정보만 수집합니다: 이메일, 선택적 프로필 정보, 지갑 주소(Web3 로그인 사용 시), 기본 사용 분석 데이터.',
+  privacyKeyPoint2: '필수 쿠키만 사용합니다 — 타겟 광고나 제3자 추적 쿠키는 사용하지 않습니다.',
+  privacyKeyPoint3:
+    '언제든지 데이터를 열람, 정정, 내보내기 또는 삭제할 수 있으며, 필수가 아닌 이메일 수신을 거부할 수 있습니다.',
+  privacyKeyPoint4: '당사는 GDPR 및 CCPA를 준수하며 데이터 요청에 30일 이내에 응답합니다.',
+  privacySec1Title: '1. 개요',
+  privacySec1Body:
+    'Arena(이하 "당사")는 웹사이트 arenafi.org 및 관련 서비스를 운영합니다. 본 개인정보 처리방침은 당사가 수집하는 개인정보, 이용 방법, 그리고 해당 정보에 관한 귀하의 권리를 설명합니다.',
+  privacySec2Title: '2. 수집하는 정보',
+  privacySec2ProvidedLabel: '귀하가 제공하는 정보:',
+  privacySec2ProvidedList:
+    '계정 생성 시 이메일 주소\nWeb3 로그인(Privy)으로 연결 시 지갑 주소\n귀하가 추가하기로 선택한 프로필 정보(표시 이름, 아바타)\n귀하가 게시하는 콘텐츠(댓글, 그룹 게시물)',
+  privacySec2AutoLabel: '자동으로 수집되는 정보:',
+  privacySec2AutoList:
+    'Vercel Analytics를 통한 사용 분석 데이터(페이지 조회수, 기능 상호작용)\n기기 및 브라우저 정보(사용자 에이전트, 화면 해상도)\nIP 주소(보안 및 남용 방지에 사용하며 장기간 저장하지 않음)',
+  privacySec3Title: '3. 데이터 이용 방법',
+  privacySec3List:
+    '트레이더 순위 서비스를 제공하고 개선하기 위해\n리더보드 순위 및 성과 분석을 표시하기 위해\n귀하의 신원을 인증하고 계정을 관리하기 위해\nPro 구독 결제를 처리하기 위해\n중요한 서비스 업데이트를 보내기 위해(마케팅은 수신 동의 시)\n남용, 사기 및 보안 위협을 탐지하고 방지하기 위해',
+  privacySec4Title: '4. 제3자 서비스',
+  privacySec4Intro: '당사는 Arena를 운영하기 위해 다음 제3자 서비스를 이용합니다:',
+  privacySec4List:
+    'Supabase — 데이터베이스 및 인증\nVercel — 호스팅 및 분석\nStripe — Pro 구독 결제 처리\nPrivy — Web3 지갑 인증\nUpstash — Redis 캐싱 계층',
+  privacySec4Outro:
+    '각 제공업체는 자체 개인정보 처리방침과 데이터 처리 관행을 가지고 있습니다. 당사는 각 서비스의 작동에 필요한 최소한의 데이터만 공유합니다.',
+  privacySec5Title: '5. 쿠키',
+  privacySec5Body:
+    'Arena는 인증 및 세션 관리를 위해 필수 쿠키만 사용합니다. 사용 추적에는 Vercel Analytics를 사용하며 이는 제3자 쿠키를 사용하지 않습니다. 당사는 타겟 광고를 제공하거나 추적 쿠키를 사용하지 않습니다.',
+  privacySec6Title: '6. 귀하의 권리',
+  privacySec6Intro: '귀하는 다음과 같은 권리가 있습니다:',
+  privacySec6List:
+    '열람 — 개인 데이터의 사본 요청\n정정 — 부정확한 정보의 갱신 또는 수정\n삭제 — 계정 및 데이터의 삭제 요청\n내보내기 — 이동 가능한 형식으로 데이터 다운로드\n수신 거부 — 필수가 아닌 커뮤니케이션 구독 취소',
+  privacySec6Contact: '이러한 권리를 행사하려면 다음으로 메시지를 보내주세요:',
+  privacySec7Title: '7. GDPR 및 CCPA 준수',
+  privacySec7Body:
+    'Arena는 일반 데이터 보호 규정(GDPR) 및 캘리포니아 소비자 개인정보 보호법(CCPA)을 포함한 적용 가능한 데이터 보호 규정의 준수에 최선을 다합니다. 귀하가 유럽 경제 지역 또는 캘리포니아 주의 거주자인 경우, 해당 규정에 명시된 추가 권리를 가집니다. 당사는 모든 정보주체의 요청에 30일 이내에 응답합니다.',
+  privacySec8Title: '8. 데이터 보안 및 보관',
+  privacySec8Body:
+    '당사는 전송 중 암호화(TLS), 암호화된 저장소, 행 수준 보안(RLS) 정책, 정기적인 접근 감사를 포함한 업계 표준 보안 조치를 시행합니다. 개인 데이터는 서비스 제공에 필요한 기간 또는 법률에서 요구하는 기간 동안만 보관합니다. 언제든지 삭제를 요청할 수 있습니다.',
+  privacySec9Title: '9. 본 방침의 변경',
+  privacySec9Body:
+    '당사는 본 개인정보 처리방침을 수시로 업데이트할 수 있습니다. 중요한 변경 사항은 이메일 또는 웹사이트 내 눈에 띄는 공지로 알려드립니다. 변경 후에도 Arena를 계속 이용하면 업데이트된 방침에 동의한 것으로 간주됩니다.',
+  privacySec10Title: '10. 문의',
+  privacySec10Body:
+    '본 개인정보 처리방침에 대한 질문이나 우려 사항은 다음으로 메시지를 보내주세요:',
+  methodologyTitle: '산정 방법',
+  methodologySubtitle:
+    'Arena가 25개 이상 거래소의 암호화폐 트레이더 순위를 매기는 방법 — 투명하고 데이터 기반이며 30분마다 업데이트',
+  methodologyBackRankings: '랭킹으로 돌아가기',
+  methodologyKeyPoint1: 'Arena Score(0–100)는 단순 ROI가 아니라 위험 조정 성과를 측정합니다.',
+  methodologyKeyPoint2:
+    '25개 이상 거래소의 공개 데이터를 집계하고 30분마다 리더보드를 다시 계산합니다.',
+  methodologyKeyPoint3: '장기 일관성이 가장 중요합니다: 90일 70%, 30일 25%, 7일 5% 가중치.',
+  methodologyKeyPoint4: 'tanh 정규화, 이상치 검사, 서버 측 계산으로 조작을 방지합니다.',
+  methodologySec1Title: '데이터 출처',
+  methodologySec1Intro:
+    'Arena는 25개 이상의 중앙화 및 탈중앙화 거래소에서 공개된 거래 데이터를 집계하며, 여기에는 다음이 포함됩니다:',
+  methodologySec1List:
+    'CEX: Binance Futures, Binance Spot, Bybit, OKX, Bitget, MEXC, HTX, Gate.io, CoinEx, BingX, BTCC, Bitfinex, Bitunix, eToro 등\nDEX: Hyperliquid, GMX, dYdX, Vertex, Drift, Aevo, Gains Network, Kwenta 등',
+  methodologySec1Outro:
+    '데이터는 공식 거래소 API를 통해 수집하며, 지역 제한이나 WAF 보호가 있는 거래소의 경우 여러 지역(싱가포르, 일본)에 배치된 VPS 기반 스크레이퍼를 통해 수집합니다.',
+  methodologySec2Title: '업데이트 빈도',
+  methodologySec2List:
+    'CEX 데이터: 3-6시간마다 갱신\nDEX 데이터: 4시간마다 갱신\n리더보드: 30분마다 재계산\n신선도 임계값: 48시간(CEX) 또는 72시간(DEX)을 초과한 데이터는 종합 점수 계산에서 제외됩니다',
+  methodologySec3Title: 'Arena Score 알고리즘 (0-100)',
+  methodologySec3Intro:
+    'Arena Score는 거래소 전반의 위험 조정 성과를 측정하도록 설계된 종합 평가입니다. 두 가지 주요 구성 요소로 이루어집니다:',
+  methodologyFormulaReturnLabel: '수익 점수 (0-60점)',
+  methodologyFormulaPnlLabel: '손익 점수 (0-40점)',
+  methodologyFormulaFinalLabel: '최종 점수',
+  methodologySec3Tanh:
+    '(쌍곡탄젠트) 정규화는 극단적인 값에 대해 수익 체감 효과를 만들어 단일 이상치 거래가 순위를 지배하는 것을 방지합니다. 계수와 지수는 기간에 따라 달라져 단기와 장기 성과에 적절히 가중치를 부여합니다.',
+  methodologySec3Confidence:
+    '신뢰도 배수는 데이터 완전성을 반영합니다. 주요 지표(승률, 최대 낙폭)가 누락된 트레이더는 페널티(0.80-0.92배)를 받습니다.',
+  methodologySec4Title: '기간 및 종합 점수',
+  methodologySec4Intro:
+    '순위는 세 가지 기간에 걸쳐 계산됩니다. 종합 점수는 장기 일관성에 큰 비중을 둡니다:',
+  methodologySec4Outro:
+    '이 가중치 설계는 단기 급등이 있는 트레이더보다 수개월에 걸쳐 강력하고 일관된 성과를 유지하는 트레이더를 우대합니다.',
+  methodologySec5Title: '거래소 간 정규화',
+  methodologySec5Intro: '거래소마다 ROI와 PnL을 보고하는 방식이 다릅니다:',
+  methodologySec5List:
+    '일부는 트레이더 본인의 PnL을, 다른 일부는 팔로워의 카피 트레이딩 PnL을 보고합니다\nROI는 비율(0.25) 또는 백분율(25%)로 표시될 수 있습니다\n일부 거래소는 미실현 PnL을 포함하고, 다른 일부는 실현 PnL만 포함합니다',
+  methodologySec5Outro:
+    'Arena는 데이터 수집 시 모든 값을 일관된 형식(ROI는 백분율, PnL은 미국 달러)으로 정규화합니다. 거래소별 trustWeight 계수가 데이터 품질과 보고 기준에 맞게 조정합니다.',
+  methodologySec6Title: '조작 방지 조치',
+  methodologySec6List:
+    'tanh 정규화: 극단적인 ROI 값을 제한합니다 — 10,000% ROI는 1,000%보다 약간만 높은 점수를 받습니다\n이상치 탐지: 통계적 검사로 스냅샷 간 ROI 또는 PnL의 비정상적 급변을 표시합니다\n최소 요건: 트레이더는 최소 거래 횟수 및 데이터 가용성 임계값을 충족해야 합니다\n서버 측 계산: 점수는 당사 서버에서 계산되며 자가 보고할 수 없습니다\n데이터 신선도 필터: 신선도 임계값 이내의 데이터만 순위에 반영됩니다',
+  methodologySec7Title: '데이터의 한계',
+  methodologySec7Intro:
+    '당사는 데이터로 알 수 있는 것과 알 수 없는 것에 대해 투명해야 한다고 믿습니다:',
+  methodologySec7List:
+    '거래소 API는 플랫폼에 따라 1-6시간의 지연이 있을 수 있습니다\n일부 거래소는 모든 지표(예: 최대 낙폭, 샤프 비율)를 공개하지 않습니다\n지역 제한으로 인해 특정 거래소의 데이터가 일시적으로 누락될 수 있습니다\nDEX 데이터는 블록체인 인덱서에 의존하며 혼잡 시 지연될 수 있습니다\n순위는 과거 성과만 반영하며 미래 결과를 예측하지 않습니다',
+  methodologySec8Title: '자주 묻는 질문',
+  methodologyFaqQ1: 'Q: 제가 좋아하는 트레이더의 점수가 예상보다 낮은 이유는 무엇인가요?',
+  methodologyFaqA1:
+    'A: Arena Score는 장기 일관성을 중시합니다(90일 = 70%). 단기 수익이 뛰어나지만 기록이 일관되지 않은 트레이더는 꾸준한 트레이더보다 점수가 낮을 수 있습니다. 데이터 완전성도 점수에 영향을 미치며, 지표 누락은 신뢰도 페널티로 이어집니다.',
+  methodologyFaqQ2: 'Q: 순위는 얼마나 자주 업데이트되나요?',
+  methodologyFaqA2:
+    'A: 원시 데이터는 3-6시간마다 가져옵니다. 리더보드는 최신 데이터를 사용해 30분마다 재계산됩니다.',
+  methodologyFaqQ3: 'Q: 서로 다른 거래소의 트레이더를 비교할 수 있나요?',
+  methodologyFaqA3:
+    'A: 예, 그것이 Arena Score의 주요 목적입니다. 다만 가장 정확한 비교를 위해서는 플랫폼마다 데이터 보고 기준이 다르므로 거래소별 순위도 함께 확인하시길 권장합니다.',
+  methodologyFaqQ4: 'Q: 거래소에서 팔로우하는 트레이더가 Arena에 표시되지 않는 이유는 무엇인가요?',
+  methodologyFaqA4:
+    'A: 당사는 각 거래소에서 상위 트레이더를 가져옵니다. 트레이더가 거래소의 공개 리더보드에 없거나 데이터가 부족하면 표시되지 않을 수 있습니다. 현재 모든 플랫폼에서 34,000명 이상의 트레이더를 추적하고 있습니다.',
+  methodologyFaqQ5: 'Q: Arena Score는 ROI와 같은가요?',
+  methodologyFaqA5:
+    'A: 아니요. Arena Score는 ROI, 절대 PnL, 데이터 품질 요소를 결합한 종합 지표입니다. ROI는 보통이지만 꾸준히 큰 이익을 내는 트레이더가 ROI는 매우 높지만 PnL이 작은 트레이더보다 높은 점수를 받을 수 있습니다.',
+  methodologyFaqQ6: 'Q: Arena는 거래 신호나 조언을 제공하나요?',
+  methodologyFaqA6:
+    'A: 아니요. Arena는 데이터 플랫폼입니다. 당사는 과거 성과 데이터를 바탕으로 트레이더 순위를 매깁니다. 금융 조언, 거래 신호 또는 추천을 제공하지 않습니다. 항상 직접 조사하십시오.',
+  disclaimerKeyPoint1:
+    'Arena는 정보 제공 목적으로만 데이터와 순위를 제공합니다 — 금융 조언이 아닙니다.',
+  disclaimerKeyPoint2:
+    '암호화폐 거래에는 상당한 위험이 따르며, 과거 실적이 미래 수익을 보장하지 않습니다.',
+  disclaimerKeyPoint3:
+    '데이터는 지연되거나 불완전할 수 있으며, 이를 바탕으로 내린 결정에 대해 Arena는 책임지지 않습니다.',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: '성능 모니터링',
