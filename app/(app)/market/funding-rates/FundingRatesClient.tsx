@@ -6,7 +6,7 @@ import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
-import { tokens } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 
 interface FundingRateRow {
   platform: string
@@ -15,7 +15,7 @@ interface FundingRateRow {
   funding_time: string
 }
 
-type SortField = 'platform' | 'symbol' | 'funding_rate' | 'funding_time'
+type SortField = 'platform' | 'symbol' | 'funding_rate' | 'apr' | 'funding_time'
 type SortDir = 'asc' | 'desc'
 
 const PLATFORM_LABELS: Record<string, string> = {
@@ -25,6 +25,16 @@ const PLATFORM_LABELS: Record<string, string> = {
   bitget: 'Bitget',
 }
 
+// Funding settles every 8h on Binance/Bybit/OKX/Bitget for most perpetuals → 3
+// periods/day. The data layer does not (yet) carry a per-row funding interval,
+// so APR is annualized under this assumption (see aprAssumptionNote tooltip).
+const FUNDING_PERIODS_PER_DAY = 3
+
+/** Annualized APR (fraction) from a single-period funding rate, assuming 8h cadence. */
+function annualizeApr(rate: number): number {
+  return rate * FUNDING_PERIODS_PER_DAY * 365
+}
+
 function normalizeSymbol(symbol: string): string {
   // Normalize OKX format: BTC-USDT-SWAP -> BTCUSDT
   return symbol.replace(/-/g, '').replace('SWAP', '')
@@ -32,6 +42,10 @@ function normalizeSymbol(symbol: string): string {
 
 function formatRate(rate: number): string {
   return (rate * 100).toFixed(4) + '%'
+}
+
+function formatApr(apr: number): string {
+  return (apr * 100).toFixed(2) + '%'
 }
 
 function formatTime(iso: string, locale: string): string {
@@ -51,6 +65,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
   const [sortField, setSortField] = useState<SortField>('funding_rate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
+  const [search, setSearch] = useState<string>('')
 
   const platforms = useMemo(() => {
     const set = new Set(rates.map((r) => r.platform))
@@ -58,8 +73,12 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
   }, [rates])
 
   const sorted = useMemo(() => {
-    const filtered =
-      filterPlatform === 'all' ? rates : rates.filter((r) => r.platform === filterPlatform)
+    const q = search.trim().toLowerCase()
+    const filtered = rates.filter(
+      (r) =>
+        (filterPlatform === 'all' || r.platform === filterPlatform) &&
+        (q === '' || normalizeSymbol(r.symbol).toLowerCase().includes(q))
+    )
     return [...filtered].sort((a, b) => {
       let cmp = 0
       switch (sortField) {
@@ -70,6 +89,8 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
           cmp = normalizeSymbol(a.symbol).localeCompare(normalizeSymbol(b.symbol))
           break
         case 'funding_rate':
+        case 'apr':
+          // APR is a fixed multiple of the period rate, so it sorts identically
           cmp = a.funding_rate - b.funding_rate
           break
         case 'funding_time':
@@ -78,14 +99,20 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
       }
       return sortDir === 'desc' ? -cmp : cmp
     })
-  }, [rates, sortField, sortDir, filterPlatform])
+  }, [rates, sortField, sortDir, filterPlatform, search])
+
+  // Heatmap normalization: largest |rate| in the loaded set drives cell intensity.
+  const maxAbsRate = useMemo(
+    () => rates.reduce((m, r) => Math.max(m, Math.abs(r.funding_rate)), 0),
+    [rates]
+  )
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
     } else {
       setSortField(field)
-      setSortDir(field === 'funding_rate' ? 'desc' : 'asc')
+      setSortDir(field === 'funding_rate' || field === 'apr' ? 'desc' : 'asc')
     }
   }
 
@@ -202,6 +229,23 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
               {PLATFORM_LABELS[p] || p}
             </button>
           ))}
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('searchSymbolPlaceholder')}
+            aria-label={t('searchSymbolPlaceholder')}
+            style={{
+              padding: '6px 12px',
+              borderRadius: tokens.radius.md,
+              border: tokens.glass.border.light,
+              background: tokens.glass.bg.secondary,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+              minWidth: 160,
+              marginLeft: 'auto',
+            }}
+          />
         </div>
 
         {/* Table */}
@@ -223,6 +267,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                       ['platform', t('exchange')],
                       ['symbol', t('symbol')],
                       ['funding_rate', t('fundingRate')],
+                      ['apr', t('colApr')],
                       ['funding_time', t('colFundingTime')],
                     ] as [SortField, string][]
                   ).map(([field, label]) => (
@@ -231,6 +276,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                       scope="col"
                       aria-sort={ariaSort(field)}
                       tabIndex={0}
+                      title={field === 'apr' ? t('aprAssumptionNote') : undefined}
                       onClick={() => handleSort(field)}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter' || e.key === ' ') {
@@ -240,7 +286,7 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                       }}
                       style={{
                         padding: '12px 16px',
-                        textAlign: field === 'funding_rate' ? 'right' : 'left',
+                        textAlign: field === 'funding_rate' || field === 'apr' ? 'right' : 'left',
                         fontWeight: tokens.typography.fontWeight.semibold,
                         color: tokens.colors.text.secondary,
                         cursor: 'pointer',
@@ -265,6 +311,14 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                       : row.funding_rate < 0
                         ? tokens.colors.accent.error
                         : tokens.colors.text.secondary
+                  // Heatmap: cell tint opacity ∝ |rate| / max|rate|, hue follows sign.
+                  // Capped at 18% so the colored numeral + sign stay legible.
+                  const intensity = maxAbsRate > 0 ? Math.abs(row.funding_rate) / maxAbsRate : 0
+                  const heatBg =
+                    row.funding_rate !== 0
+                      ? alpha(rateColor, Math.round(intensity * 18))
+                      : undefined
+                  const apr = annualizeApr(row.funding_rate)
 
                   return (
                     <tr
@@ -304,11 +358,27 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
                             fontVariantNumeric: 'tabular-nums',
                             fontWeight: tokens.typography.fontWeight.semibold,
                             color: rateColor,
+                            background: heatBg,
                           } as React.CSSProperties
                         }
                       >
                         {row.funding_rate > 0 ? '+' : ''}
                         {formatRate(row.funding_rate)}
+                      </td>
+                      <td
+                        style={
+                          {
+                            padding: '12px 16px',
+                            textAlign: 'right',
+                            fontFamily: 'var(--font-mono, monospace)',
+                            fontVariantNumeric: 'tabular-nums',
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                            color: rateColor,
+                          } as React.CSSProperties
+                        }
+                      >
+                        {apr > 0 ? '+' : ''}
+                        {formatApr(apr)}
                       </td>
                       <td
                         style={{

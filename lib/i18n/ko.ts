@@ -5996,6 +5996,23 @@ const ko = {
   botRoi: 'ROI',
   botScore: '점수',
   botMaxDrawdownHint: '최대 고점 대비 하락폭',
+  colApr: 'APR (연율)',
+  aprAssumptionNote:
+    '8시간 펀딩(하루 3회) 기준 연율 환산. 실제 주기는 거래소마다 다를 수 있습니다.',
+  searchSymbolPlaceholder: '심볼 검색...',
+  colShare: '비중',
+  learnOnThisPage: '이 페이지에서',
+  learnPageTitle: '학습',
+  learnPageSubtitle: 'Arena의 작동 방식, 트레이더 순위 산정 방법, 지표 읽는 법을 알아보세요.',
+  learnSearchArticles: '아티클 검색…',
+  learnTopicScoring: '점수',
+  learnTopicRankings: '랭킹',
+  learnTopicExchanges: '거래소',
+  learnTopicRisk: '리스크',
+  learnTopicBasics: '기초',
+  learnTopicPro: 'Pro',
+  learnMinRead: '분 읽기',
+  apiDocsOnThisPage: '이 페이지에서',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: '성능 모니터링',

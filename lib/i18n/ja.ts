@@ -5767,6 +5767,23 @@ const ja = {
   botRoi: 'ROI',
   botScore: 'スコア',
   botMaxDrawdownHint: '最大ピークからの下落幅',
+  colApr: 'APR（年率）',
+  aprAssumptionNote:
+    '8時間ごとの資金調達（1日3回）を前提に年率換算。実際の頻度は取引所により異なる場合があります。',
+  searchSymbolPlaceholder: '銘柄を検索...',
+  colShare: 'シェア',
+  learnOnThisPage: 'このページの内容',
+  learnPageTitle: 'ラーニング',
+  learnPageSubtitle: 'Arena の仕組み、トレーダーのランク付け方法、指標の読み方を理解しましょう。',
+  learnSearchArticles: '記事を検索…',
+  learnTopicScoring: 'スコアリング',
+  learnTopicRankings: 'ランキング',
+  learnTopicExchanges: '取引所',
+  learnTopicRisk: 'リスク',
+  learnTopicBasics: '基礎',
+  learnTopicPro: 'Pro',
+  learnMinRead: '分で読了',
+  apiDocsOnThisPage: 'このページの内容',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: 'パフォーマンス監視',

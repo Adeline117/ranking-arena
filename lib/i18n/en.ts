@@ -6121,6 +6121,23 @@ const en = {
   botRoi: 'ROI',
   botScore: 'Score',
   botMaxDrawdownHint: 'Largest peak-to-trough decline',
+  colApr: 'APR (annualized)',
+  aprAssumptionNote: 'Annualized assuming 8h funding (3×/day). Actual cadence may vary by venue.',
+  searchSymbolPlaceholder: 'Search symbol...',
+  colShare: 'Share',
+  learnOnThisPage: 'On this page',
+  learnPageTitle: 'Learn',
+  learnPageSubtitle:
+    'Understand how Arena works, how we rank traders, and how to read the metrics.',
+  learnSearchArticles: 'Search articles…',
+  learnTopicScoring: 'Scoring',
+  learnTopicRankings: 'Rankings',
+  learnTopicExchanges: 'Exchanges',
+  learnTopicRisk: 'Risk',
+  learnTopicBasics: 'Basics',
+  learnTopicPro: 'Pro',
+  learnMinRead: 'min read',
+  apiDocsOnThisPage: 'On this page',
 
   // Admin monitoring / pipeline / pro-metrics / data-health (i18n batch 2026-06)
   monTitle: 'Performance Monitoring',
