@@ -50,7 +50,7 @@ export function MultiAccountSection() {
               alignItems: 'center',
               justifyContent: 'center',
               fontSize: tokens.typography.fontSize.xs,
-              fontWeight: 700,
+              fontWeight: tokens.typography.fontWeight.bold,
               color: tokens.colors.accent.primary,
             }}
           >
@@ -129,7 +129,7 @@ export function MultiAccountSection() {
                 background: `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-accent))`,
                 color: tokens.colors.white,
                 fontSize: tokens.typography.fontSize.xs,
-                fontWeight: 700,
+                fontWeight: tokens.typography.fontWeight.bold,
               }}
             >
               Pro

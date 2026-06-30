@@ -102,6 +102,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(
               </Text>
             </Box>
             <ToggleSwitch
+              ariaLabel={t(item.labelKey as keyof typeof import('@/lib/i18n').translations.zh)}
               checked={item.value}
               onChange={(v) => {
                 item.setter(v)
@@ -164,6 +165,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
               >
                 <path d="M2 8l2 2-2 2" />
                 <path d="M22 8l-2 2 2 2" />
@@ -174,6 +176,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(
               </Text>
             </Box>
             <ToggleSwitch
+              ariaLabel={t('tradeAlertVibration')}
               checked={props.hapticEnabled}
               onChange={(v) => {
                 props.setHapticEnabled(v)

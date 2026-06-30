@@ -265,6 +265,7 @@ function SettingsContent() {
             <button
               key={sectionId}
               onClick={() => scrollToSection(sectionId)}
+              aria-current={activeSection === sectionId ? 'true' : undefined}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -289,7 +290,10 @@ function SettingsContent() {
                 width: '100%',
               }}
             >
-              <span style={{ fontSize: '14px', display: 'flex', alignItems: 'center' }}>
+              <span
+                aria-hidden="true"
+                style={{ fontSize: '14px', display: 'flex', alignItems: 'center' }}
+              >
                 {SECTION_ICONS[sectionId]}
               </span>
               {t(SECTION_KEYS[sectionId] as keyof typeof import('@/lib/i18n').translations.zh)}
@@ -318,6 +322,7 @@ function SettingsContent() {
               <button
                 key={sectionId}
                 onClick={() => scrollToSection(sectionId)}
+                aria-current={activeSection === sectionId ? 'true' : undefined}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -345,7 +350,10 @@ function SettingsContent() {
                   transition: 'all 0.15s ease',
                 }}
               >
-                <span style={{ fontSize: '12px', display: 'flex', alignItems: 'center' }}>
+                <span
+                  aria-hidden="true"
+                  style={{ fontSize: '12px', display: 'flex', alignItems: 'center' }}
+                >
                   {SECTION_ICONS[sectionId]}
                 </span>
                 {t(SECTION_KEYS[sectionId] as keyof typeof import('@/lib/i18n').translations.zh)}

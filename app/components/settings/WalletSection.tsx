@@ -126,6 +126,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                   strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
+                  aria-hidden="true"
                 >
                   <rect x="2" y="6" width="20" height="12" rx="2" />
                   <path d="M22 10H18a2 2 0 0 0-2 2 2 2 0 0 0 2 2h4" />
@@ -184,6 +185,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 strokeWidth="2.5"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
               >
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
                 <polyline points="15 3 21 3 21 9" />
@@ -288,6 +290,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
                 strokeWidth="2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
+                aria-hidden="true"
               >
                 <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                 {hasNFT && <path d="M9 12l2 2 4-4" />}
