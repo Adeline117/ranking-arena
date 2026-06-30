@@ -4,6 +4,8 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
+import EmptyState from '@/app/components/ui/EmptyState'
+import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -115,7 +117,13 @@ function Podium({
         marginBottom: tokens.spacing[5],
       }}
     >
-      <Text style={{ fontWeight: 600, marginBottom: tokens.spacing[4], textAlign: 'center' }}>
+      <Text
+        style={{
+          fontWeight: tokens.typography.fontWeight.semibold,
+          marginBottom: tokens.spacing[4],
+          textAlign: 'center',
+        }}
+      >
         {t('compPodiumWinners')}
       </Text>
       <Box
@@ -141,11 +149,16 @@ function Podium({
               }}
             >
               {/* Medal + Trader info */}
-              <Text style={{ fontSize: '2rem', lineHeight: 1 }}>{medalEmojis[origIdx]}</Text>
+              <Text
+                aria-hidden="true"
+                style={{ fontSize: tokens.typography.fontSize['3xl'], lineHeight: 1 }}
+              >
+                {medalEmojis[origIdx]}
+              </Text>
               <Text
                 style={{
                   fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: 600,
+                  fontWeight: tokens.typography.fontWeight.semibold,
                   maxWidth: 120,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -167,7 +180,7 @@ function Podium({
               <Text
                 style={{
                   fontSize: tokens.typography.fontSize.sm,
-                  fontWeight: 600,
+                  fontWeight: tokens.typography.fontWeight.semibold,
                   color:
                     (entry.current_value ?? 0) - (entry.baseline_value ?? 0) >= 0
                       ? '#22c55e'
@@ -194,7 +207,7 @@ function Podium({
                 <Text
                   style={{
                     fontSize: tokens.typography.fontSize.lg,
-                    fontWeight: 700,
+                    fontWeight: tokens.typography.fontWeight.bold,
                     color: medalColors[origIdx],
                   }}
                 >
@@ -255,7 +268,9 @@ function StandingsTable({
         }}
       >
         <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <Text style={{ fontWeight: 600 }}>{t('compStandingsLive')}</Text>
+          <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+            {t('compStandingsLive')}
+          </Text>
           {isLive && (
             <Box
               style={{
@@ -300,7 +315,7 @@ function StandingsTable({
                       textAlign: 'left' as const,
                       fontSize: tokens.typography.fontSize.xs,
                       color: tokens.colors.text.tertiary,
-                      fontWeight: 500,
+                      fontWeight: tokens.typography.fontWeight.medium,
                     }}
                   >
                     {h}
@@ -336,7 +351,7 @@ function StandingsTable({
                       style={{
                         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                         fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: 700,
+                        fontWeight: tokens.typography.fontWeight.bold,
                         color: medalColor || tokens.colors.text.primary,
                       }}
                     >
@@ -376,7 +391,7 @@ function StandingsTable({
                       style={{
                         padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                         fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: 600,
+                        fontWeight: tokens.typography.fontWeight.semibold,
                         color: isPositive ? '#22c55e' : '#ef4444',
                       }}
                     >
@@ -519,11 +534,10 @@ export default function CompetitionDetailPage() {
           style={{
             maxWidth: 960,
             margin: '0 auto',
-            padding: tokens.spacing[8],
-            textAlign: 'center',
+            padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
           }}
         >
-          <Text style={{ color: tokens.colors.text.secondary }}>{t('loading')}</Text>
+          <LoadingSkeleton variant="card" count={3} />
         </Box>
       </Box>
     )
@@ -538,15 +552,8 @@ export default function CompetitionDetailPage() {
           color: tokens.colors.text.primary,
         }}
       >
-        <Box
-          style={{
-            maxWidth: 960,
-            margin: '0 auto',
-            padding: tokens.spacing[8],
-            textAlign: 'center',
-          }}
-        >
-          <Text>{t('compNotFound')}</Text>
+        <Box style={{ maxWidth: 960, margin: '0 auto', padding: tokens.spacing[4] }}>
+          <EmptyState title={t('compNotFound')} />
         </Box>
       </Box>
     )
@@ -605,7 +612,13 @@ export default function CompetitionDetailPage() {
               marginBottom: tokens.spacing[3],
             }}
           >
-            <Text as="h1" style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 700 }}>
+            <Text
+              as="h1"
+              style={{
+                fontSize: tokens.typography.fontSize['2xl'],
+                fontWeight: tokens.typography.fontWeight.bold,
+              }}
+            >
               {competition.title}
             </Text>
             <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
@@ -645,7 +658,9 @@ export default function CompetitionDetailPage() {
               >
                 {t('compMetric')}
               </Text>
-              <Text style={{ fontWeight: 600 }}>{metricLabel(competition.metric)}</Text>
+              <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+                {metricLabel(competition.metric)}
+              </Text>
             </Box>
             <Box>
               <Text
@@ -656,7 +671,7 @@ export default function CompetitionDetailPage() {
               >
                 {t('compParticipants')}
               </Text>
-              <Text style={{ fontWeight: 600 }}>
+              <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
                 {entries.length}/{competition.max_participants}
               </Text>
             </Box>
@@ -669,7 +684,9 @@ export default function CompetitionDetailPage() {
               >
                 {t('compPrize')}
               </Text>
-              <Text style={{ fontWeight: 600 }}>{formatPrize(competition.prize_pool_cents)}</Text>
+              <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+                {formatPrize(competition.prize_pool_cents)}
+              </Text>
             </Box>
             <Box>
               <Text
@@ -680,7 +697,7 @@ export default function CompetitionDetailPage() {
               >
                 {t('compStartDate')}
               </Text>
-              <Text style={{ fontWeight: 600 }}>
+              <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
                 {new Date(competition.start_at).toLocaleDateString()}
               </Text>
             </Box>
@@ -693,7 +710,7 @@ export default function CompetitionDetailPage() {
               >
                 {t('compEndDate')}
               </Text>
-              <Text style={{ fontWeight: 600 }}>
+              <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
                 {new Date(competition.end_at).toLocaleDateString()}
               </Text>
             </Box>
@@ -711,7 +728,12 @@ export default function CompetitionDetailPage() {
               marginBottom: tokens.spacing[5],
             }}
           >
-            <Text style={{ fontWeight: 600, marginBottom: tokens.spacing[3] }}>
+            <Text
+              style={{
+                fontWeight: tokens.typography.fontWeight.semibold,
+                marginBottom: tokens.spacing[3],
+              }}
+            >
               {t('compJoinTitle')}
             </Text>
             <Box
@@ -724,6 +746,7 @@ export default function CompetitionDetailPage() {
             >
               <input
                 type="text"
+                aria-label={t('compTraderIdPlaceholder')}
                 placeholder={t('compTraderIdPlaceholder')}
                 value={traderId}
                 onChange={(e) => setTraderId(e.target.value)}
@@ -741,6 +764,7 @@ export default function CompetitionDetailPage() {
               />
               <input
                 type="text"
+                aria-label={t('compPlatformPlaceholder')}
                 placeholder={t('compPlatformPlaceholder')}
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
@@ -786,6 +810,8 @@ export default function CompetitionDetailPage() {
 
         {/* Tabs */}
         <Box
+          role="tablist"
+          aria-label={t('compLeaderboard')}
           style={{
             display: 'flex',
             gap: tokens.spacing[1],
@@ -794,176 +820,193 @@ export default function CompetitionDetailPage() {
             paddingBottom: tokens.spacing[1],
           }}
         >
-          {tabs.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              style={{
-                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                background: activeTab === tab.key ? tokens.colors.bg.tertiary : 'transparent',
-                color:
-                  activeTab === tab.key ? tokens.colors.text.primary : tokens.colors.text.secondary,
-                border: 'none',
-                borderRadius: tokens.radius.md,
-                cursor: 'pointer',
-                fontSize: tokens.typography.fontSize.sm,
-                fontWeight: activeTab === tab.key ? 600 : 400,
-                transition: 'all 0.15s ease',
-              }}
-            >
-              {tab.label}
-              {tab.key === 'standings' && competition.status === 'active' && (
-                <Box
-                  as="span"
-                  style={{
-                    display: 'inline-block',
-                    width: 6,
-                    height: 6,
-                    borderRadius: '50%',
-                    background: '#22c55e',
-                    marginLeft: tokens.spacing[1],
-                    verticalAlign: 'middle',
-                  }}
-                />
-              )}
-            </button>
-          ))}
+          {tabs.map((tab) => {
+            const selected = activeTab === tab.key
+            return (
+              <button
+                key={tab.key}
+                role="tab"
+                id={`comp-detail-tab-${tab.key}`}
+                aria-selected={selected}
+                aria-controls="comp-detail-tabpanel"
+                onClick={() => setActiveTab(tab.key)}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  background: selected ? tokens.colors.bg.tertiary : 'transparent',
+                  color: selected ? tokens.colors.text.primary : tokens.colors.text.secondary,
+                  border: 'none',
+                  borderRadius: tokens.radius.md,
+                  cursor: 'pointer',
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: selected
+                    ? tokens.typography.fontWeight.semibold
+                    : tokens.typography.fontWeight.normal,
+                  transition: 'all 0.15s ease',
+                }}
+              >
+                {tab.label}
+                {tab.key === 'standings' && competition.status === 'active' && (
+                  <Box
+                    as="span"
+                    aria-hidden="true"
+                    style={{
+                      display: 'inline-block',
+                      width: 6,
+                      height: 6,
+                      borderRadius: '50%',
+                      background: '#22c55e',
+                      marginLeft: tokens.spacing[1],
+                      verticalAlign: 'middle',
+                    }}
+                  />
+                )}
+              </button>
+            )
+          })}
         </Box>
 
         {/* Tab Content */}
-        {activeTab === 'standings' ? (
-          <StandingsTable
-            entries={entries}
-            metric={competition.metric}
-            isLive={competition.status === 'active'}
-            lastUpdate={lastUpdate}
-            t={t}
-          />
-        ) : (
-          /* Info tab - original leaderboard view with details */
-          <Box
-            style={{
-              background: tokens.colors.bg.secondary,
-              borderRadius: tokens.radius.lg,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              overflow: 'hidden',
-            }}
-          >
+        <Box
+          id="comp-detail-tabpanel"
+          role="tabpanel"
+          aria-labelledby={`comp-detail-tab-${activeTab}`}
+        >
+          {activeTab === 'standings' ? (
+            <StandingsTable
+              entries={entries}
+              metric={competition.metric}
+              isLive={competition.status === 'active'}
+              lastUpdate={lastUpdate}
+              t={t}
+            />
+          ) : (
+            /* Info tab - original leaderboard view with details */
             <Box
               style={{
-                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                background: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.lg,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                overflow: 'hidden',
               }}
             >
-              <Text style={{ fontWeight: 600 }}>{t('compLeaderboard')}</Text>
-            </Box>
+              <Box
+                style={{
+                  padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                  borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                }}
+              >
+                <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+                  {t('compLeaderboard')}
+                </Text>
+              </Box>
 
-            {entries.length === 0 ? (
-              <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-                <Text style={{ color: tokens.colors.text.secondary }}>{t('compNoEntries')}</Text>
-              </Box>
-            ) : (
-              <Box style={{ overflowX: 'auto' as const }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
-                  <thead>
-                    <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-                      {[
-                        '#',
-                        t('compColTrader'),
-                        t('compColPlatform'),
-                        t('compColBaseline'),
-                        t('compColCurrent'),
-                        t('compColDelta'),
-                      ].map((h) => (
-                        <th
-                          key={h}
-                          style={{
-                            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                            textAlign: 'left' as const,
-                            fontSize: tokens.typography.fontSize.xs,
-                            color: tokens.colors.text.tertiary,
-                            fontWeight: 500,
-                          }}
-                        >
-                          {h}
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {entries.map((entry) => {
-                      const delta = (entry.current_value ?? 0) - (entry.baseline_value ?? 0)
-                      const isPositive = delta >= 0
-                      return (
-                        <tr
-                          key={entry.id}
-                          style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}
-                        >
-                          <td
+              {entries.length === 0 ? (
+                <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
+                  <Text style={{ color: tokens.colors.text.secondary }}>{t('compNoEntries')}</Text>
+                </Box>
+              ) : (
+                <Box style={{ overflowX: 'auto' as const }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' as const }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
+                        {[
+                          '#',
+                          t('compColTrader'),
+                          t('compColPlatform'),
+                          t('compColBaseline'),
+                          t('compColCurrent'),
+                          t('compColDelta'),
+                        ].map((h) => (
+                          <th
+                            key={h}
                             style={{
                               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                              fontSize: tokens.typography.fontSize.sm,
-                              fontWeight: 600,
+                              textAlign: 'left' as const,
+                              fontSize: tokens.typography.fontSize.xs,
+                              color: tokens.colors.text.tertiary,
+                              fontWeight: tokens.typography.fontWeight.medium,
                             }}
                           >
-                            {entry.rank ?? '-'}
-                          </td>
-                          <td
-                            style={{
-                              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                              fontSize: tokens.typography.fontSize.sm,
-                            }}
+                            {h}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {entries.map((entry) => {
+                        const delta = (entry.current_value ?? 0) - (entry.baseline_value ?? 0)
+                        const isPositive = delta >= 0
+                        return (
+                          <tr
+                            key={entry.id}
+                            style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}
                           >
-                            {entry.trader_id}
-                          </td>
-                          <td
-                            style={{
-                              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                              fontSize: tokens.typography.fontSize.sm,
-                              color: tokens.colors.text.secondary,
-                            }}
-                          >
-                            {entry.platform}
-                          </td>
-                          <td
-                            style={{
-                              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                              fontSize: tokens.typography.fontSize.sm,
-                            }}
-                          >
-                            {formatValue(entry.baseline_value, competition.metric)}
-                          </td>
-                          <td
-                            style={{
-                              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                              fontSize: tokens.typography.fontSize.sm,
-                            }}
-                          >
-                            {formatValue(entry.current_value, competition.metric)}
-                          </td>
-                          <td
-                            style={{
-                              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                              fontSize: tokens.typography.fontSize.sm,
-                              fontWeight: 600,
-                              color: isPositive ? '#22c55e' : '#ef4444',
-                            }}
-                          >
-                            {formatDelta(
-                              entry.baseline_value,
-                              entry.current_value,
-                              competition.metric
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </Box>
-            )}
-          </Box>
-        )}
+                            <td
+                              style={{
+                                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                                fontSize: tokens.typography.fontSize.sm,
+                                fontWeight: tokens.typography.fontWeight.semibold,
+                              }}
+                            >
+                              {entry.rank ?? '-'}
+                            </td>
+                            <td
+                              style={{
+                                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                                fontSize: tokens.typography.fontSize.sm,
+                              }}
+                            >
+                              {entry.trader_id}
+                            </td>
+                            <td
+                              style={{
+                                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                                fontSize: tokens.typography.fontSize.sm,
+                                color: tokens.colors.text.secondary,
+                              }}
+                            >
+                              {entry.platform}
+                            </td>
+                            <td
+                              style={{
+                                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                                fontSize: tokens.typography.fontSize.sm,
+                              }}
+                            >
+                              {formatValue(entry.baseline_value, competition.metric)}
+                            </td>
+                            <td
+                              style={{
+                                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                                fontSize: tokens.typography.fontSize.sm,
+                              }}
+                            >
+                              {formatValue(entry.current_value, competition.metric)}
+                            </td>
+                            <td
+                              style={{
+                                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                                fontSize: tokens.typography.fontSize.sm,
+                                fontWeight: tokens.typography.fontWeight.semibold,
+                                color: isPositive ? '#22c55e' : '#ef4444',
+                              }}
+                            >
+                              {formatDelta(
+                                entry.baseline_value,
+                                entry.current_value,
+                                competition.metric
+                              )}
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
       </Box>
     </Box>
   )

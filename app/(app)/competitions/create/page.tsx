@@ -84,7 +84,7 @@ export default function CreateCompetitionPage() {
   const labelStyle = {
     display: 'block' as const,
     fontSize: tokens.typography.fontSize.sm,
-    fontWeight: 500 as const,
+    fontWeight: tokens.typography.fontWeight.medium,
     marginBottom: tokens.spacing[1],
     color: tokens.colors.text.secondary,
   }
@@ -131,7 +131,7 @@ export default function CreateCompetitionPage() {
           as="h1"
           style={{
             fontSize: tokens.typography.fontSize['2xl'],
-            fontWeight: 700,
+            fontWeight: tokens.typography.fontWeight.bold,
             marginBottom: tokens.spacing[5],
           }}
         >
@@ -155,8 +155,11 @@ export default function CreateCompetitionPage() {
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
               {/* Title */}
               <Box>
-                <label style={labelStyle}>{t('compFieldTitle')} *</label>
+                <label htmlFor="comp-title" style={labelStyle}>
+                  {t('compFieldTitle')} *
+                </label>
                 <input
+                  id="comp-title"
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
@@ -169,8 +172,11 @@ export default function CreateCompetitionPage() {
 
               {/* Description */}
               <Box>
-                <label style={labelStyle}>{t('compFieldDescription')}</label>
+                <label htmlFor="comp-description" style={labelStyle}>
+                  {t('compFieldDescription')}
+                </label>
                 <textarea
+                  id="comp-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   placeholder={t('compFieldDescPlaceholder')}
@@ -182,8 +188,11 @@ export default function CreateCompetitionPage() {
 
               {/* Metric */}
               <Box>
-                <label style={labelStyle}>{t('compFieldMetric')} *</label>
+                <label htmlFor="comp-metric" style={labelStyle}>
+                  {t('compFieldMetric')} *
+                </label>
                 <select
+                  id="comp-metric"
                   value={metric}
                   onChange={(e) => setMetric(e.target.value)}
                   style={inputStyle}
@@ -199,8 +208,11 @@ export default function CreateCompetitionPage() {
               {/* Dates */}
               <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
                 <Box style={{ flex: 1 }}>
-                  <label style={labelStyle}>{t('compStartDate')} *</label>
+                  <label htmlFor="comp-start" style={labelStyle}>
+                    {t('compStartDate')} *
+                  </label>
                   <input
+                    id="comp-start"
                     type="datetime-local"
                     value={startAt}
                     onChange={(e) => setStartAt(e.target.value)}
@@ -209,8 +221,11 @@ export default function CreateCompetitionPage() {
                   />
                 </Box>
                 <Box style={{ flex: 1 }}>
-                  <label style={labelStyle}>{t('compEndDate')} *</label>
+                  <label htmlFor="comp-end" style={labelStyle}>
+                    {t('compEndDate')} *
+                  </label>
                   <input
+                    id="comp-end"
                     type="datetime-local"
                     value={endAt}
                     onChange={(e) => setEndAt(e.target.value)}
@@ -222,8 +237,11 @@ export default function CreateCompetitionPage() {
 
               {/* Max Participants */}
               <Box>
-                <label style={labelStyle}>{t('compFieldMaxParticipants')}</label>
+                <label htmlFor="comp-max" style={labelStyle}>
+                  {t('compFieldMaxParticipants')}
+                </label>
                 <input
+                  id="comp-max"
                   type="number"
                   value={maxParticipants}
                   onChange={(e) => setMaxParticipants(e.target.value)}
