@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -23,7 +24,9 @@ export async function GET(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { channelId } = await params
-    const supabase = getSupabaseAdmin()
+    // Cast: channel_message_reactions + channel_messages.reply_to_id are not yet in
+    // the generated DB types (new migration). Mirrors the messages route pattern.
+    const supabase = getSupabaseAdmin() as SupabaseClient
 
     // Verify membership
     const { data: membership } = await supabase
@@ -51,15 +54,15 @@ export async function GET(
       .eq('channel_id', channelId)
 
     // Get member profiles
-    const memberIds = members?.map(m => m.user_id) || []
+    const memberIds = members?.map((m) => m.user_id) || []
     const { data: profiles } = await supabase
       .from('user_profiles')
       .select('id, handle, avatar_url')
       .in('id', memberIds)
 
-    const profileMap = new Map((profiles || []).map(p => [p.id, p]))
+    const profileMap = new Map((profiles || []).map((p) => [p.id, p]))
 
-    const membersWithProfiles = (members || []).map(m => ({
+    const membersWithProfiles = (members || []).map((m) => ({
       ...m,
       handle: profileMap.get(m.user_id)?.handle || null,
       avatar_url: profileMap.get(m.user_id)?.avatar_url || null,
@@ -69,7 +72,7 @@ export async function GET(
     const before = request.nextUrl.searchParams.get('before')
     let msgQuery = supabase
       .from('channel_messages')
-      .select('id, sender_id, content, media_url, media_type, media_name, created_at')
+      .select('id, sender_id, content, media_url, media_type, media_name, created_at, reply_to_id')
       .eq('channel_id', channelId)
       .order('created_at', { ascending: false })
       .limit(51)
@@ -80,16 +83,66 @@ export async function GET(
 
     const { data: messages } = await msgQuery
     const hasMore = (messages?.length || 0) > 50
-    const resultMessages = (messages || []).slice(0, 50).reverse()
+    const baseMessages = (messages || []).slice(0, 50).reverse()
+
+    // Enrich with reply previews (parent snippet) + emoji reactions — batched (no N+1)
+    const replyIds = Array.from(
+      new Set(baseMessages.map((m) => m.reply_to_id).filter(Boolean))
+    ) as string[]
+    const replyPreviewMap = new Map<string, { sender_id: string; content: string }>()
+    if (replyIds.length > 0) {
+      const { data: parents } = await supabase
+        .from('channel_messages')
+        .select('id, sender_id, content')
+        .in('id', replyIds)
+      for (const p of parents || []) {
+        replyPreviewMap.set(p.id, {
+          sender_id: p.sender_id,
+          content: (p.content || '').slice(0, 120),
+        })
+      }
+    }
+
+    const messageIds = baseMessages.map((m) => m.id)
+    const reactionMap = new Map<string, Record<string, { count: number; mine: boolean }>>()
+    if (messageIds.length > 0) {
+      const { data: reactionRows } = await supabase
+        .from('channel_message_reactions')
+        .select('message_id, emoji, user_id')
+        .in('message_id', messageIds)
+      for (const r of reactionRows || []) {
+        let byEmoji = reactionMap.get(r.message_id)
+        if (!byEmoji) {
+          byEmoji = {}
+          reactionMap.set(r.message_id, byEmoji)
+        }
+        const entry = byEmoji[r.emoji] || { count: 0, mine: false }
+        entry.count += 1
+        if (r.user_id === user.id) entry.mine = true
+        byEmoji[r.emoji] = entry
+      }
+    }
+
+    const resultMessages = baseMessages.map((m) => ({
+      ...m,
+      reply_preview: m.reply_to_id ? replyPreviewMap.get(m.reply_to_id) || null : null,
+      reactions: (() => {
+        const byEmoji = reactionMap.get(m.id)
+        if (!byEmoji) return []
+        return Object.entries(byEmoji).map(([emoji, v]) => ({
+          emoji,
+          count: v.count,
+          mine: v.mine,
+        }))
+      })(),
+    }))
 
     // Update read status
-    await supabase
-      .from('channel_message_reads')
-      .upsert({
-        channel_id: channelId,
-        user_id: user.id,
-        last_read_at: new Date().toISOString(),
-      })
+    await supabase.from('channel_message_reads').upsert({
+      channel_id: channelId,
+      user_id: user.id,
+      last_read_at: new Date().toISOString(),
+    })
 
     return NextResponse.json({
       channel,
@@ -99,7 +152,9 @@ export async function GET(
       my_role: membership.role,
     })
   } catch (error) {
-    logger.error('GET_CHANNEL failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('GET_CHANNEL failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -132,7 +187,7 @@ export async function PATCH(
 
     const body = await request.json()
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    
+
     if (body.name !== undefined) updates.name = body.name.trim()
     if (body.avatar_url !== undefined) updates.avatar_url = body.avatar_url
     if (body.description !== undefined) updates.description = body.description?.trim() || null
@@ -148,7 +203,9 @@ export async function PATCH(
 
     return NextResponse.json({ channel })
   } catch (error) {
-    logger.error('PATCH_CHANNEL failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('PATCH_CHANNEL failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -183,7 +240,9 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    logger.error('DELETE_CHANNEL failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('DELETE_CHANNEL failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

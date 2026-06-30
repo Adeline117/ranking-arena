@@ -4,10 +4,11 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin, getUserHandle } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { createLogger } from '@/lib/utils/logger'
+import { createLogger, fireAndForget } from '@/lib/utils/logger'
+import { sendNotification } from '@/lib/data/notifications'
 
 const logger = createLogger('api:channels:channelId:messages')
 
@@ -25,7 +26,7 @@ export async function POST(
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
     const { channelId } = await params
-    const { content, media_url, media_type, media_name } = await request.json()
+    const { content, media_url, media_type, media_name, reply_to_id } = await request.json()
 
     if (!content?.trim() && !media_url) {
       return NextResponse.json({ error: 'Message content required' }, { status: 400 })
@@ -61,6 +62,20 @@ export async function POST(
       msgData.media_name = media_name
     }
 
+    // Reply / quote target — verify the parent belongs to this channel
+    let parentAuthorId: string | null = null
+    if (reply_to_id && typeof reply_to_id === 'string') {
+      const { data: parentMsg } = await supabase
+        .from('channel_messages')
+        .select('id, channel_id, sender_id')
+        .eq('id', reply_to_id)
+        .maybeSingle()
+      if (parentMsg && parentMsg.channel_id === channelId) {
+        msgData.reply_to_id = reply_to_id
+        parentAuthorId = parentMsg.sender_id
+      }
+    }
+
     const { data: message, error } = await supabase
       .from('channel_messages')
       .insert(msgData)
@@ -71,18 +86,41 @@ export async function POST(
       return NextResponse.json({ error: 'Failed to send' }, { status: 500 })
     }
 
+    // Notify the parent author when this message is a reply (skip self-replies).
+    if (msgData.reply_to_id && parentAuthorId && parentAuthorId !== user.id) {
+      fireAndForget(
+        getUserHandle(user.id, user.email ?? undefined).then((handle) => {
+          sendNotification(
+            supabase,
+            {
+              user_id: parentAuthorId!,
+              type: 'message',
+              title: `${handle} replied to your message`,
+              message: (content?.trim() || '').slice(0, 100) || 'replied to your message',
+              actor_id: user.id,
+              link: `/channels/${channelId}`,
+              reference_id: message.id,
+              read: false,
+            },
+            'Channel reply notification'
+          )
+        }),
+        'Channel reply notification setup'
+      )
+    }
+
     // Update read status for sender
-    await supabase
-      .from('channel_message_reads')
-      .upsert({
-        channel_id: channelId,
-        user_id: user.id,
-        last_read_at: new Date().toISOString(),
-      })
+    await supabase.from('channel_message_reads').upsert({
+      channel_id: channelId,
+      user_id: user.id,
+      last_read_at: new Date().toISOString(),
+    })
 
     return NextResponse.json({ message })
   } catch (error) {
-    logger.error('SEND_MESSAGE failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('SEND_MESSAGE failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
