@@ -35,6 +35,7 @@ describe('parseBybitCopytradeLeaderboardPage', () => {
       headlineRoi: 11.36, // metricValues[0] "+11.36%"
       headlinePnl: null, // board has no master-PnL column
       headlineWinRate: 100, // "+100.00%"
+      headlineMdd: 0, // Drawdown column (already percent) → board captures MDD
     })
     expect(page.rows[1].rank).toBe(2)
   })
