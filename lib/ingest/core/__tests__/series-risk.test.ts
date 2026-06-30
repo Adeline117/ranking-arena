@@ -27,26 +27,26 @@ describe('riskFromCumulativePnl', () => {
     expect(riskFromCumulativePnl(cum([1, 2, 3]), -5).mdd).toBeNull()
   })
 
-  it('computes a negative MDD from a peak-to-trough dip', () => {
+  it('computes a positive-magnitude MDD from a peak-to-trough dip', () => {
     // equity base 10000; cumPnl peaks at +2000 (12000) then drops to +200 (10200)
     const series = [
       { ts: '2026-06-01T00:00:00Z', value: 0 },
       { ts: '2026-06-02T00:00:00Z', value: 2000 }, // peak 12000
-      { ts: '2026-06-03T00:00:00Z', value: 200 }, // trough 10200 → -15%
+      { ts: '2026-06-03T00:00:00Z', value: 200 }, // trough 10200 → 15% drawdown
       { ts: '2026-06-04T00:00:00Z', value: 1000 },
     ]
     const r = riskFromCumulativePnl(series, 10000)
-    expect(r.mdd).toBeCloseTo(-15, 1)
+    expect(r.mdd).toBeCloseTo(15, 1)
     expect(r.samples).toBe(4)
   })
 
-  it('returns -100 MDD when equity is fully wiped out', () => {
+  it('returns 100 MDD when equity is fully wiped out', () => {
     const series = [
       { ts: '2026-06-01T00:00:00Z', value: 0 },
       { ts: '2026-06-02T00:00:00Z', value: -10000 }, // base 10000 → equity 0
     ]
     const r = riskFromCumulativePnl(series, 10000)
-    expect(r.mdd).toBe(-100)
+    expect(r.mdd).toBe(100)
     expect(r.sharpe).toBeNull()
   })
 
@@ -111,11 +111,11 @@ describe('riskFromEquitySeries (direct equity curve, e.g. Hyperliquid)', () => {
     const equity = [
       { ts: '2026-06-01T00:00:00Z', value: 10000 },
       { ts: '2026-06-02T00:00:00Z', value: 12000 }, // peak
-      { ts: '2026-06-03T00:00:00Z', value: 9000 }, // trough → -25%
+      { ts: '2026-06-03T00:00:00Z', value: 9000 }, // trough → 25% drawdown
       { ts: '2026-06-04T00:00:00Z', value: 11000 },
     ]
     const r = riskFromEquitySeries(equity)
-    expect(r.mdd).toBeCloseTo(-25, 1)
+    expect(r.mdd).toBeCloseTo(25, 1)
     expect(r.samples).toBe(4)
   })
 

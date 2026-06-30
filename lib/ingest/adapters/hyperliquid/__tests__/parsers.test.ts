@@ -94,7 +94,7 @@ describe('parseHyperliquidProfile', () => {
     expect(st.volume).toBeCloseTo(222920609.98, 1)
     expect(st.winRate).toBeNull()
     // Tier-0 risk from the real accountValueHistory equity curve (47 samples).
-    expect(st.mdd).toBeCloseTo(-45.78, 1)
+    expect(st.mdd).toBeCloseTo(45.78, 1)
     expect(st.sharpe).toBeCloseTo(3.1, 1)
     expect(st.extras.sortino).toBeCloseTo(6.04, 1)
     expect(st.extras.risk_derivation).toBe('daily-approx')

@@ -103,7 +103,7 @@ describe('parseGmxProfile', () => {
     expect(s.extras.realized_pnl_usd as number).toBeCloseTo(124.189338, 5)
     // Tier-0 daily-approx risk derived from the cumulative-PnL series over the
     // maxCapital base (was NULL — GMX exposes no MDD/Sharpe). 8 daily samples.
-    expect(s.mdd).toBeCloseTo(-1.12, 2)
+    expect(s.mdd).toBeCloseTo(1.12, 2)
     expect(s.sharpe).toBe(10) // mostly-up curve → capped
     expect(s.extras.sortino).toBe(10)
     expect(s.extras.risk_derivation).toBe('daily-approx')
