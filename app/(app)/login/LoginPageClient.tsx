@@ -10,7 +10,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import { logger } from '@/lib/logger'
 import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
-import { injectStyles, validateEmail } from './components/loginHelpers'
+import { injectStyles, validateEmail, getPasswordStrength } from './components/loginHelpers'
 import { trackEvent } from '@/lib/analytics/track'
 import SocialLogin, { WalletLogin } from './components/SocialLogin'
 import RegisterForm from './components/RegisterForm'
@@ -487,7 +487,9 @@ export default function LoginPageClient() {
 
   const handleSetPassword = async () => {
     if (submittingRef.current || loading) return
-    if (!password || password.length < 6) {
+    // Password floor: minimum 8 chars AND strength at least "fair" (level >= 2).
+    // The strength meter is the real gate — block weak passwords, not just short ones.
+    if (!password || password.length < 8 || getPasswordStrength(password).level < 2) {
       setError(t('loginPasswordMinLength'))
       return
     }
@@ -812,6 +814,82 @@ export default function LoginPageClient() {
           </p>
         </div>
 
+        {/* Value / trust panel — reuses existing marketing copy keys */}
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            marginBottom: 24,
+            padding: '14px 16px',
+            borderRadius: tokens.radius.lg,
+            background: 'var(--color-accent-primary-08)',
+            border: '1px solid var(--color-accent-primary-15)',
+          }}
+        >
+          {[t('loginValueProp1'), t('loginValueProp2'), t('loginValueProp3')].map((prop, i) => (
+            <div
+              key={i}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.medium,
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="var(--color-accent-success)"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                style={{ flexShrink: 0 }}
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+              <span>{prop}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Social + Wallet — surfaced prominently (crypto audience converts here) */}
+        <SocialLogin
+          lang={lang}
+          searchParams={searchParams}
+          isAddAccount={isAddAccount}
+          onError={(msg) => setError(msg || null)}
+          onWalletSuccess={(result) => {
+            showToast(t('loginWalletSignInSuccess'), 'success')
+            router.push(getRedirectUrl(result.handle))
+          }}
+          t={t}
+        />
+        <div style={{ marginTop: 8 }}>
+          <WalletLogin
+            onSuccess={(result) => {
+              showToast(t('loginWalletSignInSuccess'), 'success')
+              router.push(getRedirectUrl(result.handle))
+            }}
+            t={t}
+          />
+        </div>
+
+        {/* Divider — email/password is the secondary path */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 16px' }}>
+          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
+          <span
+            style={{ fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}
+          >
+            {t('loginOrDivider')}
+          </span>
+          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
+        </div>
+
         {/* Email input */}
         <div style={{ marginBottom: 20 }}>
           <label
@@ -947,38 +1025,6 @@ export default function LoginPageClient() {
         >
           {isRegister ? t('loginSwitchToLogin') : t('loginSwitchToRegister')}
         </button>
-
-        {/* Divider + Social logins */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 16px' }}>
-          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
-          <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-            {t('loginOrDivider')}
-          </span>
-          <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
-        </div>
-
-        <SocialLogin
-          lang={lang}
-          searchParams={searchParams}
-          isAddAccount={isAddAccount}
-          onError={(msg) => setError(msg || null)}
-          onWalletSuccess={(result) => {
-            showToast(t('loginWalletSignInSuccess'), 'success')
-            router.push(getRedirectUrl(result.handle))
-          }}
-          t={t}
-        />
-
-        {/* Wallet Login */}
-        <div style={{ marginTop: 8 }}>
-          <WalletLogin
-            onSuccess={(result) => {
-              showToast(t('loginWalletSignInSuccess'), 'success')
-              router.push(getRedirectUrl(result.handle))
-            }}
-            t={t}
-          />
-        </div>
 
         {/* Terms */}
         <p
