@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 /**
  * WrappedCardClient -- interactive rank card
@@ -46,7 +46,7 @@ function getTopPercent(rank: number, total: number): string {
   if (pct <= 0.01) return 'Top 1%'
   if (pct <= 0.03) return 'Top 3%'
   if (pct <= 0.05) return 'Top 5%'
-  if (pct <= 0.10) return 'Top 10%'
+  if (pct <= 0.1) return 'Top 10%'
   if (pct <= 0.25) return 'Top 25%'
   return `Top ${Math.ceil(pct * 100)}%`
 }
@@ -79,9 +79,10 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
   const windowLabel = formatWindow(data.window)
 
   // Build X share text and link
-  const shareUrl = typeof window !== 'undefined'
-    ? `${window.location.origin}/wrapped/${encodeURIComponent(data.handle)}${data.platform ? '?platform=' + data.platform : ''}`
-    : `https://www.arenafi.org/wrapped/${encodeURIComponent(data.handle)}`
+  const shareUrl =
+    typeof window !== 'undefined'
+      ? `${window.location.origin}/wrapped/${encodeURIComponent(data.handle)}${data.platform ? '?platform=' + data.platform : ''}`
+      : `https://www.arenafi.org/wrapped/${encodeURIComponent(data.handle)}`
 
   const shareText = [
     `My Arena rank: ${rankDisplay} on ${data.platformLabel}`,
@@ -91,7 +92,9 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
     shareUrl,
     '',
     '#CryptoTrading #Arena',
-  ].filter(v => v !== null).join('\n')
+  ]
+    .filter((v) => v !== null)
+    .join('\n')
 
   const xShareUrl = `https://x.com/intent/post?text=${encodeURIComponent(shareText)}`
 
@@ -146,167 +149,255 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
   }, [ogImageUrl, data.handle, shareText, shareUrl, xShareUrl])
 
   // Detect if navigator.share is available (mobile)
-  const hasNativeShare = typeof navigator !== 'undefined' && typeof navigator.share === 'function' && /Mobi|Android/i.test(navigator.userAgent)
+  const hasNativeShare =
+    typeof navigator !== 'undefined' &&
+    typeof navigator.share === 'function' &&
+    /Mobi|Android/i.test(navigator.userAgent)
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      background: 'linear-gradient(180deg, #0A0A0F 0%, #1A1A2E 100%)',
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      padding: '40px 20px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
-    }}>
-      {/* Card container */}
-      <div style={{
-        width: '100%',
-        maxWidth: 680,
+    <div
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(180deg, #0A0A0F 0%, #1A1A2E 100%)',
         display: 'flex',
         flexDirection: 'column',
-        gap: 32,
-      }}>
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '40px 20px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif',
+      }}
+    >
+      {/* Card container */}
+      <div
+        style={{
+          width: '100%',
+          maxWidth: 680,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 32,
+        }}
+      >
         {/* Page title */}
         <div style={{ textAlign: 'center' }}>
-          <div style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '6px 18px',
-            borderRadius: 999,
-            background: C.goldDim,
-            border: `1px solid ${C.borderGold}`,
-            marginBottom: 16,
-          }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: C.goldLight, letterSpacing: '2px' }}>
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '6px 18px',
+              borderRadius: 999,
+              background: C.goldDim,
+              border: `1px solid ${C.borderGold}`,
+              marginBottom: 16,
+            }}
+          >
+            <span
+              style={{ fontSize: 12, fontWeight: 700, color: C.goldLight, letterSpacing: '2px' }}
+            >
               ARENA RANK CARD
             </span>
           </div>
-          <h1 style={{
-            margin: 0,
-            fontSize: 28,
-            fontWeight: 900,
-            color: C.white,
-            letterSpacing: '-0.5px',
-          }}>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 28,
+              fontWeight: 900,
+              color: C.white,
+              letterSpacing: '-0.5px',
+            }}
+          >
             {data.displayName}
           </h1>
-          <p style={{
-            margin: '8px 0 0',
-            fontSize: 15,
-            color: C.dim,
-          }}>
+          <p
+            style={{
+              margin: '8px 0 0',
+              fontSize: 15,
+              color: C.dim,
+            }}
+          >
             {data.platformLabel} &middot; {windowLabel} Performance
           </p>
         </div>
 
         {/* Main visual card */}
-        <div style={{
-          background: 'linear-gradient(180deg, #0E0A1A 0%, #12121F 100%)',
-          borderRadius: 24,
-          border: `1px solid ${C.border}`,
-          overflow: 'hidden',
-          boxShadow: '0 32px 80px rgba(139,92,246,0.15), 0 8px 24px rgba(0,0,0,0.6)',
-          position: 'relative',
-        }}>
+        <div
+          style={{
+            background: 'linear-gradient(180deg, #0E0A1A 0%, #12121F 100%)',
+            borderRadius: 24,
+            border: `1px solid ${C.border}`,
+            overflow: 'hidden',
+            boxShadow: '0 32px 80px rgba(139,92,246,0.15), 0 8px 24px rgba(0,0,0,0.6)',
+            position: 'relative',
+          }}
+        >
           {/* Top accent bar */}
-          <div style={{
-            height: 3,
-            background: 'linear-gradient(90deg, #8B5CF6 0%, #D4AF37 50%, #8B5CF6 100%)',
-          }} />
+          <div
+            style={{
+              height: 3,
+              background: 'linear-gradient(90deg, #8B5CF6 0%, #D4AF37 50%, #8B5CF6 100%)',
+            }}
+          />
 
           {/* Card body */}
           <div style={{ padding: '36px 36px 28px' }}>
             {/* Data cards row */}
-            <div style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 14,
-              marginBottom: 20,
-            }}>
+            <div
+              className="wrapped-card-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 14,
+                marginBottom: 20,
+              }}
+            >
               {/* Arena Score */}
-              <div style={{
-                padding: '20px 24px',
-                background: C.goldDim,
-                borderRadius: 16,
-                border: `1px solid ${C.borderGold}`,
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.goldLight, letterSpacing: '2px', marginBottom: 8 }}>
+              <div
+                style={{
+                  padding: '20px 24px',
+                  background: C.goldDim,
+                  borderRadius: 16,
+                  border: `1px solid ${C.borderGold}`,
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.goldLight,
+                    letterSpacing: '2px',
+                    marginBottom: 8,
+                  }}
+                >
                   ARENA SCORE
                 </div>
-                <div style={{ fontSize: 44, fontWeight: 900, color: C.goldLight, letterSpacing: '-1px', lineHeight: 1 }}>
+                <div
+                  style={{
+                    fontSize: 44,
+                    fontWeight: 900,
+                    color: C.goldLight,
+                    letterSpacing: '-1px',
+                    lineHeight: 1,
+                  }}
+                >
                   {score != null ? Math.round(score).toLocaleString('en-US') : '--'}
                 </div>
               </div>
 
               {/* ROI */}
-              <div style={{
-                padding: '20px 24px',
-                background: roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
-                borderRadius: 16,
-                border: roiValid && roi >= 0 ? '1px solid rgba(47,229,125,0.20)' : '1px solid rgba(255,85,85,0.20)',
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.dimmer, letterSpacing: '2px', marginBottom: 8 }}>
+              <div
+                style={{
+                  padding: '20px 24px',
+                  background:
+                    roiValid && roi >= 0 ? 'rgba(47,229,125,0.07)' : 'rgba(255,85,85,0.07)',
+                  borderRadius: 16,
+                  border:
+                    roiValid && roi >= 0
+                      ? '1px solid rgba(47,229,125,0.20)'
+                      : '1px solid rgba(255,85,85,0.20)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.dimmer,
+                    letterSpacing: '2px',
+                    marginBottom: 8,
+                  }}
+                >
                   ROI
                 </div>
-                <div style={{ fontSize: 44, fontWeight: 900, color: roiColor, letterSpacing: '-1px', lineHeight: 1 }}>
+                <div
+                  style={{
+                    fontSize: 44,
+                    fontWeight: 900,
+                    color: roiColor,
+                    letterSpacing: '-1px',
+                    lineHeight: 1,
+                  }}
+                >
                   {roiStr}
                 </div>
               </div>
             </div>
 
             {/* Win Rate row */}
-            <div style={{
-              display: 'flex',
-              gap: 14,
-              marginBottom: 24,
-            }}>
-              <div style={{
-                flex: 1,
-                padding: '16px 24px',
-                background: 'rgba(255,255,255,0.04)',
-                borderRadius: 12,
-                border: '1px solid rgba(255,255,255,0.08)',
-              }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: C.dim, letterSpacing: '2px', marginBottom: 6 }}>
+            <div
+              style={{
+                display: 'flex',
+                gap: 14,
+                marginBottom: 24,
+              }}
+            >
+              <div
+                style={{
+                  flex: 1,
+                  padding: '16px 24px',
+                  background: 'rgba(255,255,255,0.04)',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.08)',
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.dim,
+                    letterSpacing: '2px',
+                    marginBottom: 6,
+                  }}
+                >
                   WIN RATE
                 </div>
-                <div style={{ fontSize: 28, fontWeight: 900, color: C.offWhite, letterSpacing: '-1px', lineHeight: 1 }}>
+                <div
+                  style={{
+                    fontSize: 28,
+                    fontWeight: 900,
+                    color: C.offWhite,
+                    letterSpacing: '-1px',
+                    lineHeight: 1,
+                  }}
+                >
                   {winRate != null ? `${winRate.toFixed(0)}%` : '--'}
                 </div>
               </div>
             </div>
 
             {/* Rank section */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '16px 20px',
-              background: C.purpleDim,
-              borderRadius: 12,
-              border: `1px solid ${C.border}`,
-              marginBottom: 24,
-            }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 20px',
+                background: C.purpleDim,
+                borderRadius: 12,
+                border: `1px solid ${C.border}`,
+                marginBottom: 24,
+              }}
+            >
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-                <span style={{ fontSize: 12, fontWeight: 600, color: C.dimmer, letterSpacing: '1px' }}>
+                <span
+                  style={{ fontSize: 12, fontWeight: 600, color: C.dimmer, letterSpacing: '1px' }}
+                >
                   RANKED
                 </span>
-                <span style={{ fontSize: 32, fontWeight: 900, color: C.white, letterSpacing: '-1px' }}>
+                <span
+                  style={{ fontSize: 32, fontWeight: 900, color: C.white, letterSpacing: '-1px' }}
+                >
                   {rankDisplay}
                 </span>
-                <span style={{ fontSize: 14, color: C.dim }}>
-                  / {totalDisplay} traders
-                </span>
+                <span style={{ fontSize: 14, color: C.dim }}>/ {totalDisplay} traders</span>
               </div>
               {topPct && (
-                <div style={{
-                  padding: '4px 14px',
-                  borderRadius: 999,
-                  background: C.goldDim,
-                  border: `1px solid ${C.borderGold}`,
-                }}>
+                <div
+                  style={{
+                    padding: '4px 14px',
+                    borderRadius: 999,
+                    background: C.goldDim,
+                    border: `1px solid ${C.borderGold}`,
+                  }}
+                >
                   <span style={{ fontSize: 13, fontWeight: 800, color: C.goldLight }}>
                     {topPct}
                   </span>
@@ -315,42 +406,55 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
             </div>
 
             {/* Footer */}
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              paddingTop: 20,
-              borderTop: '1px solid rgba(255,255,255,0.06)',
-            }}>
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingTop: 20,
+                borderTop: '1px solid rgba(255,255,255,0.06)',
+              }}
+            >
               <div style={{ display: 'flex', gap: 8 }}>
-                <span style={{
-                  padding: '4px 14px',
-                  borderRadius: 6,
-                  background: C.purpleDim,
-                  border: `1px solid ${C.border}`,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: C.purpleLight,
-                }}>
+                <span
+                  style={{
+                    padding: '4px 14px',
+                    borderRadius: 6,
+                    background: C.purpleDim,
+                    border: `1px solid ${C.border}`,
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: C.purpleLight,
+                  }}
+                >
                   {data.platformLabel}
                 </span>
-                <span style={{
-                  padding: '4px 14px',
-                  borderRadius: 6,
-                  background: 'rgba(255,255,255,0.05)',
-                  border: '1px solid rgba(255,255,255,0.10)',
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: C.dim,
-                }}>
+                <span
+                  style={{
+                    padding: '4px 14px',
+                    borderRadius: 6,
+                    background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.10)',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    color: C.dim,
+                  }}
+                >
                   {windowLabel}
                 </span>
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <div style={{
-                  width: 6, height: 6, borderRadius: 999, background: C.gold,
-                }} />
-                <span style={{ fontSize: 14, fontWeight: 800, color: C.gold, letterSpacing: '0.5px' }}>
+                <div
+                  style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 999,
+                    background: C.gold,
+                  }}
+                />
+                <span
+                  style={{ fontSize: 14, fontWeight: 800, color: C.gold, letterSpacing: '0.5px' }}
+                >
                   arenafi.org
                 </span>
               </div>
@@ -359,12 +463,14 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
         </div>
 
         {/* Action buttons */}
-        <div style={{
-          display: 'flex',
-          gap: 12,
-          justifyContent: 'center',
-          flexWrap: 'wrap',
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            gap: 12,
+            justifyContent: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
           {/* Native share (mobile) */}
           {hasNativeShare && (
             <button
@@ -383,7 +489,16 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
                 cursor: 'pointer',
               }}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
                 <circle cx="18" cy="5" r="3" />
                 <circle cx="6" cy="12" r="3" />
                 <circle cx="18" cy="19" r="3" />
@@ -465,22 +580,28 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
         </div>
 
         {/* Preview note */}
-        <p style={{
-          textAlign: 'center',
-          fontSize: 13,
-          color: C.dimmer,
-          margin: 0,
-        }}>
+        <p
+          style={{
+            textAlign: 'center',
+            fontSize: 13,
+            color: C.dimmer,
+            margin: 0,
+          }}
+        >
           The card above matches what appears when shared on X
         </p>
       </div>
 
       {/* Responsive styles for mobile */}
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @media (max-width: 480px) {
           .wrapped-card-grid { grid-template-columns: 1fr !important; }
         }
-      ` }} />
+      `,
+        }}
+      />
     </div>
   )
 }
@@ -495,7 +616,16 @@ function XIcon() {
 
 function DownloadIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
       <polyline points="7 10 12 15 17 10" />
       <line x1="12" y1="15" x2="12" y2="3" />
