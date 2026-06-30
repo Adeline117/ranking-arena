@@ -12,6 +12,7 @@ import { logger } from '@/lib/logger'
 import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
 import { injectStyles, validateEmail, getPasswordStrength } from './components/loginHelpers'
 import { trackEvent } from '@/lib/analytics/track'
+import { authedFetch } from '@/lib/api/client'
 import SocialLogin, { WalletLogin } from './components/SocialLogin'
 import RegisterForm from './components/RegisterForm'
 import LoginForm from './components/LoginForm'
@@ -464,22 +465,30 @@ export default function LoginPageClient() {
       if (utmSource) updateData.utm_source = utmSource
       if (utmMedium) updateData.utm_medium = utmMedium
       if (utmCampaign) updateData.utm_campaign = utmCampaign
-      // Capture referral code
+      await supabase.from('user_profiles').upsert(updateData, { onConflict: 'id' })
+
+      // Referral attribution + reward are handled server-side by
+      // /api/referral/apply (sets referred_by, counts toward the threshold,
+      // grants the friend trial + the advocate's Pro at the threshold). We do
+      // NOT set referred_by directly here so the apply route stays the single,
+      // idempotent source of truth — it rejects a second apply once referred_by
+      // is set, which is what prevents double-counting / double-granting.
+      // Best-effort: never block signup on referral attribution.
       const refCode = searchParams.get('ref')
       if (refCode) {
-        // Look up referrer by referral_code or handle
-        const { data: referrer } = await supabase
-          .from('user_profiles')
-          .select('id')
-          .or(
-            `referral_code.eq.${refCode.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${refCode.replace(/[,.()\[\]\\%_]/g, '')}`
-          )
-          .maybeSingle()
-        if (referrer && referrer.id !== userId) {
-          updateData.referred_by = referrer.id
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+          if (session?.access_token) {
+            await authedFetch('/api/referral/apply', 'POST', session.access_token, {
+              code: refCode,
+            })
+          }
+        } catch (refErr) {
+          logger.error('Referral apply failed (non-fatal):', refErr)
         }
       }
-      await supabase.from('user_profiles').upsert(updateData, { onConflict: 'id' })
     } catch (err) {
       logger.error('Error creating profile:', err)
     }

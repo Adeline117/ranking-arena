@@ -6,6 +6,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { trackEvent } from '@/lib/analytics/track'
+import { REFERRAL_REWARD_THRESHOLD, REFERRAL_ADVOCATE_PRO_DAYS } from '@/lib/constants/referral'
 
 interface ReferralData {
   referral_code: string
@@ -13,8 +14,7 @@ interface ReferralData {
   referral_link: string
 }
 
-const REFERRAL_REWARD_THRESHOLD = 3
-const REFERRAL_REWARD = '1 month Pro free'
+const REFERRAL_REWARD = `${REFERRAL_ADVOCATE_PRO_DAYS} days Pro free`
 
 export default function ReferralCard() {
   const { language } = useLanguage()
@@ -56,7 +56,7 @@ export default function ReferralCard() {
       })
       if (res.ok) {
         const json = await res.json()
-        setData(prev => prev ? { ...prev, ...json } : { referral_count: 0, ...json })
+        setData((prev) => (prev ? { ...prev, ...json } : { referral_count: 0, ...json }))
       }
     } catch {
       // Intentionally swallowed
@@ -92,28 +92,40 @@ export default function ReferralCard() {
   const rewardEarned = data ? data.referral_count >= REFERRAL_REWARD_THRESHOLD : false
 
   return (
-    <div style={{
-      background: tokens.glass.bg.medium,
-      border: tokens.glass.border.light,
-      borderRadius: tokens.radius.xl,
-      padding: tokens.spacing[5],
-      backdropFilter: tokens.glass.blur.sm,
-      WebkitBackdropFilter: tokens.glass.blur.sm,
-    }}>
+    <div
+      style={{
+        background: tokens.glass.bg.medium,
+        border: tokens.glass.border.light,
+        borderRadius: tokens.radius.xl,
+        padding: tokens.spacing[5],
+        backdropFilter: tokens.glass.blur.sm,
+        WebkitBackdropFilter: tokens.glass.blur.sm,
+      }}
+    >
       {/* Header */}
-      <h3 style={{
-        fontSize: tokens.typography.fontSize.lg,
-        fontWeight: tokens.typography.fontWeight.semibold,
-        color: tokens.colors.text.primary,
-        marginBottom: tokens.spacing[1],
-      }}>
-        {language === 'zh' ? '邀请好友' : language === 'ja' ? '友達を招待' : language === 'ko' ? '친구 초대' : 'Invite Friends'}
+      <h3
+        style={{
+          fontSize: tokens.typography.fontSize.lg,
+          fontWeight: tokens.typography.fontWeight.semibold,
+          color: tokens.colors.text.primary,
+          marginBottom: tokens.spacing[1],
+        }}
+      >
+        {language === 'zh'
+          ? '邀请好友'
+          : language === 'ja'
+            ? '友達を招待'
+            : language === 'ko'
+              ? '친구 초대'
+              : 'Invite Friends'}
       </h3>
-      <p style={{
-        fontSize: tokens.typography.fontSize.sm,
-        color: tokens.colors.text.secondary,
-        marginBottom: tokens.spacing[4],
-      }}>
+      <p
+        style={{
+          fontSize: tokens.typography.fontSize.sm,
+          color: tokens.colors.text.secondary,
+          marginBottom: tokens.spacing[4],
+        }}
+      >
         {language === 'zh'
           ? `邀请 ${REFERRAL_REWARD_THRESHOLD} 位好友注册，获得 ${REFERRAL_REWARD}`
           : `Refer ${REFERRAL_REWARD_THRESHOLD} friends → ${REFERRAL_REWARD}`}
@@ -122,11 +134,13 @@ export default function ReferralCard() {
       {/* Referral link */}
       {data?.referral_code ? (
         <div style={{ marginBottom: tokens.spacing[4] }}>
-          <div style={{
-            display: 'flex',
-            gap: tokens.spacing[2],
-            alignItems: 'center',
-          }}>
+          <div
+            style={{
+              display: 'flex',
+              gap: tokens.spacing[2],
+              alignItems: 'center',
+            }}
+          >
             <input
               type="text"
               readOnly
@@ -158,8 +172,12 @@ export default function ReferralCard() {
               }}
             >
               {copied
-                ? (language === 'zh' ? '已复制' : 'Copied!')
-                : (language === 'zh' ? '复制' : 'Copy')}
+                ? language === 'zh'
+                  ? '已复制'
+                  : 'Copied!'
+                : language === 'zh'
+                  ? '复制'
+                  : 'Copy'}
             </button>
           </div>
         </div>
@@ -181,53 +199,71 @@ export default function ReferralCard() {
           }}
         >
           {generating
-            ? (language === 'zh' ? '生成中...' : 'Generating...')
-            : (language === 'zh' ? '生成邀请链接' : 'Generate Referral Link')}
+            ? language === 'zh'
+              ? '生成中...'
+              : 'Generating...'
+            : language === 'zh'
+              ? '生成邀请链接'
+              : 'Generate Referral Link'}
         </button>
       )}
 
       {/* Progress */}
       {data && (
         <div>
-          <div style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            marginBottom: tokens.spacing[2],
-          }}>
-            <span style={{
-              fontSize: tokens.typography.fontSize.sm,
-              color: tokens.colors.text.secondary,
-            }}>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              marginBottom: tokens.spacing[2],
+            }}
+          >
+            <span
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: tokens.colors.text.secondary,
+              }}
+            >
               {language === 'zh'
                 ? `已邀请 ${data.referral_count} 人`
                 : `${data.referral_count} referred`}
             </span>
-            <span style={{
-              fontSize: tokens.typography.fontSize.sm,
-              color: rewardEarned ? tokens.colors.accent.success : tokens.colors.text.tertiary,
-              fontWeight: rewardEarned ? tokens.typography.fontWeight.semibold : tokens.typography.fontWeight.normal,
-            }}>
+            <span
+              style={{
+                fontSize: tokens.typography.fontSize.sm,
+                color: rewardEarned ? tokens.colors.accent.success : tokens.colors.text.tertiary,
+                fontWeight: rewardEarned
+                  ? tokens.typography.fontWeight.semibold
+                  : tokens.typography.fontWeight.normal,
+              }}
+            >
               {rewardEarned
-                ? (language === 'zh' ? '奖励已解锁!' : 'Reward unlocked!')
+                ? language === 'zh'
+                  ? '奖励已解锁!'
+                  : 'Reward unlocked!'
                 : `${data.referral_count}/${REFERRAL_REWARD_THRESHOLD}`}
             </span>
           </div>
           {/* Progress bar */}
-          <div style={{
-            height: 6,
-            borderRadius: 3,
-            background: tokens.glass.bg.medium,
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              height: '100%',
-              width: `${progress * 100}%`,
+          <div
+            style={{
+              height: 6,
               borderRadius: 3,
-              background: rewardEarned
-                ? tokens.colors.accent.success
-                : `linear-gradient(90deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand || tokens.colors.accent.primary})`,
-              transition: 'width 0.3s ease',
-            }} />
+              background: tokens.glass.bg.medium,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                height: '100%',
+                width: `${progress * 100}%`,
+                borderRadius: 3,
+                background: rewardEarned
+                  ? tokens.colors.accent.success
+                  : `linear-gradient(90deg, ${tokens.colors.accent.primary}, ${tokens.colors.accent.brand || tokens.colors.accent.primary})`,
+                transition: 'width 0.3s ease',
+              }}
+            />
           </div>
         </div>
       )}
