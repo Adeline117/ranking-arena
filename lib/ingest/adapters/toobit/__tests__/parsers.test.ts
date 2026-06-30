@@ -85,7 +85,9 @@ describe('parseToobitProfile', () => {
       lead_days: 399,
       trade_count_lifetime: 161,
       last_week_win_rate: 100,
+      total_pnl: 184.8273, // detail.totalLeadProfit (Phase A)
     })
+    expect(s.extras.total_roi as number).toBeCloseTo(96.85, 2) // 0.9685 fraction ×100
     // radar "--" ratios must not leak NaN anywhere
     expect(JSON.stringify(s)).not.toContain('NaN')
   })
