@@ -717,11 +717,13 @@ a:hover {
   color: var(--color-accent-primary);
 }
 
-/* Unified input focus ring — refined glow */
+/* Unified input focus ring — keyboard focus gets a real 2px outline (WCAG 2.2
+   §2.4.11 Focus Appearance: the soft glow alone is < 3:1), plus the brand glow. */
 input:focus-visible,
 textarea:focus-visible,
 select:focus-visible {
-  outline: none;
+  outline: 2px solid var(--color-accent-primary);
+  outline-offset: 1px;
   border-color: var(--color-accent-primary);
   box-shadow: var(--shadow-input-focus);
   transition:
@@ -2358,9 +2360,12 @@ select {
     box-shadow var(--transition-fast) ease;
 }
 
-input:not([type='checkbox']):not([type='radio']):not([type='hidden']):focus,
-textarea:focus,
-select:focus {
+/* Mouse / programmatic focus only — keyboard focus is handled by the
+   :focus-visible rule above (strong outline). Scoping to :not(:focus-visible)
+   lets that rule win for keyboard users regardless of this rule's specificity. */
+input:not([type='checkbox']):not([type='radio']):not([type='hidden']):focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+select:focus:not(:focus-visible) {
   border-color: var(--color-brand, #8b6fa8) !important;
   box-shadow: 0 0 0 2px rgba(139, 111, 168, 0.25);
   outline: none;
