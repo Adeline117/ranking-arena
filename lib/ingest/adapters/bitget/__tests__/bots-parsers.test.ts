@@ -34,6 +34,8 @@ describe('parseBitgetBotsBoardPage (live-captured fixtures, 2026-06-11)', () => 
     expect(first.nickname).toBe('RIVERUSDT') // pair is the card title
     expect(first.headlineRoi).toBeCloseTo(22869.74, 1)
     expect(first.headlineWinRate).toBeNull()
+    // 最大回撤 now captured from thirtyMaxDrawdown (was dropped) — spec §11.5
+    expect(typeof first.headlineMdd).toBe('number')
     const bot = first.traderMeta?.bot as Record<string, unknown>
     expect(bot).toMatchObject({
       exchange_bot_id: first.exchangeTraderId,
