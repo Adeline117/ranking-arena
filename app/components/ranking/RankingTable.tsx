@@ -56,6 +56,10 @@ import {
 // Re-export for backward compatibility (many components import { Trader } from './RankingTable')
 export type { Trader, ColumnKey, ViewMode }
 
+// Row density (1.4) — shared with RankingFilters' density toggle.
+export type RankingDensity = 'compact' | 'comfortable'
+const LS_KEY_DENSITY = 'arena.ranking.density'
+
 import { useDebounce } from '@/lib/hooks/useDebounce'
 
 // ExportRankingButton moved to RankingFilters.tsx
@@ -184,6 +188,19 @@ function RankingTableInner(props: {
   const [showColumnSettings, setShowColumnSettings] = useState(false)
   const [viewMode, setViewMode] = useState<ViewMode>('table')
 
+  // Row density (1.4) — comfortable (default) / compact. Persisted to
+  // localStorage like the column-visibility settings; drives data-density on the
+  // container so CSS can tighten row min-height + padding.
+  const [density, setDensity] = useState<RankingDensity>('comfortable')
+  const handleDensityChange = useCallback((d: RankingDensity) => {
+    setDensity(d)
+    try {
+      localStorage.setItem(LS_KEY_DENSITY, d)
+    } catch {
+      /* localStorage unavailable (private mode) — non-fatal, density still applies for the session */
+    }
+  }, [])
+
   // Trading style filter
   const [styleFilter, setStyleFilter] = useState<TradingStyle | 'all'>('all')
   // Score grade filter
@@ -199,6 +216,16 @@ function RankingTableInner(props: {
 
   useEffect(() => {
     setVisibleColumns(getStoredColumns())
+
+    // Restore persisted row density (1.4)
+    try {
+      const storedDensity = localStorage.getItem(LS_KEY_DENSITY)
+      if (storedDensity === 'compact' || storedDensity === 'comfortable') {
+        setDensity(storedDensity)
+      }
+    } catch {
+      /* localStorage unavailable — keep default 'comfortable' */
+    }
 
     // Auto-detect: mobile → card, desktop → table
     const isMobile = window.matchMedia('(max-width: 767px)').matches
@@ -553,6 +580,7 @@ function RankingTableInner(props: {
       <Box
         className="ranking-table-container"
         data-sort-col={sortColumn}
+        data-density={density}
         {...hiddenColAttrs}
         role="table"
         aria-label={t('rankingTable') || 'Trader Rankings'}
@@ -593,6 +621,8 @@ function RankingTableInner(props: {
             source={source}
             timeRange={timeRange}
             categoryCounts={categoryCounts}
+            density={density}
+            onDensityChange={handleDensityChange}
           />
         )}
 

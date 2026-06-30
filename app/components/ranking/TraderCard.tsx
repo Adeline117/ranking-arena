@@ -5,9 +5,11 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
-import { formatROI, formatPnL, formatDisplayName } from './utils'
+import { formatROI, formatDisplayName } from './utils'
 import { HighlightedName } from './RankingSearch'
 import { Sparkline } from '../ui/Sparkline'
+import Metric from '../ui/Metric'
+import ScoreMiniBar from './ScoreMiniBar'
 import {
   TRADER_TEXT_TERTIARY,
   TRADER_ACCENT_ERROR,
@@ -306,32 +308,42 @@ export const TraderCard = memo(function TraderCard({
             </Box>
           </Box>
 
-          {/* Arena Score */}
+          {/* Arena Score — badge (number) + graded mini-bar (audit §4) */}
           {trader.arena_score != null &&
             (() => {
               const { bgGradient, borderColor, textColor } = getScoreStyle(trader.arena_score)
               return (
                 <Box
                   style={{
-                    position: 'relative',
-                    minWidth: 50,
-                    height: 28,
-                    borderRadius: tokens.radius.md,
-                    background: bgGradient,
-                    border: `1px solid ${borderColor}`,
                     display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    flexDirection: 'column',
+                    alignItems: 'flex-end',
+                    gap: 4,
                   }}
                 >
-                  <Text
-                    size="sm"
-                    weight="black"
-                    style={{ color: textColor, fontSize: tokens.typography.fontSize.sm }}
+                  <Box
+                    style={{
+                      position: 'relative',
+                      minWidth: 50,
+                      height: 28,
+                      borderRadius: tokens.radius.md,
+                      background: bgGradient,
+                      border: `1px solid ${borderColor}`,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
                   >
-                    {Number(trader.arena_score).toFixed(0)}
-                  </Text>
-                  <ScoreConfidenceIndicator trader={trader} />
+                    <Text
+                      size="sm"
+                      weight="black"
+                      style={{ color: textColor, fontSize: tokens.typography.fontSize.sm }}
+                    >
+                      {Number(trader.arena_score).toFixed(0)}
+                    </Text>
+                    <ScoreConfidenceIndicator trader={trader} />
+                  </Box>
+                  <ScoreMiniBar score={Number(trader.arena_score)} width={50} height={4} />
                 </Box>
               )
             })()}
@@ -343,22 +355,13 @@ export const TraderCard = memo(function TraderCard({
           <Box style={{ flexShrink: 1, minWidth: 0, overflow: 'hidden' }}>
             <Sparkline roi={trader.roi} width={120} height={24} />
           </Box>
-          <Text
-            size="xl"
-            weight="black"
-            style={{
-              color:
-                trader.roi != null && Number.isFinite(trader.roi)
-                  ? trader.roi >= 0
-                    ? tokens.colors.accent.success
-                    : TRADER_ACCENT_ERROR
-                  : tokens.colors.text.tertiary,
-              marginLeft: 'auto',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            {formatROI(trader.roi)}
-          </Text>
+          <Metric
+            value={trader.roi}
+            format="roi"
+            size="lg"
+            showArrow
+            style={{ marginLeft: 'auto' }}
+          />
         </Box>
 
         {/* Stats row */}
@@ -380,13 +383,10 @@ export const TraderCard = memo(function TraderCard({
           />
           <MetricStat
             label="PnL"
-            value={formatPnL(trader.pnl)}
-            color={
-              trader.pnl != null
-                ? trader.pnl >= 0
-                  ? tokens.colors.accent.success
-                  : TRADER_ACCENT_ERROR
-                : undefined
+            value={
+              trader.pnl != null ? (
+                <Metric value={trader.pnl} format="pnl" size="sm" as="span" showArrow />
+              ) : undefined
             }
           />
           <MetricStat
@@ -407,13 +407,21 @@ export const TraderCard = memo(function TraderCard({
           <MetricStat
             label="MDD"
             value={
-              trader.max_drawdown != null
-                ? Math.abs(Number(trader.max_drawdown)) < 0.05
-                  ? '< 0.1%'
-                  : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}%`
-                : undefined
+              trader.max_drawdown != null ? (
+                <Metric
+                  value={-Math.abs(Number(trader.max_drawdown))}
+                  format="percent"
+                  display={
+                    Math.abs(Number(trader.max_drawdown)) < 0.05
+                      ? '< 0.1%'
+                      : `-${Math.abs(Number(trader.max_drawdown)).toFixed(1)}%`
+                  }
+                  size="sm"
+                  as="span"
+                  showArrow
+                />
+              ) : undefined
             }
-            color={trader.max_drawdown != null ? TRADER_ACCENT_ERROR : undefined}
             nullTooltip={
               trader.max_drawdown == null
                 ? getPlatformNote(trader.source || source || '') ||

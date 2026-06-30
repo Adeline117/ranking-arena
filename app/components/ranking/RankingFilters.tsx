@@ -10,7 +10,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
 import { type CategoryType } from './CategoryRankingTabs'
 import { FilterIcon, CompareIcon, SettingsIcon, LockIconSmall } from './Icons'
-import type { ColumnKey } from './RankingTable'
+import type { ColumnKey, RankingDensity } from './RankingTable'
 import { getFilterableStyles, classifyStyle, type TradingStyle } from '@/lib/utils/trading-style'
 
 const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = [
@@ -264,6 +264,9 @@ interface RankingFiltersProps {
   timeRange?: string
   // Server-side category counts for tab badges
   categoryCounts?: { all: number; futures: number; spot: number; onchain: number }
+  // Row density toggle (1.4)
+  density?: RankingDensity
+  onDensityChange?: (d: RankingDensity) => void
 }
 
 /** Pill-style filter chip */
@@ -350,6 +353,8 @@ export function RankingFilters({
   source,
   timeRange,
   categoryCounts: _categoryCounts,
+  density,
+  onDensityChange,
 }: RankingFiltersProps) {
   const { t, language } = useLanguage()
   const columnSettingsRef = useRef<HTMLDivElement>(null)
@@ -554,6 +559,56 @@ export function RankingFilters({
             marginLeft: 'auto',
           }}
         >
+          {/* Row density toggle (1.4) — segmented comfortable / compact */}
+          {density && onDensityChange && (
+            <Box className="view-toggle-group" role="group" aria-label={t('rowDensity')}>
+              <button
+                type="button"
+                className={`view-toggle-btn${density === 'comfortable' ? ' view-toggle-active' : ''}`}
+                aria-pressed={density === 'comfortable'}
+                aria-label={t('densityComfortable')}
+                title={t('densityComfortable')}
+                onClick={() => onDensityChange('comfortable')}
+              >
+                <svg
+                  width={12}
+                  height={12}
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  aria-hidden="true"
+                >
+                  <rect x="2.5" y="3" width="11" height="4" rx="1" />
+                  <rect x="2.5" y="9" width="11" height="4" rx="1" />
+                </svg>
+              </button>
+              <button
+                type="button"
+                className={`view-toggle-btn${density === 'compact' ? ' view-toggle-active' : ''}`}
+                aria-pressed={density === 'compact'}
+                aria-label={t('densityCompact')}
+                title={t('densityCompact')}
+                onClick={() => onDensityChange('compact')}
+              >
+                <svg
+                  width={12}
+                  height={12}
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  aria-hidden="true"
+                >
+                  <line x1="2.5" y1="4" x2="13.5" y2="4" />
+                  <line x1="2.5" y1="8" x2="13.5" y2="8" />
+                  <line x1="2.5" y1="12" x2="13.5" y2="12" />
+                </svg>
+              </button>
+            </Box>
+          )}
+
           {/* Filter toggle */}
           <Box
             data-filter-toggle

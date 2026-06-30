@@ -1456,6 +1456,9 @@ const en = {
   clearSearch: 'Clear search',
   tableView: 'Table View',
   cardView: 'Card View',
+  rowDensity: 'Row density',
+  densityComfortable: 'Comfortable',
+  densityCompact: 'Compact',
   resetAutoLayout: 'Reset to auto layout',
 
   // RankingSection

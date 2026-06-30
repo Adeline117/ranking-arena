@@ -1323,6 +1323,9 @@ const ja = {
   clearSearch: '検索をクリア',
   tableView: 'テーブルビュー',
   cardView: 'カードビュー',
+  rowDensity: '行の密度',
+  densityComfortable: '快適',
+  densityCompact: 'コンパクト',
   resetAutoLayout: '自動レイアウトにリセット',
 
   justUpdated: 'たった今',

@@ -9,6 +9,7 @@ import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { formatDisplayName } from './utils'
 import { RankDisplay, ArenaScoreCircle, areTraderPropsEqual } from './shared/TraderDisplay'
+import ScoreMiniBar from './ScoreMiniBar'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { classifyStyle, getStyleInfo, type TradingStyle } from '@/lib/utils/trading-style'
@@ -47,6 +48,21 @@ const ScoreBreakdownTooltip = dynamic(
     ssr: false,
   }
 )
+
+// ── Module-level style constants (avoid per-render allocation) ───────────────
+
+// Score cell now stacks the circle (top) + a graded mini-bar (bottom).
+const SCORE_CELL_STACK_STYLE: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: 3,
+}
+const SCORE_CELL_ROW_STYLE: React.CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 4,
+}
 
 // ── Props ──────────────────────────────────────────────────────────────────
 
@@ -209,7 +225,8 @@ export const TraderRow = memo(
               style={{
                 ...ROW_BASE_STYLE,
                 borderBottom: rank <= 3 ? undefined : '1px solid var(--color-border-primary)',
-                minHeight: rank <= 3 ? 72 : 58,
+                // Row min-height is driven by CSS (.ranking-table-rows .ranking-row,
+                // + density override) so the compact/comfortable toggle can win.
                 ...heroStyle,
               }}
             >
@@ -234,16 +251,23 @@ export const TraderRow = memo(
                 tradingStyleInfo={tradingStyleInfo}
               />
 
-              {/* Arena Score */}
+              {/* Arena Score — circle (number) + graded mini-bar (audit §4) */}
               <Box className="col-score" style={SCORE_CELL_STYLE}>
-                <ArenaScoreCircle
-                  score={trader.arena_score}
-                  roi={trader.roi}
-                  pnl={trader.pnl}
-                  showConfidence
-                  trader={trader}
-                />
-                <ScoreBreakdownTooltip trader={trader} language={language} />
+                <div style={SCORE_CELL_STACK_STYLE}>
+                  <div style={SCORE_CELL_ROW_STYLE}>
+                    <ArenaScoreCircle
+                      score={trader.arena_score}
+                      roi={trader.roi}
+                      pnl={trader.pnl}
+                      showConfidence
+                      trader={trader}
+                    />
+                    <ScoreBreakdownTooltip trader={trader} language={language} />
+                  </div>
+                  {trader.arena_score != null && (
+                    <ScoreMiniBar score={Number(trader.arena_score)} width={44} height={4} />
+                  )}
+                </div>
               </Box>
 
               {/* All metric columns */}
