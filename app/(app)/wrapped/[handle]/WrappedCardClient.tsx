@@ -75,7 +75,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
   const roiStr = roiValid ? formatRoi(roi) : '--'
   const topPct = rank && total ? getTopPercent(rank, total) : ''
   const rankDisplay = rank ? (rank <= 9999 ? `${rank}` : `${Math.round(rank / 1000)}K`) : '--'
-  const totalDisplay = total ? `${total.toLocaleString('en-US')}+` : '32,000+'
+  const totalDisplay = total ? `${total.toLocaleString('en-US')}+` : null
   const windowLabel = formatWindow(data.window)
 
   // Build X share text and link
@@ -387,7 +387,9 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
                 >
                   {rankDisplay}
                 </span>
-                <span style={{ fontSize: 14, color: C.dim }}>/ {totalDisplay} traders</span>
+                {totalDisplay && (
+                  <span style={{ fontSize: 14, color: C.dim }}>/ {totalDisplay} traders</span>
+                )}
               </div>
               {topPct && (
                 <div
