@@ -1,10 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import dynamic from 'next/dynamic'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { usePeriodStore } from '@/lib/stores/periodStore'
 import {
   PeriodSelector,
   getBestChartType,
@@ -33,9 +34,12 @@ export function EquityCurveSection({
   delay,
 }: EquityCurveSectionProps) {
   const { t } = useLanguage()
-  const [period, setPeriod] = useState<'7D' | '30D' | '90D'>(() =>
-    getBestInitialPeriod(equityCurve)
-  )
+  // Period is the SINGLE source of truth, shared via periodStore — the same
+  // store OverviewPerformanceCard and the drawdown / daily-returns charts read.
+  // Switching the period anywhere now moves every chart together.
+  const period = usePeriodStore((s) => s.period)
+  const setPeriod = usePeriodStore((s) => s.setPeriod)
+  const didInitPeriodRef = useRef(false)
   const [chartType, setChartType] = useState<'roi' | 'pnl'>(() => getBestChartType(equityCurve))
   const [mounted, setMounted] = useState(false)
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false)
@@ -57,6 +61,20 @@ export function EquityCurveSection({
     const timer = setTimeout(() => setMounted(true), delay * 1000)
     return () => clearTimeout(timer)
   }, [delay, prefersReducedMotion])
+
+  // Preserve the "pick the best available period on load" UX. The shared store
+  // defaults to 90D and isn't equity-curve-aware, so if the current period has
+  // no equity data fall back to the best available one (90D → 30D → 7D). Runs
+  // once; a URL/user-chosen period that already has data is left untouched.
+  useEffect(() => {
+    if (didInitPeriodRef.current) return
+    didInitPeriodRef.current = true
+    const hasDataForCurrent = (equityCurve?.[period]?.length ?? 0) > 0
+    if (!hasDataForCurrent) {
+      const best = getBestInitialPeriod(equityCurve)
+      if (best !== period) setPeriod(best)
+    }
+  }, [equityCurve, period, setPeriod])
 
   // Auto-switch chart type when the selected period has no data for current type
   useEffect(() => {
