@@ -26,20 +26,33 @@ interface PageProps {
 // Generate metadata for SEO and social sharing
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { token } = await params
-  let snapshot: { title: string | null; time_range: string; total_traders: number; top_trader_handle: string; top_trader_roi: number; data_captured_at: string } | null = null
+  let snapshot: {
+    title: string | null
+    time_range: string
+    total_traders: number
+    top_trader_handle: string
+    top_trader_roi: number
+    data_captured_at: string
+  } | null = null
   try {
     const supabase = getSupabaseAdmin() as SupabaseClient
     const { data } = await Promise.race([
       supabase
         .from('ranking_snapshots')
-        .select('title, time_range, total_traders, top_trader_handle, top_trader_roi, data_captured_at')
+        .select(
+          'title, time_range, total_traders, top_trader_handle, top_trader_roi, data_captured_at'
+        )
         .eq('share_token', token)
         .eq('is_public', true)
         .single(),
-      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+      new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+      ),
     ])
     snapshot = data
-  } catch { /* timeout or error — use default metadata */ }
+  } catch {
+    /* timeout or error — use default metadata */
+  }
 
   if (!snapshot) {
     return {
@@ -53,7 +66,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     '90D': '90-Day',
   }
 
-  const title = snapshot.title || `${timeRangeLabels[snapshot.time_range] || snapshot.time_range} Leaderboard Snapshot`
+  const title =
+    snapshot.title ||
+    `${timeRangeLabels[snapshot.time_range] || snapshot.time_range} Leaderboard Snapshot`
   const description = `Top ${snapshot.total_traders} traders. #1: ${snapshot.top_trader_handle} with ${snapshot.top_trader_roi >= 0 ? '+' : ''}${snapshot.top_trader_roi?.toFixed(1)}% ROI. Captured on ${new Date(snapshot.data_captured_at).toLocaleDateString()}.`
 
   return {
@@ -77,8 +92,9 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function SnapshotViewerPage({ params }: PageProps) {
   const { token } = await params
 
-  // Validate token format
-  if (!token || token.length < 6) {
+  // Validate token format (url-safe charset, bounded length) — reject malformed
+  // tokens before hitting the DB, not just short ones.
+  if (!token || !/^[A-Za-z0-9_-]{6,64}$/.test(token)) {
     notFound()
   }
 
@@ -92,7 +108,8 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
     const { data: snapshotData, error: snapshotError } = await Promise.race([
       supabase
         .from('ranking_snapshots')
-        .select(`
+        .select(
+          `
           id,
           share_token,
           time_range,
@@ -109,7 +126,8 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
           title,
           description,
           created_at
-        `)
+        `
+        )
         .eq('share_token', token)
         .single(),
       new Promise<{ data: null; error: { message: string } }>((resolve) =>
@@ -126,7 +144,8 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
     const { data: tradersData } = await Promise.race([
       supabase
         .from('snapshot_traders')
-        .select(`
+        .select(
+          `
           rank,
           trader_id,
           handle,
@@ -143,7 +162,8 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
           drawdown_score,
           stability_score,
           data_availability
-        `)
+        `
+        )
         .eq('snapshot_id', snapshotData.id)
         .order('rank', { ascending: true }),
       new Promise<{ data: null }>((resolve) =>
@@ -161,9 +181,12 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
   // Check if snapshot is expired
   const isExpired = snap.expires_at && new Date(snap.expires_at as string) < new Date()
 
-  // Increment view count (fire-and-forget, no timeout needed)
+  // Increment view count (fire-and-forget, no timeout needed). Guard the
+  // rejection so a failed RPC can't surface as an unhandled promise rejection.
   if (!isExpired) {
-    getSupabaseAdmin().rpc('increment_snapshot_view_count', { snapshot_share_token: token })
+    void Promise.resolve(
+      getSupabaseAdmin().rpc('increment_snapshot_view_count', { snapshot_share_token: token })
+    ).catch(() => void 0)
   }
 
   // Transform data for client component
