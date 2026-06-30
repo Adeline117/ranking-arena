@@ -194,40 +194,42 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
   const minValue = Math.min(...values)
   // Guard against Infinity/-Infinity
   if (!isFinite(maxValue) || !isFinite(minValue)) return null
-  const range = maxValue - minValue || 1
+
+  // Honest zero-baseline: cumulative ROI/PnL is anchored so the domain always
+  // includes 0. An all-positive series that dips slightly is then read against
+  // 0 (a small dip stays small) instead of against the series min (which would
+  // exaggerate it into a cliff). domainMin/domainMax always bracket 0.
+  const domainMin = Math.min(0, minValue)
+  const domainMax = Math.max(0, maxValue)
+  const range = domainMax - domainMin || 1
 
   const width = 100
   const height = 100
   const denominator = validData.length > 1 ? validData.length - 1 : 1
+  const yFor = (val: number) => height - ((val - domainMin) / range) * height
   const points = validData.map((d, i) => {
     const x = (i / denominator) * width
-    const y = height - (((d[dataKey] as number) - minValue) / range) * height
-    return `${x},${y}`
+    return `${x},${yFor(d[dataKey] as number)}`
   })
   const pathD = `M ${points.join(' L ')}`
 
-  // Baseline series: baseline is 0 for both ROI and PnL
-  const baselineValue = 0
-  const baselineY =
-    range === 0 ? height / 2 : height - ((baselineValue - minValue) / range) * height
+  // Baseline is 0 for both ROI and PnL; always within the anchored domain.
+  const baselineY = yFor(0)
   const clampedBaselineY = Math.max(0, Math.min(height, baselineY))
 
+  // Trend direction — used only for the accessible summary text.
   const isPositive = values[values.length - 1] >= values[0]
-  const color = isPositive ? tokens.colors.accent.success : tokens.colors.accent.error
 
-  // Check if baseline is within view (mixed positive/negative data)
+  // Show an interior "0" tick label only when zero sits inside the plot (mixed
+  // sign data). For all-positive / all-negative series the min/max axis labels
+  // already carry the 0 endpoint, so an interior label would be redundant.
   const hasBaseline = minValue < 0 && maxValue > 0
 
   // Always-on label pinned to the final data point ("label on the data") so the
   // current value reads without hovering. Clamp vertical position off the edges.
   const lastVal = values[values.length - 1]
-  const lastYPct = range === 0 ? 50 : height - ((lastVal - minValue) / range) * height
-  const lastLabelTop = Math.max(7, Math.min(93, lastYPct))
-  const lastLabelColor = hasBaseline
-    ? lastVal >= 0
-      ? tokens.colors.accent.success
-      : tokens.colors.accent.error
-    : color
+  const lastLabelTop = Math.max(7, Math.min(93, yFor(lastVal)))
+  const lastLabelColor = lastVal >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
 
   const locale =
     language === 'zh'
@@ -320,8 +322,8 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
           style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}
         >
           {dataKey === 'roi'
-            ? `${maxValue.toFixed(Math.abs(maxValue) < 10 ? 1 : 0)}%`
-            : formatAxisLabel(maxValue)}
+            ? `${domainMax.toFixed(Math.abs(domainMax) < 10 ? 1 : 0)}%`
+            : formatAxisLabel(domainMax)}
         </Text>
         <Text
           size="xs"
@@ -329,8 +331,8 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
           style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}
         >
           {dataKey === 'roi'
-            ? `${minValue.toFixed(Math.abs(minValue) < 10 ? 1 : 0)}%`
-            : formatAxisLabel(minValue)}
+            ? `${domainMin.toFixed(Math.abs(domainMin) < 10 ? 1 : 0)}%`
+            : formatAxisLabel(domainMin)}
         </Text>
       </Box>
 
@@ -370,33 +372,19 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
           preserveAspectRatio="none"
           style={{ width: '100%', height: '100%' }}
         >
-          {/* Grid */}
-          {[0, 25, 50, 75, 100].map((y) => (
-            <line
-              key={y}
-              x1="0"
-              y1={y}
-              x2="100"
-              y2={y}
-              stroke={tokens.colors.border.primary}
-              strokeWidth="0.3"
-              strokeDasharray="2,2"
-            />
-          ))}
-
-          {/* Baseline zero line (when data crosses zero) */}
-          {hasBaseline && (
-            <line
-              x1="0"
-              y1={clampedBaselineY}
-              x2="100"
-              y2={clampedBaselineY}
-              stroke={tokens.colors.text.tertiary}
-              strokeWidth="0.5"
-              strokeDasharray="2,2"
-              opacity="0.6"
-            />
-          )}
+          {/* Zero reference line — the single honest gridline, mapped to the
+              real 0 value. (The old fixed 0/25/50/75/100 lines were drawn at
+              viewBox positions that didn't correspond to any data value.) */}
+          <line
+            x1="0"
+            y1={clampedBaselineY}
+            x2="100"
+            y2={clampedBaselineY}
+            stroke={tokens.colors.text.tertiary}
+            strokeWidth="0.5"
+            strokeDasharray="2,2"
+            opacity="0.6"
+          />
 
           {/* Baseline series: split fill above/below zero using clipPath */}
           <defs>
@@ -418,65 +406,46 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
             </linearGradient>
           </defs>
 
-          {hasBaseline ? (
-            <>
-              {/* Green area fill above baseline */}
-              <path
-                d={`${pathD} L ${width},${clampedBaselineY} L 0,${clampedBaselineY} Z`}
-                fill={`url(#gradient-${period}-positive)`}
-                clipPath={`url(#clip-above-${period})`}
-                opacity="0.4"
-              />
-              {/* Red area fill below baseline */}
-              <path
-                d={`${pathD} L ${width},${clampedBaselineY} L 0,${clampedBaselineY} Z`}
-                fill={`url(#gradient-${period}-negative)`}
-                clipPath={`url(#clip-below-${period})`}
-                opacity="0.4"
-              />
-              {/* Green line above baseline */}
-              <path
-                d={pathD}
-                fill="none"
-                stroke={tokens.colors.accent.success}
-                strokeWidth="3"
-                vectorEffect="non-scaling-stroke"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                clipPath={`url(#clip-above-${period})`}
-              />
-              {/* Red line below baseline */}
-              <path
-                d={pathD}
-                fill="none"
-                stroke={tokens.colors.accent.error}
-                strokeWidth="3"
-                vectorEffect="non-scaling-stroke"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                clipPath={`url(#clip-below-${period})`}
-              />
-            </>
-          ) : (
-            <>
-              {/* Single-color fill (all values same sign) */}
-              <path
-                d={`${pathD} L 100,100 L 0,100 Z`}
-                fill={`url(#gradient-${period}-${isPositive ? 'positive' : 'negative'})`}
-                opacity="0.4"
-              />
-              {/* Single-color line */}
-              <path
-                d={pathD}
-                fill="none"
-                stroke={color}
-                strokeWidth="3"
-                vectorEffect="non-scaling-stroke"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-            </>
-          )}
+          {/* Fill + line split at the zero baseline: green above (profit),
+              red below (loss). Driven by sign vs. zero, not by start-vs-end
+              trend — so an all-positive series that dips slightly still reads
+              green rather than being painted entirely red. */}
+          {/* Green area fill above baseline */}
+          <path
+            d={`${pathD} L ${width},${clampedBaselineY} L 0,${clampedBaselineY} Z`}
+            fill={`url(#gradient-${period}-positive)`}
+            clipPath={`url(#clip-above-${period})`}
+            opacity="0.4"
+          />
+          {/* Red area fill below baseline */}
+          <path
+            d={`${pathD} L ${width},${clampedBaselineY} L 0,${clampedBaselineY} Z`}
+            fill={`url(#gradient-${period}-negative)`}
+            clipPath={`url(#clip-below-${period})`}
+            opacity="0.4"
+          />
+          {/* Green line above baseline */}
+          <path
+            d={pathD}
+            fill="none"
+            stroke={tokens.colors.accent.success}
+            strokeWidth="3"
+            vectorEffect="non-scaling-stroke"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            clipPath={`url(#clip-above-${period})`}
+          />
+          {/* Red line below baseline */}
+          <path
+            d={pathD}
+            fill="none"
+            stroke={tokens.colors.accent.error}
+            strokeWidth="3"
+            vectorEffect="non-scaling-stroke"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            clipPath={`url(#clip-below-${period})`}
+          />
 
           {/* Hover vertical line */}
           {hoverIndex !== null && (
@@ -497,12 +466,8 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
             (() => {
               const cx = (hoverIndex / denominator) * width
               const val = validData[hoverIndex][dataKey] as number
-              const cy = height - ((val - minValue) / range) * height
-              const dotColor = hasBaseline
-                ? val >= 0
-                  ? tokens.colors.accent.success
-                  : tokens.colors.accent.error
-                : color
+              const cy = yFor(val)
+              const dotColor = val >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
               return (
                 <circle
                   cx={cx}
@@ -516,6 +481,29 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
               )
             })()}
         </svg>
+
+        {/* Interior "0" tick label — only when zero sits inside the plot
+            (mixed-sign data); labels the zero reference line honestly. */}
+        {hasBaseline && (
+          <Box
+            style={{
+              position: 'absolute',
+              left: 4,
+              top: `${clampedBaselineY}%`,
+              transform: 'translateY(-50%)',
+              pointerEvents: 'none',
+              zIndex: 4,
+            }}
+          >
+            <Text
+              size="xs"
+              color="tertiary"
+              style={{ fontFamily: tokens.typography.fontFamily.mono.join(', '), fontSize: 11 }}
+            >
+              {dataKey === 'roi' ? '0%' : '$0'}
+            </Text>
+          </Box>
+        )}
 
         {/* Always-on final-value label, pinned to the last data point. Hidden
             while hovering so it doesn't fight the hover tooltip. */}
@@ -577,11 +565,10 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
               size="sm"
               weight="bold"
               style={{
-                color: hasBaseline
-                  ? hoverData[dataKey] >= 0
+                color:
+                  hoverData[dataKey] >= 0
                     ? tokens.colors.accent.success
-                    : tokens.colors.accent.error
-                  : color,
+                    : tokens.colors.accent.error,
                 fontFamily: tokens.typography.fontFamily.mono.join(', '),
               }}
             >

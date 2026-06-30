@@ -4,7 +4,7 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
 import { Sparkline } from '@/app/components/ui/Sparkline'
-import { formatPnL as formatPnLUtil, formatROI as formatROIUtil } from '../../ranking/utils'
+import Metric from '@/app/components/ui/Metric'
 import InfoTooltip from '../../ui/InfoTooltip'
 
 export interface HeroMetricsProps {
@@ -16,19 +16,23 @@ export interface HeroMetricsProps {
 
 export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsProps) {
   const { t } = useLanguage()
-  void t // used below
 
-  const formatPnl = (value: number | undefined | null) => {
-    if (value == null) return '—'
-    return formatPnLUtil(value)
-  }
+  // Shared entrance animation for the headline figures.
+  const enterStyle = (delayMs: number) => ({
+    opacity: isVisible ? 1 : 0,
+    transform: isVisible ? 'translateY(0)' : 'translateY(4px)',
+    transition: `opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) ${delayMs}ms`,
+  })
 
   return (
     <Box
       className="performance-main-grid"
       style={{
         display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
+        // ROI is the single dominant hero → give it the wider column. Collapses
+        // to a single column ≤768px (see .performance-main-grid in globals.css),
+        // so the hero never gets cramped on narrow / 320px viewports.
+        gridTemplateColumns: 'minmax(0, 1.4fr) minmax(0, 1fr)',
         gap: tokens.spacing[4],
         marginBottom: tokens.spacing[5],
       }}
@@ -73,28 +77,16 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
           />
         </Text>
         <Box style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
-          <Text
+          <Metric
             className="hero-metric-value"
+            value={roi}
+            format="roi"
+            size="hero"
             style={{
-              fontSize: tokens.typography.fontSize.hero,
-              fontWeight: 800,
-              color:
-                roi != null
-                  ? roi >= 0
-                    ? tokens.colors.accent.success
-                    : tokens.colors.accent.error
-                  : tokens.colors.text.secondary,
               fontFamily: tokens.typography.fontFamily.mono.join(', '),
-              letterSpacing: '-0.03em',
-              lineHeight: 1.2,
-              opacity: isVisible ? 1 : 0,
-              transform: isVisible ? 'translateY(0)' : 'translateY(4px)',
-              transition:
-                'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.1s, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.1s',
+              ...enterStyle(100),
             }}
-          >
-            {roi != null ? formatROIUtil(roi) : '—'}
-          </Text>
+          />
           {(sparklineData.length > 2 || roi != null) && (
             <Sparkline
               data={sparklineData.length > 2 ? sparklineData : undefined}
@@ -143,28 +135,16 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
             size={11}
           />
         </Text>
-        <Text
-          className="hero-metric-value"
+        {/* Secondary supporting figure — demoted below the ROI hero. */}
+        <Metric
+          value={pnl}
+          format="pnl"
+          size="lg"
           style={{
-            fontSize: tokens.typography.fontSize.hero,
-            fontWeight: 800,
-            color:
-              pnl != null
-                ? pnl >= 0
-                  ? tokens.colors.accent.success
-                  : tokens.colors.accent.error
-                : tokens.colors.text.secondary,
             fontFamily: tokens.typography.fontFamily.mono.join(', '),
-            letterSpacing: '-0.03em',
-            lineHeight: 1.2,
-            opacity: isVisible ? 1 : 0,
-            transform: isVisible ? 'translateY(0)' : 'translateY(4px)',
-            transition:
-              'opacity 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.2s, transform 0.5s cubic-bezier(0.4, 0, 0.2, 1) 0.2s',
+            ...enterStyle(200),
           }}
-        >
-          {formatPnl(pnl)}
-        </Text>
+        />
       </Box>
     </Box>
   )

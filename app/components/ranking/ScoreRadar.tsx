@@ -7,19 +7,21 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 interface ScoreRadarProps {
   profitability: number | null // 0-60 (returnScore)
   riskControl: number | null // 0-40 (pnlScore)
-  execution: number | null // V3 removed, typically null
+  /** @deprecated V3 removed the execution axis (always null/0). Accepted for
+   *  backwards-compat with call sites but no longer rendered. */
+  execution?: number | null
   arenaScore: number // 0-100, for color
   size?: number
 }
 
 /**
- * 三角形雷达图 - SVG自绘
- * 三个轴：收益能力、风险控制、执行质量
+ * 雷达图 - SVG自绘
+ * 两个轴：收益能力 (0-60)、风险控制 (0-40)。
+ * 执行质量 (Exec) 轴在 V3 已废弃（恒为 0/null），已从图与标签中移除。
  */
 export const ScoreRadar = memo(function ScoreRadar({
   profitability,
   riskControl,
-  execution,
   arenaScore,
   size = 120,
 }: ScoreRadarProps) {
@@ -28,28 +30,29 @@ export const ScoreRadar = memo(function ScoreRadar({
   const cy = size / 2
   const r = size * 0.38 // max radius
 
-  // Normalize to 0-1, guard against NaN/undefined/null
-  const pVal = profitability != null && Number.isFinite(profitability) ? profitability : 0
-  const rVal = riskControl != null && Number.isFinite(riskControl) ? riskControl : 0
-  const eVal = execution != null && Number.isFinite(execution) ? execution : 0
-  const pNorm = Math.min(pVal / 60, 1)
-  const rNorm = Math.min(rVal / 40, 1)
-  const eNorm = Math.min(eVal / 40, 1) // Use same scale as riskControl since execution is deprecated
+  // Normalize to 0-1 against the REAL axis maxima (60 / 40); guard null/NaN.
+  const pFinite = profitability != null && Number.isFinite(profitability)
+  const rFinite = riskControl != null && Number.isFinite(riskControl)
+  const pVal = pFinite ? (profitability as number) : 0
+  const rVal = rFinite ? (riskControl as number) : 0
+  const pNorm = Math.min(Math.max(pVal / 60, 0), 1)
+  const rNorm = Math.min(Math.max(rVal / 40, 0), 1)
 
-  // Three axes at 120 degree intervals, starting from top
-  // Top: 收益能力, Bottom-left: 风险控制, Bottom-right: 执行质量
-  const angles = [-Math.PI / 2, -Math.PI / 2 + (2 * Math.PI) / 3, -Math.PI / 2 + (4 * Math.PI) / 3]
+  // Two axes: profit (upper-left) and risk (upper-right), symmetric about the
+  // vertical so the filled shape reads as a balanced "peak".
+  const angles = [(-Math.PI * 3) / 4, -Math.PI / 4]
 
   const getPoint = (angle: number, ratio: number) => ({
     x: cx + r * ratio * Math.cos(angle),
     y: cy + r * ratio * Math.sin(angle),
   })
 
-  // Background grid lines
+  // Background grid (nested triangles from center to each axis tip)
   const gridLevels = [0.33, 0.66, 1.0]
   const gridPaths = gridLevels.map((level) => {
-    const pts = angles.map((a) => getPoint(a, level))
-    return `M${pts[0].x},${pts[0].y} L${pts[1].x},${pts[1].y} L${pts[2].x},${pts[2].y} Z`
+    const a = getPoint(angles[0], level)
+    const b = getPoint(angles[1], level)
+    return `M${cx},${cy} L${a.x},${a.y} L${b.x},${b.y} Z`
   })
 
   // Axis lines
@@ -58,32 +61,41 @@ export const ScoreRadar = memo(function ScoreRadar({
     return `M${cx},${cy} L${end.x},${end.y}`
   })
 
-  // Data shape
-  const values = [pNorm, rNorm, eNorm]
+  // Data shape (center → profit → risk → center). Floor ratio so a zero axis
+  // still shows a small dot rather than collapsing onto the center.
+  const values = [pNorm, rNorm]
   const dataPoints = angles.map((a, i) => getPoint(a, Math.max(values[i], 0.05)))
-  const dataPath = `M${dataPoints[0].x},${dataPoints[0].y} L${dataPoints[1].x},${dataPoints[1].y} L${dataPoints[2].x},${dataPoints[2].y} Z`
+  const dataPath = `M${cx},${cy} L${dataPoints[0].x},${dataPoints[0].y} L${dataPoints[1].x},${dataPoints[1].y} Z`
 
   const color = getScoreColor(arenaScore)
   const labelFontSize = Math.max(size * 0.08, 9)
-  // Raw per-axis scores for on-data value labels (skip deprecated execution=0).
-  const rawValues = [pVal, rVal, eVal]
+  // Raw per-axis scores for on-data value labels.
+  const rawValues = [pVal, rVal]
+  const rawFinite = [pFinite, rFinite]
   const valueFontSize = Math.max(size * 0.062, 8)
 
-  // Label positions (slightly outside the triangle)
+  // Label positions (slightly outside the shape)
   const labelOffset = r + 14
   const labels = [
-    { text: t('scoreRadarProfit'), x: cx, y: cy - labelOffset },
+    {
+      text: t('scoreRadarProfit'),
+      x: cx + labelOffset * Math.cos(angles[0]) - 2,
+      y: cy + labelOffset * Math.sin(angles[0]) - 2,
+    },
     {
       text: t('scoreRadarRisk'),
-      x: cx + labelOffset * Math.cos(angles[1]) - 4,
-      y: cy + labelOffset * Math.sin(angles[1]) + 4,
-    },
-    {
-      text: t('scoreRadarExec'),
-      x: cx + labelOffset * Math.cos(angles[2]) + 4,
-      y: cy + labelOffset * Math.sin(angles[2]) + 4,
+      x: cx + labelOffset * Math.cos(angles[1]) + 2,
+      y: cy + labelOffset * Math.sin(angles[1]) - 2,
     },
   ]
+
+  // Honest accessible summary: real denominators (60 / 40), null-guarded, no
+  // deprecated Exec axis.
+  const ariaProfit = pFinite ? Math.round(pVal) : '—'
+  const ariaRisk = rFinite ? Math.round(rVal) : '—'
+  const ariaLabel =
+    `Score radar: ${t('scoreRadarProfit')} ${ariaProfit}/60, ` +
+    `${t('scoreRadarRisk')} ${ariaRisk}/40`
 
   return (
     <svg
@@ -91,7 +103,7 @@ export const ScoreRadar = memo(function ScoreRadar({
       height={size}
       viewBox={`0 0 ${size} ${size}`}
       role="img"
-      aria-label={`Score radar: ${t('scoreRadarProfit')} ${profitability}/35, ${t('scoreRadarRisk')} ${riskControl}/40, ${t('scoreRadarExec')} ${execution}/25`}
+      aria-label={ariaLabel}
       style={{ overflow: 'visible' }}
     >
       {/* Grid */}
@@ -124,7 +136,7 @@ export const ScoreRadar = memo(function ScoreRadar({
       {/* On-data value labels — score read directly off each axis dot. Nudged
           radially outward so they clear the filled polygon. */}
       {dataPoints.map((pt, i) =>
-        rawValues[i] > 0 ? (
+        rawFinite[i] ? (
           <text
             key={`val-${i}`}
             x={pt.x + Math.cos(angles[i]) * 8}
