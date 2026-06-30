@@ -78,6 +78,7 @@ export default function NewsCard({
       }}
     >
       <Box
+        aria-hidden="true"
         className={item.importance === 'breaking' ? 'flash-dot-breaking' : undefined}
         style={{
           position: 'absolute',
@@ -182,8 +183,9 @@ export default function NewsCard({
                 {translatedContent[item.id] && (
                   <span
                     style={{
+                      // eslint-disable-next-line no-restricted-syntax -- off-scale micro label by design
                       fontSize: 10,
-                      fontWeight: 500,
+                      fontWeight: tokens.typography.fontWeight.medium,
                       marginLeft: 6,
                       padding: '1px 6px',
                       borderRadius: tokens.radius.sm,
