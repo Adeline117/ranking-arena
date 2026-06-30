@@ -121,8 +121,12 @@ export function parseBitmartLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parse
       headlinePnl: num(item.pnl),
       // win_rate only ships inside the structured ai_comment block
       headlineWinRate: aiComment ? pct(aiComment.win_rate) : null,
+      // Board carries mdd (fraction→pct, "0.251"=25.11%) and aum (absolute USD) —
+      // were raw-only, so board-tier masters had no MDD/AUM.
+      headlineMdd: pct(item.mdd),
+      headlineAum: num(item.aum),
       traderMeta: item.master_tag !== undefined ? { master_tag: int(item.master_tag) } : null,
-      // NAV, scores, pl_ratio, mdd, copiers, aum, profit share... verbatim
+      // NAV, scores, pl_ratio, copiers, profit share... verbatim
       raw: item,
     })
   }
