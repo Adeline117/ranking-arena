@@ -13,6 +13,8 @@ interface SparklineProps {
   /** Stroke color; defaults based on trend */
   color?: string
   className?: string
+  /** Override the default aria-label (e.g. for non-ROI series like Fear & Greed). */
+  ariaLabel?: string
 }
 
 /**
@@ -26,6 +28,7 @@ export const Sparkline = memo(function Sparkline({
   height = 24,
   color,
   className,
+  ariaLabel,
 }: SparklineProps) {
   // useId must be called before any early return to satisfy rules-of-hooks
   const gradientId = useId()
@@ -44,7 +47,8 @@ export const Sparkline = memo(function Sparkline({
         height={height}
         viewBox={`0 0 ${width} ${height}`}
         className={className}
-        aria-label={`ROI ${roiVal >= 0 ? '+' : ''}${roiVal.toFixed(1)}%`}
+        role="img"
+        aria-label={ariaLabel ?? `ROI ${roiVal >= 0 ? '+' : ''}${roiVal.toFixed(1)}%`}
       >
         {/* Background track */}
         <rect
@@ -113,7 +117,9 @@ export const Sparkline = memo(function Sparkline({
       viewBox={`0 0 ${width} ${height}`}
       className={className}
       role="img"
-      aria-label={`ROI trend: ${isUp ? '+' : ''}${changePercent}% over ${data.length} points`}
+      aria-label={
+        ariaLabel ?? `ROI trend: ${isUp ? '+' : ''}${changePercent}% over ${data.length} points`
+      }
     >
       <defs>
         <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">

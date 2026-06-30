@@ -66,34 +66,30 @@ const CATEGORY_MAP: Record<string, string> = {
   THETA: 'Infra',
 }
 
+// Diverging gain/loss ramp anchored at 0% (intensity 0 = neutral midpoint).
+// Keeps the red(loss)/green(gain) SEMANTIC, but encodes direction with
+// LUMINANCE too — gains trend toward a *bright* green (high luminance) and
+// losses toward a *dark* red (low luminance). Protan/deutan viewers who can't
+// separate the two hues can still read direction by lightness. A continuous
+// per-tile ramp can't be a design token, so rgb() interpolation is intentional.
 function getChangeColor(changePct: number, isLight = false): string {
   const maxPct = 10
   const clamped = Math.max(-maxPct, Math.min(maxPct, changePct))
-  const intensity = Math.abs(clamped) / maxPct
+  const intensity = Math.abs(clamped) / maxPct // 0 at 0%, 1 at ±maxPct
+  const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t)
+  const mix = (mid: [number, number, number], end: [number, number, number]) =>
+    `rgb(${lerp(mid[0], end[0], intensity)}, ${lerp(mid[1], end[1], intensity)}, ${lerp(mid[2], end[2], intensity)})`
+
   if (isLight) {
-    if (clamped >= 0) {
-      const r = Math.round(34 + (1 - intensity) * 160)
-      const g = Math.round(139 + (1 - intensity) * 80)
-      const b = Math.round(34 + (1 - intensity) * 160)
-      return `rgb(${r}, ${g}, ${b})`
-    } else {
-      const r = Math.round(200 + (1 - intensity) * 40)
-      const g = Math.round(50 + (1 - intensity) * 140)
-      const b = Math.round(50 + (1 - intensity) * 140)
-      return `rgb(${r}, ${g}, ${b})`
-    }
+    // Light theme: neutral light-slate midpoint
+    const mid: [number, number, number] = [210, 216, 224]
+    // gain → vivid green (higher luminance) | loss → deep dark red (low luminance)
+    return clamped >= 0 ? mix(mid, [21, 150, 70]) : mix(mid, [140, 22, 30])
   }
-  if (clamped >= 0) {
-    const r = Math.round(42 - intensity * 20)
-    const g = Math.round(107 + intensity * 56)
-    const b = Math.round(74 - intensity * 0)
-    return `rgb(${r}, ${g}, ${b})`
-  } else {
-    const r = Math.round(139 + intensity * 81)
-    const g = Math.round(58 - intensity * 20)
-    const b = Math.round(58 - intensity * 20)
-    return `rgb(${r}, ${g}, ${b})`
-  }
+  // Dark theme: muted slate midpoint
+  const mid: [number, number, number] = [51, 65, 85]
+  // gain → bright green (high luminance) | loss → dark crimson (low luminance)
+  return clamped >= 0 ? mix(mid, [34, 197, 94]) : mix(mid, [120, 22, 35])
 }
 
 interface TreemapNode {
@@ -323,7 +319,7 @@ export default function SectorTreemap({
                 key={node.name}
                 role="button"
                 tabIndex={0}
-                aria-label={`${node.name} (${node.category}): ${node.changePct >= 0 ? '+' : ''}${node.changePct.toFixed(1)}%`}
+                aria-label={`${node.name} (${node.category}): ${node.changePct >= 0 ? '+' : ''}${node.changePct.toFixed(1)}%, ${t('sectorTreemapMCap')} $${(node.marketCap / 1e9).toFixed(1)}B`}
                 onClick={() => onSectorClick?.(node.category)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -334,7 +330,13 @@ export default function SectorTreemap({
                 onMouseEnter={() => setHoveredNode(node.name)}
                 onMouseMove={(e) => setTooltipPos({ x: e.clientX, y: e.clientY })}
                 onMouseLeave={() => setHoveredNode(null)}
-                onFocus={() => setHoveredNode(node.name)}
+                onFocus={(e) => {
+                  // Keyboard focus has no pointer coords — anchor the tooltip to
+                  // the focused tile's rect so it renders in place (not at 0,0).
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  setTooltipPos({ x: rect.left, y: rect.top + 40 })
+                  setHoveredNode(node.name)
+                }}
                 onBlur={() => setHoveredNode(null)}
                 style={{
                   position: 'absolute',

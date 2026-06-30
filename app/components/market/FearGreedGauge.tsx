@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
 import { apiFetch } from '@/lib/utils/api-fetch'
+import Sparkline from '@/app/components/ui/Sparkline'
 
 function getColor(value: number): string {
   if (value <= 25) return tokens.colors.gauge.extremeFear
@@ -18,6 +19,7 @@ function getColor(value: number): string {
 export default function FearGreedGauge() {
   const { t, language } = useLanguage()
   const [data, setData] = useState<FearGreedData | null>(null)
+  const [history, setHistory] = useState<number[]>([])
   const [animatedValue, setAnimatedValue] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const prevValueRef = useRef(0)
@@ -31,7 +33,7 @@ export default function FearGreedGauge() {
   }
 
   useEffect(() => {
-    apiFetch<{ current?: FearGreedData }>('/api/market/fear-greed')
+    apiFetch<{ current?: FearGreedData; history?: FearGreedData[] }>('/api/market/fear-greed')
       .then((json) => {
         if (json.current) {
           // Hide stale data: if timestamp is older than 24 hours, hide entirely
@@ -41,6 +43,16 @@ export default function FearGreedGauge() {
             return
           }
           setData(json.current)
+          // API returns history most-recent-first; reverse for chronological
+          // (oldest → newest) so the sparkline reads left-to-right.
+          if (Array.isArray(json.history) && json.history.length > 1) {
+            setHistory(
+              json.history
+                .map((d) => Number(d.value))
+                .filter((v) => Number.isFinite(v))
+                .reverse()
+            )
+          }
         }
       })
       .catch((err) => {
@@ -366,6 +378,35 @@ export default function FearGreedGauge() {
             {label}
           </text>
         </svg>
+
+        {/* 30-day history sparkline — adds trend context to the single value */}
+        {history.length > 1 && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              marginTop: tokens.spacing[1],
+            }}
+          >
+            <span
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: tokens.colors.text.tertiary,
+                fontWeight: tokens.typography.fontWeight.medium,
+              }}
+            >
+              {t('days30')}
+            </span>
+            <Sparkline
+              data={history}
+              color={color}
+              width={120}
+              height={28}
+              ariaLabel={`${t('fearGreedTitle')} ${t('days30')}`}
+            />
+          </div>
+        )}
       </div>
     </div>
   )
