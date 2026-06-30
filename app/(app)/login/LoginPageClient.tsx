@@ -298,8 +298,17 @@ export default function LoginPageClient() {
       clearTimeout(timeoutId)
       if (otpError) {
         const msg = otpError.message.toLowerCase()
+        // Account-enumeration safety: never reveal whether an email is registered.
+        // "signup disabled / not found" is treated the same as success (neutral
+        // "code sent"), matching the reset-password flow. Real failures (rate
+        // limit, network) still surface so the user can react.
         if (msg.includes('signup') || msg.includes('not allowed') || msg.includes('not found')) {
-          setError(t('loginEmailNotRegistered'))
+          setCodeSent(true)
+          setCountdown(60)
+          sessionStorage.setItem('otp_countdown_end', String(Date.now() + 60000))
+          otpAttemptsRef.current = 0
+          setOtpLocked(false)
+          showToast(t('loginCodeSent'), 'success')
         } else {
           setError(t('loginSendFailedShort'))
         }
