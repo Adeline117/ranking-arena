@@ -23,7 +23,7 @@ import {
   warmupLeaderboardCache,
 } from './post-processing'
 import { detectTraderType, deriveWinRateMDD } from './helpers'
-import { type TraderRow, makeAddToTraderMap } from './trader-row'
+import { type TraderRow, makeAddToTraderMap, sanitizeTraderRow } from './trader-row'
 import { computeLastResortCalmar, classifyTradingStyle } from './scoring-helpers'
 import { checkPlatformFreshness } from './freshness-check'
 import { fetchHandleAvatarMap } from './fetch-handles'
@@ -599,6 +599,13 @@ async function computeSeason(
     .filter((t) => Math.abs(t.roi!) <= roiThreshold)
     .filter((t) => t.roi! > -90) // 过滤已爆仓交易员（ROI < -90%），无参考价值
     .filter((t) => t.trades_count == null || t.trades_count === 0 || t.trades_count >= MIN_TRADES) // 0 = unknown (API doesn't provide), treat same as null
+
+  // Re-apply boundary + contradiction sanitization AFTER all enrichment (Phases 3–4b3).
+  // The enrich steps (stats_detail / equity-curve / daily-snapshots) write win_rate /
+  // MDD / sharpe directly into traderMap, bypassing the intake sanitizer in
+  // addToTraderMap. Without this second pass, a profitable trader can carry a
+  // contradictory 99.x% MDD or 0% win_rate into BOTH scoring and serving.
+  for (const t of uniqueTraders) sanitizeTraderRow(t)
 
   // Debug: jupiter_perps filter analysis
   const jupiterInMap = Array.from(traderMap.values()).filter((t) => t.source === 'jupiter_perps')
