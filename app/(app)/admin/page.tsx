@@ -13,6 +13,7 @@ import { useFreshness } from './hooks/useFreshness'
 import { useApplications } from './hooks/useApplications'
 
 // Tab Components
+import AdminTabs, { tabButtonId, tabPanelId, type AdminTabItem } from './components/AdminTabs'
 import DashboardTab from './components/DashboardTab'
 import ScraperStatusTab from './components/ScraperStatusTab'
 import UserManagementTab from './components/UserManagementTab'
@@ -110,6 +111,57 @@ export default function AdminPage() {
   const pendingApplicationsCount = applications.length
   const pendingEditApplicationsCount = editApplications.length
 
+  const tabs: AdminTabItem[] = [
+    { id: 'dashboard', label: t('dashboard'), ariaLabel: t('dashboard') },
+    {
+      id: 'scraperStatus',
+      ariaLabel: t('scraperStatus'),
+      label: (
+        <>
+          {t('scraperStatus')}
+          {hasScraperAlert && (
+            <span
+              aria-hidden="true"
+              style={{
+                marginLeft: tokens.spacing[1],
+                color: freshnessReport?.summary?.critical
+                  ? tokens.colors.accent.error
+                  : tokens.colors.accent.warning,
+              }}
+            >
+              ●
+            </span>
+          )}
+        </>
+      ),
+    },
+    { id: 'users', label: t('userManagement'), ariaLabel: t('userManagement') },
+    { id: 'reports', label: t('contentReports'), ariaLabel: t('contentReports') },
+    {
+      id: 'applications',
+      ariaLabel: t('groupApplications'),
+      label: (
+        <>
+          {t('groupApplications')} {pendingApplicationsCount > 0 && `(${pendingApplicationsCount})`}
+        </>
+      ),
+    },
+    {
+      id: 'editApplications',
+      ariaLabel: t('groupEdits'),
+      label: (
+        <>
+          {t('groupEdits')}{' '}
+          {pendingEditApplicationsCount > 0 && `(${pendingEditApplicationsCount})`}
+        </>
+      ),
+    },
+    { id: 'traderClaims', label: t('traderClaims'), ariaLabel: t('traderClaims') },
+    { id: 'alertConfig', label: t('alertConfig'), ariaLabel: t('alertConfig') },
+    { id: 'moderationQueue', label: t('moderationQueue'), ariaLabel: t('moderationQueue') },
+    { id: 'auditLog', label: t('auditLog'), ariaLabel: t('auditLog') },
+  ]
+
   return (
     <Box
       style={{
@@ -127,138 +179,47 @@ export default function AdminPage() {
             marginBottom: tokens.spacing[6],
           }}
         >
-          <Text size="2xl" weight="black">
+          <Text as="h1" size="2xl" weight="black">
             {t('adminDashboard')}
           </Text>
         </Box>
 
         {/* Tabs */}
-        <Box
-          role="tablist"
-          aria-label={t('adminDashboard')}
-          style={{
-            display: 'flex',
-            gap: tokens.spacing[2],
-            marginBottom: tokens.spacing[6],
-            flexWrap: 'wrap',
-          }}
-        >
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'dashboard'}
-            variant={activeTab === 'dashboard' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('dashboard')}
-          >
-            {t('dashboard')}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'scraperStatus'}
-            variant={activeTab === 'scraperStatus' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('scraperStatus')}
-          >
-            {t('scraperStatus')}
-            {hasScraperAlert && (
-              <span
-                style={{
-                  marginLeft: tokens.spacing[1],
-                  color: freshnessReport?.summary?.critical
-                    ? tokens.colors.accent.error
-                    : tokens.colors.accent.warning,
-                }}
-              >
-                ●
-              </span>
-            )}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'users'}
-            variant={activeTab === 'users' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('users')}
-          >
-            {t('userManagement')}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'reports'}
-            variant={activeTab === 'reports' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('reports')}
-          >
-            {t('contentReports')}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'applications'}
-            variant={activeTab === 'applications' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('applications')}
-          >
-            {t('groupApplications')}{' '}
-            {pendingApplicationsCount > 0 && `(${pendingApplicationsCount})`}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'editApplications'}
-            variant={activeTab === 'editApplications' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('editApplications')}
-          >
-            {t('groupEdits')}{' '}
-            {pendingEditApplicationsCount > 0 && `(${pendingEditApplicationsCount})`}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'traderClaims'}
-            variant={activeTab === 'traderClaims' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('traderClaims')}
-          >
-            {t('traderClaims') || 'Trader Claims'}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'alertConfig'}
-            variant={activeTab === 'alertConfig' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('alertConfig')}
-          >
-            {t('alertConfig')}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'moderationQueue'}
-            variant={activeTab === 'moderationQueue' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('moderationQueue')}
-          >
-            {t('moderationQueue') || 'Mod Queue'}
-          </Button>
-          <Button
-            role="tab"
-            aria-selected={activeTab === 'auditLog'}
-            variant={activeTab === 'auditLog' ? 'primary' : 'secondary'}
-            onClick={() => setActiveTab('auditLog')}
-          >
-            {t('auditLog') || 'Audit Log'}
-          </Button>
-        </Box>
+        <AdminTabs
+          tabs={tabs}
+          active={activeTab}
+          onChange={(id) => setActiveTab(id as AdminTab)}
+          label={t('adminDashboard')}
+          idPrefix="admin"
+        />
 
         {/* Tab Content */}
-        {activeTab === 'dashboard' && <DashboardTab accessToken={accessToken} />}
+        <div
+          role="tabpanel"
+          id={tabPanelId('admin', activeTab)}
+          aria-labelledby={tabButtonId('admin', activeTab)}
+          tabIndex={0}
+        >
+          {activeTab === 'dashboard' && <DashboardTab accessToken={accessToken} />}
 
-        {activeTab === 'scraperStatus' && <ScraperStatusTab />}
+          {activeTab === 'scraperStatus' && <ScraperStatusTab />}
 
-        {activeTab === 'users' && <UserManagementTab accessToken={accessToken} />}
+          {activeTab === 'users' && <UserManagementTab accessToken={accessToken} />}
 
-        {activeTab === 'reports' && <ReportsTab accessToken={accessToken} />}
+          {activeTab === 'reports' && <ReportsTab accessToken={accessToken} />}
 
-        {activeTab === 'applications' && <GroupApplicationsTab accessToken={accessToken} />}
+          {activeTab === 'applications' && <GroupApplicationsTab accessToken={accessToken} />}
 
-        {activeTab === 'editApplications' && <GroupEditTab accessToken={accessToken} />}
+          {activeTab === 'editApplications' && <GroupEditTab accessToken={accessToken} />}
 
-        {activeTab === 'traderClaims' && <TraderClaimsTab accessToken={accessToken} />}
+          {activeTab === 'traderClaims' && <TraderClaimsTab accessToken={accessToken} />}
 
-        {activeTab === 'alertConfig' && <AlertConfigTab accessToken={accessToken} />}
+          {activeTab === 'alertConfig' && <AlertConfigTab accessToken={accessToken} />}
 
-        {activeTab === 'moderationQueue' && <ModerationQueueTab accessToken={accessToken} />}
+          {activeTab === 'moderationQueue' && <ModerationQueueTab accessToken={accessToken} />}
 
-        {activeTab === 'auditLog' && <AuditLogTab accessToken={accessToken} />}
+          {activeTab === 'auditLog' && <AuditLogTab accessToken={accessToken} />}
+        </div>
       </Box>
     </Box>
   )
