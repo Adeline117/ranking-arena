@@ -148,6 +148,10 @@ export function parseBybitCopytradeLeaderboardPage(
       headlineRoi: num(metrics.roi),
       headlinePnl: null,
       headlineWinRate: num(metrics.win_rate),
+      // The board has a Drawdown column (SORT_KEY..DRAW_DOWN -> 'drawdown'); its
+      // display value is already a percent like roi/win_rate, so num() not pct().
+      // Was unread → bybit-copytrade sat at ~9% MDD capture (top-N profiles only).
+      headlineMdd: num(metrics.drawdown),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: { ...item, _metrics: metrics },
     })
