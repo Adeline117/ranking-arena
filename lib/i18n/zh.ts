@@ -4748,7 +4748,7 @@ const zh = {
 
   // Claim Landing Page
   claimPageTitle: '在 Arena 认领你的交易员档案',
-  claimPageSubtitle: '你已跻身 68,000+ 交易员排行榜，掌控你的个人档案。',
+  claimPageSubtitle: '你已跻身 8,000+ 交易员排行榜，掌控你的个人档案。',
   claimPageBenefitVerified: '获得认证徽章',
   claimPageBenefitEdit: '编辑简介、头像和社交链接',
   claimPageBenefitStandout: '在排行榜上脱颖而出',
@@ -5204,7 +5204,7 @@ const zh = {
   rankingControlsPrev: '上一页',
   rankingControlsNext: '下一页',
   rankingControlsLoading: '加载中\u2026',
-  rankingControlsShowingTop: '显示前 {count} 名交易员。升级 Pro 解锁全部 34,000+',
+  rankingControlsShowingTop: '显示前 {count} 名交易员。升级 Pro 解锁全部 8,000+',
   rankingControlsUpgrade: '升级 \u2192',
 
   // Onboarding
@@ -6206,7 +6206,7 @@ const zh = {
     '答：可以，这正是 Arena Score 的主要目的。但为了最准确的比较，我们建议同时查看各交易所的排名，因为数据报告标准因平台而异。',
   methodologyFaqQ4: '问：为什么我在某交易所关注的交易者没有出现在 Arena 上？',
   methodologyFaqA4:
-    '答：我们从每个交易所获取排名靠前的交易者。如果交易者不在交易所的公开排行榜中或数据不足，可能不会出现。我们目前跟踪所有平台的 34,000 多名交易者。',
+    '答：我们从每个交易所获取排名靠前的交易者。如果交易者不在交易所的公开排行榜中或数据不足，可能不会出现。我们目前跟踪所有平台的 8,000 多名交易者。',
   methodologyFaqQ5: '问：Arena Score 和 ROI 一样吗？',
   methodologyFaqA5:
     '答：不一样。Arena Score 是结合 ROI、绝对 PnL 和数据质量因素的综合指标。ROI 适中但利润大且稳定的交易者可能得分高于 ROI 极高但 PnL 很小的交易者。',

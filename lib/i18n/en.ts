@@ -4850,7 +4850,7 @@ const en = {
 
   // Claim Landing Page
   claimPageTitle: 'Claim Your Trader Profile on Arena',
-  claimPageSubtitle: "You're ranked among 68,000+ traders. Take control of your profile.",
+  claimPageSubtitle: "You're ranked among 8,000+ traders. Take control of your profile.",
   claimPageBenefitVerified: 'Get a verified badge on your profile',
   claimPageBenefitEdit: 'Edit your bio, avatar, and social links',
   claimPageBenefitStandout: 'Stand out on the leaderboard',
@@ -5320,7 +5320,7 @@ const en = {
   rankingControlsPrev: 'Prev',
   rankingControlsNext: 'Next',
   rankingControlsLoading: 'Loading\u2026',
-  rankingControlsShowingTop: 'Showing top {count} traders. Unlock all 34,000+ with Pro',
+  rankingControlsShowingTop: 'Showing top {count} traders. Unlock all 8,000+ with Pro',
   rankingControlsUpgrade: 'Upgrade \u2192',
 
   // Onboarding
@@ -6359,7 +6359,7 @@ const en = {
     'A: Yes, that is the primary purpose of Arena Score. However, for the most accurate comparison, we recommend also checking the per-exchange rankings, as data reporting standards vary between platforms.',
   methodologyFaqQ4: 'Q: Why is a trader I follow on an exchange not appearing on Arena?',
   methodologyFaqA4:
-    "A: We fetch the top-ranked traders from each exchange. If a trader is not in the exchange's public leaderboard or has insufficient data, they may not appear. We currently track 34,000+ traders across all platforms.",
+    "A: We fetch the top-ranked traders from each exchange. If a trader is not in the exchange's public leaderboard or has insufficient data, they may not appear. We currently track 8,000+ traders across all platforms.",
   methodologyFaqQ5: 'Q: Is Arena Score the same as ROI?',
   methodologyFaqA5:
     'A: No. Arena Score is a composite metric that combines ROI, absolute PnL, and data quality factors. A trader with moderate ROI but large consistent profits may score higher than one with extremely high ROI but tiny PnL.',

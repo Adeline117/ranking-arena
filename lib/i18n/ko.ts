@@ -4722,7 +4722,7 @@ const ko = {
 
   // Claim page
   claimPageTitle: 'Arena에서 트레이더 프로필 신청',
-  claimPageSubtitle: '68,000명 이상의 트레이더 중 순위에 올라 있습니다. 프로필을 관리하세요.',
+  claimPageSubtitle: '8,000명 이상의 트레이더 중 순위에 올라 있습니다. 프로필을 관리하세요.',
   claimPageBenefitVerified: '프로필에 인증 배지 획득',
   claimPageBenefitEdit: '소개, 아바타, 소셜 링크 편집',
   claimPageBenefitStandout: '리더보드에서 눈에 띄기',
@@ -5172,7 +5172,7 @@ const ko = {
   rankingControlsNext: '다음',
   rankingControlsLoading: '로딩 중\u2026',
   rankingControlsShowingTop:
-    '상위 {count}명의 트레이더를 표시 중. Pro로 34,000+명 전체를 확인하세요',
+    '상위 {count}명의 트레이더를 표시 중. Pro로 8,000+명 전체를 확인하세요',
   rankingControlsUpgrade: '업그레이드 \u2192',
 
   // SSR ranking table empty state
@@ -6234,7 +6234,7 @@ const ko = {
     'A: 예, 그것이 Arena Score의 주요 목적입니다. 다만 가장 정확한 비교를 위해서는 플랫폼마다 데이터 보고 기준이 다르므로 거래소별 순위도 함께 확인하시길 권장합니다.',
   methodologyFaqQ4: 'Q: 거래소에서 팔로우하는 트레이더가 Arena에 표시되지 않는 이유는 무엇인가요?',
   methodologyFaqA4:
-    'A: 당사는 각 거래소에서 상위 트레이더를 가져옵니다. 트레이더가 거래소의 공개 리더보드에 없거나 데이터가 부족하면 표시되지 않을 수 있습니다. 현재 모든 플랫폼에서 34,000명 이상의 트레이더를 추적하고 있습니다.',
+    'A: 당사는 각 거래소에서 상위 트레이더를 가져옵니다. 트레이더가 거래소의 공개 리더보드에 없거나 데이터가 부족하면 표시되지 않을 수 있습니다. 현재 모든 플랫폼에서 8,000명 이상의 트레이더를 추적하고 있습니다.',
   methodologyFaqQ5: 'Q: Arena Score는 ROI와 같은가요?',
   methodologyFaqA5:
     'A: 아니요. Arena Score는 ROI, 절대 PnL, 데이터 품질 요소를 결합한 종합 지표입니다. ROI는 보통이지만 꾸준히 큰 이익을 내는 트레이더가 ROI는 매우 높지만 PnL이 작은 트레이더보다 높은 점수를 받을 수 있습니다.',

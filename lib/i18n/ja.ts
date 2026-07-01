@@ -4471,7 +4471,7 @@ const ja = {
   // Claim page
   claimPageTitle: 'Arenaでトレーダープロフィールを申請',
   claimPageSubtitle:
-    '68,000人以上のトレーダーの中にランクインしています。プロフィールを管理しましょう。',
+    '8,000人以上のトレーダーの中にランクインしています。プロフィールを管理しましょう。',
   claimPageBenefitVerified: 'プロフィールに認証バッジを取得',
   claimPageBenefitEdit: '自己紹介、アバター、ソーシャルリンクを編集',
   claimPageBenefitStandout: 'ランキングで目立つ',
@@ -4931,7 +4931,7 @@ const ja = {
   rankingControlsPrev: '前へ',
   rankingControlsNext: '次へ',
   rankingControlsLoading: '読み込み中\u2026',
-  rankingControlsShowingTop: '上位 {count} 名のトレーダーを表示中。Proで34,000+人全員を表示',
+  rankingControlsShowingTop: '上位 {count} 名のトレーダーを表示中。Proで8,000+人全員を表示',
   rankingControlsUpgrade: 'アップグレード \u2192',
 
   // SSR ranking table empty state
@@ -6008,7 +6008,7 @@ const ja = {
     'A: はい、それが Arena Score の主な目的です。ただし、最も正確に比較するには、データ報告基準がプラットフォームによって異なるため、取引所別のランキングも併せて確認することをお勧めします。',
   methodologyFaqQ4: 'Q: 取引所でフォローしているトレーダーが Arena に表示されないのはなぜですか？',
   methodologyFaqA4:
-    'A: 当社は各取引所から上位のトレーダーを取得します。トレーダーが取引所の公開リーダーボードに含まれていない場合やデータが不十分な場合は、表示されないことがあります。現在、全プラットフォームで34,000人以上のトレーダーを追跡しています。',
+    'A: 当社は各取引所から上位のトレーダーを取得します。トレーダーが取引所の公開リーダーボードに含まれていない場合やデータが不十分な場合は、表示されないことがあります。現在、全プラットフォームで8,000人以上のトレーダーを追跡しています。',
   methodologyFaqQ5: 'Q: Arena Score は ROI と同じですか？',
   methodologyFaqA5:
     'A: いいえ。Arena Score は ROI、絶対 PnL、データ品質の要素を組み合わせた総合指標です。ROI は中程度でも安定して大きな利益を上げるトレーダーは、ROI が極端に高くても PnL が小さいトレーダーより高いスコアになる場合があります。',
