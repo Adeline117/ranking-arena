@@ -29,6 +29,10 @@ const Analytics = dynamic(() =>
 // Plausible, scroll restoration, cookie consent) into a SINGLE async chunk
 // instead of 10 separate ones — saves ~100-300ms of chunk negotiation on 4G.
 const DeferredLayoutWidgets = dynamic(() => import('../components/layout/DeferredLayoutWidgets'))
+// ReferralAutoApply — mounted inside Providers so it runs on every (app) page
+// (email/OAuth signup + Privy → /onboarding all live under (app)). Applies any
+// pending `?ref` captured on an earlier (Provider-less) page. Renders null.
+const ReferralAutoApply = dynamic(() => import('../components/referral/ReferralAutoApply'))
 
 /**
  * App layout — wraps ALL pages except the homepage.
@@ -60,6 +64,7 @@ export default function AppLayout({
               {children}
             </main>
           </PageErrorBoundary>
+          <ReferralAutoApply />
           <MobileBottomNav />
           <Suspense fallback={null}>
             <DeferredLayoutWidgets />

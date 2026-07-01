@@ -150,6 +150,17 @@ export default function RootLayout({
             __html: `try{var t=localStorage.getItem('theme');var e=t==='light'?'light':t==='dark'?'dark':window.matchMedia('(prefers-color-scheme:dark)').matches?'dark':'light';document.documentElement.setAttribute('data-theme',e)}catch(x){}`,
           }}
         />
+        {/* Referral capture — runs pre-hydration so it works on the homepage,
+            which omits Providers (no React runs there). Stores a `?ref` code in
+            localStorage for the unified applier to consume after signup.
+            MUST stay in sync with lib/referral/pending.ts: same key
+            ('arena_pending_ref'), same charset ([A-Za-z0-9_-]{2,64}), same
+            { code, ts } shape, 30-day TTL. Fail-open, self-contained. */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var r=new URLSearchParams(location.search).get('ref');if(r&&/^[A-Za-z0-9_-]{2,64}$/.test(r)){var K='arena_pending_ref',T=2592000000,ok=true,x=localStorage.getItem(K);if(x){try{var p=JSON.parse(x);if(p&&typeof p.ts==='number'&&Date.now()-p.ts<=T)ok=false}catch(e){}}if(ok)localStorage.setItem(K,JSON.stringify({code:r,ts:Date.now()}))}}catch(e){}`,
+          }}
+        />
         <script
           dangerouslySetInnerHTML={{
             __html: `if(!AbortSignal.timeout){AbortSignal.timeout=function(ms){var c=new AbortController();setTimeout(function(){c.abort(new DOMException('TimeoutError','TimeoutError'))},ms);return c.signal}}`,
