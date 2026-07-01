@@ -160,8 +160,25 @@ export default function PortfolioPage() {
         headers: { ...fetchHeaders(), 'Content-Type': 'application/json' },
         body: JSON.stringify({ portfolio_id: portfolioId }),
       })
+      const json = (await res.json().catch(() => null)) as {
+        data?: { synced?: boolean; reason?: string }
+      } | null
+      const reason = json?.data?.reason
+      // Map stable server reason codes → localized copy.
+      const reasonKey: Record<string, string> = {
+        geo_unavailable: 'portfolioSyncGeoUnavailable',
+        passphrase_required: 'portfolioSyncPassphraseRequired',
+        unsupported: 'portfolioSyncUnsupported',
+        keys_unreadable: 'portfolioSyncKeysUnreadable',
+        exchange_error: 'portfolioSyncExchangeError',
+      }
       if (!res.ok) {
-        showToast(t('portfolioSyncFailed'), 'error')
+        showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'error')
+        return
+      }
+      if (json?.data?.synced === false) {
+        // Soft outcome (geo/passphrase/unsupported) — inform, don't error.
+        showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'info')
         return
       }
       await loadPositions()

@@ -4552,6 +4552,15 @@ const en = {
   portfolioAddFailed: 'Failed to add exchange',
   portfolioConnectSuccess: 'Exchange connected successfully',
   portfolioSyncFailed: 'Sync failed, please try again',
+  portfolioSyncGeoUnavailable:
+    "Sync for this exchange isn't available from our region yet — coming soon.",
+  portfolioSyncPassphraseRequired:
+    'This exchange requires an API passphrase. Support is coming soon — reconnect once available.',
+  portfolioSyncUnsupported: "Automatic sync for this exchange isn't supported yet.",
+  portfolioSyncKeysUnreadable:
+    'Could not read your stored API keys. Please remove and reconnect this exchange.',
+  portfolioSyncExchangeError:
+    'The exchange rejected the request. Check that your API key is valid and read-enabled.',
   portfolioSyncSuccess: 'Synced successfully',
   portfolioNetworkError: 'Network error',
   portfolioRemoveExchange: 'Remove Exchange',
