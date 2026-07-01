@@ -105,6 +105,11 @@ const HoldingDistribution = dynamic(
 const MetricGrid = dynamic(() => import('@/app/components/trader/serving/MetricGrid'), {
   ssr: false,
 })
+// M2-2a: eToro "Copiers Card" — copy-trading commercials (copiers/principal/
+// min-copy/profit-share/growth) on the Overview decision zone. NULL-collapses.
+const CopyTradingCard = dynamic(() => import('@/app/components/trader/serving/CopyTradingCard'), {
+  ssr: false,
+})
 // ExchangeLinksBar — static import (no client-only deps). Previously dynamic
 // with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
 // trader page load. Static import eliminates the flash + reduces chunk count.
@@ -759,6 +764,14 @@ export default function TraderProfileClient({
                           MEXC ability radar — surfaced on the default path. Both
                           NULL-collapse when the source lacks the extras. */}
                       <SignalChips source={data.source} extras={servingTab.metaExtras} />
+                      {/* M2-2a: eToro Copiers-Card — the "should I copy" commercial
+                          facts, grouped instead of dumped into the metric grid. */}
+                      <Box style={{ marginTop: tokens.spacing[3] }}>
+                        <CopyTradingCard
+                          extras={servingTab.metaExtras}
+                          currency={servingTab.currency}
+                        />
+                      </Box>
                       <AbilityRadar extras={servingTab.metaExtras} />
                     </Box>
                   )}
