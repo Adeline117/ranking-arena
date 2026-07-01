@@ -152,8 +152,17 @@ function parseGateFuturesProfile(bundle: Dict, ctx: ParseCtx): ParsedProfile {
     if (block.pl_ratio !== undefined) extras.pl_ratio = num(block.pl_ratio)
     if (block.average_profit !== undefined) extras.average_profit = num(block.average_profit)
     if (block.average_loss !== undefined) extras.average_loss = num(block.average_loss)
-    if (block.trading_frequency !== undefined)
-      extras.trading_frequency = num(block.trading_frequency)
+    // trading_frequency is trades-per-DAY (verified against trade_num/period_days
+    // across all 3 period blocks: 3.28≈23/7, 1.96≈59/30, 1.97≈178/90). Keep the
+    // raw per-day value AND surface a per-week figure under the registry alias
+    // `trade_frequency` (×7) so the trades_per_week metric finally displays.
+    if (block.trading_frequency !== undefined) {
+      const perDay = num(block.trading_frequency)
+      if (perDay !== null) {
+        extras.trading_frequency = perDay
+        extras.trade_frequency = Math.round(perDay * 7 * 100) / 100
+      }
+    }
     if (block.total_invest !== undefined) extras.lead_size = num(block.total_invest)
     if (allTime) {
       const liq = isoSecs(allTime.liquidation_time)
@@ -250,7 +259,16 @@ function parseGateCfdProfile(bundle: Dict, ctx: ParseCtx): ParsedProfile {
   const stats: ParsedStats[] = []
   if (info) {
     const extras: Record<string, unknown> = {}
-    if (info.daily_trade_freq !== undefined) extras.trading_frequency = num(info.daily_trade_freq)
+    // daily_trade_freq is trades-per-DAY (name-confirmed) → keep raw + per-week alias.
+    if (info.daily_trade_freq !== undefined) {
+      const perDay = num(info.daily_trade_freq)
+      if (perDay !== null) {
+        extras.trading_frequency = perDay
+        extras.trade_frequency = Math.round(perDay * 7 * 100) / 100
+      }
+    }
+    // unrealized PnL on open positions — lives on leadInfo (Phase A: was raw-only).
+    if (lead?.unrealized_pnl !== undefined) extras.unrealized_pnl = num(lead.unrealized_pnl)
     if (info.profit_loss_ratio !== undefined) extras.pl_ratio = num(info.profit_loss_ratio)
     if (info.net_asset_value !== undefined) extras.net_asset_value = num(info.net_asset_value)
     const lastTrade = isoSecs(info.latest_trade_at)

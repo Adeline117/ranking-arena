@@ -86,6 +86,9 @@ describe('parseGateProfile (futures)', () => {
     expect(s.extras.roi_net_value).toBeCloseTo(749.64, 2)
     expect(s.extras.style_labels).toEqual(['short-line', 'high-frequence', 'radical'])
     expect(s.tradingPreferences).toBeTruthy()
+    // 交易频率: raw per-day (1.96 = 59 trades / 30d) + per-week alias for display
+    expect(s.extras.trading_frequency).toBeCloseTo(1.96, 2)
+    expect(s.extras.trade_frequency).toBeCloseTo(13.72, 2) // 1.96 × 7
   })
 
   it('emits roi/pnl/pnl_daily/lead_size series from profit_chart', () => {
@@ -137,6 +140,10 @@ describe('parseGateProfile (cfd)', () => {
     expect(s.copierCount).toBe(1)
     expect(s.profitShareRate).toBeCloseTo(20, 5)
     expect(s.extras.leading_days).toBe(17)
+    // daily_trade_freq 0.8824/day → per-week alias 6.18; unrealized_pnl surfaced
+    expect(s.extras.trading_frequency).toBeCloseTo(0.8824, 4)
+    expect(s.extras.trade_frequency).toBeCloseTo(6.18, 2)
+    expect(s.extras.unrealized_pnl).toBe(0) // lead-info "0.00"
     expect(profile.nickname).toBe('1000X带单')
     const metrics = profile.series.map((x) => x.metric).sort()
     expect(metrics).toEqual(['pnl', 'roi'])
