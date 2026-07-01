@@ -79,6 +79,10 @@
       "schedule": "15 0 * * *"
     },
     {
+      "path": "/api/cron/qualify-referrals",
+      "schedule": "0 */6 * * *"
+    },
+    {
       "path": "/api/cron/compute-derived-metrics",
       "schedule": "20 0 * * *"
     },
