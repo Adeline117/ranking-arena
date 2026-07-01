@@ -162,7 +162,9 @@ const gtradeAdapter: SourceAdapter = {
   capabilities: {
     profile: true, // stats endpoint + trades-table aggregation (spec §11.20)
     positions: false, // open-trades is raw on-chain scaled — out of v1
-    positionHistory: false,
+    // M3-3b: closed positions rebuilt from the trades table (pair+tradeIndex
+    // open→close pairing) — same fetch as orders, zero extra requests.
+    positionHistory: true,
     orders: true, // the trades table itself
     transfers: false,
     copiers: false, // DEX — no copy trading
@@ -243,7 +245,11 @@ const gtradeAdapter: SourceAdapter = {
     kind: HistoryKind,
     cursor: string | null
   ): AsyncIterable<RawPage> {
-    if (kind !== 'orders') throw new Error(`[gtrade] history surface ${kind} not supported`)
+    // position_history reuses the SAME trades-table pages — the parser regroups
+    // them into closed positions (M3-3b); no separate endpoint exists.
+    if (kind !== 'orders' && kind !== 'position_history') {
+      throw new Error(`[gtrade] history surface ${kind} not supported`)
+    }
     const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
     const maxPages = Number(src.meta.history_max_pages ?? 5) || 5
     const cursorMs = cursor ? Date.parse(cursor) : NaN

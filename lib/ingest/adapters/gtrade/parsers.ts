@@ -32,6 +32,13 @@ import type {
   RankingTimeframe,
 } from '../../core/types'
 import { ratiosFromCumulativePnl } from '../../core/series-risk'
+import { createHash } from 'crypto'
+
+function dedupeHash(...fields: unknown[]): string {
+  return createHash('sha1')
+    .update(fields.map((f) => String(f ?? '')).join('|'))
+    .digest('hex')
+}
 
 type Dict = Record<string, unknown>
 
@@ -217,9 +224,12 @@ export function parseGtradeHistory(
   kind: HistoryKind,
   _ctx: ParseCtx
 ): ParsedHistoryRow[] {
-  if (kind !== 'orders') throw new Error(`[gtrade] history surface ${kind} not supported`)
+  if (kind !== 'orders' && kind !== 'position_history') {
+    throw new Error(`[gtrade] history surface ${kind} not supported`)
+  }
   const payload = (raw ?? {}) as { data?: unknown }
   const rows = Array.isArray(payload.data) ? (payload.data as TradeRow[]) : []
+  if (kind === 'position_history') return gtradePositionHistory(rows)
 
   const out: ParsedOrderRow[] = []
   for (const row of rows) {
@@ -236,6 +246,59 @@ export function parseGtradeHistory(
       qty: num(row.size),
       dedupeHash: String(id),
       raw: row,
+    })
+  }
+  return out
+}
+
+/**
+ * M3-3b (DEX Tier-1, 链上重组): rebuild closed positions from the flat trades
+ * table. Actions carrying the same `pair + tradeIndex` belong to ONE position
+ * (verified on the live fixture: open/increase/decrease/close all share it).
+ * A row is emitted only for COMPLETE pairs — a TradeOpenedMarket AND a
+ * TradeClosedMarket both inside the fetched window — so entry/exit are honest,
+ * never guessed. Realized PnL sums every realizing action in the group
+ * (partial decreases realize too — the same identity the board reconciles on).
+ */
+function gtradePositionHistory(rows: TradeRow[]): ParsedHistoryRow[] {
+  type G = { open?: TradeRow; close?: TradeRow; realized: number; all: TradeRow[] }
+  const groups = new Map<string, G>()
+  for (const row of rows) {
+    const pair = typeof row.pair === 'string' ? row.pair : null
+    const tradeIndex = num((row as Dict).tradeIndex)
+    if (pair === null || tradeIndex === null) continue
+    const key = `${pair}#${tradeIndex}`
+    let g = groups.get(key)
+    if (!g) {
+      g = { realized: 0, all: [] }
+      groups.set(key, g)
+    }
+    g.all.push(row)
+    g.realized += realizedUsd(row)
+    if (row.action === 'TradeOpenedMarket') g.open = row
+    if (row.action === 'TradeClosedMarket') g.close = row
+  }
+
+  const out: ParsedHistoryRow[] = []
+  for (const [key, g] of groups) {
+    if (!g.open || !g.close) continue // incomplete pair — open outside the window
+    const openedAt = typeof g.open.date === 'string' ? g.open.date : null
+    const closedAt = typeof g.close.date === 'string' ? g.close.date : null
+    if (openedAt === null || closedAt === null) continue
+    const addr = typeof (g.open as Dict).address === 'string' ? (g.open as Dict).address : ''
+    out.push({
+      kind: 'position_history',
+      openedAt,
+      closedAt,
+      symbol: key.split('#')[0],
+      side: g.open.long === 1 || g.open.long === true ? 'long' : 'short',
+      leverage: num(g.open.leverage),
+      size: num(g.open.size),
+      entryPrice: num(g.open.price),
+      exitPrice: num(g.close.price),
+      realizedPnl: Math.round(g.realized * 1e6) / 1e6,
+      dedupeHash: dedupeHash('gtrade_ph', addr, key, g.close.id),
+      raw: { open: g.open, close: g.close, actions: g.all.length },
     })
   }
   return out
