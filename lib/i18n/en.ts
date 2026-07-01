@@ -5992,6 +5992,8 @@ const en = {
   metricGroupPerformance: 'Performance',
   metricLossTrades: 'Losing Trades',
   copyCardTitle: 'Copy Trading',
+  holdByOrder: 'By Order',
+  holdByPosition: 'By Position',
   copyCardCurrentCopiers: 'Current Copiers',
   copyCardCumulativeCopiers: 'Cumulative Copiers',
   copyCardGrowth30d: 'Copier Growth (30D)',

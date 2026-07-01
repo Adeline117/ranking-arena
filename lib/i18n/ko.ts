@@ -5871,6 +5871,8 @@ const ko = {
   metricGroupPerformance: '핵심 성과',
   metricLossTrades: '손실 횟수',
   copyCardTitle: '카피 트레이딩',
+  holdByOrder: '주문별',
+  holdByPosition: '포지션별',
   copyCardCurrentCopiers: '현재 카피어',
   copyCardCumulativeCopiers: '누적 카피어',
   copyCardGrowth30d: '카피어 증가(30일)',

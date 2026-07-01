@@ -5638,6 +5638,8 @@ const ja = {
   metricGroupPerformance: 'パフォーマンス',
   metricLossTrades: '損失回数',
   copyCardTitle: 'コピートレード',
+  holdByOrder: '注文別',
+  holdByPosition: 'ポジション別',
   copyCardCurrentCopiers: '現在のコピー数',
   copyCardCumulativeCopiers: '累計コピー数',
   copyCardGrowth30d: 'コピー増加(30日)',

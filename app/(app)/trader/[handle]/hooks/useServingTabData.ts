@@ -98,6 +98,14 @@ export function useServingTabData(
   const { nickname, avatarSrc, entries } = input
 
   return useMemo(() => {
+    // M2-2e: extras fallback-merge across TFs. 90d wins; keys captured only on
+    // shorter TFs (some sources emit per-TF extras) fill in WITHOUT clobbering —
+    // otherwise those fields never display (the grid/card/strip read one blob).
+    const mergedExtras: Record<string, unknown> = {
+      ...(m7?.extras ?? {}),
+      ...(m30?.extras ?? {}),
+      ...(m90?.extras ?? {}),
+    }
     const best = entries?.find((e) => e.timeframe === 90) ?? entries?.[0]
     const copierExtra = best?.extras?.copier_count ?? best?.extras?.copiers
     return {
@@ -126,9 +134,9 @@ export function useServingTabData(
       traderStats: servingToStats(m90?.stats ?? null, m90?.extras ?? null),
       traderPortfolio: positionsToPortfolio(posRows ?? []),
       traderPositionHistory: historyToPositionHistory(histRows ?? []),
-      metaExtras: m90?.extras ?? {},
+      metaExtras: mergedExtras,
       currency: m90?.currency ?? 'USD',
-      gridStats: promoteExtrasMetrics(m90?.stats ?? {}, m90?.extras ?? {}),
+      gridStats: promoteExtrasMetrics(m90?.stats ?? {}, mergedExtras),
       gridCapabilityMetrics: [
         ...(capability?.metrics ?? Object.keys(m90?.stats ?? {})),
         // Extras-sourced metrics (sortino, volatility…) aren't in the capability

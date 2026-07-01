@@ -110,6 +110,11 @@ const MetricGrid = dynamic(() => import('@/app/components/trader/serving/MetricG
 const CopyTradingCard = dynamic(() => import('@/app/components/trader/serving/CopyTradingCard'), {
   ssr: false,
 })
+// M2-2d: asset-preference weights (eToro Trading-Card top instruments) — was
+// escape-hatch-only, so normal users never saw it. NULL-collapses.
+const AssetPreference = dynamic(() => import('@/app/components/trader/serving/AssetPreference'), {
+  ssr: false,
+})
 // ExchangeLinksBar — static import (no client-only deps). Previously dynamic
 // with ssr:false, which caused a 30-80px CLS pop-in above the fold on every
 // trader page load. Static import eliminates the flash + reduces chunk count.
@@ -830,6 +835,8 @@ export default function TraderProfileClient({
                       {/* M1: holding-duration histogram (MEXC etc.) on default
                           Stats tab. NULL-collapses when no hold_histogram. */}
                       {useThreeTab && <HoldingDistribution extras={servingTab.metaExtras} />}
+                      {/* M2-2d: asset-preference weights (top traded instruments). */}
+                      {useThreeTab && <AssetPreference extras={servingTab.metaExtras} />}
                       {/* M1/M2: registry superset metric grid (sharpe/sortino/mdd/
                           risk ratios — incl. DEX Tier-0 derived). Was escape-hatch
                           only; NULL-collapses per source capability. */}

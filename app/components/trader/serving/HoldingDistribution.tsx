@@ -11,6 +11,7 @@
  * NULL-collapses (renders nothing) when the source exposes no histogram.
  */
 
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -24,8 +25,8 @@ interface HoldBucket {
 /** Top buckets is plenty; the tail is sparse single-position buckets. */
 const MAX_ROWS = 12
 
-function parseBuckets(extras: Record<string, unknown>): HoldBucket[] {
-  const raw = Array.isArray(extras.hold_histogram) ? extras.hold_histogram : []
+function parseBuckets(extras: Record<string, unknown>, key: string): HoldBucket[] {
+  const raw = Array.isArray(extras[key]) ? (extras[key] as unknown[]) : []
   return raw
     .map((b) => b as Record<string, unknown>)
     .filter(
@@ -53,23 +54,59 @@ function fmtSecs(secs: number): string {
 
 export default function HoldingDistribution({ extras }: { extras: Record<string, unknown> }) {
   const { t } = useLanguage()
-  const buckets = parseBuckets(extras)
-  if (buckets.length === 0) return null
+  // 按订单 (per-order) is the default histogram; 按仓位 (per-position) is the
+  // MEXC POSITION variant (逐图核对 M2-2e). Toggle only when both exist.
+  const [byPosition, setByPosition] = useState(false)
+  const orderBuckets = parseBuckets(extras, 'hold_histogram')
+  const positionBuckets = parseBuckets(extras, 'hold_histogram_by_position')
+  const hasBoth = orderBuckets.length > 0 && positionBuckets.length > 0
+  const buckets = byPosition && positionBuckets.length > 0 ? positionBuckets : orderBuckets
+  if (buckets.length === 0 && positionBuckets.length === 0) return null
+  const shown = buckets.length > 0 ? buckets : positionBuckets
 
-  const max = Math.max(...buckets.map((b) => b.count), 1)
+  const max = Math.max(...shown.map((b) => b.count), 1)
 
   return (
     <Box>
-      <Text
-        size="sm"
-        weight="semibold"
-        color="primary"
-        style={{ marginBottom: tokens.spacing[3], display: 'block' }}
+      <Box
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: tokens.spacing[3],
+        }}
       >
-        {t('holdingDistribution')}
-      </Text>
+        <Text size="sm" weight="semibold" color="primary">
+          {t('holdingDistribution')}
+        </Text>
+        {hasBoth && (
+          <Box style={{ display: 'flex', gap: tokens.spacing[1] }}>
+            {(['order', 'position'] as const).map((mode) => {
+              const active = mode === 'position' ? byPosition : !byPosition
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  onClick={() => setByPosition(mode === 'position')}
+                  style={{
+                    padding: '2px 10px',
+                    borderRadius: tokens.radius.full,
+                    border: '1px solid ' + tokens.colors.border.primary,
+                    background: active ? tokens.colors.bg.tertiary : 'transparent',
+                    color: active ? tokens.colors.text.primary : tokens.colors.text.tertiary,
+                    cursor: 'pointer',
+                    font: 'inherit',
+                  }}
+                >
+                  <Text size="xs">{t(mode === 'order' ? 'holdByOrder' : 'holdByPosition')}</Text>
+                </button>
+              )
+            })}
+          </Box>
+        )}
+      </Box>
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-        {buckets.map((b) => (
+        {shown.map((b) => (
           <Box
             key={`${b.start}-${b.end}`}
             style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}
