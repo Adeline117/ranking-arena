@@ -74,6 +74,49 @@ the crash-loop hazard is structurally impossible (not just policy).
   Playwright base). Building it on a locked-keychain macOS that can't pull the
   node:20 base will fail at the pull, not the Dockerfile.
 
+### Build on the SG box directly (credential-free path — used 2026-07-01)
+
+When GHCR isn't set up (no PAT) and you can't build locally, build the image ON
+the box from the PUBLIC base images (node:20 + Playwright pull anonymously). The
+"never npm on SG" rule is about the HOST npm corrupting a running install under
+concurrency — inside an isolated `docker build` layer it's deterministic and
+can't touch the running worker. This is the credential-free way to get the
+container running:
+
+```bash
+# 1. rsync the build context to an isolated dir (NOT /opt/arena-ingest — that's live)
+rsync -az --exclude node_modules --exclude logs --exclude .arena-ingest \
+  package.json package-lock.json .npmrc tsconfig.json lib worker \
+  root@SG:/opt/arena-ingest-build/
+# 2. build on the box (~25 min: npm ci 1869 pkgs + chrome; run detached via setsid)
+ssh SG 'cd /opt/arena-ingest-build && docker build -f worker/Dockerfile.ingest -t arena-ingest:local .'
+# 3. cut over (verify then stop pm2) — see docker-run-sg.sh
+ssh SG 'bash -s -- stop-pm2'      < worker/docker-run-sg.sh
+ssh SG "DEPLOYED_SHA=$(git rev-parse HEAD) bash -s -- deploy-local" < worker/docker-run-sg.sh
+# rollback: ssh SG 'bash -s -- start-pm2' < worker/docker-run-sg.sh
+```
+
+**Four gotchas each cost a failed verify run** (all handled by `docker-run-sg.sh`):
+
+1. **.env quotes** — the box `.env` has `KEY="value"`; docker `--env-file` does NOT
+   strip quotes → pg gets a quoted connection string → misparsed host `base`.
+   The script pre-strips quotes into a clean env-file.
+2. **non-root .env read** — the container runs as `pwuser` (uid 1000); it can't
+   read a `root:0600` `.env` via a bind-mount (dotenv loads 0 vars). Feed the
+   clean env-file via `--env-file` (docker reads as root at create time).
+3. **profile volume perms** — `pwuser` must OWN the mounted profile dir or
+   Chromium fails `mkdir profiles` (EACCES). The script chowns it to `1000:1000`
+   (root still writes it on a pm2 rollback — safe both ways).
+4. **heartbeat SHA** — the container isn't a git checkout → `resolveDeployedSha()`
+   returns `unknown` → drift sentinel sees Mac's real SHA + SG's `unknown` = two
+   live SHAs = false page. Pass `DEPLOYED_SHA=$(git rev-parse HEAD)`.
+
+**Current SG state (2026-07-01):** cut over to the container — `arena-ingest:local`
+built on the box, run via `docker-run-sg.sh deploy-local` (`--restart unless-stopped`),
+pm2 `arena-ingest-worker-sg` stopped + saved. `.env` files are now `.dockerignore`d
+so a rebuild never bakes secrets. To update: rebuild on the box (rsync + build +
+`deploy-local`), or cut to the GHCR image once a PAT is set.
+
 ## `worker/deploy-ingest-sg.sh` modes
 
 - `--dry-run` — preview the rsync, no changes.
