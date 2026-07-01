@@ -223,6 +223,24 @@ async function main(): Promise<void> {
     console.error('[ingest-worker] UNHANDLED REJECTION:', reason)
   })
   process.on('uncaughtException', (err) => {
+    // Supavisor (Supabase pooler) closes idle/long-lived connections server-side;
+    // node-pg can surface that on a checked-out client as an uncaughtException
+    // (EDBHANDLEREXITED / "connection to database closed"). The pool opens a fresh
+    // backend on the next checkout, so this class is RECOVERABLE — log and keep
+    // running instead of crash-restarting (which cost ~60-90s of re-warm each time
+    // on BOTH nodes). Anything else is genuinely unexpected → exit for a clean restart.
+    const msg = String((err as { message?: string })?.message ?? err)
+    if (
+      /EDBHANDLEREXITED|connection to database closed|Connection terminated|ECONNRESET|read ECONNRESET/i.test(
+        msg
+      )
+    ) {
+      console.error(
+        '[ingest-worker] recoverable DB connection drop (non-fatal, pool reconnects):',
+        msg
+      )
+      return
+    }
     console.error('[ingest-worker] UNCAUGHT EXCEPTION:', err)
     process.exit(1)
   })
