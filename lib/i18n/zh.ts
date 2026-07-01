@@ -4455,6 +4455,7 @@ const zh = {
   portfolioPageTitle: '投资组合',
   portfolioTitle: '投资组合',
   portfolioConnectExchange: '连接交易所',
+  portfolioEmptyTitle: '连接交易所以追踪你的投资组合',
   portfolioConnectedExchanges: '已连接交易所',
   portfolioAddFailed: '添加交易所失败',
   portfolioConnectSuccess: '交易所连接成功',

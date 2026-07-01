@@ -4104,6 +4104,7 @@ const ja = {
   portfolioPageTitle: 'ポートフォリオ',
   portfolioTitle: 'ポートフォリオ',
   portfolioConnectExchange: '取引所を接続',
+  portfolioEmptyTitle: '取引所を接続してポートフォリオを追跡',
   portfolioConnectedExchanges: '接続済みの取引所',
   portfolioAddFailed: '取引所の追加に失敗しました',
   portfolioConnectSuccess: '取引所の接続に成功しました',

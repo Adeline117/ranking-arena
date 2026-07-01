@@ -4551,6 +4551,7 @@ const en = {
   portfolioPageTitle: 'Portfolio',
   portfolioTitle: 'Portfolio',
   portfolioConnectExchange: 'Connect Exchange',
+  portfolioEmptyTitle: 'Connect an exchange to track your portfolio',
   portfolioConnectedExchanges: 'Connected Exchanges',
   portfolioAddFailed: 'Failed to add exchange',
   portfolioConnectSuccess: 'Exchange connected successfully',
