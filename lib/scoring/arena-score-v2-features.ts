@@ -6,6 +6,13 @@
  * arena.traders.meta into one typed FeatureVector, so a future scoring
  * iteration consumes ONE shape instead of 30+ exchange-specific key spellings.
  *
+ * Risk-control block (2026-06-30): the FeatureVector now carries sharpe/sortino/
+ * mdd/calmar/pnl_ratio — the risk-adjusted quality inputs spec §12.2 weights at
+ * 40%. sharpe/mdd are typed trader_stats columns (passed via input.stats);
+ * sortino/calmar/pnl_ratio come from extras. `risk_is_approx` flags DEX Tier-0
+ * daily-approx derivations (lib/ingest/core/series-risk.ts) so a v2 formula can
+ * down-weight sampled risk vs exchange-reported.
+ *
  * Source → raw signal inventory (sampled from prod, 2026-06):
  *   bitget_cfd/futures   style_labels[], settled_in_days, copier_count_current,
  *                        copier_count_max, trade_frequency, long_short_ratio
@@ -77,6 +84,20 @@ export interface FeatureVector {
   /** Trades per week, converted from per-day / per-period variants. */
   trade_frequency_per_week: number | null
   long_short_ratio: number | null
+  /** Risk-adjusted quality ratios (spec §12.2 risk control block). sharpe/mdd
+   *  come from the typed trader_stats columns (passed via input.stats); sortino/
+   *  calmar/pnl_ratio from extras. Null when the source/derivation has none. */
+  sharpe: number | null
+  sortino: number | null
+  mdd: number | null
+  calmar: number | null
+  pnl_ratio: number | null
+  /** True when sharpe/mdd/sortino were derived from a daily-sampled series
+   *  (DEX Tier-0, extras.risk_derivation='daily-approx') rather than exchange-
+   *  reported — a v2 formula should down-weight these vs exchange-grade values. */
+  risk_is_approx: boolean
+  /** Lifetime trade count — an activity/confidence signal (Phase A promotions). */
+  lifetime_trades: number | null
   /** ISO timestamp of the most recent forced liquidation (Gate — spec §12.3:
    *  a risk signal no other exchange exposes). */
   last_liquidation_at: string | null
@@ -95,6 +116,9 @@ export interface FeatureExtractionInput {
   extras?: Record<string, unknown> | null
   /** arena.traders.meta for the trader. */
   meta?: Record<string, unknown> | null
+  /** Typed trader_stats columns (sharpe/mdd live here, not in extras). Optional
+   *  so existing extras-only callers keep working; the v2 formula joins them in. */
+  stats?: { sharpe?: number | null; mdd?: number | null } | null
 }
 
 // ============================================================
@@ -213,9 +237,23 @@ const COPIER_MAX_KEYS = [
 const WEEKLY_FREQUENCY_KEYS = [
   'trade_frequency_per_week', // htx, mexc
   'weekly_trades', // bybit
-  'trading_frequency', // gate
-  'trade_frequency', // bitget
+  'trade_frequency', // bitget, gate, kucoin (per-week; gate/kucoin ×7 from per-day)
+  // NOTE: `trading_frequency` is deliberately EXCLUDED — gate/kucoin write it as
+  // the raw PER-DAY value (the per-week figure is `trade_frequency`). Treating
+  // per-day as per-week would under-count 7×.
 ] as const
+
+/** Profit-to-loss quality ratio — many spellings across sources. */
+const PNL_RATIO_KEYS = [
+  'pnl_ratio',
+  'profit_to_loss_ratio',
+  'profit_loss_ratio',
+  'profit_and_loss_ratio',
+  'pl_ratio',
+] as const
+
+/** Lifetime trade-count spellings (Phase A promotions + earlier). */
+const LIFETIME_TRADES_KEYS = ['lifetime_trades', 'trade_count_lifetime'] as const
 
 // ============================================================
 // Extraction
@@ -225,11 +263,17 @@ export function extractFeatureVector(input: FeatureExtractionInput): FeatureVect
   const extras = input.extras && typeof input.extras === 'object' ? input.extras : {}
   const meta = input.meta && typeof input.meta === 'object' ? input.meta : {}
 
+  const stats = input.stats && typeof input.stats === 'object' ? input.stats : {}
   const riskRaw = firstFinite(extras, ['risk_rating', 'risk_rating_1_10'])
   const navRaw = firstFinite(extras, ['nav', 'net_asset_value'])
   const weekly = firstFinite(extras, WEEKLY_FREQUENCY_KEYS)
   const perDay = finiteOrNull(extras.trades_per_day) // bitmart
   const settled = firstFinite(extras, SETTLED_DAYS_KEYS)
+  // sharpe/mdd are typed columns → prefer input.stats, fall back to extras
+  // (DEX Tier-0 sets the typed cols; some sources also mirror into extras).
+  const sharpeRaw = stats.sharpe ?? finiteOrNull(extras.sharpe)
+  const mddRaw = stats.mdd ?? finiteOrNull(extras.mdd)
+  const lifetimeTrades = firstFinite(extras, LIFETIME_TRADES_KEYS)
 
   const vector: Omit<FeatureVector, 'coverage'> = {
     source: input.source,
@@ -244,6 +288,14 @@ export function extractFeatureVector(input: FeatureExtractionInput): FeatureVect
     trade_frequency_per_week:
       weekly !== null && weekly >= 0 ? weekly : perDay !== null && perDay >= 0 ? perDay * 7 : null,
     long_short_ratio: nonNegativeOrNull(extras.long_short_ratio),
+    sharpe: sharpeRaw === null || sharpeRaw === undefined ? null : round6(sharpeRaw),
+    sortino: firstFinite(extras, ['sortino', 'sortino_ratio']),
+    mdd: mddRaw === null || mddRaw === undefined || mddRaw < 0 ? null : round6(mddRaw),
+    calmar: firstFinite(extras, ['calmar', 'calmar_ratio']),
+    pnl_ratio: firstFinite(extras, PNL_RATIO_KEYS),
+    risk_is_approx: extras.risk_derivation === 'daily-approx',
+    lifetime_trades:
+      lifetimeTrades === null || lifetimeTrades < 0 ? null : Math.round(lifetimeTrades),
     last_liquidation_at: isoOrNull(extras.last_liquidation_at),
     kol: meta.binance_web3_kol === true || meta.kol === true,
     wallet_categories: normalizeLabels(meta.okx_web3_labels, meta.wallet_category_tags),
@@ -263,6 +315,12 @@ function countCoverage(v: Omit<FeatureVector, 'coverage'>): number {
   if (v.copier_count_max !== null) n++
   if (v.trade_frequency_per_week !== null) n++
   if (v.long_short_ratio !== null) n++
+  if (v.sharpe !== null) n++
+  if (v.sortino !== null) n++
+  if (v.mdd !== null) n++
+  if (v.calmar !== null) n++
+  if (v.pnl_ratio !== null) n++
+  if (v.lifetime_trades !== null) n++
   if (v.last_liquidation_at !== null) n++
   if (v.kol) n++
   if (v.wallet_categories.length > 0) n++
@@ -294,8 +352,15 @@ export async function fetchFeatureVectors(
   for (const [tfKey, raw] of Object.entries(byTimeframe)) {
     const tf = Number(tfKey)
     if (!Number.isFinite(tf) || !raw || typeof raw !== 'object') continue
-    const extras = (raw as Record<string, unknown>).extras as Record<string, unknown> | null
-    out[tf] = extractFeatureVector({ source, timeframe: tf, extras, meta })
+    const row = raw as Record<string, unknown>
+    const extras = row.extras as Record<string, unknown> | null
+    // typed sharpe/mdd if the RPC surfaces them alongside extras (else null →
+    // the extractor falls back to extras / leaves them null).
+    const stats = {
+      sharpe: typeof row.sharpe === 'number' ? row.sharpe : null,
+      mdd: typeof row.mdd === 'number' ? row.mdd : null,
+    }
+    out[tf] = extractFeatureVector({ source, timeframe: tf, extras, meta, stats })
   }
   return out
 }
