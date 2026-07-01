@@ -28,6 +28,8 @@ import type {
   Timeframe,
 } from '../../core/types'
 import { riskFromEquitySeries } from '../../core/series-risk'
+import { fillStats, reconstructRoundTrips, type HlFill } from './fills'
+import { createHash } from 'crypto'
 
 type Dict = Record<string, unknown>
 
@@ -205,6 +207,7 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
   const payload = (raw ?? {}) as {
     portfolio?: unknown
     clearinghouse?: unknown
+    fills?: unknown
     timeframe?: unknown
   }
   const tfNum = num(payload.timeframe) ?? 30
@@ -213,6 +216,21 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
   const ch = (payload.clearinghouse ?? null) as Dict | null
   const marginSummary = (ch?.marginSummary ?? null) as Dict | null
   const aum = num(marginSummary?.accountValue)
+
+  // M3-3a fills replay: round-trip reconstruction over the TF window gives the
+  // CEX-equivalent winRate / positions / holding-time / 盈亏比 that HL never
+  // hands over ("needs fills replay — spike §8.3", now in). NULL-collapses when
+  // the fills fetch failed or the window has no completed trips.
+  const fillsArr = Array.isArray(payload.fills) ? (payload.fills as HlFill[]) : []
+  const fstats =
+    fillsArr.length > 0 ? fillStats(fillsArr, Date.parse(ctx.scrapedAt) - tf * DAY_MS, tf) : null
+  const hasTrips = fstats !== null && fstats.totalPositions > 0
+  const fillsExtras: Record<string, unknown> = {}
+  if (hasTrips) {
+    fillsExtras.fills_derivation = 'fills-replay'
+    if (fstats.pnlRatio !== null) fillsExtras.pnl_ratio = fstats.pnlRatio
+    if (fstats.tripsPerWeek !== null) fillsExtras.trades_per_week = fstats.tripsPerWeek
+  }
 
   const stats: ParsedStats[] = []
   const series: ParsedProfile['series'] = []
@@ -245,10 +263,15 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
         pnl,
         aum,
         volume: num(win.vlm),
-        extras: { roi_basis: 'start_equity', ...riskExtras },
+        extras: { roi_basis: 'start_equity', ...riskExtras, ...fillsExtras },
         ...EMPTY_STATS,
         sharpe: risk.sharpe, // Tier-0 (overrides EMPTY_STATS null)
         mdd: risk.mdd,
+        // M3-3a fills replay (overrides EMPTY_STATS nulls when trips exist)
+        winRate: hasTrips ? fstats.winRate : null,
+        winPositions: hasTrips ? fstats.winPositions : null,
+        totalPositions: hasTrips ? fstats.totalPositions : null,
+        holdingDurationAvgHours: hasTrips ? fstats.avgHoldingHours : null,
       })
       push(seriesFrom(tf, 'pnl', pnlPts))
       push(seriesFrom(tf, 'account_value', eqPts))
@@ -288,10 +311,16 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
           derivation: 'portfolio_alltime_lerp',
           roi_basis: 'start_equity',
           ...riskExtras,
+          ...fillsExtras,
         },
         ...EMPTY_STATS,
         sharpe: risk.sharpe, // Tier-0 (overrides EMPTY_STATS null)
         mdd: risk.mdd,
+        // M3-3a fills replay (overrides EMPTY_STATS nulls when trips exist)
+        winRate: hasTrips ? fstats.winRate : null,
+        winPositions: hasTrips ? fstats.winPositions : null,
+        totalPositions: hasTrips ? fstats.totalPositions : null,
+        holdingDurationAvgHours: hasTrips ? fstats.avgHoldingHours : null,
       })
       const inWindow = pnlPts.filter((p) => p.ts >= windowStart)
       push(
@@ -347,11 +376,37 @@ export function parseHyperliquidPositions(raw: unknown, _ctx: ParseCtx): ParsedP
 
 // ── Histories ──
 
-/** No append-only history surfaces in v1 (capabilities all false). */
+/** M3-3a: position_history = closed round-trips rebuilt from userFillsByTime
+ *  (lib/ingest/adapters/hyperliquid/fills.ts). Other surfaces stay unsupported. */
 export function parseHyperliquidHistory(
-  _raw: unknown,
+  raw: unknown,
   kind: HistoryKind,
   _ctx: ParseCtx
 ): ParsedHistoryRow[] {
-  throw new Error(`[hyperliquid] history surface ${kind} not supported`)
+  if (kind !== 'position_history') {
+    throw new Error(`[hyperliquid] history surface ${kind} not supported`)
+  }
+  const fills = (raw as Dict)?.fills
+  const arr = Array.isArray(fills) ? (fills as HlFill[]) : []
+  return reconstructRoundTrips(arr).map((t) => ({
+    kind: 'position_history' as const,
+    openedAt: isoMs(t.openedAtMs),
+    closedAt: isoMs(t.closedAtMs),
+    symbol: t.coin,
+    side: t.side,
+    leverage: null, // fills don't carry leverage; positions surface has it live
+    size: t.size,
+    entryPrice: Math.round(t.entryPrice * 1e6) / 1e6,
+    exitPrice: Math.round(t.exitPrice * 1e6) / 1e6,
+    realizedPnl: t.realizedPnl,
+    dedupeHash: createHash('sha1')
+      .update(['hl_ph', t.coin, t.openedAtMs, t.closedAtMs, t.realizedPnl].join('|'))
+      .digest('hex'),
+    raw: {
+      coin: t.coin,
+      fills: t.fills,
+      from_flip: t.fromFlip,
+      max_size: t.size,
+    },
+  }))
 }
