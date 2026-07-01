@@ -142,12 +142,29 @@ const xtAdapter: SourceAdapter = {
       method: 'GET',
       headers: HEADERS,
     })
+    // leader-stats carries the FULL per-TF Performance block (discovered via live
+    // capture 2026-07-01): recentRate/totalEarnings/maxRetraction/winRate/
+    // profitCount/lossCount/avgProfit/avgLoss/avgHoldTime/tradeFrequency/
+    // followerMargin/followersEarnings — the img65 fields the thin detail-v2 lacks.
+    // leader-symbol-prefer = 市场偏好 donut (img64). recentDays = TF.
+    const [stats, symbolPrefer] = await Promise.all([
+      replayJson(session, fetcher, {
+        url: `${base(src)}/leader-stats?accountId=${exchangeTraderId}&recentDays=${tf}`,
+        method: 'GET',
+        headers: HEADERS,
+      }).catch(() => null),
+      replayJson(session, fetcher, {
+        url: `${base(src)}/leader-symbol-prefer?accountId=${exchangeTraderId}&recentDays=${tf}`,
+        method: 'GET',
+        headers: HEADERS,
+      }).catch(() => null),
+    ])
     const fetchedAt = new Date().toISOString()
     return {
       pages: [
         {
           pageIndex: 1,
-          payload: { detail, timeframe: tf },
+          payload: { detail, stats, symbolPrefer, timeframe: tf },
           url: `${base(src)}/leader-detail-v2`,
           fetchedAt,
         },

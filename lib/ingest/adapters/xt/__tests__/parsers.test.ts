@@ -95,6 +95,37 @@ describe('parseXtProfile', () => {
     expect(profile.series).toHaveLength(0)
   })
 
+  it('uses the leader-stats Performance block when present (live-captured endpoint)', () => {
+    const profile = parseXtProfile(
+      {
+        detail: fixture('detail-fut.json'),
+        stats: fixture('leader-stats-30.json'),
+        symbolPrefer: fixture('leader-symbol-prefer-30.json'),
+        timeframe: 30,
+      },
+      ctx
+    )
+    const s = profile.stats[0]
+    // The img65 Performance block — previously uncaptured (TIER 2), now via
+    // leader-stats?accountId&recentDays.
+    expect(s.roi).toBeCloseTo(320.09, 1) // recentRate 3.2009 (decimal) ×100
+    expect(s.pnl).toBeCloseTo(95.627, 2) // totalEarnings
+    expect(s.mdd).toBeCloseTo(13.01, 1) // maxRetraction 0.130089
+    expect(s.winRate).toBe(100) // winRate 1
+    expect(s.winPositions).toBe(24) // profitCount
+    expect(s.totalPositions).toBe(24) // totalTransactions
+    expect(s.copierPnl).toBeCloseTo(-653.36, 1) // followersEarnings
+    expect(s.aum).toBe(2570) // followerMargin (Lead AUM)
+    expect(s.holdingDurationAvgHours).toBeCloseTo(17.67, 1) // avgHoldTime 63606.62s
+    expect(s.extras.avg_profit).toBeCloseTo(4.6326, 3)
+    expect(s.extras.trade_frequency).toBe(3.43)
+    expect(s.extras.loss_trades).toBe(0)
+    // 市场偏好 donut (img64) from leader-symbol-prefer
+    const prefs = s.tradingPreferences as { markets: Array<{ symbol: string }> }
+    expect(prefs.markets[0].symbol).toBe('AXS_USDT')
+    expect(prefs.markets).toHaveLength(4)
+  })
+
   it('survives an empty detail payload', () => {
     const profile = parseXtProfile({ detail: {}, timeframe: 7 }, ctx)
     expect(profile.stats).toHaveLength(0)
