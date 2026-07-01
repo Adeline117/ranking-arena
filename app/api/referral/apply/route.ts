@@ -33,7 +33,11 @@ export const POST = withAuth(
 
     const code = (body?.code as string)?.trim()
 
-    if (!code || typeof code !== 'string' || code.length < 2) {
+    // Strict server-side allowlist (client validation is not a security boundary
+    // — a direct API caller bypasses it). referral_code + handle are both drawn
+    // from this charset, so this also makes the PostgREST .or() filter below
+    // injection-safe without relying on a fragile character blocklist.
+    if (!code || typeof code !== 'string' || !/^[A-Za-z0-9_-]{2,64}$/.test(code)) {
       return NextResponse.json({ error: 'Invalid referral code' }, { status: 400 })
     }
 
@@ -52,9 +56,9 @@ export const POST = withAuth(
     const { data: referrer } = await supabase
       .from('user_profiles')
       .select('id, referral_code, handle')
-      .or(
-        `referral_code.eq.${code.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${code.replace(/[,.()\[\]\\%_]/g, '')}`
-      )
+      // Safe: `code` is validated against ^[A-Za-z0-9_-]{2,64}$ above, so it
+      // contains no PostgREST filter metacharacters.
+      .or(`referral_code.eq.${code},handle.eq.${code}`)
       .limit(1)
       .maybeSingle()
 
@@ -67,15 +71,30 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Cannot use your own referral code' }, { status: 400 })
     }
 
-    // Set referred_by on the current user
-    const { error: updateError } = await supabase
+    // Atomically set referred_by ONLY if not already set (compare-and-swap).
+    // This is the single guard that makes the FRIEND grant exactly-once: the
+    // normal signup path fires this endpoint twice near-simultaneously on the
+    // same SIGNED_IN event (LoginPageClient + ReferralAutoApply). Without the
+    // `.is('referred_by', null)` predicate both requests would read null, both
+    // update, and both grant the friend trial (and, since subscriptions has no
+    // unique(user_id), insert duplicate Pro rows). With it, only the request
+    // whose update matched a row proceeds; the loser bails as "already applied".
+    const { data: updatedRows, error: updateError } = await supabase
       .from('user_profiles')
       .update({ referred_by: referrer.id })
       .eq('id', user.id)
+      .is('referred_by', null)
+      .select('id')
 
     if (updateError) {
       logger.error('Failed to set referred_by:', updateError.message)
       return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      // Lost the CAS race (concurrent apply already set referred_by) → do not
+      // grant again.
+      return NextResponse.json({ error: 'Referral code already applied' }, { status: 400 })
     }
 
     // Count total referrals for the referrer (including this new one)
