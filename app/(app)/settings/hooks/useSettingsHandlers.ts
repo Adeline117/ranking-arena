@@ -44,6 +44,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     notifyComment: boolean
     notifyMention: boolean
     notifyMessage: boolean
+    notifyTraderEvents: boolean
     showFollowers: boolean
     showFollowing: boolean
     dmPermission: string
@@ -70,6 +71,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   const [notifyComment, setNotifyComment] = useState(true)
   const [notifyMention, setNotifyMention] = useState(true)
   const [notifyMessage, setNotifyMessage] = useState(true)
+  const [notifyTraderEvents, setNotifyTraderEvents] = useState(true)
   const [hapticEnabled, setHapticEnabled] = useState(true)
 
   // Privacy settings
@@ -208,6 +210,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       notifyComment !== initial.notifyComment ||
       notifyMention !== initial.notifyMention ||
       notifyMessage !== initial.notifyMessage ||
+      notifyTraderEvents !== initial.notifyTraderEvents ||
       showFollowers !== initial.showFollowers ||
       showFollowing !== initial.showFollowing ||
       dmPermission !== initial.dmPermission ||
@@ -223,6 +226,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     notifyComment,
     notifyMention,
     notifyMessage,
+    notifyTraderEvents,
     showFollowers,
     showFollowing,
     dmPermission,
@@ -280,6 +284,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
           notifyComment: sensitive?.notify_comment !== false,
           notifyMention: sensitive?.notify_mention !== false,
           notifyMessage: sensitive?.notify_message !== false,
+          notifyTraderEvents: sensitive?.notify_trader_events !== false,
           showFollowers: userProfile.show_followers !== false,
           showFollowing: userProfile.show_following !== false,
           dmPermission: userProfile.dm_permission || 'all',
@@ -299,6 +304,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         setNotifyComment(p.notifyComment)
         setNotifyMention(p.notifyMention)
         setNotifyMessage(p.notifyMessage)
+        setNotifyTraderEvents(p.notifyTraderEvents)
         setShowFollowers(p.showFollowers)
         setShowFollowing(p.showFollowing)
         setDmPermission(p.dmPermission as 'all' | 'mutual' | 'none')
@@ -510,6 +516,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
           notify_comment: notifyComment,
           notify_mention: notifyMention,
           notify_message: notifyMessage,
+          notify_trader_events: notifyTraderEvents,
           show_followers: showFollowers,
           show_following: showFollowing,
           dm_permission: dmPermission,
@@ -546,6 +553,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         notifyComment,
         notifyMention,
         notifyMessage,
+        notifyTraderEvents,
         showFollowers,
         showFollowing,
         dmPermission,
@@ -1284,6 +1292,8 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     setNotifyMention,
     notifyMessage,
     setNotifyMessage,
+    notifyTraderEvents,
+    setNotifyTraderEvents,
     hapticEnabled,
     setHapticEnabled,
     emailDigest,

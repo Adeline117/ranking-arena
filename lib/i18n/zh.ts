@@ -960,6 +960,7 @@ const zh = {
   postCommentedNotify: '帖子收到评论时通知我',
   mentionedNotify: '被提及时通知我',
   newMessageNotify: '收到私信时通知我',
+  traderEventsNotify: '我关注的交易员有大变动时通知我',
   // 隐私设置
   showFollowerList: '显示关注者列表',
   showFollowingList: '显示关注列表',

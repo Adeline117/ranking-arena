@@ -20,6 +20,8 @@ interface NotificationsSectionProps {
   setNotifyMention: (v: boolean) => void
   notifyMessage: boolean
   setNotifyMessage: (v: boolean) => void
+  notifyTraderEvents: boolean
+  setNotifyTraderEvents: (v: boolean) => void
   hapticEnabled: boolean
   setHapticEnabled: (v: boolean) => void
   emailDigest: 'none' | 'daily' | 'weekly'
@@ -68,6 +70,12 @@ export const NotificationsSection = React.memo(function NotificationsSection(
       labelKey: 'newMessageNotify',
       value: props.notifyMessage,
       setter: props.setNotifyMessage,
+    },
+    {
+      key: 'trader_events',
+      labelKey: 'traderEventsNotify',
+      value: props.notifyTraderEvents,
+      setter: props.setNotifyTraderEvents,
     },
   ]
 
