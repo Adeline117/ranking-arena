@@ -233,13 +233,28 @@ export default function PortfolioPage() {
             }
           />
 
-          <PortfolioOverview
-            totalEquity={totalEquity}
-            totalPnl={totalPnl}
-            totalPnlPct={totalPnlPct}
-            snapshots={snapshots}
-            isLoading={loading}
-          />
+          {/* First-run: no connected exchange yet → a focused connect prompt
+              instead of hollow $0.00 metric cards + "no positions". */}
+          {!loading && portfolios.length === 0 ? (
+            <div style={styles.emptyState}>
+              <div style={styles.emptyIcon} aria-hidden="true">
+                📊
+              </div>
+              <h2 style={styles.emptyTitle}>{t('portfolioEmptyTitle')}</h2>
+              <p style={styles.emptyDesc}>{t('apiKeyReadOnlyHint')}</p>
+              <button style={styles.addBtn} onClick={() => setShowAddModal(true)}>
+                + {t('portfolioConnectExchange')}
+              </button>
+            </div>
+          ) : (
+            <PortfolioOverview
+              totalEquity={totalEquity}
+              totalPnl={totalPnl}
+              totalPnlPct={totalPnlPct}
+              snapshots={snapshots}
+              isLoading={loading}
+            />
+          )}
 
           {/* Connected exchanges */}
           {portfolios.length > 0 && (
@@ -286,11 +301,13 @@ export default function PortfolioPage() {
             </div>
           )}
 
-          {/* Positions */}
-          <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>{t('openPositions')}</h2>
-            <PositionList positions={positions} isLoading={loading} />
-          </div>
+          {/* Positions — hidden on the first-run empty state (handled above) */}
+          {(loading || portfolios.length > 0) && (
+            <div style={styles.section}>
+              <h2 style={styles.sectionTitle}>{t('openPositions')}</h2>
+              <PositionList positions={positions} isLoading={loading} />
+            </div>
+          )}
         </div>
       </div>
       {/* MobileBottomNav rendered in root layout */}
@@ -305,6 +322,34 @@ export default function PortfolioPage() {
 }
 
 const styles: Record<string, React.CSSProperties> = {
+  emptyState: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    textAlign: 'center',
+    gap: '12px',
+    padding: '48px 24px',
+    borderRadius: '16px',
+    backgroundColor: 'var(--color-bg-secondary)',
+    border: '1px solid var(--color-border-primary)',
+  },
+  emptyIcon: {
+    fontSize: '40px',
+    lineHeight: 1,
+  },
+  emptyTitle: {
+    margin: 0,
+    fontSize: '18px',
+    fontWeight: 700,
+    color: 'var(--color-text-primary)',
+  },
+  emptyDesc: {
+    margin: 0,
+    maxWidth: '420px',
+    fontSize: '14px',
+    lineHeight: 1.5,
+    color: 'var(--color-text-secondary)',
+  },
   page: {
     minHeight: '100vh',
     backgroundColor: 'var(--color-bg-primary)',

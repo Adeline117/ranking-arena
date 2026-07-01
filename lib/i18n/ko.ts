@@ -4400,6 +4400,7 @@ const ko = {
   portfolioPageTitle: '포트폴리오',
   portfolioTitle: '포트폴리오',
   portfolioConnectExchange: '거래소 연결',
+  portfolioEmptyTitle: '거래소를 연결하여 포트폴리오를 추적하세요',
   portfolioConnectedExchanges: '연결된 거래소',
   portfolioAddFailed: '거래소 추가 실패',
   portfolioConnectSuccess: '거래소 연결 성공',
