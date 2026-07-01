@@ -4658,6 +4658,51 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_attributions: {
+        Row: {
+          created_at: string
+          friend_granted: boolean
+          id: string
+          provider: string | null
+          referred_id: string
+          referrer_id: string
+          signup_ip_hash: string | null
+        }
+        Insert: {
+          created_at?: string
+          friend_granted?: boolean
+          id?: string
+          provider?: string | null
+          referred_id: string
+          referrer_id: string
+          signup_ip_hash?: string | null
+        }
+        Update: {
+          created_at?: string
+          friend_granted?: boolean
+          id?: string
+          provider?: string | null
+          referred_id?: string
+          referrer_id?: string
+          signup_ip_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'referral_attributions_referred_id_fkey'
+            columns: ['referred_id']
+            isOneToOne: true
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'referral_attributions_referrer_id_fkey'
+            columns: ['referrer_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       referral_rewards: {
         Row: {
           created_at: string
