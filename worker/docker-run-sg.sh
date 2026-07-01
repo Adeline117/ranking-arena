@@ -57,6 +57,7 @@ run_container() {
     --env-file "${CLEAN_ENV}" \
     -e INGEST_REGIONS=vps_sg \
     -e INGEST_LOCAL_REGION=vps_sg \
+    -e DEPLOYED_SHA="${DEPLOYED_SHA:-unknown}" \
     -v "${PROFILE_VOL}:/app/.arena-ingest" \
     --restart unless-stopped \
     --init \
