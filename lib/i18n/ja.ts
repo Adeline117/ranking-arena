@@ -5632,6 +5632,8 @@ const ja = {
   colNotional: '想定元本',
   colMargin: '証拠金',
   colMarginMode: 'モード',
+  marginIsolated: '分離',
+  marginCross: 'クロス',
   colRoe: 'ROE',
   colRoi: 'ROI',
   colMaxOpenInterest: '最大建玉',

@@ -5986,6 +5986,8 @@ const en = {
   colNotional: 'Notional',
   colMargin: 'Margin',
   colMarginMode: 'Mode',
+  marginIsolated: 'Isolated',
+  marginCross: 'Cross',
   colRoe: 'ROE',
   colRoi: 'ROI',
   colMaxOpenInterest: 'Max OI',
