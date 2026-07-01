@@ -40,9 +40,9 @@ const CCXT_ID: Record<string, string> = {
   blofin: 'blofin',
 }
 
-/** Reachable from Vercel hnd1 + CCXT fetchPositions validated. Includes
- * passphrase exchanges (bitget/kucoin/coinex) — those additionally require a
- * stored passphrase (see PASSPHRASE_REQUIRED). */
+/** CCXT fetchPositions validated. Passphrase exchanges (bitget/kucoin/coinex/okx)
+ * additionally require a stored passphrase; geo exchanges (binance/okx) additionally
+ * require the sync proxy to be configured (see below). */
 const SYNC_SUPPORTED = new Set([
   'bybit',
   'mexc',
@@ -53,12 +53,50 @@ const SYNC_SUPPORTED = new Set([
   'bitget',
   'kucoin',
   'coinex',
+  'binance',
+  'okx',
 ])
-/** Blocked from the serverless region — need a VPS/CF proxy, do not attempt.
- * (okx also needs a passphrase, but geo takes precedence.) */
+/** Blocked from the serverless region (451). Only syncable when the VPS sync
+ * proxy is configured (PORTFOLIO_SYNC_PROXY_URL/_KEY); otherwise refused. */
 const GEO_BLOCKED = new Set(['binance', 'okx'])
 /** Require an API passphrase (passed to CCXT as `password`). */
-const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex'])
+const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex', 'okx'])
+
+/**
+ * CCXT fetch adapter that tunnels every request through the SG VPS proxy
+ * (scripts/vps-deploy/arena-proxy.mjs) so geo-blocked exchanges (binance/okx)
+ * are reachable from Vercel. The VPS forwards our signed headers verbatim (the
+ * API *secret* never leaves this function — CCXT signs locally), and the proxy
+ * is X-Proxy-Key-authed. Opt-in: returns null when the proxy env is unset, so
+ * geo-blocked exchanges cleanly fall back to `geo_unavailable` (no regression).
+ */
+function makeProxyFetch(): ((url: string | URL, init?: RequestInit) => Promise<Response>) | null {
+  const proxyUrl = process.env.PORTFOLIO_SYNC_PROXY_URL
+  const proxyKey = process.env.PORTFOLIO_SYNC_PROXY_KEY
+  if (!proxyUrl || !proxyKey) return null
+  return async (url, init) => {
+    const headers: Record<string, string> = {}
+    const h = init?.headers
+    if (h instanceof Headers) h.forEach((v, k) => (headers[k] = v))
+    else if (Array.isArray(h)) h.forEach(([k, v]) => (headers[k] = v))
+    else if (h) Object.assign(headers, h)
+    const resp = await fetch(proxyUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'X-Proxy-Key': proxyKey },
+      body: JSON.stringify({
+        url: String(url),
+        method: init?.method || 'GET',
+        headers,
+        body: typeof init?.body === 'string' ? init.body : undefined,
+      }),
+    })
+    const text = await resp.text()
+    return new Response(text, {
+      status: resp.status,
+      headers: { 'content-type': resp.headers.get('content-type') || 'application/json' },
+    })
+  }
+}
 
 export interface SyncedPositionRow {
   portfolio_id: string
@@ -126,7 +164,10 @@ export async function syncExchangePortfolio(params: {
 }): Promise<SyncOutcome> {
   const ex = params.exchange.toLowerCase()
 
-  if (GEO_BLOCKED.has(ex)) return { ok: false, reason: 'geo_unavailable' }
+  // Geo-blocked exchanges are only syncable through the VPS proxy; if it's not
+  // configured, refuse (unchanged "coming soon" behavior — no regression).
+  const proxyFetch = GEO_BLOCKED.has(ex) ? makeProxyFetch() : null
+  if (GEO_BLOCKED.has(ex) && !proxyFetch) return { ok: false, reason: 'geo_unavailable' }
   if (!SYNC_SUPPORTED.has(ex)) return { ok: false, reason: 'unsupported' }
   const needsPassphrase = PASSPHRASE_REQUIRED.has(ex)
   if (needsPassphrase && !params.apiPassphraseEncrypted) {
@@ -162,6 +203,7 @@ export async function syncExchangePortfolio(params: {
       apiKey,
       secret: apiSecret,
       ...(passphrase ? { password: passphrase } : {}),
+      ...(proxyFetch ? { fetchImplementation: proxyFetch } : {}),
       enableRateLimit: true,
       timeout: 8000, // fail fast — sequential calls must stay well under maxDuration
       options: { defaultType: 'swap' },
