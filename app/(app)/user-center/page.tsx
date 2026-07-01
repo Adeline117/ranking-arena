@@ -14,6 +14,7 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import MembershipContent from './MembershipContent'
 import LevelTab from './components/LevelTab'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 
 type Tab = 'level' | 'membership'
 
@@ -200,6 +201,15 @@ function UserCenterPage() {
     { key: 'level', label: t('userCenterMyLevel') },
     { key: 'membership', label: t('userCenterMembership') },
   ]
+
+  // B2 tabs a11y: level/membership share the single content card below.
+  const tabsA11y = useTabsA11y({
+    tabs: tabs.map((tab) => tab.key),
+    active: activeTab,
+    onChange: handleTabChange,
+    idPrefix: 'ucenter',
+    sharedPanelId: 'ucenter-panel',
+  })
 
   if (!loading && !userId) {
     return (
@@ -407,7 +417,7 @@ function UserCenterPage() {
 
         {/* Tab Navigation */}
         <Box
-          role="tablist"
+          {...tabsA11y.getTabListProps()}
           aria-label={t('userCenter')}
           style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}
         >
@@ -415,8 +425,7 @@ function UserCenterPage() {
             <button
               key={tab.key}
               type="button"
-              role="tab"
-              aria-selected={activeTab === tab.key}
+              {...tabsA11y.getTabProps(tab.key)}
               onClick={() => handleTabChange(tab.key)}
               style={{
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
@@ -452,6 +461,7 @@ function UserCenterPage() {
 
         {/* Content */}
         <Box
+          {...tabsA11y.getSharedPanelProps()}
           style={{
             borderRadius: tokens.radius['2xl'],
             padding: tokens.spacing[6],
