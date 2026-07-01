@@ -355,7 +355,7 @@ function UserCenterPage() {
                   flexWrap: 'wrap',
                 }}
               >
-                <Text size="lg" weight="black" style={{ letterSpacing: '-0.2px' }}>
+                <Text as="h1" size="lg" weight="black" style={{ letterSpacing: '-0.2px' }}>
                   {userHandle || t('userCenterDefaultUser')}
                 </Text>
                 <LevelBadge exp={info.currentExp} isPro={levelData?.isPro} size="md" showName />

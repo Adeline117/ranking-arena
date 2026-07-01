@@ -182,16 +182,17 @@ export default function ActivityFeed({
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <span
+          <h1
             style={{
               fontSize: tokens.typography.fontSize.lg,
               fontWeight: tokens.typography.fontWeight.black,
               color: tokens.colors.text.primary,
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
+              margin: 0,
             }}
           >
             {localTitle}
-          </span>
+          </h1>
           {activities.length > 0 && (
             <span
               style={{

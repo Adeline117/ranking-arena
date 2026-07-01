@@ -267,7 +267,7 @@ function CompareContent() {
           }}
         >
           <Box>
-            <Text size="2xl" weight="black" className="gradient-text">
+            <Text as="h1" size="2xl" weight="black" className="gradient-text">
               {t('compareTraders')}
             </Text>
             <Text size="sm" color="tertiary" style={{ marginTop: tokens.spacing[2] }}>
