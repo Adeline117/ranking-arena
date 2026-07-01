@@ -91,6 +91,7 @@ describe('parseBtccProfile', () => {
       register_days: 556,
       trader_level: 2,
       all_time: { roi: 304.43, pnl: 35392.5, win_rate: 93.8 },
+      total_roi: 304.43, // top-level alias (nested all_time.roi is invisible to promoteExtrasMetrics)
     })
   })
 
