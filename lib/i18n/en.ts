@@ -971,6 +971,7 @@ const en = {
   postCommentedNotify: 'Notify me when my posts receive comments',
   mentionedNotify: 'Notify me when I am mentioned',
   newMessageNotify: 'Notify me when I receive messages',
+  traderEventsNotify: 'Notify me about big moves from traders I follow',
   // Privacy settings
   showFollowerList: 'Show followers list',
   showFollowingList: 'Show following list',

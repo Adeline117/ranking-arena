@@ -910,6 +910,7 @@ const ko = {
   postCommentedNotify: '게시글에 댓글이 달리면 알림 받기',
   mentionedNotify: '멘션되면 알림 받기',
   newMessageNotify: '메시지를 받으면 알림 받기',
+  traderEventsNotify: '팔로우한 트레이더의 큰 변동 시 알림 받기',
   // Privacy settings
   showFollowerList: '팔로워 목록 표시',
   showFollowingList: '팔로잉 목록 표시',

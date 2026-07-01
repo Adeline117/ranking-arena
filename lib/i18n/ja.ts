@@ -872,6 +872,7 @@ const ja = {
   postCommentedNotify: '投稿にコメントされたら通知',
   mentionedNotify: 'メンションされたら通知',
   newMessageNotify: 'メッセージを受信したら通知',
+  traderEventsNotify: 'フォロー中のトレーダーに大きな動きがあったら通知',
   showFollowerList: 'フォロワーリストを表示',
   showFollowingList: 'フォロー中リストを表示',
   dmPermissions: 'ダイレクトメッセージの権限',

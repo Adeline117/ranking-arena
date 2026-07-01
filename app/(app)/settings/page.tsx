@@ -518,6 +518,8 @@ function SettingsContent() {
             setNotifyMention={h.setNotifyMention}
             notifyMessage={h.notifyMessage}
             setNotifyMessage={h.setNotifyMessage}
+            notifyTraderEvents={h.notifyTraderEvents}
+            setNotifyTraderEvents={h.setNotifyTraderEvents}
             hapticEnabled={h.hapticEnabled}
             setHapticEnabled={h.setHapticEnabled}
             emailDigest={h.emailDigest}
